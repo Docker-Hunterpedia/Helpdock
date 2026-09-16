@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "clean-code-guard": {
+      "source": "amElnagdy/guard-skills",
+      "sourceType": "github",
+      "skillPath": "skills/clean-code-guard/SKILL.md",
+      "computedHash": "a037fd57c8fa0b7bd84cb274b2ea816e16622edb0245a5c2c6f23d8244eeb634"
+    },
+    "docs-guard": {
+      "source": "amElnagdy/guard-skills",
+      "sourceType": "github",
+      "skillPath": "skills/docs-guard/SKILL.md",
+      "computedHash": "aa78378b4e172bfc0ada76edc6b000782a7e352d240a3d51cd8da8e05102b449"
+    },
+    "security-audit": {
+      "source": "cloudflare/security-audit-skill",
+      "sourceType": "github",
+      "skillPath": "skills/security-audit/SKILL.md",
+      "computedHash": "98b97aad2873b3b9a8e064007c25e7827b493ba27fda8bfbdb41dab586767973"
+    },
+    "test-guard": {
+      "source": "amElnagdy/guard-skills",
+      "sourceType": "github",
+      "skillPath": "skills/test-guard/SKILL.md",
+      "computedHash": "1b16faf306e977fefe738c5b0c2cace6c3759b848ca92aa3bf1de549814ef241"
+    }
+  }
+}

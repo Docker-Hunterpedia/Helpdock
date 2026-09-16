@@ -1,6 +1,6 @@
 # In development
 
-Nothing is in development yet. The first milestone will be **M0 Skeleton** (see [ARCHITECTURE.md §18](../planning/ARCHITECTURE.md#18-milestones-suggested)).
+Nothing is in development yet. The first milestone will be **M0 Skeleton** (see [PRD.md](../planning/PRD.md#m0-skeleton)).
 
 When a milestone starts, add a file here named `M<n>-<slug>.md` using this template:
 
@@ -12,9 +12,15 @@ Started: 2026-09-16
 Owner: @Docker-Hunterpedia
 
 ## Scope
-What is included, with a link to the relevant section of the planning docs.
+Link to the milestone section in the PRD.
 
-## Tasks
+## Deliverables
+| Id | Deliverable | Issue | Status |
+|---|---|---|---|
+| M0-01 | Monorepo | #3 | in progress |
+
+## Exit criteria
+Copied from the PRD, ticked as they are met.
 - [ ] ...
 
 ## Open questions

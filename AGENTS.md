@@ -6,6 +6,7 @@ Instructions for AI coding agents (Claude Code, Codex, Cursor, Copilot and other
 
 Helpdock is an open-source (AGPL-3.0), self-hosted customer support platform: ticketing, help center, live chat widget and grounded AI, with one deploy serving many brands. Read the two planning documents before doing any non-trivial work:
 
+- [docs/planning/PRD.md](docs/planning/PRD.md) is the execution plan: phases, milestones, deliverable ids (`M1-04`), exit criteria and the status board. Work is always tied to a deliverable id.
 - [docs/planning/REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) defines scope. Anything under "Non-goals" or "v1.1+" is out of scope for v1.
 - [docs/planning/ARCHITECTURE.md](docs/planning/ARCHITECTURE.md) defines the stack, repository layout, data model, tenancy, auth, queues and milestones.
 
@@ -14,7 +15,7 @@ Current state: pre-alpha. No application code exists yet. The first milestone is
 ## Repository layout
 
 ```
-docs/planning/         requirements and architecture (source of truth)
+docs/planning/         PRD, requirements and architecture (source of truth)
 docs/in-development/   one doc per milestone being built
 docs/completed/        docs for shipped work
 docs/decisions/        ADRs
@@ -29,10 +30,24 @@ Rule: `apps/*` never import each other. They share code only through `packages/*
 
 - `main` is protected. Never push to it. Create a branch, open a pull request, and stop. A human merges.
 - Commit messages follow Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
-- When you start a milestone, create `docs/in-development/M<n>-<slug>.md` from the template in that folder and keep its task list current.
+- Every piece of work maps to a deliverable id in the PRD and a GitHub issue in the matching milestone. PRs link the issue with `Closes #n`. If no deliverable fits, stop and ask; do not invent scope.
+- When you start a milestone, create `docs/in-development/M<n>-<slug>.md` from the template in that folder, keep its task list current, and update the status board in the PRD.
 - When you settle one of the open decisions in ARCHITECTURE.md §19, write an ADR in `docs/decisions/`.
 - Do not add dependencies outside the stack table in ARCHITECTURE.md §1 without an ADR.
 - Do not build v1.1 features, however small, even if asked in passing. Point to the backlog instead.
+
+## Definition of done
+
+This is an open-source project. Strangers will read the code, run the tests and follow the docs, so every PR must leave all three consistent. A PR is not done until:
+
+1. **Docs are updated.** Anything added or changed in behaviour, configuration, API, schema, UI or deployment is reflected in the docs in the same PR: the milestone doc in `docs/in-development/`, the relevant user guide under `docs/guides/` once it exists, `.env.example` for new config keys, and the OpenAPI schema for API changes. New architectural choices get an ADR. No "docs later".
+2. **Unit tests exist** for every new function, service, rule, resolver or schema, and for every bug fix (a failing test first, then the fix). Vitest, colocated as `*.test.ts`.
+3. **Integration tests exist** for anything that touches the database, Redis, queues or channel adapters. Testcontainers, real Postgres and Redis. Every new tenant table is added to the RLS isolation test.
+4. **Browser tests exist** for every new or changed user-facing screen or flow in the admin app, help center or widget. Playwright, under `apps/<app>/e2e/`. Cover the happy path and the main failure path, in both `en` and `ar` when the screen has text.
+5. **CI is green**, including the coverage gate and the widget size check.
+6. **The PR description** states the deliverable id, what changed, why, and how it was tested.
+
+If any of these cannot be met, say so explicitly in the PR description and why. A reviewer decides, not the author.
 
 ## Engineering rules
 

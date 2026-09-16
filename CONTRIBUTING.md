@@ -11,10 +11,11 @@ Thanks for your interest. Helpdock is early and moving fast, so please read this
 ## Workflow
 
 1. Fork the repository and create a branch from `main`. Use a descriptive name such as `feat/email-threading` or `fix/sla-timer-pause`.
-2. Make your change with tests.
-3. Open a pull request against `main`. Fill in the description: what changed, why, and how it was tested.
-4. A code owner reviews. Address review threads; every thread must be resolved before merge.
-5. Pull requests are squash-merged. Direct pushes to `main` are not allowed for anyone.
+2. Pick or open an issue tied to a deliverable id from the [PRD](docs/planning/PRD.md).
+3. Make your change. Every PR must include unit tests, integration tests where infrastructure is touched, Playwright tests for any user-facing change, and updated docs. See the Definition of done in [AGENTS.md](AGENTS.md); it applies to humans too.
+4. Open a pull request against `main` that links the issue with `Closes #n`. Fill in the description: deliverable id, what changed, why, and how it was tested.
+5. A code owner reviews. Address review threads; every thread must be resolved before merge.
+6. Pull requests are squash-merged. Direct pushes to `main` are not allowed for anyone.
 
 ## Commit and PR style
 

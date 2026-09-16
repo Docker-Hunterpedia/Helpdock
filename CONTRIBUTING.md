@@ -4,7 +4,7 @@ Thanks for your interest. Helpdock is early and moving fast, so please read this
 
 ## Before you start
 
-- Read [REQUIREMENTS.md](REQUIREMENTS.md) and [ARCHITECTURE.md](ARCHITECTURE.md). They are the source of truth for scope and stack.
+- Read [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md). They are the source of truth for scope and stack.
 - For anything larger than a small fix, open an issue first so we can agree on the approach.
 - Features listed under v1.1 or non-goals will not be merged into v1.
 

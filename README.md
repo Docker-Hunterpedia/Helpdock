@@ -2,7 +2,7 @@
 
 Open-source customer support platform: ticketing, help center, live chat widget and grounded AI, in one deploy that serves many brands. A self-hosted alternative to Zoho Desk, Zendesk and Freshdesk.
 
-> **Status:** pre-alpha. The product is fully specified but not yet implemented. See [REQUIREMENTS.md](REQUIREMENTS.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+> **Status:** pre-alpha. The product is fully specified but not yet implemented. See [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
 
 ## Why Helpdock
 
@@ -34,7 +34,7 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 | M8 | API, webhooks, reports |
 | M9 | Hardening and 1.0 release |
 
-Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#18-milestones-suggested).
+Full detail in [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md#18-milestones-suggested). All project documents live under [docs/](docs/), organised by lifecycle stage.
 
 ## Contributing
 

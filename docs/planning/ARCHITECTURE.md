@@ -1,6 +1,6 @@
 # Helpdock — Architecture & Stack (v1)
 
-Companion to `REQUIREMENTS.md`. Every choice below was checked against current package versions (September 2026). Pin ranges at scaffold time; Renovate keeps them current.
+Companion to `REQUIREMENTS.md` (same folder). Every choice below was checked against current package versions (September 2026). Pin ranges at scaffold time; Renovate keeps them current.
 
 ---
 

@@ -9,13 +9,14 @@ Helpdock is an open-source (AGPL-3.0), self-hosted customer support platform: ti
 - [docs/planning/PRD.md](docs/planning/PRD.md) is the execution plan: phases, milestones, deliverable ids (`M1-04`), exit criteria and the status board. Work is always tied to a deliverable id.
 - [docs/planning/REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) defines scope. Anything under "Non-goals" or "v1.1+" is out of scope for v1.
 - [docs/planning/ARCHITECTURE.md](docs/planning/ARCHITECTURE.md) defines the stack, repository layout, data model, tenancy, auth, queues and milestones.
+- [docs/planning/DOMAIN-RULES.md](docs/planning/DOMAIN-RULES.md) defines behaviour: the authorization matrix, ticket transitions, SLA maths, identity and ownership, knowledge visibility, the outbox, the realtime delivery contract, embeddings, AI quality gate, operations, retention and SSRF rules. When code and this file disagree, the code is wrong.
 
 Current state: pre-alpha. No application code exists yet. The first milestone is M0 Skeleton.
 
 ## Repository layout
 
 ```
-docs/planning/         PRD, requirements and architecture (source of truth)
+docs/planning/         PRD, requirements, architecture, domain rules (source of truth)
 docs/in-development/   one doc per milestone being built
 docs/completed/        docs for shipped work
 docs/decisions/        ADRs
@@ -53,11 +54,13 @@ If any of these cannot be met, say so explicitly in the PR description and why. 
 
 These are non-negotiable and come from the security section of the requirements.
 
-- **Tenancy.** Every tenant table has `brand_id` and a row-level security policy. Every request runs inside a transaction that sets `app.brand_ids`. Any code path that queries without a tenant context must be an explicit, audited admin or system path.
+- **Tenancy.** Every tenant table has `brand_id` and a `FORCE`d row-level security policy; ticket-scoped tables also enforce department scope. Every request runs inside a transaction that sets the `app.*` session settings. Every route declares `@Requires(permission)`. Any code path that queries without a tenant context must be an explicit, audited install-admin or system path. New tenant tables extend the negative test suite in DOMAIN-RULES §1.6.
 - **Validation.** Zod at every boundary: HTTP input, queue job payloads, channel inbound messages, config. Responses go through Zod output schemas so internal fields never leak.
-- **Side effects.** Email, Telegram, AI calls, webhooks, indexing and media processing go through BullMQ jobs, never inline in a request handler.
+- **Side effects.** Email, Telegram, AI calls, webhooks, indexing and media processing are enqueued through the transactional outbox in the same transaction as the domain change, then run as idempotent BullMQ jobs. Never enqueue directly from a request handler or an event listener.
 - **Secrets.** Encrypted with AES-256-GCM under `APP_MASTER_KEY`. Never logged, never returned to the client after save.
-- **Uploads.** Sniff MIME by magic bytes, re-encode images with sharp, cap sizes, serve through short-lived presigned URLs.
+- **Uploads.** Sniff MIME by magic bytes, re-encode images with sharp, cap sizes, serve through short-lived presigned URLs issued only after authorization on the parent ticket.
+- **Outbound HTTP.** Any fetch of a user-supplied URL goes through the SSRF-safe client (DOMAIN-RULES §13). Never call `fetch` on user input directly.
+- **Knowledge.** Retrieval always takes an `audience`; visitor-facing paths filter visibility in SQL before ranking.
 - **AI.** No tool calls or actions in v1. The model reads knowledge and writes text. PII redaction runs before any LLM call. Every call is logged to `ai_calls` with cost.
 - **i18n.** Every user-facing string goes through i18next with `en` and `ar` catalogs. Layouts must work in RTL.
 - **Tests.** Unit tests with Vitest. Integration tests use Testcontainers with real Postgres and Redis. RLS isolation must be covered by a test that proves brand A cannot read brand B.

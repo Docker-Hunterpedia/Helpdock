@@ -1,6 +1,6 @@
 # Helpdock — Architecture & Stack (v1)
 
-Companion to `REQUIREMENTS.md` (same folder). Every choice below was checked against current package versions (September 2026). Pin ranges at scaffold time; Renovate keeps them current.
+Companion to `REQUIREMENTS.md` and `DOMAIN-RULES.md` (same folder). Behavioural contracts (authorization, ticket lifecycle, SLA maths, identity, knowledge visibility, delivery guarantees, operations) live in DOMAIN-RULES.md; this file describes components. Every choice below was checked against current package versions (September 2026). Pin ranges at scaffold time; Renovate keeps them current.
 
 ---
 
@@ -39,7 +39,7 @@ Companion to `REQUIREMENTS.md` (same folder). Every choice below was checked aga
 | Antivirus | ClamAV container + clamscan | 2.4 | Optional attachment scanning |
 | Reverse proxy | Caddy | 2.x | Automatic TLS, on-demand certs for custom domains |
 
-Dropped from the original list: `EventEmitter` as a cross-service bus (use Nest `@nestjs/event-emitter` in-process for domain events + BullMQ for anything with side effects); Cloudflare/Vercel targets (v1.1+).
+Dropped from the original list: `EventEmitter` as a cross-service bus (Nest `@nestjs/event-emitter` is used in-process only for non-critical effects such as cache invalidation; anything with side effects goes through the transactional outbox, DOMAIN-RULES §6); Cloudflare/Vercel targets (v1.1+).
 
 ---
 
@@ -120,7 +120,7 @@ Config is cached in-process with a Redis pub/sub invalidation so a change in adm
 
 ## 5. Data model (core tables)
 
-All tenant tables have `brand_id uuid not null` + RLS policy `brand_id = ANY(current_setting('app.brand_ids')::uuid[])`. IDs are **UUIDv7** (time-ordered → good index locality). Ticket display numbers come from `brand_ticket_seq` (a sequence per brand, created with the brand).
+All tenant tables have `brand_id uuid not null` + RLS policy `brand_id = ANY(current_setting('app.brand_ids')::uuid[])`. Ticket-scoped tables additionally enforce department scope (DOMAIN-RULES §1.3). All policies are `FORCE`d; the runtime DB role is `NOBYPASSRLS` and separate from the migration owner role (DOMAIN-RULES §1.5). IDs are **UUIDv7** (time-ordered → good index locality). Ticket display numbers come from `brand_ticket_seq` (a sequence per brand, created with the brand).
 
 ```
 users, user_brand_roles(user_id, brand_id, role, department_ids[])
@@ -128,10 +128,10 @@ brands, brand_domains(domain, kind: helpcenter|widget_origin, verified_at, txt_t
 departments, teams, team_members
 contacts(brand_id, primary_email, phone, telegram_chat_id, external_id, visitor_ids[], account_id)
 accounts
-tickets(brand_id, number, prefix, subject, status_id, priority, channel, department_id, team_id, assignee_id,
+tickets(brand_id, number, prefix, subject, status_id, priority, channel, department_id, team_id, assignee_id, merged_into_id, split_from_id,
         contact_id, sla_policy_id, first_response_due_at, resolution_due_at, sla_breached, closed_at, custom jsonb,
         search tsvector, parent_id)
-ticket_messages(ticket_id, kind: public|note|system|ai, author_type, author_id, body_html, body_text, channel,
+ticket_messages(ticket_id, department_id /*denormalised for RLS*/, seq, client_id, kind: public|note|system|ai, author_type, author_id, body_html, body_text, channel,
                 external_message_id, ai_meta jsonb)
 attachments(message_id, s3_key, mime, size, kind: image|video|audio|file, variants jsonb, scan_status)
 tags, ticket_tags, ticket_statuses, custom_field_defs
@@ -144,7 +144,8 @@ webhooks, webhook_deliveries
 hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, search tsvector, status)
 hc_article_feedback, hc_search_log
 knowledge_sources(kind: article|file|crawl|notion|gdrive, config_encrypted, sync_status)
-knowledge_chunks(source_id, locale, content, embedding vector(1536), meta jsonb)   -- HNSW index
+knowledge_chunks(source_id, locale, content, embedding vector(<dims>), embedding_model, visibility, meta jsonb)   -- HNSW index; dims set by knowledge.configure (DOMAIN-RULES §8)
+outbox(id, brand_id, event, payload jsonb, created_at, published_at), job_receipts(key, completed_at)   -- DOMAIN-RULES §6
 ai_settings(brand_id, provider_id, model, embeddings_model, modes jsonb, guardrails jsonb, budget jsonb, system_prompt)
 ai_calls(brand_id, ticket_id, purpose, model, tokens_in, tokens_out, cost, sources jsonb)
 csat_responses, notifications, notification_prefs, audit_log, settings(key, value_encrypted, is_secret, updated_by)
@@ -157,9 +158,9 @@ Search: `tickets.search` and `hc_article_versions.search` are generated tsvector
 ## 6. Request lifecycle & tenancy
 
 1. Caddy → api. `RequestContextMiddleware` sets request id, resolves brand from host (help center / widget) or from session/API key (admin/API).
-2. Auth guard populates `principal = {type: staff|visitor|apikey, id, brandIds[], role, scopes[]}`.
-3. `TenantInterceptor` opens a transaction and runs `SET LOCAL app.brand_ids = '{…}'` (and `app.principal_id`). Every Drizzle query in the request runs inside it → RLS applies. Admin "all brands" paths set the full list explicitly and are audited.
-4. Controllers validate with Zod pipes; services emit domain events (`ticket.created`) via `@nestjs/event-emitter`; listeners enqueue BullMQ jobs for side effects (rules, notifications, indexing, webhooks).
+2. Auth guard populates the `Principal` (DOMAIN-RULES §1.1): staff carry a role and department list **per brand**; visitors carry their conversation ids; API keys carry scopes; workers run as `system` for one brand.
+3. `TenantInterceptor` opens a transaction and runs `SET LOCAL` for `app.brand_ids`, `app.department_ids`, `app.all_departments`, `app.principal_type`, `app.principal_id`. Every Drizzle query in the request runs inside it → RLS applies. Install-admin "all brands" paths set the full list explicitly and are audited. Route handlers declare `@Requires('<permission>')`; a CI check fails on any route without one.
+4. Controllers validate with Zod pipes; services write domain rows **and an `outbox` row in the same transaction** for every side effect (rules, notifications, sends, indexing, webhooks). The worker's `outbox.relay` publishes rows to BullMQ with `jobId = outbox.id`; consumers are idempotent (DOMAIN-RULES §6). `@nestjs/event-emitter` is used only for in-process, non-critical effects.
 5. Response DTOs are Zod-parsed on the way out (no accidental field leaks).
 
 ---
@@ -168,7 +169,7 @@ Search: `tickets.search` and `hc_article_versions.search` are generated tsvector
 
 - **Staff:** email+password (argon2id, pepper from master key) · magic link (single-use, 10 min) · Google/GitHub OAuth (passport strategies) · TOTP (otplib) with recovery codes; admin can enforce 2FA install-wide.
   Session = access JWT (jose, ES256, 10 min) in memory + refresh token (opaque, rotating, 30 days) in `httpOnly; Secure; SameSite=Lax` cookie; refresh family stored in Redis → revocation on logout/"log out everywhere"/password change. Reuse of a rotated refresh token kills the family.
-- **Visitors (widget):** `visitor_id` (UUIDv7) issued on first load, stored in localStorage for the brand; optional signed identity `{user_id, email, name, ts}` + HMAC-SHA256 with brand secret, ts ≤ 5 min; toggle per brand. Origin allow-list enforced on the token issue endpoint and on Socket.IO handshake.
+- **Visitors (widget):** `visitor_id` (UUIDv7) plus a server-issued `visitor_secret` (hashed at rest) on first load, stored in localStorage for the brand and sent as the credential on REST and the socket handshake; a visitor reaches only conversations created with their `visitor_id`. Optional signed identity `{user_id, email, name, ts}` + HMAC-SHA256 with brand secret, ts ≤ 5 min, links a verified `external_id` (DOMAIN-RULES §4.1–4.2). Origin allow-list enforced on the token issue endpoint and on Socket.IO handshake.
 - **API keys:** `hd_live_<random>` shown once; stored as SHA-256 hash; scopes; per-key throttle; brand-bound.
 - **Internal endpoints** (`/internal/*`, e.g. domain-check, inbound-parse) require a shared secret header and are not exposed by Caddy publicly except where needed.
 
@@ -187,10 +188,10 @@ interface ChannelAdapter {
 ```
 
 - Inbound path: adapter → `InboundMessage` → `ConversationRouter` (find contact by identity, find open ticket by thread key, else create ticket in the channel's default department) → `ticket.replied|created` events.
-- Email thread key: `In-Reply-To`/`References` → known message ids → else `[PREFIX-N]` in subject → else new ticket.
+- Email thread key: `In-Reply-To`/`References` → known message ids, or `[PREFIX-N]` in subject, **and** the sender must be a ticket participant; otherwise new ticket with a mismatch note (DOMAIN-RULES §4.3).
 - Telegram: `chat_id` = identity; open ticket per chat; media downloaded via Bot API `getFile` into S3 then processed.
 - Widget: Socket.IO namespace `/widget`, rooms per conversation; SSE fallback via `GET /widget/stream`.
-- Outbound always through BullMQ (`send-email`, `send-telegram`, …) with retries and per-channel rate limits.
+- Outbound always through the outbox → BullMQ (`send-email`, `send-telegram`, …) with retries, idempotency by `ticket_message_id`, and per-channel rate limits.
 
 ---
 
@@ -216,13 +217,13 @@ packages/ai
 ├── embeddings/    OpenAI-compatible embeddings client (configurable base URL + model + dims)
 ├── ingest/        loaders: article | pdf(unpdf) | docx(mammoth) | md/txt | crawl(cheerio, optional playwright, sitemap)
 │                  | notion(@notionhq/client) | gdrive(googleapis)  → chunker (by headings, ~500 tokens, overlap 60)
-├── retrieval/     hybrid: pgvector cosine top-k + tsvector BM25-ish → reciprocal rank fusion → per-locale boost
+├── retrieval/     hybrid: audience filter (visibility, published) in SQL → pgvector cosine top-k + tsvector → reciprocal rank fusion → per-locale boost → citation validation (DOMAIN-RULES §5)
 ├── guardrails/    pii-redact (regex + Luhn), injection-filter for ingested text, budget meter, output checks
 ├── tasks/         suggestReply, summarize, classify, translate, draftArticle, autoReply(confidence)
 └── agent/         pi-agent-core loop, tools = [] in v1 (read-only); streaming to admin/widget over WS
 ```
 
-- **Auto-reply confidence:** model returns answer + cited chunk ids + self-rated confidence; combined with retrieval score; below brand threshold → handoff. Every reply carries "AI" badge and citations to the visitor.
+- **Auto-reply confidence:** model returns answer + cited chunk ids + self-rated confidence; combined with retrieval score; below brand threshold → handoff. Every reply carries "AI" badge and citations to the visitor. Handoff sets `ai_paused_until` and is checked immediately before every send (DOMAIN-RULES §9). Quality is gated by the EN/AR evaluation set, not only by mocked E2E tests.
 - **Budget:** `ai_calls` aggregated per brand per day/month; soft alert at 80 %, hard stop at 100 % (auto-reply off, assist still allowed if configured).
 - **OAuth/subscription providers:** supported through pi-ai's OAuth entry point; docs mark API-key as the officially supported path and subscription login as "at your own risk / check provider terms".
 
@@ -231,7 +232,7 @@ packages/ai
 ## 11. Help center SSR & custom domains
 
 - `apps/helpcenter` is a Vite SSR React app; the api hosts it (`ssr-manifest`, streaming render) under a `HelpCenterController` that resolves the brand from `Host`.
-- Cache: rendered HTML per `(brand, locale, path)` in Redis, invalidated on article publish/theme change; ETag; `Cache-Control: public, s-maxage=300`.
+- Cache: rendered HTML per `(brand, locale, path, audience)` in Redis, invalidated on article publish/theme change; ETag. Public pages: `Cache-Control: public, s-maxage=300, stale-while-revalidate=60`. Internal pages and staff sessions: `private, no-store`, never stored in Redis (DOMAIN-RULES §5).
 - SEO: canonical, hreflang for locales, sitemap.xml per brand, OG tags, JSON-LD `FAQPage`/`Article`.
 - Theme tokens → CSS custom properties injected inline; custom CSS sanitized (no `@import`, no `url()` to external hosts except allow-list).
 - Domain onboarding: admin adds `support.brand.com` → shows CNAME target + TXT token → "Verify" → verified → Caddy on-demand TLS starts answering; behind Cloudflare, mark "proxied" to skip ACME.
@@ -241,7 +242,7 @@ packages/ai
 ## 12. Widget
 
 - Built with Vite lib mode to `widget.js` (ES2022, Preact, no polyfills); mounts `<helpdock-widget brand="…" locale="…" mode="…">` with Shadow DOM; theme fetched from `GET /widget/:brand/config` (cached, ETag).
-- Connection: Socket.IO client (only the websocket transport, no long-polling) with SSE fallback; heartbeat; reconnect with backoff.
+- Connection: Socket.IO client (only the websocket transport, no long-polling) with SSE fallback; heartbeat; reconnect with backoff. Delivery contract: client `client_id`, server `seq`, REST cursor catch-up on reconnect or gap; sockets are notifications, REST is truth (DOMAIN-RULES §7).
 - Modes: chat · chat+articles · helpcenter · form. Article suggestions call `POST /widget/:brand/suggest` (debounced, semantic).
 - Voice recording via `MediaRecorder`; file picker constrained by the brand policy received in config.
 - Security: no `eval`, no inline styles outside Shadow DOM, origin check, per-visitor throttle, optional Turnstile before first message.
@@ -262,7 +263,8 @@ packages/ai
 | `media` | `media.process`, `media.scan` | |
 | `notify` | `notify.inapp`, `notify.email`, `notify.push` | |
 | `webhooks` | `webhook.deliver` | HMAC, retry, log |
-| `maintenance` | `cleanup.tokens`, `cleanup.visitor_sessions`, `stats.rollup` | cron |
+| `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |
+| `maintenance` | `cleanup.tokens`, `maintenance.retention`, `stats.rollup`, `sla.rebuild` (on boot) | cron |
 
 Bull Board (auth-protected) mounted in admin System page for queue inspection.
 
@@ -304,12 +306,12 @@ services:
   api:      { image: ghcr.io/docker-hunterpedia/helpdock:latest, env_file: .env, environment: { APP_ROLE: api }, depends_on: [postgres, redis] , deploy: { replicas: 2 } }
   worker:   { image: ghcr.io/docker-hunterpedia/helpdock:latest, env_file: .env, environment: { APP_ROLE: worker }, depends_on: [postgres, redis] }
   postgres: { image: pgvector/pgvector:pg17, volumes: [pg_data:/var/lib/postgresql/data] }
-  redis:    { image: redis:7-alpine, command: ["redis-server","--appendonly","yes"] }
+  redis:    { image: redis:7-alpine, command: ["redis-server","--appendonly","yes"], volumes: [redis_data:/data] }
   minio:    { image: minio/minio, profiles: [dev] }        # prod: external S3
   clamav:   { image: clamav/clamav, profiles: [clamav] }   # optional
 ```
 
-`.env.example` documents every bootstrap key; the wizard at first `/` creates the admin, the first brand, and tests SMTP + LLM.
+`.env.example` documents every bootstrap key (`DATABASE_URL` is the runtime role, `DATABASE_MIGRATION_URL` the owner role); the wizard at first `/` creates the admin, the first brand, and tests SMTP (LLM step arrives with M7). Backup, restore, upgrade and key-rotation procedures: DOMAIN-RULES §10.
 
 ---
 
@@ -336,3 +338,4 @@ services:
 - Web push: VAPID via `web-push` package (yes, small).
 - CAPTCHA default: Cloudflare Turnstile (free, privacy-friendly), hCaptcha as alternative.
 - Bull Board vs custom queue page: Bull Board embedded, custom summary on System page.
+- Embedding model scope: one per install, no per-brand override in v1 (DOMAIN-RULES §8).

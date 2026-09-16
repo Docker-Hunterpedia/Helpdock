@@ -27,14 +27,14 @@ Blueprint-style visual process builder · community forums · phone/VoIP · bill
 |---|---|---|
 | **Admin** | Whole install | Everything: brands, users, channels, AI providers, config, roles toggle, system page |
 | **Team Leader** | Brand(s) / department(s) assigned | Manage agents in their departments, SLAs, workflow rules, macros, canned responses, help center content, widget theme, chat content policy (voice/image/video/files), view reports |
-| **Agent** | Departments assigned | Work tickets, reply, internal notes, use macros/canned responses, propose articles |
+| **Agent** | Departments assigned | Work tickets **in their departments only** (tickets elsewhere are invisible, even when assigned to them), reply, internal notes, use macros/canned responses, propose articles |
 | **Viewer** *(optional, admin can disable the role)* | Brand(s) | Read-only tickets, reports, help center |
 | **Visitor / Contact** | Public | Use widget, browse help center, receive email/Telegram replies. No login in v1. |
 
 Rules:
 - Roles are fixed in v1; custom permission sets are v1.1.
 - A user can hold different roles in different brands.
-- Every permission check is enforced server-side (guards) and reflected in UI.
+- Every permission check is enforced server-side (guards + RLS on brand and department) and reflected in UI. Full matrix in DOMAIN-RULES §1.
 
 ---
 
@@ -66,14 +66,15 @@ Install
 
 **Ticket** = subject, description (first message), contact, brand, department, status, priority, channel, assignee, team, tags, due date, SLA policy, custom fields, CSAT, thread of messages (public replies + internal notes), attachments, activity log.
 
-- **Statuses:** Open, On Hold, Escalated, Closed (system) + custom statuses per brand mapped to one of the four system states (so SLA/reporting stay consistent).
+- **Statuses:** Open, On Hold, Escalated, Closed (system) + custom statuses per brand mapped to one of the four system states with `pauses_sla` and `awaiting_customer` flags (so SLA/reporting stay consistent). Transition table in DOMAIN-RULES §2.
+- **Reopen policy** per brand, set by Team Leaders: customer reply to a closed ticket reopens it within N days (default 7), always, or never (new linked ticket). DOMAIN-RULES §2.3.
 - **Priorities:** Low, Medium, High, Urgent (labels editable).
 - **Channels:** Email, Web chat, Telegram, Web form, API, Manual.
-- **Contacts & Accounts:** contact = person (email/phone/telegram id/visitor id merged into one identity); account = customer company; contacts belong to accounts; contact timeline shows all tickets across channels.
+- **Contacts & Accounts:** contact = person (email/phone/telegram id/visitor id merged into one identity, automatically only when both identifiers are verified, DOMAIN-RULES §4.4); account = customer company; contacts belong to accounts; contact timeline shows all tickets across channels that the viewer is allowed to see.
 - **Views:** saved filters (personal + shared), Zoho-like defaults: My open, Unassigned, Overdue, All open per department, Escalated.
 - **Assignment:** manual, round-robin per department, skill-based (tags on agents ↔ ticket tags/department), load-cap per agent, auto-unassign when agent goes offline (toggle).
 - **Agent collision:** live indicator when another agent is viewing/replying.
-- **Merge / Split / Parent–child** tickets.
+- **Merge / Split / Parent–child** tickets, with the semantics in DOMAIN-RULES §2.4.
 - **Spam:** mark as spam; sender-level block list; optional spam heuristics on email (SPF/DKIM failures + keyword rules).
 - **Macros:** one-click bundles of actions (set status, priority, tags, assignee, reply with canned response).
 - **Canned responses:** per brand, per department, with placeholders (`{{contact.first_name}}`, `{{ticket.number}}`), EN/AR variants.
@@ -86,7 +87,7 @@ Install
 
 ### 4.2 SLAs & business hours
 - Business hours + holidays per brand (and optionally per department), timezone-aware.
-- SLA policy: first-response and resolution targets per priority; escalation steps (notify, reassign, raise priority) at % thresholds; pause on On Hold / awaiting-customer.
+- SLA policy: first-response and resolution targets per priority; escalation steps (notify, reassign, raise priority) at % thresholds; pause on statuses flagged `pauses_sla`. An AI auto-reply counts as first response when the brand toggle `ai_counts_as_first_response` is on (default on); auto-acknowledgments never count. Full calculation rules and worked examples in DOMAIN-RULES §3.
 - SLA timers computed by the worker (BullMQ delayed jobs), visible on ticket and in views; breach badge.
 
 ### 4.3 Automation
@@ -134,7 +135,7 @@ All channels implement one `ChannelAdapter` interface (normalize inbound → mes
 - **Custom domain** per brand with TLS (Caddy on-demand) or behind Cloudflare; canonical URL + sitemap + Open Graph per article; SSR for SEO.
 - Search: Postgres full-text (tsvector, per-language config `english`/`arabic`) + trigram fuzzy + semantic (pgvector) merged and ranked.
 - Article feedback (👍/👎 + comment), view counts, "related articles" (semantic).
-- Access: public, or restricted to logged-in agents (internal KB) in v1; contact-authenticated KB is v1.1.
+- Access: public, or restricted to logged-in agents (internal KB) in v1; contact-authenticated KB is v1.1. Internal content is never used for visitor-facing AI answers, public search, sitemaps or public caches (DOMAIN-RULES §5).
 - Article → ticket handoff: "Still need help?" opens widget/form with article context.
 - Agents can propose an article from a resolved ticket (AI drafts it, Team Leader approves).
 
@@ -233,19 +234,23 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 ### 5.2 Performance
 - Widget bundle < 40 KB gzipped, first paint < 300 ms on 3G.
 - API p95 < 150 ms for ticket list/read at 50k tickets per brand; help-center SSR TTFB < 200 ms (cached).
-- Realtime message delivery < 500 ms end-to-end.
+- Realtime message delivery < 500 ms end-to-end, with reconnect catch-up and deduplication guaranteed by the delivery contract in DOMAIN-RULES §7.
 - Horizontal: stateless API replicas behind Caddy; Socket.IO Redis adapter; workers scale independently.
 - DB: indexes on `(brand_id, status, updated_at)`, `(brand_id, assignee_id)`, tsvector GIN, pgvector HNSW.
 
 ### 5.3 Reliability
 - All side effects (email send, Telegram send, AI calls, indexing, webhooks) go through BullMQ with retries + dead-letter queue visible in admin.
-- Idempotent inbound handling (dedupe by channel message id).
+- Idempotent inbound handling (dedupe by channel message id). Side effects are enqueued through a transactional outbox so a committed change is never left without its job and a rolled-back change never produces one (DOMAIN-RULES §6).
 - Health/readiness endpoints; graceful shutdown.
 
 ### 5.4 Accessibility
 - WCAG 2.1 AA for widget and help center (keyboard, focus, contrast, ARIA live regions for chat).
 
-### 5.5 Deployment
+### 5.5 Data lifecycle and operations
+- Per-brand retention for tickets, spam, AI logs, search log, audit log and visitor sessions; brand deletion with a 30-day grace; contact anonymisation. DOMAIN-RULES §11.
+- Documented backup, restore, upgrade and master-key rotation procedures with a rehearsed restore drill before 1.0 (no backup tooling shipped in v1). DOMAIN-RULES §10.
+
+### 5.6 Deployment
 - **Docker Compose only** in v1: `api`, `worker`, `postgres:17` (+pgvector), `redis:7`, `caddy`, `minio` (dev) / external S3 (prod), optional `clamav`, optional `ffmpeg` sidecar (bundled in image).
 - Single image for api/worker (`APP_ROLE=api|worker`).
 - First-run wizard: admin account, first brand, SMTP test, LLM provider.

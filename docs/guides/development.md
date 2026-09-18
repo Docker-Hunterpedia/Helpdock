@@ -48,12 +48,14 @@ pnpm turbo run typecheck --filter=@helpdock/api
 
 ```
 apps/          api, admin, helpcenter, widget
-packages/      db, schemas, ai, channels, ui, i18n, config
+packages/      db, schemas, ai, channels, ui, i18n, config, net
 scripts/       repository checks run by CI
 docs/          planning, guides, decisions
 ```
 
-Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end. `packages/config` is the first real one; see [Configuration](#configuration).
+Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end.
+
+Two are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md).
 
 TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `verbatimModuleSyntax`). A workspace `tsconfig.json` only adds `rootDir`, `outDir` and which files to include. Because module resolution is `nodenext`, relative imports carry the `.js` extension even when the file on disk is `.ts`.
 
@@ -63,8 +65,17 @@ TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `v
 2. Add `package.json`: name `@helpdock/<name>`, `"private": true`, `"type": "module"`, an `exports` map pointing at `dist/`, and the four scripts. Copy an existing package.
 3. Add `tsconfig.json` extending `../../tsconfig.base.json`.
 4. Run `pnpm install` so the workspace is linked.
+5. Check that `pnpm-lock.yaml` gained an `importers` entry for it, and commit the change.
 
 Vitest discovers the new workspace through the `packages/*` glob in `vitest.config.ts`, and Turborepo through `pnpm-workspace.yaml`. Neither file needs editing. The coverage gate starts applying to it immediately.
+
+Step 5 is not busywork. CI installs with `--frozen-lockfile`, which refuses a workspace that has no `importers` entry — and when the new package has no dependencies of its own, a plain `pnpm install` does not add one, nor does `pnpm install --lockfile-only` despite what the error message suggests. Only a clean resolve writes it:
+
+```bash
+rm -rf node_modules pnpm-lock.yaml && pnpm install
+```
+
+That produces a one-line diff (`packages/<name>: {}`) and no version drift, because every dependency is pinned exactly. Confirm with `pnpm install --frozen-lockfile` before pushing; it fails locally exactly as it does in CI.
 
 Dependencies must come from the stack table in [ARCHITECTURE.md §1](../planning/ARCHITECTURE.md); anything else needs an ADR first.
 

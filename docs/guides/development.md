@@ -55,7 +55,7 @@ docs/          planning, guides, decisions
 
 Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end.
 
-Four are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n).
+Five are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/db` is the schema, the migrations and the row-level security; see [Database](#database). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n).
 
 TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `verbatimModuleSyntax`). A workspace `tsconfig.json` only adds `rootDir`, `outDir` and which files to include. Because module resolution is `nodenext`, relative imports carry the `.js` extension even when the file on disk is `.ts`.
 
@@ -76,6 +76,8 @@ rm -rf node_modules pnpm-lock.yaml && pnpm install
 ```
 
 That produces a one-line diff (`packages/<name>: {}`) and no version drift, because every dependency is pinned exactly. Confirm with `pnpm install --frozen-lockfile` before pushing; it fails locally exactly as it does in CI.
+
+A package that imports another workspace package adds a `resolve.alias` for it in its own `vitest.config.ts`, as `packages/db` does for `@helpdock/config`. Without it the `exports` map sends the test to the other package's last build instead of to its source.
 
 Dependencies must come from the stack table in [ARCHITECTURE.md §1](../planning/ARCHITECTURE.md); anything else needs an ADR first.
 
@@ -135,7 +137,7 @@ import {
 } from '@helpdock/config';
 
 const settings = createSettings({
-  store: new InMemorySettingsStore(), // the Postgres store arrives with M0-03
+  store: new InMemorySettingsStore(), // PostgresSettingsStore in @helpdock/db for a real install
   keyring: createKeyring(env),
   invalidation: new LocalInvalidation(),
 });
@@ -221,6 +223,74 @@ because `tokens.json` and `locales/` sit beside the source and have to reach
 Before changing either, read DESIGN.md. A new colour, font size, radius or
 spacing value needs a change there first, and a new component needs a DESIGN §6
 entry in the same pull request.
+
+## Database
+
+The schema, the migrations and the row-level security policies live in
+`packages/db`. Its [README](../../packages/db/README.md) is the reference; this
+is what you need to run it.
+
+### The two connection URLs
+
+Helpdock connects to Postgres as two different roles ([DOMAIN-RULES
+§1.5](../planning/DOMAIN-RULES.md#1-authorization)):
+
+| Key | Role | Used for |
+|---|---|---|
+| `DATABASE_MIGRATION_URL` | the owner | migrations only, at api boot |
+| `DATABASE_URL` | `helpdock_app` | every runtime query |
+
+`helpdock_app` is `NOSUPERUSER NOBYPASSRLS`, owns nothing, and may only read and
+write rows. The first migration creates it, with the password from
+`DATABASE_URL`, so a fresh database needs only the owner to exist and to have
+`CREATEROLE`. `assertRuntimeRoleIsSafe(db)` throws rather than let a process
+serve on a connection that can bypass row-level security; api boot calls it from
+M0-04 onwards.
+
+### Running migrations
+
+Migrations run from the application, not from a CLI. Api boot calls this from
+M0-04 onwards; until then it is what the integration tests call:
+
+```ts
+import { appRolePasswordFromUrl, runMigrations } from '@helpdock/db';
+
+const { applied } = await runMigrations({
+  migrationUrl: env.DATABASE_MIGRATION_URL,
+  appRolePassword: appRolePasswordFromUrl(env.DATABASE_URL),
+});
+```
+
+It takes a Postgres advisory lock first, so several api replicas can start
+together and the migrations still run once. `drizzle-kit migrate` and
+`drizzle-kit push` are deliberately not part of any workflow.
+
+### Changing the schema
+
+```bash
+pnpm --filter @helpdock/db gen:migration   # drizzle-kit generate from src/schema
+pnpm --filter @helpdock/db gen:rls         # rewrite the policy migration from TENANT_TABLES
+```
+
+Both write into `packages/db/drizzle/`, and both belong in the same commit as
+the schema change. A new tenant table also has to be added to `TENANT_TABLES`
+and to the negative suite in `rls.integration.test.ts`; unit tests fail until it
+is, which is how [DOMAIN-RULES
+§1.6](../planning/DOMAIN-RULES.md#1-authorization) stays true.
+
+### Integration tests with Postgres
+
+`packages/db/src/*.integration.test.ts` start `pgvector/pgvector:pg17` through
+Testcontainers, apply the migrations and run against the real thing, as the real
+runtime role:
+
+```bash
+pnpm test:integration -- packages/db
+```
+
+The first run pulls the image, which can take a few minutes; pull it in advance
+with `docker pull pgvector/pgvector:pg17` if the suite times out. No local
+Postgres is needed, and without Docker the suites skip themselves.
 
 ## Tests
 

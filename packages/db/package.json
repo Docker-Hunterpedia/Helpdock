@@ -15,6 +15,17 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/db"
+    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/db",
+    "gen:migration": "drizzle-kit generate",
+    "gen:rls": "node scripts/generate-rls-migration.ts"
+  },
+  "dependencies": {
+    "@helpdock/config": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "12.1.0",
+    "drizzle-kit": "0.31.10"
   }
 }

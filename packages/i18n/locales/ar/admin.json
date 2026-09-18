@@ -1,0 +1,21 @@
+{
+  "nav": {
+    "label": "التنقّل الرئيسي",
+    "tickets": "التذاكر",
+    "contacts": "جهات الاتصال",
+    "helpCenter": "مركز المساعدة",
+    "reports": "التقارير",
+    "adminGroup": "الإدارة",
+    "settings": "الإعدادات",
+    "staff": "الموظفون والأدوار",
+    "system": "النظام"
+  },
+  "brandSwitcher": {
+    "caption": "العلامة التجارية · تبديل",
+    "action": "تبديل العلامة التجارية"
+  },
+  "currentUser": {
+    "installAdmin": "مدير التثبيت",
+    "menuLabel": "قائمة حساب {{name}}"
+  }
+}

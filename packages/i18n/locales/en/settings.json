@@ -1,0 +1,53 @@
+{
+  "title": "Settings",
+  "scope": "Install-wide · applies to every brand",
+  "tabs": {
+    "general": "General",
+    "authentication": "Authentication",
+    "email": "Email",
+    "captcha": "CAPTCHA",
+    "notifications": "Notifications",
+    "ai": "AI"
+  },
+  "signInMethods": {
+    "title": "Sign-in methods",
+    "description": "Password sign-in is always on. Enable the others by adding credentials.",
+    "requireTwoFactor": "Require two-factor authentication for all staff",
+    "requireTwoFactorHint": "Staff without TOTP are asked to enrol at next sign-in.",
+    "magicLinkValidity": "Magic link validity (minutes)"
+  },
+  "oauth": {
+    "google": "Google OAuth",
+    "github": "GitHub OAuth",
+    "clientId": "Client ID",
+    "clientSecret": "Client secret",
+    "clientIdPlaceholder": "Iv1.…",
+    "clientSecretPlaceholder": "Paste once",
+    "replace": "Replace",
+    "secretSaved": "Saved {{date}} by {{name}}. Secrets are never shown again after saving."
+  },
+  "status": {
+    "enabled": "Enabled",
+    "notConfigured": "Not configured"
+  },
+  "lock": {
+    "badge": "Set by environment",
+    "hint": "Locked by {{envKey}}. Remove it from {{envFile}} to edit here."
+  },
+  "aside": {
+    "redirectUrls": {
+      "title": "Redirect URLs",
+      "body": "Register these with Google and GitHub:"
+    },
+    "live": {
+      "title": "Changes apply live",
+      "body": "Every api and worker replica picks up a saved setting within a second. No restart. Keys set in {{envFile}} always win and are marked with a lock."
+    },
+    "recent": {
+      "title": "Recent changes",
+      "openAuditLog": "Open audit log",
+      "entryCount_one": "{{count}} change in the last week",
+      "entryCount_other": "{{count}} changes in the last week"
+    }
+  }
+}

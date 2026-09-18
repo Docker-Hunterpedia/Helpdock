@@ -1,0 +1,31 @@
+{
+  "title": "Set up Helpdock",
+  "systemStatus": "{{version}} · api + worker healthy",
+  "stepLabel": "{{index}} · {{label}}",
+  "stepsRemaining_one": "{{count}} step left",
+  "stepsRemaining_other": "{{count}} steps left",
+  "steps": {
+    "account": "Admin account",
+    "brand": "First brand",
+    "email": "Outgoing email",
+    "done": "Done"
+  },
+  "brand": {
+    "title": "Your first brand",
+    "description": "A brand is one support desk: its own inboxes, help center, widget and agents. You can add more later.",
+    "nameLabel": "Brand name",
+    "prefixLabel": "Ticket prefix",
+    "prefixHint": "Tickets will look like {{example}}. Cannot be changed after creation.",
+    "languageLabel": "Default language",
+    "timezoneLabel": "Timezone",
+    "domainLabel": "Help center domain",
+    "domainOptional": "(optional, you can verify it later)",
+    "domainPlaceholder": "support.example.com",
+    "submit": "Create brand and continue"
+  },
+  "masterKey": {
+    "title": "Keep your master key safe.",
+    "body": "Secrets are encrypted with {{envKey}} from your {{envFile}}. If it is lost, stored credentials cannot be recovered.",
+    "link": "How to back it up"
+  }
+}

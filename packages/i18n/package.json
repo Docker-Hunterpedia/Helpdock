@@ -7,14 +7,30 @@
   "license": "AGPL-3.0-only",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./locales/*": "./locales/*"
   },
+  "files": [
+    "dist",
+    "locales"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/i18n"
+  },
+  "dependencies": {
+    "i18next": "26.4.2"
+  },
+  "peerDependencies": {
+    "react-i18next": "^17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-i18next": {
+      "optional": true
+    }
   }
 }

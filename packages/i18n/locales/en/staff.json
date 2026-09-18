@@ -1,0 +1,64 @@
+{
+  "title": "Staff and roles",
+  "subtitle": "{{brand}} · {{people}} · Viewer role enabled",
+  "peopleCount_one": "{{count}} person",
+  "peopleCount_other": "{{count}} people",
+  "invite": "Invite",
+  "searchPlaceholder": "Search people",
+  "table": {
+    "person": "Person",
+    "role": "Role",
+    "departments": "Departments",
+    "twoFactor": "2FA",
+    "lastActive": "Last active",
+    "rowActions": "Actions for {{name}}"
+  },
+  "roles": {
+    "admin": "Admin",
+    "teamLeader": "Team Leader",
+    "agent": "Agent",
+    "viewer": "Viewer"
+  },
+  "roleDescriptions": {
+    "admin": "Everything in this brand",
+    "teamLeader": "Manages chosen departments",
+    "agent": "Works tickets in chosen departments",
+    "viewer": "Read-only tickets and reports"
+  },
+  "departments": {
+    "all": "All departments",
+    "add": "Add department…",
+    "hint": "Agents see only tickets in their departments."
+  },
+  "twoFactor": {
+    "enrolled": "Enrolled",
+    "pending": "Pending"
+  },
+  "lastActive": {
+    "now": "Now",
+    "yesterday": "Yesterday"
+  },
+  "pendingInvite": {
+    "line": "{{invited}} · {{expires}}",
+    "invitedAgo_one": "Invited {{count}} day ago",
+    "invitedAgo_other": "Invited {{count}} days ago",
+    "expiresIn_one": "expires in {{count}} day",
+    "expiresIn_other": "expires in {{count}} days",
+    "resend": "Resend",
+    "revoke": "Revoke"
+  },
+  "deactivated": {
+    "line": "Deactivated {{date}} · {{reassigned}}",
+    "ticketsReassigned_one": "{{count}} ticket reassigned",
+    "ticketsReassigned_other": "{{count}} tickets reassigned"
+  },
+  "inviteDialog": {
+    "title": "Invite a person",
+    "description": "They get a link valid for 7 days. Roles are per brand; you can change them later.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "name@example.com",
+    "roleLabel": "Role in {{brand}}",
+    "departmentsLabel": "Departments",
+    "submit": "Send invite"
+  }
+}

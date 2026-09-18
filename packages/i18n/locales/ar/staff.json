@@ -1,0 +1,80 @@
+{
+  "title": "الموظفون والأدوار",
+  "subtitle": "{{brand}} · {{people}} · دور المشاهد مفعّل",
+  "peopleCount_zero": "لا أشخاص",
+  "peopleCount_one": "شخص واحد",
+  "peopleCount_two": "شخصان",
+  "peopleCount_few": "{{count}} أشخاص",
+  "peopleCount_many": "{{count}} شخصًا",
+  "peopleCount_other": "{{count}} شخص",
+  "invite": "دعوة",
+  "searchPlaceholder": "ابحث عن شخص",
+  "table": {
+    "person": "الشخص",
+    "role": "الدور",
+    "departments": "الأقسام",
+    "twoFactor": "التحقق بخطوتين",
+    "lastActive": "آخر نشاط",
+    "rowActions": "إجراءات {{name}}"
+  },
+  "roles": {
+    "admin": "مدير",
+    "teamLeader": "قائد فريق",
+    "agent": "موظف دعم",
+    "viewer": "مشاهد"
+  },
+  "roleDescriptions": {
+    "admin": "كل شيء في هذه العلامة التجارية",
+    "teamLeader": "يدير الأقسام المحددة",
+    "agent": "يعمل على تذاكر الأقسام المحددة",
+    "viewer": "اطّلاع فقط على التذاكر والتقارير"
+  },
+  "departments": {
+    "all": "كل الأقسام",
+    "add": "إضافة قسم…",
+    "hint": "يرى موظفو الدعم تذاكر أقسامهم فقط."
+  },
+  "twoFactor": {
+    "enrolled": "مسجَّل",
+    "pending": "قيد الانتظار"
+  },
+  "lastActive": {
+    "now": "الآن",
+    "yesterday": "أمس"
+  },
+  "pendingInvite": {
+    "line": "{{invited}} · {{expires}}",
+    "invitedAgo_zero": "دُعي اليوم",
+    "invitedAgo_one": "دُعي قبل يوم واحد",
+    "invitedAgo_two": "دُعي قبل يومين",
+    "invitedAgo_few": "دُعي قبل {{count}} أيام",
+    "invitedAgo_many": "دُعي قبل {{count}} يومًا",
+    "invitedAgo_other": "دُعي قبل {{count}} يوم",
+    "expiresIn_zero": "تنتهي الصلاحية اليوم",
+    "expiresIn_one": "تنتهي الصلاحية خلال يوم واحد",
+    "expiresIn_two": "تنتهي الصلاحية خلال يومين",
+    "expiresIn_few": "تنتهي الصلاحية خلال {{count}} أيام",
+    "expiresIn_many": "تنتهي الصلاحية خلال {{count}} يومًا",
+    "expiresIn_other": "تنتهي الصلاحية خلال {{count}} يوم",
+    "resend": "إعادة الإرسال",
+    "revoke": "إلغاء الدعوة"
+  },
+  "deactivated": {
+    "line": "أُلغي التفعيل في {{date}} · {{reassigned}}",
+    "ticketsReassigned_zero": "لم يُعَد إسناد أي تذكرة",
+    "ticketsReassigned_one": "أُعيد إسناد تذكرة واحدة",
+    "ticketsReassigned_two": "أُعيد إسناد تذكرتين",
+    "ticketsReassigned_few": "أُعيد إسناد {{count}} تذاكر",
+    "ticketsReassigned_many": "أُعيد إسناد {{count}} تذكرة",
+    "ticketsReassigned_other": "أُعيد إسناد {{count}} تذكرة"
+  },
+  "inviteDialog": {
+    "title": "دعوة شخص",
+    "description": "سيصله رابط صالح لمدة 7 أيام. الأدوار خاصة بكل علامة تجارية، ويمكنك تغييرها لاحقًا.",
+    "emailLabel": "البريد الإلكتروني",
+    "emailPlaceholder": "name@example.com",
+    "roleLabel": "الدور في {{brand}}",
+    "departmentsLabel": "الأقسام",
+    "submit": "إرسال الدعوة"
+  }
+}

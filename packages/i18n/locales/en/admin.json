@@ -1,0 +1,21 @@
+{
+  "nav": {
+    "label": "Main",
+    "tickets": "Tickets",
+    "contacts": "Contacts",
+    "helpCenter": "Help center",
+    "reports": "Reports",
+    "adminGroup": "Admin",
+    "settings": "Settings",
+    "staff": "Staff and roles",
+    "system": "System"
+  },
+  "brandSwitcher": {
+    "caption": "Brand · switch",
+    "action": "Switch brand"
+  },
+  "currentUser": {
+    "installAdmin": "Install admin",
+    "menuLabel": "Account menu for {{name}}"
+  }
+}

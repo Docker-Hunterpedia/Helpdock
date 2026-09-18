@@ -48,12 +48,14 @@ pnpm turbo run typecheck --filter=@helpdock/api
 
 ```
 apps/          api, admin, helpcenter, widget
-packages/      db, schemas, ai, channels, ui, i18n, config
+packages/      db, schemas, ai, channels, ui, i18n, config, net
 scripts/       repository checks run by CI
 docs/          planning, guides, decisions
 ```
 
-Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end. `packages/config` is the first real one; see [Configuration](#configuration).
+Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end.
+
+Two are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md).
 
 TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `verbatimModuleSyntax`). A workspace `tsconfig.json` only adds `rootDir`, `outDir` and which files to include. Because module resolution is `nodenext`, relative imports carry the `.js` extension even when the file on disk is `.ts`.
 

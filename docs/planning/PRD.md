@@ -85,7 +85,7 @@ Update this table in the same PR that changes a milestone's status.
 
 | Phase | Milestone | Depends on | Effort (weeks) | Status | Started | Shipped |
 |---|---|---|---|---|---|---|
-| 0 Foundation | M0 Skeleton | — | 5–7 | planned | | |
+| 0 Foundation | M0 Skeleton | — | 5–7 | in progress | 2026-09-18 | |
 | 1 Core desk | M1 Ticketing core | M0 | 6–8 | planned | | |
 | 1 Core desk | M2 Email channel | M1 | 3–4 | planned | | |
 | 1 Core desk | M3 Automation and SLAs | M1 | 4–5 | planned | | |
@@ -435,3 +435,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 |---|---|
 | 2026-09-16 | Initial version. |
 | 2026-09-16 | 1.1: added DOMAIN-RULES.md and referenced it throughout; fixed milestone dependency contradictions (realtime gateway, outbox, presence and SSRF client moved to M0; LLM wizard step moved to M7; dependencies govern scheduling instead of phase gates); new deliverables M0-13..15, M1-13..14, M7-11, M8-07, M9-10; effort estimates and external dependencies; performance conditions and product metrics; five new risks. |
+| 2026-09-18 | M0 started. |

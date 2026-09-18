@@ -1,6 +1,8 @@
 # In development
 
-Nothing is in development yet. The first milestone will be **M0 Skeleton** (see [PRD.md](../planning/PRD.md#m0-skeleton)).
+Active milestone documents:
+
+- [M0-skeleton.md](M0-skeleton.md) — **M0 Skeleton**, in progress since 2026-09-18 ([PRD](../planning/PRD.md#m0-skeleton)).
 
 When a milestone starts, add a file here named `M<n>-<slug>.md` using this template:
 

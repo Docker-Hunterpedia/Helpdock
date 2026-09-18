@@ -2,7 +2,17 @@
 
 One file per decision, named `NNNN-short-slug.md`, numbered in order of creation. Accepted ADRs are never edited; a change of mind gets a new ADR that supersedes the old one.
 
-Pending decisions listed in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.md#19-open-decisions-small-can-settle-during-m0) should each get an ADR when settled during M0: article editor library, web push, CAPTCHA default, queue dashboard.
+The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.md#19-open-decisions-small-can-settle-during-m0) — article editor library, web push, CAPTCHA default, queue dashboard and embedding model scope — were settled in M0-12 and are recorded below.
+
+## Index
+
+| Number | Title | Status |
+|---|---|---|
+| [0001](0001-tiptap-for-rich-text.md) | Use TipTap for article and reply editing | accepted |
+| [0002](0002-web-push-via-vapid.md) | Use web push with VAPID for agent notifications | accepted |
+| [0003](0003-turnstile-default-captcha.md) | Use Cloudflare Turnstile as the default CAPTCHA, hCaptcha as the alternative | accepted |
+| [0004](0004-bull-board-for-queues.md) | Embed Bull Board for queue inspection, with a custom summary on the System page | accepted |
+| [0005](0005-single-embedding-model-per-install.md) | One embedding model per install, with no per-brand override in v1 | accepted |
 
 ## Template
 

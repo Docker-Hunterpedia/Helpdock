@@ -70,11 +70,11 @@ Components reference semantic tokens only, never palette values.
 | `action.primary.active` | teal700 | teal100 | |
 | `action.primary.text` | n0 | n900 | Text on primary |
 | `action.primary.tint` | teal50 | `#123331` | Selected list row, AI surfaces |
-| `status.<name>` | solid | solid lightened one step | Dots, borders, solid badges |
-| `status.<name>.tint` | tint | 12 % of solid over `bg.surface` | Badge backgrounds |
-| `status.<name>.text` | text on tint | solid | Badge text |
+| `status.<name>` | solid | solid lifted by +0.20 OKLCH lightness | Dots, borders, solid badges |
+| `status.<name>.tint` | tint | lifted solid at 12 % over `bg.surface` | Badge backgrounds |
+| `status.<name>.text` | text on tint | the lifted solid | Badge text |
 
-Contrast that was checked: `text.primary` on `bg.canvas` 15.9:1, `text.secondary` on `bg.canvas` 6.4:1, `action.primary.text` on `action.primary` 5.2:1, `text.link` on `bg.canvas` 4.8:1, each `status.text` on its tint ≥ 6:1. Dark values were chosen to keep the same minimums; verify them in `packages/ui` with a unit test that computes contrast for every pair in this table.
+Contrast, as measured by the test in `packages/ui` (light / dark): `text.primary` on `bg.canvas` 16.3 / 15.0, `text.secondary` on `bg.canvas` 6.7 / 7.0, `action.primary.text` on `action.primary` 5.5 / 7.6, `text.link` on `bg.canvas` 5.0 / 7.6, every `status.text` on its tint ≥ 7.1 / ≥ 4.9. The +0.20 dark lift is the smallest round step that keeps every status pair above 4.5:1 (at +0.18 danger drops to 4.57). The test fails the build if any pair regresses.
 
 ### 2.3 Rules
 
@@ -237,8 +237,8 @@ What a brand can set (Team Leader, admin "Widget" and "Help center" pages, live 
 
 | Token | Default | Constraint |
 |---|---|---|
-| `brand.accent` | teal500 | Any hex. Hover and active are derived in OKLCH by −0.06 and −0.12 L. `action.primary.text` is computed: white if contrast ≥ 4.5:1, else n900. The tint is the accent at 10 % over `bg.surface`. The admin shows the computed contrast and blocks values below 3:1 against the surface. |
-| `brand.surfaceTone` | warm (`n50` ground) | `warm` · `neutral` (`#F5F5F4`) · `cool` (`#F4F6F8`). Picks one of three pre-built neutral ramps; text and border tokens follow the ramp. |
+| `brand.accent` | teal500 | Any hex. Hover and active are derived in OKLCH by −0.06 and −0.12 L. In dark mode the accent is first lifted by +0.21 L (the teal500 → teal300 step) so a mid-tone accent stays readable on the dark surface. `action.primary.text` is computed: white if contrast ≥ 4.5:1, else n900. The tint is the accent at 10 % over `bg.surface`. The admin shows the computed contrast and blocks values below 3:1 against the surface. |
+| `brand.surfaceTone` | warm (`n50` ground) | `warm` · `neutral` (`#F5F5F4`) · `cool` (`#F4F6F8`). Picks one of three neutral ramps. The `neutral` and `cool` ramps keep the warm ramp's OKLCH lightness per step, take the ground's hue, and scale chroma by the ratio of the grounds' chroma; `n0` stays white and `n50` is the exact ground. Applies to light mode only; the dark neutrals in §2.2 are drawn values and do not change with the tone. Text and border tokens follow the ramp. |
 | `brand.radius` | 6 | 0–12; scales `md` and `lg` proportionally, `full` unchanged. |
 | `brand.font` | IBM Plex Sans | One of a curated list of self-hosted pairs with an Arabic companion (IBM Plex, Noto Sans, Vazirmatn + system). No arbitrary font URLs. |
 | `brand.mode` | auto | `light` · `dark` · `auto`. |
@@ -284,3 +284,4 @@ Every PR that touches UI ticks these in the description:
 | Date | Change |
 |---|---|
 | 2026-09-18 | 1.0. Direction "Quiet desk" chosen over "Editorial ink" and "Signal". Canvas published. |
+| 2026-09-19 | 1.1. Made three rules concrete after implementing `packages/ui`: dark status lift +0.20 L, dark brand accent lift +0.21 L, derivation of the `neutral` and `cool` ramps. Contrast figures replaced by the measured ones. |

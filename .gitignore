@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test and tooling output
+coverage/
+.turbo/
+*.log
+
+# Environment — .env.example is the documented template and stays tracked
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Agent worktrees
+.claude/worktrees/
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/

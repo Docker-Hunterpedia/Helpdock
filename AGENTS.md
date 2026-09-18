@@ -9,6 +9,7 @@ Helpdock is an open-source (AGPL-3.0), self-hosted customer support platform: ti
 - [docs/planning/PRD.md](docs/planning/PRD.md) is the execution plan: phases, milestones, deliverable ids (`M1-04`), exit criteria and the status board. Work is always tied to a deliverable id.
 - [docs/planning/REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) defines scope. Anything under "Non-goals" or "v1.1+" is out of scope for v1.
 - [docs/planning/ARCHITECTURE.md](docs/planning/ARCHITECTURE.md) defines the stack, repository layout, data model, tenancy, auth, queues and milestones.
+- [DESIGN.md](DESIGN.md) defines the design system ("Quiet desk"): tokens, type scale, components, RTL rules, brand theming limits and the accessibility checklist. Every screen in admin, widget and help center is built from it.
 - [docs/planning/DOMAIN-RULES.md](docs/planning/DOMAIN-RULES.md) defines behaviour: the authorization matrix, ticket transitions, SLA maths, identity and ownership, knowledge visibility, the outbox, the realtime delivery contract, embeddings, AI quality gate, operations, retention and SSRF rules. When code and this file disagree, the code is wrong.
 
 Current state: pre-alpha. No application code exists yet. The first milestone is M0 Skeleton.
@@ -62,6 +63,7 @@ These are non-negotiable and come from the security section of the requirements.
 - **Outbound HTTP.** Any fetch of a user-supplied URL goes through the SSRF-safe client (DOMAIN-RULES §13). Never call `fetch` on user input directly.
 - **Knowledge.** Retrieval always takes an `audience`; visitor-facing paths filter visibility in SQL before ranking.
 - **AI.** No tool calls or actions in v1. The model reads knowledge and writes text. PII redaction runs before any LLM call. Every call is logged to `ai_calls` with cost.
+- **UI.** Build only from the tokens and components in DESIGN.md. No new colors, font sizes, radii or spacing values outside its scales; no new component without adding it to DESIGN.md §6 in the same PR. Logical CSS properties only (no `left`/`right`), Lucide icons only, no emoji. Every UI PR ticks the accessibility checklist in DESIGN.md §10.
 - **i18n.** Every user-facing string goes through i18next with `en` and `ar` catalogs. Layouts must work in RTL.
 - **Tests.** Unit tests with Vitest. Integration tests use Testcontainers with real Postgres and Redis. RLS isolation must be covered by a test that proves brand A cannot read brand B.
 

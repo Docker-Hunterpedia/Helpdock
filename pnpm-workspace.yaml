@@ -6,3 +6,11 @@ packages:
 # rather than from .npmrc.
 saveExact: true
 autoInstallPeers: true
+# Transitive dependencies of `@testcontainers/redis` (via dockerode). None of
+# their install scripts are needed: cpu-features and ssh2 only build an optional
+# native speed-up for SSH, which Testcontainers does not use against a local
+# Docker socket, and protobufjs only regenerates bundled code.
+allowBuilds:
+  cpu-features: false
+  protobufjs: false
+  ssh2: false

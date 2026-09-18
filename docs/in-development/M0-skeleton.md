@@ -15,7 +15,7 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
 | M0-01 | Monorepo | #4 | shipped (#21) |
-| M0-02 | Config loader | #5 | planned |
+| M0-02 | Config loader | #5 | in review (#25) |
 | M0-03 | Database | #6 | planned |
 | M0-04 | Tenancy plumbing | #7 | planned |
 | M0-05 | Auth | #8 | planned |

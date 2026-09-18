@@ -16,5 +16,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/config"
+  },
+  "dependencies": {
+    "ioredis": "6.0.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@testcontainers/redis": "12.1.0"
   }
 }

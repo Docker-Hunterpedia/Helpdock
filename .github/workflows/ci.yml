@@ -47,5 +47,10 @@ jobs:
       - name: Test with coverage
         run: pnpm test
 
+      # GitHub-hosted runners ship a Docker daemon, so Testcontainers starts the
+      # containers itself. No service container is declared here on purpose.
+      - name: Integration tests
+        run: pnpm test:integration
+
       - name: Build
         run: pnpm build

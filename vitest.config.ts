@@ -16,6 +16,18 @@ export default defineConfig({
           include: ['scripts/**/*.test.ts'],
         },
       },
+      {
+        // Testcontainers starts real Postgres and Redis here, so this project is
+        // excluded from `pnpm test` and run by `pnpm test:integration`, which CI
+        // runs as its own step. Without Docker the suites skip themselves.
+        test: {
+          name: 'integration',
+          root: import.meta.dirname,
+          include: ['packages/*/src/**/*.integration.test.ts'],
+          testTimeout: 120_000,
+          hookTimeout: 300_000,
+        },
+      },
     ],
     coverage: {
       provider: 'v8',

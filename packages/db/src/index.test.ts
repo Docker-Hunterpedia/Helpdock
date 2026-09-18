@@ -1,13 +1,60 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { PACKAGE_NAME } from './index.js';
+import * as client from './client.js';
+import * as index from './index.js';
+import * as migrate from './migrate.js';
+import * as rls from './rls.js';
+import * as roles from './roles.js';
+import * as schema from './schema/index.js';
+import * as settingsStore from './settings-store.js';
+import * as tenant from './tenant.js';
+import * as uuid from './uuid.js';
+
+const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  'client.ts': client,
+  'migrate.ts': migrate,
+  'rls.ts': rls,
+  'roles.ts': roles,
+  'settings-store.ts': settingsStore,
+  'tenant.ts': tenant,
+  'uuid.ts': uuid,
+};
+
+const sourceFilesIn = (directory: URL): string[] =>
+  readdirSync(directory, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.includes('.test.') &&
+        entry.name !== 'index.ts',
+    )
+    .map((entry) => entry.name)
+    .sort();
 
 describe('@helpdock/db', () => {
-  it('exports the name declared in package.json', () => {
-    const manifest = JSON.parse(
-      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-    ) as { name: string };
+  it('has an entry point that knows about every module in the package', () => {
+    expect(sourceFilesIn(new URL('.', import.meta.url))).toEqual(Object.keys(modules).sort());
+  });
 
-    expect(PACKAGE_NAME).toBe(manifest.name);
+  it('re-exports every public name, so consumers import from @helpdock/db alone', () => {
+    for (const [file, module] of Object.entries({ ...modules, 'schema/index.ts': schema })) {
+      for (const name of Object.keys(module)) {
+        expect(index, `${file} exports ${name}`).toHaveProperty(name);
+      }
+    }
+  });
+
+  it('has a schema barrel that knows about every table file', () => {
+    expect(sourceFilesIn(new URL('schema/', import.meta.url))).toEqual([
+      'audit-log.ts',
+      'brands.ts',
+      'enums.ts',
+      'job-receipts.ts',
+      'outbox.ts',
+      'settings.ts',
+      'user-brand-roles.ts',
+      'users.ts',
+    ]);
   });
 });

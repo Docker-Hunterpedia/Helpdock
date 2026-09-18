@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 // Single root run: `pnpm test` executes every workspace project and reports one
@@ -20,6 +21,16 @@ export default defineConfig({
         // Testcontainers starts real Postgres and Redis here, so this project is
         // excluded from `pnpm test` and run by `pnpm test:integration`, which CI
         // runs as its own step. Without Docker the suites skip themselves.
+        resolve: {
+          alias: {
+            // Workspace packages resolve to `dist/` through their `exports` map,
+            // which would make a test run against the last build instead of the
+            // source. Each workspace project sets the same alias for itself.
+            '@helpdock/config': fileURLToPath(
+              new URL('packages/config/src/index.ts', import.meta.url),
+            ),
+          },
+        },
         test: {
           name: 'integration',
           root: import.meta.dirname,

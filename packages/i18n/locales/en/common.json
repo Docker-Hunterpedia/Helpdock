@@ -1,5 +1,6 @@
 {
   "appName": "Helpdock",
+  "loading": "Loading",
   "actions": {
     "back": "Back",
     "cancel": "Cancel",

@@ -151,6 +151,25 @@ describe('the catalogs as a whole', () => {
     expect(plurals.length).toBeGreaterThan(0);
   });
 
+  /**
+   * The reference screens were drawn with a placeholder brand before the sample
+   * brand became Helpdock. A catalog string is shipped copy, so a leftover
+   * placeholder would reach an installer's screen.
+   */
+  it('carries no leftover placeholder brand', () => {
+    const offenders: string[] = [];
+
+    for (const [catalogName, catalog] of catalogs) {
+      for (const [key, text] of catalog) {
+        if (/swapforless|SFL-/i.test(text)) {
+          offenders.push(`${catalogName}:${key}`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it('never leaves an English string in the Arabic catalogs', () => {
     const untranslated: string[] = [];
 

@@ -1,6 +1,7 @@
 {
   "nav": {
     "label": "Main",
+    "open": "Open navigation",
     "tickets": "Tickets",
     "contacts": "Contacts",
     "helpCenter": "Help center",
@@ -16,6 +17,36 @@
   },
   "currentUser": {
     "installAdmin": "Install admin",
-    "menuLabel": "Account menu for {{name}}"
+    "menuLabel": "Account menu for {{name}}",
+    "signOut": "Sign out"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "auto": "Match system"
+  },
+  "pages": {
+    "caption": {
+      "tickets": "Every conversation for this brand, in one queue.",
+      "contacts": "The people who write in, and the tickets they opened.",
+      "helpCenter": "Articles and categories for this brand's public help center.",
+      "reports": "Volume, response times, SLA and CSAT for this brand.",
+      "settings": "Install-wide · applies to every brand.",
+      "staff": "Who can work in this brand, and what they are allowed to do.",
+      "system": "Version, migrations, queues and storage for this install."
+    },
+    "empty": {
+      "heading": "Nothing here yet",
+      "body": {
+        "tickets": "Ticketing arrives with milestone M1.",
+        "contacts": "Contacts arrive with milestone M1.",
+        "helpCenter": "The help center arrives with milestone M5.",
+        "reports": "Reports arrive with milestone M8.",
+        "settings": "Install settings arrive with the rest of milestone M0.",
+        "staff": "Staff and roles arrive with the rest of milestone M0.",
+        "system": "The system page arrives with milestone M8."
+      }
+    }
   }
 }

@@ -27,7 +27,7 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-11 | CI | #14 | in progress (`ci` job and required status check from #21; coverage gate live; Testcontainers, CodeQL, image build pending) |
 | M0-12 | ADRs for the open decisions | #15 | shipped (#19) |
 | M0-13 | Realtime gateway skeleton | #16 | planned |
-| M0-14 | Transactional outbox | #17 | planned |
+| M0-14 | Transactional outbox | #17 | in review (#30) |
 | M0-15 | Outbound HTTP client with SSRF protection | #18 | in review (#24) |
 
 ## Exit criteria

@@ -1,0 +1,18 @@
+{
+  "appName": "Helpdock",
+  "actions": {
+    "back": "رجوع",
+    "cancel": "إلغاء",
+    "discard": "تجاهل",
+    "save": "حفظ التغييرات",
+    "search": "بحث"
+  },
+  "language": {
+    "en": "English",
+    "ar": "العربية",
+    "switchTo": "التبديل إلى {{language}}"
+  },
+  "placeholder": {
+    "empty": "—"
+  }
+}

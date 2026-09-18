@@ -12,6 +12,7 @@
       "!**/coverage",
       "!**/.turbo",
       "!**/skills-lock.json",
+      "!packages/ui/fonts",
       "!.agents",
       "!.claude"
     ]

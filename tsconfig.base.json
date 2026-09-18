@@ -17,6 +17,7 @@
     "exactOptionalPropertyTypes": true,
     "noUncheckedSideEffectImports": true,
 
+    "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
 

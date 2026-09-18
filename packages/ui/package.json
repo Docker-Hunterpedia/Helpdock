@@ -3,18 +3,51 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Shared React building blocks, theme tokens and the RTL provider.",
+  "description": "Design tokens, the MUI theme, the RTL caches and the brand resolver.",
   "license": "AGPL-3.0-only",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./tokens.json": "./tokens.json",
+    "./fonts.css": "./fonts/fonts.css",
+    "./fonts/*": "./fonts/*"
   },
+  "files": [
+    "dist",
+    "fonts",
+    "tokens.json"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/ui"
+    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/ui",
+    "sync:fonts": "node scripts/sync-fonts.ts"
+  },
+  "dependencies": {
+    "@mui/stylis-plugin-rtl": "9.4.0",
+    "stylis": "4.4.0",
+    "zod": "4.6.5"
+  },
+  "peerDependencies": {
+    "@emotion/cache": "^11.14.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/material": "^9.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@emotion/cache": "11.14.0",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "@fontsource/ibm-plex-sans-arabic": "5.3.0",
+    "@mui/material": "9.4.0",
+    "@types/react": "19.3.0",
+    "@types/stylis": "4.2.7",
+    "react": "19.3.0"
   }
 }

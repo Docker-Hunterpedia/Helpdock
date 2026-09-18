@@ -1,0 +1,35 @@
+{
+  "title": "إعداد Helpdock",
+  "systemStatus": "{{version}} · واجهة البرمجة والعامل يعملان بسلامة",
+  "stepLabel": "{{index}} · {{label}}",
+  "stepsRemaining_zero": "لم تبقَ خطوات",
+  "stepsRemaining_one": "بقيت خطوة واحدة",
+  "stepsRemaining_two": "بقيت خطوتان",
+  "stepsRemaining_few": "بقيت {{count}} خطوات",
+  "stepsRemaining_many": "بقيت {{count}} خطوة",
+  "stepsRemaining_other": "بقيت {{count}} خطوة",
+  "steps": {
+    "account": "حساب المدير",
+    "brand": "العلامة التجارية الأولى",
+    "email": "البريد الصادر",
+    "done": "تم"
+  },
+  "brand": {
+    "title": "علامتك التجارية الأولى",
+    "description": "العلامة التجارية هي مكتب دعم واحد: له صناديق بريده ومركز مساعدته وأداة الدردشة والموظفون الخاصون به. يمكنك إضافة المزيد لاحقًا.",
+    "nameLabel": "اسم العلامة التجارية",
+    "prefixLabel": "بادئة التذاكر",
+    "prefixHint": "ستظهر التذاكر بالشكل {{example}}. لا يمكن تغييرها بعد الإنشاء.",
+    "languageLabel": "اللغة الافتراضية",
+    "timezoneLabel": "المنطقة الزمنية",
+    "domainLabel": "نطاق مركز المساعدة",
+    "domainOptional": "(اختياري، يمكنك التحقق منه لاحقًا)",
+    "domainPlaceholder": "support.example.com",
+    "submit": "إنشاء العلامة التجارية والمتابعة"
+  },
+  "masterKey": {
+    "title": "احتفظ بمفتاحك الرئيسي في مكان آمن.",
+    "body": "تُشفَّر الأسرار باستخدام {{envKey}} من ملف {{envFile}}. إذا فُقد المفتاح، فلا يمكن استرجاع بيانات الاعتماد المخزّنة.",
+    "link": "طريقة الاحتفاظ بنسخة احتياطية منه"
+  }
+}

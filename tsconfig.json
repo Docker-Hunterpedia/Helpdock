@@ -5,5 +5,10 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["scripts/**/*.ts", "apps/*/src/**/*.test.ts", "packages/*/src/**/*.test.ts"]
+  "include": [
+    "scripts/**/*.ts",
+    "packages/*/scripts/**/*.ts",
+    "apps/*/src/**/*.test.ts",
+    "packages/*/src/**/*.test.ts"
+  ]
 }

@@ -55,7 +55,7 @@ docs/          planning, guides, decisions
 
 Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end.
 
-Two are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md).
+Four are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n).
 
 TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `verbatimModuleSyntax`). A workspace `tsconfig.json` only adds `rootDir`, `outDir` and which files to include. Because module resolution is `nodenext`, relative imports carry the `.js` extension even when the file on disk is `.ts`.
 
@@ -184,6 +184,43 @@ process at construction rather than being ignored.
 4. Document it wherever operators will look for it. Bootstrap keys go in
    `.env.example`; registry keys are described in the registry itself and surface
    in admin.
+
+## UI and i18n
+
+Everything a screen looks like and every word it says come from two packages, so
+the admin app, the help center and the widget stay one product.
+
+[`packages/ui`](../../packages/ui/README.md) is
+[DESIGN.md](../../DESIGN.md) in code: `tokens.json` is the single source of truth
+for colour, type, spacing, radius, elevation and motion, and the package builds
+the MUI theme, the light and dark `--hd-*` custom properties the widget uses, the
+two Emotion caches that make RTL work, and `resolveBrandTheme` for the per-brand
+accent, ramp and radius. Its contrast suite asserts every pair DESIGN §2.2 claims,
+in both modes, so a colour change that breaks AA fails CI. The self-hosted IBM
+Plex woff2 files live there too, under a 1.5 MB budget.
+
+```ts
+import { createHelpdockTheme, createRtlCache, tokens } from '@helpdock/ui';
+```
+
+[`packages/i18n`](../../packages/i18n/README.md) holds the `en` and `ar` catalogs,
+one namespace per screen area, and `createI18n` plus the `dir(lng)` helper that
+decides text direction everywhere. No user-facing string is written in an app —
+labels, hints, errors and `aria-label`s all go through `t()`. A key present in one
+language and missing in the other fails the parity test, and every plural key
+carries all six Arabic forms.
+
+```ts
+import { createI18n, dir } from '@helpdock/i18n';
+```
+
+Both packages compile with `rootDir` at the package root rather than `src/`,
+because `tokens.json` and `locales/` sit beside the source and have to reach
+`dist/`. Their `exports` maps therefore point at `./dist/src/index.js`.
+
+Before changing either, read DESIGN.md. A new colour, font size, radius or
+spacing value needs a change there first, and a new component needs a DESIGN §6
+entry in the same pull request.
 
 ## Tests
 

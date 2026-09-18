@@ -35,6 +35,7 @@ Rule: `apps/*` never import each other. They share code only through `packages/*
 - Every piece of work maps to a deliverable id in the PRD and a GitHub issue in the matching milestone. PRs link the issue with `Closes #n`. If no deliverable fits, stop and ask; do not invent scope.
 - When you start a milestone, create `docs/in-development/M<n>-<slug>.md` from the template in that folder, keep its task list current, and update the status board in the PRD.
 - When you settle one of the open decisions in ARCHITECTURE.md §19, write an ADR in `docs/decisions/`.
+- **Design first.** Every screen, dialog, widget mode, help center page and email template is designed as an artboard on the Helpdock design canvas (link in DESIGN.md) before it is implemented, by the orchestrating session, not by implementing agents. An implementing agent builds from the named artboard plus DESIGN.md. If a task needs a screen that has no artboard, stop and ask for one; do not improvise a layout. Customer-facing screens get `en` and `ar` artboards.
 - Do not add dependencies outside the stack table in ARCHITECTURE.md §1 without an ADR.
 - Do not build v1.1 features, however small, even if asked in passing. Point to the backlog instead.
 

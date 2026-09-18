@@ -3,6 +3,8 @@
 Status: accepted · Version 1.0 (2026-09-18) · Owner: @Docker-Hunterpedia
 Canvas with color, type, component sheet and reference screens: https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ (private until shared).
 
+**Design-first rule.** Every screen is designed on that canvas before it is built. Artboards are named by area and screen, for example `Admin/Login`, `Admin/Wizard`, `Widget/Chat-AR`. An implementation PR names the artboard it was built from.
+
 This document is the source of truth for how Helpdock looks and behaves visually across the admin app, the widget and the help center. Tokens here become `packages/ui/tokens.json`, the MUI theme, and the widget's CSS custom properties. When code and this file disagree, this file wins until it is changed by PR.
 
 ---

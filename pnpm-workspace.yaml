@@ -17,3 +17,7 @@ allowBuilds:
   # drizzle-kit runs esbuild, whose install script unpacks the platform binary
   # the CLI needs. Without it `drizzle-kit generate` cannot run.
   esbuild: true
+  # A transitive dependency of `bullmq` (through msgpackr). Its install script
+  # builds an optional native accelerator; without it msgpackr uses its
+  # JavaScript implementation, which is what BullMQ is published against.
+  msgpackr-extract: false

@@ -29,6 +29,7 @@ export default defineConfig({
             '@helpdock/config': fileURLToPath(
               new URL('packages/config/src/index.ts', import.meta.url),
             ),
+            '@helpdock/db': fileURLToPath(new URL('packages/db/src/index.ts', import.meta.url)),
           },
         },
         test: {

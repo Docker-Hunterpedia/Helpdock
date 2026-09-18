@@ -75,6 +75,12 @@ Some deliberate choices:
   `published_at IS NULL`. The relay reads the backlog in id order, and ids are
   time-ordered, so `published_at` would be a constant column in that index and
   earn nothing.
+- **An insert into `outbox` notifies the relay.** The statement-level trigger
+  `outbox_notify_relay` (`drizzle/0003_outbox_notify_relay.sql`) runs
+  `pg_notify('outbox', '')`, which Postgres delivers on commit, so a rolled-back
+  transaction wakes nobody. The relay in [`@helpdock/jobs`](../jobs/README.md)
+  listens on that channel; the payload is empty because the relay reads the
+  table and needs a nudge, not a list.
 
 ## Tenant context
 

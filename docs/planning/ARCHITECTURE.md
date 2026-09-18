@@ -60,7 +60,8 @@ helpdock/
 │   ├── ui/             # Shared React bits (theme tokens → MUI theme, RTL provider)
 │   ├── i18n/           # en/, ar/ catalogs for all apps + email templates
 │   ├── config/         # Config loader: .env + DB settings, Zod-validated, typed
-│   └── net/            # SSRF-safe outbound HTTP client and URL policy
+│   ├── net/            # SSRF-safe outbound HTTP client and URL policy
+│   └── jobs/           # Queue names, job schemas, outbox relay, idempotent consumers
 ├── docker/
 │   ├── Dockerfile      # single image (api + worker + built admin/helpcenter/widget)
 │   ├── docker-compose.yml

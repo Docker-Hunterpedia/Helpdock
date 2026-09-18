@@ -1,5 +1,6 @@
 {
   "appName": "Helpdock",
+  "loading": "جارٍ التحميل",
   "actions": {
     "back": "رجوع",
     "cancel": "إلغاء",

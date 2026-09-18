@@ -17,6 +17,13 @@ coverage/
 .env.*.local
 !.env.example
 
+# Playwright run output. The screenshot baselines under
+# `apps/*/e2e/__screenshots__/` are committed and must not be ignored.
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Agent worktrees
 .claude/worktrees/
 

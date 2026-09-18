@@ -143,6 +143,7 @@ Line-heights are multiples of 4. Admin base is 14 px; widget and help center bas
 - Icon-only buttons always have `aria-label`. Decorative icons have `aria-hidden="true"`.
 - Directional icons (chevrons, send, back) are mirrored in RTL with `[dir="rtl"] & { transform: scaleX(-1) }`. Non-directional icons (search, paperclip, clock) are not mirrored.
 - Channel icons: email = `mail`, widget = `message-circle`, Telegram = `send`, web form = `file-text`, API = `code`, manual = `pencil`. AI = `sparkles`. No emoji anywhere in the UI.
+- **Provider marks.** Lucide dropped brand icons in v1, and a second icon set is not allowed, so the Google and GitHub sign-in buttons carry their mark as an inline monochrome path in `currentColor` at 16 px (`apps/admin/src/ui/provider-marks.tsx`). They are decorative: the button's own label names the provider. No other brand mark is drawn anywhere.
 
 ## 6. Components
 
@@ -285,3 +286,4 @@ Every PR that touches UI ticks these in the description:
 |---|---|
 | 2026-09-18 | 1.0. Direction "Quiet desk" chosen over "Editorial ink" and "Signal". Canvas published. |
 | 2026-09-19 | 1.1. Made three rules concrete after implementing `packages/ui`: dark status lift +0.20 L, dark brand accent lift +0.21 L, derivation of the `neutral` and `cool` ramps. Contrast figures replaced by the measured ones. |
+| 2026-09-19 | 1.2. Added the §5 rule for OAuth provider marks after building the admin shell: Lucide v1 has no brand icons, so the two are inlined rather than adding a second icon set. |

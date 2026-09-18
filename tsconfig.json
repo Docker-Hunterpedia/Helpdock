@@ -11,5 +11,6 @@
     "packages/*/drizzle.config.ts",
     "apps/*/src/**/*.test.ts",
     "packages/*/src/**/*.test.ts"
-  ]
+  ],
+  "exclude": ["apps/admin"]
 }

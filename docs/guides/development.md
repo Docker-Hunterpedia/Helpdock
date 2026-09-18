@@ -53,9 +53,9 @@ scripts/       repository checks run by CI
 docs/          planning, guides, decisions
 ```
 
-Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end.
+Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end. `apps/admin` adds `dev`, `e2e` and `e2e:baselines`, and its `build` is `vite build` rather than `tsc`; see [Admin app](#admin-app).
 
-Six are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/db` is the schema, the migrations and the row-level security; see [Database](#database). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/jobs` is the queue names, job schemas, outbox relay and idempotent consumers from M0-14; see [Jobs and outbox](#jobs-and-outbox). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n).
+Six packages and one app are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/db` is the schema, the migrations and the row-level security; see [Database](#database). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/jobs` is the queue names, job schemas, outbox relay and idempotent consumers from M0-14; see [Jobs and outbox](#jobs-and-outbox). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n). `apps/admin` is the admin SPA from M0-07; see [Admin app](#admin-app).
 
 TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `verbatimModuleSyntax`). A workspace `tsconfig.json` only adds `rootDir`, `outDir` and which files to include. Because module resolution is `nodenext`, relative imports carry the `.js` extension even when the file on disk is `.ts`.
 
@@ -367,6 +367,57 @@ and the commit:
 ```bash
 pnpm test:integration packages/jobs
 ```
+
+## Admin app
+
+[`apps/admin`](../../apps/admin/README.md) is the Vite + React SPA agents and
+administrators work in. It is the first app with screens, so it is also where
+the browser tests live.
+
+```bash
+pnpm build                          # once, so the packages have a dist/
+pnpm --filter @helpdock/admin dev   # http://localhost:5273
+```
+
+There is no backend until M0-05, so the app is built against an `AuthApi`
+interface with an in-memory fixture. `VITE_AUTH_API` picks the adapter — `mock`
+by default in dev and test, `http` in a production build — and
+[`apps/admin/.env.example`](../../apps/admin/.env.example) documents it. The
+fixture's credentials are in the app's README.
+
+`apps/admin` owns its whole TypeScript program, including its tests and its
+Playwright specs, because they need `jsx`, `dom` types and bundler resolution
+that the Node-shaped root config does not have. It is therefore excluded from
+the root `tsc --noEmit`, and `pnpm --filter @helpdock/admin typecheck` covers it
+instead; `pnpm typecheck` runs both.
+
+### Browser tests
+
+```bash
+pnpm --filter @helpdock/admin e2e             # both locales
+pnpm --filter @helpdock/admin e2e:screenshots # the tagged screenshot suite
+pnpm --filter @helpdock/admin e2e:baselines   # regenerate Linux screenshots
+```
+
+Playwright runs every spec twice, once in `en` and once in `ar`, as two projects
+that differ only in the locale they seed into `localStorage`. An RTL layout is a
+different layout (DESIGN §7), so a spec that passes in one direction proves
+nothing about the other. `@axe-core/playwright` scans each screen against WCAG
+2.1 A and AA and the suite fails on any violation.
+
+Screenshot baselines belong under `apps/admin/e2e/__screenshots__/<locale>/` as
+Linux pixels, because CI runs on `ubuntu-latest`. They are not committed yet, so
+that spec is tagged `@screenshot` and excluded from `pnpm e2e`; Playwright fails
+a comparison whose baseline is missing rather than skipping it, so leaving it in
+would turn CI red for a reason unrelated to the code. `e2e:baselines` generates
+them from a macOS host by running the browsers inside
+`mcr.microsoft.com/playwright` against a dev server on the host; the admin
+README explains why the server stays outside the container and how to switch the
+suite back on.
+
+CI installs Chromium with `pnpm exec playwright install --with-deps chromium`,
+caches it by the Playwright version in the lockfile, and runs the suite as a
+step of the `ci` job after the build.
 
 ## Tests
 

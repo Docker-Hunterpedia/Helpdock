@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <!--
+      Read by `src/install/public-info.ts` for the sign-in caption. The api
+      rewrites them per install when it serves this file; the values below are
+      the development fixture.
+    -->
+    <meta name="helpdock:primary-domain" content="support.helpdock.com" />
+    <meta name="helpdock:brand-count" content="3" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Helpdock</title>
+    <!--
+      Runs before the bundle so `dir` is already right when the first frame
+      paints: React mounting into an `ltr` document and flipping it to `rtl`
+      afterwards is a visible jump (DESIGN §7). Kept free of imports on purpose —
+      it has to be inline to beat the bundle. `src/app/preferences.ts` owns the
+      same two storage keys and a unit test asserts this script still matches.
+    -->
+    <script>
+      (() => {
+        const read = (key) => {
+          try {
+            return localStorage.getItem(key);
+          } catch {
+            return null;
+          }
+        };
+
+        const stored = read('helpdock.admin.locale');
+        const navigatorLocale = (navigator.language || '').toLowerCase();
+        const locale =
+          stored === 'en' || stored === 'ar'
+            ? stored
+            : navigatorLocale.startsWith('ar')
+              ? 'ar'
+              : 'en';
+
+        const theme = read('helpdock.admin.theme');
+        const mode =
+          theme === 'light' || theme === 'dark'
+            ? theme
+            : matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+
+        const root = document.documentElement;
+        root.lang = locale;
+        root.dir = locale === 'ar' ? 'rtl' : 'ltr';
+        root.style.colorScheme = mode;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

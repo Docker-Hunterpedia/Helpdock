@@ -20,7 +20,7 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-04 | Tenancy plumbing | #7 | planned |
 | M0-05 | Auth | #8 | planned |
 | M0-06 | Roles and staff lifecycle | #9 | planned |
-| M0-07 | Admin shell | #10 | planned |
+| M0-07 | Admin shell | #10 | in progress (foundations #26) |
 | M0-08 | First-run wizard | #11 | planned |
 | M0-09 | Docker | #12 | planned |
 | M0-10 | Observability | #13 | planned |

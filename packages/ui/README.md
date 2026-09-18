@@ -189,7 +189,7 @@ covers:
 import '@helpdock/ui/fonts.css';
 ```
 
-Sixteen faces, 369 KiB: IBM Plex Sans 400/500/600 in latin and latin-ext, IBM
+Sixteen faces, 361 KiB of woff2 (369 KiB for the directory, stylesheet included): IBM Plex Sans 400/500/600 in latin and latin-ext, IBM
 Plex Sans Arabic 400/500/600 in arabic and latin, IBM Plex Mono 400/500 in latin
 and latin-ext. DESIGN §3.2 loads three weights and no italics, and the budget for
 the directory is 1.5 MB; `src/fonts.test.ts` enforces both.

@@ -1,0 +1,20 @@
+{
+  "name": "@helpdock/widget",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Preact web component embedded on customer sites.",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/widget"
+  }
+}

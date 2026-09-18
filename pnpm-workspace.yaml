@@ -1,0 +1,8 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 11+ reads every setting except registry and authentication from this file
+# rather than from .npmrc.
+saveExact: true
+autoInstallPeers: true

@@ -87,7 +87,7 @@ literal IP in the URL goes through the same range check without a lookup.
 |---|---|
 | IPv4 | loopback `127.0.0.0/8`, unspecified `0.0.0.0/8`, private `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, link-local `169.254.0.0/16`, CGNAT `100.64.0.0/10`, multicast `224.0.0.0/4`, reserved `240.0.0.0/4`, broadcast `255.255.255.255`, cloud metadata `169.254.169.254` |
 | IPv6 | loopback `::1`, unspecified `::`, unique-local `fc00::/7`, link-local `fe80::/10`, multicast `ff00::/8`, cloud metadata `fd00:ec2::254` |
-| IPv6 carrying IPv4 | IPv4-mapped `::ffff:0:0/96`, 6to4 `2002::/16` and Teredo `2001::/32` are unwrapped and the IPv4 address inside them is checked against the table above. For Teredo both the server address and the obfuscated client address are checked. |
+| IPv6 carrying IPv4 | IPv4-mapped `::ffff:0:0/96`, 6to4 `2002::/16`, Teredo `2001::/32` and NAT64 `64:ff9b::/96` are unwrapped and the IPv4 address inside them is checked against the table above. For Teredo both the server address and the obfuscated client address are checked. |
 
 Every hop of a redirect chain is re-validated from scratch: scheme, credentials,
 port and resolution. `Authorization` and `Cookie` are dropped when the redirect

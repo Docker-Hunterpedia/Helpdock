@@ -56,11 +56,13 @@ const IPV6_RANGES: readonly NamedRange[] = [
 
 const SIX_TO_FOUR = range('6to4', '2002::/16');
 const TEREDO = range('Teredo', '2001::/32');
+const NAT64 = range('NAT64', '64:ff9b::/96');
 
 const SIX_TO_FOUR_OFFSET = 2;
 const TEREDO_SERVER_OFFSET = 4;
 const TEREDO_CLIENT_OFFSET = 12;
 const TEREDO_CLIENT_OBFUSCATION = 0xff;
+const NAT64_OFFSET = 12;
 
 function matchRange(ranges: readonly NamedRange[], address: Uint8Array): string | undefined {
   return ranges.find((candidate) => cidrContains(candidate.cidr, address))?.name;
@@ -93,6 +95,10 @@ function ipv6BlockedReason(address: Uint8Array): string | undefined {
 
   if (cidrContains(SIX_TO_FOUR.cidr, address)) {
     return describeEmbedded('6to4 embedded IPv4', sliceIpv4(address, SIX_TO_FOUR_OFFSET));
+  }
+
+  if (cidrContains(NAT64.cidr, address)) {
+    return describeEmbedded('NAT64 embedded IPv4', sliceIpv4(address, NAT64_OFFSET));
   }
 
   if (cidrContains(TEREDO.cidr, address)) {

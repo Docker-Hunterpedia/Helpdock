@@ -81,6 +81,21 @@ describe('blockedReason, IPv6 addresses carrying an IPv4 one', () => {
     expect(reasonFor('2002:0808:0808::1')).toBeUndefined();
   });
 
+  it('checks the IPv4 embedded in a NAT64 address', () => {
+    // On a NAT64 network the well-known prefix is a live route to the IPv4
+    // internet, so 64:ff9b::a00:1 reaches 10.0.0.1.
+    expect(reasonFor('64:ff9b::a00:1')).toBe(
+      'NAT64 embedded IPv4 10.0.0.1 (IPv4 private 10.0.0.0/8)',
+    );
+    expect(reasonFor('64:ff9b::169.254.169.254')).toBe(
+      'NAT64 embedded IPv4 169.254.169.254 (IPv4 cloud metadata 169.254.169.254)',
+    );
+    expect(reasonFor('64:ff9b::7f00:1')).toBe(
+      'NAT64 embedded IPv4 127.0.0.1 (IPv4 loopback 127.0.0.0/8)',
+    );
+    expect(reasonFor('64:ff9b::808:808')).toBeUndefined();
+  });
+
   it('checks both IPv4 addresses embedded in a Teredo address', () => {
     // 2001:0::<server v4>:<flags>:<port>:<obfuscated client v4>
     expect(reasonFor('2001:0:a00:1::')).toBe(

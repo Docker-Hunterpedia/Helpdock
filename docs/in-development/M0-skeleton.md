@@ -14,7 +14,7 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M0-01 | Monorepo | #4 | in progress |
+| M0-01 | Monorepo | #4 | shipped (#21) |
 | M0-02 | Config loader | #5 | planned |
 | M0-03 | Database | #6 | planned |
 | M0-04 | Tenancy plumbing | #7 | planned |
@@ -24,8 +24,8 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-08 | First-run wizard | #11 | planned |
 | M0-09 | Docker | #12 | planned |
 | M0-10 | Observability | #13 | planned |
-| M0-11 | CI | #14 | planned |
-| M0-12 | ADRs for the open decisions | #15 | in progress |
+| M0-11 | CI | #14 | in progress (`ci` job and required status check from #21; coverage gate live; Testcontainers, CodeQL, image build pending) |
+| M0-12 | ADRs for the open decisions | #15 | shipped (#19) |
 | M0-13 | Realtime gateway skeleton | #16 | planned |
 | M0-14 | Transactional outbox | #17 | planned |
 | M0-15 | Outbound HTTP client with SSRF protection | #18 | planned |
@@ -60,4 +60,6 @@ None yet.
 
 ## Pull requests
 
-- this PR: milestone doc + ADRs
+- #19 milestone doc + ADRs 0001–0005 (M0-12)
+- #20 DESIGN.md design system and UI rules
+- #21 monorepo scaffold, Biome, Vitest, `ci` workflow (M0-01, part of M0-11)

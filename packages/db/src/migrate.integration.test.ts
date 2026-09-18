@@ -17,6 +17,7 @@ const MIGRATION_TAGS = [
   '0000_core_tables',
   '0001_app_role_and_ticket_sequences',
   '0002_tenant_rls_policies',
+  '0003_outbox_notify_relay',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

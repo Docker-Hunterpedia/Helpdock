@@ -22,7 +22,7 @@ docs/in-development/   one doc per milestone being built
 docs/completed/        docs for shipped work
 docs/decisions/        ADRs
 apps/                  api, admin, helpcenter, widget      (from M0)
-packages/              db, schemas, ai, channels, ui, i18n, config, net   (from M0)
+packages/              db, schemas, ai, channels, ui, i18n, config, net, jobs   (from M0)
 docker/                Dockerfile, compose files, Caddyfile (from M0)
 ```
 

@@ -1,0 +1,32 @@
+{
+  "name": "@helpdock/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Queue names, job schemas, outbox relay, idempotent consumers.",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/jobs"
+  },
+  "dependencies": {
+    "@helpdock/db": "workspace:*",
+    "bullmq": "6.3.6",
+    "drizzle-orm": "0.45.2",
+    "ioredis": "6.0.0",
+    "postgres": "3.4.9",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "12.1.0",
+    "@testcontainers/redis": "12.1.0"
+  }
+}

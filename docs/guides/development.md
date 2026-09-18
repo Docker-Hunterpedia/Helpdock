@@ -48,14 +48,14 @@ pnpm turbo run typecheck --filter=@helpdock/api
 
 ```
 apps/          api, admin, helpcenter, widget
-packages/      db, schemas, ai, channels, ui, i18n, config, net
+packages/      db, schemas, ai, channels, ui, i18n, config, net, jobs
 scripts/       repository checks run by CI
 docs/          planning, guides, decisions
 ```
 
 Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end.
 
-Five are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/db` is the schema, the migrations and the row-level security; see [Database](#database). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n).
+Six are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/db` is the schema, the migrations and the row-level security; see [Database](#database). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/jobs` is the queue names, job schemas, outbox relay and idempotent consumers from M0-14; see [Jobs and outbox](#jobs-and-outbox). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n).
 
 TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `verbatimModuleSyntax`). A workspace `tsconfig.json` only adds `rootDir`, `outDir` and which files to include. Because module resolution is `nodenext`, relative imports carry the `.js` extension even when the file on disk is `.ts`.
 
@@ -285,12 +285,88 @@ Testcontainers, apply the migrations and run against the real thing, as the real
 runtime role:
 
 ```bash
-pnpm test:integration -- packages/db
+pnpm test:integration packages/db
 ```
 
 The first run pulls the image, which can take a few minutes; pull it in advance
 with `docker pull pgvector/pgvector:pg17` if the suite times out. No local
 Postgres is needed, and without Docker the suites skip themselves.
+
+## Jobs and outbox
+
+Queues, job schemas, the outbox relay and the consumer wrapper live in
+`packages/jobs`. Its [README](../../packages/jobs/README.md) is the reference;
+this is the part you need before writing a feature.
+
+One rule governs everything here
+([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)): **a side
+effect is enqueued in the same transaction as the change that causes it, and
+executed at least once, idempotently.** Sending an email, calling an LLM,
+delivering a webhook, indexing knowledge, processing media — all of them start as
+a row in `outbox`.
+
+### Asking for a side effect
+
+Never call `queue.add` from a request handler, a service or an event listener.
+Write an outbox row through the transaction you are already in:
+
+```ts
+import { enqueueOutbox } from '@helpdock/jobs';
+
+await withTenant(db, context, async (tx) => {
+  const ticket = await tx.insert(tickets).values(…).returning();
+  await enqueueOutbox(tx, {
+    brandId,
+    event: 'ticket.replied',
+    payload: { ticketId: ticket.id },
+  });
+});
+```
+
+If the transaction rolls back, the row was never there and no job exists. If it
+commits, the relay publishes the row to BullMQ with `jobId = outbox.id` and
+stamps `published_at` in one transaction, so a crash costs at most a duplicate
+job and never a lost one.
+
+### Handling it
+
+Register a handler for the event and let the dispatcher route to it. The handler
+runs inside the brand's transaction, next to the `job_receipts` claim that makes
+the delivery exactly-once:
+
+```ts
+import { registerEventHandler } from '@helpdock/jobs';
+
+registerEventHandler('ticket.replied', async ({ brandId, payload, tx }) => {
+  await tx.insert(notifications).values({ brandId, … });
+});
+```
+
+Throwing asks BullMQ for a retry and rolls back both the writes and the receipt.
+Returning commits both, so every later delivery of the same key stops at the
+receipt. A payload that fails its Zod schema is not retried at all: it goes
+straight to the failed set with the issues in `job.failedReason`.
+
+### Adding a job
+
+Jobs are declared in `packages/jobs/src/jobs.ts` with a name, a queue from
+[ARCHITECTURE §13](../planning/ARCHITECTURE.md#13-background-jobs-bullmq-queues),
+a Zod payload schema that includes `brandId`, and a retry profile. The schema is
+used on enqueue and on consume, so the two cannot drift.
+
+### Running it
+
+The relay and the consumers run in the worker, which is the same image with
+`APP_ROLE=worker`. The README's "What the worker host wires at boot" shows the
+order: register handlers, start the workers, then start the relay.
+
+The suites in `packages/jobs/src/*.integration.test.ts` start a real Postgres and
+a real Redis and prove the guarantees, including a relay killed between the `add`
+and the commit:
+
+```bash
+pnpm test:integration packages/jobs
+```
 
 ## Tests
 
@@ -304,7 +380,7 @@ Anything that touches Postgres, Redis, a queue or a channel adapter is tested ag
 
 ```bash
 pnpm test:integration                                  # the whole project
-pnpm test:integration -- packages/config               # one directory
+pnpm test:integration packages/config               # one directory
 ```
 
 They are not part of `pnpm test`, which stays fast and needs nothing installed. CI runs them as a step of its own; GitHub-hosted runners have a Docker daemon, so no service container is declared in the workflow.

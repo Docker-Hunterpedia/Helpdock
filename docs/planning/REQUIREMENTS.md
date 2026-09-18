@@ -11,7 +11,7 @@ Most teams pay Zoho Desk / Zendesk / Freshdesk for two things: a ticketing syste
 
 Helpdock is built from day one around four ideas:
 
-1. **One deploy, many brands.** A single installation hosts any number of brands. Each brand has its own inboxes, help center (on its own domain, e.g. `support.swapforless.com`), widget theme, channels, and AI knowledge.
+1. **One deploy, many brands.** A single installation hosts any number of brands. Each brand has its own inboxes, help center (on its own domain, e.g. `support.helpdock.com`), widget theme, channels, and AI knowledge.
 2. **Zoho-style ticketing discipline.** Departments, SLAs, workflow rules, macros, views, and agent collision — not "a chat inbox with labels".
 3. **AI that is grounded and controlled.** The AI answers from *your* knowledge (help center, files, crawled sites, Notion, Google Drive), never takes actions, and every AI feature is a toggle. Any LLM provider, by API key or subscription.
 4. **Security and speed are requirements, not features.** Row-level tenant isolation in Postgres, encrypted secrets, signed widget identities, rate limits everywhere, and a widget under 40 KB.
@@ -42,8 +42,8 @@ Rules:
 
 ```
 Install
-└── Brand (e.g. SwapForLess)
-    ├── Domains: support.swapforless.com (help center), widget allowed origins
+└── Brand (e.g. Helpdock)
+    ├── Domains: support.helpdock.com (help center), widget allowed origins
     ├── Departments (Billing, Technical, Sales)
     │   └── Teams → Agents
     ├── Channels: email mailboxes, Telegram bots, web widget(s), API keys
@@ -56,7 +56,7 @@ Install
 
 - Brand is the tenant boundary. Every table carries `brand_id` (or `install`-level for global objects) and Postgres RLS enforces it.
 - Global objects: users, roles, LLM provider credentials (can be shared across brands or scoped to one), system settings.
-- Ticket numbers are auto-generated per brand: `<BRAND_PREFIX>-<sequence>` (e.g. `SFL-1042`). Prefix editable once at brand creation; sequence is a Postgres sequence per brand — never reused.
+- Ticket numbers are auto-generated per brand: `<BRAND_PREFIX>-<sequence>` (e.g. `HD-1042`). Prefix editable once at brand creation; sequence is a Postgres sequence per brand — never reused.
 
 ---
 
@@ -108,7 +108,7 @@ All channels implement one `ChannelAdapter` interface (normalize inbound → mes
 
 **Email**
 - Inbound: IMAP polling per mailbox (imapflow + mailparser) **and** inbound-parse webhooks (Postmark, SendGrid, Mailgun, Resend, generic JSON).
-- Threading by `Message-ID`/`In-Reply-To`/`References` + ticket-number token in subject `[SFL-1042]`; quoted-reply stripping; inline images preserved; attachments → S3.
+- Threading by `Message-ID`/`In-Reply-To`/`References` + ticket-number token in subject `[HD-1042]`; quoted-reply stripping; inline images preserved; attachments → S3.
 - Outbound: SMTP per brand (Nodemailer), `From`/`Reply-To` per department, HTML + plain text, signature per agent, DKIM handled by the SMTP provider.
 - Auto-responders: new ticket acknowledgment, out-of-hours notice (per brand).
 - Loop protection: `Auto-Submitted`, `Precedence: bulk`, rate cap per sender.

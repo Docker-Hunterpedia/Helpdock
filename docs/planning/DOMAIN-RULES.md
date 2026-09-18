@@ -111,7 +111,7 @@ Per brand, editable by Team Leaders and Admins. Setting `reopen_policy`:
 | `always` | Always reopens |
 | `never` | Always creates a new ticket |
 
-A new ticket created by this rule gets `parent_id` = the closed ticket, a system message "Continued from SFL-1042", and appears next to it on the contact timeline. The closed ticket gets a system message "Continued in SFL-1101". Auto-responders treat it as a new ticket. Reopening restarts clocks as in §3.5.
+A new ticket created by this rule gets `parent_id` = the closed ticket, a system message "Continued from HD-1042", and appears next to it on the contact timeline. The closed ticket gets a system message "Continued in HD-1101". Auto-responders treat it as a new ticket. Reopening restarts clocks as in §3.5.
 
 ### 2.4 Merge and split
 
@@ -127,7 +127,7 @@ A new ticket created by this rule gets `parent_id` = the closed ticket, a system
 **Split** (selected messages → new ticket):
 
 - New ticket with `split_from_id`, same contact, department chosen by the agent, fresh ticket number.
-- Selected messages are **copied** (not moved) with `copied_from_message_id`; the original ticket shows a system message "Messages split to SFL-1103".
+- Selected messages are **copied** (not moved) with `copied_from_message_id`; the original ticket shows a system message "Messages split to HD-1103".
 - New clocks start at split time under the new ticket's policy. Original ticket's clocks are untouched.
 - CSAT is sent per ticket on its own close.
 
@@ -211,7 +211,7 @@ An inbound email is attached to an existing ticket only if **both** hold:
 1. A thread hint matches: `In-Reply-To` or any `References` id equals a message id Helpdock sent or received on that ticket, **or** the subject contains the brand's `[PREFIX-N]` token.
 2. The sender address is a participant of that ticket (§2.5), compared case-insensitively on the normalised address.
 
-If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced SFL-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.
+If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced HD-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.
 
 Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`, `mailer-daemon@`) never create tickets unless the brand allow-lists them; they are logged.
 

@@ -35,6 +35,10 @@ const status = (overrides: Partial<RelayStatus> = {}): RelayStatus => ({
 
 const silent = { warn: () => {} };
 
+// The fixtures carry a fixed `at`; pin `now` next to it so the staleness check
+// never depends on the wall clock of the machine running the suite.
+const NOW = Date.parse('2026-09-19T10:00:05.000Z');
+
 describe('recordQueueCounts', () => {
   it('sets one series per queue and state', async () => {
     const metrics = createMetrics();
@@ -52,7 +56,7 @@ describe('recordRelayStatus', () => {
   it('publishes the backlog and observes the cycle once', async () => {
     const metrics = createMetrics();
 
-    const seen = recordRelayStatus(metrics, status({ pending: 4, durationMs: 500 }), null);
+    const seen = recordRelayStatus(metrics, status({ pending: 4, durationMs: 500 }), null, NOW);
 
     const scrape = await metrics.registry.metrics();
     expect(scrape).toContain('outbox_unpublished_rows 4');
@@ -65,8 +69,8 @@ describe('recordRelayStatus', () => {
   it('does not count the same reported cycle twice when the relay has not moved on', async () => {
     const metrics = createMetrics();
 
-    const first = recordRelayStatus(metrics, status({ durationMs: 500 }), null);
-    recordRelayStatus(metrics, status({ durationMs: 500 }), first);
+    const first = recordRelayStatus(metrics, status({ durationMs: 500 }), null, NOW);
+    recordRelayStatus(metrics, status({ durationMs: 500 }), first, NOW);
 
     expect(await metrics.registry.metrics()).toContain('outbox_relay_cycle_seconds_count 1');
   });
@@ -74,8 +78,8 @@ describe('recordRelayStatus', () => {
   it('counts the next cycle when it is a different one', async () => {
     const metrics = createMetrics();
 
-    const first = recordRelayStatus(metrics, status(), null);
-    recordRelayStatus(metrics, status({ at: '2026-09-19T10:00:01.000Z' }), first);
+    const first = recordRelayStatus(metrics, status(), null, NOW);
+    recordRelayStatus(metrics, status({ at: '2026-09-19T10:00:01.000Z' }), first, NOW);
 
     expect(await metrics.registry.metrics()).toContain('outbox_relay_cycle_seconds_count 2');
   });

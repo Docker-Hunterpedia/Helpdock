@@ -4,6 +4,7 @@ import arCommon from '../locales/ar/common.json' with { type: 'json' };
 import arEmail from '../locales/ar/email.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
+import arSystem from '../locales/ar/system.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
@@ -11,6 +12,7 @@ import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enEmail from '../locales/en/email.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
+import enSystem from '../locales/en/system.json' with { type: 'json' };
 import enWizard from '../locales/en/wizard.json' with { type: 'json' };
 
 /** DESIGN §7 and REQUIREMENTS: English and Modern Standard Arabic in v1. */
@@ -28,6 +30,7 @@ export const NAMESPACES = [
   'settings',
   'staff',
   'email',
+  'system',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -42,6 +45,7 @@ export const resources = {
     settings: enSettings,
     staff: enStaff,
     email: enEmail,
+    system: enSystem,
   },
   ar: {
     common: arCommon,
@@ -51,6 +55,7 @@ export const resources = {
     settings: arSettings,
     staff: arStaff,
     email: arEmail,
+    system: arSystem,
   },
 };
 

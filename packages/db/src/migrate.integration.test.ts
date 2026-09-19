@@ -93,6 +93,12 @@ describe.skipIf(!hasDocker)('migrations', () => {
 
     expect(first.applied).toEqual(MIGRATION_TAGS);
     expect(second.applied).toEqual([]);
+
+    // `total` is how far the schema has been brought, so the second run reports
+    // the same number as the first even though it applied nothing. The System
+    // page reads it from boot, because the runtime role may not read the log.
+    expect(first.total).toBe(MIGRATION_TAGS.length);
+    expect(second.total).toBe(MIGRATION_TAGS.length);
   });
 
   it('applies each migration once when two replicas start at the same time', async () => {

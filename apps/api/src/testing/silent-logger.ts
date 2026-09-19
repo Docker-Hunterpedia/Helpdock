@@ -6,4 +6,7 @@ import { createLogger, type Logger } from '../logging/logger.js';
  * instead of a page of JSON in the run output.
  */
 export const silentLogger = (): Logger =>
-  createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test' }, level: 'silent' });
+  createLogger({
+    env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' },
+    level: 'silent',
+  });

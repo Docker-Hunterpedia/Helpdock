@@ -82,6 +82,17 @@ export interface RunMigrationsOptions {
 export interface MigrationResult {
   /** Migrations this call applied, in order. Empty when the database was up to date. */
   readonly applied: readonly string[];
+  /**
+   * Migrations the database has recorded once this call finished — how far the
+   * schema has been brought, not how far this boot brought it.
+   *
+   * It is returned rather than left to be queried later because the migration
+   * log lives in the `drizzle` schema, which the runtime role deliberately
+   * cannot read (see `0001_app_role_and_ticket_sequences.sql`). The owner
+   * connection that runs the migrations is the only one that may count them, so
+   * it counts them while it is here (ARCHITECTURE §14, the System page).
+   */
+  readonly total: number;
 }
 
 type Client = ReturnType<typeof postgres>;
@@ -105,12 +116,15 @@ const appliedMillis = async (client: Client): Promise<ReadonlySet<number>> => {
 const readJournal = async (): Promise<Journal> =>
   JSON.parse(await readFile(JOURNAL_PATH, 'utf8')) as Journal;
 
-const applyMigrations = async (client: Client): Promise<readonly string[]> => {
+const applyMigrations = async (client: Client): Promise<MigrationResult> => {
   const before = await appliedMillis(client);
   await migrate(drizzle(client), { migrationsFolder: MIGRATIONS_FOLDER });
   const after = await appliedMillis(client);
 
-  return newlyAppliedTags(await readJournal(), before, after);
+  return {
+    applied: newlyAppliedTags(await readJournal(), before, after),
+    total: after.size,
+  };
 };
 
 /**
@@ -133,14 +147,14 @@ export const runMigrations = async ({
     await client`SELECT pg_advisory_lock(${MIGRATION_LOCK_ID}::bigint)`;
 
     try {
-      const applied = await applyMigrations(client);
+      const result = await applyMigrations(client);
 
       log(
-        applied.length === 0
+        result.applied.length === 0
           ? 'Database is up to date; no migrations applied.'
-          : `Applied ${applied.length} migration(s): ${applied.join(', ')}.`,
+          : `Applied ${result.applied.length} migration(s): ${result.applied.join(', ')}.`,
       );
-      return { applied };
+      return result;
     } finally {
       await client`SELECT pg_advisory_unlock(${MIGRATION_LOCK_ID}::bigint)`;
       await client`SELECT set_config(${APP_PASSWORD_SETTING}, '', false)`;

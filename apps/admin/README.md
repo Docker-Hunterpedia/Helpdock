@@ -9,6 +9,10 @@ M0-07 shipped the chrome: the sign-in screens, the shell, and one empty page per
 nav destination. M0-05 connected them to the real auth service; the in-memory
 fixture stays as the adapter the unit and browser suites run against.
 
+M0-10 adds the first real screen, **System**, built from the design canvas
+artboard `Admin/System`. It reads a real endpoint
+(`GET /api/install/system`), so it is the one page that needs the api running.
+
 In production the api serves `dist/` at `/` on the admin host, with `no-store`
 on `index.html` and a year of `immutable` on everything Vite content-hashed into
 `assets/`; `apps/api/README.md` has the rules.
@@ -60,12 +64,47 @@ src/screens/        sign in, the code screen, the link and reset confirmations,
 src/shell/          sidebar, brand switcher, user menu, page header, empty state
 src/ui/             the small pieces DESIGN §6 has no component for yet
 src/install/        what the sign-in screen may know before anyone signs in
+src/screens/admin/system/   the System page (M0-10), its api client and formatters
 e2e/                Playwright, one project per locale
 e2e/api/            Playwright against a real api, its own config
 ```
 
-Imports reach `@helpdock/ui` and `@helpdock/i18n` only through their package
-entry points, and no app imports another app (`pnpm check:boundaries`).
+Imports reach `@helpdock/ui`, `@helpdock/i18n` and `@helpdock/schemas` only
+through their package entry points, and no app imports another app
+(`pnpm check:boundaries`).
+
+### The System page
+
+`src/screens/admin/system/` is M0-10's half of the milestone: four health cards,
+the queue table, and the channels / usage / audit column of the artboard. It
+polls `GET /api/install/system` every ten seconds with TanStack Query and parses
+the response through `systemStatusSchema` from `@helpdock/schemas`, so a field
+that quietly went missing is an error the page shows rather than a card drawn as
+healthy.
+
+Three rules it follows, which later screens should too:
+
+- **A subsystem that is not measured says "Not configured".** Storage and AI
+  spend have no numbers until M1 and M7, and a zero would read as a
+  measurement.
+- **A state is a word as well as a hue.** "Degraded" is written beside the dot
+  (DESIGN §10).
+- **Numerals are Latin in both locales and end-aligned in the table**
+  (DESIGN §6.5, §7).
+
+Only an install admin is offered the nav item, because everything on the page is
+install-wide. The route is not hidden: a brand admin who types the path gets the
+api's 403 drawn as "Not allowed", so the answer comes from one place.
+
+"All queues" fetches the rest from `GET /api/install/system/queues` rather than
+expanding what is already on screen — the status read carries only the first
+few, so expanding would move a label and nothing else. "Open queue dashboard"
+opens the same table on its own screen; Bull Board is M8-05
+([ADR 0004](../../docs/decisions/0004-bull-board-for-queues.md)), and the
+button's tooltip says so.
+
+What the page's numbers mean is in the
+[operations guide](../../docs/guides/operations.md#the-system-page).
 
 ### Providers
 
@@ -155,8 +194,14 @@ and putting it in the main one would start containers for the fixture suite too.
 
 The fixture suite has one project per locale and runs every spec twice, which
 is what catches a layout that only works in one direction. `@axe-core/playwright`
-scans sign in, the code screen and the shell — including their error banners and
-open menus — against WCAG 2.1 A and AA, and the suite fails on any violation.
+scans sign in, the code screen, the shell and the System page — including their
+error banners, open menus and degraded states — against WCAG 2.1 A and AA, and
+the suite fails on any violation.
+
+`e2e/system.spec.ts` stubs `GET /api/install/system` with Playwright's own
+`route`, using the same fixture as the unit tests
+(`src/screens/admin/system/fixtures.ts`), so the two cannot drift and no mock
+server is needed.
 
 ### Screenshots
 

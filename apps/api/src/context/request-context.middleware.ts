@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Env } from '@helpdock/config';
 import { Inject, Injectable, type NestMiddleware } from '@nestjs/common';
+import { isSpanContextValid, trace } from '@opentelemetry/api';
+import { principalIdOf } from '../auth/principal.js';
 import type { Logger } from '../logging/logger.js';
 import { BRAND_RESOLVER, ENV, LOGGER } from '../runtime/tokens.js';
 import type { BrandResolver } from './brand-resolver.js';
@@ -66,27 +68,40 @@ export class RequestContextMiddleware implements NestMiddleware {
   }
 
   /**
-   * One line per request: the id, the route, the outcome, how long it took and
-   * who asked. Never a body, never a query string, never a header.
+   * One line per request: the id, the trace it belongs to, the route, the
+   * outcome, how long it took and who asked. Never a body, never a query
+   * string, never a header, and never an email — the principal is named by its
+   * id, which is the same handle `audit_log` uses (ARCHITECTURE §14).
    *
    * The bindings are read from the context the listener closes over rather than
    * from the AsyncLocalStorage: `finish` is emitted by Node when the socket
    * drains, and an event listener runs in the emitter's async context, not the
-   * one it was registered in.
+   * one it was registered in. The trace id is captured for the same reason —
+   * the active span is gone by the time `finish` fires, so it is read while the
+   * request is still in flight.
    */
   #logWhenFinished(res: ServerResponse, context: RequestContext): void {
+    const span = trace.getActiveSpan()?.spanContext();
+    const traceIds =
+      span !== undefined && isSpanContextValid(span)
+        ? { traceId: span.traceId, spanId: span.spanId }
+        : {};
+
     res.once('finish', () => {
       const brandId = context.targetBrandId ?? context.hostBrandId;
+      const principal = context.principal;
 
       this.#logger.info(
         {
           requestId: context.requestId,
+          ...traceIds,
           ...(brandId === null ? {} : { brandId }),
           method: context.method,
           path: context.path,
           status: res.statusCode,
           durationMs: Math.round(context.durationMs),
-          principalType: context.principal?.type ?? null,
+          principalType: principal?.type ?? null,
+          ...(principal === null ? {} : { principalId: principalIdOf(principal) }),
         },
         'request',
       );
@@ -95,13 +110,23 @@ export class RequestContextMiddleware implements NestMiddleware {
 }
 
 /**
- * The path without its query string. A query may carry a search term or an
- * email address, and ARCHITECTURE §14 puts no request content in the log.
+ * The path alone. A query may carry a search term or an email address, and
+ * ARCHITECTURE §14 puts no request content in the log.
+ *
+ * Parsed rather than cut at the first `?`, because a request target may arrive
+ * in absolute form — `GET http://user:pw@host/x HTTP/1.1` is legal and Node
+ * hands it over as-is. Cutting would log the host and its userinfo, and an
+ * install-scope route writes this same value into `audit_log.targetId`.
  */
 const pathOf = (url: string | undefined): string => {
   if (url === undefined) {
     return '/';
   }
-  const query = url.indexOf('?');
-  return query === -1 ? url : url.slice(0, query);
+
+  try {
+    return new URL(url, 'http://helpdock.invalid').pathname;
+  } catch {
+    /* c8 ignore next 2 -- `URL` with a base parses anything Node accepted as a target. */
+    return '/';
+  }
 };

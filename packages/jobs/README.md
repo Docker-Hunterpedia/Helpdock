@@ -150,6 +150,15 @@ connection it can hold, which a job that starts and ends cannot. Each cycle:
    than waits), select up to `batchSize` unpublished rows in id order, `add` one
    BullMQ job per row with `jobId = outbox.id`, and stamp `published_at`.
 
+Then, if a `status` store was given, write the cycle to Redis under
+`hd:relay:last` — when it ran, how long it took, how many rows were waiting and
+how many were published. That key is what `/metrics` and the admin System page
+read: the relay is the one component that may look at every brand's `outbox` at
+once (its discovery statement above), so it reports rather than being asked, and
+an api replica never has to widen its tenant context to answer "how big is the
+backlog?". A failed write is logged and dropped; publishing a heartbeat must
+never be able to stop the relay.
+
 Then wait for a `LISTEN outbox` notification or `pollIntervalMs`, whichever comes
 first. The notification is latency; the poll is the guarantee, so a lost
 subscription makes the relay slower and never wrong. A brand that fills its batch
@@ -191,8 +200,15 @@ const worker = createWorker(outboxEventJob, createOutboxEventHandler(), {
   log,
 });
 
-// 3. Run the relay.
-const relay = startOutboxRelay({ db, redis: connection, log, listenUrl: env.DATABASE_URL });
+// 3. Run the relay. `status` is the same connection: BullMQ owns its own client
+//    and does not lend it out, so the heartbeat needs one it can use.
+const relay = startOutboxRelay({
+  db,
+  redis: connection,
+  status: connection,
+  log,
+  listenUrl: env.DATABASE_URL,
+});
 
 // On shutdown, in this order:
 await relay.stop();
@@ -202,6 +218,9 @@ await connection.quit();
 
 `createQueueConnection` sets `maxRetriesPerRequest: null`, which BullMQ requires
 of a connection a worker blocks on.
+
+Leaving `status` out is allowed: the relay runs exactly as before and the System
+page says the worker has not reported.
 
 Registering handlers before starting the worker matters: a job that arrives
 before its handler is registered fails as an unknown event and burns attempts.

@@ -125,11 +125,16 @@ export function Sidebar({
         </Typography>
 
         <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {ADMIN_NAV.map((item) => (
-            <Box component="li" key={item.key}>
-              <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
-            </Box>
-          ))}
+          {/* The System page is install-wide — schema, queues, the database
+              role — so only an install admin is offered it. A brand admin who
+              reaches the path anyway is refused by the api, not by the nav. */}
+          {ADMIN_NAV.filter((item) => item.key !== 'system' || session.user.installAdmin).map(
+            (item) => (
+              <Box component="li" key={item.key}>
+                <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+              </Box>
+            ),
+          )}
         </Box>
       </Box>
 

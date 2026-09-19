@@ -57,6 +57,7 @@ describe('runRelayCycle', () => {
 
     expect(await runRelayCycle({ db, queue, brandIds: [] })).toEqual({
       published: 0,
+      pending: 0,
       brands: 0,
       skipped: 0,
       failed: 0,

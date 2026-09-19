@@ -18,9 +18,10 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { enqueueOutbox } from './outbox.js';
 import { QUEUE_NAMES } from './queues.js';
+import { createQueueConnection } from './redis.js';
 import {
   advisoryLockKey,
-  findBrandsWithUnpublishedRows,
+  findUnpublishedRowCounts,
   type JobQueue,
   listRelayBrandIds,
   OUTBOX_RELAY_LOCK_NAMESPACE,
@@ -28,6 +29,7 @@ import {
   runRelayCycle,
   startOutboxRelay,
 } from './relay.js';
+import { readRelayStatus } from './relay-status.js';
 
 /**
  * The relay guarantees of DOMAIN-RULES §6, against a real Postgres and a real
@@ -240,8 +242,11 @@ describe.skipIf(!hasDocker)('the outbox relay', () => {
     const idA = await write(brandA);
     const idB = await write(brandB);
 
-    expect(await findBrandsWithUnpublishedRows(db, [brandA])).toEqual([brandA]);
-    expect(await runRelayCycle({ db, queue, brandIds: [brandA] })).toMatchObject({ published: 1 });
+    expect(await findUnpublishedRowCounts(db, [brandA])).toEqual([{ brandId: brandA, rows: 1 }]);
+    expect(await runRelayCycle({ db, queue, brandIds: [brandA] })).toMatchObject({
+      published: 1,
+      pending: 1,
+    });
 
     expect(await waitingJobIds()).toEqual([idA]);
     expect(await queue.getJob(idB)).toBeUndefined();
@@ -274,6 +279,46 @@ describe.skipIf(!hasDocker)('the outbox relay', () => {
       );
     } finally {
       await relay.stop();
+    }
+  });
+
+  it('reports every cycle to Redis, so the api can say the worker is alive', async () => {
+    const connection = createQueueConnection(redis.getConnectionUrl());
+    await write(brandA);
+
+    const relay = startOutboxRelay({
+      db,
+      redis: connection,
+      status: connection,
+      brandIds: [brandA],
+      pollIntervalMs: 200,
+    });
+
+    try {
+      const reported = await vi.waitFor(
+        async () => {
+          const status = await readRelayStatus(connection);
+          expect(status).not.toBeNull();
+          return status;
+        },
+        { timeout: 10_000, interval: 50 },
+      );
+
+      // The first cycle found the row waiting and published it, which is what
+      // the System page's "n pending · last cycle x ago" is built from.
+      expect(reported).toMatchObject({ pending: 1, published: 1, brands: 1, failed: 0 });
+      expect(Date.parse(reported?.at ?? '')).toBeGreaterThan(Date.now() - 30_000);
+
+      // A later cycle overwrites it with an empty backlog.
+      await vi.waitFor(
+        async () => {
+          expect(await readRelayStatus(connection)).toMatchObject({ pending: 0, published: 0 });
+        },
+        { timeout: 10_000, interval: 50 },
+      );
+    } finally {
+      await relay.stop();
+      await connection.quit();
     }
   });
 });

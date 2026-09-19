@@ -67,6 +67,35 @@ describe('loadEnv', () => {
     expectInvalidKeys(envWith({ TRUST_PROXY: 'maybe' }), ['TRUST_PROXY']);
   });
 
+  it('defaults the log level to info and takes any level pino knows', () => {
+    expect(loadEnv(completeEnv).LOG_LEVEL).toBe('info');
+
+    for (const level of ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']) {
+      expect(loadEnv(envWith({ LOG_LEVEL: level })).LOG_LEVEL, level).toBe(level);
+    }
+  });
+
+  it('refuses a log level that is not one, rather than logging nothing by accident', () => {
+    expectInvalidKeys(envWith({ LOG_LEVEL: 'verbose' }), ['LOG_LEVEL']);
+    expectInvalidKeys(envWith({ LOG_LEVEL: 'INFO' }), ['LOG_LEVEL']);
+  });
+
+  it('leaves METRICS_TOKEN unset unless an install chose one', () => {
+    expect(loadEnv(completeEnv).METRICS_TOKEN).toBeUndefined();
+    expect(loadEnv(envWith({ METRICS_TOKEN: '  ' })).METRICS_TOKEN).toBeUndefined();
+  });
+
+  it('refuses a metrics token short enough to guess', () => {
+    expectInvalidKeys(envWith({ METRICS_TOKEN: 'short' }), ['METRICS_TOKEN']);
+    expect(loadEnv(envWith({ METRICS_TOKEN: 'x'.repeat(16) })).METRICS_TOKEN).toBe('x'.repeat(16));
+  });
+
+  it('never quotes the metrics token in the error it throws', () => {
+    const failure = expectInvalidKeys(envWith({ METRICS_TOKEN: 'secret' }), ['METRICS_TOKEN']);
+
+    expect(failure.message).not.toContain('secret');
+  });
+
   it('parses the port and the outbound allow-list', () => {
     const env = loadEnv(
       envWith({ PORT: '8080', OUTBOUND_ALLOW_CIDRS: '10.0.0.0/8, fd00::/8 ,192.168.1.1/32' }),

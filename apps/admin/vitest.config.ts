@@ -11,6 +11,9 @@ import { defineConfig } from 'vitest/config';
  * sources so the suite
  * runs on a clean clone without building the workspace first. Both packages
  * compile from exactly these files, and their own suites test the built output.
+ * sources so the suite runs on a clean clone without building the workspace
+ * first. Each package compiles from exactly these files, and its own suite
+ * tests the built output.
  */
 export default defineConfig({
   plugins: [react()],

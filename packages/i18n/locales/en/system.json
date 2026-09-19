@@ -1,0 +1,84 @@
+{
+  "title": "System",
+  "caption": "Install-wide · refreshed {{seconds}} s ago",
+  "captionJustNow": "Install-wide · refreshed just now",
+  "version": "helpdock {{version}} · {{sha}} · node {{node}}",
+  "openQueues": "Open queue dashboard",
+  "openQueuesHint": "Opens the full queue table. The embedded Bull Board arrives with milestone M8.",
+  "notAllowed": {
+    "heading": "Not allowed",
+    "body": "The System page is install-wide, so only an install admin can open it."
+  },
+  "error": {
+    "heading": "Could not read the system status",
+    "body": "The api did not answer. Check that it is running, then try again."
+  },
+  "loading": "Reading the system status",
+  "notConfigured": "Not configured",
+  "unknown": "Unknown",
+  "status": {
+    "ok": "Healthy",
+    "warning": "Degraded",
+    "error": "Down",
+    "connected": "Connected",
+    "disconnected": "Disconnected"
+  },
+  "cards": {
+    "api": {
+      "title": "API",
+      "caption": "{{checks}} checks · slowest {{latency}} ms"
+    },
+    "worker": {
+      "title": "Worker",
+      "caption": "outbox relay: {{pending}} pending · last cycle {{ago}} s ago",
+      "notReporting": "no relay has reported; is a worker running?"
+    },
+    "postgres": {
+      "title": "Postgres",
+      "caption_one": "{{count}} migration applied · role {{role}} · RLS forced",
+      "caption_other": "{{count}} migrations applied · role {{role}} · RLS forced",
+      "rlsBypassed": "warning: this role can bypass row-level security"
+    },
+    "redis": {
+      "title": "Redis",
+      "caption": "latency {{latency}} ms",
+      "aofRewrite": "AOF rewrite running · latency {{latency}} ms"
+    }
+  },
+  "queues": {
+    "title": "Queues",
+    "name": "Queue",
+    "waiting": "Waiting",
+    "active": "Active",
+    "failed": "Failed",
+    "delayed": "Delayed",
+    "oldest": "Oldest waiting",
+    "deadLetter_one": "{{count}} in dead letter",
+    "deadLetter_other": "{{count}} in dead letter",
+    "footer": "Showing {{shown}} of {{total}}",
+    "showAll": "All queues",
+    "showFewer": "Show fewer",
+    "empty": "No queues could be read."
+  },
+  "channels": {
+    "title": "Channels",
+    "empty": "No channels yet · added in M2",
+    "fix": "fix"
+  },
+  "usage": {
+    "title": "Storage and AI spend",
+    "storage": "Attachments in S3",
+    "storageLimit": "of {{limit}} soft limit",
+    "storagePending": "Attachment storage is measured from milestone M1.",
+    "ai": "LLM tokens · cost",
+    "aiBudget": "{{percent}} % of the {{budget}} budget · alert at {{alert}} %",
+    "aiPending": "LLM usage is measured from milestone M7."
+  },
+  "audit": {
+    "title": "Audit log",
+    "showAll": "Show all",
+    "showFewer": "Show fewer",
+    "empty": "Nothing has been recorded yet.",
+    "entry": "{{action}} · {{target}}"
+  }
+}

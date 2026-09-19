@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 import { RequireSession } from '../auth/require-session.tsx';
+import { SystemPage } from '../screens/admin/system/system-page.tsx';
+import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
 import { AuthComplete } from '../screens/auth-complete.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
@@ -34,13 +36,18 @@ export function AppRoutes(): ReactNode {
 
       <Route element={<RequireSession />}>
         <Route element={<AppShell />}>
-          {ALL_NAV.map((item) => (
+          {ALL_NAV.filter((item) => item.key !== 'system').map((item) => (
             <Route
               key={item.key}
               path={item.path}
               element={<PlaceholderPage navKey={item.key} />}
             />
           ))}
+          {/* M0-10. The nav item is install-admin only, but the route is not
+              hidden: a non-admin who types the path gets the api's 403 drawn
+              as "Not allowed", which is one answer in one place. */}
+          <Route path={ROUTES.system} element={<SystemPage />} />
+          <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
         </Route>
       </Route>
 

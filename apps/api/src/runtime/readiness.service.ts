@@ -1,6 +1,6 @@
 import type { Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
-import type { Readiness, ReadinessCheck } from '@helpdock/schemas';
+import type { Readiness, ReadinessCheck, SystemCheck } from '@helpdock/schemas';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
@@ -32,7 +32,20 @@ export class ReadinessService {
   }
 
   async check(): Promise<Readiness> {
-    const checks = await Promise.all([
+    const checks = await this.detail();
+
+    return {
+      status: checks.every((check) => check.status === 'up') ? 'ready' : 'not_ready',
+      // `/ready` answers without a principal, so it gets the probe and not the
+      // timing; the output schema would drop `latencyMs` anyway. The System
+      // page, which is install-admin only, gets the whole reading.
+      checks: checks.map(({ latencyMs: _latencyMs, ...check }) => check),
+    };
+  }
+
+  /** The same three probes, each with how long it took (ARCHITECTURE §14). */
+  async detail(): Promise<readonly SystemCheck[]> {
+    return Promise.all([
       probe('database', async () => {
         await this.#db.execute(sql`SELECT 1`);
       }),
@@ -43,11 +56,6 @@ export class ReadinessService {
         await this.#settings.get('auth.require2fa');
       }),
     ]);
-
-    return {
-      status: checks.every((check) => check.status === 'up') ? 'ready' : 'not_ready',
-      checks,
-    };
   }
 }
 
@@ -59,15 +67,21 @@ export class ReadinessService {
 const probe = async (
   name: ReadinessCheck['name'],
   run: () => Promise<void>,
-): Promise<ReadinessCheck> => {
+): Promise<SystemCheck> => {
+  const startedAt = process.hrtime.bigint();
+  const latencyMs = (): number => Number(process.hrtime.bigint() - startedAt) / NANOS_PER_MILLI;
+
   try {
     await run();
-    return { name, status: 'up' };
+    return { name, status: 'up', latencyMs: latencyMs() };
   } catch (error) {
     return {
       name,
       status: 'down',
       error: error instanceof Error ? error.name : 'Error',
+      latencyMs: latencyMs(),
     };
   }
 };
+
+const NANOS_PER_MILLI = 1_000_000;

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "changelog": ["@changesets/changelog-github", { "repo": "Docker-Hunterpedia/Helpdock" }],
+  "commit": false,
+  "baseBranch": "main",
+  "access": "restricted",
+  "updateInternalDependencies": "patch",
+  "privatePackages": { "version": true, "tag": false },
+  "ignore": [
+    "@helpdock/admin",
+    "@helpdock/helpcenter",
+    "@helpdock/widget",
+    "@helpdock/ai",
+    "@helpdock/channels",
+    "@helpdock/config",
+    "@helpdock/db",
+    "@helpdock/i18n",
+    "@helpdock/jobs",
+    "@helpdock/net",
+    "@helpdock/schemas",
+    "@helpdock/ui"
+  ]
+}

@@ -30,6 +30,16 @@
       "groupName": "dev dependencies"
     },
     {
+      "description": "The OpenTelemetry packages move together; a mixed set fails to instrument.",
+      "matchPackageNames": ["@opentelemetry/**"],
+      "groupName": "opentelemetry"
+    },
+    {
+      "description": "Nest's own packages share a version and have to be upgraded as one.",
+      "matchPackageNames": ["@nestjs/**"],
+      "groupName": "nestjs"
+    },
+    {
       "description": "Node stays on the 24 LTS line until the stack table changes.",
       "matchPackageNames": ["node", "@types/node"],
       "allowedVersions": "<25"

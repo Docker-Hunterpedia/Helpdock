@@ -7,9 +7,11 @@ import { strings } from './strings.js';
  * One baseline per screen per locale, so an accidental layout change in either
  * direction shows up as a picture rather than as a reviewer's hunch.
  *
- * Tagged `@screenshot` and left out of `pnpm e2e` until the Linux baselines are
- * committed: a comparison with no baseline on disk fails the run rather than
- * skipping it. `apps/admin/README.md` has the command that generates them.
+ * Tagged `@screenshot` and left out of `pnpm e2e`: the baselines are Linux
+ * pixels, so a comparison anywhere else fails for a reason unrelated to the
+ * code. `pnpm e2e:screenshots` runs it, and CI runs that as a step of its own.
+ * The baselines come from `.github/workflows/screenshots.yml`;
+ * `apps/admin/README.md` says why they are generated there.
  */
 test.describe('reference screens @screenshot', () => {
   test('sign in', async ({ page }) => {

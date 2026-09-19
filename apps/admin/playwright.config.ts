@@ -15,10 +15,11 @@ const BASE_URL = externalBaseUrl ?? `http://localhost:${PORT}`;
  * Every spec runs twice, once per locale, because an RTL layout is a different
  * layout (DESIGN §7) and half the bugs only appear in one of them.
  *
- * The `@screenshot` tests are excluded from `pnpm e2e` until their Linux
- * baselines are committed, because a screenshot comparison without a baseline
- * fails rather than skips. `apps/admin/README.md` has the one command that
- * generates them and turns the tag back on.
+ * The `@screenshot` tests are excluded from `pnpm e2e` and run by
+ * `pnpm e2e:screenshots` instead. Their baselines are Linux pixels, so the
+ * comparison fails anywhere else; `pnpm e2e` has to be a command a contributor
+ * can run on any machine, and CI runs the comparison as a step of its own.
+ * `apps/admin/README.md` says where the baselines come from.
  */
 export default defineConfig<LocaleOption>({
   testDir: './e2e',

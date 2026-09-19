@@ -8,7 +8,10 @@ import { createLogger } from '../logging/logger.js';
 import type { BrandResolver } from './brand-resolver.js';
 import { NoopBrandResolver } from './brand-resolver.js';
 import { currentRequestContext, type RequestContext } from './request-context.js';
-import { RequestContextMiddleware } from './request-context.middleware.js';
+import {
+  RequestContextMiddleware,
+  redactCredentialSegments,
+} from './request-context.middleware.js';
 import { REQUEST_ID_HEADER } from './request-id.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
@@ -92,6 +95,35 @@ const run = async ({
     });
   });
 };
+
+/**
+ * A query string never reaches the log, so a token in one is safe. A token in a
+ * *path* is not, and the admin SPA serves `/invite/<token>` as a document
+ * through the catch-all route — which never reaches a handler that knows what
+ * the segment is. So the redaction lives in the middleware, where every request
+ * passes, and this is what proves it.
+ */
+describe('redactCredentialSegments', () => {
+  it.each([
+    ['/invite/AbC-123_xyz', '/invite/:token'],
+    ['/api/auth/invites/AbC-123_xyz', '/api/auth/invites/:token'],
+    ['/api/auth/invites/AbC-123_xyz/accept', '/api/auth/invites/:token/accept'],
+    ['/api/auth/magic-link/AbC-123_xyz', '/api/auth/magic-link/:token'],
+  ])('collapses %s', (path, expected) => {
+    expect(redactCredentialSegments(path)).toBe(expected);
+  });
+
+  it.each([
+    '/',
+    '/tickets',
+    '/api/auth/sign-in',
+    '/admin/staff',
+    // No segment after it: there is nothing to redact and nothing to lose.
+    '/invite',
+  ])('leaves %s alone', (path) => {
+    expect(redactCredentialSegments(path)).toBe(path);
+  });
+});
 
 describe('RequestContextMiddleware', () => {
   it('opens a context the rest of the request can read', async () => {

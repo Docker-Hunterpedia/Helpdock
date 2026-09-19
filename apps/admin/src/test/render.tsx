@@ -5,15 +5,20 @@ import { MemoryRouter } from 'react-router';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
+import type { StaffApi } from '../staff/api.js';
+import { MockStaffApi } from '../staff/mock-api.js';
 
 export interface RenderAppOptions {
   readonly authApi?: AuthApi;
+  /** Defaults to a fresh fixture, so a screen that reads it always has one. */
+  readonly staffApi?: StaffApi;
   readonly initialEntries?: readonly string[];
 }
 
 export interface RenderedApp extends RenderResult {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly authApi: AuthApi;
+  readonly staffApi: StaffApi;
 }
 
 /**
@@ -22,13 +27,16 @@ export interface RenderedApp extends RenderResult {
  * gets.
  */
 export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): RenderedApp {
-  const authApi = options.authApi ?? new MockAuthApi();
+  const staffApi = options.staffApi ?? new MockStaffApi();
+  const authApi =
+    options.authApi ?? new MockAuthApi(staffApi instanceof MockStaffApi ? staffApi : undefined);
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
   const result = render(
     <AppProviders
       authApi={authApi}
+      staffApi={staffApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -38,5 +46,5 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     </AppProviders>,
   );
 
-  return { ...result, user: userEvent.setup(), authApi };
+  return { ...result, user: userEvent.setup(), authApi, staffApi };
 }

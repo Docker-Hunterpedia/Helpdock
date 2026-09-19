@@ -27,6 +27,7 @@ describe('the schema', () => {
       'audit_log',
       'brand_domains',
       'brands',
+      'departments',
       'job_receipts',
       'outbox',
       'settings',
@@ -64,9 +65,9 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Six of the eight tables have a uuid primary key; `settings` is keyed by
+    // Seven of the nine tables have a uuid primary key; `settings` is keyed by
     // `(key, brand_id)` and `job_receipts` by the consumer's idempotency key.
-    expect(generated).toHaveLength(6);
+    expect(generated).toHaveLength(7);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }
@@ -92,6 +93,12 @@ describe('the indexes and constraints', () => {
     const unique = configOf('user_brand_roles').uniqueConstraints[0];
 
     expect(unique?.columns.map((column) => column.name)).toEqual(['user_id', 'brand_id']);
+  });
+
+  it('keeps a department name unique inside its brand', () => {
+    const unique = configOf('departments').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'name']);
   });
 
   it('keys a setting by key and scope together', () => {

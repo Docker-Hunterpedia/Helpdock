@@ -233,6 +233,47 @@ is known, so it reads `user_brand_roles` in a transaction that names every
 active brand, as `principal_type = system`. That is the widest scope in the
 application and it is confined to that file.
 
+`AuthModule` is `global: true`. The credential services are cross-cutting —
+`src/staff/` changes a password and turns a second factor off — and they must do
+it through the same `AuthService`: the same pepper, the same keyring, the same
+decoy hash. A second `AuthModule.forRoot` would silently build a second graph.
+
+## Staff and roles
+
+`src/staff/` holds M0-06: the staff list, invitations, the lifecycle changes of
+[DOMAIN-RULES §12](../../docs/planning/DOMAIN-RULES.md#12-staff-lifecycle), and
+the `/api/me/*` routes a person uses on their own account. What it does and how
+an operator thinks about it is [the staff and roles
+guide](../../docs/guides/staff-and-roles.md); what follows is for somebody
+reading the code.
+
+| File | |
+|---|---|
+| `staff-scope.ts` | The matrix. Pure functions over values the caller has already read, so who may do what is decided in one place and is testable without a database. |
+| `staff-failure.ts` | A refusal by a §12 rule rather than by a permission. The same shape as `auth-failure.ts`, and for the same reason: the screen needs to pick between four sentences. |
+| `anonymise.ts` | What is left of an account after a delete: `Former staff`, and a placeholder address derived from the user id. |
+| `invite.store.ts` | The pending-invitation record. It holds the token's *hash* — enough to destroy the previous link on a resend, never enough to present it — and the two dates the staff list prints. |
+| `lifecycle-hooks.ts` | The §12 effects that belong to M0-13 and M1, as named calls at the point in the sequence where they have to happen. |
+| `invite.service.ts` | The two `@Public()` routes. They open their own transaction, naming the one brand the token names, as `principal_type = system` with `principal_id = invite` — narrower than the sign-in path, which has to name every active brand. |
+
+Four things are easy to get wrong here and are written down where they happen:
+
+- **An Agent's empty department list means "no departments", not "all".** The
+  mapping is `roles.ts`, and it is the one mistake that would hand a new starter
+  the whole brand.
+- **Reading an invitation does not spend it.** `EmailTokenStore.read` exists for
+  that one purpose; a preview that burned the token would mean one refresh cost
+  somebody their invitation.
+- **An account that already exists and is active is never sent an invitation.**
+  It gains the role and nothing else: a link that could set a new password would
+  be a way to take over an existing account.
+- **Two actions are not confined to the brand they are performed in**, because
+  `users` is a global table: attaching an account that already exists
+  install-wide, and deactivating one. Both take the brand's highest standing —
+  `role === 'admin'` — and an install admin's account is adoptable by nobody.
+  Without that, a Team Leader of any brand could attach a stranger's account as
+  an agent of a department they lead and then disable it install-wide.
+
 ### The development principal header
 
 `HeaderPrincipalResolver` reads a whole principal out of the
@@ -266,6 +307,10 @@ routes answers 401 without a valid bearer token.
 | `GET /api/brands` | `@Authenticated()` | Brands the principal holds a role in. |
 | `GET /api/install/brands` | `@Requires('install:admin')` | Every brand. Audited. |
 | `GET /api/brands/:brandId` | `@Requires('brand:read')` | One brand. |
+| `/api/brands/:brandId/staff/*` | `@Requires('staff:manage')` | Staff and roles. [The guide](../../docs/guides/staff-and-roles.md#endpoints) lists them. |
+| `GET /api/brands/:brandId/departments` | `@Requires('brand:read')` | The department picker's options. |
+| `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
+| `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
 | `GET /api/install/system` | `@Requires('install:admin')` | The System page's read. Audited. |
 | `GET /api/install/system/queues` | `@Requires('install:admin')` | Every queue, paginated. Audited. |
@@ -273,8 +318,8 @@ routes answers 401 without a valid bearer token.
 | `/api/auth/*` | mostly `@Public()` | Signing in. [The authentication guide](../../docs/guides/authentication.md#endpoints) lists them. |
 | `GET /*` | `@Public()` | The admin SPA, above. |
 
-Most of these exist to prove the plumbing; M0-06 onwards replaces them with real
-ones. `/api/auth/*` and `/internal/domain-check` are not among them. The second
+Most of the first few exist to prove the plumbing; the milestones after M0-06
+replace them with real ones. `/api/auth/*` and `/internal/domain-check` are not among them. The second
 is what stops Caddy
 issuing a certificate for a hostname this install does not serve
 (ARCHITECTURE §3).
@@ -374,6 +419,12 @@ only when a test passes it as an extra controller.
 
 ## Known gaps
 
+- **`on_unassign` is not implemented.** Deactivating somebody, or narrowing what
+  they may see, leaves their tickets assigned to them. `staff/lifecycle-hooks.ts`
+  names the calls M1 fills in.
+- **Own-account actions write no `audit_log` row.** `audit_log` is keyed on
+  `brand_id` and a password change belongs to a person; the reasoning is at the
+  top of `staff/account.service.ts` and in the guide. They are logged instead.
 - `NoopBrandResolver` resolves every host to nothing. `brand_domains` exists
   from M0-09, for the on-demand TLS check; M5 adds the rows, their verification,
   and the resolver that turns a `Host` header into a brand. Until it does, every

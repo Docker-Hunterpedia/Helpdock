@@ -55,8 +55,10 @@ test.describe('the admin shell', () => {
     await page.getByRole('link', { name: new RegExp(t('admin:nav.staff')) }).click();
 
     await expect(page.locator('a[aria-current="page"]')).toContainText(t('admin:nav.staff'));
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('admin:nav.staff'));
-    await expect(page.getByText(t('admin:pages.empty.body.staff'))).toBeVisible();
+    // M0-06 replaced the placeholder with the real screen, which carries the
+    // same title as its nav item.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('staff:title'));
+    await expect(page.getByRole('table')).toBeVisible();
   });
 
   test('the language toggle flips the document and the sidebar to the other side', async ({

@@ -9,8 +9,10 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useState
 import { I18nextProvider } from 'react-i18next';
 import { BrowserRouter } from 'react-router';
 import type { AuthApi } from '../auth/api.js';
-import { createAuthApi } from '../auth/select-api.js';
+import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
+import type { StaffApi } from '../staff/api.js';
+import { ToastProvider } from '../ui/toasts.tsx';
 import {
   resolveInitialLocale,
   resolveInitialThemePreference,
@@ -77,6 +79,8 @@ export interface AppProvidersProps {
   readonly children: ReactNode;
   /** Defaults to the adapter `VITE_AUTH_API` names. Tests pass their own. */
   readonly authApi?: AuthApi;
+  /** Defaults to the matching adapter; a test passing one passes both. */
+  readonly staffApi?: StaffApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -98,6 +102,7 @@ export function createAdminQueryClient(): QueryClient {
 export function AppProviders({
   children,
   authApi,
+  staffApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -109,7 +114,11 @@ export function AppProviders({
   const prefersDark = useMediaQuery('(prefers-color-scheme: dark)', { noSsr: true });
   const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)', { noSsr: true });
 
-  const api = useMemo(() => authApi ?? createAuthApi(), [authApi]);
+  // One pair: the http adapters share a transport and the mocks share a
+  // fixture, so building them apart would break both of those guarantees.
+  const [fallback] = useState(createApis);
+  const api = authApi ?? fallback.auth;
+  const staff = staffApi ?? fallback.staff;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -164,8 +173,10 @@ export function AppProviders({
           <CssBaseline />
           <I18nextProvider i18n={i18n}>
             <QueryClientProvider client={client}>
-              <AuthApiProvider api={api}>
-                <Router>{children}</Router>
+              <AuthApiProvider api={api} staffApi={staff}>
+                <ToastProvider>
+                  <Router>{children}</Router>
+                </ToastProvider>
               </AuthApiProvider>
             </QueryClientProvider>
           </I18nextProvider>

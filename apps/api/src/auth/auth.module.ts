@@ -86,7 +86,16 @@ export const createAuthRuntime = ({
     keys: signingKeys,
     logger,
     appUrl: env.APP_URL,
+    settings,
   });
+
+  const email =
+    emailSender ??
+    new LoggingEmailSender({
+      log: (fields, message) => {
+        logger.info(fields, message);
+      },
+    });
 
   const auth = new AuthService({
     staff,
@@ -100,13 +109,7 @@ export const createAuthRuntime = ({
     oauth: new OauthService({ settings, redis, logger, appUrl: env.APP_URL }),
     settings,
     keyring,
-    email:
-      emailSender ??
-      new LoggingEmailSender({
-        log: (fields, message) => {
-          logger.info(fields, message);
-        },
-      }),
+    email,
     logger,
     appUrl: env.APP_URL,
   });
@@ -123,6 +126,15 @@ export class AuthModule {
   static forRoot(options: AuthModuleOptions): DynamicModule {
     return {
       module: AuthModule,
+      /**
+       * Global because the credential services are cross-cutting: M0-06's
+       * account routes change a password and turn a second factor off, and
+       * they must do it through the same `AuthService` — the same pepper, the
+       * same keyring, the same decoy hash — rather than through a second graph
+       * built beside it. `AuthModule.forRoot` is called once per process, and
+       * a second call would silently produce that second graph.
+       */
+      global: true,
       controllers: [AuthController],
       providers: [
         {

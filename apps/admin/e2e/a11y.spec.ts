@@ -1,8 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { MOCK_EMAIL } from '../src/auth/mock-api.js';
+import {
+  MOCK_ENROLMENT_CODE,
+  MOCK_EXPIRED_INVITE_TOKEN,
+  MOCK_INVITE_TOKEN,
+} from '../src/staff/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { signIn, submitPassword } from './flows.js';
+import { openSecurity, openStaff, signIn, submitPassword } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -23,7 +28,10 @@ async function violations(page: Page): Promise<string[]> {
     .analyze();
 
   return result.violations.map(
-    (violation) => `${violation.id} (${violation.nodes.length}): ${violation.help}`,
+    (violation) =>
+      `${violation.id} (${violation.nodes.length}): ${violation.help} — ${violation.nodes
+        .map((node) => node.target.join(' '))
+        .join(', ')}`,
   );
 }
 
@@ -71,6 +79,71 @@ test.describe('accessibility', () => {
 
     await page.getByRole('button', { name: t('admin:brandSwitcher.action') }).click();
     await page.getByRole('menu', { name: t('admin:brandSwitcher.action') }).waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the staff screen has no violations, table and invite dialog alike', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openStaff(page, locale);
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: t('staff:invite'), exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('two-factor enrolment has no violations on either step', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await page.goto('/sign-in/enrol');
+    await page.getByRole('img', { name: t('auth:enrolment.step1.qrAlt') }).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByLabel(t('auth:enrolment.step1.codeLabel')).fill(MOCK_ENROLMENT_CODE);
+    await page.getByRole('button', { name: t('auth:enrolment.step1.submit') }).click();
+    await page.getByRole('list', { name: t('auth:enrolment.step2.listLabel') }).waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the invite screen has no violations, live or expired', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await page.goto(`/invite/${MOCK_INVITE_TOKEN}`);
+    await page.getByLabel(t('auth:invite.nameLabel')).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await page.goto(`/invite/${MOCK_EXPIRED_INVITE_TOKEN}`);
+    await page.getByRole('heading', { name: t('auth:invite.expiredTitle'), level: 1 }).waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the security page has no violations, including its confirmation', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: t('me:twoFactor.disable'), exact: true }).click();
+    await page.getByRole('dialog').waitFor();
 
     expect(await violations(page)).toEqual([]);
   });

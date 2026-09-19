@@ -1,6 +1,6 @@
 {
   "title": "Staff and roles",
-  "subtitle": "{{brand}} · {{people}} · Viewer role enabled",
+  "subtitle": "{{brand}} · {{people}} · {{viewer}}",
   "peopleCount_one": "{{count}} person",
   "peopleCount_other": "{{count}} people",
   "invite": "Invite",
@@ -11,7 +11,9 @@
     "departments": "Departments",
     "twoFactor": "2FA",
     "lastActive": "Last active",
-    "rowActions": "Actions for {{name}}"
+    "rowActions": "Actions for {{name}}",
+    "caption": "Everyone with a role in {{brand}}",
+    "self": "You"
   },
   "roles": {
     "admin": "Admin",
@@ -36,7 +38,8 @@
   },
   "lastActive": {
     "now": "Now",
-    "yesterday": "Yesterday"
+    "yesterday": "Yesterday",
+    "never": "Never"
   },
   "pendingInvite": {
     "line": "{{invited}} · {{expires}}",
@@ -59,6 +62,67 @@
     "emailPlaceholder": "name@example.com",
     "roleLabel": "Role in {{brand}}",
     "departmentsLabel": "Departments",
-    "submit": "Send invite"
+    "submit": "Send invite",
+    "emailRequired": "Enter an email address.",
+    "emailInvalid": "Enter an email address like name@example.com.",
+    "viewerOff": "The Viewer role is turned off for this install."
+  },
+  "viewerEnabled": "Viewer role enabled",
+  "viewerDisabled": "Viewer role turned off",
+  "installAdmin": "Install admin",
+  "status": {
+    "active": "Active",
+    "invited": "Pending invite",
+    "deactivated": "Deactivated"
+  },
+  "empty": {
+    "heading": "Nobody here yet",
+    "body": "Invite the first person to {{brand}} and they will appear here.",
+    "noMatchesHeading": "No one matches that search",
+    "noMatchesBody": "Try part of a name or an email address."
+  },
+  "actions": {
+    "changeRole": "Change role",
+    "deactivate": "Deactivate",
+    "reactivate": "Reactivate",
+    "remove": "Remove from {{brand}}",
+    "resend": "Resend invite",
+    "revoke": "Revoke invite"
+  },
+  "roleDialog": {
+    "title": "Change role",
+    "description": "{{name}} keeps their account; only what they may do in {{brand}} changes. Their open sessions end, so the new role takes effect at once.",
+    "submit": "Save role"
+  },
+  "confirm": {
+    "deactivate": {
+      "title": "Deactivate {{name}}?",
+      "body": "They are signed out everywhere, taken out of presence and round-robin, and stop receiving notifications. You can reactivate them later.",
+      "submit": "Deactivate"
+    },
+    "remove": {
+      "title": "Remove {{name}} from {{brand}}?",
+      "body": "They lose their role in this brand and every session ends. Roles they hold in other brands are untouched.",
+      "submit": "Remove"
+    },
+    "revoke": {
+      "title": "Revoke the invitation to {{email}}?",
+      "body": "The link stops working. You can invite the same address again afterwards.",
+      "submit": "Revoke invite"
+    }
+  },
+  "toast": {
+    "invited": "Invitation sent to {{email}}.",
+    "resent": "A new invitation is on its way to {{email}}.",
+    "revoked": "The invitation to {{email}} was revoked.",
+    "roleChanged": "{{name}} is now {{role}} in {{brand}}.",
+    "deactivated": "{{name}} was deactivated.",
+    "reactivated": "{{name}} was reactivated.",
+    "removed": "{{name}} was removed from {{brand}}.",
+    "failed": "That did not work. Nothing was changed.",
+    "selfChange": "You cannot change your own role.",
+    "lastInstallAdmin": "This is the last install admin, so it cannot be deactivated.",
+    "outOfScope": "You can only manage agents and viewers in your own departments.",
+    "viewerDisabled": "The Viewer role is turned off for this install."
   }
 }

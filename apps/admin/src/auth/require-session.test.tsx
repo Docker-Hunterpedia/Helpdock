@@ -2,7 +2,14 @@ import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
 import { renderApp } from '../test/render.tsx';
-import { signedInMockApi } from '../test/signed-in.js';
+import { signedInMockApis } from '../test/signed-in.js';
+
+/** `signedInMockApis` names the pair the way the app does; `renderApp` names them as props. */
+const signedIn = ({ auth, staff }: Awaited<ReturnType<typeof signedInMockApis>>) => ({
+  authApi: auth,
+  staffApi: staff,
+});
+
 import { MockAuthApi } from './mock-api.js';
 
 describe('RequireSession', () => {
@@ -32,7 +39,7 @@ describe('RequireSession', () => {
 
   it('lets a signed-in session straight through', async () => {
     renderApp(<AppRoutes />, {
-      authApi: await signedInMockApi(),
+      ...signedIn(await signedInMockApis()),
       initialEntries: ['/reports'],
     });
 
@@ -41,7 +48,7 @@ describe('RequireSession', () => {
 
   it('shows a busy state instead of bouncing while the session is being read', async () => {
     renderApp(<AppRoutes />, {
-      authApi: await signedInMockApi(),
+      ...signedIn(await signedInMockApis()),
       initialEntries: ['/tickets'],
     });
 
@@ -51,7 +58,7 @@ describe('RequireSession', () => {
 
   it('sends an unknown path to the default screen', async () => {
     renderApp(<AppRoutes />, {
-      authApi: await signedInMockApi(),
+      ...signedIn(await signedInMockApis()),
       initialEntries: ['/nowhere'],
     });
 

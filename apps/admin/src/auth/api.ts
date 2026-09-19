@@ -1,9 +1,13 @@
 import type {
   AuthErrorCode,
   AuthMethods,
+  InviteAcceptRequest,
   OauthProvider,
+  PublicInvite,
+  RecoveryCodes,
   Session,
   SignInResult,
+  TotpEnrolment,
 } from '@helpdock/schemas';
 
 /**
@@ -33,9 +37,19 @@ export interface AuthApi {
   /** Always resolves, whether or not the address belongs to an account. */
   requestPasswordReset(email: string): Promise<void>;
   resetPassword(token: string, password: string): Promise<void>;
+  /** Stages a TOTP secret. Nothing is on until a live code confirms it (M0-06). */
+  enrolTotp(): Promise<TotpEnrolment>;
+  /** Enables the second factor and hands over the recovery codes, once. */
+  confirmTotp(code: string): Promise<RecoveryCodes>;
+  /** Reads an invitation without spending it, so a refresh costs nothing. */
+  previewInvite(token: string): Promise<PublicInvite>;
+  /** Spends it, creates the account, and signs the person in. */
+  acceptInvite(token: string, request: InviteAcceptRequest): Promise<SignInResult>;
   /** The current session, or `null` when nobody is signed in. */
   me(): Promise<Session | null>;
   signOut(): Promise<void>;
+  /** Every browser, and every browser this account trusted (DOMAIN-RULES §12). */
+  signOutEverywhere(): Promise<void>;
 }
 
 /**

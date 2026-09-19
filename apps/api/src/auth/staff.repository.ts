@@ -156,6 +156,18 @@ export class StaffRepository {
     await (tx ?? this.#db).update(users).set({ recoveryCodesHashed }).where(eq(users.id, userId));
   }
 
+  /**
+   * Turns the second factor off and forgets the secret with it. Keeping the
+   * secret would mean a later "turn it back on" silently re-enrolled the old
+   * authenticator, including one the person meant to walk away from.
+   */
+  async disableTotp(userId: string, tx?: Queryable): Promise<void> {
+    await (tx ?? this.#db)
+      .update(users)
+      .set({ totpEnabled: false, totpSecretEncrypted: null, recoveryCodesHashed: [] })
+      .where(eq(users.id, userId));
+  }
+
   /** An invited account becomes active the first time it proves an identity. */
   async markActive(userId: string, tx?: Queryable): Promise<void> {
     await (tx ?? this.#db).update(users).set({ status: 'active' }).where(eq(users.id, userId));

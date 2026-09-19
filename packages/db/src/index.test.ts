@@ -50,6 +50,7 @@ describe('@helpdock/db', () => {
       'audit-log.ts',
       'brand-domains.ts',
       'brands.ts',
+      'departments.ts',
       'enums.ts',
       'job-receipts.ts',
       'outbox.ts',

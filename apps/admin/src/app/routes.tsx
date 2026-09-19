@@ -1,13 +1,16 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 import { RequireSession } from '../auth/require-session.tsx';
+import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
 import { AuthComplete } from '../screens/auth-complete.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
+import { SecurityScreen } from '../screens/security.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
+import { StaffScreen } from '../screens/staff.tsx';
 import { Totp } from '../screens/totp.tsx';
 import { TotpEnrolment } from '../screens/totp-enrolment.tsx';
 import { AppShell } from '../shell/app-shell.tsx';
@@ -21,6 +24,10 @@ import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from './route-paths.js';
  *
  * `AuthComplete` is mounted twice because the api redirects a magic link and an
  * OAuth callback to different paths and the screen handles both the same way.
+ *
+ * `/invite/:token` is public for the same reason the sign-in screens are: the
+ * token in the path is the credential, and somebody following it has no session
+ * to require.
  */
 export function AppRoutes(): ReactNode {
   return (
@@ -33,10 +40,11 @@ export function AppRoutes(): ReactNode {
       <Route path={ROUTES.passwordResetSent} element={<PasswordResetSent />} />
       <Route path={ROUTES.passwordReset} element={<PasswordReset />} />
       <Route path={ROUTES.totpEnrolment} element={<TotpEnrolment />} />
+      <Route path={ROUTES.acceptInvite} element={<AcceptInvite />} />
 
       <Route element={<RequireSession />}>
         <Route element={<AppShell />}>
-          {ALL_NAV.filter((item) => item.key !== 'system').map((item) => (
+          {ALL_NAV.filter((item) => item.placeholder === true).map((item) => (
             <Route
               key={item.key}
               path={item.path}
@@ -48,6 +56,8 @@ export function AppRoutes(): ReactNode {
               as "Not allowed", which is one answer in one place. */}
           <Route path={ROUTES.system} element={<SystemPage />} />
           <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
+          <Route path={ROUTES.staff} element={<StaffScreen />} />
+          <Route path={ROUTES.security} element={<SecurityScreen />} />
         </Route>
       </Route>
 

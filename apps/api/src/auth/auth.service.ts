@@ -24,6 +24,7 @@ import {
   type RateLimiter,
   SIGN_IN_EMAIL_RULE,
   SIGN_IN_IP_RULE,
+  STEP_UP_RULE,
 } from './rate-limit.js';
 import type { IssuedSession, SessionService } from './session/session.service.js';
 import type { Queryable, StaffRepository, StaffUser } from './staff.repository.js';
@@ -59,6 +60,18 @@ export type SignInOutcome =
   | { readonly kind: 'session'; readonly issued: IssuedSession }
   | { readonly kind: 'totp-required'; readonly challengeId: string; readonly email: string }
   | { readonly kind: 'totp-enrolment-required'; readonly challengeId: string };
+
+/** What one invite message needs beyond the catalogs (M0-06). */
+export interface InviteEmailInput {
+  readonly to: string;
+  readonly url: string;
+  readonly locale: Locale;
+  readonly expiresInDays: number;
+  readonly inviterName: string;
+  readonly brandName: string;
+  /** Already translated into the recipient's language by the caller. */
+  readonly roleName: string;
+}
 
 export interface SignInInput {
   readonly email: string;
@@ -263,6 +276,141 @@ export class AuthService {
     return { recoveryCodes };
   }
 
+  /**
+   * Turns the second factor off. A live code is the credential: somebody who
+   * walked up to an unlocked laptop has the session but not the phone, and
+   * without this they could remove the factor that would have stopped them.
+   *
+   * Refused while `auth.require2fa` is on, because an install that requires an
+   * authenticator cannot have accounts without one (DOMAIN-RULES §12).
+   */
+  async disableTotp(userId: string, code: string, tx?: Queryable): Promise<void> {
+    if (await this.#parts.settings.get('auth.require2fa')) {
+      throw new AuthFailure('unavailable');
+    }
+
+    const user = await this.#requireLiveCode(userId, code, tx);
+
+    await this.#parts.staff.disableTotp(user.id, tx);
+    await this.#parts.trustedDevices.revokeAll(user.id);
+    this.#parts.logger.warn({ userId: user.id }, 'Disabled the second factor for a staff account');
+  }
+
+  /**
+   * Draws ten new recovery codes and forgets the old ones, once a live code has
+   * proved the authenticator is still in hand. Regenerating without that proof
+   * would be a way to mint a working credential from a stolen session.
+   */
+  async regenerateRecoveryCodes(
+    userId: string,
+    code: string,
+    tx?: Queryable,
+  ): Promise<RecoveryCodes> {
+    const user = await this.#requireLiveCode(userId, code, tx);
+    const recoveryCodes = newRecoveryCodes();
+
+    await this.#parts.staff.replaceRecoveryCodes(
+      user.id,
+      await hashRecoveryCodes(recoveryCodes, this.#parts.hasher),
+      tx,
+    );
+    this.#parts.logger.info({ userId: user.id }, 'Redrew the recovery codes of a staff account');
+
+    return { recoveryCodes };
+  }
+
+  /**
+   * A password change from inside a session. The current password is asked for
+   * because the session alone is not proof that the person at the keyboard is
+   * the account holder, and every *other* family is revoked afterwards for the
+   * same reason a reset revokes them all — except this one, so the person who
+   * just changed it is not thrown out of the screen they did it on.
+   */
+  async changePassword({
+    userId,
+    currentPassword,
+    newPassword,
+    keepFamilyId,
+    tx,
+  }: {
+    readonly userId: string;
+    readonly currentPassword: string;
+    readonly newPassword: string;
+    readonly keepFamilyId: string | null;
+    readonly tx?: Queryable;
+  }): Promise<void> {
+    await this.#spendStepUp(userId);
+
+    const user = await this.#requireUser(userId, tx);
+    if (user.passwordHash === null) {
+      // An account that signs in with OAuth or a link alone has no current
+      // password to prove; it sets one through the reset flow, which proves
+      // the address instead.
+      throw new AuthFailure('invalid-credentials');
+    }
+
+    const verification = await this.#parts.hasher.verify(user.passwordHash, currentPassword);
+    if (!verification.valid) {
+      throw new AuthFailure('invalid-credentials');
+    }
+
+    await this.#parts.staff.updatePasswordHash(
+      user.id,
+      await this.#parts.hasher.hash(newPassword),
+      tx,
+    );
+    await this.#parts.trustedDevices.revokeAll(user.id);
+    const revoked = await this.#parts.sessions.revokeEverythingExcept(
+      user.id,
+      keepFamilyId,
+      'password-change',
+    );
+
+    this.#parts.logger.info({ userId: user.id, revoked }, 'A staff account changed its password');
+  }
+
+  /**
+   * Hashes a password for a module that has no business holding the pepper.
+   * M0-06's invite acceptance sets the first password an account ever has, and
+   * it must be the same argon2 parameters under the same pepper as every other
+   * one — a second hasher built beside this one is a second pepper, and half
+   * the hashes in the table would stop verifying.
+   */
+  hashPassword(password: string): Promise<string> {
+    return this.#parts.hasher.hash(password);
+  }
+
+  /**
+   * Signs in an account that has just accepted its invitation. There is no
+   * credential to check here because the invite token was the credential and
+   * the caller has already spent it — exactly as a magic link works — so this
+   * joins the same path every other first factor ends on, second factor and
+   * enrolment requirement included.
+   */
+  async signInAfterInvite(userId: string, userAgent: string | undefined): Promise<SignInOutcome> {
+    const user = await this.#requireUser(userId);
+
+    return this.#afterFirstFactor(user, { userAgent, trustedDeviceCookie: undefined });
+  }
+
+  /** Sends one invite message. The staff service owns the token; this owns the envelope. */
+  async sendInvite(input: InviteEmailInput): Promise<void> {
+    await this.#parts.email.send(
+      renderAuthEmail({
+        kind: 'invite',
+        to: input.to,
+        url: input.url,
+        locale: input.locale,
+        expiresIn: input.expiresInDays,
+        values: {
+          inviter: input.inviterName,
+          brandName: input.brandName,
+          role: input.roleName,
+        },
+      }),
+    );
+  }
+
   // ------------------------------------------------------------------
   // Magic link
   // ------------------------------------------------------------------
@@ -297,7 +445,7 @@ export class AuthService {
       kind: 'magicLink',
       user,
       url: new URL(`/api/auth/magic-link/${token}`, this.#parts.appUrl).toString(),
-      ttlMinutes: minutes,
+      expiresIn: minutes,
     });
   }
 
@@ -351,7 +499,7 @@ export class AuthService {
         `/sign-in/reset?token=${encodeURIComponent(token)}`,
         this.#parts.appUrl,
       ).toString(),
-      ttlMinutes: PASSWORD_RESET_TTL_MINUTES,
+      expiresIn: PASSWORD_RESET_TTL_MINUTES,
     });
   }
 
@@ -470,10 +618,25 @@ export class AuthService {
    * which is the one thing "log out everywhere" is asked for.
    */
   async signOutEverywhere(userId: string): Promise<void> {
-    await this.#parts.trustedDevices.revokeAll(userId);
-    const revoked = await this.#parts.sessions.revokeEverything(userId, 'sign-out-everywhere');
+    await this.revokeAllAccess(userId, 'sign-out-everywhere');
+  }
 
-    this.#parts.logger.info({ userId, revoked }, 'Signed a staff account out everywhere');
+  /**
+   * Everything this account can get back in with, gone: every family, and every
+   * browser it trusted. M0-06 calls it on deactivation, where the same
+   * reasoning applies with more force — a deactivated person must not keep a
+   * browser that skips the second factor (DOMAIN-RULES §12).
+   */
+  async revokeAllAccess(userId: string, reason: string): Promise<number> {
+    await this.#parts.trustedDevices.revokeAll(userId);
+    const revoked = await this.#parts.sessions.revokeEverything(userId, reason);
+
+    this.#parts.logger.info(
+      { userId, revoked, reason },
+      'Revoked every session of a staff account',
+    );
+
+    return revoked;
   }
 
   // ------------------------------------------------------------------
@@ -598,6 +761,36 @@ export class AuthService {
     return new AuthFailure(code, { attemptsLeft: outcome.attemptsLeft });
   }
 
+  /**
+   * The account behind a signed-in request, with a live authenticator code
+   * proved. Shared by the two operations that weaken the second factor.
+   */
+  async #requireLiveCode(userId: string, code: string, tx?: Queryable): Promise<StaffUser> {
+    await this.#spendStepUp(userId);
+
+    const user = await this.#requireUser(userId, tx);
+    const secret = this.#totpSecretOf(user);
+
+    if (!user.totpEnabled || secret === null || !(await verifyTotpCode({ secret, code }))) {
+      throw new AuthFailure('totp-mismatch');
+    }
+
+    return user;
+  }
+
+  /**
+   * The budget for re-proving a credential from inside a session. Sign-in has a
+   * spendable challenge for this; these routes have none, so without a limit
+   * six digits is a few minutes of guessing away from turning somebody's second
+   * factor off.
+   */
+  async #spendStepUp(userId: string): Promise<void> {
+    if (!(await this.#parts.limiter.consume(STEP_UP_RULE, userId))) {
+      this.#parts.logger.warn({ userId }, 'A step-up check was refused by the rate limit');
+      throw new AuthFailure('totp-locked');
+    }
+  }
+
   async #requireUser(userId: string, tx?: Queryable): Promise<StaffUser> {
     const user = await this.#parts.staff.findById(userId, tx);
     if (user === undefined || !this.#isUsable(user)) {
@@ -635,12 +828,12 @@ export class AuthService {
     kind,
     user,
     url,
-    ttlMinutes,
+    expiresIn,
   }: {
     readonly kind: 'magicLink' | 'passwordReset';
     readonly user: StaffUser;
     readonly url: string;
-    readonly ttlMinutes: number;
+    readonly expiresIn: number;
   }): Promise<void> {
     await this.#parts.email.send(
       renderAuthEmail({
@@ -649,7 +842,7 @@ export class AuthService {
         name: user.name,
         url,
         locale: user.locale as Locale,
-        ttlMinutes,
+        expiresIn,
       }),
     );
   }

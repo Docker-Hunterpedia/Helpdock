@@ -46,3 +46,29 @@ export async function signIn(page: Page, locale: Locale): Promise<void> {
   await submitTotp(page, locale);
   await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
 }
+
+/**
+ * Opens a screen inside the shell by clicking, never with `page.goto`.
+ *
+ * The fixture keeps its session in memory — the real one is an `httpOnly`
+ * cookie the api owns — so a reload signs the browser out and lands on the
+ * sign-in form instead of the screen under test.
+ */
+export async function openStaff(page: Page, locale: Locale): Promise<void> {
+  const t = strings(locale);
+
+  await page.getByRole('link', { name: new RegExp(t('admin:nav.staff')) }).click();
+  await page.getByRole('table').waitFor();
+}
+
+export async function openSecurity(
+  page: Page,
+  locale: Locale,
+  name = 'Lina Haddad',
+): Promise<void> {
+  const t = strings(locale);
+
+  await page.getByRole('button', { name: t('admin:currentUser.menuLabel', { name }) }).click();
+  await page.getByRole('menuitem', { name: t('me:security.title') }).click();
+  await page.getByRole('heading', { name: t('me:security.title'), level: 1 }).waitFor();
+}

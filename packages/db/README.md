@@ -35,13 +35,14 @@ const roles = await withTenant(
 ## Schema
 
 Tables live in `src/schema/`, one file each, re-exported from
-`src/schema/index.ts`. M0 has eight:
+`src/schema/index.ts`. M0 has nine:
 
 | Table | Scope | Notes |
 |---|---|---|
 | `users` | global | Staff accounts. Unique on `lower(email)`, so addresses compare case-insensitively without the `citext` extension. |
 | `brands` | global | The tenant. `prefix` is unique, and DOMAIN-RULES §11 keeps it reserved after a brand is deleted. Inserting a row creates that brand's ticket sequence. |
-| `user_brand_roles` | tenant | One role per user per brand. `department_ids` null means every department. |
+| `user_brand_roles` | tenant | One role per user per brand. `department_ids` null means every department; an empty array means none, which is what an Agent with nothing assigned has. |
+| `departments` | tenant | The unit a Team Leader leads and an Agent belongs to. M0-06 needs it to exist so that assignment is real; M1-01 adds business hours, the SLA policy, `on_unassign` and the inbox. Unique on `(brand_id, name)`. |
 | `brand_domains` | tenant | Hostnames a brand owns. `domain` is unique install-wide. M0 reads it for Caddy's on-demand TLS check; M5 creates and verifies rows. |
 | `settings` | tenant | Primary key `(key, brand_id)`. `value` is JSON, or the `v1.…` envelope for a secret. |
 | `audit_log` | tenant | Who did what. `actor_id` is text: a system actor is a job id. |
@@ -186,6 +187,10 @@ if a policy ends up ahead of its `CREATE TABLE`.
    fixture row, and the cross-brand read, insert, update, delete, subquery and
    join cases run against it automatically. The suite fails until the fixture
    exists, which is how DOMAIN-RULES §1.6 stays true.
+
+`departments` is the worked example: `0005_departments.sql` carries the
+`CREATE TABLE` and its four policies in one file, and `rls.integration.test.ts`
+gained one fixture row.
 
 ## Tests
 

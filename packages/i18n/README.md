@@ -20,8 +20,8 @@ dir('ar');                    // "rtl"
 ## Layout
 
 ```
-locales/en/{common,auth,admin,wizard,settings,staff,email}.json
-locales/ar/{common,auth,admin,wizard,settings,staff,email}.json
+locales/en/{common,auth,admin,wizard,settings,staff,me,email}.json
+locales/ar/{common,auth,admin,wizard,settings,staff,me,email}.json
 ```
 
 One namespace per screen area, so a screen loads only what it shows:
@@ -33,12 +33,14 @@ One namespace per screen area, so a screen loads only what it shows:
 | `admin` | The shell: navigation, the brand switcher, the current user. |
 | `wizard` | The first-run wizard. |
 | `settings` | Install settings. |
-| `staff` | Staff and roles, including the invite dialog. |
-| `email` | Messages the api sends: the sign-in link and the password reset. Rendered server-side in the recipient's own language. |
+| `staff` | Staff and roles: the table, the invite and change-role dialogs, the confirmations and the toasts. |
+| `me` | A person's own account: the security page's details, password, second factor and sessions. |
+| `email` | Messages the api sends: the sign-in link, the password reset and the staff invitation. Rendered server-side in the recipient's own language. |
 
 The strings in this milestone come from the artboards `Admin/Login`,
-`Admin/Login-AR`, `Admin/TOTP`, `Admin/Wizard`, `Admin/Settings` and
-`Admin/Staff` on the design canvas linked from [DESIGN.md](../../DESIGN.md).
+`Admin/Login-AR`, `Admin/TOTP`, `Admin/Wizard`, `Admin/Settings`, `Admin/Staff`,
+`Admin/Enrol2FA` and `Admin/AcceptInvite` on the design canvas linked from
+[DESIGN.md](../../DESIGN.md).
 
 ## Adding a string
 

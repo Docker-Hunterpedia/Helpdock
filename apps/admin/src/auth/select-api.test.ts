@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { HttpStaffApi } from '../staff/http-api.js';
+import { MockStaffApi } from '../staff/mock-api.js';
 import { HttpAuthApi } from './http-api.js';
 import { MockAuthApi } from './mock-api.js';
-import { createAuthApi, resolveAuthApiAdapter } from './select-api.js';
+import { createApis, resolveAuthApiAdapter } from './select-api.js';
 
 describe('resolveAuthApiAdapter', () => {
   it.each([
@@ -20,10 +22,12 @@ describe('resolveAuthApiAdapter', () => {
   });
 });
 
-describe('createAuthApi', () => {
+describe('createApis', () => {
   it('builds the adapter it is asked for', () => {
-    expect(createAuthApi('mock')).toBeInstanceOf(MockAuthApi);
-    expect(createAuthApi('http')).toBeInstanceOf(HttpAuthApi);
+    expect(createApis('mock').auth).toBeInstanceOf(MockAuthApi);
+    expect(createApis('mock').staff).toBeInstanceOf(MockStaffApi);
+    expect(createApis('http').auth).toBeInstanceOf(HttpAuthApi);
+    expect(createApis('http').staff).toBeInstanceOf(HttpStaffApi);
   });
 });
 

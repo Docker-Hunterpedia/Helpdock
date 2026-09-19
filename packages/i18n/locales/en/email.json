@@ -20,5 +20,14 @@
     "expiry_one": "The link expires in {{count}} minute.",
     "expiry_other": "The link expires in {{count}} minutes.",
     "ignore": "If you did not ask for this, you can ignore this message. Your password has not changed."
+  },
+  "invite": {
+    "subject": "{{inviter}} invited you to {{brandName}} on {{appName}}",
+    "heading": "You're invited to {{brandName}}",
+    "body": "{{inviter}} invited {{email}} to join {{brandName}} on {{appName}} as {{role}}. Choose a password and the account is yours.",
+    "action": "Accept the invitation",
+    "expiry_one": "The invitation expires in {{count}} day.",
+    "expiry_other": "The invitation expires in {{count}} days.",
+    "ignore": "If you were not expecting this, you can ignore this message. No account exists until you accept."
   }
 }

@@ -32,6 +32,7 @@ export interface TenantTable {
  */
 export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'user_brand_roles', departmentScoped: false },
+  { name: 'departments', departmentScoped: false },
   { name: 'brand_domains', departmentScoped: false },
   { name: 'settings', departmentScoped: false },
   { name: 'audit_log', departmentScoped: false },

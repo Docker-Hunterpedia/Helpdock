@@ -11,6 +11,7 @@ import {
   auditLog,
   brandDomains,
   brands,
+  departments,
   outbox,
   settings,
   userBrandRoles,
@@ -51,6 +52,11 @@ const fixtures = [
     name: 'user_brand_roles',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(userBrandRoles).values({ userId, brandId, role: 'agent' }),
+  },
+  {
+    name: 'departments',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(departments).values({ brandId, name: 'Support' }),
   },
   {
     name: 'brand_domains',

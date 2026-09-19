@@ -2,10 +2,12 @@ import type { EmailMessage } from '@helpdock/channels';
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
 
 /**
- * The two messages M0-05 sends, rendered from the `email` catalogs in
- * `@helpdock/i18n`. No sentence is written here: catalogs hold every string a
- * person reads, in `en` and `ar`, and this file only decides the shape around
- * them (packages/i18n README).
+ * Every message the api puts in a person's inbox before they have a session:
+ * the sign-in link and the password reset of M0-05, and the staff invite of
+ * M0-06. They are rendered from the `email` catalogs in `@helpdock/i18n`. No
+ * sentence is written here: catalogs hold every string a person reads, in `en`
+ * and `ar`, and this file only decides the shape around them (packages/i18n
+ * README).
  *
  * The HTML is one table and inline styles on purpose. Mail clients strip
  * `<style>` blocks, ignore most of CSS and have no `:root`, so the markup that
@@ -80,7 +82,7 @@ const layout = ({
   return { text, html };
 };
 
-export type AuthEmailKind = 'magicLink' | 'passwordReset';
+export type AuthEmailKind = 'magicLink' | 'passwordReset' | 'invite';
 
 export interface RenderAuthEmailInput {
   readonly kind: AuthEmailKind;
@@ -88,7 +90,18 @@ export interface RenderAuthEmailInput {
   readonly name?: string;
   readonly url: string;
   readonly locale: Locale;
-  readonly ttlMinutes: number;
+  /**
+   * How long the link lasts, as a number the catalog phrases. The **unit
+   * belongs to the key**: `magicLink.expiry` and `passwordReset.expiry` count
+   * minutes, `invite.expiry` counts days. Naming it `ttlMinutes` would have
+   * made the invite's seven read as seven minutes at every call site.
+   */
+  readonly expiresIn: number;
+  /**
+   * Extra interpolation for the kinds whose sentences name more than the
+   * recipient — the invite says who invited them, to which brand, as what.
+   */
+  readonly values?: Readonly<Record<string, string>>;
 }
 
 export const renderAuthEmail = ({
@@ -97,19 +110,21 @@ export const renderAuthEmail = ({
   name,
   url,
   locale,
-  ttlMinutes,
+  expiresIn,
+  values = {},
 }: RenderAuthEmailInput): EmailMessage => {
   // One instance per message: it is cheap, the catalogs are already in memory,
   // and a shared instance whose language is switched per message is a race the
   // help center would eventually lose too.
   const t = createI18n({ lng: locale }).getFixedT(locale, 'email');
+  const common = { appName: APP_NAME, email: to, ...values };
 
   const copy: TemplateCopy = {
-    subject: t(`${kind}.subject`, { appName: APP_NAME }),
-    heading: t(`${kind}.heading`, { appName: APP_NAME }),
-    body: t(`${kind}.body`, { email: to }),
+    subject: t(`${kind}.subject`, common),
+    heading: t(`${kind}.heading`, common),
+    body: t(`${kind}.body`, common),
     action: t(`${kind}.action`),
-    expiry: t(`${kind}.expiry`, { count: ttlMinutes }),
+    expiry: t(`${kind}.expiry`, { ...common, count: expiresIn }),
     ignore: t(`${kind}.ignore`),
     linkFallback: t('common.linkFallback'),
     signature: t('common.signature', { appName: APP_NAME }),

@@ -1,0 +1,70 @@
+{
+  "security": {
+    "title": "Security",
+    "caption": "Your details, your password, two-factor authentication and the browsers you are signed in on.",
+    "saved": "Saved.",
+    "failed": "That did not work. Nothing was changed."
+  },
+  "details": {
+    "title": "Your details",
+    "caption": "The name colleagues see beside your replies, and the language this app is in.",
+    "nameLabel": "Name",
+    "nameRequired": "Enter your name.",
+    "emailLabel": "Email",
+    "emailHint": "An administrator changes the address an account signs in with.",
+    "localeLabel": "Language",
+    "submit": "Save changes"
+  },
+  "password": {
+    "title": "Password",
+    "caption": "Changing it signs out every other browser you are signed in on.",
+    "currentLabel": "Current password",
+    "currentRequired": "Enter your current password.",
+    "newLabel": "New password",
+    "newHint": "At least {{count}} characters. {{strength}}",
+    "tooShort": "Use at least {{count}} characters.",
+    "wrong": "That current password is not right.",
+    "submit": "Change password",
+    "done": "Your password was changed. Every other browser was signed out."
+  },
+  "twoFactor": {
+    "title": "Two-factor authentication",
+    "on": "On",
+    "off": "Off",
+    "onCaption": "Your authenticator app is asked for a code every time you sign in on a new browser.",
+    "offCaption": "Anyone with your password can sign in as you. Turning this on takes a minute.",
+    "requiredCaption": "This install requires two-factor authentication, so it cannot be turned off.",
+    "codesLeft_one": "{{count}} recovery code left.",
+    "codesLeft_other": "{{count}} recovery codes left.",
+    "enable": "Turn on two-factor",
+    "disable": "Turn off",
+    "regenerate": "Regenerate recovery codes",
+    "codeLabel": "Authentication code",
+    "codeRequired": "Enter the 6-digit code from your authenticator app.",
+    "codeWrong": "That code did not match.",
+    "disableTitle": "Turn off two-factor?",
+    "disableBody": "Enter a code from your authenticator app to confirm. Afterwards your password alone signs you in.",
+    "disableSubmit": "Turn off two-factor",
+    "disabled": "Two-factor is off for this account.",
+    "regenerateTitle": "Regenerate recovery codes?",
+    "regenerateBody": "Enter a code from your authenticator app. The codes you have now stop working at once.",
+    "regenerateSubmit": "Regenerate",
+    "regenerated": "New recovery codes. The old ones no longer work.",
+    "newCodesTitle": "Your new recovery codes",
+    "newCodesBody": "Each works once, and this is the only time they are shown."
+  },
+  "sessions": {
+    "title": "Active sessions",
+    "caption": "Every browser this account is signed in on. Signing one out ends it immediately.",
+    "listLabel": "Browsers this account is signed in on",
+    "current": "This browser",
+    "unknownBrowser": "Unknown browser",
+    "startedAt": "Signed in {{date}}",
+    "lastUsedAt": "Last used {{date}}",
+    "signOut": "Sign out",
+    "signOutLabel": "Sign out {{browser}}",
+    "signOutEverywhere": "Sign out everywhere",
+    "signedOut": "That browser was signed out.",
+    "empty": "No other browser is signed in."
+  }
+}

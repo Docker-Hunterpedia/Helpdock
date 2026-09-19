@@ -1,12 +1,13 @@
+import type { Settings } from '@helpdock/config';
 import { uuidv7 } from '@helpdock/db';
 import type { AuthSessionResponse, Session } from '@helpdock/schemas';
 import type { Redis } from 'ioredis';
 import type { Logger } from '../../logging/logger.js';
 import { brandPreferenceKey, PRINCIPAL_REVOKED_CHANNEL } from '../redis-keys.js';
 import { buildSession, toClaimBrands } from '../session-view.js';
-import type { Queryable, StaffRepository } from '../staff.repository.js';
+import type { Queryable, StaffMembership, StaffRepository } from '../staff.repository.js';
 import { ACCESS_TOKEN_TTL_SECONDS, issueAccessToken } from './access-token.js';
-import type { RefreshStore } from './refresh-store.js';
+import type { RefreshFamily, RefreshStore } from './refresh-store.js';
 import type { SigningKeys } from './signing-keys.js';
 
 /**
@@ -34,6 +35,7 @@ export class SessionService {
   readonly #keys: SigningKeys;
   readonly #logger: Logger;
   readonly #appUrl: string;
+  readonly #settings: Settings;
 
   constructor({
     staff,
@@ -42,6 +44,7 @@ export class SessionService {
     keys,
     logger,
     appUrl,
+    settings,
   }: {
     readonly staff: StaffRepository;
     readonly refresh: RefreshStore;
@@ -49,6 +52,7 @@ export class SessionService {
     readonly keys: SigningKeys;
     readonly logger: Logger;
     readonly appUrl: string;
+    readonly settings: Settings;
   }) {
     this.#staff = staff;
     this.#refresh = refresh;
@@ -56,6 +60,7 @@ export class SessionService {
     this.#keys = keys;
     this.#logger = logger;
     this.#appUrl = appUrl;
+    this.#settings = settings;
   }
 
   /**
@@ -152,6 +157,30 @@ export class SessionService {
     };
   }
 
+  /** The newest activity per account, for the staff table's "Last active" (M0-06). */
+  async lastActiveOf(userIds: readonly string[]): Promise<Map<string, number>> {
+    return this.#refresh.lastActiveOf(userIds);
+  }
+
+  /** Every browser this account is signed in on, newest first (M0-06). */
+  async listSessions(userId: string): Promise<RefreshFamily[]> {
+    return this.#refresh.familiesOf(userId);
+  }
+
+  /**
+   * Ends one of the caller's own browsers. It answers false rather than
+   * throwing for a family that is not theirs, so the route cannot be used to
+   * find out which family ids exist.
+   */
+  async revokeOwnFamily(userId: string, familyId: string, reason: string): Promise<boolean> {
+    if ((await this.#refresh.userOfFamily(familyId)) !== userId) {
+      return false;
+    }
+
+    await this.revokeFamily(familyId, reason);
+    return true;
+  }
+
   /** One browser. The other families this user holds keep working. */
   async revokeFamily(familyId: string, reason: string): Promise<void> {
     const userId = await this.#refresh.revokeFamily(familyId);
@@ -163,6 +192,33 @@ export class SessionService {
   /** "Log out everywhere", a password reset, a deactivation (DOMAIN-RULES §12). */
   async revokeEverything(userId: string, reason: string): Promise<number> {
     const revoked = await this.#refresh.revokeAllForUser(userId);
+    await this.#announceRevocation(userId, reason);
+
+    return revoked;
+  }
+
+  /**
+   * Every family but one. A password change from inside a session revokes the
+   * others: the person is proving they hold the account right now, so throwing
+   * them out of the screen they are standing on would be theatre, while leaving
+   * a browser somebody else has signed in would be the failure that matters.
+   */
+  async revokeEverythingExcept(
+    userId: string,
+    keepFamilyId: string | null,
+    reason: string,
+  ): Promise<number> {
+    const families = await this.#refresh.familiesOf(userId);
+    let revoked = 0;
+
+    for (const family of families) {
+      if (family.familyId === keepFamilyId) {
+        continue;
+      }
+      await this.#refresh.revokeFamily(family.familyId);
+      revoked += 1;
+    }
+
     await this.#announceRevocation(userId, reason);
 
     return revoked;
@@ -211,7 +267,7 @@ export class SessionService {
       return null;
     }
 
-    const memberships = await this.#staff.membershipsOf(userId, tx);
+    const memberships = await this.#usableMemberships(userId, tx);
     const brands = await this.#staff.brandsByIds(
       memberships.map((membership) => membership.brandId),
       tx,
@@ -237,6 +293,22 @@ export class SessionService {
       claimBrands: toClaimBrands(memberships),
       installAdmin: user.installAdmin,
     };
+  }
+
+  /**
+   * The memberships that still count. `roles.viewerEnabled` is the install
+   * toggle of REQUIREMENTS §2, and turning it off has to reach accounts that
+   * already hold the role: a Viewer membership is dropped here, so the claims
+   * never carry it, and an account whose only role was Viewer has nothing left
+   * to sign in to and is answered `no-account` (M0-06).
+   */
+  async #usableMemberships(userId: string, tx?: Queryable): Promise<StaffMembership[]> {
+    const memberships = await this.#staff.membershipsOf(userId, tx);
+    if (await this.#settings.get('roles.viewerEnabled')) {
+      return memberships;
+    }
+
+    return memberships.filter((membership) => membership.role !== 'viewer');
   }
 
   /**

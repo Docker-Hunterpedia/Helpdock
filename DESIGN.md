@@ -158,7 +158,7 @@ Anatomy, sizes and states for the shared set in `packages/ui`. Every component s
 | Input, Textarea | md 36 · lg 44 | default, with leading icon, with trailing action | hover, focus, invalid (red border + 12 px hint), disabled, read-only |
 | Select, Combobox | md 36 | single, multi (chips inside) | as Input; menu is elevation 2 |
 | Checkbox, Radio, Switch | 16 px box · switch 20×36 | | checked, indeterminate, focus, disabled |
-| SegmentedControl | md 32 | | used for Reply / Internal note |
+| SegmentedControl | md 32 | | used for Reply / Internal note, People / Accounts, and the contact timeline filter. Unselected options use `text.secondary`, the selected one `action.primary` on `action.primary.tint` |
 | Search | md 32 (admin) · lg 40 (help center) | | shows `⌘K` hint in admin |
 
 Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below at 12 px. Required fields show a text "required" suffix in the label, not an asterisk.
@@ -274,7 +274,7 @@ Every PR that touches UI ticks these in the description:
 | Where | What |
 |---|---|
 | `packages/ui/tokens.json` | The tables in §2–§4 as a single JSON object, the source for everything below. Includes the three neutral ramps for `brand.surfaceTone`. |
-| `packages/ui/src/theme.ts` | Builds the MUI theme from tokens: palette, typography, shape, shadows, component overrides (`MuiButton`, `MuiOutlinedInput`, `MuiChip`, `MuiDialog`, `MuiTooltip`, `MuiSnackbar`, `MuiTab`, `MuiTableCell`), RTL cache. |
+| `packages/ui/src/theme.ts` | Builds the MUI theme from tokens: palette, typography, shape, shadows, component overrides (`MuiButton`, `MuiOutlinedInput`, `MuiChip`, `MuiDialog`, `MuiTooltip`, `MuiSnackbar`, `MuiTab`, `MuiToggleButton`, `MuiTableCell`), RTL cache. |
 | `packages/ui/src/css.ts` | Emits the same tokens as CSS custom properties (`--hd-*`) for the widget and help center, with light and dark blocks under `prefers-color-scheme` and `[data-theme]`. |
 | `packages/ui/src/components/*` | The React components in §6 for admin and help center. |
 | `apps/widget/src/ui/*` | Preact equivalents of the widget subset only, styled with the `--hd-*` variables inside the Shadow DOM. |
@@ -288,5 +288,6 @@ Every PR that touches UI ticks these in the description:
 |---|---|
 | 2026-09-18 | 1.0. Direction "Quiet desk" chosen over "Editorial ink" and "Signal". Canvas published. |
 | 2026-09-19 | 1.1. Made three rules concrete after implementing `packages/ui`: dark status lift +0.20 L, dark brand accent lift +0.21 L, derivation of the `neutral` and `cool` ramps. Contrast figures replaced by the measured ones. |
+| 2026-09-19 | 1.2. Gave SegmentedControl its own theme override (M1-04): MUI's default unselected colour is a translucent black that fails §10 on the canvas. |
 | 2026-09-19 | 1.2. Added the §5 rule for OAuth provider marks after building the admin shell: Lucide v1 has no brand icons, so the two are inlined rather than adding a second icon set. |
 | 2026-09-19 | 1.3. Added StepProgress to §6.2 for the first-run wizard (`Admin/Wizard`), and PasswordStrengthBar for the bar M0-06 built and the wizard reuses. A step that is merely later uses `text.secondary`, not `text.disabled`: the latter is 2.3:1 on the canvas, which §10 does not allow for a label anyone is meant to read. |

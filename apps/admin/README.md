@@ -79,6 +79,9 @@ src/screens/        sign in, the code screen, the link and reset confirmations,
                     enrolment, the invite screen, the security page
 src/realtime/       the socket client, presence and the away timer
 src/staff/          the StaffApi boundary and its two adapters
+src/contacts/       the ContactsApi boundary and its two adapters
+src/screens/contacts/       the contact list, one contact, the create form, one
+                    account, and the dialogs they share
 src/shell/          sidebar, brand switcher, user menu, page header, empty state
 src/ui/             the small pieces DESIGN §6 has no component for yet: the
                     toast stack, the confirmation dialog, the password-strength
@@ -206,6 +209,24 @@ stack table in ARCHITECTURE §1 needs an ADR. The encoder is checked against the
 tables in ISO/IEC 18004 — the format strings, the version strings, the
 Reed-Solomon example in annex I — and then read back out of the matrix the way a
 scanner reads it.
+
+### The contact screens
+
+`src/screens/contacts/` is M1-04, built from the `Admin/Contacts` and
+`Admin/Contact` artboards. Two decisions are worth knowing before changing them:
+
+- **The URL is the state.** The search term, the filters, the People/Accounts
+  tab and the page all live in the query string, so a filtered list is a link an
+  agent can send to a colleague and the back button steps through what they
+  looked at rather than out of the screen.
+- **The hidden-ticket count is the feature.** DOMAIN-RULES §1.2 says a contact
+  timeline shows how many tickets the viewer's departments exclude. That count
+  drives the caption under the heading and the lock row in the list, and it is
+  the only thing the screen says about those tickets.
+
+Merge is drawn on the duplicate row and disabled, with the reason on the
+button's own label rather than in a tooltip alone: acting on a suggestion is
+M1-13.
 
 ### The auth and staff boundaries
 

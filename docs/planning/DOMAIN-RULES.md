@@ -32,6 +32,8 @@ A staff member has one role per brand. `departmentIds` is `'all'` for Admin, and
 
 Contacts and accounts are brand-scoped, not department-scoped. An agent viewing a contact timeline sees only the tickets they are allowed to see; the timeline shows a count of hidden tickets so the agent knows history exists.
 
+Reading them (`contact:read`) comes with every role, including Viewer. Editing them, adding or removing an identifier, writing a note and dismissing a duplicate suggestion (`contact:write`) follow the "Edits tickets" column: Admin, Team Leader and Agent, never Viewer. **Erasing** a contact (§11) is Admin only, in the brand the contact belongs to, because it destroys history that no permission can give back.
+
 Moving a ticket to a department the actor cannot see is allowed (it is how escalation works); the ticket disappears from their view afterwards and the activity log records it.
 
 ### 1.3 Enforcement layers

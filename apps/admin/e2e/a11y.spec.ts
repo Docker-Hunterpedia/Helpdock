@@ -7,7 +7,14 @@ import {
   MOCK_INVITE_TOKEN,
 } from '../src/staff/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { openSecurity, openStaff, signIn, submitPassword } from './flows.js';
+import {
+  openContact,
+  openContacts,
+  openSecurity,
+  openStaff,
+  signIn,
+  submitPassword,
+} from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -94,6 +101,49 @@ test.describe('accessibility', () => {
     expect(await violations(page)).toEqual([]);
 
     await page.getByRole('button', { name: t('staff:invite'), exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the contact list has no violations, filtered or empty', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openContacts(page, locale);
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByLabel(t('contacts:searchPlaceholder'), { exact: true }).fill('nobody at all');
+    await page.getByText(t('contacts:empty.noMatchesHeading')).waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('a contact has no violations, its duplicate warning and dialogs included', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openContact(page, locale, 'Mona Khalil');
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: t('contacts:detail.edit'), exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the create form has no violations', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openContacts(page, locale);
+    await page.getByRole('button', { name: t('contacts:newContact') }).click();
     await page.getByRole('dialog').waitFor();
 
     expect(await violations(page)).toEqual([]);

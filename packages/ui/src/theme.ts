@@ -283,6 +283,39 @@ function buildComponents(
       },
     },
 
+    /**
+     * DESIGN §6.1 SegmentedControl: 32 px, caption weight, one selected option
+     * on `action.primary.tint`. MUI's own unselected colour is a translucent
+     * black that lands under 4.5:1 on `bg.surface`, so the text token is set
+     * here rather than relying on the default (DESIGN §10).
+     */
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          minHeight: px(SIZE.tab),
+          height: px(SIZE.tab),
+          textTransform: 'none',
+          paddingInline: px(12),
+          borderColor: semantic['border.strong'],
+          color: semantic['text.secondary'],
+          ...typeStyle('caption'),
+          '&:hover': { backgroundColor: semantic['bg.muted'] },
+          '&.Mui-selected': {
+            color: semantic['action.primary'],
+            backgroundColor: semantic['action.primary.tint'],
+            '&:hover': { backgroundColor: semantic['action.primary.tint'] },
+          },
+          '&:focus-visible': ring,
+        },
+      },
+    },
+
+    MuiToggleButtonGroup: {
+      styleOverrides: {
+        root: { borderRadius: px(radius.md) },
+      },
+    },
+
     MuiTab: {
       styleOverrides: {
         root: {

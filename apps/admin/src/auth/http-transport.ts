@@ -1,5 +1,11 @@
-import type { AuthErrorBody, StaffRefusal } from '@helpdock/schemas';
+import type {
+  AuthErrorBody,
+  ContactRefusal,
+  IdentityProblem,
+  StaffRefusal,
+} from '@helpdock/schemas';
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
+import { ContactError } from '../contacts/api.js';
 import { StaffError } from '../staff/api.js';
 import { AuthError } from './api.js';
 
@@ -145,21 +151,27 @@ export class HttpTransport {
 
 /**
  * Turns a failed response into the error its screen understands. The api puts
- * the detail in `error.auth` or `error.staff`; anything else — a proxy's HTML
- * error page, a network failure — is `unavailable`, because the screens have
- * exactly one sentence for "something went wrong".
+ * the detail in `error.auth`, `error.staff` or `error.contact`; anything else —
+ * a proxy's HTML error page, a network failure — is `unavailable`, because the
+ * screens have exactly one sentence for "something went wrong".
  */
-const toError = async (response: Response): Promise<AuthError | StaffError> => {
+const toError = async (response: Response): Promise<AuthError | ContactError | StaffError> => {
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
+  let contact: { reason: ContactRefusal; problem?: IdentityProblem | undefined } | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
     auth = body.auth;
     staff = body.staff?.reason;
+    contact = body.contact;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
+  }
+
+  if (contact !== undefined) {
+    return new ContactError(contact.reason, contact.problem);
   }
 
   if (staff !== undefined) {

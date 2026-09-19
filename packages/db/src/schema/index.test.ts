@@ -22,11 +22,16 @@ const columnsOf = (name: string): readonly string[] =>
   Object.values(getTableColumns(tableNamed(name))).map((column) => column.name);
 
 describe('the schema', () => {
-  it('declares the tables M0 needs (ARCHITECTURE §5)', () => {
+  it('declares the tables shipped so far (ARCHITECTURE §5)', () => {
     expect([...byName.keys()].sort()).toEqual([
+      'accounts',
       'audit_log',
       'brand_domains',
       'brands',
+      'contact_duplicate_suggestions',
+      'contact_identities',
+      'contact_notes',
+      'contacts',
       'departments',
       'job_receipts',
       'outbox',
@@ -65,9 +70,9 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Seven of the nine tables have a uuid primary key; `settings` is keyed by
+    // Every table but two has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)` and `job_receipts` by the consumer's idempotency key.
-    expect(generated).toHaveLength(7);
+    expect(generated).toHaveLength(byName.size - 2);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }
@@ -111,6 +116,28 @@ describe('the indexes and constraints', () => {
     const domain = configOf('brand_domains').columns.find((column) => column.name === 'domain');
 
     expect(domain?.isUnique).toBe(true);
+  });
+
+  it('lets one brand claim a domain once, and another brand claim it too', () => {
+    const unique = configOf('accounts').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'domain']);
+  });
+
+  it('binds an identifier to one contact inside a brand', () => {
+    const unique = configOf('contact_identities').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'kind', 'value']);
+  });
+
+  it('suggests a pair of contacts once', () => {
+    const unique = configOf('contact_duplicate_suggestions').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual([
+      'brand_id',
+      'contact_id',
+      'other_contact_id',
+    ]);
   });
 
   it('reserves a brand prefix for good', () => {

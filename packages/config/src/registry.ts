@@ -179,6 +179,18 @@ export const SETTING_DEFINITIONS = [
     description: 'Whether the optional read-only Viewer role can be assigned (REQUIREMENTS §2).',
   }),
   defineSetting({
+    key: 'contacts.defaultCallingCode',
+    // Digits, with or without the plus. Empty means "no fallback": a phone
+    // number that is not already in international form is refused rather than
+    // guessed at (ADR 0008).
+    schema: z.string().regex(/^\+?\d{0,4}$/),
+    default: '',
+    secret: false,
+    scope: 'brand',
+    description:
+      'Country calling code prefixed to phone numbers typed without one, for example 49. Empty refuses them instead (ADR 0008).',
+  }),
+  defineSetting({
     key: 'captcha.provider',
     schema: z.enum(['turnstile', 'hcaptcha', 'none']),
     default: 'none',

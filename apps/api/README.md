@@ -295,6 +295,33 @@ application and it is confined to that file.
 it through the same `AuthService`: the same pepper, the same keyring, the same
 decoy hash. A second `AuthModule.forRoot` would silently build a second graph.
 
+## Contacts and accounts
+
+`src/contacts/` is M1-04: who a person is, how Helpdock recognises them again,
+and what is left of them after a privacy request. The rules, the endpoint table
+and the refusal codes are in [the contacts
+guide](../../docs/guides/contacts.md); three things matter to anybody working in
+this app.
+
+**`findOrCreateContactByIdentity` is the seam.** Every channel — M2 email, M4
+widget, M6 Telegram — turns "a message arrived from X" into a contact through
+that one function, inside its own transaction. It is where DOMAIN-RULES §4.4
+lives: a verified identifier matches an existing contact, an unverified one that
+somebody else holds starts a new contact and records a duplicate suggestion
+instead.
+
+**Normalisation lives in `packages/schemas`, not here.** `contact_identities` is
+unique on the spelled value, and the admin, the api and the widget all have to
+spell it the same way. `apps/api` calls `normaliseIdentity` and never compares a
+raw string.
+
+**Tickets reach the contact screens through two interfaces.**
+`TicketStatsProvider` and `ContactTimelineProvider` in `src/contacts/providers.ts`
+have "none yet" implementations, because M1-04 ships before M1-02. M1-02 passes
+real ones to `ContactsModule.forRoot` and nothing else in the folder changes.
+`hiddenCount` on the timeline is DOMAIN-RULES §1.2's count of the tickets a
+viewer's departments exclude.
+
 ## Staff and roles
 
 `src/staff/` holds M0-06: the staff list, invitations, the lifecycle changes of
@@ -366,6 +393,8 @@ routes answers 401 without a valid bearer token.
 | `GET /api/brands/:brandId` | `@Requires('brand:read')` | One brand. |
 | `/api/brands/:brandId/staff/*` | `@Requires('staff:manage')` | Staff and roles. [The guide](../../docs/guides/staff-and-roles.md#endpoints) lists them. |
 | `GET /api/brands/:brandId/departments` | `@Requires('brand:read')` | The department picker's options. |
+| `/api/brands/:brandId/contacts/*` | `@Requires('contact:read'\|'contact:write')` | Contacts, identifiers, notes, duplicate suggestions and erasure. [The guide](../../docs/guides/contacts.md#api) lists them. |
+| `/api/brands/:brandId/accounts/*` | `@Requires('contact:read'\|'contact:write')` | The customer companies of a brand. |
 | `GET /api/brands/:brandId/presence` | `@Requires('staff:read')` | Who is online in that brand. [The realtime guide](../../docs/guides/realtime.md#presence). |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |

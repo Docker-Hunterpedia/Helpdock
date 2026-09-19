@@ -17,3 +17,23 @@ export const actorTypeEnum = pgEnum('actor_type', ['staff', 'visitor', 'apikey',
 
 /** What a brand hostname is for (ARCHITECTURE §5). */
 export const brandDomainKindEnum = pgEnum('brand_domain_kind', ['helpcenter', 'widget_origin']);
+
+/**
+ * How a contact can be reached, and how Helpdock recognises them again
+ * (DOMAIN-RULES §4.4). `external` is the brand's own user id, carried by a
+ * signed identity; `visitor` is the id the widget issues on first load.
+ */
+export const contactIdentityKindEnum = pgEnum('contact_identity_kind', [
+  'email',
+  'phone',
+  'telegram',
+  'visitor',
+  'external',
+]);
+
+/** What became of a possible-duplicate suggestion (DOMAIN-RULES §4.4). */
+export const contactDuplicateStatusEnum = pgEnum('contact_duplicate_status', [
+  'open',
+  'dismissed',
+  'merged',
+]);

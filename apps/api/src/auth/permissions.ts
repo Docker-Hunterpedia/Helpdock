@@ -19,6 +19,13 @@ import type { BrandRole, Principal } from './principal.js';
  * The list is what M0 needs plus the ticket permissions, so M1 extends it
  * rather than inventing a second vocabulary.
  *
+ * `contact:write` follows "Edits tickets" in the table: whoever may work a ticket
+ * may correct the person it is about — an address typed wrong on a phone call is
+ * fixed by the agent who took the call, not by an administrator. A Viewer holds
+ * `contact:read` alone. Erasing a contact is narrower still and is refused to
+ * anybody but an Admin inside the service (DOMAIN-RULES §11), because it is not
+ * an edit: it destroys history no permission can give back.
+ *
  * `staff:read` is the one permission every role holds. §1.2 restricts *tickets*
  * by department, never colleagues: an Agent has to see which of them is online
  * before taking a ticket (M1-07 assignment, M1-09 collision), and a Viewer
@@ -29,6 +36,7 @@ export const PERMISSIONS = [
   'ticket:read',
   'ticket:write',
   'contact:read',
+  'contact:write',
   'brand:read',
   'brand:manage',
   'staff:read',
@@ -53,6 +61,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'ticket:read',
     'ticket:write',
     'contact:read',
+    'contact:write',
     'brand:read',
     'brand:manage',
     'staff:read',
@@ -68,13 +77,21 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'ticket:read',
     'ticket:write',
     'contact:read',
+    'contact:write',
     'brand:read',
     'staff:read',
     'staff:manage',
     'settings:read',
     'settings:write',
   ],
-  agent: ['ticket:read', 'ticket:write', 'contact:read', 'brand:read', 'staff:read'],
+  agent: [
+    'ticket:read',
+    'ticket:write',
+    'contact:read',
+    'contact:write',
+    'brand:read',
+    'staff:read',
+  ],
   viewer: ['ticket:read', 'contact:read', 'brand:read', 'staff:read'],
 });
 

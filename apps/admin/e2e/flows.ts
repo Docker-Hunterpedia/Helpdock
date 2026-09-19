@@ -61,6 +61,25 @@ export async function openStaff(page: Page, locale: Locale): Promise<void> {
   await page.getByRole('table').waitFor();
 }
 
+/**
+ * Opens the contact list by clicking the nav item, for the reason `openStaff`
+ * gives: the fixture keeps its session in memory, so a `page.goto` would sign
+ * the browser out.
+ */
+export async function openContacts(page: Page, locale: Locale): Promise<void> {
+  const t = strings(locale);
+
+  await page.getByRole('link', { name: new RegExp(t('admin:nav.contacts')) }).click();
+  await page.getByRole('heading', { name: t('contacts:title'), level: 1 }).waitFor();
+}
+
+/** Opens one contact from the list, by the name on its row. */
+export async function openContact(page: Page, locale: Locale, name: string): Promise<void> {
+  await openContacts(page, locale);
+  await page.getByRole('link', { name, exact: true }).click();
+  await page.getByRole('heading', { name, level: 1 }).waitFor();
+}
+
 export async function openSecurity(
   page: Page,
   locale: Locale,

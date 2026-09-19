@@ -14,6 +14,7 @@ import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
 import type { PrincipalResolver } from './auth/principal-resolver.js';
+import { ContactsModule } from './contacts/contacts.module.js';
 import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
 import { RequestContextMiddleware } from './context/request-context.middleware.js';
@@ -94,6 +95,7 @@ export class AppModule implements NestModule {
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
         RealtimeModule.forRoot({ ...options.realtime, logger: options.logger }),
         StaffModule.forRoot({ logger: options.logger }),
+        ContactsModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

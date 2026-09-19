@@ -34,6 +34,14 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'user_brand_roles', departmentScoped: false },
   { name: 'departments', departmentScoped: false },
   { name: 'brand_domains', departmentScoped: false },
+  // Contacts and accounts are brand-scoped and never department-scoped
+  // (DOMAIN-RULES §1.2): an Agent may open any contact in the brand, and it is
+  // the timeline that withholds the tickets they may not read.
+  { name: 'accounts', departmentScoped: false },
+  { name: 'contacts', departmentScoped: false },
+  { name: 'contact_identities', departmentScoped: false },
+  { name: 'contact_notes', departmentScoped: false },
+  { name: 'contact_duplicate_suggestions', departmentScoped: false },
   { name: 'settings', departmentScoped: false },
   { name: 'audit_log', departmentScoped: false },
   { name: 'outbox', departmentScoped: false },

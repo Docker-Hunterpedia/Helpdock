@@ -6,6 +6,10 @@ import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
 import { AuthComplete } from '../screens/auth-complete.tsx';
+import { AccountPage } from '../screens/contacts/account-page.tsx';
+import { ContactPage } from '../screens/contacts/contact-page.tsx';
+import { ContactsPage } from '../screens/contacts/contacts-page.tsx';
+import { NewContactPage } from '../screens/contacts/new-contact-page.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
@@ -75,6 +79,13 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.system} element={<SystemPage />} />
           <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
           <Route path={ROUTES.staff} element={<StaffScreen />} />
+          {/* M1-04. `new` and `accounts/:id` are static-first, which React
+              Router ranks above `:contactId`, so a contact can never be
+              shadowed by a word. */}
+          <Route path={ROUTES.contacts} element={<ContactsPage />} />
+          <Route path={ROUTES.contactNew} element={<NewContactPage />} />
+          <Route path={ROUTES.account} element={<AccountPage />} />
+          <Route path={ROUTES.contact} element={<ContactPage />} />
           <Route path={ROUTES.security} element={<SecurityScreen />} />
         </Route>
       </Route>

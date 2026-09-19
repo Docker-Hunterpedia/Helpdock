@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
+import type { ContactsApi } from '../contacts/api.js';
+import { MockContactsApi } from '../contacts/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 
@@ -12,6 +14,7 @@ export interface RenderAppOptions {
   readonly authApi?: AuthApi;
   /** Defaults to a fresh fixture, so a screen that reads it always has one. */
   readonly staffApi?: StaffApi;
+  readonly contactsApi?: ContactsApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -19,6 +22,7 @@ export interface RenderedApp extends RenderResult {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly authApi: AuthApi;
   readonly staffApi: StaffApi;
+  readonly contactsApi: ContactsApi;
 }
 
 /**
@@ -30,6 +34,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const staffApi = options.staffApi ?? new MockStaffApi();
   const authApi =
     options.authApi ?? new MockAuthApi(staffApi instanceof MockStaffApi ? staffApi : undefined);
+  const contactsApi = options.contactsApi ?? new MockContactsApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -37,6 +42,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     <AppProviders
       authApi={authApi}
       staffApi={staffApi}
+      contactsApi={contactsApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -46,5 +52,5 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     </AppProviders>,
   );
 
-  return { ...result, user: userEvent.setup(), authApi, staffApi };
+  return { ...result, user: userEvent.setup(), authApi, staffApi, contactsApi };
 }

@@ -205,8 +205,8 @@ reads a column instead of joining back to `tickets` — a policy that joined to 
 table whose own policy is being evaluated would cost that join on every row of
 every read.
 
-Nothing writes that column by hand. Two triggers in
-`0007_ticket_department_sync.sql` keep it true:
+Nothing writes that column by hand. Three triggers, built from two functions,
+keep it true:
 
 | Trigger | When | What |
 |---|---|---|
@@ -246,8 +246,8 @@ Two counters, both drawn inside the caller's transaction (`src/ticket-numbers.ts
 
 `seedBrandStatuses(tx, brandId)` writes the six statuses of DOMAIN-RULES §2.1
 and §2.4 for a new brand. It is called by whatever creates the brand — the
-first-run wizard today — rather than by a trigger, because the rows are data and
-the runtime role writes data. `onConflictDoNothing` on `(brand_id, name)` makes
+first-run wizard and the development seed today — rather than by a trigger,
+because the rows are data and the runtime role writes data. `onConflictDoNothing` on `(brand_id, name)` makes
 it idempotent.
 
 ## Known gaps

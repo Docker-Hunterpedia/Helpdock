@@ -1231,6 +1231,50 @@ describe.skipIf(!hasDocker)('tickets', () => {
       });
     });
 
+    it('tells the queue a ticket has left, and turns its ticket room out', async () => {
+      // A room is authorised when it is joined, and a move changes who may read
+      // the ticket. The old queue has to hear about it — its watchers are in no
+      // other room the event reaches — and the ticket room has to be emptied,
+      // so whoever was in it re-joins through the same check.
+      const { ticket } = await createTicket(ada);
+      await drainOutbox();
+
+      const watchingSupport = await connect(ada);
+      const inTicket = await connect(sam);
+      expect(await join(watchingSupport, departmentRoom(support))).toMatchObject({ ok: true });
+      expect(await join(inTicket, ticketRoom(ticket.id))).toMatchObject({ ok: true });
+
+      const heardInOldQueue: unknown[] = [];
+      const heardAfterEviction: unknown[] = [];
+      watchingSupport.on(REALTIME_EVENTS.ticketChanged, (envelope) =>
+        heardInOldQueue.push(envelope),
+      );
+      inTicket.on(REALTIME_EVENTS.ticketMessage, (envelope) => heardAfterEviction.push(envelope));
+
+      await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+        departmentId: billing,
+      });
+      await drainOutbox();
+
+      expect(await eventually(() => heardInOldQueue.length > 0)).toBe(true);
+
+      // Sam was in the ticket room and is a Support agent, so after the move
+      // there is no version of this they may still read. A reply now reaches
+      // the room; it must not reach them.
+      await call('POST', `${brandPath(seeded.brandId)}/tickets/${ticket.id}/messages`, ada, {
+        kind: 'note',
+        bodyHtml: '<p>now a billing matter</p>',
+      });
+      await drainOutbox();
+
+      expect(heardAfterEviction).toEqual([]);
+      // And they may not get back in.
+      expect(await join(inTicket, ticketRoom(ticket.id))).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    });
+
     it('delivers a reply to the ticket room and to nobody in another department', async () => {
       const { ticket } = await createTicket(sam);
       await drainOutbox();

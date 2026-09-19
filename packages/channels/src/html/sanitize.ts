@@ -229,7 +229,13 @@ export class SanitizeLimitError extends Error {
   }
 }
 
-const TAG_OPENING = /</g;
+/**
+ * An opening tag: `<` immediately followed by a letter. Closing tags are not
+ * counted, so the ceiling reads as "elements", and a `<` in prose only counts
+ * when a letter follows it — a conservative over-count in a guard, which is the
+ * right direction for one.
+ */
+const TAG_OPENING = /<[a-zA-Z]/g;
 
 const assertWithinLimits = (html: string): void => {
   const tags = html.match(TAG_OPENING)?.length ?? 0;

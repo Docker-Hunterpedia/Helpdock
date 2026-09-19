@@ -37,18 +37,20 @@ brand_id = ANY(app.brand_ids)
 ```
 
 The child tables carry a **denormalised** `department_id` so the policy never
-needs a join. Two triggers keep it true, and nothing else writes it:
+needs a join. Three triggers, built from two functions, keep it true, and
+nothing else writes it:
 
 | Trigger | When | What |
 |---|---|---|
 | `ticket_messages_department`, `ticket_activity_department` | before insert | Reads the parent ticket's department and overwrites whatever was passed. The read is subject to the caller's own policies, so a ticket the caller cannot see raises `insufficient_privilege` naming the ticket. |
-| `tickets_department_moved` | after a department change | Rewrites every message and activity row of that ticket. A ticket escalated from Support to Billing takes its thread with it, or Support would keep reading it. |
+| `tickets_department_moved` | after a department change | Rewrites every message **and** activity row of that ticket. A ticket escalated from Support to Billing takes its thread with it, or Support would keep reading it. |
 
 What this means in practice: an Agent of Support asking for a Billing ticket of
-the same brand gets **404**, by list, by id, by message cursor, by activity and
-by socket room. Not 403 — the transaction cannot see the row, so the api
-genuinely does not know whether it exists, and "forbidden" would confirm that it
-does.
+the same brand gets **404** by id, by message cursor and by activity, a list
+that simply does not contain it, and a `forbidden` acknowledgement on a
+`ticket:<id>` socket join. Never 403 over HTTP — the transaction cannot see the
+row, so the api genuinely does not know whether it exists, and "forbidden" would
+confirm that it does. No answer distinguishes "not found" from "not yours".
 
 **One gap, deliberately.** §1.2 says moving a ticket to a department the actor
 cannot see is allowed, because that is how escalation works. The `WITH CHECK`
@@ -82,7 +84,7 @@ Every brand is seeded with six when it is created, by `seedBrandStatuses`:
 They are marked `is_system`. A brand may rename and recolour them; nothing
 deletes them, because code refers to what they are rather than what they are
 called. `color` is one of the five status hues of
-[DESIGN §2.1](../../DESIGN.md#21-color) — a brand tints, it never adds a hue.
+[DESIGN §2.1](../../DESIGN.md#21-palettes) — a brand tints, it never adds a hue.
 
 A brand created before M1-02 has no statuses and cannot hold a ticket; the api
 answers 409 and says so. `seedBrandStatuses` is exported from `@helpdock/db` for
@@ -91,8 +93,9 @@ whatever creates a brand.
 ### Numbers
 
 A ticket's display number comes from that brand's own sequence, created with the
-brand (`brand_ticket_seq_<uuid>`), and `prefix` is **copied** onto the row rather
-than joined: `HD-1042` is printed in emails that outlive a rename.
+brand — `brand_ticket_seq_<the brand's uuid with its hyphens removed>` — and
+`prefix` is **copied** onto the row rather than joined: `HD-1042` is printed in
+emails that outlive a rename.
 
 Numbers are not dense. `nextval` is non-transactional by design — that is what
 lets two requests draw two numbers without waiting for each other — so a
@@ -139,10 +142,16 @@ Two things about the sanitiser are worth knowing before rendering a body:
   retrieval — and it must never be interpolated into HTML. `body_html` is the
   field that is safe to render.
 
-A body is refused with 400 when it carries more than 6,000 HTML tags. The
-sanitiser's cost is super-linear in nesting depth rather than in size, and it
-runs synchronously inside the request's open transaction, so a body built to be
-expensive would stall every other request on the replica.
+Two more things the sanitiser does to a body, which change what is stored:
+
+- every surviving `<a>` leaves with `rel="noopener noreferrer nofollow"`,
+  whatever it arrived with, and a `target` is normalised to `_blank`;
+- a body carrying more than 6,000 opening tags is refused with **400**. The
+  sanitiser's cost is super-linear in nesting depth rather than in size, and it
+  runs synchronously inside the request's open transaction, so a body built to
+  be expensive would stall every other request on the replica. The count is
+  taken on the raw input, before the parser sees it, and is deliberately a
+  conservative over-count.
 
 ## Activity
 
@@ -157,6 +166,9 @@ retention purges it with the ticket. `audit_log` stays what an admin reads.
 | `ticket.status.changed` | The status moved, through the transition hook |
 | `ticket.replied` | A public reply was added |
 | `ticket.note_added` | An internal note was added |
+
+`ticket.status.changed` is an activity action only. A status change travels as
+part of the `ticket.updated` **outbox** event; there is no fifth one.
 
 `via` is *how*: `ui` for the admin, `api` for an api key, `rule` for M3-03's
 rules, `ai` for M7, `system` for a worker. A field set to the value it already
@@ -203,10 +215,10 @@ which departments it reaches is the policies'.
 | `GET /tickets` | `ticket:read` | A filtered, sorted, cursor-paged list |
 | `POST /tickets` | `ticket:write` | A ticket and its first message |
 | `GET /tickets/:ticketId` | `ticket:read` | The ticket, the first page of its thread and its activity |
-| `PATCH /tickets/:ticketId` | `ticket:write` | Subject, priority, department, team, assignee, status |
+| `PATCH /tickets/:ticketId` | `ticket:write` | Subject, priority, department, assignee, status. Setting a team answers 400 until M1-01; clearing one with `null` is allowed |
 | `GET /tickets/:ticketId/messages` | `ticket:read` | The thread after a `seq` |
 | `POST /tickets/:ticketId/messages` | `ticket:write` | A public reply or an internal note |
-| `GET /tickets/:ticketId/activity` | `ticket:read` | The activity log |
+| `GET /tickets/:ticketId/activity` | `ticket:read` | The newest 100 activity entries, oldest first. It does not page yet |
 
 ### Listing
 
@@ -287,10 +299,23 @@ Content-Type: application/json
 
 Answers `201` with the ticket, its first message and its activity. The body is
 the first message: a ticket with no message is a row nobody can answer, so the
-two are never written apart. `contactId` is optional until M1-04 exists.
+two are never written apart.
+
+**Creating a ticket is not idempotent, and `clientId` does not make it so.** The
+uniqueness D §7 defines is `(conversation_id, client_id)`, and a conversation
+does not exist until the ticket does — so a retried `POST /tickets` writes a
+*second* ticket. What `clientId` does here is give the first message the same
+dedupe key a reply gets. Idempotent creation needs a key that outlives the
+request: M2-04's email threading key, M4's conversation id.
 
 A department outside the actor's own scope answers `403` with a sentence rather
 than letting the policy answer `500`.
+
+A `PATCH` whose fields all already hold the values it names answers **200** and
+writes nothing — no activity row, no outbox event — because "priority: medium →
+medium" is an entry nobody reads and a phantom `ticket.updated` makes every
+screen re-read for nothing. An *empty* body is a 400, so a caller retrying a
+failed write can still tell the two apart.
 
 `teamId` is refused with 400 until M1-01 creates `teams`, for the reason `tagId`
 is: `tickets.team_id` has no foreign key yet, so any uuid would be stored
@@ -312,7 +337,14 @@ reply by an omitted default is the worst bug this endpoint could have. `system`
 and `ai` are the server's to write.
 
 The response carries the `seq`. Posting the same `clientId` twice returns the
-first message.
+first message. A reply also bumps the ticket's `updated_at`, so it rises to the
+front of the queue it just became urgent in, even though none of the ticket's
+own columns moved.
+
+A message on the wire carries neither `external_message_id` nor `ai_meta` nor
+its denormalised `department_id`: the first is a channel's threading handle, the
+second is cost accounting, and the ticket already says which department it is
+in. M8 decides separately what the public API exposes.
 
 ### Catching up
 

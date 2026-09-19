@@ -7,16 +7,21 @@ import type { StaffPrincipal } from './socket.js';
  * Which rooms a principal may join (DOMAIN-RULES §1.4: "joining a room runs the
  * same permission check as the corresponding REST read").
  *
- * The permission itself — does this principal hold a role in this brand at all
- * — is the {@link ../auth/permission.guard.js PermissionGuard}'s answer, and it
- * has already said yes by the time this runs. What is left is the part the
- * database enforces for HTTP: the department scope of DOMAIN-RULES §1.3 layer
- * 3, which no row-level security policy can enforce for a room *name*.
+ * The `PermissionGuard` has already checked the permission the *join* declares,
+ * `brand:read`, by the time this runs. Two things are left.
  *
- * Two of the three kinds are decided without touching the database, and one
- * cannot be. A `ticket:` room names a row, and the only honest answer to
- * "may this principal join it" is the one the policies give
- * ({@link ./room-reader.js RoomScopeReader}), so this function is async.
+ * The first is the permission the **route each room mirrors** declares. A
+ * `ticket:` or `department:` room carries what `GET …/tickets/:ticketId`
+ * carries, and that route declares `ticket:read`; every role that holds
+ * `brand:read` holds it too *today*, which is exactly why asking is cheap and
+ * why not asking would be a subscription the next role can make and not fetch.
+ *
+ * The second is the department scope of DOMAIN-RULES §1.3 layer 3, which no
+ * row-level security policy can enforce for a room *name*. A `brand:` room and
+ * an explicit department list are decided from the principal alone; an
+ * unrestricted scope and a `ticket:` room name a row, and the only honest
+ * answer there is the one the policies give
+ * ({@link ./room-reader.js RoomScopeReader}) — which is why this is async.
  */
 
 export type RoomAuthorization =

@@ -293,9 +293,13 @@ boundary, over the same Redis pub/sub shape `principal.revoked` already uses
 (`apps/api/src/realtime/broadcast.ts`):
 
 ```
-worker   →  PUBLISH helpdock:realtime:emit   { rooms, event, data, seq }
+worker   →  PUBLISH helpdock:realtime:emit   { rooms, event, data, seq, evict }
 api      →  RealtimeEmitSubscriber → RealtimePublisher.emitToRoom(…, { local: true })
 ```
+
+`evict` names the rooms whose members must be turned out once the frame is
+delivered — the ticket room of a ticket that has just changed department, whose
+members all joined under the old department's scope.
 
 `local: true` is not an optimisation. Every replica subscribes and every replica
 receives the message, and the Socket.IO Redis adapter would fan a normal emit out

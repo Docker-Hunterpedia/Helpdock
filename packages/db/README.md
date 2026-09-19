@@ -35,7 +35,7 @@ const roles = await withTenant(
 ## Schema
 
 Tables live in `src/schema/`, one file each, re-exported from
-`src/schema/index.ts`. M0 has nine:
+`src/schema/index.ts`. M0 left nine; M1-02 and M1-03 added four:
 
 | Table | Scope | Notes |
 |---|---|---|
@@ -48,6 +48,10 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `audit_log` | tenant | Who did what. `actor_id` is text: a system actor is a job id. |
 | `outbox` | tenant | The transactional outbox of DOMAIN-RULES §6. Partial index on the unpublished backlog. |
 | `job_receipts` | global | Idempotency keys for consumers with no natural key. |
+| `ticket_statuses` | tenant | A brand's own statuses, each mapped to one of the four system states of DOMAIN-RULES §2.1. Brand-scoped and **not** department-scoped: an Agent has to read the name of the status a ticket in their own department is in. Unique on `(brand_id, name)`. |
+| `tickets` | tenant, **department** | The ticket. `department_id` is not null — a ticket with no department would be invisible to everyone. `search` is a generated tsvector. |
+| `ticket_messages` | tenant, **department** | The thread. `seq` is monotonic per ticket; `(ticket_id, client_id)` dedupes a retried send; `(brand_id, channel, external_message_id)` dedupes an inbound redelivery. |
+| `ticket_activity` | tenant, **department** | Who changed what, and how. Part of the ticket rather than the brand's administrative trail, which stays `audit_log`. |
 
 Ids are **UUIDv7**, generated in `src/uuid.ts`: a 48-bit millisecond timestamp,
 a 12-bit counter and 62 bits of randomness (RFC 9562). Node's
@@ -95,7 +99,8 @@ Row-level security is the layer that still holds when a guard is forgotten
 brand_id = ANY (nullif(current_setting('app.brand_ids', true), '')::uuid[])
 ```
 
-and, for a department-scoped table (none yet; tickets arrive in M1):
+and, for a department-scoped table — `tickets`, `ticket_messages` and
+`ticket_activity`:
 
 ```sql
 AND (coalesce(nullif(current_setting('app.all_departments', true), '')::boolean, false)
@@ -192,6 +197,30 @@ if a policy ends up ahead of its `CREATE TABLE`.
 `CREATE TABLE` and its four policies in one file, and `rls.integration.test.ts`
 gained one fixture row.
 
+### Department-scoped tables
+
+A ticket-scoped table carries a **denormalised** `department_id`, so the policy
+reads a column instead of joining back to `tickets` — a policy that joined to a
+table whose own policy is being evaluated would cost that join on every row of
+every read.
+
+Nothing writes that column by hand. Two triggers in
+`0007_ticket_department_sync.sql` keep it true:
+
+| Trigger | When | What |
+|---|---|---|
+| `ticket_messages_department`, `ticket_activity_department` | before insert | Overwrite whatever was passed with the parent ticket's department. The `SELECT` runs with the caller's own row-level security, so a ticket the caller cannot see raises `insufficient_privilege` naming the ticket — which is the check "may this principal write to this ticket", with nowhere else to write it. |
+| `tickets_department_moved` | after `department_id` changes | Rewrite every message and activity row of that ticket, so a ticket that is escalated takes its thread with it. |
+
+Both are invoker-rights functions, deliberately: the `UPDATE` is bound by the
+same policies, so rows only move where the actor could have written them anyway.
+
+The *cross-brand* half of the negative suite covers these three tables like
+every other. The *same-brand, other-department* half needs two departments and
+two principals inside one brand, so it lives where those exist:
+`apps/api/src/tickets/tickets.integration.test.ts`, at the HTTP layer and in
+hand-written SQL.
+
 ## Tests
 
 `src/*.test.ts` are unit tests and need nothing installed. `src/*.integration.test.ts`
@@ -199,8 +228,33 @@ start a real `pgvector/pgvector:pg17` with Testcontainers and cover the
 migrations, the negative suite and the settings store; they skip themselves and
 say so when Docker is not running.
 
+## Ticket counters
+
+Two counters, both drawn inside the caller's transaction (`src/ticket-numbers.ts`):
+
+- **`nextTicketNumber(tx, brandId)`** reads the brand's own sequence. The name
+  is built by `brandTicketSequenceName`, which refuses anything that is not a
+  UUID, and is then bound as a parameter cast to `regclass` — never pasted into
+  the statement. Numbers are *not* dense: `nextval` is non-transactional by
+  design, so a rolled-back creation burns its number. A gap is not a defect; a
+  duplicate would be, and `tickets_brand_number_key` would catch one.
+- **`nextMessageSeq(tx, ticketId)`** takes a `SELECT … FOR UPDATE` on the ticket
+  row and then reads `max(seq) + 1`. The ticket row rather than the messages,
+  because the first message of a ticket has no message row to lock. A ticket the
+  transaction cannot see raises rather than handing back 1.
+
+`seedBrandStatuses(tx, brandId)` writes the six statuses of DOMAIN-RULES §2.1
+and §2.4 for a new brand. It is called by whatever creates the brand — the
+first-run wizard today — rather than by a trigger, because the rows are data and
+the runtime role writes data. `onConflictDoNothing` on `(brand_id, name)` makes
+it idempotent.
+
 ## Known gaps
 
+- **A brand created before M1-02 has no statuses** and cannot hold a ticket.
+  Nothing backfills them: a migration cannot write tenant rows without a tenant
+  context, and the install is pre-alpha. `seedBrandStatuses` is exported for
+  whatever needs to repair one.
 - A brand-scoped `PostgresSettingsStore` reads and writes only its own rows. It
   does not fall back to the install-wide value for a key a brand has not
   overridden; that resolution rule belongs to the milestone that puts per-brand

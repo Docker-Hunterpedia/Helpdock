@@ -36,6 +36,7 @@ import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js'
 import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
+import { TicketsModule } from './tickets/tickets.module.js';
 
 /**
  * The request lifecycle of ARCHITECTURE §6, in the order Nest runs it:
@@ -94,6 +95,7 @@ export class AppModule implements NestModule {
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
         RealtimeModule.forRoot({ ...options.realtime, logger: options.logger }),
         StaffModule.forRoot({ logger: options.logger }),
+        TicketsModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

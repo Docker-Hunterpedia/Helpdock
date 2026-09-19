@@ -38,7 +38,7 @@ export class RealtimePublisher {
     room: string,
     event: E,
     payload: ServerEventPayload<E>,
-    options: { readonly seq?: number } = {},
+    options: { readonly seq?: number; readonly local?: boolean } = {},
   ): void {
     const namespace = this.#namespace;
     if (namespace === null) {
@@ -47,7 +47,15 @@ export class RealtimePublisher {
       return;
     }
 
-    namespace.to(roomSchema.parse(room)).emit(event, this.envelope(event, payload, options));
+    // `local` restricts the emit to this replica's own sockets. It is for the
+    // one caller whose fan-out has already happened —
+    // {@link ./broadcast.js RealtimeEmitSubscriber}, which every replica runs
+    // on a message every replica receives. Without it the Redis adapter would
+    // fan that message out again and a room would hear the frame once per
+    // replica.
+    const target = options.local === true ? namespace.local : namespace;
+
+    target.to(roomSchema.parse(room)).emit(event, this.envelope(event, payload, options));
   }
 
   /** Exported for the tests, and because a seq-bearing envelope is worth naming. */

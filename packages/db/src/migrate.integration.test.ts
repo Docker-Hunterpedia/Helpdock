@@ -20,6 +20,8 @@ const MIGRATION_TAGS = [
   '0003_outbox_notify_relay',
   '0004_brand_domains',
   '0005_departments',
+  '0006_tickets',
+  '0007_ticket_department_sync',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

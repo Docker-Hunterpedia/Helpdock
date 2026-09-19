@@ -5,4 +5,6 @@ export * from './roles.js';
 export * from './schema/index.js';
 export * from './settings-store.js';
 export * from './tenant.js';
+export * from './ticket-numbers.js';
+export * from './ticket-statuses.js';
 export * from './uuid.js';

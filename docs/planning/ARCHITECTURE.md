@@ -275,9 +275,9 @@ Bull Board (auth-protected) mounted in admin System page for queue inspection.
 ## 14. Observability
 
 - pino JSON logs with request id, brand id, principal (no PII bodies); log level per env.
-- OpenTelemetry auto-instrumentation (http, pg, ioredis, bullmq) → OTLP exporter (optional endpoint).
+- OpenTelemetry instrumentation (http, fastify, ioredis; no contrib instrumentation exists for the `postgres` driver or BullMQ as of M0-10, so DB and queue spans are manual where needed) → OTLP/HTTP exporter, enabled only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Preloaded with `node --import`.
 - `/metrics` (Prometheus): http latency histograms, queue depth/failed, socket connections, AI tokens/cost, SLA breaches.
-- `/health` (liveness) and `/ready` (DB, Redis, S3 reachability).
+- `/health` (liveness) and `/ready` (database, Redis and settings reachability with latency; S3 joins when attachments land in M1). `/metrics` is never routed publicly: private-network peers or `METRICS_TOKEN`; a request through the trusted proxy always needs the token.
 - Admin System page: version + git sha, pending migrations, queue health, channel status, storage usage, LLM spend.
 
 ---

@@ -501,10 +501,14 @@ only when a test passes it as an extra controller.
   from M0-09, for the on-demand TLS check; M5 adds the rows, their verification,
   and the resolver that turns a `Host` header into a brand. Until it does, every
   brand in a session is shown with the install's own host.
-- Input validation depends on `emitDecoratorMetadata`, which `tsc` emits and
-  esbuild does not. The routes that take a credential name their schema on the
-  parameter so they validate wherever they run; the rest rely on the global
-  pipe, which means the integration suite does not exercise them.
+- Input validation no longer depends on `emitDecoratorMetadata` (M0-11, issue
+  #36): every `@Param`, `@Query` and `@Body` names its schema on the parameter,
+  so the routes validate under `tsc` and under esbuild alike, and
+  `pnpm check:validation` fails the build for one that does not. What a schema
+  *allows* is still a judgement: `oauthProviderParamSchema` bounds the
+  `:provider` segment rather than listing the providers, because both OAuth
+  routes answer a browser with a redirect and a pipe can only answer with a
+  body.
 - `ticket:<id>` socket rooms are refused until M1 has a table to check them
   against, and the `/widget` namespace is M4. `src/realtime/` is the whole
   gateway; [the realtime guide](../../docs/guides/realtime.md) is what to read

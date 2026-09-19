@@ -36,11 +36,12 @@ jobs:
 
       # Anonymous pulls from Docker Hub are rate limited per IP, and a
       # GitHub-hosted runner shares its address with everybody else's. This job
-      # pulls four images from there — `node` for the image build, `pgvector`,
-      # `redis` and `caddy` for Testcontainers and the Compose smoke test — so a
-      # busy hour used to fail the run for a reason unrelated to the code.
-      # Authenticating lifts the limit. It is optional on purpose: a fork has no
-      # such secret, and the run must still work without one.
+      # pulls `node` for the image build, `pgvector/pgvector:pg17` and
+      # `redis:7-alpine` for both Testcontainers and the Compose smoke test, and
+      # Testcontainers' own `ryuk` reaper — so a busy hour used to fail a run for
+      # a reason unrelated to the code. Authenticating lifts the limit. It is
+      # optional on purpose: a fork has no such secret, and the run must still
+      # work without one.
       - name: Log in to Docker Hub
         if: env.DOCKERHUB_CONFIGURED == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0

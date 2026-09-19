@@ -3,6 +3,7 @@ import type { Db } from '@helpdock/db';
 import { readRelayStatus } from '@helpdock/jobs';
 import {
   type DynamicModule,
+  Global,
   Inject,
   Injectable,
   Module,
@@ -107,6 +108,12 @@ export class ObservabilityGauges implements OnModuleInit, OnApplicationShutdown 
   }
 }
 
+/**
+ * Global because a metrics registry is process state, like the database pool
+ * and the Redis client: whichever module holds the thing worth counting writes
+ * to the same one. `RealtimeModule` sets `socket_connections` that way.
+ */
+@Global()
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class ObservabilityModule {

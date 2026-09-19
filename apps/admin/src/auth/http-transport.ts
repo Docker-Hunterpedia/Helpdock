@@ -26,9 +26,17 @@ import { AuthError } from './api.js';
  * itself — a wrong password, a wrong authenticator code — which must reach the
  * screen unchanged.
  */
+/**
+ * How long before a token's stated expiry it counts as spent. A socket
+ * handshake that arrives a second after the token died is refused, and the
+ * reconnect that follows would ask for the same dead token again.
+ */
+const EXPIRY_SKEW_MS = 30_000;
+
 export class HttpTransport {
   readonly #baseUrl: string;
   #accessToken: string | null = null;
+  #expiresAt = 0;
   /** In-flight refresh, so ten requests failing at once produce one refresh. */
   #refreshing: Promise<boolean> | null = null;
 
@@ -46,6 +54,30 @@ export class HttpTransport {
 
   set accessToken(token: string | null) {
     this.#accessToken = token;
+    this.#expiresAt = 0;
+  }
+
+  /** A token and the moment it dies, which the api states on every issue. */
+  keepSession(issued: { readonly accessToken: string; readonly expiresInSeconds: number }): void {
+    this.#accessToken = issued.accessToken;
+    this.#expiresAt = Date.now() + issued.expiresInSeconds * 1000;
+  }
+
+  /**
+   * A token that is still current, refreshing first when there is none or when
+   * the one held is about to expire.
+   *
+   * The expiry check is what makes the realtime client's reconnect loop work:
+   * nothing about a WebSocket handshake produces the 401 that clears the token
+   * on the HTTP path, so without it a reconnect an hour later would present the
+   * same dead token for ever.
+   */
+  async currentAccessToken(): Promise<string | null> {
+    if (this.#accessToken === null || Date.now() >= this.#expiresAt - EXPIRY_SKEW_MS) {
+      await this.refresh();
+    }
+
+    return this.#accessToken;
   }
 
   async request(
@@ -69,7 +101,7 @@ export class HttpTransport {
     });
 
     if (response.status === 401 && retry && sent !== null) {
-      this.#accessToken = null;
+      this.accessToken = null;
       if (await this.refresh()) {
         return this.request(method, path, body, { retry: false });
       }
@@ -106,7 +138,7 @@ export class HttpTransport {
       return false;
     }
 
-    this.#accessToken = parsed.data.accessToken;
+    this.keepSession(parsed.data);
     return true;
   }
 }

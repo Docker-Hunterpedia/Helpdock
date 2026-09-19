@@ -22,6 +22,17 @@ import type { SigningKeys } from './signing-keys.js';
  * Visitors (M4) and API keys (M8) arrive with different credentials and get
  * their own resolvers behind the same interface.
  */
+
+export interface ResolvedSession {
+  readonly principal: Principal;
+  /** `sid`: this access token's own id, and what revocation is recorded against. */
+  readonly sessionId: string;
+  /** `fam`: the refresh family, which is to say the browser. */
+  readonly familyId: string;
+  /** `exp`, in epoch seconds. A socket outlives a request and has to honour it. */
+  readonly expiresAt: number;
+}
+
 export class SessionPrincipalResolver implements PrincipalResolver {
   readonly #keys: SigningKeys;
   readonly #refresh: RefreshStore;
@@ -47,6 +58,18 @@ export class SessionPrincipalResolver implements PrincipalResolver {
       return null;
     }
 
+    return (await this.resolveSession(token))?.principal ?? null;
+  }
+
+  /**
+   * The same answer plus the session and family the token came from.
+   *
+   * The socket gateway (M0-13) needs them: a handshake is authenticated exactly
+   * as a request is, but the socket then outlives the token, so it has to
+   * remember which session it was opened on in order to re-ask whether that
+   * session is still alive (DOMAIN-RULES §1.4).
+   */
+  async resolveSession(token: string): Promise<ResolvedSession | null> {
     const claims = await verifyAccessToken(token, this.#keys);
     if (claims === null) {
       return null;
@@ -57,10 +80,15 @@ export class SessionPrincipalResolver implements PrincipalResolver {
     }
 
     return {
-      type: 'staff',
-      id: claims.sub,
-      brands: claims.brands,
-      installAdmin: claims.installAdmin,
+      principal: {
+        type: 'staff',
+        id: claims.sub,
+        brands: claims.brands,
+        installAdmin: claims.installAdmin,
+      },
+      sessionId: claims.sid,
+      familyId: claims.fam,
+      expiresAt: claims.exp,
     };
   }
 

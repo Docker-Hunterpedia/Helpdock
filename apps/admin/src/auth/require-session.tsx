@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { RETURN_TO_PARAM, ROUTES } from '../app/route-paths.js';
+import { RealtimeProvider } from '../realtime/realtime-provider.tsx';
 import { SessionProvider, useSessionQuery } from './session.tsx';
 
 /**
@@ -36,7 +37,11 @@ export function RequireSession(): ReactNode {
 
   return (
     <SessionProvider session={session}>
-      <Outlet />
+      {/* Below the session, because a socket needs a principal, a brand and a
+          token, and none of the three exists on the sign-in screen (M0-13). */}
+      <RealtimeProvider>
+        <Outlet />
+      </RealtimeProvider>
     </SessionProvider>
   );
 }

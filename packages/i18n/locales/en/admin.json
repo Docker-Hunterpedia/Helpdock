@@ -20,6 +20,16 @@
     "menuLabel": "Account menu for {{name}}",
     "signOut": "Sign out"
   },
+  "presence": {
+    "caption": "{{role}} · {{status}}",
+    "status": {
+      "online": "Online",
+      "away": "Away",
+      "offline": "Offline"
+    },
+    "setAway": "Set yourself away",
+    "setOnline": "Set yourself online"
+  },
   "theme": {
     "label": "Theme",
     "light": "Light",

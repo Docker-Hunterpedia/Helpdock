@@ -18,6 +18,12 @@ import type { BrandRole, Principal } from './principal.js';
  *
  * The list is what M0 needs plus the ticket permissions, so M1 extends it
  * rather than inventing a second vocabulary.
+ *
+ * `staff:read` is the one permission every role holds. §1.2 restricts *tickets*
+ * by department, never colleagues: an Agent has to see which of them is online
+ * before taking a ticket (M1-07 assignment, M1-09 collision), and a Viewer
+ * reading reports is reading about the same people. Changing who may work in
+ * the brand stays `staff:manage`.
  */
 export const PERMISSIONS = [
   'ticket:read',
@@ -25,6 +31,7 @@ export const PERMISSIONS = [
   'contact:read',
   'brand:read',
   'brand:manage',
+  'staff:read',
   'staff:manage',
   'settings:read',
   'settings:write',
@@ -48,6 +55,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'contact:read',
     'brand:read',
     'brand:manage',
+    'staff:read',
     'staff:manage',
     'settings:read',
     'settings:write',
@@ -61,12 +69,13 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'ticket:write',
     'contact:read',
     'brand:read',
+    'staff:read',
     'staff:manage',
     'settings:read',
     'settings:write',
   ],
-  agent: ['ticket:read', 'ticket:write', 'contact:read', 'brand:read'],
-  viewer: ['ticket:read', 'contact:read', 'brand:read'],
+  agent: ['ticket:read', 'ticket:write', 'contact:read', 'brand:read', 'staff:read'],
+  viewer: ['ticket:read', 'contact:read', 'brand:read', 'staff:read'],
 });
 
 export const roleHasPermission = (role: BrandRole, permission: Permission): boolean =>

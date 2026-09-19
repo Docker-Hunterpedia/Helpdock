@@ -23,6 +23,8 @@ export const MOCK_EMAIL = 'lina@helpdock.com';
 export const MOCK_PASSWORD = 'correct horse';
 export const MOCK_TOTP_CODE = '482913';
 export const MOCK_RECOVERY_CODE = 'RC-1234-5678';
+/** Not a JWT and not meant to be: nothing in the fixture verifies it. */
+export const MOCK_ACCESS_TOKEN = 'mock-access-token';
 
 /** DOMAIN-RULES §1.4: three tries, then a 15-minute lock. */
 export const MOCK_TOTP_ATTEMPTS = 3;
@@ -236,6 +238,11 @@ export class MockAuthApi implements AuthApi {
 
   async me(): Promise<Session | null> {
     return this.#session;
+  }
+
+  /** A value shaped like a token, so a caller can tell "signed in" from "not". */
+  async accessToken(): Promise<string | null> {
+    return this.#session === null ? null : MOCK_ACCESS_TOKEN;
   }
 
   async signOut(): Promise<void> {

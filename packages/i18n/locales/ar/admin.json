@@ -20,6 +20,16 @@
     "menuLabel": "قائمة حساب {{name}}",
     "signOut": "تسجيل الخروج"
   },
+  "presence": {
+    "caption": "{{role}} · {{status}}",
+    "status": {
+      "online": "متصل",
+      "away": "بعيد",
+      "offline": "غير متصل"
+    },
+    "setAway": "اضبط حالتك على بعيد",
+    "setOnline": "اضبط حالتك على متصل"
+  },
   "theme": {
     "label": "المظهر",
     "light": "فاتح",

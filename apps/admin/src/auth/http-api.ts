@@ -82,7 +82,7 @@ export class HttpAuthApi implements AuthApi {
     const response = authSessionResponseSchema.parse(
       await this.#transport.request('POST', '/auth/exchange', { code }),
     );
-    this.#transport.accessToken = response.accessToken;
+    this.#transport.keepSession(response);
 
     return response.session;
   }
@@ -158,6 +158,18 @@ export class HttpAuthApi implements AuthApi {
     }
   }
 
+  /**
+   * A current access token, refreshed first when this tab holds none or holds
+   * one that is about to expire.
+   *
+   * The one caller is the realtime client (M0-13): a browser cannot set headers
+   * on a WebSocket handshake, so the token goes in `auth.token` instead of in
+   * `Authorization`. It stays in memory either way.
+   */
+  async accessToken(): Promise<string | null> {
+    return this.#transport.currentAccessToken();
+  }
+
   async signOut(): Promise<void> {
     try {
       await this.#transport.request('POST', '/auth/sign-out');
@@ -184,7 +196,7 @@ export class HttpAuthApi implements AuthApi {
       return response;
     }
 
-    this.#transport.accessToken = response.accessToken;
+    this.#transport.keepSession(response);
     return { kind: 'session', session: response.session };
   }
 

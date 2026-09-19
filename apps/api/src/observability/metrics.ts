@@ -46,7 +46,8 @@ export interface Metrics {
   readonly dbPoolConnections: Gauge<'state'>;
   readonly dbUp: Gauge<never>;
   readonly redisUp: Gauge<never>;
-  readonly socketConnections: Gauge<never>;
+  /** `namespace` is the Socket.IO one: `/staff`, and `/widget` from M4. */
+  readonly socketConnections: Gauge<'namespace'>;
 }
 
 /**
@@ -116,7 +117,8 @@ export const createMetrics = (): Metrics => {
     }),
     socketConnections: new Gauge({
       name: 'socket_connections',
-      help: 'Open Socket.IO connections on this replica. Stays 0 until M0-13 sets it.',
+      help: 'Open Socket.IO connections on this replica, by namespace.',
+      labelNames: ['namespace'],
       registers,
     }),
   };

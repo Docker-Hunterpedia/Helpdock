@@ -30,6 +30,7 @@ import type { BootFacts } from './observability/boot-facts.js';
 import { registerHttpMetrics } from './observability/http-metrics.js';
 import type { Metrics } from './observability/metrics.js';
 import { METRICS } from './observability/tokens.js';
+import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
 import { resolveAdminDist } from './static/admin-assets.js';
 import { startWorker } from './worker/start-worker.js';
@@ -184,6 +185,16 @@ export const createApiApp = async ({
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
+  // One of each, shared by the HTTP guards and the socket handshake: a socket
+  // "authenticates on handshake exactly like HTTP" (DOMAIN-RULES §1.4), and two
+  // resolvers would be two places for that to stop being true.
+  const refreshStore = new RefreshStore(runtime.redis);
+  const sessionResolver = new SessionPrincipalResolver({
+    keys: runtime.signingKeys,
+    refresh: refreshStore,
+    logger,
+  });
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
       env,
@@ -197,15 +208,8 @@ export const createApiApp = async ({
         logger,
         ...(emailSender === undefined ? {} : { emailSender }),
       },
-      principalResolver: createPrincipalResolver({
-        env,
-        logger,
-        session: new SessionPrincipalResolver({
-          keys: runtime.signingKeys,
-          refresh: new RefreshStore(runtime.redis),
-          logger,
-        }),
-      }),
+      realtime: { sessionResolver, revocations: refreshStore },
+      principalResolver: createPrincipalResolver({ env, logger, session: sessionResolver }),
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
@@ -226,6 +230,13 @@ export const createApiApp = async ({
   // is the same on every replica without a second thing to configure.
   await app.register(cookie);
   await app.register(helmet, securityHeaderOptions({ appUrl: env.APP_URL }));
+
+  // Before `init()`, which is when Nest binds gateways to whatever adapter is
+  // installed. After it, the gateway would have been bound to Nest's default
+  // one: no Redis, both transports, and no origin check (M0-13).
+  const websockets = new RedisIoAdapter(app, { appUrl: env.APP_URL, logger });
+  await websockets.connect(env.REDIS_URL);
+  app.useWebSocketAdapter(websockets);
 
   // `serve: false` registers no routes of its own: it only decorates
   // `reply.sendFile`, so `AdminSpaController` stays the single place that

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { MOCK_EMAIL } from '../src/auth/mock-api.js';
+import { MOCK_EMAIL, MOCK_USER } from '../src/auth/mock-api.js';
 import {
   MOCK_ENROLMENT_CODE,
   MOCK_EXPIRED_INVITE_TOKEN,
@@ -144,6 +144,19 @@ test.describe('accessibility', () => {
 
     await page.getByRole('button', { name: t('me:twoFactor.disable'), exact: true }).click();
     await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the account menu, which carries the presence toggle, has no violations', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const menuLabel = strings(locale)('admin:currentUser.menuLabel', { name: MOCK_USER.name });
+
+    await signIn(page, locale);
+    await page.getByRole('button', { name: menuLabel }).click();
+    await page.getByRole('menu', { name: menuLabel }).waitFor();
 
     expect(await violations(page)).toEqual([]);
   });

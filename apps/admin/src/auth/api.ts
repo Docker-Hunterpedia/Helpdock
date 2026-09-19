@@ -47,6 +47,16 @@ export interface AuthApi {
   acceptInvite(token: string, request: InviteAcceptRequest): Promise<SignInResult>;
   /** The current session, or `null` when nobody is signed in. */
   me(): Promise<Session | null>;
+  /**
+   * A current access token, refreshed first if this tab holds none, or `null`
+   * when nobody is signed in.
+   *
+   * The one caller is the realtime client (M0-13): a browser cannot set headers
+   * on a WebSocket handshake, so the token goes in `auth.token` instead of in
+   * `Authorization`. It stays in memory either way — this hands the value over,
+   * it does not store it anywhere new.
+   */
+  accessToken(): Promise<string | null>;
   signOut(): Promise<void>;
   /** Every browser, and every browser this account trusted (DOMAIN-RULES §12). */
   signOutEverywhere(): Promise<void>;

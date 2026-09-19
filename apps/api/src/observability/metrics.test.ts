@@ -35,9 +35,9 @@ describe('createMetrics', () => {
     const first = createMetrics();
     const second = createMetrics();
 
-    first.socketConnections.set(7);
+    first.socketConnections.set({ namespace: '/staff' }, 7);
 
-    expect(await first.registry.metrics()).toContain('socket_connections 7');
-    expect(await second.registry.metrics()).toContain('socket_connections 0');
+    expect(await first.registry.metrics()).toContain('socket_connections{namespace="/staff"} 7');
+    expect(await second.registry.metrics()).not.toContain('socket_connections{');
   });
 });

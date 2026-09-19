@@ -30,7 +30,7 @@ export interface TargetBrandInput {
  * may never name it, whatever a path parameter or a principal says, or the
  * `@Requires('install:admin')` gate would have a way around it.
  */
-const isNamedBrand = (brandId: string): boolean =>
+export const isNamedBrand = (brandId: string): boolean =>
   isUuid(brandId) && brandId !== INSTALL_SCOPE_BRAND_ID;
 
 export const resolveTargetBrand = ({

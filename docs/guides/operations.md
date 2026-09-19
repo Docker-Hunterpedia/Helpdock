@@ -124,7 +124,7 @@ misconfigured — it is a backstop, not a reason to skip the exclusion.
 | `outbox_relay_cycle_seconds` | histogram | — | One observation per *reported* cycle. The relay cycles far more often than the api samples, so this is a sample of cycles, not all of them. |
 | `db_pool_connections` | gauge | `state` | Sessions the runtime role holds on the server, by the state Postgres reports — `active`, `idle`, `idle_in_transaction`, `idle_in_transaction_(aborted)`, and `unknown` for a session Postgres reports no state for. Install-wide, not per replica. |
 | `db_up`, `redis_up` | gauge | — | `1` when the readiness probe reached it, `0` when it did not. |
-| `socket_connections` | gauge | — | Open Socket.IO connections. Stays `0` until M0-13 sets it. |
+| `socket_connections` | gauge | `namespace` | Open Socket.IO connections on this replica, per namespace (`/staff`; `/widget` from M4). |
 
 `prom-client`'s default Node metrics are on the same registry: event-loop lag,
 heap, handles, GC and process start time.
@@ -271,7 +271,6 @@ Two are worth knowing:
 
 ## Still to come
 
-- **M0-13** sets `socket_connections`.
 - **M8-05** embeds Bull Board in the System page ([ADR
   0004](../decisions/0004-bull-board-for-queues.md)). Until then "Open queue
   dashboard" opens the full queue table.

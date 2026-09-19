@@ -91,15 +91,23 @@ describe.skipIf(!hasDocker)('idempotent consumers', () => {
     return id;
   };
 
-  const settledJob = (id: string, state: 'completed' | 'failed'): Promise<Job> =>
-    vi.waitFor(
+  // `queue.getJob` is a snapshot while `getState` reads live, so the state can
+  // already be settled while `failedReason` / `attemptsMade` on the snapshot are
+  // stale. Wait on the state, then load the job again so its fields are final.
+  const settledJob = async (id: string, state: 'completed' | 'failed'): Promise<Job> => {
+    await vi.waitFor(
       async () => {
         const job = await queue.getJob(id);
         expect(await job?.getState()).toBe(state);
-        return job as Job;
       },
       { timeout: 20_000, interval: 50 },
     );
+    const settled = await queue.getJob(id);
+    if (settled === undefined) {
+      throw new Error(`job ${id} disappeared after settling as ${state}`);
+    }
+    return settled;
+  };
 
   const auditRows = () =>
     withSystem(db, brandId, (tx) =>

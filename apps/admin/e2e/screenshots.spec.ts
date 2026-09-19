@@ -1,6 +1,6 @@
 import { MOCK_EMAIL } from '../src/auth/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { signIn, submitPassword } from './flows.js';
+import { openContact, openContacts, signIn, submitPassword } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -55,5 +55,23 @@ test.describe('reference screens @screenshot', () => {
     await page.getByRole('heading', { level: 1 }).waitFor();
 
     await expect(page).toHaveScreenshot('shell-settings.png', { fullPage: true });
+  });
+
+  test('the contact list', async ({ page, appLocale: locale }) => {
+    await signIn(page, locale);
+    await openContacts(page, locale);
+    // The heading renders before the rows do, so wait for the table itself.
+    await page.getByRole('table').waitFor();
+
+    await expect(page).toHaveScreenshot('contacts-list.png', { fullPage: true });
+  });
+
+  test('one contact', async ({ page, appLocale: locale }) => {
+    await signIn(page, locale);
+    // The fixture's fullest contact: a verified identifier beside unverified
+    // ones, an account, a note, every stat and an open duplicate suggestion.
+    await openContact(page, locale, 'Mona Khalil');
+
+    await expect(page).toHaveScreenshot('contact-detail.png', { fullPage: true });
   });
 });

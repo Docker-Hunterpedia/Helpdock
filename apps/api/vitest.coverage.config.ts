@@ -30,6 +30,7 @@ export default defineConfig({
         new URL('../../packages/config/src/index.ts', import.meta.url),
       ),
       '@helpdock/db': fileURLToPath(new URL('../../packages/db/src/index.ts', import.meta.url)),
+      '@helpdock/jobs': fileURLToPath(new URL('../../packages/jobs/src/index.ts', import.meta.url)),
       '@helpdock/schemas': fileURLToPath(
         new URL('../../packages/schemas/src/index.ts', import.meta.url),
       ),

@@ -22,14 +22,14 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-01 | Monorepo | #4 | shipped (#21) |
 | M0-02 | Config loader | #5 | shipped (#25) |
 | M0-03 | Database | #6 | shipped (#28) |
-| M0-04 | Tenancy plumbing | #7 | shipped (#33, #45) |
+| M0-04 | Tenancy plumbing | #7 | shipped (#33, #60) |
 | M0-05 | Auth | #8 | shipped (#37) |
 | M0-06 | Roles and staff lifecycle | #9 | shipped (#42) |
-| M0-07 | Admin shell | #10 | shipped (#26, #31, #45) |
+| M0-07 | Admin shell | #10 | shipped (#26, #31, #60) |
 | M0-08 | First-run wizard | #11 | shipped (#41) |
 | M0-09 | Docker | #12 | shipped (#35) |
 | M0-10 | Observability | #13 | shipped (#38) |
-| M0-11 | CI | #14 | shipped (#45) |
+| M0-11 | CI | #14 | shipped (#60) |
 | M0-12 | ADRs for the open decisions | #15 | shipped (#19) |
 | M0-13 | Realtime gateway skeleton | #16 | shipped (#44) |
 | M0-14 | Transactional outbox | #17 | shipped (#30) |
@@ -152,4 +152,4 @@ an issue.
 - #41 first-run wizard (M0-08)
 - #42 roles and the staff lifecycle (M0-06)
 - #44 realtime gateway, rooms and staff presence (M0-13)
-- #45 CI, the input-validation check, screenshot baselines and this close-out (M0-11)
+- #60 CI, the input-validation check, screenshot baselines and this close-out (M0-11)

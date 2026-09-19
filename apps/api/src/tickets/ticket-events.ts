@@ -55,7 +55,14 @@ export type TicketEvent = (typeof TICKET_EVENTS)[keyof typeof TICKET_EVENTS];
  */
 export const ticketEventPayloadSchema = z.object({
   ticketId: z.uuid(),
+  /** The department the ticket is in **now**. */
   departmentId: z.uuid(),
+  /**
+   * The department it was in before, on the one update that moves it. A queue
+   * that a ticket has just left has to be told, and its watchers are in the old
+   * `department:` room and in no other room this event reaches.
+   */
+  previousDepartmentId: z.uuid().optional(),
   /** Present on `ticket.replied` and `ticket.note_added`. */
   messageId: z.uuid().optional(),
   seq: z.int().positive().optional(),
@@ -78,20 +85,28 @@ export const enqueueTicketEvent = (
   enqueueOutbox(tx, { brandId, event, payload: ticketEventPayloadSchema.parse(payload) });
 
 /**
- * Which rooms hear about a change. Both, always:
+ * Which rooms hear about a change. Two, and on a department move three:
  *
  * - `ticket:<id>` is whoever has the ticket open, for the thread and for
  *   M1-09's collision indicator;
- * - `department:<id>` is whoever has a queue open, because a new ticket has to
- *   appear in a list nobody was looking at.
- *
- * The department is the ticket's department *now*, which is what lets a client
- * holding the old department's room tell that the ticket has left it.
+ * - `department:<id>` is whoever has the destination queue open, because a
+ *   ticket that has just arrived has to appear in a list nobody was looking at;
+ * - `department:<previous>` is whoever had the *old* queue open. Without it a
+ *   ticket that has left a queue sits in it until somebody reloads: those
+ *   watchers are not in the ticket room and hear nothing else.
  */
-export const roomsFor = (payload: TicketEventPayload): readonly string[] => [
-  ticketRoom(payload.ticketId),
-  departmentRoom(payload.departmentId),
-];
+export const roomsFor = (payload: TicketEventPayload): readonly string[] => {
+  const rooms = [ticketRoom(payload.ticketId), departmentRoom(payload.departmentId)];
+
+  if (
+    payload.previousDepartmentId !== undefined &&
+    payload.previousDepartmentId !== payload.departmentId
+  ) {
+    rooms.push(departmentRoom(payload.previousDepartmentId));
+  }
+
+  return rooms;
+};
 
 /**
  * The handler registered for all four ticket events. It is one function rather
@@ -114,7 +129,20 @@ export const createTicketEventHandler =
 
       // No `seq`: a ticket change has no per-ticket cursor to catch up from, and
       // §7 reserves `seq` for what a client replays.
-      await broadcast.emit({ rooms, event: REALTIME_EVENTS.ticketChanged, data, seq: null });
+      //
+      // A move also turns the ticket room out. Everyone in it joined under the
+      // old department's scope, and who may read the ticket has just changed;
+      // they re-join through the same check they passed once.
+      await broadcast.emit({
+        rooms,
+        event: REALTIME_EVENTS.ticketChanged,
+        data,
+        seq: null,
+        ...(parsed.previousDepartmentId === undefined ||
+        parsed.previousDepartmentId === parsed.departmentId
+          ? {}
+          : { evict: [ticketRoom(parsed.ticketId)] }),
+      });
       return;
     }
 

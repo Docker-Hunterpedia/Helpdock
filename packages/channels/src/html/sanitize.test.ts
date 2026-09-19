@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeMessageHtml } from './sanitize.js';
+import { MAX_TAGS, SanitizeLimitError, sanitizeMessageHtml } from './sanitize.js';
 
 /**
  * REQUIREMENTS §5.1: "no HTML JS/forms rendered; sanitized HTML (allowlist)".
@@ -144,6 +144,46 @@ describe('sanitizeMessageHtml', () => {
 
   it('parses a half-closed document the way a mail client would', () => {
     expect(sanitizeMessageHtml('<p>one<p>two')).toBe('<p>one</p><p>two</p>');
+  });
+
+  it.each([
+    ['a root-relative image', '<img src="/pixel.gif" />'],
+    ['a document-relative image', '<img src="p.gif" />'],
+    ['a parent-relative image', '<img src="../tracking/p.gif" />'],
+  ])('drops %s, which would fire from the reader’s own session', (_name, html) => {
+    // A scheme allowlist is applied only to a URL that *has* a scheme. A
+    // relative one resolves against whatever page renders the message, so under
+    // `cid-only` it is still a read receipt — fired by the agent's browser at
+    // the admin's own origin.
+    expect(sanitizeMessageHtml(html)).toBe('<img />');
+  });
+
+  it('drops a relative image even when remote images are allowed', () => {
+    expect(sanitizeMessageHtml('<img src="/pixel.gif" />', { imageSrc: 'allow-remote' })).toBe(
+      '<img />',
+    );
+  });
+
+  it('drops a relative link, which would look like a genuine in-app one', () => {
+    expect(sanitizeMessageHtml('<a href="/settings/delete">Click here</a>')).toBe(
+      '<a rel="noopener noreferrer nofollow">Click here</a>',
+    );
+  });
+
+  it('refuses a body built to be expensive rather than parsing it', () => {
+    // The cost is super-linear in nesting depth, not in size, and sanitising
+    // runs synchronously inside the request's open transaction.
+    const nested = '<b>'.repeat(MAX_TAGS + 1);
+
+    expect(() => sanitizeMessageHtml(nested)).toThrow(SanitizeLimitError);
+  });
+
+  it('accepts a body at the limit, so the ceiling is above any real message', () => {
+    expect(() => sanitizeMessageHtml('<b>x</b>'.repeat(MAX_TAGS / 2))).not.toThrow();
+  });
+
+  it('counts tags, not bytes: a long plain body is fine', () => {
+    expect(() => sanitizeMessageHtml(`<p>${'a'.repeat(199_000)}</p>`)).not.toThrow();
   });
 
   it('is idempotent: sanitising its own output changes nothing', () => {

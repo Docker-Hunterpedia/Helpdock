@@ -1,4 +1,4 @@
-import { sanitizeMessageBody } from '@helpdock/channels';
+import { SanitizeLimitError, sanitizeMessageBody } from '@helpdock/channels';
 import type {
   DbTransaction,
   Ticket as TicketRow,
@@ -8,6 +8,7 @@ import type {
   MessageCreateRequest,
   MessagePageQuery,
   Ticket,
+  TicketActivityEntry,
   TicketActivityList,
   TicketCreateRequest,
   TicketDetail,
@@ -110,8 +111,13 @@ export class TicketsService {
 
     return {
       ticket: toTicket(found.ticket, found.status),
-      messages: await this.messages(ticketId, { after: 0, limit: TICKET_PAGE_SIZE_DEFAULT }),
-      activity: (await this.#tickets.activityOf(tx, ticketId, ACTIVITY_PAGE)).map(toTicketActivity),
+      // `#messagePage` rather than `messages`, which would re-run the ticket
+      // read this method has already done.
+      messages: await this.#messagePage(tx, ticketId, {
+        after: 0,
+        limit: TICKET_PAGE_SIZE_DEFAULT,
+      }),
+      activity: await this.#activityOf(tx, ticketId),
     };
   }
 
@@ -124,23 +130,14 @@ export class TicketsService {
     const tx = getTx();
     await this.#require(tx, ticketId);
 
-    const rows = await this.#tickets.messagesAfter(tx, ticketId, query.after, query.limit);
-    const page = rows.slice(0, query.limit);
-    const last = page.at(-1);
-
-    return {
-      messages: page.map(toTicketMessage),
-      nextAfter: rows.length > query.limit && last !== undefined ? last.seq : null,
-    };
+    return this.#messagePage(tx, ticketId, query);
   }
 
   async activity(ticketId: string): Promise<TicketActivityList> {
     const tx = getTx();
     await this.#require(tx, ticketId);
 
-    return {
-      activity: (await this.#tickets.activityOf(tx, ticketId, ACTIVITY_PAGE)).map(toTicketActivity),
-    };
+    return { activity: await this.#activityOf(tx, ticketId) };
   }
 
   // ------------------------------------------------------------------- writes
@@ -158,10 +155,12 @@ export class TicketsService {
     const actor = activityActorFor(principal);
 
     await this.#requireDepartment(tx, input.departmentId);
+    await this.#requireTeam(input.teamId);
+    await this.#requireAssignee(tx, input.assigneeId);
     const status = await this.#requireDefaultStatus(tx);
     const prefix = await this.#requirePrefix(tx, brandId);
 
-    const body = sanitizeMessageBody(input.bodyHtml);
+    const body = this.#body(input.bodyHtml);
     const ticket = await this.#tickets.insertTicket(tx, {
       brandId,
       departmentId: input.departmentId,
@@ -207,9 +206,7 @@ export class TicketsService {
     return {
       ticket: toTicket(ticket, status),
       messages: { messages: [toTicketMessage(message)], nextAfter: null },
-      activity: (await this.#tickets.activityOf(tx, ticket.id, ACTIVITY_PAGE)).map(
-        toTicketActivity,
-      ),
+      activity: await this.#activityOf(tx, ticket.id),
     };
   }
 
@@ -237,6 +234,8 @@ export class TicketsService {
     if (input.departmentId !== undefined && input.departmentId !== ticket.departmentId) {
       await this.#requireDepartment(tx, input.departmentId);
     }
+    await this.#requireTeam(input.teamId ?? undefined);
+    await this.#requireAssignee(tx, input.assigneeId ?? undefined);
 
     const statusResult =
       input.statusId === undefined
@@ -285,6 +284,11 @@ export class TicketsService {
     await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.updated, {
       ticketId,
       departmentId: updated.departmentId,
+      // On a move, whoever is watching the queue the ticket has just left is in
+      // no other room this event reaches.
+      ...(updated.departmentId === ticket.departmentId
+        ? {}
+        : { previousDepartmentId: ticket.departmentId }),
     });
 
     const nextStatus =
@@ -321,7 +325,7 @@ export class TicketsService {
       }
     }
 
-    const body = sanitizeMessageBody(input.bodyHtml);
+    const body = this.#body(input.bodyHtml);
     const message = await this.#tickets.insertMessage(tx, {
       brandId,
       ticketId,
@@ -369,6 +373,36 @@ export class TicketsService {
   }
 
   // ---------------------------------------------------------------- internals
+
+  async #messagePage(
+    tx: DbTransaction,
+    ticketId: string,
+    query: MessagePageQuery,
+  ): Promise<TicketMessagePage> {
+    const rows = await this.#tickets.messagesAfter(tx, ticketId, query.after, query.limit);
+    const page = rows.slice(0, query.limit);
+    const last = page.at(-1);
+
+    return {
+      messages: page.map(toTicketMessage),
+      nextAfter: rows.length > query.limit && last !== undefined ? last.seq : null,
+    };
+  }
+
+  /**
+   * The newest entries, returned oldest first.
+   *
+   * The read is `ORDER BY created_at DESC LIMIT n` and the page is reversed
+   * here, because the thread renders oldest first but the hundred that matter
+   * on a long-running ticket are the *newest* ones. Ordering ascending with the
+   * same limit would return the first hundred and silently drop every status
+   * change and reassignment since.
+   */
+  async #activityOf(tx: DbTransaction, ticketId: string): Promise<TicketActivityEntry[]> {
+    const rows = await this.#tickets.activityOf(tx, ticketId, ACTIVITY_PAGE);
+
+    return rows.reverse().map(toTicketActivity);
+  }
 
   async #require(tx: DbTransaction, ticketId: string) {
     const found = await this.#tickets.findTicket(tx, ticketId);
@@ -460,6 +494,59 @@ export class TicketsService {
   async #requireDepartment(tx: DbTransaction, departmentId: string): Promise<void> {
     if (!(await this.#tickets.departmentIsWritable(tx, departmentId))) {
       throw new ForbiddenException('That department is outside your scope');
+    }
+  }
+
+  /**
+   * `teams` is M1-01's table and does not exist yet, so `team_id` has no
+   * foreign key and *any* uuid would be stored permanently. Refusing is the
+   * same judgement the `tagId` filter takes: a field that is accepted and not
+   * honoured is worse than one that is refused.
+   */
+  async #requireTeam(teamId: string | undefined): Promise<void> {
+    if (teamId !== undefined) {
+      throw new BadRequestException('Assigning a team arrives with deliverable M1-01');
+    }
+    await Promise.resolve();
+  }
+
+  /**
+   * An assignee has to hold a role in this brand. `tickets.assignee_id`
+   * references the *global* `users` table, so the foreign key alone would
+   * accept a stranger's id and produce a ticket owned by somebody who cannot
+   * open it. `user_brand_roles` is brand-scoped, so the policy answers the
+   * brand half and this answers the rest.
+   *
+   * Which *department* an assignee must be in is M1-07's question, with the
+   * round-robin and the load caps.
+   */
+  async #requireAssignee(tx: DbTransaction, assigneeId: string | undefined): Promise<void> {
+    if (assigneeId === undefined) {
+      return;
+    }
+
+    if (!(await this.#tickets.isBrandMember(tx, assigneeId))) {
+      throw new BadRequestException('That person holds no role in this brand');
+    }
+  }
+
+  /**
+   * The sanitised body, or a 400.
+   *
+   * A body the sanitiser refuses is a body somebody sent, not a bug here: the
+   * limits exist because sanitising is synchronous and runs inside the
+   * request's transaction, so a body built to be expensive is a way to stall a
+   * replica. The caller has to learn that from the status code.
+   */
+  #body(html: string) {
+    try {
+      return sanitizeMessageBody(html);
+    } catch (error) {
+      if (error instanceof SanitizeLimitError) {
+        throw new BadRequestException(error.message);
+      }
+      /* c8 ignore next 2 -- the sanitiser throws nothing else. */
+      throw error;
     }
   }
 

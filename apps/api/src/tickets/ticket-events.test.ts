@@ -7,6 +7,7 @@ import { createTicketEventHandler, roomsFor, TICKET_EVENTS } from './ticket-even
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
 const DEPARTMENT = '01937f5e-7e53-7000-8000-000000000011';
+const OTHER_DEPARTMENT = '01937f5e-7e53-7000-8000-000000000012';
 const TICKET = '01937f5e-7e53-7000-8000-0000000000a1';
 const MESSAGE = '01937f5e-7e53-7000-8000-0000000000b1';
 
@@ -79,6 +80,23 @@ describe('the ticket outbox handler', () => {
     );
 
     expect(sent[0]?.data).toMatchObject({ event: 'ticket.updated' });
+    expect(sent[0]?.evict).toBeUndefined();
+  });
+
+  it('turns the ticket room out when the ticket changed department', async () => {
+    // Everyone in it joined under the old department's scope, and who may read
+    // the ticket has just changed.
+    const { sent, broadcast } = recorder();
+
+    await createTicketEventHandler(broadcast)(
+      context(TICKET_EVENTS.updated, {
+        ticketId: TICKET,
+        departmentId: DEPARTMENT,
+        previousDepartmentId: OTHER_DEPARTMENT,
+      }),
+    );
+
+    expect(sent[0]?.evict).toEqual([ticketRoom(TICKET)]);
   });
 
   it('carries the message seq on a reply, which is what a client catches up from', async () => {
@@ -101,7 +119,11 @@ describe('the ticket outbox handler', () => {
     });
   });
 
-  it('sends no body with a note, so an internal note cannot leak over a socket', async () => {
+  it('strips a body somebody put in the outbox row, so a note cannot leak', async () => {
+    // The payload is read out of the database and crosses a process boundary.
+    // Parsing it through the event's own schema is what drops a field the
+    // frame does not declare — this asserts that stripping, not the absence of
+    // a field nobody sent.
     const { sent, broadcast } = recorder();
 
     await createTicketEventHandler(broadcast)(
@@ -111,10 +133,12 @@ describe('the ticket outbox handler', () => {
         messageId: MESSAGE,
         seq: 5,
         kind: 'note',
+        bodyHtml: '<p>chasing finance about the refund</p>',
+        bodyText: 'chasing finance about the refund',
       }),
     );
 
-    expect(JSON.stringify(sent[0]?.data)).not.toMatch(/body/i);
+    expect(JSON.stringify(sent[0]?.data)).not.toContain('finance');
     expect(sent[0]?.data).toMatchObject({ kind: 'note', event: 'ticket.note_added' });
   });
 

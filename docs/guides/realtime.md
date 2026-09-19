@@ -96,6 +96,12 @@ this order:
 | `department:<id>` | An explicit department list containing the id needs no query: the list is itself per-brand, so membership proves both the brand and the scope. An *unrestricted* scope (`all`) does need one — a room name carries no brand, and `all` means "every department *of that brand*" — so `departments` is read inside a transaction scoped to the brand the join named. |
 | `ticket:<id>` | The ticket exists inside the principal's own scope. The check is the *same* question `GET /api/brands/:brandId/tickets/:ticketId` asks, asked the same way: a transaction carrying the principal's brand and departments, and the policies answering. "No such ticket" and "not in your departments" are therefore one answer, and neither confirms the other. |
 
+`department:` and `ticket:` also re-ask the permission the *route* they mirror
+declares, `ticket:read`, rather than resting on the `brand:read` the join itself
+is declared with. Every role that holds one holds the other today; asking anyway
+is what stops the next role from being able to subscribe to traffic it cannot
+fetch.
+
 The two that need a read go through `RoomScopeReader`
 (`apps/api/src/realtime/room-reader.ts`). It is the only place in the app that
 opens a tenant transaction outside the request lifecycle for a staff principal,
@@ -141,9 +147,12 @@ has no body in the payload to leak. `departmentId` is the department the ticket
 is in *now*, so a client holding a `department:` room can tell whether the
 ticket has just arrived in it or just left it.
 
-Each one reaches two rooms: `ticket:<id>` — whoever has the ticket open — and
+Each one reaches `ticket:<id>` — whoever has the ticket open — and
 `department:<id>`, because a new ticket has to appear in a list nobody was
-looking at.
+looking at. A ticket that moves department reaches the room it has *left* too,
+and the server then turns every socket out of `ticket:<id>`: a room is
+authorised when it is joined, and who may read that ticket has just changed.
+The clients re-join and are authorised again, which nobody sees.
 
 Every event emitted through `RealtimePublisher` travels in an envelope.
 `revoked` is the exception: the revocation subscriber sends it bare, because it
@@ -294,10 +303,13 @@ again — so a room would hear the same frame once per replica. The fan-out has
 already happened by the time the subscriber runs, so each replica does the last
 hop to its own sockets alone.
 
-The payload is parsed on arrival: it crosses a process boundary, and anything
-with `PUBLISH` on that Redis can write to the channel. An event a replica does
-not know — which is what a rolling deploy looks like — is dropped with a warning,
-because the screen re-reads over REST anyway.
+Both halves of the message are parsed on arrival — the envelope and the payload,
+through the event's own schema — because it crosses a process boundary and
+anything with `PUBLISH` on that Redis can write to the channel. A frame that
+does not match is dropped rather than thrown on: this runs inside a Redis
+`message` handler, where a throw is an unhandled rejection. An event a replica
+does not know, which is what a rolling deploy looks like, is dropped the same
+way; the screen re-reads over REST anyway.
 
 ## Known gaps
 

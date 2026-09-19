@@ -118,6 +118,38 @@ export interface SanitizeHtmlOptions {
  */
 const LINK_REL = 'noopener noreferrer nofollow';
 
+/**
+ * A URL is kept only when it is **absolute** and its scheme is allowed.
+ *
+ * `allowedSchemes` alone is not enough, because it is applied only to a URL
+ * that *has* a scheme: `src="/pixel.gif"`, `src="p.gif"` and `href="/settings"`
+ * all survive it. Relative URLs resolve against whatever page renders the
+ * message, so under `cid-only` a relative `<img>` is still a read receipt — one
+ * fired from the agent's own session against the admin's own origin — and a
+ * relative `<a>` is a link that looks like a genuine in-app link. Neither has
+ * any meaning in a message that arrived from somewhere else.
+ *
+ * `//host/x` is handled by `allowProtocolRelative: false` as well; this covers
+ * the rest.
+ */
+const LINK_URL = /^(?:https?|mailto|tel):/i;
+const imageUrlPattern = (imageSrc: ImageSrcPolicy): RegExp =>
+  imageSrc === 'allow-remote' ? /^(?:cid|https?):/i : /^cid:/i;
+
+const keepAbsolute = (
+  attribs: Record<string, string>,
+  attribute: string,
+  allowed: RegExp,
+): Record<string, string> => {
+  const value = attribs[attribute];
+  if (value === undefined || allowed.test(value.trim())) {
+    return attribs;
+  }
+
+  const { [attribute]: _dropped, ...rest } = attribs;
+  return rest;
+};
+
 const optionsFor = (imageSrc: ImageSrcPolicy): sanitizeHtmlLibrary.IOptions => ({
   allowedTags: [...ALLOWED_TAGS],
   allowedAttributes: ALLOWED_ATTRIBUTES,
@@ -154,15 +186,19 @@ const optionsFor = (imageSrc: ImageSrcPolicy): sanitizeHtmlLibrary.IOptions => (
     a: (tagName, attribs) => ({
       tagName,
       attribs: {
-        ...attribs,
+        ...keepAbsolute(attribs, 'href', LINK_URL),
         rel: LINK_REL,
         ...(attribs.target === undefined ? {} : { target: '_blank' }),
       },
     }),
+    img: (tagName, attribs) => ({
+      tagName,
+      attribs: keepAbsolute(attribs, 'src', imageUrlPattern(imageSrc)),
+    }),
   },
-  // Comments can carry conditional content that a mail client acts on
-  // (`<!--[if mso]>`), and nobody in a thread reads one.
-  allowedIframeHostnames: [],
+  // Comments are discarded by the library's default, which is what we want:
+  // one can carry conditional content a mail client acts on (`<!--[if mso]>`),
+  // and nobody in a thread reads one.
   parser: { lowerCaseTags: true, lowerCaseAttributeNames: true },
 });
 
@@ -170,12 +206,52 @@ const CID_ONLY = optionsFor('cid-only');
 const ALLOW_REMOTE = optionsFor('allow-remote');
 
 /**
- * The sanitised body. Never throws on malformed input: a parser that gives up
- * on a half-closed tag would mean a message that cannot be stored, and the
- * tolerant parse of a broken document is exactly what a mail client would do
- * with it anyway.
+ * How many tags a body may contain.
+ *
+ * A length cap is not enough. The sanitiser's cost is super-linear in *nesting
+ * depth*, not in size: `'<b>'.repeat(66_000)` is under two hundred kilobytes
+ * and takes seconds, while the same number of bytes of prose takes two
+ * milliseconds. Sanitising is synchronous and runs inside the request's open
+ * database transaction, so a handful of those bodies stalls every other request
+ * on the replica and holds transactions open while they wait.
+ *
+ * Six thousand is far above any real message — a long HTML newsletter is a few
+ * hundred — and far below where the cost curve turns. It is counted from the
+ * raw input, before the parser sees it, because the point is not to parse it.
+ */
+export const MAX_TAGS = 6_000;
+
+/** The body did not survive its limits. The caller answers 400, never 500. */
+export class SanitizeLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SanitizeLimitError';
+  }
+}
+
+const TAG_OPENING = /</g;
+
+const assertWithinLimits = (html: string): void => {
+  const tags = html.match(TAG_OPENING)?.length ?? 0;
+  if (tags > MAX_TAGS) {
+    throw new SanitizeLimitError(
+      `That message contains more than ${MAX_TAGS} HTML tags and cannot be processed`,
+    );
+  }
+};
+
+/**
+ * The sanitised body. It does not throw on *malformed* input — a parser that
+ * gave up on a half-closed tag would mean a message that cannot be stored, and
+ * the tolerant parse of a broken document is exactly what a mail client would
+ * do with it — but it does refuse a body built to be expensive
+ * ({@link SanitizeLimitError}).
  */
 export const sanitizeMessageHtml = (
   html: string,
   { imageSrc = 'cid-only' }: SanitizeHtmlOptions = {},
-): string => sanitizeHtmlLibrary(html, imageSrc === 'allow-remote' ? ALLOW_REMOTE : CID_ONLY);
+): string => {
+  assertWithinLimits(html);
+
+  return sanitizeHtmlLibrary(html, imageSrc === 'allow-remote' ? ALLOW_REMOTE : CID_ONLY);
+};

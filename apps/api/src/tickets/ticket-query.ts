@@ -18,12 +18,12 @@ import { decodeTicketCursor, encodeTicketCursor, type TicketCursor } from './cur
  * on nonsense, rather than to `to_tsquery`, which does.
  */
 
-/** Which column each sort orders by, and what the cursor carries for it. */
-const SORT_COLUMNS: Record<TicketSort, PgColumn> = {
-  updatedAt: tickets.updatedAt,
-  createdAt: tickets.createdAt,
-  number: tickets.number,
-  priority: tickets.priority,
+/** Which column each sort orders by, and the type its cursor value is cast to. */
+const SORT_COLUMNS: Record<TicketSort, { readonly column: PgColumn; readonly cast: string }> = {
+  updatedAt: { column: tickets.updatedAt, cast: 'timestamptz' },
+  createdAt: { column: tickets.createdAt, cast: 'timestamptz' },
+  number: { column: tickets.number, cast: 'bigint' },
+  priority: { column: tickets.priority, cast: 'ticket_priority' },
 };
 
 /**
@@ -68,10 +68,14 @@ const searchFilter = (term: string): SQL =>
  * answer the first from an index in one seek.
  */
 const keysetFilter = (cursor: TicketCursor): SQL => {
-  const column = SORT_COLUMNS[cursor.sort];
-  const value = sql`${cursor.value}`;
+  const { column, cast } = SORT_COLUMNS[cursor.sort];
   const row = sql`(${column}, ${tickets.id})`;
-  const after = sql`(${value}, ${cursor.id}::uuid)`;
+  // Cast both halves explicitly. The schema already types the value per sort,
+  // and this is the second half of the same guarantee: an untyped parameter in
+  // a row comparison is resolved by Postgres, and a future sort key added
+  // without a matching schema branch would resolve to the wrong type rather
+  // than failing here.
+  const after = sql`(${cursor.value}${sql.raw(`::${cast}`)}, ${cursor.id}::uuid)`;
 
   return cursor.direction === 'desc' ? lt(row, after) : gt(row, after);
 };
@@ -127,10 +131,9 @@ export const ticketFilters = ({
  * lands between them would drop one row or repeat it.
  */
 export const ticketOrder = (sort: TicketSort, direction: TicketSortDirection): SQL[] => {
-  const column = SORT_COLUMNS[sort];
   const order = direction === 'desc' ? desc : asc;
 
-  return [order(column), order(tickets.id)];
+  return [order(SORT_COLUMNS[sort].column), order(tickets.id)];
 };
 
 /** The cursor that asks for the row after `row`, given the ordering it was read under. */

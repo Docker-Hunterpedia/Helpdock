@@ -9,6 +9,7 @@ import {
   departments,
   outbox,
   seedBrandStatuses,
+  ticketActivity,
   ticketMessages,
   tickets,
   userBrandRoles,
@@ -111,6 +112,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
   let otherDepartment: string;
   let ola: Person;
 
+  let openStatus: string;
   let closedStatus: string;
   let otherBrandStatus: string;
 
@@ -360,6 +362,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
       `${brandPath(seeded.brandId)}/ticket-statuses`,
       ada,
     );
+    openStatus = statuses.body.statuses.find((status) => status.isDefault)?.id ?? '';
     closedStatus = statuses.body.statuses.find((status) => status.name === 'Closed')?.id ?? '';
 
     const theirs = await call<TicketStatusList>(
@@ -579,16 +582,91 @@ describe.skipIf(!hasDocker)('tickets', () => {
       );
       expect(status).toBe(200);
 
-      // The denormalised column is what the policies read, so the messages have
-      // to move with the ticket or Support would keep reading them.
-      const rows = await withSystem(runtime.db, seeded.brandId, (tx) =>
-        tx
+      // The denormalised column is what the policies read, so both children
+      // have to move with the ticket. An activity row left behind stays
+      // readable by the department the ticket has left.
+      const moved = await withSystem(runtime.db, seeded.brandId, async (tx) => ({
+        messages: await tx
           .select({ departmentId: ticketMessages.departmentId })
           .from(ticketMessages)
           .where(eq(ticketMessages.ticketId, ticket.id)),
+        activity: await tx
+          .select({ departmentId: ticketActivity.departmentId })
+          .from(ticketActivity)
+          .where(eq(ticketActivity.ticketId, ticket.id)),
+      }));
+
+      expect(moved.messages.length).toBeGreaterThan(0);
+      expect(moved.activity.length).toBeGreaterThan(0);
+      expect(moved.messages.every((row) => row.departmentId === billing)).toBe(true);
+      expect(moved.activity.every((row) => row.departmentId === billing)).toBe(true);
+    });
+
+    it('leaves nothing to log when a field is set to the value it already holds', async () => {
+      // 200 with no activity row and no event: an activity log full of
+      // "priority: medium → medium" is a log nobody reads, and a phantom
+      // `ticket.updated` frame makes every screen re-read for nothing.
+      const { ticket } = await createTicket(sam);
+      await drainOutbox();
+
+      const { status } = await call(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+        { priority: ticket.priority },
       );
-      expect(rows.length).toBeGreaterThan(0);
-      expect(rows.every((row) => row.departmentId === billing)).toBe(true);
+
+      expect(status).toBe(200);
+      expect(await unpublished()).toHaveLength(0);
+
+      const detail = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+      );
+      expect(detail.body.activity.map((entry) => entry.action)).toEqual(['ticket.created']);
+    });
+
+    it('refuses a team, because the table it would point at arrives with M1-01', async () => {
+      const { ticket } = await createTicket(sam);
+
+      const { status } = await call(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+        { teamId: uuidv7() },
+      );
+
+      expect(status).toBe(400);
+    });
+
+    it('refuses an assignee who holds no role in the brand', async () => {
+      // `assignee_id` references the *global* users table, so the foreign key
+      // alone would accept a stranger and produce a ticket nobody here owns.
+      const { ticket } = await createTicket(sam);
+
+      const { status } = await call(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+        { assigneeId: ola.id },
+      );
+
+      expect(status).toBe(400);
+    });
+
+    it('accepts an assignee who does hold one', async () => {
+      const { ticket } = await createTicket(sam);
+
+      const { status, body } = await call<Ticket>(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+        { assigneeId: sam.id },
+      );
+
+      expect(status).toBe(200);
+      expect(body.assigneeId).toBe(sam.id);
     });
   });
 
@@ -641,8 +719,10 @@ describe.skipIf(!hasDocker)('tickets', () => {
           { kind: 'public', bodyHtml: '<p>sent twice</p>', clientId },
         );
 
-      const first = await send();
-      const second = await send();
+      // Concurrent, not sequential: the retry has to arrive *while* the first
+      // attempt is still committing, which is what the `FOR UPDATE` ordering
+      // and the partial unique index exist for (DOMAIN-RULES §7).
+      const [first, second] = await Promise.all([send(), send()]);
 
       expect(second.body.id).toBe(first.body.id);
       expect(second.body.seq).toBe(first.body.seq);
@@ -721,49 +801,92 @@ describe.skipIf(!hasDocker)('tickets', () => {
   // ------------------------------------------------------------------- list
 
   describe('the list', () => {
-    it('filters, searches and pages with a cursor', async () => {
-      await createTicket(sam, { subject: 'Printer jammed again', priority: 'high' });
-      await createTicket(sam, { subject: 'Printer will not print' });
+    it('finds both tickets whose subject matches the search', async () => {
+      const jammed = await createTicket(sam, { subject: 'Kymera printer jammed again' });
+      const silent = await createTicket(sam, { subject: 'Kymera printer will not print' });
 
-      const search = await call<TicketList>(
+      const { body } = await call<TicketList>(
         'GET',
-        `${brandPath(seeded.brandId)}/tickets?q=printer`,
+        `${brandPath(seeded.brandId)}/tickets?q=kymera&limit=100`,
         sam,
       );
-      expect(search.body.tickets.length).toBeGreaterThanOrEqual(2);
 
-      const filtered = await call<TicketList>(
-        'GET',
-        `${brandPath(seeded.brandId)}/tickets?q=printer&priority=high`,
-        sam,
+      expect(body.tickets.map((row) => row.id).sort()).toEqual(
+        [jammed.ticket.id, silent.ticket.id].sort(),
       );
-      expect(filtered.body.tickets.length).toBeGreaterThanOrEqual(1);
-      expect(filtered.body.tickets.every((ticket) => ticket.priority === 'high')).toBe(true);
-
-      const page = await call<TicketList>(
-        'GET',
-        `${brandPath(seeded.brandId)}/tickets?limit=1`,
-        sam,
-      );
-      expect(page.body.tickets).toHaveLength(1);
-      expect(page.body.nextCursor).not.toBeNull();
-
-      const next = await call<TicketList>(
-        'GET',
-        `${brandPath(seeded.brandId)}/tickets?limit=1&cursor=${encodeURIComponent(page.body.nextCursor ?? '')}`,
-        sam,
-      );
-      expect(next.body.tickets[0]?.id).not.toBe(page.body.tickets[0]?.id);
     });
 
+    it('narrows a search with a filter', async () => {
+      const urgent = await createTicket(sam, { subject: 'Lorric outage', priority: 'high' });
+      await createTicket(sam, { subject: 'Lorric question' });
+
+      const { body } = await call<TicketList>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets?q=lorric&priority=high&limit=100`,
+        sam,
+      );
+
+      expect(body.tickets.map((row) => row.id)).toEqual([urgent.ticket.id]);
+    });
+
+    it.each(['desc', 'asc'] as const)(
+      'pages a %s ordering without repeating or skipping a row',
+      async (direction) => {
+        // The cursor carries a timestamp as an ISO string, which `Date` holds
+        // only to the millisecond. A microsecond column would be compared
+        // against a truncated copy of itself: ascending, the boundary row
+        // satisfies `>` again and the client pages forever; descending, rows
+        // inside the sub-millisecond window vanish. Three rows, one at a time,
+        // is what catches both.
+        const created = [
+          await createTicket(sam, { subject: `Paging ${direction} one` }),
+          await createTicket(sam, { subject: `Paging ${direction} two` }),
+          await createTicket(sam, { subject: `Paging ${direction} three` }),
+        ].map((detail) => detail.ticket.id);
+
+        const seen: string[] = [];
+        let cursor: string | null = null;
+        for (let page = 0; page < 200; page += 1) {
+          const url: string = `${brandPath(seeded.brandId)}/tickets?limit=1&direction=${direction}${
+            cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`
+          }`;
+          const answer = await call<TicketList>('GET', url, sam);
+
+          const id = answer.body.tickets[0]?.id;
+          if (id === undefined) {
+            break;
+          }
+          expect(seen).not.toContain(id);
+          seen.push(id);
+
+          cursor = answer.body.nextCursor;
+          if (cursor === null) {
+            break;
+          }
+        }
+
+        // Every ticket of this brand, each exactly once, however many other
+        // tests have seeded one.
+        for (const id of created) {
+          expect(seen).toContain(id);
+        }
+      },
+    );
+
     it('filters by system state without the caller resolving status ids', async () => {
+      const { ticket } = await createTicket(sam, { subject: 'Closed by the state filter' });
+      await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, sam, {
+        statusId: closedStatus,
+      });
+
       const { body } = await call<TicketList>(
         'GET',
         `${brandPath(seeded.brandId)}/tickets?systemState=closed&limit=100`,
         sam,
       );
 
-      expect(body.tickets.every((ticket) => ticket.status.systemState === 'closed')).toBe(true);
+      expect(body.tickets.map((row) => row.id)).toContain(ticket.id);
+      expect(body.tickets.every((row) => row.status.systemState === 'closed')).toBe(true);
     });
 
     it('finds a half-typed word through the trigram index', async () => {
@@ -820,14 +943,21 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(status).toBe(400);
     });
 
-    it('shows a brand nothing of another brand’s', async () => {
+    it('shows a brand its own tickets and none of another brand’s', async () => {
+      const mine = await call<TicketDetail>('POST', `${brandPath(otherBrand)}/tickets`, ola, {
+        subject: 'Globex only',
+        bodyHtml: '<p>x</p>',
+        departmentId: otherDepartment,
+      });
+
       const { body } = await call<TicketList>(
         'GET',
         `${brandPath(otherBrand)}/tickets?limit=100`,
         ola,
       );
 
-      expect(body.tickets.every((ticket) => ticket.prefix === 'GLX')).toBe(true);
+      expect(body.tickets.map((row) => row.id)).toContain(mine.body.ticket.id);
+      expect(body.tickets.every((row) => row.prefix === 'GLX')).toBe(true);
     });
   });
 
@@ -929,6 +1059,58 @@ describe.skipIf(!hasDocker)('tickets', () => {
       );
 
       expect(visible).toEqual([]);
+    });
+
+    it('refuses a ticket written straight into another department, in raw SQL', async () => {
+      // Every write negative above is refused by the service before the policy
+      // is consulted. This is the `WITH CHECK` half itself: if it were dropped
+      // from the migration tomorrow, nothing else here would fail
+      // (DOMAIN-RULES §1.6).
+      const rejection = await withTenant(
+        runtime.db,
+        {
+          brandIds: [seeded.brandId],
+          departmentIds: [support],
+          principalType: 'staff',
+          principalId: sam.id,
+        },
+        (tx) =>
+          tx.insert(tickets).values({
+            brandId: seeded.brandId,
+            departmentId: billing,
+            number: 900_001,
+            prefix: 'HD',
+            subject: 'Smuggled into billing',
+            statusId: openStatus,
+            channel: 'manual',
+          }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+    });
+
+    it('refuses to move its own ticket into a department it cannot see, in raw SQL', async () => {
+      const { ticket } = await createTicket(sam);
+
+      const rejection = await withTenant(
+        runtime.db,
+        {
+          brandIds: [seeded.brandId],
+          departmentIds: [support],
+          principalType: 'staff',
+          principalId: sam.id,
+        },
+        (tx) => tx.update(tickets).set({ departmentId: billing }).where(eq(tickets.id, ticket.id)),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      // `USING` lets the row be found; `WITH CHECK` is what stops it walking out.
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
     });
 
     it('hides its messages through the denormalised department', async () => {

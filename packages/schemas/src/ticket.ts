@@ -250,7 +250,17 @@ export const ticketCreateRequestSchema = z.object({
   teamId: z.uuid().optional(),
   /** Defaults to `manual`, which is what a ticket typed into the admin is. */
   channel: ticketChannelSchema.default('manual'),
-  /** The first message's dedupe key, exactly as a reply's (DOMAIN-RULES §7). */
+  /**
+   * The `client_id` the **first message** is stored with.
+   *
+   * It does not make creation idempotent, and cannot: the uniqueness DOMAIN-RULES
+   * §7 defines is `(conversation_id, client_id)`, and a conversation does not
+   * exist until the ticket does. A retried `POST /tickets` therefore creates a
+   * second ticket. What it is for is the reply path: the admin's composer holds
+   * one id for the message it is sending, and the first message is a message.
+   * Idempotent creation needs a key that outlives the request — M2-04's
+   * threading key for email, M4's conversation id for the widget.
+   */
   clientId: z.uuid().optional(),
 });
 export type TicketCreateRequest = z.infer<typeof ticketCreateRequestSchema>;

@@ -28,21 +28,9 @@ const CLOSED = status('closed', 'closed');
 const SPAM = status('spam', 'closed');
 
 describe('applyStatusChange', () => {
-  it('refuses a status the transaction cannot see', () => {
+  it('refuses a status the transaction cannot see, and names it', () => {
     // The lookup ran inside the tenant transaction, so `undefined` means "not
     // this brand's" as surely as "does not exist". Both are refused the same.
-    expect(() =>
-      applyStatusChange({
-        requestedStatusId: 'elsewhere',
-        current: OPEN,
-        next: undefined,
-        closedAt: null,
-        now: NOW,
-      }),
-    ).toThrow(UnknownStatusError);
-  });
-
-  it('names the status it refused, for the message the handler renders', () => {
     try {
       applyStatusChange({
         requestedStatusId: 'elsewhere',
@@ -51,8 +39,9 @@ describe('applyStatusChange', () => {
         closedAt: null,
         now: NOW,
       });
-      expect.unreachable();
+      expect.unreachable('the status should have been refused');
     } catch (error) {
+      expect(error).toBeInstanceOf(UnknownStatusError);
       expect((error as UnknownStatusError).statusId).toBe('elsewhere');
     }
   });

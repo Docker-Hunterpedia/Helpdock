@@ -140,6 +140,17 @@ describe('the indexes and constraints', () => {
     expect(search?.generated?.type).toBe('always');
   });
 
+  it('keeps the two cursor columns at the precision a cursor can carry', () => {
+    // A cursor carries an ISO-8601 string, which `Date` cannot hold beyond
+    // milliseconds. A microsecond column would be compared against a truncated
+    // copy of itself and the list would loop or skip rows.
+    for (const name of ['created_at', 'updated_at']) {
+      const column = configOf('tickets').columns.find((entry) => entry.name === name);
+
+      expect(column?.getSQLType()).toBe('timestamp (3) with time zone');
+    }
+  });
+
   it('makes seq unique per ticket, which is the backstop under the lock', () => {
     const index = configOf('ticket_messages').indexes.find(
       (entry) => entry.config.name === 'ticket_messages_ticket_seq_key',
@@ -154,6 +165,10 @@ describe('the indexes and constraints', () => {
     );
 
     expect(index?.config.unique).toBe(true);
+    expect(index?.config.columns.map((column) => 'name' in column && column.name)).toEqual([
+      'ticket_id',
+      'client_id',
+    ]);
     // Partial: most rows have no `client_id`, and a full index would carry them.
     expect(index?.config.where).toBeDefined();
   });

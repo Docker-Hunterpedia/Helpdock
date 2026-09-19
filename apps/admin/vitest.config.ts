@@ -7,7 +7,8 @@ import { defineConfig } from 'vitest/config';
  * `apps/*` project glob, so `pnpm test` at the root runs it too; the project
  * name has to stay the package name for `--project @helpdock/admin` to select it.
  *
- * `@helpdock/ui` and `@helpdock/i18n` are aliased to their sources so the suite
+ * `@helpdock/ui`, `@helpdock/i18n` and `@helpdock/schemas` are aliased to their
+ * sources so the suite
  * runs on a clean clone without building the workspace first. Both packages
  * compile from exactly these files, and their own suites test the built output.
  */
@@ -24,6 +25,10 @@ export default defineConfig({
       {
         find: /^@helpdock\/i18n$/,
         replacement: new URL('../../packages/i18n/src/index.ts', import.meta.url).pathname,
+      },
+      {
+        find: /^@helpdock\/schemas$/,
+        replacement: new URL('../../packages/schemas/src/index.ts', import.meta.url).pathname,
       },
     ],
   },

@@ -6,11 +6,13 @@ import type { Logger } from '../logging/logger.js';
 import type { Principal } from './principal.js';
 
 /**
- * Step 2 of ARCHITECTURE §6. M0-05 replaces the resolver behind this interface
- * with the real one — access JWT in the `Authorization` header or the refresh
- * cookie for staff, `visitor_secret` for the widget, `hd_live_…` for an api key
- * — and nothing else in the app changes: the guard, the tenant interceptor and
- * every controller only ever see a `Principal`.
+ * Step 2 of ARCHITECTURE §6. The real resolver is
+ * {@link ./session/session-principal-resolver.js SessionPrincipalResolver},
+ * which reads the access token out of the `Authorization` header; the widget's
+ * `visitor_secret` (M4) and `hd_live_…` api keys (M8) arrive behind the same
+ * interface. Nothing else in the app changes when one is swapped for another:
+ * the guard, the tenant interceptor and every controller only ever see a
+ * `Principal`.
  */
 
 export interface PrincipalRequest {
@@ -21,7 +23,10 @@ export interface PrincipalResolver {
   resolve(request: PrincipalRequest): Promise<Principal | null>;
 }
 
-/** The default until M0-05: no credential is recognised, so nothing is authenticated. */
+/**
+ * Recognises no credential at all. It is what a misconfiguration falls back to,
+ * and what the unit tests use when the question is "is this route guarded?".
+ */
 export class DenyAllPrincipalResolver implements PrincipalResolver {
   resolve(): Promise<Principal | null> {
     return Promise.resolve(null);
@@ -72,12 +77,21 @@ export const devPrincipalHeaderEnabled = (
 export interface CreatePrincipalResolverOptions {
   readonly env: Pick<Env, 'NODE_ENV'>;
   readonly logger: Logger;
+  /** The session resolver, which is what a real deploy uses. */
+  readonly session: PrincipalResolver;
   readonly source?: EnvSource;
 }
 
+/**
+ * The session resolver, unless the operator deliberately asked for the
+ * development header instead. The header is not an addition to the session: a
+ * process that trusts it trusts it for every request, so the two are never both
+ * in play and the choice is visible in one place.
+ */
 export const createPrincipalResolver = ({
   env,
   logger,
+  session,
   source = process.env,
 }: CreatePrincipalResolverOptions): PrincipalResolver => {
   if (devPrincipalHeaderEnabled(env, source)) {
@@ -94,5 +108,5 @@ export const createPrincipalResolver = ({
     );
   }
 
-  return new DenyAllPrincipalResolver();
+  return session;
 };

@@ -15,13 +15,15 @@
     "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "e2e": "playwright test --grep-invert @screenshot",
     "e2e:baselines": "node scripts/update-screenshots.ts --grep @screenshot",
-    "e2e:screenshots": "playwright test --grep @screenshot"
+    "e2e:screenshots": "playwright test --grep @screenshot",
+    "e2e:api": "playwright test --config playwright.api.config.ts"
   },
   "dependencies": {
     "@emotion/cache": "11.14.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
     "@helpdock/i18n": "workspace:*",
+    "@helpdock/schemas": "workspace:*",
     "@helpdock/ui": "workspace:*",
     "@mui/material": "9.4.0",
     "@tanstack/react-query": "5.103.1",
@@ -35,6 +37,8 @@
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
+    "@testcontainers/postgresql": "12.1.0",
+    "@testcontainers/redis": "12.1.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",
@@ -42,6 +46,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
     "happy-dom": "20.14.5",
+    "otplib": "13.5.0",
     "vite": "8.3.0"
   }
 }

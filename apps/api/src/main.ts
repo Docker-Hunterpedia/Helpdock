@@ -9,7 +9,9 @@ import { start } from './bootstrap.js';
  *
  * `reflect-metadata` is imported first and by nothing else: Nest's dependency
  * injection reads the metadata the decorators emit, and a decorator that runs
- * before the polyfill is installed records nothing.
+ * before the polyfill is installed records nothing. Importing it a second time
+ * from a second module instance is worse than not importing it: the polyfill
+ * installs a fresh store, and whatever was recorded into the first one is gone.
  */
 
 const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'] as const;

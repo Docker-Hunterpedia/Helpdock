@@ -7,6 +7,10 @@ packages:
 saveExact: true
 autoInstallPeers: true
 allowBuilds:
+  # argon2 is a native binding. Its install script unpacks the prebuilt binary
+  # for this platform, or compiles one; without it `require('argon2')` throws
+  # and no password can be hashed or verified.
+  argon2: true
   # Transitive dependencies of `@testcontainers/*` (via dockerode). None of
   # their install scripts are needed: cpu-features and ssh2 only build an
   # optional native speed-up for SSH, which Testcontainers does not use against

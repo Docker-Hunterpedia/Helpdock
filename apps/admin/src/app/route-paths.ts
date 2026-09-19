@@ -3,6 +3,12 @@ export const ROUTES = {
   signIn: '/sign-in',
   totp: '/sign-in/totp',
   magicLinkSent: '/sign-in/link-sent',
+  /** Where the api redirects after a magic link, carrying a one-time code. */
+  authComplete: '/sign-in/complete',
+  passwordResetSent: '/sign-in/reset-sent',
+  passwordReset: '/sign-in/reset',
+  /** M0-06 replaces this with the real enrolment screen. */
+  totpEnrolment: '/sign-in/enrol',
   oauthCallback: '/oauth/callback',
   tickets: '/tickets',
   contacts: '/contacts',

@@ -1,8 +1,9 @@
 import { TenantContextError } from '@helpdock/db';
-import type { ErrorCode, ErrorResponse, FieldError } from '@helpdock/schemas';
+import type { AuthErrorBody, ErrorCode, ErrorResponse, FieldError } from '@helpdock/schemas';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
+import { AuthFailure } from '../auth/auth-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 
 /**
@@ -20,6 +21,8 @@ export interface MappedError {
   readonly code: ErrorCode;
   readonly message: string;
   readonly fields?: readonly FieldError[];
+  /** Only on a sign-in failure; see `auth/auth-failure.ts`. */
+  readonly auth?: AuthErrorBody;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -60,6 +63,18 @@ export const mapError = (error: unknown): MappedError => {
       code: 'validation_failed',
       message: 'The request did not match the expected shape',
       ...(zodError === undefined ? {} : { fields: fieldErrorsOf(zodError) }),
+      unexpected: false,
+    };
+  }
+
+  // Before the generic `HttpException` branch, which would drop the detail the
+  // sign-in screens read.
+  if (error instanceof AuthFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'unauthenticated',
+      message: error.message,
+      auth: error.auth,
       unexpected: false,
     };
   }
@@ -105,5 +120,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     message: mapped.message,
     requestId,
     ...(mapped.fields === undefined ? {} : { fields: [...mapped.fields] }),
+    ...(mapped.auth === undefined ? {} : { auth: mapped.auth }),
   },
 });

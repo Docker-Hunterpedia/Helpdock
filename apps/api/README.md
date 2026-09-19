@@ -40,11 +40,15 @@ one before it.
    verified.
 6. **Redis and settings** — the invalidation channel, a client for `/ready`, and
    the install-scope settings resolver over the `settings` table.
-7. **Queues, `APP_ROLE=worker` only.** `src/worker/start-worker.ts` registers the
+7. **Signing keys** — the ES256 key pair access tokens are signed with, read
+   from the `auth.jwtSigningKey` setting or generated once, under a Redis lock,
+   if this is the install's first boot
+   ([the authentication guide](../../docs/guides/authentication.md)).
+8. **Queues, `APP_ROLE=worker` only.** `src/worker/start-worker.ts` registers the
    `outbox.event` consumer and then starts the outbox relay, in the order
    [`packages/jobs/README.md`](../../packages/jobs/README.md) requires: a job
    that arrives before its consumer exists burns attempts.
-8. **Listen**, for `APP_ROLE=api`, after registering `@fastify/static` against
+9. **Listen**, for `APP_ROLE=api`, after registering `@fastify/static` against
    `ADMIN_DIST_DIR` so the admin build can be served (see below).
 
 `SIGTERM` and `SIGINT` close the HTTP server — or, in a worker, the relay, then
@@ -60,7 +64,7 @@ In the order Nest runs it:
 | Step | Where | What it does |
 |---|---|---|
 | 1 | `RequestContextMiddleware` | Request id, start time, brand from the `Host` header, all of it in `AsyncLocalStorage`. Logs one line when the response finishes. |
-| 2 | `AuthGuard` | Resolves the `Principal` through `PrincipalResolver`, or 401. |
+| 2 | `AuthGuard` | Resolves the `Principal` through `PrincipalResolver` — `SessionPrincipalResolver`, which verifies the bearer token — or 401. |
 | 3 | `PermissionGuard` | Reads the route's declaration, resolves the target brand, checks the role, decides the tenant scope, or 403/400. |
 | 4 | `ZodSerializerInterceptor` | Parses the response through its output schema — outside the transaction, so parsing holds no connection. |
 | 5 | `TenantInterceptor` | Opens the transaction and sets `app.brand_ids`, `app.department_ids`, `app.all_departments`, `app.principal_type` and `app.principal_id`. |
@@ -197,11 +201,36 @@ decides what a path means. Fastify's router prefers a static route to the
 controller's `/*`, which is what keeps `/health`, `/ready` and every declared
 `/api/…` route reachable.
 
-## The development principal header
+## Authentication
 
-M0-05 replaces `PrincipalResolver` with the real session resolver. Until then
-the only way to authenticate is `HeaderPrincipalResolver`, which reads a whole
-principal out of the `x-hd-dev-principal` header as JSON.
+`src/auth/` holds M0-05: password, sign-in link, Google and GitHub OAuth, TOTP
+with recovery codes, and the session — a ten-minute ES256 access token plus a
+rotating refresh token in an `httpOnly` cookie. What it does and how an operator
+configures it is [the authentication
+guide](../../docs/guides/authentication.md); what follows is what someone
+reading this app's code needs.
+
+`SessionPrincipalResolver` is the `PRINCIPAL_RESOLVER`. It verifies the bearer
+token and builds the principal out of its claims, so an authorised request costs
+one signature check and one Redis `EXISTS` — the revocation marker — and no
+database read at all. A revoked session is refused within the ten minutes
+[DOMAIN-RULES §1.6](../../docs/planning/DOMAIN-RULES.md#16-required-negative-tests)
+allows. Visitors (M4) and api keys (M8) arrive behind the same interface.
+
+`AuthController` is the only place in the app that touches a cookie, and the
+only one that names its input schema on the parameter rather than leaving it to
+the global pipe — the comment there says why.
+
+`StaffRepository` is the documented system path: sign-in happens before a brand
+is known, so it reads `user_brand_roles` in a transaction that names every
+active brand, as `principal_type = system`. That is the widest scope in the
+application and it is confined to that file.
+
+### The development principal header
+
+`HeaderPrincipalResolver` reads a whole principal out of the
+`x-hd-dev-principal` header as JSON, instead of the session resolver, so the
+tenancy plumbing can be exercised without signing in.
 
 It is enabled only when **both** are true:
 
@@ -217,8 +246,8 @@ curl -s localhost:3000/api/me \
   -H 'x-hd-dev-principal: {"type":"staff","id":"0199f4b2-6a91-7c27-9a1f-000000000001","brands":{"0199f4b2-6a91-7c27-9a1f-00000000000a":{"role":"admin","departmentIds":"all"}},"installAdmin":false}'
 ```
 
-Without the flag the resolver is `DenyAllPrincipalResolver` and everything but
-`/health` and `/ready` answers 401.
+Without the flag the session resolver is used, and everything but the public
+routes answers 401 without a valid bearer token.
 
 ## Endpoints
 
@@ -231,10 +260,12 @@ Without the flag the resolver is `DenyAllPrincipalResolver` and everything but
 | `GET /api/install/brands` | `@Requires('install:admin')` | Every brand. Audited. |
 | `GET /api/brands/:brandId` | `@Requires('brand:read')` | One brand. |
 | `GET /internal/domain-check` | `@Public()` | Caddy's on-demand TLS gate. 200 for a verified help-center domain, 403 otherwise. |
+| `/api/auth/*` | mostly `@Public()` | Signing in. [The authentication guide](../../docs/guides/authentication.md#endpoints) lists them. |
 | `GET /*` | `@Public()` | The admin SPA, above. |
 
 Most of these exist to prove the plumbing; M0-06 onwards replaces them with real
-ones. `/internal/domain-check` is not one of them: it is what stops Caddy
+ones. `/api/auth/*` and `/internal/domain-check` are not among them. The second
+is what stops Caddy
 issuing a certificate for a hostname this install does not serve
 (ARCHITECTURE §3).
 
@@ -260,7 +291,8 @@ Every failure answers with the same body:
 ```
 
 A failed input schema adds `fields`, each with the path as the request carried
-it. An unexpected error answers `internal_error` with a fixed message — the
+it. A failed sign-in adds `error.auth`, which is the code the sign-in screens
+turn into a sentence. An unexpected error answers `internal_error` with a fixed message — the
 cause, the stack and the SQL go to the log under that request id, and nowhere
 else. A response that fails its *output* schema is a bug in the api, so it is a
 500 with no field detail.
@@ -281,9 +313,15 @@ served by later milestones and each brings the policy its own content needs.
 ## Tests
 
 ```bash
-pnpm --filter @helpdock/api test          # unit
-pnpm test:integration                     # Testcontainers: real Postgres and Redis
+pnpm --filter @helpdock/api test           # unit
+pnpm test:integration                      # Testcontainers: real Postgres and Redis
+pnpm --filter @helpdock/api test:coverage  # both, with the 90 % line gate for src/
 ```
+
+The gate is measured across both runs because half of this app — the controller,
+the guards, the request lifecycle — is only reached over HTTP. A number from the
+unit run alone would say more about where the tests are than about what is
+covered.
 
 `src/*.test.ts` need nothing installed. `src/api.integration.test.ts` starts
 `pgvector/pgvector:pg17` and `redis:7-alpine`, boots the real app against them
@@ -300,12 +338,17 @@ only when a test passes it as an extra controller.
 
 - `NoopBrandResolver` resolves every host to nothing. `brand_domains` exists
   from M0-09, for the on-demand TLS check; M5 adds the rows, their verification,
-  and the resolver that turns a `Host` header into a brand.
-- `DenyAllPrincipalResolver` is the default until M0-05.
+  and the resolver that turns a `Host` header into a brand. Until it does, every
+  brand in a session is shown with the install's own host.
+- Input validation depends on `emitDecoratorMetadata`, which `tsc` emits and
+  esbuild does not. The routes that take a credential name their schema on the
+  parameter so they validate wherever they run; the rest rely on the global
+  pipe, which means the integration suite does not exercise them.
 - The WebSocket gateway is M0-13. `PermissionGuard` refuses any non-HTTP
   execution context outright, so M0-13 has to say what a socket event needs
   ([DOMAIN-RULES §1.4](../../docs/planning/DOMAIN-RULES.md#14-workers-and-websockets))
   rather than inherit silence. `pnpm check:routes` covers `@Controller`
-  handlers only; M0-13 extends it to `@SubscribeMessage`.
+  handlers only; M0-13 extends it to `@SubscribeMessage`. M0-05 publishes
+  `principal.revoked` on Redis with nothing subscribed to it yet.
 - `/metrics` and OpenTelemetry are M0-10. The logger here is deliberately small
   enough to extend rather than replace.

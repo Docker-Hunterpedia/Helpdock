@@ -57,6 +57,12 @@ jobs:
       - name: Integration tests
         run: pnpm test:integration
 
+      # The api is the one workspace whose behaviour is mostly reached over
+      # HTTP, so its gate is measured across the unit and the integration
+      # suites together (M0-05).
+      - name: Api coverage gate
+        run: pnpm --filter @helpdock/api test:coverage
+
       - name: Build
         run: pnpm build
 
@@ -78,6 +84,11 @@ jobs:
 
       - name: Browser tests
         run: pnpm --filter @helpdock/admin e2e
+
+      # The same screens against a real api, a real Postgres and a real Redis:
+      # the M0 exit criterion that every auth method works end to end.
+      - name: Browser tests against the real api
+        run: pnpm --filter @helpdock/admin e2e:api
 
       - name: Upload the Playwright report
         if: failure()

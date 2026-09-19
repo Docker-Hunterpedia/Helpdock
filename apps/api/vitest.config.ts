@@ -2,9 +2,15 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 // Integration tests need Docker, so they belong to the root `integration`
-// project and are kept out of the unit run.
+// project and are kept out of the unit run. `vitest.coverage.config.ts` runs
+// both and reports one number.
 export default defineConfig({
   resolve: {
+    // One copy of zod and of its Nest bindings, whatever a workspace package
+    // resolves for itself. Two copies make `error instanceof ZodError` false,
+    // and a failed input schema would answer 500 instead of 400 — in the test
+    // run only, which is the worst place for a difference to live.
+    dedupe: ['zod', 'nestjs-zod'],
     alias: {
       // Workspace packages resolve to `dist/` through their `exports` map, which
       // would make a test run against the last build instead of the source.

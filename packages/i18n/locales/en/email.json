@@ -1,0 +1,24 @@
+{
+  "common": {
+    "linkFallback": "If the button does not work, copy this address into your browser:",
+    "signature": "— {{appName}}"
+  },
+  "magicLink": {
+    "subject": "Your sign-in link for {{appName}}",
+    "heading": "Sign in to {{appName}}",
+    "body": "Use the link below to sign in as {{email}}. It works once.",
+    "action": "Sign in",
+    "expiry_one": "The link expires in {{count}} minute.",
+    "expiry_other": "The link expires in {{count}} minutes.",
+    "ignore": "If you did not ask to sign in, you can ignore this message. Nothing has changed."
+  },
+  "passwordReset": {
+    "subject": "Reset your {{appName}} password",
+    "heading": "Choose a new password",
+    "body": "Use the link below to set a new password for {{email}}. It works once.",
+    "action": "Choose a new password",
+    "expiry_one": "The link expires in {{count}} minute.",
+    "expiry_other": "The link expires in {{count}} minutes.",
+    "ignore": "If you did not ask for this, you can ignore this message. Your password has not changed."
+  }
+}

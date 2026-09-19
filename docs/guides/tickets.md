@@ -297,6 +297,12 @@ Content-Type: application/json
 }
 ```
 
+`contactId` is optional: a ticket typed into the admin may have nobody attached
+yet, and M1-13's identity rules are what attach one later. It is a foreign key
+to `contacts` with `on delete set null`, so erasing a contact
+(DOMAIN-RULES §11) does not take their tickets with them — the work and the SLA
+history outlive the person's record.
+
 Answers `201` with the ticket, its first message and its activity. The body is
 the first message: a ticket with no message is a row nobody can answer, so the
 two are never written apart.
@@ -364,7 +370,7 @@ with `seq > last_seq + 1`, or that reconnects, calls this.
 
 | Milestone | Adds |
 |---|---|
-| M1-04, M1-13 | `contacts`, and the foreign key on `tickets.contact_id` that waits for it |
+| M1-13 | Identity rules: verified matches, automatic merge, participants (contact + CCs) |
 | M1-06 | `tags`, `ticket_tags` and custom field definitions — the `tagId` filter starts working |
 | M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
 | M1-08 | The transition table of §2.2 behind `applyStatusChange`, `auto_await_on_agent_reply`, the reopen policy and `parent_id` linking |

@@ -379,15 +379,27 @@ export type AccountList = z.infer<typeof accountListSchema>;
 
 export const CONTACT_PAGE_SIZE = 50;
 
+/**
+ * A boolean in a query string, parsed idempotently.
+ *
+ * `z.stringbool()` alone is not enough: a query is parsed by the global
+ * `ZodValidationPipe` *and* by the one the parameter names, and the second pass
+ * is handed the boolean the first produced — which `z.stringbool()` refuses,
+ * so `?hasOpenTickets=true` answered 400. Accepting a boolean that is already
+ * one makes the schema safe to apply twice, which is what a pipeline with two
+ * pipes in it needs.
+ */
+const queryBoolean = z.union([z.boolean(), z.stringbool()]);
+
 export const contactSearchQuerySchema = z.object({
   search: z.string().max(200).optional(),
   accountId: z.uuid().optional(),
   /** `true` narrows to contacts with at least one open ticket. */
-  hasOpenTickets: z.stringbool().optional(),
+  hasOpenTickets: queryBoolean.optional(),
   /** Placeholder until M1-06 defines tags; accepted and ignored for now. */
   tag: z.string().max(64).optional(),
   /** Only the contacts an open duplicate suggestion points at. */
-  duplicates: z.stringbool().optional(),
+  duplicates: queryBoolean.optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(CONTACT_PAGE_SIZE).optional(),
 });

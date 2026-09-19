@@ -90,3 +90,31 @@ AFTER UPDATE OF department_id ON public.tickets
 FOR EACH ROW
 WHEN (OLD.department_id IS DISTINCT FROM NEW.department_id)
 EXECUTE FUNCTION public.helpdock_ticket_department_moved();
+--> statement-breakpoint
+
+-- How many tickets a contact has *in total*, for the hidden-ticket count of
+-- DOMAIN-RULES §1.2: "the timeline shows a count of hidden tickets so the agent
+-- knows history exists".
+--
+-- A row the department policy hides is a row no scoped query can count, so this
+-- is the one place that looks past that layer, and only that layer. The
+-- function-level SET turns `app.all_departments` on for the duration of the
+-- call and restores it on return; `app.brand_ids` is untouched, so the brand
+-- policy still applies and a brand outside the transaction's scope counts to
+-- zero. It runs with the caller's rights: FORCEd row-level security binds the
+-- owner too, so SECURITY DEFINER would buy nothing and cost an audit. And it
+-- returns a number, so there is no row for it to leak.
+--
+-- STABLE, so the planner may call it once per query. A function with a SET
+-- clause is never inlined, which is what makes the SET take effect.
+CREATE FUNCTION public.helpdock_contact_ticket_count(p_brand_id uuid, p_contact_id uuid)
+RETURNS bigint
+LANGUAGE sql
+STABLE
+SET search_path = ''
+SET app.all_departments = 'true'
+AS $$
+  SELECT pg_catalog.count(*)
+  FROM public.tickets
+  WHERE brand_id = p_brand_id AND contact_id = p_contact_id;
+$$;

@@ -19,6 +19,7 @@ import {
   withTenant,
 } from '@helpdock/db';
 import { outboxEvents, silentLogger } from '@helpdock/jobs';
+import type { ContactStats } from '@helpdock/schemas';
 import {
   departmentRoom,
   REALTIME_EVENTS,
@@ -1201,6 +1202,168 @@ describe.skipIf(!hasDocker)('tickets', () => {
         sam,
       );
       expect(detail.body.ticket.priority).toBe('medium');
+    });
+  });
+
+  // ------------------------------------------------- the contact providers
+
+  describe('what the contact screens read (M1-04’s seam)', () => {
+    let contactId: string;
+
+    beforeAll(async () => {
+      const created = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Nadia Karim' },
+      );
+      contactId = created.body.id;
+
+      // One in each department, so the same contact is partly visible to each
+      // agent and wholly visible to the admin.
+      await createTicket(sam, { subject: 'Support side', contactId });
+      await call<TicketDetail>('POST', `${brandPath(seeded.brandId)}/tickets`, bo, {
+        subject: 'Billing side',
+        bodyHtml: '<p>x</p>',
+        departmentId: billing,
+        contactId,
+      });
+    });
+
+    it('counts only the tickets the reader may see, and says how many it hid', async () => {
+      // DOMAIN-RULES §1.2: "the timeline shows a count of hidden tickets so the
+      // agent knows history exists".
+      const { status, body } = await call<{
+        items: { subject: string }[];
+        hiddenCount: number;
+      }>('GET', `${brandPath(seeded.brandId)}/contacts/${contactId}/timeline`, sam);
+
+      expect(status).toBe(200);
+      expect(body.items.map((item) => item.subject)).toEqual(['Support side']);
+      expect(body.hiddenCount).toBe(1);
+    });
+
+    it('hides nothing from somebody who may see everything', async () => {
+      const { body } = await call<{ items: unknown[]; hiddenCount: number }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts/${contactId}/timeline`,
+        ada,
+      );
+
+      expect(body.items).toHaveLength(2);
+      expect(body.hiddenCount).toBe(0);
+    });
+
+    it('counts nothing for a brand the transaction does not name', async () => {
+      // The function turns `app.all_departments` on and leaves `app.brand_ids`
+      // alone, so it looks past the department predicate and not past the brand
+      // one: another brand's rows are invisible to it exactly as they are to
+      // every other read, and it says zero rather than raising.
+      const [own, other] = await withTenant(
+        runtime.db,
+        {
+          brandIds: [seeded.brandId],
+          departmentIds: [support],
+          principalType: 'staff',
+          principalId: sam.id,
+        },
+        async (tx) => [
+          await tx.execute<{ total: number }>(
+            sql`SELECT helpdock_contact_ticket_count(${seeded.brandId}::uuid, ${contactId}::uuid)::int AS total`,
+          ),
+          await tx.execute<{ total: number }>(
+            sql`SELECT helpdock_contact_ticket_count(${otherBrand}::uuid, ${contactId}::uuid)::int AS total`,
+          ),
+        ],
+      );
+
+      // Both of the contact's tickets, although this scope can see only one.
+      expect([...(own ?? [])][0]?.total).toBe(2);
+      expect([...(other ?? [])][0]?.total).toBe(0);
+    });
+
+    it('restores the department scope the call borrowed', async () => {
+      // A function-level SET lasts for the call and no longer. If it leaked,
+      // every read after a timeline would quietly see every department.
+      const visible = await withTenant(
+        runtime.db,
+        {
+          brandIds: [seeded.brandId],
+          departmentIds: [support],
+          principalType: 'staff',
+          principalId: sam.id,
+        },
+        async (tx) => {
+          await tx.execute(
+            sql`SELECT helpdock_contact_ticket_count(${seeded.brandId}::uuid, ${contactId}::uuid)`,
+          );
+          return tx
+            .select({ id: tickets.id })
+            .from(tickets)
+            .where(eq(tickets.contactId, contactId));
+        },
+      );
+
+      expect(visible).toHaveLength(1);
+    });
+
+    it('gives the contact list the counts it draws, scoped to the reader', async () => {
+      const mine = await call<{ contacts: { id: string; stats: ContactStats }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts`,
+        sam,
+      );
+      const everything = await call<{ contacts: { id: string; stats: ContactStats }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+      );
+
+      const seenBySam = mine.body.contacts.find((row) => row.id === contactId)?.stats;
+      const seenByAda = everything.body.contacts.find((row) => row.id === contactId)?.stats;
+
+      expect(seenBySam?.totalTickets).toBe(1);
+      expect(seenByAda?.totalTickets).toBe(2);
+      expect(seenByAda?.openTickets).toBe(2);
+      // M1-12 and M3-02 measure these; a zero would read as "rated badly" and
+      // "answered instantly" rather than "not measured yet".
+      expect(seenByAda?.csat).toBeNull();
+      expect(seenByAda?.averageFirstReplySeconds).toBeNull();
+      expect(Date.parse(seenByAda?.lastTicketAt ?? '')).not.toBeNaN();
+    });
+
+    it('narrows the "has open tickets" filter for real, and per reader', async () => {
+      // The filter answered nothing while there were no tickets to ask about;
+      // now it answers "has an open ticket *you can see*", which is the only
+      // honest question for this principal.
+      const withOpen = await call<{ contacts: { id: string }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts?hasOpenTickets=true`,
+        sam,
+      );
+      const nobodyElse = await call<{ contacts: { id: string }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts?hasOpenTickets=true`,
+        bo,
+      );
+
+      expect(withOpen.body.contacts.map((row) => row.id)).toContain(contactId);
+      expect(nobodyElse.body.contacts.map((row) => row.id)).toContain(contactId);
+
+      // A contact with no ticket at all is excluded by it.
+      const lonely = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Nobody Withaticket' },
+      );
+      const again = await call<{ contacts: { id: string }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts?hasOpenTickets=true`,
+        ada,
+      );
+
+      expect(again.body.contacts.map((row) => row.id)).not.toContain(lonely.body.id);
     });
   });
 

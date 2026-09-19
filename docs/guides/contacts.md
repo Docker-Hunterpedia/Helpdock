@@ -190,24 +190,42 @@ boundary. None of the messages repeats the identifier that was refused, because
 "that address is taken" told to a stranger who is guessing addresses is an
 enumeration oracle.
 
-## Tickets are not here yet
+## Where the ticket numbers come from
 
-M1-04 ships before M1-02, so there are no tickets to count. Rather than leave a
-hole in the screens, the api serves both ticket-shaped answers through
-interfaces in `apps/api/src/contacts/providers.ts`:
+Nothing in `apps/api/src/contacts/` knows the ticket schema. Both ticket-shaped
+answers arrive through interfaces declared in
+`apps/api/src/contacts/providers.ts`:
 
 - `TicketStatsProvider` — open and total counts, CSAT, average first reply, last
-  ticket date, per contact.
+  ticket date, per contact. It takes a whole page of contacts at once, because
+  fifty rows must not be fifty queries.
 - `ContactTimelineProvider` — the tickets this viewer may see, plus
   `hiddenCount`, the DOMAIN-RULES §1.2 count of the ones they may not.
 
-The v1 implementations answer "none yet". M1-02 passes real ones to
-`ContactsModule.forRoot` and nothing else in that folder changes.
+M1-04 shipped first and its implementations answered "none yet". M1-02
+implements both in `apps/api/src/tickets/contact-providers.ts` and passes them
+to `ContactsModule.forRoot`; nothing in `contacts/` changed.
 
-One deliberate nuance: `withOpenTickets` answers `null` rather than an empty
-list while it cannot answer, and the "Has open tickets" filter then narrows
-nothing — a chip that hid every row would look like a broken list rather than an
-honest zero.
+Two things are worth knowing about the real ones:
+
+- **Both read through the request's own transaction**, so the timeline and the
+  counts are department-scoped like everything else: "an agent viewing a contact
+  timeline sees only the tickets they are allowed to see" (§1.2).
+- **`hiddenCount` cannot come from a scoped read** — a row the policy hides is a
+  row no scoped query can count. It comes from
+  `helpdock_contact_ticket_count`, a `SECURITY DEFINER` function that elevates
+  past the *department* predicate and not past the brand one: it refuses a brand
+  that is not in `app.brand_ids`, and it returns a number, so there is no row
+  for it to leak. The agent learns that history exists and nothing about what is
+  in it.
+
+`csat` and `averageFirstReplySeconds` are still null: CSAT is M1-12 and the
+first-response clock is M3-02, and a zero would read as "rated badly" and
+"answered instantly" rather than "not measured yet".
+
+`withOpenTickets` answered `null` while it could not answer, and the "Has open
+tickets" filter then narrowed nothing — a chip that hid every row would look
+like a broken list rather than an honest zero. It answers a real list now.
 
 ## Configuration
 
@@ -230,9 +248,6 @@ setting resolution lands (the open gap in
   `contact_identities.value` are scanned with `ILIKE`; the trigram GIN index of
   [ARCHITECTURE §5](../planning/ARCHITECTURE.md#5-data-model-core-tables) arrives
   with the ticket index set in M1-15.
-- **`tickets.contact_id` has no foreign key yet.** The `tickets` table is M1-02's
-  and did not exist when this migration was written. The constraint belongs to
-  whichever of the two lands second.
 - **Tags are a placeholder.** The `tag` query parameter is accepted and ignored
   until M1-06 defines tags.
 - **Custom fields are stored, not edited.** `contacts.custom` and

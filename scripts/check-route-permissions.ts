@@ -58,15 +58,49 @@ interface Token {
   readonly text: string;
 }
 
-const tokenize = (source: string): Token[] => {
+/**
+ * `scan()` alone cannot read a template literal with a substitution in it: it
+ * stops at `${`, and the `}` that ends the substitution comes back as an
+ * ordinary closing brace. Everything after it — the template's own text — is
+ * then scanned as if it were code, which both corrupts the brace depth this
+ * checker tracks and can stall the scanner outright, because text like a CSS
+ * colour reads as an invalid private identifier that consumes nothing.
+ *
+ * Rescanning that brace as the next template span is what the compiler's own
+ * parser does, and it keeps template text out of the token stream entirely.
+ */
+const tokenize = (source: string, file: string): Token[] => {
   const scanner = createScanner(true, undefined, source);
   const tokens: Token[] = [];
+  let templateDepth = 0;
+  let lastEnd = -1;
 
   for (;;) {
-    const kind = scanner.scan();
+    let kind = scanner.scan();
     if (kind === SyntaxKind.EndOfFile) {
       return tokens;
     }
+
+    if (kind === SyntaxKind.CloseBraceToken && templateDepth > 0) {
+      kind = scanner.reScanTemplateToken(false);
+    }
+    if (kind === SyntaxKind.TemplateHead) {
+      templateDepth += 1;
+    } else if (kind === SyntaxKind.TemplateTail) {
+      templateDepth -= 1;
+    }
+
+    // A scanner that returns a token without consuming anything would loop
+    // until the process runs out of memory. Saying where it stopped is the
+    // difference between a fixable report and a heap dump.
+    const end = scanner.getTokenEnd();
+    if (end <= lastEnd) {
+      throw new Error(
+        `${file}: the scanner stopped making progress at offset ${String(end)}; this file cannot be checked`,
+      );
+    }
+    lastEnd = end;
+
     tokens.push({ kind, text: scanner.getTokenText() });
   }
 };
@@ -135,7 +169,7 @@ export function findUndeclaredRoutes(params: {
   readonly file: string;
   readonly source: string;
 }): UndeclaredRoute[] {
-  const tokens = tokenize(params.source);
+  const tokens = tokenize(params.source, params.file);
   const undeclared: UndeclaredRoute[] = [];
 
   let depth = 0;

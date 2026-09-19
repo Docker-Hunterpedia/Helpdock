@@ -134,6 +134,15 @@ export const SETTING_DEFINITIONS = [
     description: 'Require TOTP for every staff account on this install.',
   }),
   defineSetting({
+    key: 'auth.jwtSigningKey',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description:
+      'ES256 key pair the api signs access tokens with, as JSON. Generated at first boot and shared by every replica; never set by hand. Rotating it signs every session out (ARCHITECTURE §7).',
+  }),
+  defineSetting({
     key: 'auth.magicLinkTtlMinutes',
     schema: z.int().min(1).max(60),
     default: 10,

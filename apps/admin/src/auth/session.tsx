@@ -1,7 +1,7 @@
+import type { Session, SessionBrand } from '@helpdock/schemas';
 import { type UseQueryResult, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext } from 'react';
 import type { AuthApi } from './api.js';
-import type { Brand, Session } from './schemas.js';
 
 /** One cache entry holds the session; every screen reads it from there. */
 const SESSION_QUERY_KEY = ['auth', 'session'] as const;
@@ -75,7 +75,7 @@ export function useSession(): Session {
   return session;
 }
 
-export function currentBrand(session: Session): Brand {
+export function currentBrand(session: Session): SessionBrand {
   const brand =
     session.brands.find((candidate) => candidate.id === session.currentBrandId) ??
     session.brands[0];

@@ -28,13 +28,7 @@ describe('createAuthApi', () => {
 });
 
 describe('HttpAuthApi', () => {
-  it('refuses every call until M0-05 implements it', () => {
-    const api = new HttpAuthApi();
-
-    expect(() => api.me()).toThrow(/not implemented until M0-05/);
-  });
-
-  it('already knows where the provider flows start', () => {
+  it('knows where the provider flows start', () => {
     expect(new HttpAuthApi().oauthStartUrl('google')).toBe('/api/auth/oauth/google/start');
   });
 });

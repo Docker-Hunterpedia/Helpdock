@@ -1,12 +1,14 @@
 import arAdmin from '../locales/ar/admin.json' with { type: 'json' };
 import arAuth from '../locales/ar/auth.json' with { type: 'json' };
 import arCommon from '../locales/ar/common.json' with { type: 'json' };
+import arEmail from '../locales/ar/email.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
 import enCommon from '../locales/en/common.json' with { type: 'json' };
+import enEmail from '../locales/en/email.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
 import enWizard from '../locales/en/wizard.json' with { type: 'json' };
@@ -18,7 +20,15 @@ export type Locale = (typeof SUPPORTED_LNGS)[number];
 export const FALLBACK_LNG = 'en' as const;
 
 /** One namespace per screen area, so a screen loads only what it shows. */
-export const NAMESPACES = ['common', 'auth', 'admin', 'wizard', 'settings', 'staff'] as const;
+export const NAMESPACES = [
+  'common',
+  'auth',
+  'admin',
+  'wizard',
+  'settings',
+  'staff',
+  'email',
+] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
 export const DEFAULT_NS = 'common' as const;
@@ -31,6 +41,7 @@ export const resources = {
     wizard: enWizard,
     settings: enSettings,
     staff: enStaff,
+    email: enEmail,
   },
   ar: {
     common: arCommon,
@@ -39,6 +50,7 @@ export const resources = {
     wizard: arWizard,
     settings: arSettings,
     staff: arStaff,
+    email: arEmail,
   },
 };
 

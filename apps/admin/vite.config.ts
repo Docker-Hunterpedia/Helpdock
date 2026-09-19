@@ -7,9 +7,10 @@ import { defineConfig } from 'vite';
  *
  * In development the two halves run apart — Vite here, the api on 3000 — and
  * the proxy below is what makes them share an origin. Without it the app would
- * have to know an absolute api URL, and a cookie set on `localhost:3000` would
- * not be sent from `localhost:5273`. With `VITE_AUTH_API=mock`, which is the
- * default in dev, nothing is proxied because nothing is called.
+ * have to know an absolute api URL, and the `SameSite=Lax`, host-only refresh
+ * cookie set on `localhost:3000` would not be sent from `localhost:5273`. With
+ * `VITE_AUTH_API=mock`, which is the default in dev, nothing is proxied
+ * because nothing is called.
  */
 const API_ORIGIN = process.env.VITE_API_ORIGIN ?? 'http://localhost:3000';
 

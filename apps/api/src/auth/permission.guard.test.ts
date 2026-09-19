@@ -2,8 +2,9 @@ import { BadRequestException, Controller, ForbiddenException, Get } from '@nestj
 import { Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
-import { createLogger, type Logger } from '../logging/logger.js';
+import type { Logger } from '../logging/logger.js';
 import { fakeExecutionContext } from '../testing/execution-context.js';
+import { silentLogger } from '../testing/silent-logger.js';
 import { PermissionGuard } from './permission.guard.js';
 import type { Principal } from './principal.js';
 import { Authenticated, Public, Requires } from './route-declaration.js';
@@ -43,9 +44,6 @@ const staff = (
   >,
   installAdmin = false,
 ): Principal => ({ type: 'staff', id: USER, brands, installAdmin });
-
-const silentLogger = (): Logger =>
-  createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test' }, level: 'silent' });
 
 interface RunOptions {
   readonly route: RouteName;

@@ -1,5 +1,11 @@
+import type {
+  AuthMethods,
+  OauthProvider,
+  Session,
+  SessionBrand,
+  SignInResult,
+} from '@helpdock/schemas';
 import { type AuthApi, AuthError } from './api.js';
-import type { Brand, OauthProvider, Session, SignInResult } from './schemas.js';
 
 /**
  * The fixture the admin app runs against until M0-05 (#8) ships real auth. It
@@ -19,7 +25,7 @@ export const MOCK_TOTP_ATTEMPTS = 3;
 /** Long enough that the "check your email" screen is a real transition. */
 const MAGIC_LINK_DELAY_MS = 300;
 
-export const MOCK_BRANDS: readonly Brand[] = [
+export const MOCK_BRANDS: readonly SessionBrand[] = [
   {
     id: '0192c3f0-1a2b-7c3d-8e4f-000000000001',
     name: 'Helpdock',
@@ -70,6 +76,11 @@ export class MockAuthApi implements AuthApi {
   #recoveryCodeUsed = false;
   /** What a real install would store as a trusted-device cookie. */
   #trustedDevice = false;
+
+  /** Every method is on: the fixture exists to exercise every screen. */
+  async authMethods(): Promise<AuthMethods> {
+    return { password: true, magicLink: true, oauth: { google: true, github: true } };
+  }
 
   async signInWithPassword(email: string, password: string): Promise<SignInResult> {
     if (email.trim().toLowerCase() !== MOCK_EMAIL || password !== MOCK_PASSWORD) {
@@ -138,6 +149,25 @@ export class MockAuthApi implements AuthApi {
     // Lands on the app's own callback route: there is no provider to talk to
     // until M0-05 registers the OAuth clients.
     return `/oauth/callback?provider=${provider}`;
+  }
+
+  /**
+   * What the real adapter does with the one-time code a redirect carried. The
+   * fixture has no redirect to have carried one, so any code signs in: the
+   * screen under test is the one that reads the parameter, not the exchange.
+   */
+  async exchange(_code: string): Promise<Session> {
+    this.#session = MOCK_SESSION;
+    return MOCK_SESSION;
+  }
+
+  /** The same answer for any address, for the same reason as the magic link. */
+  async requestPasswordReset(_email: string): Promise<void> {
+    await delay(MAGIC_LINK_DELAY_MS);
+  }
+
+  async resetPassword(_token: string, _password: string): Promise<void> {
+    await delay(MAGIC_LINK_DELAY_MS);
   }
 
   async me(): Promise<Session | null> {

@@ -11,6 +11,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { AuthGuard } from './auth/auth.guard.js';
+import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
 import type { PrincipalResolver } from './auth/principal-resolver.js';
 import type { BrandResolver } from './context/brand-resolver.js';
@@ -55,6 +56,8 @@ export interface AppModuleOptions {
   readonly redis: Redis;
   readonly logger: Logger;
   readonly principalResolver: PrincipalResolver;
+  /** Everything under `/api/auth` (M0-05); boot supplies the signing keys. */
+  readonly auth: AuthModuleOptions;
   /** Defaults to {@link NoopBrandResolver}; M5 supplies the real one. */
   readonly brandResolver?: BrandResolver;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
@@ -70,6 +73,7 @@ export class AppModule implements NestModule {
         ConfigModule.forRoot(options.env),
         DbModule.forRoot(options.db),
         SettingsModule.forRoot(options.settings, options.redis),
+        AuthModule.forRoot(options.auth),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

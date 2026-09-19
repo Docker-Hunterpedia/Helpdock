@@ -20,8 +20,8 @@ dir('ar');                    // "rtl"
 ## Layout
 
 ```
-locales/en/{common,auth,admin,wizard,settings,staff}.json
-locales/ar/{common,auth,admin,wizard,settings,staff}.json
+locales/en/{common,auth,admin,wizard,settings,staff,email}.json
+locales/ar/{common,auth,admin,wizard,settings,staff,email}.json
 ```
 
 One namespace per screen area, so a screen loads only what it shows:
@@ -34,6 +34,7 @@ One namespace per screen area, so a screen loads only what it shows:
 | `wizard` | The first-run wizard. |
 | `settings` | Install settings. |
 | `staff` | Staff and roles, including the invite dialog. |
+| `email` | Messages the api sends: the sign-in link and the password reset. Rendered server-side in the recipient's own language. |
 
 The strings in this milestone come from the artboards `Admin/Login`,
 `Admin/Login-AR`, `Admin/TOTP`, `Admin/Wizard`, `Admin/Settings` and
@@ -52,7 +53,8 @@ The strings in this milestone come from the artboards `Admin/Login`,
 5. Run `pnpm --filter @helpdock/i18n test`.
 
 Never put markup in a catalog. A string with a link inside it is a `<Trans>`
-component in the app with the text as one key.
+component in the app with the text as one key — and in an email template, a
+plain string the renderer escapes and puts inside the markup it owns.
 
 ## Plurals
 

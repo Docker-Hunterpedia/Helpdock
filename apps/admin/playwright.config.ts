@@ -22,6 +22,10 @@ const BASE_URL = externalBaseUrl ?? `http://localhost:${PORT}`;
  */
 export default defineConfig<LocaleOption>({
   testDir: './e2e',
+  // `e2e/api/` is the project that drives a real api, and it has its own
+  // config: it needs containers and a differently configured dev server, so it
+  // must not be swept up by a run of the mock suite.
+  testIgnore: '**/api/**',
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

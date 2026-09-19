@@ -1,3 +1,4 @@
+import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import {
@@ -20,6 +21,9 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { Redis } from 'ioredis';
 import { AppModule, type AppModuleOptions } from './app.module.js';
 import { createPrincipalResolver } from './auth/principal-resolver.js';
+import { RefreshStore } from './auth/session/refresh-store.js';
+import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
+import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
 import { securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
@@ -46,6 +50,8 @@ export interface Runtime {
   readonly redis: Redis;
   readonly settings: Settings;
   readonly logger: Logger;
+  /** Generated on the first boot of an install and shared by every replica (M0-05). */
+  readonly signingKeys: SigningKeys;
   close(): Promise<void>;
 }
 
@@ -107,12 +113,17 @@ export const createRuntime = async ({
     });
     closers.unshift(() => settings.close());
 
+    // After settings, because the key pair is stored there, and before the app,
+    // because nothing can verify a token without it (ARCHITECTURE §7).
+    const signingKeys = await loadOrCreateSigningKeys({ settings, redis, logger });
+
     return {
       env,
       db,
       redis,
       settings,
       logger,
+      signingKeys,
       close: async () => {
         for (const close of closers) {
           await close();
@@ -143,12 +154,15 @@ export interface CreateApiAppOptions {
   readonly runtime: Runtime;
   readonly extraControllers?: AppModuleOptions['extraControllers'];
   readonly brandResolver?: AppModuleOptions['brandResolver'];
+  /** Tests substitute a sender they can read the magic link back out of. */
+  readonly emailSender?: AppModuleOptions['auth']['emailSender'];
 }
 
 export const createApiApp = async ({
   runtime,
   extraControllers,
   brandResolver,
+  emailSender,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -159,7 +173,20 @@ export const createApiApp = async ({
       settings: runtime.settings,
       redis: runtime.redis,
       logger,
-      principalResolver: createPrincipalResolver({ env, logger }),
+      auth: {
+        signingKeys: runtime.signingKeys,
+        logger,
+        ...(emailSender === undefined ? {} : { emailSender }),
+      },
+      principalResolver: createPrincipalResolver({
+        env,
+        logger,
+        session: new SessionPrincipalResolver({
+          keys: runtime.signingKeys,
+          refresh: new RefreshStore(runtime.redis),
+          logger,
+        }),
+      }),
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
@@ -173,6 +200,12 @@ export const createApiApp = async ({
     { logger: new NestPinoLogger(logger), bufferLogs: false, abortOnError: false },
   );
 
+  // Before helmet only because order does not matter here; both are plugins the
+  // auth routes need before anything is served. The cookie plugin carries no
+  // secret: the one cookie that is signed is signed with a key derived from
+  // `APP_MASTER_KEY` in `auth/totp/trusted-device.ts`, so that the signing key
+  // is the same on every replica without a second thing to configure.
+  await app.register(cookie);
   await app.register(helmet, securityHeaderOptions({ appUrl: env.APP_URL }));
 
   // `serve: false` registers no routes of its own: it only decorates

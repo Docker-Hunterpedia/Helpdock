@@ -1,5 +1,6 @@
+import type { AuthErrorCode, OauthProvider } from '@helpdock/schemas';
 import { Box, Button, Divider, Link, OutlinedInput, Typography } from '@mui/material';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Mail } from 'lucide-react';
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -7,7 +8,6 @@ import { useT } from '../app/i18n.js';
 import { RETURN_TO_PARAM, ROUTES, safeReturnTo } from '../app/route-paths.js';
 import type { AuthApi } from '../auth/api.js';
 import { isAuthError } from '../auth/api.js';
-import type { AuthErrorCode, OauthProvider } from '../auth/schemas.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AlertBanner } from '../ui/alert-banner.tsx';
@@ -26,12 +26,29 @@ const OAUTH_PROVIDERS = [
   { provider: 'github', labelKey: 'auth:signIn.github' },
 ] as const satisfies readonly { provider: OauthProvider; labelKey: string }[];
 
+/**
+ * A provider with no client id in settings is not configured, so its button is
+ * not drawn: a button that can only answer "not configured" is worse than no
+ * button. While `GET /api/auth/methods` is in flight nothing is drawn either,
+ * which is the honest state and avoids a button appearing and then vanishing.
+ */
 function ProviderButtons({ api }: { readonly api: AuthApi }): ReactNode {
   const t = useT();
+  const methods = useQuery({
+    queryKey: ['auth', 'methods'],
+    queryFn: () => api.authMethods(),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+
+  const enabled = OAUTH_PROVIDERS.filter(({ provider }) => methods.data?.oauth[provider] === true);
+  if (enabled.length === 0) {
+    return null;
+  }
 
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
-      {OAUTH_PROVIDERS.map(({ provider, labelKey }) => (
+      {enabled.map(({ provider, labelKey }) => (
         <Button
           key={provider}
           component="a"
@@ -72,6 +89,11 @@ export function SignIn(): ReactNode {
         return;
       }
 
+      if (result.kind === 'totp-enrolment-required') {
+        void navigate(ROUTES.totpEnrolment, { replace: true });
+        return;
+      }
+
       void navigate(ROUTES.totp, {
         state: { challengeId: result.challengeId, email: result.email, returnTo },
       });
@@ -91,6 +113,16 @@ export function SignIn(): ReactNode {
     },
   });
 
+  const passwordReset = useMutation({
+    mutationFn: () => api.requestPasswordReset(email.trim()),
+    onSuccess: () => {
+      void navigate(ROUTES.passwordResetSent, { state: { email: email.trim() } });
+    },
+    onError: () => {
+      setFailure('unavailable');
+    },
+  });
+
   const submitPassword = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const found = validateSignInForm({ email, password });
@@ -102,14 +134,27 @@ export function SignIn(): ReactNode {
     }
   };
 
-  const submitMagicLink = (): void => {
+  /** Both "email me a link" and "forgot password" only need somewhere to send it. */
+  const submitWithEmailOnly = (run: () => void): void => {
     const emailIssue = validateEmail(email);
     setErrors(emailIssue ? { email: emailIssue } : {});
     setFailure(null);
 
     if (!emailIssue) {
-      magicLink.mutate();
+      run();
     }
+  };
+
+  const submitMagicLink = (): void => {
+    submitWithEmailOnly(() => {
+      magicLink.mutate();
+    });
+  };
+
+  const submitPasswordReset = (): void => {
+    submitWithEmailOnly(() => {
+      passwordReset.mutate();
+    });
   };
 
   const subtitle =
@@ -122,9 +167,11 @@ export function SignIn(): ReactNode {
   const failureMessage =
     failure === 'invalid-credentials'
       ? t('auth:signIn.invalidCredentials')
-      : failure
-        ? t('auth:unavailable')
-        : undefined;
+      : failure === 'no-account'
+        ? t('auth:noAccount')
+        : failure
+          ? t('auth:unavailable')
+          : undefined;
 
   return (
     <AuthLayout
@@ -180,10 +227,12 @@ export function SignIn(): ReactNode {
             label={t('auth:signIn.passwordLabel')}
             error={passwordError}
             action={
-              // Until M0-05 ships password reset, the recovery path this
-              // install has is the sign-in link, so the control does that
-              // rather than pointing at a page that does not exist.
-              <Link component="button" type="button" variant="caption" onClick={submitMagicLink}>
+              <Link
+                component="button"
+                type="button"
+                variant="caption"
+                onClick={submitPasswordReset}
+              >
                 {t('auth:signIn.forgotPassword')}
               </Link>
             }
@@ -215,7 +264,7 @@ export function SignIn(): ReactNode {
             color="primary"
             fullWidth
             loading={signIn.isPending}
-            disabled={magicLink.isPending}
+            disabled={magicLink.isPending || passwordReset.isPending}
           >
             {t('auth:signIn.submit')}
           </Button>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger } from '../logging/logger.js';
+import { silentLogger } from '../testing/silent-logger.js';
 import {
   createPrincipalResolver,
   DEV_PRINCIPAL_ENV_KEY,
@@ -22,9 +22,6 @@ const principal = {
 const requestWith = (value: unknown) => ({
   headers: { [DEV_PRINCIPAL_HEADER]: value } as Record<string, string | string[] | undefined>,
 });
-
-const silentLogger = () =>
-  createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test' }, level: 'silent' });
 
 describe('HeaderPrincipalResolver', () => {
   const resolver = new HeaderPrincipalResolver();
@@ -81,6 +78,7 @@ describe('createPrincipalResolver', () => {
     const resolver = createPrincipalResolver({
       env: { NODE_ENV: 'development' },
       logger,
+      session: new DenyAllPrincipalResolver(),
       source: { [DEV_PRINCIPAL_ENV_KEY]: '1' },
     });
 
@@ -92,23 +90,28 @@ describe('createPrincipalResolver', () => {
     const logger = silentLogger();
     const error = vi.spyOn(logger, 'error');
 
+    const session = new DenyAllPrincipalResolver();
     const resolver = createPrincipalResolver({
       env: { NODE_ENV: 'production' },
       logger,
+      session,
       source: { [DEV_PRINCIPAL_ENV_KEY]: '1' },
     });
 
-    expect(resolver).toBeInstanceOf(DenyAllPrincipalResolver);
+    // The session resolver, not the header one: the flag is refused rather
+    // than obeyed, and the deploy still has a way to authenticate.
+    expect(resolver).toBe(session);
     expect(error).toHaveBeenCalledOnce();
   });
 
-  it('denies everything when the flag is off, without complaining', () => {
+  it('uses the session resolver when the flag is off, without complaining', () => {
     const logger = silentLogger();
     const error = vi.spyOn(logger, 'error');
+    const session = new DenyAllPrincipalResolver();
 
     expect(
-      createPrincipalResolver({ env: { NODE_ENV: 'development' }, logger, source: {} }),
-    ).toBeInstanceOf(DenyAllPrincipalResolver);
+      createPrincipalResolver({ env: { NODE_ENV: 'development' }, logger, session, source: {} }),
+    ).toBe(session);
     expect(error).not.toHaveBeenCalled();
   });
 });

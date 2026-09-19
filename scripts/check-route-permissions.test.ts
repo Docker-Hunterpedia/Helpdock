@@ -3,6 +3,28 @@ import { findUndeclaredRoutes } from './check-route-permissions.ts';
 
 const scan = (source: string) => findUndeclaredRoutes({ file: 'apps/api/src/fixture.ts', source });
 
+describe('the scanner', () => {
+  it('reads a template literal as one span, not as code with a brace in it', () => {
+    // A CSS colour inside a template used to be scanned as a private
+    // identifier that consumed nothing, and the checker looped until it ran
+    // out of memory (M0-05).
+    const source = `
+      @Controller()
+      class Styles {
+        css(locale: string): string {
+          return \`<p lang="\${locale}" style="color:#1b1f24">{ }</p>\`;
+        }
+
+        @Get('x')
+        @Public()
+        route(): void {}
+      }
+    `;
+
+    expect(findUndeclaredRoutes({ file: 'styles.ts', source })).toEqual([]);
+  });
+});
+
 describe('findUndeclaredRoutes', () => {
   it('accepts a handler that declares a permission', () => {
     expect(

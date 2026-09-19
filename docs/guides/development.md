@@ -38,6 +38,7 @@ Run these from the repository root.
 | `pnpm test:watch` | Vitest in watch mode. |
 | `pnpm check:boundaries` | Enforces the app import rule described below. |
 | `pnpm check:routes` | Fails when a controller handler declares neither `@Requires`, `@Authenticated` nor `@Public`. |
+| `pnpm --filter @helpdock/api seed:dev` | Creates the development install: one brand, one admin, a published password. Refuses `NODE_ENV=production`. |
 
 For a single workspace, use the per-package scripts through pnpm or Turborepo:
 
@@ -381,11 +382,12 @@ pnpm build                          # once, so the packages have a dist/
 pnpm --filter @helpdock/admin dev   # http://localhost:5273
 ```
 
-There is no backend until M0-05, so the app is built against an `AuthApi`
-interface with an in-memory fixture. `VITE_AUTH_API` picks the adapter — `mock`
-by default in dev and test, `http` in a production build — and
+The app talks to the api through an `AuthApi` interface with two adapters.
+`VITE_AUTH_API` picks one — `mock`, the in-memory fixture, by default in dev and
+test; `http`, the real service, in a production build — and
 [`apps/admin/.env.example`](../../apps/admin/.env.example) documents it. The
-fixture's credentials are in the app's README.
+fixture's credentials are in the app's README; running against a real api is in
+[the authentication guide](authentication.md#the-development-install).
 
 `apps/admin` owns its whole TypeScript program, including its tests and its
 Playwright specs, because they need `jsx`, `dom` types and bundler resolution
@@ -396,7 +398,8 @@ instead; `pnpm typecheck` runs both.
 ### Browser tests
 
 ```bash
-pnpm --filter @helpdock/admin e2e             # both locales
+pnpm --filter @helpdock/admin e2e             # both locales, against the fixture
+pnpm --filter @helpdock/admin e2e:api         # against a real api; needs Docker
 pnpm --filter @helpdock/admin e2e:screenshots # the tagged screenshot suite
 pnpm --filter @helpdock/admin e2e:baselines   # regenerate Linux screenshots
 ```
@@ -417,9 +420,14 @@ them from a macOS host by running the browsers inside
 README explains why the server stays outside the container and how to switch the
 suite back on.
 
+`e2e:api` is a second config: it starts Postgres and Redis with Testcontainers,
+runs the built api as its own process, seeds a known account, and drives the
+same screens with `VITE_AUTH_API=http`. It needs a `pnpm build` first, and it
+skips itself with a message when Docker is not running.
+
 CI installs Chromium with `pnpm exec playwright install --with-deps chromium`,
-caches it by the Playwright version in the lockfile, and runs the suite as a
-step of the `ci` job after the build.
+caches it by the Playwright version in the lockfile, and runs both suites as
+steps of the `ci` job after the build.
 
 ## Docker
 
@@ -535,22 +543,37 @@ without a session.
 
 ### Authenticating locally
 
-Real sessions arrive with M0-05. Until then, set
+Sign in the way a person does. `pnpm --filter @helpdock/api seed:dev` creates one
+brand and one install admin with a password that is written down in [the
+authentication guide](authentication.md#the-development-install), and
+
+```bash
+curl -s -X POST localhost:3000/api/auth/sign-in \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@helpdock.test","password":"helpdock dev password"}'
+```
+
+answers with an access token to send as `Authorization: Bearer …`.
+
+To exercise the tenancy plumbing without a session — a different principal
+shape, an api key, a worker — set
 
 ```bash
 HD_DEV_PRINCIPAL_HEADER=1
 ```
 
-in `.env` and send a whole principal as JSON in the `x-hd-dev-principal` header.
-It is refused when `NODE_ENV=production`, and boot logs a warning whenever it is
-on, because anyone who can reach the port can name themselves an install admin.
+in `.env` and send a whole principal as JSON in the `x-hd-dev-principal` header
+instead. It is refused when `NODE_ENV=production`, and boot logs a warning
+whenever it is on, because anyone who can reach the port can name themselves an
+install admin.
 
 ```bash
 curl -s localhost:3000/api/me \
   -H 'x-hd-dev-principal: {"type":"staff","id":"0199f4b2-6a91-7c27-9a1f-000000000001","brands":{},"installAdmin":true}'
 ```
 
-Without the flag, everything but the two probes answers 401.
+The flag replaces the session resolver rather than adding to it: a process that
+trusts the header trusts it for every request.
 
 ### Serving the admin SPA
 
@@ -599,7 +622,7 @@ name in a comment or a string is not mistaken for a declaration.
 
 Unit tests are Vitest, colocated as `src/**/*.test.ts`. `pnpm test` runs one Vitest process across all workspaces, defined as projects in the root `vitest.config.ts`.
 
-Coverage uses `@vitest/coverage-v8` and gates at **80 % of lines across `packages/*`** (ARCHITECTURE §15). Apps are outside the gate: the UI apps are covered by Playwright from M0-07 onwards. `apps/api` has no UI, so it is covered by its own unit and integration tests instead, and M0-04 reports its number in the pull request rather than gating on it. Browser tests with Playwright join the pipeline with their own deliverables.
+Coverage uses `@vitest/coverage-v8` and gates at **80 % of lines across `packages/*`** (ARCHITECTURE §15). The UI apps are outside that gate and are covered by Playwright instead. `apps/api` has no UI, so it has a gate of its own at **90 % of lines across `apps/api/src`**, run by `pnpm --filter @helpdock/api test:coverage`: that command runs the unit *and* the integration suites together, because half of the app is only reached over HTTP and a number from the unit run alone would say more about where the tests are than about what is covered.
 
 ### Integration tests
 
@@ -610,6 +633,12 @@ pnpm test:integration                                  # the whole project
 pnpm test:integration packages/config                  # one directory
 pnpm test:integration apps/api                         # the api against real Postgres and Redis
 ```
+
+One thing they do not cover: input validation. The global `ZodValidationPipe`
+finds a DTO's schema through `design:paramtypes`, which `tsc` emits and esbuild —
+which Vitest transforms with — does not. The routes that take a credential name
+their schema on the parameter instead, so they validate wherever they run; the
+rest are validated in a real build and not under Vitest.
 
 They are not part of `pnpm test`, which stays fast and needs nothing installed. CI runs them as a step of its own; GitHub-hosted runners have a Docker daemon, so no service container is declared in the workflow.
 
@@ -632,7 +661,7 @@ describe.skipIf(!hasDocker)('settings invalidation over Redis', () => {
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`, as a single job named `ci` so it can be the required status check on the `main` ruleset. It installs with `--frozen-lockfile`, then runs lint, the boundary check, the route-permission check, typecheck, test with coverage, the integration tests, build and the Playwright suite — the same commands you run locally. It then builds `docker/Dockerfile` for `linux/amd64` with a BuildKit cache in GitHub Actions and runs [`scripts/compose-smoke.sh`](#the-whole-stack-from-your-working-copy) against the image it produced. The image is not pushed.
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`, as a single job named `ci` so it can be the required status check on the `main` ruleset. It installs with `--frozen-lockfile`, then runs lint, the boundary check, the route-permission check, typecheck, test with coverage, the integration tests, the api coverage gate, build, and both Playwright suites — the same commands you run locally. It then builds `docker/Dockerfile` for `linux/amd64` with a BuildKit cache in GitHub Actions and runs [`scripts/compose-smoke.sh`](#the-whole-stack-from-your-working-copy) against the image it produced. The image is not pushed.
 
 The rest of M0-11 (CodeQL and the multi-arch publish) extends this workflow later.
 

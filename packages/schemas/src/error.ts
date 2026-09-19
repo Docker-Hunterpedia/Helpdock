@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { authErrorSchema } from './auth.js';
 
 /**
  * The one body shape every failed request answers with. The api's exception
@@ -33,6 +34,12 @@ export const errorResponseSchema = z.object({
     message: z.string(),
     requestId: z.string(),
     fields: z.array(fieldErrorSchema).optional(),
+    /**
+     * Only on a sign-in failure. The sign-in screens turn this into a
+     * translated sentence and count the remaining attempts down with it, which
+     * `code` above is too coarse for (M0-05).
+     */
+    auth: authErrorSchema.optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

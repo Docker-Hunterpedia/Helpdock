@@ -26,8 +26,17 @@ export class RequestContext {
   readonly requestId: string;
   readonly startedAt: bigint;
   readonly method: string;
-  /** Path only. A query string may carry a search term, which is a body by another name. */
-  readonly path: string;
+  /**
+   * Path only. A query string may carry a search term, which is a body by
+   * another name.
+   *
+   * Writable because a path can itself be a credential: the magic-link route
+   * takes its token as a path parameter, and the handler replaces that segment
+   * before the line is written. The log is read by more people than the
+   * database is, and a single-use token in it is a working one until it is
+   * spent.
+   */
+  path: string;
 
   /** Brand named by the `Host` header, for help-center and widget requests. Null otherwise. */
   hostBrandId: string | null = null;

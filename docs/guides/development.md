@@ -641,11 +641,24 @@ Every controller handler carries `@Requires(permission)`, `@Authenticated()` or
 a token scan over `apps/*/src` using TypeScript's own scanner, so a decorator
 name in a comment or a string is not mistaken for a declaration.
 
+§1.3 says "per route **or event**", so a `@SubscribeMessage` handler on a
+`@WebSocketGateway` is held to the same rule by the same guard and the same
+check.
+
+### Realtime
+
+The api serves a Socket.IO `/staff` namespace on `/socket.io`, and the admin
+connects to it as soon as there is a session. Nothing extra has to be
+configured: `APP_URL` decides the allowed origin and `REDIS_URL` the adapter's
+connections. [The realtime guide](realtime.md) is the contract — namespaces,
+the handshake, rooms and their permission rule, presence, revocation, and what
+to do to add an event.
+
 ## Tests
 
 Unit tests are Vitest, colocated as `src/**/*.test.ts`. `pnpm test` runs one Vitest process across all workspaces, defined as projects in the root `vitest.config.ts`.
 
-Coverage uses `@vitest/coverage-v8` and gates at **80 % of lines across `packages/*`** (ARCHITECTURE §15). The UI apps are outside that gate and are covered by Playwright instead. `apps/api` has no UI, so it has a gate of its own at **90 % of lines across `apps/api/src`**, run by `pnpm --filter @helpdock/api test:coverage`: that command runs the unit *and* the integration suites together, because half of the app is only reached over HTTP and a number from the unit run alone would say more about where the tests are than about what is covered.
+Coverage uses `@vitest/coverage-v8` and gates at **80 % of lines across `packages/*`** (ARCHITECTURE §15). The UI apps are outside that gate and are covered by Playwright instead. `apps/api` has no UI, so it has a gate of its own at **90 % of lines across `apps/api/src`**, run by `pnpm --filter @helpdock/api test:coverage`: that command runs the unit *and* the integration suites together, because half of the app is only reached over HTTP and a number from the unit run alone would say more about where the tests are than about what is covered. `apps/admin` gates at **85 % of lines**, run by `pnpm --filter @helpdock/admin test:coverage`; its layout is Playwright's to check, its logic is Vitest's.
 
 ### Integration tests
 

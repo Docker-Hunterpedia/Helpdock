@@ -210,4 +210,33 @@ describe('HttpAuthApi', () => {
       new HttpAuthApi().requestPasswordReset('stranger@example.com'),
     ).resolves.toBeUndefined();
   });
+
+  describe('accessToken, which the socket handshake carries (M0-13)', () => {
+    it('refreshes when this tab holds none, so a socket after a reload gets one', async () => {
+      fetchMock.mockResolvedValueOnce(
+        json({ session, accessToken: 'fresh.token', expiresInSeconds: 600 }),
+      );
+      const api = new HttpAuthApi();
+
+      expect(await api.accessToken()).toBe('fresh.token');
+      expect(calls()[0]?.url).toBe('/api/auth/refresh');
+    });
+
+    it('hands over the token it already holds without a round trip', async () => {
+      fetchMock.mockResolvedValueOnce(
+        json({ kind: 'session', session, accessToken: 'a.b.c', expiresInSeconds: 600 }),
+      );
+      const api = new HttpAuthApi();
+      await api.signInWithPassword('lina@helpdock.com', 'correct horse');
+
+      expect(await api.accessToken()).toBe('a.b.c');
+      expect(calls()).toHaveLength(1);
+    });
+
+    it('answers null when there is no session to refresh', async () => {
+      fetchMock.mockResolvedValueOnce(authFailure('session-expired'));
+
+      expect(await new HttpAuthApi().accessToken()).toBeNull();
+    });
+  });
 });

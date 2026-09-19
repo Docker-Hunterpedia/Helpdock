@@ -1,8 +1,9 @@
 import type { Redis } from 'ioredis';
 
 /**
- * An in-memory stand-in for the handful of Redis commands the auth service
- * uses, so its logic can be unit tested without a container.
+ * An in-memory stand-in for the handful of Redis commands the auth service and
+ * the presence store use, so their logic can be unit tested without a
+ * container.
  *
  * **What it is not.** `ioredis-mock` was the obvious candidate and was ruled
  * out: it declares `ioredis@^5` as a peer and this workspace is on 6. So this
@@ -106,9 +107,12 @@ export class RedisStub {
     return 'OK';
   }
 
-  /** One round trip for many keys; a missing one is `null` in its place. */
-  async mget(...keys: string[]): Promise<(string | null)[]> {
-    return Promise.all(keys.map((key) => this.get(key)));
+  /**
+   * One round trip for many keys; a missing one is `null` in its place. ioredis
+   * accepts the keys spread or as one array, and both are used.
+   */
+  async mget(...keys: (string | string[])[]): Promise<(string | null)[]> {
+    return Promise.all(keys.flat().map((key) => this.get(key)));
   }
 
   async getdel(key: string): Promise<string | null> {
@@ -168,6 +172,25 @@ export class RedisStub {
     return Promise.all(fields.map((field) => this.hget(key, field)));
   }
 
+  async hgetall(key: string): Promise<Record<string, string>> {
+    const entry = this.#live(key);
+    return entry?.data.kind === 'hash' ? Object.fromEntries(entry.data.value) : {};
+  }
+
+  async hdel(key: string, ...fields: string[]): Promise<number> {
+    const entry = this.#live(key);
+    if (entry?.data.kind !== 'hash') {
+      return 0;
+    }
+
+    let removed = 0;
+    for (const field of fields) {
+      removed += entry.data.value.delete(field) ? 1 : 0;
+    }
+
+    return removed;
+  }
+
   // -- sets ----------------------------------------------------------
 
   async sadd(key: string, ...members: string[]): Promise<number> {
@@ -200,6 +223,16 @@ export class RedisStub {
     }
 
     return removed;
+  }
+
+  async scard(key: string): Promise<number> {
+    const entry = this.#live(key);
+    return entry?.data.kind === 'set' ? entry.data.value.size : 0;
+  }
+
+  async sismember(key: string, member: string): Promise<number> {
+    const entry = this.#live(key);
+    return entry?.data.kind === 'set' && entry.data.value.has(member) ? 1 : 0;
   }
 
   /** One pass returns everything: the auth code only uses `SCAN` to walk a prefix. */

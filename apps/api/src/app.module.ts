@@ -21,6 +21,7 @@ import { AllExceptionsFilter } from './http/exception.filter.js';
 import type { Logger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
+import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
 import { BrandsController } from './routes/brands.controller.js';
 import { BrandsService } from './routes/brands.service.js';
 import { DomainCheckController } from './routes/domain-check.controller.js';
@@ -62,6 +63,11 @@ export interface AppModuleOptions {
   readonly principalResolver: PrincipalResolver;
   /** Everything under `/api/auth` (M0-05); boot supplies the signing keys. */
   readonly auth: AuthModuleOptions;
+  /**
+   * The `/staff` namespace and presence (M0-13). The logger is filled in from
+   * {@link AppModuleOptions.logger}, so a caller only names what is its own.
+   */
+  readonly realtime: Omit<RealtimeModuleOptions, 'logger'>;
   /** Defaults to {@link NoopBrandResolver}; M5 supplies the real one. */
   readonly brandResolver?: BrandResolver;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
@@ -79,6 +85,7 @@ export class AppModule implements NestModule {
         SettingsModule.forRoot(options.settings, options.redis),
         AuthModule.forRoot(options.auth),
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
+        RealtimeModule.forRoot({ ...options.realtime, logger: options.logger }),
         StaffModule.forRoot({ logger: options.logger }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),

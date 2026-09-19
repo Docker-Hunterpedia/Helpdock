@@ -1,8 +1,12 @@
 /**
- * Enforces the rule in ARCHITECTURE §6 and DOMAIN-RULES §1.3: every route
- * handler declares what it needs, with `@Requires(...)`, `@Authenticated()` or
+ * Enforces the rule in ARCHITECTURE §6 and DOMAIN-RULES §1.3: every handler
+ * declares what it needs, with `@Requires(...)`, `@Authenticated()` or
  * `@Public()`. A handler that declares nothing is refused at runtime by the
  * permission guard; this check refuses it in review, which is cheaper.
+ *
+ * "HTTP/WebSocket guard: role and scope check per route **or event**" (§1.3),
+ * so a `@SubscribeMessage` handler on a `@WebSocketGateway` counts as a route
+ * here and is held to the same rule.
  *
  * Run with `pnpm check:routes`. Exits non-zero and names every handler.
  *
@@ -16,7 +20,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createScanner, SyntaxKind } from 'typescript/unstable/ast';
 
-/** Decorators that turn a method into an HTTP route. */
+/** Decorators that turn a method into an HTTP route or a socket event handler. */
 const ROUTE_DECORATORS = new Set([
   'Get',
   'Post',
@@ -28,12 +32,14 @@ const ROUTE_DECORATORS = new Set([
   'All',
   'Search',
   'Sse',
+  'SubscribeMessage',
 ]);
 
 /** Decorators that satisfy the rule. One of them, on the handler or its class. */
 const DECLARATION_DECORATORS = new Set(['Public', 'Authenticated', 'Requires']);
 
-const CONTROLLER_DECORATOR = 'Controller';
+/** Class decorators that make a class a place route handlers may live. */
+const HANDLER_HOST_DECORATORS = new Set(['Controller', 'WebSocketGateway']);
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx']);
 const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist', 'build', 'coverage', '.turbo', 'e2e']);
@@ -47,9 +53,10 @@ const TEST_FILE = /\.(?:test|spec)\.tsx?$/;
 export interface UndeclaredRoute {
   /** Repository-relative, POSIX-separated path of the file. */
   readonly file: string;
-  readonly controller: string;
+  /** The controller or gateway the handler is declared on. */
+  readonly className: string;
   readonly handler: string;
-  /** The HTTP decorator that made it a route, for the message. */
+  /** The decorator that made it a handler, for the message. */
   readonly route: string;
 }
 
@@ -156,14 +163,15 @@ const readDecorator = (
 
 interface ClassFrame {
   readonly name: string;
-  readonly isController: boolean;
+  /** A `@Controller` or a `@WebSocketGateway`; anything else holds no routes. */
+  readonly isHandlerHost: boolean;
   readonly declared: boolean;
   readonly bodyDepth: number;
 }
 
 /**
- * Every route handler in one file that declares neither a permission nor
- * `@Public()`. Exported so the tests can hand it a source string.
+ * Every route or socket-event handler in one file that declares neither a
+ * permission nor `@Public()`. Exported so the tests can hand it a source string.
  */
 export function findUndeclaredRoutes(params: {
   readonly file: string;
@@ -195,7 +203,9 @@ export function findUndeclaredRoutes(params: {
         const name = tokens[index + 1]?.text ?? '(anonymous)';
         frame = {
           name,
-          isController: pending.includes(CONTROLLER_DECORATOR),
+          isHandlerHost: pending.some((decoratorName) =>
+            HANDLER_HOST_DECORATORS.has(decoratorName),
+          ),
           declared: pending.some((decoratorName) => DECLARATION_DECORATORS.has(decoratorName)),
           bodyDepth: depth + 1,
         };
@@ -255,7 +265,7 @@ export function findUndeclaredRoutes(params: {
   return undeclared;
 }
 
-/** Whether this member is a route handler that declared nothing. */
+/** Whether this member is a handler that declared nothing. */
 const undeclaredRoute = ({
   file,
   frame,
@@ -267,7 +277,7 @@ const undeclaredRoute = ({
   readonly handler: string;
   readonly decorators: readonly string[];
 }): UndeclaredRoute | undefined => {
-  if (!frame.isController) {
+  if (!frame.isHandlerHost) {
     return undefined;
   }
 
@@ -276,7 +286,7 @@ const undeclaredRoute = ({
 
   return route === undefined || declared
     ? undefined
-    : { file, controller: frame.name, handler, route };
+    : { file, className: frame.name, handler, route };
 };
 
 async function collectSourceFiles(directory: string, repoRoot: string): Promise<string[]> {
@@ -302,7 +312,7 @@ async function collectSourceFiles(directory: string, repoRoot: string): Promise<
 }
 
 function formatUndeclared(route: UndeclaredRoute): string {
-  return `  ${route.file}: ${route.controller}.${route.handler} is @${route.route}() with no @Requires, @Authenticated or @Public`;
+  return `  ${route.file}: ${route.className}.${route.handler} is @${route.route}() with no @Requires, @Authenticated or @Public`;
 }
 
 async function main(): Promise<void> {
@@ -337,7 +347,7 @@ async function main(): Promise<void> {
 
   if (undeclared.length > 0) {
     console.error(
-      `Every route handler must declare @Requires(...), @Authenticated() or @Public() (DOMAIN-RULES §1.3).\n${undeclared
+      `Every route and socket event handler must declare @Requires(...), @Authenticated() or @Public() (DOMAIN-RULES §1.3).\n${undeclared
         .map(formatUndeclared)
         .join('\n')}`,
     );
@@ -345,7 +355,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(`route permissions: ${files.length} files checked, every route declares one`);
+  console.log(
+    `route permissions: ${files.length} files checked, every route and socket event declares one`,
+  );
 }
 
 const invokedPath = process.argv[1];

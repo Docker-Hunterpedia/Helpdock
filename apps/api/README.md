@@ -1,7 +1,7 @@
 # @helpdock/api
 
-The NestJS application. One image, two roles: `APP_ROLE=api` serves HTTP and
-(from M0-13) WebSockets and the server-rendered help center; `APP_ROLE=worker`
+The NestJS application. One image, two roles: `APP_ROLE=api` serves HTTP,
+WebSockets and (from M5) the server-rendered help center; `APP_ROLE=worker`
 drains queues. Specs: [ARCHITECTURE
 §6](../../docs/planning/ARCHITECTURE.md#6-request-lifecycle--tenancy) for the
 request lifecycle and [DOMAIN-RULES
@@ -309,6 +309,7 @@ routes answers 401 without a valid bearer token.
 | `GET /api/brands/:brandId` | `@Requires('brand:read')` | One brand. |
 | `/api/brands/:brandId/staff/*` | `@Requires('staff:manage')` | Staff and roles. [The guide](../../docs/guides/staff-and-roles.md#endpoints) lists them. |
 | `GET /api/brands/:brandId/departments` | `@Requires('brand:read')` | The department picker's options. |
+| `GET /api/brands/:brandId/presence` | `@Requires('staff:read')` | Who is online in that brand. [The realtime guide](../../docs/guides/realtime.md#presence). |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
@@ -316,6 +317,7 @@ routes answers 401 without a valid bearer token.
 | `GET /api/install/system/queues` | `@Requires('install:admin')` | Every queue, paginated. Audited. |
 | `GET /internal/domain-check` | `@Public()` | Caddy's on-demand TLS gate. 200 for a verified help-center domain, 403 otherwise. |
 | `/api/auth/*` | mostly `@Public()` | Signing in. [The authentication guide](../../docs/guides/authentication.md#endpoints) lists them. |
+| `GET /socket.io` | handshake | The `/staff` namespace. [The realtime guide](../../docs/guides/realtime.md). |
 | `GET /*` | `@Public()` | The admin SPA, above. |
 
 Most of the first few exist to prove the plumbing; the milestones after M0-06
@@ -406,7 +408,10 @@ covered.
 `pgvector/pgvector:pg17` and `redis:7-alpine`, boots the real app against them
 and runs the negative suite of [DOMAIN-RULES
 §1.6](../../docs/planning/DOMAIN-RULES.md#16-required-negative-tests) at the HTTP
-layer. It skips itself, and says so, when Docker is not running.
+layer. `src/realtime/realtime.integration.test.ts` starts *two* replicas on two
+ports over one Redis, which is the only way to prove that a room spans them and
+that a sign-out on one closes a socket on the other. Both skip themselves, and
+say so, when Docker is not running.
 
 `src/observability/observability.integration.test.ts` boots the same stack again
 to prove `/metrics` is served and guarded and that the System page's read
@@ -433,13 +438,10 @@ only when a test passes it as an extra controller.
   esbuild does not. The routes that take a credential name their schema on the
   parameter so they validate wherever they run; the rest rely on the global
   pipe, which means the integration suite does not exercise them.
-- The WebSocket gateway is M0-13. `PermissionGuard` refuses any non-HTTP
-  execution context outright, so M0-13 has to say what a socket event needs
-  ([DOMAIN-RULES §1.4](../../docs/planning/DOMAIN-RULES.md#14-workers-and-websockets))
-  rather than inherit silence. `pnpm check:routes` covers `@Controller`
-  handlers only; M0-13 extends it to `@SubscribeMessage`. M0-05 publishes
-  `principal.revoked` on Redis with nothing subscribed to it yet.
-- `socket_connections` is registered and stays at zero until M0-13 sets it.
+- `ticket:<id>` socket rooms are refused until M1 has a table to check them
+  against, and the `/widget` namespace is M4. `src/realtime/` is the whole
+  gateway; [the realtime guide](../../docs/guides/realtime.md) is what to read
+  before adding an event to it.
 - There is no instrumentation for the `postgres` driver or for BullMQ, so
   neither appears as its own span. Both gaps are explained in the
   [operations guide](../../docs/guides/operations.md#what-is-instrumented).

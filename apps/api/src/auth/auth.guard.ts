@@ -32,8 +32,11 @@ export class AuthGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // WebSocket handshakes authenticate the same way but through the gateway
-    // (M0-13, DOMAIN-RULES §1.4), which is not mounted yet.
+    // A socket authenticates once, at the handshake, in
+    // `realtime/handshake.ts` — with this same resolver — and carries the
+    // principal on itself afterwards (DOMAIN-RULES §1.4). There is nothing for
+    // this guard to resolve on a socket event; `PermissionGuard` reads what the
+    // handshake put there.
     if (context.getType() !== 'http') {
       return true;
     }

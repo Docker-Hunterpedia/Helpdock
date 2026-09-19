@@ -67,7 +67,7 @@ describe('findUndeclaredRoutes', () => {
     ).toEqual([
       {
         file: 'apps/api/src/fixture.ts',
-        controller: 'TicketsController',
+        className: 'TicketsController',
         handler: 'list',
         route: 'Get',
       },
@@ -136,7 +136,7 @@ describe('findUndeclaredRoutes', () => {
           a() { return '@Public()'; }
         }
       `),
-    ).toEqual([{ file: 'apps/api/src/fixture.ts', controller: 'C', handler: 'a', route: 'Get' }]);
+    ).toEqual([{ file: 'apps/api/src/fixture.ts', className: 'C', handler: 'a', route: 'Get' }]);
   });
 
   it('does not credit a handler for a decorator inside another one’s arguments', () => {
@@ -149,7 +149,7 @@ describe('findUndeclaredRoutes', () => {
           a() { return 1; }
         }
       `),
-    ).toEqual([{ file: 'apps/api/src/fixture.ts', controller: 'C', handler: 'a', route: 'Get' }]);
+    ).toEqual([{ file: 'apps/api/src/fixture.ts', className: 'C', handler: 'a', route: 'Get' }]);
   });
 
   it('does not credit a handler for a parameter decorator on the one before it', () => {
@@ -161,7 +161,7 @@ describe('findUndeclaredRoutes', () => {
           @Get('b') b() { return 2; }
         }
       `),
-    ).toEqual([{ file: 'apps/api/src/fixture.ts', controller: 'C', handler: 'b', route: 'Get' }]);
+    ).toEqual([{ file: 'apps/api/src/fixture.ts', className: 'C', handler: 'b', route: 'Get' }]);
   });
 
   it('does not mistake an object key inside a method body for a handler', () => {
@@ -195,11 +195,78 @@ describe('findUndeclaredRoutes', () => {
     `);
 
     expect(undeclared).toEqual([
-      { file: 'apps/api/src/fixture.ts', controller: 'A', handler: 'one', route: 'Get' },
+      { file: 'apps/api/src/fixture.ts', className: 'A', handler: 'one', route: 'Get' },
     ]);
   });
 
   it('handles a file with no classes at all', () => {
     expect(scan('export const answer = 42;\n')).toEqual([]);
+  });
+});
+
+/**
+ * "HTTP/WebSocket guard: role and scope check per route **or event**"
+ * (DOMAIN-RULES §1.3). A socket event is a route as far as this check cares.
+ */
+describe('socket event handlers', () => {
+  it('reports a @SubscribeMessage handler that declares nothing', () => {
+    expect(
+      scan(`
+        @WebSocketGateway({ namespace: '/staff' })
+        export class StaffGateway {
+          @SubscribeMessage('room:join')
+          join(@ConnectedSocket() socket: StaffSocket) { return socket.id; }
+        }
+      `),
+    ).toEqual([
+      {
+        file: 'apps/api/src/fixture.ts',
+        className: 'StaffGateway',
+        handler: 'join',
+        route: 'SubscribeMessage',
+      },
+    ]);
+  });
+
+  it.each(['@Public()', '@Authenticated()', "@Requires('brand:read')"])(
+    'accepts a socket event declared with %s',
+    (declaration) => {
+      expect(
+        scan(`
+          @WebSocketGateway({ namespace: '/staff' })
+          class StaffGateway {
+            @SubscribeMessage('room:join')
+            ${declaration}
+            join() { return 1; }
+          }
+        `),
+      ).toEqual([]);
+    },
+  );
+
+  it('ignores a decorated gateway member that is not an event handler', () => {
+    expect(
+      scan(`
+        @WebSocketGateway({ namespace: '/staff' })
+        class StaffGateway {
+          @WebSocketServer()
+          namespace!: Namespace;
+
+          afterInit(namespace: Namespace) { return namespace; }
+        }
+      `),
+    ).toEqual([]);
+  });
+
+  it('ignores a @SubscribeMessage on a class that is neither controller nor gateway', () => {
+    expect(
+      scan(`
+        @Injectable()
+        class NotAGateway {
+          @SubscribeMessage('room:join')
+          join() { return 1; }
+        }
+      `),
+    ).toEqual([]);
   });
 });

@@ -1,5 +1,7 @@
+import { INSTALL_SCOPE_BRAND_ID } from '@helpdock/db';
 import { BadRequestException, Controller, ForbiddenException, Get } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { WsException } from '@nestjs/websockets';
 import { describe, expect, it, vi } from 'vitest';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import type { Logger } from '../logging/logger.js';
@@ -185,13 +187,105 @@ describe('PermissionGuard', () => {
     expect(() => run({ route: 'me' })).toThrow(ForbiddenException);
   });
 
-  it('refuses a transport that has no authorization rules yet, rather than inheriting silence', () => {
-    // The socket gateway is M0-13. Until it says what a socket event needs, an
-    // event reaching the global guards must be refused, not waved through.
+  it('refuses a transport that has no authorization rules, rather than inheriting silence', () => {
     const guard = new PermissionGuard(new Reflector(), silentLogger());
 
-    expect(() => guard.canActivate(fakeExecutionContext({ type: 'ws' }))).toThrow(
+    expect(() => guard.canActivate(fakeExecutionContext({ type: 'rpc' }))).toThrow(
       ForbiddenException,
     );
+  });
+});
+
+/**
+ * The same guard, the same decorators and the same matrix over a socket
+ * (DOMAIN-RULES §1.3: "role and scope check per route **or event**"). What
+ * differs is where the brand comes from — the message, not the path — and that
+ * a refusal is a `WsException` the gateway's filter can acknowledge with.
+ */
+describe('PermissionGuard over a socket', () => {
+  const onSocket = ({
+    event,
+    principal,
+    data,
+    logger = silentLogger(),
+  }: {
+    readonly event: RouteName;
+    readonly principal?: Principal;
+    readonly data?: unknown;
+    readonly logger?: Logger;
+  }) =>
+    new PermissionGuard(new Reflector(), logger).canActivate(
+      fakeExecutionContext({
+        type: 'ws',
+        handler: Routes.prototype[event],
+        controller: Routes,
+        client: { data: principal === undefined ? {} : { principal } },
+        data,
+      }),
+    );
+
+  it('lets an @Authenticated() event through for any signed-in socket', () => {
+    expect(onSocket({ event: 'me', principal: staff({}) })).toBe(true);
+  });
+
+  it('refuses an event whose socket carries no principal', () => {
+    expect(() => onSocket({ event: 'me' })).toThrow(WsException);
+  });
+
+  it('allows a @Requires event for the brand the message names', () => {
+    expect(
+      onSocket({
+        event: 'brand',
+        principal: staff({ [BRAND_A]: { role: 'agent', departmentIds: [] } }),
+        data: { brandId: BRAND_A },
+      }),
+    ).toBe(true);
+  });
+
+  /** The `SocketError` the guard refused with, so a test can read its code. */
+  const refusalOf = (input: Parameters<typeof onSocket>[0]): unknown => {
+    try {
+      onSocket(input);
+      return expect.unreachable('the guard should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(WsException);
+      return (error as WsException).getError();
+    }
+  };
+
+  it('refuses a @Requires event for a brand the principal has no role in', () => {
+    expect(
+      refusalOf({
+        event: 'brand',
+        principal: staff({ [BRAND_A]: { role: 'admin', departmentIds: 'all' } }),
+        data: { brandId: BRAND_B },
+      }),
+    ).toMatchObject({ code: 'forbidden' });
+  });
+
+  it.each([
+    ['names no brand', {}],
+    [
+      'names the install sentinel, which is a scope and not a brand',
+      { brandId: INSTALL_SCOPE_BRAND_ID },
+    ],
+  ])('refuses a @Requires event that %s', (_name, data) => {
+    expect(
+      refusalOf({
+        event: 'brand',
+        principal: staff({ [BRAND_A]: { role: 'admin', departmentIds: 'all' } }),
+        data,
+      }),
+    ).toMatchObject({ code: 'invalid_payload' });
+  });
+
+  it('refuses an event that declares nothing, and says so in the log', () => {
+    const logger = silentLogger();
+    const error = vi.spyOn(logger, 'error');
+
+    expect(() => onSocket({ event: 'undeclared', principal: staff({}), logger })).toThrow(
+      WsException,
+    );
+    expect(error).toHaveBeenCalledOnce();
   });
 });

@@ -67,6 +67,7 @@ src/auth/           the AuthApi boundary, its two adapters, session state
 src/screens/        sign in, the code screen, the link and reset confirmations,
                     the redirect hand-off, staff and roles, two-factor
                     enrolment, the invite screen, the security page
+src/realtime/       the socket client, presence and the away timer
 src/staff/          the StaffApi boundary and its two adapters
 src/shell/          sidebar, brand switcher, user menu, page header, empty state
 src/ui/             the small pieces DESIGN §6 has no component for yet: the
@@ -202,10 +203,32 @@ has to reach the screen unchanged.
 The endpoints behind it are in [the authentication
 guide](../../docs/guides/authentication.md#endpoints).
 
+`accessToken()` is the one method that hands the token out, and its one caller
+is the realtime client: a browser cannot set headers on a WebSocket handshake,
+so the token goes in `auth.token` instead. It stays in memory either way.
+
 Two things the fixture does that the real service owns: `navCounts` on the
 session is optional and the sidebar renders a count only for the keys it
 receives, and switching brand is a client-side change to the cached session
 until a milestone gives it somewhere to persist.
+
+### The socket
+
+`src/realtime/` is the same shape as the auth boundary: one interface
+(`RealtimeClient`), two adapters chosen by the same `VITE_AUTH_API` switch, and
+no component that ever sees a socket. `SocketRealtimeClient` connects to the
+`/staff` namespace with the access token, reconnects itself with backoff so
+every attempt carries a *fresh* one, heartbeats, and stops for good when the
+server says the session was revoked. `MockRealtimeClient` is what `pnpm dev` and
+the browser tests run against.
+
+`RealtimeProvider` sits below `RequireSession`, reads the presence map over REST
+and applies `presence:changed` events to it, and sets the person away after five
+minutes without a pointer, key, wheel or touch event and without the tab
+becoming visible again. `useRealtime()` gives their own
+status and the toggle the user menu uses; `usePresence(brandId)` gives the map.
+
+The contract is in [the realtime guide](../../docs/guides/realtime.md).
 
 ## Tests
 

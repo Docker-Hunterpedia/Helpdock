@@ -1,0 +1,183 @@
+import { describe, expect, it } from 'vitest';
+import { findUndeclaredRoutes } from './check-route-permissions.ts';
+
+const scan = (source: string) => findUndeclaredRoutes({ file: 'apps/api/src/fixture.ts', source });
+
+describe('findUndeclaredRoutes', () => {
+  it('accepts a handler that declares a permission', () => {
+    expect(
+      scan(`
+        @Controller('api')
+        export class BrandsController {
+          @Get('brands/:brandId')
+          @Requires('brand:read')
+          find(@Param() params: BrandIdParamDto) { return params; }
+        }
+      `),
+    ).toEqual([]);
+  });
+
+  it.each(['@Public()', '@Authenticated()', "@Requires('ticket:read')"])(
+    'accepts %s',
+    (declaration) => {
+      expect(
+        scan(`
+          @Controller()
+          class C {
+            @Get('x')
+            ${declaration}
+            read() { return 1; }
+          }
+        `),
+      ).toEqual([]);
+    },
+  );
+
+  it('reports a handler that declares nothing', () => {
+    expect(
+      scan(`
+        @Controller('api')
+        export class TicketsController {
+          @Get('tickets')
+          list() { return []; }
+        }
+      `),
+    ).toEqual([
+      {
+        file: 'apps/api/src/fixture.ts',
+        controller: 'TicketsController',
+        handler: 'list',
+        route: 'Get',
+      },
+    ]);
+  });
+
+  it('reports every undeclared handler, and only those', () => {
+    const undeclared = scan(`
+      @Controller('api')
+      class C {
+        @Get('a') @Public() a() { return 1; }
+        @Post('b') b() { return 2; }
+        @Delete('c') c() { return 3; }
+        @Patch('d') @Requires('ticket:write') d() { return 4; }
+      }
+    `);
+
+    expect(undeclared.map((route) => route.handler)).toEqual(['b', 'c']);
+    expect(undeclared.map((route) => route.route)).toEqual(['Post', 'Delete']);
+  });
+
+  it('accepts a controller that declares once for all of its handlers', () => {
+    expect(
+      scan(`
+        @Controller('internal')
+        @Requires('install:admin')
+        class C {
+          @Get('a') a() { return 1; }
+          @Get('b') b() { return 2; }
+        }
+      `),
+    ).toEqual([]);
+  });
+
+  it('ignores a class that is not a controller', () => {
+    expect(
+      scan(`
+        @Injectable()
+        class BrandsService {
+          @Get('not-a-route')
+          list() { return []; }
+        }
+      `),
+    ).toEqual([]);
+  });
+
+  it('ignores a method with no HTTP decorator', () => {
+    expect(
+      scan(`
+        @Controller()
+        class C {
+          constructor(@Inject(DB) db: Db) {}
+          private helper() { return 1; }
+        }
+      `),
+    ).toEqual([]);
+  });
+
+  it('is not fooled by a decorator name in a comment or a string', () => {
+    expect(
+      scan(`
+        @Controller()
+        class C {
+          // @Requires('ticket:read') was removed on purpose
+          @Get('a')
+          a() { return '@Public()'; }
+        }
+      `),
+    ).toEqual([{ file: 'apps/api/src/fixture.ts', controller: 'C', handler: 'a', route: 'Get' }]);
+  });
+
+  it('does not credit a handler for a decorator inside another one’s arguments', () => {
+    expect(
+      scan(`
+        @Controller()
+        class C {
+          @UseInterceptors(wrap(Public()))
+          @Get('a')
+          a() { return 1; }
+        }
+      `),
+    ).toEqual([{ file: 'apps/api/src/fixture.ts', controller: 'C', handler: 'a', route: 'Get' }]);
+  });
+
+  it('does not credit a handler for a parameter decorator on the one before it', () => {
+    expect(
+      scan(`
+        @Controller()
+        class C {
+          @Get('a') @Public() a(@Param('id') id: string) { return id; }
+          @Get('b') b() { return 2; }
+        }
+      `),
+    ).toEqual([{ file: 'apps/api/src/fixture.ts', controller: 'C', handler: 'b', route: 'Get' }]);
+  });
+
+  it('does not mistake an object key inside a method body for a handler', () => {
+    expect(
+      scan(`
+        @Controller()
+        class C {
+          @Get('a')
+          @Public()
+          a() {
+            const handlers = { list() { return 1; } };
+            return handlers.list();
+          }
+        }
+      `),
+    ).toEqual([]);
+  });
+
+  it('keeps two controllers in one file apart', () => {
+    const undeclared = scan(`
+      @Controller('a')
+      class A {
+        @Get() one() { return 1; }
+      }
+
+      @Controller('b')
+      @Public()
+      class B {
+        @Get() two() { return 2; }
+      }
+    `);
+
+    expect(undeclared).toEqual([
+      { file: 'apps/api/src/fixture.ts', controller: 'A', handler: 'one', route: 'Get' },
+    ]);
+  });
+
+  it('handles a file with no classes at all', () => {
+    expect(scan('export const answer = 42;\n')).toEqual([]);
+  });
+});

@@ -105,6 +105,12 @@ export const envSchema = z.object({
     .max(MAX_PORT)
     .default(DEFAULT_PORT)
     .describe(`optional; must be a port number between 1 and ${MAX_PORT}, default ${DEFAULT_PORT}`),
+  TRUST_PROXY: z
+    .stringbool()
+    .default(false)
+    .describe(
+      'optional; must be "true" or "false", default false. Only "true" when a reverse proxy this install controls sets x-forwarded-* and x-request-id',
+    ),
   DATABASE_URL: urlSchema('postgres:', 'postgresql:').describe(
     'must be a postgres:// URL for the runtime role',
   ),

@@ -24,7 +24,8 @@
     "test": "vitest run --coverage --project=!integration",
     "test:integration": "vitest run --project=integration",
     "test:watch": "vitest",
-    "check:boundaries": "node scripts/check-app-boundaries.ts"
+    "check:boundaries": "node scripts/check-app-boundaries.ts",
+    "check:routes": "node scripts/check-route-permissions.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

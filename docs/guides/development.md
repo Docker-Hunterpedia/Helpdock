@@ -36,6 +36,7 @@ Run these from the repository root.
 | `pnpm test:integration` | The Testcontainers suites. Needs Docker; skips itself without it. |
 | `pnpm test:watch` | Vitest in watch mode. |
 | `pnpm check:boundaries` | Enforces the app import rule described below. |
+| `pnpm check:routes` | Fails when a controller handler declares neither `@Requires`, `@Authenticated` nor `@Public`. |
 
 For a single workspace, use the per-package scripts through pnpm or Turborepo:
 
@@ -55,7 +56,7 @@ docs/          planning, guides, decisions
 
 Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end. `apps/admin` adds `dev`, `e2e` and `e2e:baselines`, and its `build` is `vite build` rather than `tsc`; see [Admin app](#admin-app).
 
-Six packages and one app are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/db` is the schema, the migrations and the row-level security; see [Database](#database). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/jobs` is the queue names, job schemas, outbox relay and idempotent consumers from M0-14; see [Jobs and outbox](#jobs-and-outbox). `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n). `apps/admin` is the admin SPA from M0-07; see [Admin app](#admin-app).
+Seven packages and two apps are real so far. `packages/config` is the configuration loader; see [Configuration](#configuration). `packages/db` is the schema, the migrations and the row-level security; see [Database](#database). `packages/net` is the SSRF-safe outbound HTTP client and URL policy from M0-15, which everything that fetches a user-supplied URL goes through; see [`packages/net/README.md`](../../packages/net/README.md). `packages/jobs` is the queue names, job schemas, outbox relay and idempotent consumers from M0-14; see [Jobs and outbox](#jobs-and-outbox). `packages/schemas` holds the Zod schemas the api, admin and widget share; every request and response shape belongs there rather than in the app that happens to need it first. `packages/ui` and `packages/i18n` hold the design system and the catalogs; see [UI and i18n](#ui-and-i18n). `apps/api` is the NestJS application from M0-04, which carries the request context, the guards and the tenant transaction; see [API](#api). `apps/admin` is the admin SPA from M0-07; see [Admin app](#admin-app).
 
 TypeScript settings live in `tsconfig.base.json` (strict, `nodenext` modules, `verbatimModuleSyntax`). A workspace `tsconfig.json` only adds `rootDir`, `outDir` and which files to include. Because module resolution is `nodenext`, relative imports carry the `.js` extension even when the file on disk is `.ts`.
 
@@ -419,11 +420,92 @@ CI installs Chromium with `pnpm exec playwright install --with-deps chromium`,
 caches it by the Playwright version in the lockfile, and runs the suite as a
 step of the `ci` job after the build.
 
+## API
+
+`apps/api` is the NestJS application. Its
+[README](../../apps/api/README.md) is the reference for the boot sequence, the
+request lifecycle and how to add a route; this is how to run it.
+
+There is no `docker compose` file yet — that is M0-09. Until then, start
+Postgres and Redis yourself and point `.env` at them.
+
+```bash
+docker run -d --name helpdock-pg -p 5432:5432 \
+  -e POSTGRES_USER=helpdock_owner -e POSTGRES_PASSWORD=owner-password \
+  -e POSTGRES_DB=helpdock pgvector/pgvector:pg17
+docker run -d --name helpdock-redis -p 6379:6379 redis:7-alpine
+```
+
+Then copy `.env.example` to `.env` at the repository root and set at least:
+
+```bash
+APP_URL=http://localhost:3000
+APP_ROLE=api
+APP_MASTER_KEY=$(openssl rand -base64 32)
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgres://helpdock_app:app-password@localhost:5432/helpdock
+DATABASE_MIGRATION_URL=postgres://helpdock_owner:owner-password@localhost:5432/helpdock
+REDIS_URL=redis://localhost:6379
+```
+
+`DATABASE_URL` must name `helpdock_app`; the first migration creates that role
+with the password you put there. The `S3_*` keys are required to boot but
+nothing reads them until M1, so any non-empty values will do for now.
+
+The api is compiled before it runs: Node's built-in type stripping does not
+transform decorators, and NestJS is built on them. So a dev loop is two
+terminals — one compiling, one running what it compiled.
+
+```bash
+pnpm --filter @helpdock/api dev:build   # tsc --watch into dist/
+pnpm --filter @helpdock/api dev         # node --watch dist/main.js, reads ../../.env
+```
+
+The first start runs the migrations, verifies that the runtime role cannot
+bypass row-level security, and logs both. `GET /health` and `GET /ready` answer
+without a session.
+
+### Authenticating locally
+
+Real sessions arrive with M0-05. Until then, set
+
+```bash
+HD_DEV_PRINCIPAL_HEADER=1
+```
+
+in `.env` and send a whole principal as JSON in the `x-hd-dev-principal` header.
+It is refused when `NODE_ENV=production`, and boot logs a warning whenever it is
+on, because anyone who can reach the port can name themselves an install admin.
+
+```bash
+curl -s localhost:3000/api/me \
+  -H 'x-hd-dev-principal: {"type":"staff","id":"0199f4b2-6a91-7c27-9a1f-000000000001","brands":{},"installAdmin":true}'
+```
+
+Without the flag, everything but the two probes answers 401.
+
+### The worker role
+
+`APP_ROLE=worker` boots the same process without the HTTP listener and without
+running migrations: a worker waits for an `APP_ROLE=api` replica to migrate,
+polling for up to 60 seconds. It registers no queues yet; the outbox relay is
+M0-14.
+
+### Routes declare their permission
+
+Every controller handler carries `@Requires(permission)`, `@Authenticated()` or
+`@Public()`. The permission guard refuses a handler that carries none, and
+`pnpm check:routes` fails the build for one
+([DOMAIN-RULES §1.3](../planning/DOMAIN-RULES.md#1-authorization)). The check is
+a token scan over `apps/*/src` using TypeScript's own scanner, so a decorator
+name in a comment or a string is not mistaken for a declaration.
+
 ## Tests
 
 Unit tests are Vitest, colocated as `src/**/*.test.ts`. `pnpm test` runs one Vitest process across all workspaces, defined as projects in the root `vitest.config.ts`.
 
-Coverage uses `@vitest/coverage-v8` and gates at **80 % of lines across `packages/*`** (ARCHITECTURE §15). Apps are excluded: they are covered by Playwright from M0-07 onwards. Browser tests with Playwright join the pipeline with their own deliverables.
+Coverage uses `@vitest/coverage-v8` and gates at **80 % of lines across `packages/*`** (ARCHITECTURE §15). Apps are outside the gate: the UI apps are covered by Playwright from M0-07 onwards. `apps/api` has no UI, so it is covered by its own unit and integration tests instead, and M0-04 reports its number in the pull request rather than gating on it. Browser tests with Playwright join the pipeline with their own deliverables.
 
 ### Integration tests
 
@@ -431,7 +513,8 @@ Anything that touches Postgres, Redis, a queue or a channel adapter is tested ag
 
 ```bash
 pnpm test:integration                                  # the whole project
-pnpm test:integration packages/config               # one directory
+pnpm test:integration packages/config                  # one directory
+pnpm test:integration apps/api                         # the api against real Postgres and Redis
 ```
 
 They are not part of `pnpm test`, which stays fast and needs nothing installed. CI runs them as a step of its own; GitHub-hosted runners have a Docker daemon, so no service container is declared in the workflow.
@@ -455,7 +538,7 @@ describe.skipIf(!hasDocker)('settings invalidation over Redis', () => {
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`, as a single job named `ci` so it can be the required status check on the `main` ruleset. It installs with `--frozen-lockfile`, then runs lint, the boundary check, typecheck, test with coverage, the integration tests, and build — the same commands you run locally.
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`, as a single job named `ci` so it can be the required status check on the `main` ruleset. It installs with `--frozen-lockfile`, then runs lint, the boundary check, the route-permission check, typecheck, test with coverage, the integration tests, and build — the same commands you run locally.
 
 The rest of M0-11 (CodeQL, the image build and publish) extends this workflow later.
 

@@ -86,7 +86,7 @@ Update this table in the same PR that changes a milestone's status.
 | Phase | Milestone | Depends on | Effort (weeks) | Status | Started | Shipped |
 |---|---|---|---|---|---|---|
 | 0 Foundation | M0 Skeleton | — | 5–7 | shipped | 2026-09-18 | 2026-09-19 |
-| 1 Core desk | M1 Ticketing core | M0 | 6–8 | planned | | |
+| 1 Core desk | M1 Ticketing core | M0 | 6–8 | in progress | 2026-09-19 | |
 | 1 Core desk | M2 Email channel | M1 | 3–4 | planned | | |
 | 1 Core desk | M3 Automation and SLAs | M1 | 4–5 | planned | | |
 | 2 Customer surfaces | M4 Widget and realtime | M1, M3 | 5–6 | planned | | |
@@ -437,3 +437,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-09-16 | 1.1: added DOMAIN-RULES.md and referenced it throughout; fixed milestone dependency contradictions (realtime gateway, outbox, presence and SSRF client moved to M0; LLM wizard step moved to M7; dependencies govern scheduling instead of phase gates); new deliverables M0-13..15, M1-13..14, M7-11, M8-07, M9-10; effort estimates and external dependencies; performance conditions and product metrics; five new risks. |
 | 2026-09-18 | M0 started. |
 | 2026-09-19 | M0 shipped. All fifteen deliverables merged; six of seven exit criteria met and the seventh ([all four auth methods in a Playwright test](#m0-skeleton)) met in part, because Google and GitHub wait on the OAuth credentials under external dependencies. Actual effort two days against an estimate of 5–7 weeks; the M1 estimate is left as it stands until there is more than one milestone to calibrate against. What was built, and the ten accepted gaps, are in [docs/completed/M0-skeleton.md](../completed/M0-skeleton.md). M1 Ticketing core is next. |
+| 2026-09-19 | M1 started. |

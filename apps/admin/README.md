@@ -9,12 +9,21 @@ M0-07 ships the chrome: the four sign-in screens, the shell, and one empty page
 per nav destination. There is no backend yet — the app runs against an in-memory
 `AuthApi` fixture until M0-05 lands real auth.
 
+In production the api serves `dist/` at `/` on the admin host, with `no-store`
+on `index.html` and a year of `immutable` on everything Vite content-hashed into
+`assets/`; `apps/api/README.md` has the rules.
+
 ## Running it
 
 ```bash
 pnpm build                       # once, so @helpdock/ui and @helpdock/i18n have a dist/
 pnpm --filter @helpdock/admin dev
 ```
+
+The dev server proxies `/api` to `http://localhost:3000`, so the browser sees one
+origin and a session cookie set by the api is sent back to it. `VITE_API_ORIGIN`
+points the proxy elsewhere. With `VITE_AUTH_API=mock`, which is the default in
+dev, nothing is proxied because nothing is called.
 
 Open http://localhost:5273 and sign in with the fixture:
 
@@ -72,7 +81,10 @@ script and `src/app/preferences.ts` still agree on those keys.
 
 `index.html` also carries two meta tags — `helpdock:primary-domain` and
 `helpdock:brand-count` — that the sign-in caption reads. The api rewrites them
-per install when it serves the file; the checked-in values are the dev fixture.
+per install when it serves the file (`apps/api/src/static/`), from the install's
+brands and their verified help-center domains; the checked-in values are the dev
+fixture, and they are what a `vite preview` or a build served by anything else
+shows.
 
 ### The auth boundary
 

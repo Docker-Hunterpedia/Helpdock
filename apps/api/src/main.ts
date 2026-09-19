@@ -14,6 +14,15 @@ import { start } from './bootstrap.js';
 
 const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'] as const;
 
+/**
+ * How long a drain may take before the process gives up and exits non-zero.
+ * `docker stop` sends SIGTERM and then SIGKILL after its grace period, and a
+ * container killed mid-drain leaves no line saying why; this one does. The
+ * Compose services allow a longer grace period than this, so the timeout is
+ * always ours to report rather than Docker's to cut short.
+ */
+const SHUTDOWN_TIMEOUT_MS = 15_000;
+
 const main = async (): Promise<void> => {
   const env = loadEnv();
   const { close } = await start(env);
@@ -27,6 +36,14 @@ const main = async (): Promise<void> => {
         return;
       }
       closing = true;
+
+      const deadline = setTimeout(() => {
+        process.stderr.write(`Shutdown did not finish within ${SHUTDOWN_TIMEOUT_MS} ms; exiting\n`);
+        process.exit(1);
+      }, SHUTDOWN_TIMEOUT_MS);
+      // The timer must not be the reason the event loop stays alive; the
+      // shutdown it guards is.
+      deadline.unref();
 
       close().then(
         () => process.exit(0),

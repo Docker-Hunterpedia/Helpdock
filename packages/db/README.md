@@ -35,13 +35,14 @@ const roles = await withTenant(
 ## Schema
 
 Tables live in `src/schema/`, one file each, re-exported from
-`src/schema/index.ts`. M0 has seven:
+`src/schema/index.ts`. M0 has eight:
 
 | Table | Scope | Notes |
 |---|---|---|
 | `users` | global | Staff accounts. Unique on `lower(email)`, so addresses compare case-insensitively without the `citext` extension. |
 | `brands` | global | The tenant. `prefix` is unique, and DOMAIN-RULES §11 keeps it reserved after a brand is deleted. Inserting a row creates that brand's ticket sequence. |
 | `user_brand_roles` | tenant | One role per user per brand. `department_ids` null means every department. |
+| `brand_domains` | tenant | Hostnames a brand owns. `domain` is unique install-wide. M0 reads it for Caddy's on-demand TLS check; M5 creates and verifies rows. |
 | `settings` | tenant | Primary key `(key, brand_id)`. `value` is JSON, or the `v1.…` envelope for a secret. |
 | `audit_log` | tenant | Who did what. `actor_id` is text: a system actor is a job id. |
 | `outbox` | tenant | The transactional outbox of DOMAIN-RULES §6. Partial index on the unpublished backlog. |
@@ -158,8 +159,15 @@ them and every replica but one applies nothing.
 
 ```bash
 pnpm --filter @helpdock/db gen:migration   # drizzle-kit generate, after a schema change
-pnpm --filter @helpdock/db gen:rls         # rewrite the policy migration from TENANT_TABLES
+pnpm --filter @helpdock/db gen:rls         # append the missing policies to that migration
 ```
+
+`gen:rls` appends the policies of any `TENANT_TABLES` entry that has none yet to
+the newest migration — the one `gen:migration` has just written for that table.
+They belong together because migrations are forward-only: a policy that ran
+before its own table existed would fail on a fresh database. `rls.test.ts` fails
+while a tenant table has no policies in any committed migration, and fails again
+if a policy ends up ahead of its `CREATE TABLE`.
 
 `drizzle-kit migrate` and `push` are not part of any workflow: nothing but
 `runMigrations` applies migrations, so the advisory lock is never bypassed.
@@ -172,7 +180,8 @@ pnpm --filter @helpdock/db gen:rls         # rewrite the policy migration from T
    reason it needs no policy — `src/schema/index.test.ts` fails if it is on
    neither list).
 3. `pnpm --filter @helpdock/db gen:migration` for the table, then
-   `pnpm --filter @helpdock/db gen:rls` for its policies. Commit both.
+   `pnpm --filter @helpdock/db gen:rls`, which appends its policies to that same
+   migration. Rename the generated file after what it does and commit it.
 4. **Add it to the negative suite** in `src/rls.integration.test.ts`: one
    fixture row, and the cross-brand read, insert, update, delete, subquery and
    join cases run against it automatically. The suite fails until the fixture

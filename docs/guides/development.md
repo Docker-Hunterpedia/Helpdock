@@ -8,10 +8,11 @@ How to install, build, test and extend the Helpdock monorepo. Contribution rules
 |---|---|---|
 | Node.js | 24 LTS | Pinned in `.nvmrc` and `.node-version`. `nvm use` or `fnm use` picks it up. |
 | pnpm | 12 | Pinned in `packageManager`. `corepack enable pnpm` installs the right one. |
-| Docker | any recent version | Only for the integration tests. Everything else runs without it. |
+| Docker | any recent version, with the Compose plugin | For the integration tests and the dev stack. The unit tests and the build run without it. |
 
 No database to install by hand: the integration tests start the services they
-need in containers themselves, and the full Compose stack arrives with M0-09.
+need in containers themselves, and [the dev Compose stack](#docker) starts
+Postgres, Redis, MinIO and Mailpit for the dev loop.
 
 ## Install
 
@@ -270,7 +271,7 @@ together and the migrations still run once. `drizzle-kit migrate` and
 
 ```bash
 pnpm --filter @helpdock/db gen:migration   # drizzle-kit generate from src/schema
-pnpm --filter @helpdock/db gen:rls         # rewrite the policy migration from TENANT_TABLES
+pnpm --filter @helpdock/db gen:rls         # append the missing policies to that migration
 ```
 
 Both write into `packages/db/drizzle/`, and both belong in the same commit as
@@ -420,23 +421,89 @@ CI installs Chromium with `pnpm exec playwright install --with-deps chromium`,
 caches it by the Playwright version in the lockfile, and runs the suite as a
 step of the `ci` job after the build.
 
+## Docker
+
+`docker/` holds the image and the Compose stack. Operators read
+[the install guide](install.md); this is what the stack is for while developing.
+
+```
+docker/Dockerfile              one image, two roles (APP_ROLE=api|worker)
+docker/docker-compose.yml      the production stack of ARCHITECTURE §17
+docker/docker-compose.dev.yml  local overrides: build here, publish ports
+docker/caddy/Caddyfile         host routing and TLS
+docker/postgres/init.sql       creates the helpdock_app role on first boot
+```
+
+### Infrastructure for the dev loop
+
+The usual loop runs the apps on the host with `pnpm dev` and only the services
+in containers:
+
+```bash
+cd docker
+cp ../.env.example .env         # fill in APP_MASTER_KEY and the passwords
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  --profile dev up -d postgres redis minio minio-bucket mailpit
+```
+
+That publishes Postgres on 5432, Redis on 6379, MinIO on 9000 (console 9001) and
+Mailpit on 1025 (inbox at http://localhost:8025). Point the repository-root
+`.env` at `localhost` for each of them, as [API](#api) below shows. Mailpit is
+there for M2's outbound email and does nothing until then.
+
+Nothing is bind-mounted from the source tree. The containers run what the image
+contains; the code you are editing runs on the host.
+
+### The whole stack from your working copy
+
+```bash
+cd docker
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+curl -s localhost:3000/health
+```
+
+This builds `docker/Dockerfile` from the repository root and runs one api
+replica on `127.0.0.1:3000` plus a worker. Caddy is behind the `proxy` profile
+and stays down, because it would try to get certificates for hostnames that do
+not resolve on your machine.
+
+`scripts/compose-smoke.sh` is the same thing as a check: it writes a throwaway
+`docker/.env`, waits for the api to be healthy, and asserts that `/health` and
+`/ready` answer 200, that `/` returns the admin build, that an unverified domain
+gets no certificate, and that `/api/me` still answers 401. CI runs it after
+building the image, and so can you:
+
+```bash
+docker build -f docker/Dockerfile -t ghcr.io/docker-hunterpedia/helpdock:ci .
+HELPDOCK_VERSION=ci ./scripts/compose-smoke.sh
+```
+
+### The image
+
+Three stages: `deps` installs the whole workspace from the lockfile, `build`
+runs `pnpm build` and then `pnpm deploy --filter @helpdock/api --prod` into
+`/out`, and `runtime` takes that plus `apps/admin/dist` into a `node:24-bookworm-slim`
+running as the non-root `helpdock` user. The entry point is
+`node dist/main.js` for both roles; `APP_ROLE` decides which one boots.
+
+Two things worth knowing before changing it:
+
+- **The admin build lives at `/app/admin`**, which is the default of
+  `ADMIN_DIST_DIR`. The api serves it at `/` and rewrites the install meta tags
+  per request; see [Serving the admin SPA](#serving-the-admin-spa).
+- **`pnpm fetch` runs with `trustLockfile`**, so the image build does not repeat
+  pnpm's supply-chain verification of a lockfile that `pnpm install` has already
+  verified on the developer's machine and in CI. It resolves nothing of its own;
+  a change to the lockfile still goes through a verified install first.
+
 ## API
 
 `apps/api` is the NestJS application. Its
 [README](../../apps/api/README.md) is the reference for the boot sequence, the
 request lifecycle and how to add a route; this is how to run it.
 
-There is no `docker compose` file yet — that is M0-09. Until then, start
-Postgres and Redis yourself and point `.env` at them.
-
-```bash
-docker run -d --name helpdock-pg -p 5432:5432 \
-  -e POSTGRES_USER=helpdock_owner -e POSTGRES_PASSWORD=owner-password \
-  -e POSTGRES_DB=helpdock pgvector/pgvector:pg17
-docker run -d --name helpdock-redis -p 6379:6379 redis:7-alpine
-```
-
-Then copy `.env.example` to `.env` at the repository root and set at least:
+Start Postgres and Redis with [the dev Compose stack](#docker), then copy
+`.env.example` to `.env` at the repository root and set at least:
 
 ```bash
 APP_URL=http://localhost:3000
@@ -485,12 +552,39 @@ curl -s localhost:3000/api/me \
 
 Without the flag, everything but the two probes answers 401.
 
+### Serving the admin SPA
+
+With `ADMIN_DIST_DIR` pointing at a built `apps/admin/dist`, the api serves the
+SPA at `/`: a request for a file in the build gets that file, and anything else
+that is not under `/api` gets `index.html` so the client router can take over. A
+missing endpoint under `/api` stays a JSON 404, because handing a `fetch` a page
+where it asked for data hides the error rather than reporting it.
+
+`index.html` is sent with `no-store` and its two `helpdock:*` meta tags rewritten
+from this install's brands; everything under `assets/` is content-hashed by Vite
+and sent as `immutable` for a year. The image sets `ADMIN_DIST_DIR=/app/admin`;
+outside the image it defaults to that same path, so a dev api simply logs that
+it found no build and serves `/api` alone.
+
+The dev loop does not use any of this: `pnpm --filter @helpdock/admin dev` runs
+Vite on 5273 and proxies `/api` to `http://localhost:3000`, so the browser sees
+one origin and a session cookie works. `VITE_API_ORIGIN` points the proxy
+somewhere else.
+
 ### The worker role
 
 `APP_ROLE=worker` boots the same process without the HTTP listener and without
 running migrations: a worker waits for an `APP_ROLE=api` replica to migrate,
-polling for up to 60 seconds. It registers no queues yet; the outbox relay is
-M0-14.
+polling for up to 60 seconds. It then registers the `outbox.event` consumer and
+starts the outbox relay, in that order, and shuts them down in the reverse one
+(`apps/api/src/worker/start-worker.ts`, following
+[`packages/jobs/README.md`](../../packages/jobs/README.md)).
+
+```bash
+cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  up -d --build worker
+docker compose logs -f worker
+```
 
 ### Routes declare their permission
 
@@ -538,8 +632,8 @@ describe.skipIf(!hasDocker)('settings invalidation over Redis', () => {
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`, as a single job named `ci` so it can be the required status check on the `main` ruleset. It installs with `--frozen-lockfile`, then runs lint, the boundary check, the route-permission check, typecheck, test with coverage, the integration tests, and build — the same commands you run locally.
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`, as a single job named `ci` so it can be the required status check on the `main` ruleset. It installs with `--frozen-lockfile`, then runs lint, the boundary check, the route-permission check, typecheck, test with coverage, the integration tests, build and the Playwright suite — the same commands you run locally. It then builds `docker/Dockerfile` for `linux/amd64` with a BuildKit cache in GitHub Actions and runs [`scripts/compose-smoke.sh`](#the-whole-stack-from-your-working-copy) against the image it produced. The image is not pushed.
 
-The rest of M0-11 (CodeQL, the image build and publish) extends this workflow later.
+The rest of M0-11 (CodeQL and the multi-arch publish) extends this workflow later.
 
 Dependencies are updated by Renovate, configured in `renovate.json`: grouped pull requests weekly, security advisories immediately.

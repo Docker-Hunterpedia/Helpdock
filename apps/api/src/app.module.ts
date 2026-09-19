@@ -20,6 +20,8 @@ import { AllExceptionsFilter } from './http/exception.filter.js';
 import type { Logger } from './logging/logger.js';
 import { BrandsController } from './routes/brands.controller.js';
 import { BrandsService } from './routes/brands.service.js';
+import { DomainCheckController } from './routes/domain-check.controller.js';
+import { DomainCheckService } from './routes/domain-check.service.js';
 import { HealthController } from './routes/health.controller.js';
 import { MeController } from './routes/me.controller.js';
 import { ConfigModule } from './runtime/config.module.js';
@@ -27,6 +29,7 @@ import { DbModule } from './runtime/db.module.js';
 import { ReadinessService } from './runtime/readiness.service.js';
 import { SettingsModule } from './runtime/settings.module.js';
 import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js';
+import { StaticModule } from './static/static.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
 
 /**
@@ -67,11 +70,14 @@ export class AppModule implements NestModule {
         ConfigModule.forRoot(options.env),
         DbModule.forRoot(options.db),
         SettingsModule.forRoot(options.settings, options.redis),
+        // Last, so its catch-all route is registered after every declared one.
+        StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],
       controllers: [
         HealthController,
         MeController,
         BrandsController,
+        DomainCheckController,
         ...(options.extraControllers ?? []),
       ],
       providers: [
@@ -79,6 +85,7 @@ export class AppModule implements NestModule {
         { provide: PRINCIPAL_RESOLVER, useValue: options.principalResolver },
         { provide: BRAND_RESOLVER, useValue: options.brandResolver ?? new NoopBrandResolver() },
         BrandsService,
+        DomainCheckService,
         ReadinessService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionGuard },

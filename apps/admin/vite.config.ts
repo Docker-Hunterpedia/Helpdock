@@ -3,9 +3,16 @@ import { defineConfig } from 'vite';
 
 /**
  * The api serves this build from `dist/` (ARCHITECTURE §3), so the bundle is
- * emitted there and the dev server proxies nothing yet: until M0-05 the admin
- * app talks to the in-memory `MockAuthApi` instead of a backend.
+ * emitted there.
+ *
+ * In development the two halves run apart — Vite here, the api on 3000 — and
+ * the proxy below is what makes them share an origin. Without it the app would
+ * have to know an absolute api URL, and a cookie set on `localhost:3000` would
+ * not be sent from `localhost:5273`. With `VITE_AUTH_API=mock`, which is the
+ * default in dev, nothing is proxied because nothing is called.
  */
+const API_ORIGIN = process.env.VITE_API_ORIGIN ?? 'http://localhost:3000';
+
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -15,6 +22,9 @@ export default defineConfig({
   },
   server: {
     port: 5273,
+    proxy: {
+      '/api': { target: API_ORIGIN, changeOrigin: false },
+    },
   },
   preview: {
     port: 4173,

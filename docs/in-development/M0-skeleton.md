@@ -22,7 +22,7 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-06 | Roles and staff lifecycle | #9 | planned |
 | M0-07 | Admin shell | #10 | shipped (#26, #31); screenshot baselines tracked in #32 |
 | M0-08 | First-run wizard | #11 | planned |
-| M0-09 | Docker | #12 | planned |
+| M0-09 | Docker | #12 | in review (#35) |
 | M0-10 | Observability | #13 | planned |
 | M0-11 | CI | #14 | in progress (`ci` job and required status check from #21; coverage gate live; Testcontainers, CodeQL, image build pending) |
 | M0-12 | ADRs for the open decisions | #15 | shipped (#19) |
@@ -70,3 +70,4 @@ None yet.
 - #30 transactional outbox relay, `packages/jobs` (M0-14)
 - #31 admin shell with sign-in, TOTP, nav (M0-07)
 - #33 NestJS api, tenancy plumbing, permission guard (M0-04)
+- #35 Docker image, Compose stack, Caddy on-demand TLS (M0-09)

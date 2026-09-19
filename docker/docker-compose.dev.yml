@@ -1,0 +1,64 @@
+# Local overrides for the production stack. Two uses:
+#
+#   # Infrastructure only, with `pnpm dev` on the host (the usual dev loop):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#     --profile dev up -d postgres redis minio minio-bucket mailpit
+#
+#   # The whole stack from the local Dockerfile, which is what CI smoke-tests:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Nothing is bind-mounted from the source tree: the dev loop runs `pnpm dev` on
+# the host, and the containers run what the image contains.
+name: helpdock
+
+x-helpdock-build: &helpdock-build
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+    args:
+      HELPDOCK_VERSION: ${HELPDOCK_VERSION:-dev}
+  image: ghcr.io/docker-hunterpedia/helpdock:${HELPDOCK_VERSION:-dev}
+
+services:
+  # Caddy wants certificates for real hostnames. A local stack reaches the api
+  # directly on 3000 instead, so the proxy is left out of every dev command
+  # above; this only stops `up` from starting it by accident.
+  caddy:
+    profiles: ['proxy']
+
+  api:
+    <<: *helpdock-build
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      APP_ROLE: api
+      TRUST_PROXY: 'false'
+    deploy:
+      # One replica, because the published port above cannot be shared.
+      replicas: 1
+
+  worker:
+    <<: *helpdock-build
+
+  postgres:
+    ports:
+      - '127.0.0.1:5432:5432'
+
+  redis:
+    ports:
+      - '127.0.0.1:6379:6379'
+
+  minio:
+    ports:
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
+
+  # SMTP sink for M2's outbound email: nothing leaves the machine, and the inbox
+  # is at http://localhost:8025. Harmless until then.
+  mailpit:
+    image: axllent/mailpit
+    profiles: ['dev']
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8025:8025'
+      - '127.0.0.1:1025:1025'

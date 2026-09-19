@@ -25,6 +25,7 @@ describe('the schema', () => {
   it('declares the tables M0 needs (ARCHITECTURE §5)', () => {
     expect([...byName.keys()].sort()).toEqual([
       'audit_log',
+      'brand_domains',
       'brands',
       'job_receipts',
       'outbox',
@@ -63,9 +64,9 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Five of the seven tables have a uuid primary key; `settings` is keyed by
+    // Six of the eight tables have a uuid primary key; `settings` is keyed by
     // `(key, brand_id)` and `job_receipts` by the consumer's idempotency key.
-    expect(generated).toHaveLength(5);
+    expect(generated).toHaveLength(6);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }
@@ -97,6 +98,12 @@ describe('the indexes and constraints', () => {
     const primaryKey = configOf('settings').primaryKeys[0];
 
     expect(primaryKey?.columns.map((column) => column.name)).toEqual(['key', 'brand_id']);
+  });
+
+  it('lets a hostname belong to one brand only', () => {
+    const domain = configOf('brand_domains').columns.find((column) => column.name === 'domain');
+
+    expect(domain?.isUnique).toBe(true);
   });
 
   it('reserves a brand prefix for good', () => {

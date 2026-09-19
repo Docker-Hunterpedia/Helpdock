@@ -86,3 +86,29 @@ jobs:
           name: playwright-report
           path: apps/admin/playwright-report
           retention-days: 7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Not pushed: the release workflow publishes the multi-arch image
+      # (ARCHITECTURE §16). `load: true` puts it in the daemon so the smoke test
+      # below runs the image this commit produced.
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ghcr.io/docker-hunterpedia/helpdock:ci
+          build-args: HELPDOCK_VERSION=ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The browser-less end-to-end test for M0-09: the stack comes up, the api
+      # serves the admin build, and an unverified domain gets no certificate.
+      - name: Compose smoke test
+        run: ./scripts/compose-smoke.sh
+        env:
+          HELPDOCK_VERSION: ci

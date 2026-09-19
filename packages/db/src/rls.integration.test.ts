@@ -7,7 +7,15 @@ import { createDb, type Db, type DbHandle, type DbTransaction } from './client.j
 import { runMigrations } from './migrate.js';
 import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
-import { auditLog, brands, outbox, settings, userBrandRoles, users } from './schema/index.js';
+import {
+  auditLog,
+  brandDomains,
+  brands,
+  outbox,
+  settings,
+  userBrandRoles,
+  users,
+} from './schema/index.js';
 import { withSystem, withTenant } from './tenant.js';
 import { uuidv7 } from './uuid.js';
 
@@ -43,6 +51,18 @@ const fixtures = [
     name: 'user_brand_roles',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(userBrandRoles).values({ userId, brandId, role: 'agent' }),
+  },
+  {
+    name: 'brand_domains',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(brandDomains).values({
+        brandId,
+        // `domain` is unique across the install, so the fixture row of each
+        // brand needs a hostname of its own.
+        domain: `support.${brandId}.example`,
+        kind: 'helpcenter',
+        txtToken: 'helpdock-verification=seeded',
+      }),
   },
   {
     name: 'settings',

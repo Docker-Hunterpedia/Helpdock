@@ -1,0 +1,45 @@
+# What never belongs in the build context. Everything the image needs is source,
+# the lockfile and `packages/db/drizzle`; the build stage produces the rest.
+
+# Installed and built on the host, for the host.
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+*.tsbuildinfo
+
+# Tooling output.
+coverage
+**/coverage
+.turbo
+**/.turbo
+*.log
+test-results
+**/test-results
+playwright-report
+**/playwright-report
+blob-report
+**/blob-report
+.playwright
+
+# Secrets. `.env.example` is a template and still not needed in the image.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# History and CI, which the image never reads.
+.git
+.gitignore
+.github
+.claude
+.agents
+
+# Documentation: the image serves the admin SPA, not the docs.
+docs
+*.md
+
+# Browser tests and their baselines.
+**/e2e

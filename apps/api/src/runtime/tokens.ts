@@ -12,6 +12,9 @@ export const SETTINGS = Symbol('helpdock.settings');
 export const REDIS = Symbol('helpdock.redis');
 export const LOGGER = Symbol('helpdock.logger');
 
+/** Absolute path of the admin build, or `undefined` when this process serves none. */
+export const ADMIN_DIST = Symbol('helpdock.admin-dist');
+
 /** Replaced by the session resolver in M0-05; see `src/auth/principal-resolver.ts`. */
 export const PRINCIPAL_RESOLVER = Symbol('helpdock.principal-resolver');
 /** Filled in by M5, when brand domains exist; see `src/context/brand-resolver.ts`. */

@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  renderTenantPolicyMigration,
+  missingPolicyTables,
   SESSION_SETTINGS,
+  TENANT_TABLES,
   tenantPolicies,
   tenantPredicate,
 } from './rls.js';
@@ -78,14 +79,27 @@ describe('tenantPredicate', () => {
   });
 });
 
-describe('the committed policy migration', () => {
-  it('is what the generator produces from TENANT_TABLES', () => {
-    const committed = readFileSync(
-      new URL('../drizzle/0002_tenant_rls_policies.sql', import.meta.url),
-      'utf8',
-    );
+describe('the committed migrations', () => {
+  const directory = new URL('../drizzle/', import.meta.url);
+  const committed = readdirSync(directory)
+    .filter((entry) => entry.endsWith('.sql'))
+    .sort()
+    .map((entry) => readFileSync(new URL(entry, directory), 'utf8'))
+    .join('\n');
 
-    // Run `pnpm --filter @helpdock/db gen:rls` when this fails.
-    expect(committed).toBe(renderTenantPolicyMigration());
+  it('puts every tenant table under the generated policies', () => {
+    // Run `pnpm --filter @helpdock/db gen:rls` when this fails: it appends the
+    // missing policies to the migration that creates the table.
+    expect(missingPolicyTables(committed).map((table) => table.name)).toEqual([]);
+  });
+
+  it.each(TENANT_TABLES)('creates $name before the policies that reference it', ({ name }) => {
+    const created = committed.indexOf(`CREATE TABLE "${name}"`);
+    const enabled = committed.indexOf(`ALTER TABLE "${name}" ENABLE ROW LEVEL SECURITY;`);
+
+    // Migrations are forward-only and run in file order, so a policy that
+    // precedes its own table would fail on a fresh database.
+    expect(created).toBeGreaterThanOrEqual(0);
+    expect(enabled).toBeGreaterThan(created);
   });
 });

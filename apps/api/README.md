@@ -40,11 +40,18 @@ one before it.
    verified.
 6. **Redis and settings** — the invalidation channel, a client for `/ready`, and
    the install-scope settings resolver over the `settings` table.
-7. **Listen**, for `APP_ROLE=api`.
+7. **Queues, `APP_ROLE=worker` only.** `src/worker/start-worker.ts` registers the
+   `outbox.event` consumer and then starts the outbox relay, in the order
+   [`packages/jobs/README.md`](../../packages/jobs/README.md) requires: a job
+   that arrives before its consumer exists burns attempts.
+8. **Listen**, for `APP_ROLE=api`, after registering `@fastify/static` against
+   `ADMIN_DIST_DIR` so the admin build can be served (see below).
 
-`SIGTERM` and `SIGINT` close the HTTP server, then the settings resolver, Redis
+`SIGTERM` and `SIGINT` close the HTTP server — or, in a worker, the relay, then
+the consumer, then the queue connection — and then the settings resolver, Redis
 and the database pool, in that order. A second signal during a shutdown is
-ignored.
+ignored, and a drain that has not finished after 15 seconds exits 1 with a line
+saying so rather than waiting for `docker stop` to send SIGKILL.
 
 ## Request lifecycle
 
@@ -150,6 +157,46 @@ request transaction: one brand, every department, `principal_type = system`, and
 ([DOMAIN-RULES §1.4](../../docs/planning/DOMAIN-RULES.md#14-workers-and-websockets)).
 A job that needs several brands enqueues one child job per brand.
 
+`src/worker/start-worker.ts` is what `APP_ROLE=worker` boots. It takes the three
+things `@helpdock/jobs` needs — a queue connection, the `outbox.event` consumer
+and the relay — through an interface, so a unit test proves the start and
+shutdown order without Redis. Adding a consumed event means calling
+`registerEventHandler` there, before the worker is created.
+
+## Serving the admin SPA
+
+`src/static/` serves `apps/admin/dist` at `/` on the admin host
+(ARCHITECTURE §3). `ADMIN_DIST_DIR` says where the build is; the image sets it to
+`/app/admin`, which is also the default, and a process that finds no build there
+logs one warning at boot and serves `/api` alone.
+
+| Path | Answer |
+|---|---|
+| a file in the build | that file; `Cache-Control: immutable` for a year under `assets/`, an hour elsewhere |
+| `/`, or any path that is not a file | `index.html`, `Cache-Control: no-store`, with the install meta tags rewritten |
+| `/api/…` with no matching route | the JSON 404 every other failure uses |
+
+The two `helpdock:*` meta tags are rewritten per request from this install's
+brands (`InstallInfoService`), because they are the only thing the sign-in card
+may know before anyone has signed in and no endpoint may enumerate brands to an
+anonymous visitor. A database that is down falls back to the `APP_URL` host
+rather than failing the page.
+
+`index.html` also leaves with a `Content-Security-Policy` of its own, replacing
+the `default-src 'none'` every api response carries — under which the SPA could
+not load a single byte. The policy admits the one inline script `index.html`
+runs by its SHA-256 hash rather than with `'unsafe-inline'`, computed from the
+file that is being served, so editing that script cannot leave a stale policy
+behind. `'unsafe-inline'` stays on `style-src`, because Emotion writes MUI's
+styles into `<style>` elements at runtime; removing it means giving that cache a
+nonce, in `apps/admin`.
+
+`@fastify/static` is registered with `serve: false`: it contributes
+`reply.sendFile` and no routes, so `AdminSpaController` stays the one place that
+decides what a path means. Fastify's router prefers a static route to the
+controller's `/*`, which is what keeps `/health`, `/ready` and every declared
+`/api/…` route reachable.
+
 ## The development principal header
 
 M0-05 replaces `PrincipalResolver` with the real session resolver. Until then
@@ -183,8 +230,26 @@ Without the flag the resolver is `DenyAllPrincipalResolver` and everything but
 | `GET /api/brands` | `@Authenticated()` | Brands the principal holds a role in. |
 | `GET /api/install/brands` | `@Requires('install:admin')` | Every brand. Audited. |
 | `GET /api/brands/:brandId` | `@Requires('brand:read')` | One brand. |
+| `GET /internal/domain-check` | `@Public()` | Caddy's on-demand TLS gate. 200 for a verified help-center domain, 403 otherwise. |
+| `GET /*` | `@Public()` | The admin SPA, above. |
 
-These exist to prove the plumbing. M0-06 onwards replaces them with real ones.
+Most of these exist to prove the plumbing; M0-06 onwards replaces them with real
+ones. `/internal/domain-check` is not one of them: it is what stops Caddy
+issuing a certificate for a hostname this install does not serve
+(ARCHITECTURE §3).
+
+It reads `brand_domains` on an install-scope path — every brand id named
+explicitly, one statement, that table only — because the brand is exactly what
+the question is asking. The answer is logged at `debug` as `domain.check` and
+not written to `audit_log`: Caddy asks on every handshake for an unknown host,
+so a row per call would be a way for a stranger to fill the table.
+
+`@Public()` because Caddy's `ask` carries no headers, so the `/internal/*`
+shared secret of [ARCHITECTURE
+§7](../../docs/planning/ARCHITECTURE.md#7-auth-design) cannot apply. Two things
+stand in its place: `docker/caddy/Caddyfile` answers 404 to `/internal/*` from
+outside, so the route is reachable only from inside the Compose network, and the
+handler rate-limits per source address.
 
 ## Errors
 
@@ -233,11 +298,10 @@ only when a test passes it as an extra controller.
 
 ## Known gaps
 
-- `NoopBrandResolver` resolves every host to nothing. M5 adds `brand_domains`
-  and the implementation that reads it.
+- `NoopBrandResolver` resolves every host to nothing. `brand_domains` exists
+  from M0-09, for the on-demand TLS check; M5 adds the rows, their verification,
+  and the resolver that turns a `Host` header into a brand.
 - `DenyAllPrincipalResolver` is the default until M0-05.
-- `APP_ROLE=worker` boots a verified database role, settings and a logger, and
-  registers no queues. The outbox relay is M0-14.
 - The WebSocket gateway is M0-13. `PermissionGuard` refuses any non-HTTP
   execution context outright, so M0-13 has to say what a socket event needs
   ([DOMAIN-RULES §1.4](../../docs/planning/DOMAIN-RULES.md#14-workers-and-websockets))

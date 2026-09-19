@@ -1,4 +1,5 @@
 import helmet from '@fastify/helmet';
+import fastifyStatic from '@fastify/static';
 import {
   createKeyring,
   createSettings,
@@ -22,6 +23,8 @@ import { createPrincipalResolver } from './auth/principal-resolver.js';
 import { securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
+import { resolveAdminDist } from './static/admin-assets.js';
+import { startWorker } from './worker/start-worker.js';
 
 /**
  * Boot, in the order ARCHITECTURE §6 and DOMAIN-RULES §1.5 require:
@@ -164,10 +167,27 @@ export const createApiApp = async ({
     // same promise `TRUST_PROXY` makes about `x-request-id`, so it is the same
     // switch (REQUIREMENTS §5.1).
     new FastifyAdapter({ trustProxy: env.TRUST_PROXY }),
-    { logger: new NestPinoLogger(logger), bufferLogs: false },
+    // `abortOnError: false` so a boot failure is thrown rather than turned into
+    // `process.abort()`. Aborting leaves a container with SIGABRT and a core
+    // dump where `main.ts` would have written the message that says what to fix.
+    { logger: new NestPinoLogger(logger), bufferLogs: false, abortOnError: false },
   );
 
   await app.register(helmet, securityHeaderOptions({ appUrl: env.APP_URL }));
+
+  // `serve: false` registers no routes of its own: it only decorates
+  // `reply.sendFile`, so `AdminSpaController` stays the single place that
+  // decides what a path means and which cache headers it earns.
+  const adminDist = resolveAdminDist(env.ADMIN_DIST_DIR);
+  if (adminDist === undefined) {
+    logger.warn(
+      { adminDistDir: env.ADMIN_DIST_DIR },
+      'No admin build found; the api will serve /api only (ADMIN_DIST_DIR)',
+    );
+  } else {
+    await app.register(fastifyStatic, { root: adminDist, serve: false });
+  }
+
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 
@@ -182,11 +202,15 @@ export const start = async (env: Env): Promise<{ close: () => Promise<void> }> =
   const runtime = await createRuntime({ env });
 
   if (env.APP_ROLE === 'worker') {
-    // The queues themselves are M0-14. What a worker has today is a verified
-    // database role, settings and a logger, which is what the outbox relay will
-    // be handed when it arrives.
-    runtime.logger.info('Worker runtime ready; no queues are registered yet (M0-14).');
-    return { close: () => runtime.close() };
+    const worker = startWorker({ env, db: runtime.db, log: runtime.logger });
+    runtime.logger.info('Worker ready: outbox relay running and outbox.event consumed.');
+
+    return {
+      close: async () => {
+        await worker.close();
+        await runtime.close();
+      },
+    };
   }
 
   const app = await createApiApp({ runtime });

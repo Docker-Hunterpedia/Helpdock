@@ -14,3 +14,6 @@ export const brandRoleEnum = pgEnum('brand_role', ['admin', 'team_leader', 'agen
 
 /** The principal kinds of DOMAIN-RULES §1.1, as recorded on an audit row. */
 export const actorTypeEnum = pgEnum('actor_type', ['staff', 'visitor', 'apikey', 'system']);
+
+/** What a brand hostname is for (ARCHITECTURE §5). */
+export const brandDomainKindEnum = pgEnum('brand_domain_kind', ['helpcenter', 'widget_origin']);

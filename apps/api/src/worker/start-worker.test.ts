@@ -1,0 +1,94 @@
+import type { Db } from '@helpdock/db';
+import { silentLogger } from '@helpdock/jobs';
+import type { Redis } from 'ioredis';
+import { describe, expect, it } from 'vitest';
+import { startWorker, type WorkerDependencies } from './start-worker.js';
+
+const env = {
+  REDIS_URL: 'redis://redis:6379',
+  DATABASE_URL: 'postgres://helpdock_app:pw@postgres:5432/helpdock',
+};
+
+const db = {} as Db;
+
+interface Harness {
+  readonly deps: WorkerDependencies;
+  readonly calls: string[];
+  readonly started: { redisUrl?: string; listenUrl?: string; relayRedis?: unknown };
+}
+
+const harness = (): Harness => {
+  const calls: string[] = [];
+  const started: Harness['started'] = {};
+  // Only `quit` is ever called on it, so the double is the smallest thing the
+  // BullMQ-shaped signature accepts.
+  const connection = { quit: async () => calls.push('connection.quit') } as unknown as Redis;
+
+  return {
+    calls,
+    started,
+    deps: {
+      createConnection: (url) => {
+        started.redisUrl = url;
+        calls.push('connection.create');
+        return connection;
+      },
+      createEventWorker: ({ redis }) => {
+        calls.push('worker.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('worker.close') };
+      },
+      startRelay: ({ redis, listenUrl }) => {
+        calls.push('relay.start');
+        started.listenUrl = listenUrl;
+        started.relayRedis = redis;
+        return { stop: async () => void calls.push('relay.stop') };
+      },
+    },
+  };
+};
+
+describe('startWorker', () => {
+  it('registers the consumer before the relay that feeds it', () => {
+    const { deps, calls } = harness();
+
+    startWorker({ env, db, log: silentLogger, deps });
+
+    // A job that arrives before its consumer exists burns attempts
+    // (packages/jobs/README.md).
+    expect(calls).toEqual(['connection.create', 'worker.create', 'relay.start']);
+  });
+
+  it('gives the relay and the worker one connection, and the relay the LISTEN url', () => {
+    const { deps, started } = harness();
+
+    startWorker({ env, db, log: silentLogger, deps });
+
+    expect(started.redisUrl).toBe(env.REDIS_URL);
+    // `LISTEN outbox` needs a connection of its own on the runtime role.
+    expect(started.listenUrl).toBe(env.DATABASE_URL);
+  });
+
+  it('shuts down relay, then worker, then connection', async () => {
+    const { deps, calls } = harness();
+    const host = startWorker({ env, db, log: silentLogger, deps });
+
+    calls.length = 0;
+    await host.close();
+
+    // The relay stops adding jobs first, and the connection closes last so an
+    // in-flight job still has Redis to report to.
+    expect(calls).toEqual(['relay.stop', 'worker.close', 'connection.quit']);
+  });
+
+  it('shuts down once, however many signals arrive', async () => {
+    const { deps, calls } = harness();
+    const host = startWorker({ env, db, log: silentLogger, deps });
+
+    calls.length = 0;
+    await Promise.all([host.close(), host.close()]);
+    await host.close();
+
+    expect(calls).toEqual(['relay.stop', 'worker.close', 'connection.quit']);
+  });
+});

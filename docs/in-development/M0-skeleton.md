@@ -22,7 +22,7 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-06 | Roles and staff lifecycle | #9 | planned |
 | M0-07 | Admin shell | #10 | shipped (#26, #31); screenshot baselines tracked in #32 |
 | M0-08 | First-run wizard | #11 | planned |
-| M0-09 | Docker | #12 | planned |
+| M0-09 | Docker | #12 | in review (#TBD) |
 | M0-10 | Observability | #13 | planned |
 | M0-11 | CI | #14 | in progress (`ci` job and required status check from #21; coverage gate live; Testcontainers, CodeQL, image build pending) |
 | M0-12 | ADRs for the open decisions | #15 | shipped (#19) |

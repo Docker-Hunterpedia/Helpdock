@@ -6,6 +6,8 @@ const MASTER_KEY_BYTES = 32;
 
 const MAX_PORT = 65_535;
 const DEFAULT_PORT = 3000;
+/** Where `docker/Dockerfile` copies `apps/admin/dist`, so an image needs no `.env` entry. */
+const DEFAULT_ADMIN_DIST_DIR = '/app/admin';
 const IPV4_BITS = 32;
 const IPV6_BITS = 128;
 const NO_CIDRS: readonly string[] = [];
@@ -123,6 +125,13 @@ export const envSchema = z.object({
   S3_BUCKET: z.string().min(1).describe('must be the bucket that holds attachments and images'),
   S3_ACCESS_KEY_ID: z.string().min(1).describe('must be the S3 access key id'),
   S3_SECRET_ACCESS_KEY: z.string().min(1).describe('must be the S3 secret access key'),
+  ADMIN_DIST_DIR: z
+    .string()
+    .min(1)
+    .default(DEFAULT_ADMIN_DIST_DIR)
+    .describe(
+      `optional; directory holding the built admin SPA, default ${DEFAULT_ADMIN_DIST_DIR} (where the image puts it)`,
+    ),
   OUTBOUND_ALLOW_CIDRS: cidrListSchema()
     .default(NO_CIDRS)
     .describe(
@@ -135,6 +144,14 @@ export type EnvKey = keyof z.infer<typeof envSchema>;
 
 /** Every bootstrap key, in the order `.env.example` documents them. */
 export const ENV_KEYS = Object.keys(envSchema.shape) as readonly EnvKey[];
+
+/**
+ * Heading in `.env.example` after which the keys belong to
+ * `docker/docker-compose.yml` rather than to this schema. Compose reads the same
+ * file, so an operator fills in one file; `env.test.ts` uses the marker to check
+ * each half against the right owner.
+ */
+export const COMPOSE_SECTION_MARKER = '# Docker Compose only';
 
 const describeKey = (key: EnvKey): string => envSchema.shape[key].description ?? '';
 

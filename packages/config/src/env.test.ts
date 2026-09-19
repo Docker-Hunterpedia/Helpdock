@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  COMPOSE_SECTION_MARKER,
   decodeMasterKey,
   ENV_KEYS,
   type EnvSource,
@@ -49,6 +50,8 @@ describe('loadEnv', () => {
     expect(env.OUTBOUND_ALLOW_CIDRS).toEqual([]);
     expect(env.APP_MASTER_KEY_PREVIOUS).toBeUndefined();
     expect(env.TRUST_PROXY).toBe(false);
+    // Where docker/Dockerfile copies apps/admin/dist, so an image needs no key.
+    expect(env.ADMIN_DIST_DIR).toBe('/app/admin');
   });
 
   it('reads TRUST_PROXY as a boolean, in the spellings an operator reaches for', () => {
@@ -173,10 +176,26 @@ describe('decodeMasterKey', () => {
 
 describe('.env.example', () => {
   const template = readFileSync(new URL('../../../.env.example', import.meta.url), 'utf8');
-  const documented = [...template.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1]);
+  // Everything after the marker is read by `docker/docker-compose.yml` and not
+  // by this package, so it is deliberately not a bootstrap key.
+  const [bootstrap = '', compose = ''] = template.split(COMPOSE_SECTION_MARKER);
+  const keysIn = (section: string): string[] =>
+    [...section.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1] as string);
+
+  it('splits the file into a bootstrap section and a Compose-only one', () => {
+    expect(template).toContain(COMPOSE_SECTION_MARKER);
+    expect(compose).not.toBe('');
+  });
 
   it('documents every bootstrap key exactly once, and nothing else', () => {
-    expect([...documented].sort()).toEqual([...ENV_KEYS].sort());
+    expect(keysIn(bootstrap).sort()).toEqual([...ENV_KEYS].sort());
+  });
+
+  it('keeps the Compose-only section free of bootstrap keys', () => {
+    // A key in both sections would be documented twice and could drift.
+    expect(keysIn(compose).filter((key) => (ENV_KEYS as readonly string[]).includes(key))).toEqual(
+      [],
+    );
   });
 
   it('gives every key a description, which is what the failure message quotes', () => {

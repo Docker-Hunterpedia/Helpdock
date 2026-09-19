@@ -2,6 +2,7 @@ import {
   brandIdParamSchema,
   brandListSchema,
   brandSchema,
+  domainCheckResultSchema,
   healthSchema,
   meSchema,
   readinessSchema,
@@ -24,3 +25,4 @@ export class MeDto extends createZodDto(meSchema) {}
 export class BrandDto extends createZodDto(brandSchema) {}
 export class BrandListDto extends createZodDto(brandListSchema) {}
 export class BrandIdParamDto extends createZodDto(brandIdParamSchema) {}
+export class DomainCheckResultDto extends createZodDto(domainCheckResultSchema) {}

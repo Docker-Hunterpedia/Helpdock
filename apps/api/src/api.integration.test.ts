@@ -1,8 +1,13 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import {
   auditLog,
+  brandDomains,
   brands,
   createDb,
   type Db,
@@ -61,6 +66,29 @@ const BRAND_B = uuidv7();
 const DEPARTMENT_1 = uuidv7();
 const DEPARTMENT_2 = uuidv7();
 
+/**
+ * A stand-in for `apps/admin/dist`, written here rather than built, so the suite
+ * proves what the api does with a build and never depends on one existing.
+ */
+const HASHED_ASSET = 'assets/index-Abc12345.js';
+/** Stands in for the `lang`/`dir` bootstrap the real index.html runs inline. */
+const INLINE_BOOTSTRAP = "document.documentElement.lang = 'en';";
+const VERIFIED_DOMAIN = 'support.acme.example';
+const UNVERIFIED_DOMAIN = 'pending.globex.example';
+const WIDGET_ORIGIN = 'shop.globex.example';
+const adminDist = mkdtempSync(path.join(tmpdir(), 'helpdock-admin-'));
+mkdirSync(path.join(adminDist, 'assets'), { recursive: true });
+writeFileSync(
+  path.join(adminDist, 'index.html'),
+  '<!doctype html><html><head>' +
+    '<meta name="helpdock:primary-domain" content="support.helpdock.com" />' +
+    '<meta name="helpdock:brand-count" content="3" />' +
+    `<script>${INLINE_BOOTSTRAP}</script>` +
+    `</head><body><script type="module" src="/${HASHED_ASSET}"></script></body></html>`,
+);
+writeFileSync(path.join(adminDist, HASHED_ASSET), 'console.log("admin");\n');
+writeFileSync(path.join(adminDist, 'favicon.svg'), '<svg xmlns="http://www.w3.org/2000/svg" />');
+
 const staffPrincipal = (
   id: string,
   brandRoles: Record<
@@ -108,6 +136,7 @@ describe.skipIf(!hasDocker)('the api', () => {
       S3_BUCKET: 'helpdock',
       S3_ACCESS_KEY_ID: 'access',
       S3_SECRET_ACCESS_KEY: 'secret',
+      ADMIN_DIST_DIR: adminDist,
       OUTBOUND_ALLOW_CIDRS: [],
       ...overrides,
     }) as Env;
@@ -201,6 +230,135 @@ describe.skipIf(!hasDocker)('the api', () => {
           { name: 'settings', status: 'up' },
         ],
       });
+    });
+  });
+
+  describe('the admin SPA', () => {
+    it('serves index.html with the install meta tags rewritten, and never caches it', async () => {
+      const response = await get('/');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toContain('text/html');
+      expect(response.headers['cache-control']).toBe('no-store');
+      // Two seeded brands, neither with a verified help-center domain yet, so
+      // the caption falls back to the host APP_URL names.
+      expect(response.body).toContain('<meta name="helpdock:brand-count" content="2" />');
+      expect(response.body).toContain(
+        '<meta name="helpdock:primary-domain" content="support.example.com" />',
+      );
+    });
+
+    it('replaces the JSON deny-all policy with one the SPA can load under', async () => {
+      const policy = (await get('/')).headers['content-security-policy'] ?? '';
+
+      // A browser refuses the inline bootstrap without its hash, and the whole
+      // bundle without `script-src 'self'`.
+      expect(policy).toContain(
+        `script-src 'self' 'sha256-${createHash('sha256').update(INLINE_BOOTSTRAP, 'utf8').digest('base64')}'`,
+      );
+      expect(policy).not.toContain("script-src 'self' 'unsafe-inline'");
+      expect(policy).toContain("frame-ancestors 'none'");
+    });
+
+    it('leaves the deny-all policy on an api response', async () => {
+      expect((await get('/health')).headers['content-security-policy']).toBe(
+        "default-src 'none';frame-ancestors 'none';base-uri 'none';form-action 'none'",
+      );
+    });
+
+    it('serves a hashed asset as immutable', async () => {
+      const response = await get(`/${HASHED_ASSET}`);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(response.body).toContain('console.log');
+    });
+
+    it('serves an unhashed file for an hour', async () => {
+      expect((await get('/favicon.svg')).headers['cache-control']).toBe('public, max-age=3600');
+    });
+
+    it('falls back to index.html for a client-side route', async () => {
+      const response = await get('/tickets/42');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toContain('text/html');
+    });
+
+    it('answers a missing endpoint under /api as JSON, not as the SPA', async () => {
+      const response = await get('/api/not-a-route');
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: { code: 'not_found' } });
+    });
+
+    it('refuses to walk out of the build directory', async () => {
+      const response = await get('/assets/..%2f..%2f..%2fetc%2fpasswd');
+
+      // The SPA fallback is the safe answer: never a file from outside the root.
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toContain('text/html');
+    });
+  });
+
+  describe('the on-demand TLS check Caddy calls', () => {
+    const seedDomain = (
+      brandId: string,
+      domain: string,
+      kind: 'helpcenter' | 'widget_origin',
+      verified: boolean,
+    ) =>
+      withSystemJob(runtime.db, brandId, 'seed-domain', (tx) =>
+        tx.insert(brandDomains).values({
+          brandId,
+          domain,
+          kind,
+          txtToken: 'helpdock-verification=seeded',
+          ...(verified ? { verifiedAt: new Date() } : {}),
+        }),
+      );
+
+    it('refuses a domain nobody added', async () => {
+      expect((await get('/internal/domain-check?domain=nope.example')).statusCode).toBe(403);
+    });
+
+    it('refuses a domain that is not verified yet', async () => {
+      await seedDomain(BRAND_B, UNVERIFIED_DOMAIN, 'helpcenter', false);
+
+      expect((await get(`/internal/domain-check?domain=${UNVERIFIED_DOMAIN}`)).statusCode).toBe(
+        403,
+      );
+    });
+
+    it('refuses a widget origin, which is an allow-list entry and not a host we serve', async () => {
+      await seedDomain(BRAND_B, WIDGET_ORIGIN, 'widget_origin', true);
+
+      expect((await get(`/internal/domain-check?domain=${WIDGET_ORIGIN}`)).statusCode).toBe(403);
+    });
+
+    it('refuses a malformed domain before it reaches the database', async () => {
+      expect((await get('/internal/domain-check?domain=not a domain')).statusCode).toBe(400);
+      expect((await get('/internal/domain-check')).statusCode).toBe(400);
+    });
+
+    it('allows a verified help center domain, whatever case Caddy passes through', async () => {
+      await seedDomain(BRAND_A, VERIFIED_DOMAIN, 'helpcenter', true);
+
+      const response = await get(`/internal/domain-check?domain=${VERIFIED_DOMAIN}`);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ domain: VERIFIED_DOMAIN });
+
+      // A trailing dot and upper case are both legal in a ServerName.
+      expect(
+        (await get(`/internal/domain-check?domain=${VERIFIED_DOMAIN.toUpperCase()}.`)).statusCode,
+      ).toBe(200);
+    });
+
+    it('names that brand domain as the install primary domain once it is verified', async () => {
+      // Runs after the case above, which is what verifies BRAND_A's domain.
+      expect((await get('/')).body).toContain(
+        `<meta name="helpdock:primary-domain" content="${VERIFIED_DOMAIN}" />`,
+      );
     });
   });
 
@@ -600,6 +758,7 @@ describe.skipIf(!hasDocker)('/ready when Redis is gone', () => {
         S3_BUCKET: 'helpdock',
         S3_ACCESS_KEY_ID: 'access',
         S3_SECRET_ACCESS_KEY: 'secret',
+        ADMIN_DIST_DIR: adminDist,
         OUTBOUND_ALLOW_CIDRS: [],
       } as Env,
       logger: createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test' }, level: 'silent' }),

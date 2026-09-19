@@ -1,0 +1,76 @@
+# Host routing and TLS for the whole install (ARCHITECTURE §3).
+#
+#   {$ADMIN_HOST}   the admin SPA and the REST API
+#   {$API_HOST}     the REST API, the widget bundle and the WebSocket endpoint
+#   everything else a brand's help-center domain, certificate issued on demand
+#
+# Caddy gets certificates for the first two because they are named here. For the
+# third it cannot know the hostname in advance, so it asks the api first; see
+# `on_demand_tls` below.
+#
+# Behind Cloudflare's proxy, use ./Caddyfile.cloudflare instead.
+
+{
+	email {$ACME_EMAIL}
+
+	on_demand_tls {
+		# Answers 200 only for a verified `helpcenter` row in `brand_domains`,
+		# so a stranger pointing DNS at this server cannot make Caddy ask a
+		# certificate authority for a certificate in their name — which is both
+		# an abuse vector and the fastest way to hit the issuance limits.
+		ask http://api:3000/internal/domain-check
+
+		# A handshake for an unknown host costs one request to the api.
+		interval 2m
+		burst 10
+	}
+}
+
+# Everything the api is allowed to be asked from the outside. `/internal/*` is
+# not: those routes exist for Caddy and for other containers on this network
+# (ARCHITECTURE §7), and `ask` above reaches them without passing through here.
+(helpdock_upstream) {
+	handle /internal/* {
+		respond "Not found" 404
+	}
+
+	handle {
+		reverse_proxy api:3000 {
+			# Overwritten, never merged: the request id an operator greps for
+			# must be one Caddy chose, not one a client sent (apps/api/README).
+			header_up X-Request-Id {http.request.uuid}
+			# X-Forwarded-For, -Proto and -Host are set by reverse_proxy itself;
+			# the api believes them only when TRUST_PROXY=true.
+			header_up X-Forwarded-Host {host}
+		}
+	}
+}
+
+# HSTS only on the hosts this install owns outright. A brand's own domain gets
+# it once that brand has opted in, which is M5's decision and not ours to make
+# on a domain somebody else operates.
+(helpdock_hsts) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}
+
+{$ADMIN_HOST} {
+	import helpdock_hsts
+	import helpdock_upstream
+}
+
+{$API_HOST} {
+	import helpdock_hsts
+	import helpdock_upstream
+}
+
+# Every other https hostname: a brand help-center domain, or somebody else's DNS
+# pointing here. `on_demand` plus the `ask` above is what tells the two apart.
+https:// {
+	tls {
+		on_demand
+	}
+
+	import helpdock_upstream
+}

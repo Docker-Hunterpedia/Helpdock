@@ -1,0 +1,167 @@
+# The production stack of ARCHITECTURE §17. Run it from this directory, with a
+# `.env` beside it (`cp ../.env.example .env`): Compose reads that file both for
+# `env_file` below and for the `${…}` substitutions.
+#
+#   docker compose up -d
+#
+# The install guide is ../docs/guides/install.md.
+name: helpdock
+
+x-helpdock-image: &helpdock-image
+  image: ghcr.io/docker-hunterpedia/helpdock:${HELPDOCK_VERSION:-latest}
+  env_file: .env
+  restart: unless-stopped
+  # Longer than the api's own 15 s shutdown deadline, so the process is always
+  # the one that reports a drain it could not finish.
+  stop_grace_period: 30s
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      ADMIN_HOST: ${ADMIN_HOST:?set ADMIN_HOST in .env}
+      API_HOST: ${API_HOST:?set API_HOST in .env}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      # Behind Cloudflare's proxy, point CADDYFILE at ./caddy/Caddyfile.cloudflare.
+      - ${CADDYFILE:-./caddy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      # Certificates and account keys. Losing this volume means re-issuing every
+      # certificate, which counts against the certificate authority's limits.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    <<: *helpdock-image
+    environment:
+      APP_ROLE: api
+      # Caddy is the only thing that reaches this port, and it sets
+      # `x-forwarded-*` and `x-request-id` itself.
+      TRUST_PROXY: 'true'
+    deploy:
+      # Compose v2 honours this and starts two containers; Swarm does too. The
+      # replicas serialise on the migration advisory lock at boot, so starting
+      # together is safe. Remove it, or `docker compose up -d --scale api=1`, to
+      # run a single one.
+      replicas: 2
+
+  worker:
+    <<: *helpdock-image
+    environment:
+      APP_ROLE: worker
+    depends_on:
+      # A worker never migrates: it waits for an api replica to have done it
+      # (apps/api/README.md), so it starts once the api is serving.
+      api:
+        condition: service_healthy
+    healthcheck:
+      # The image's check calls /health, and a worker has no listener.
+      disable: true
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-helpdock_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-helpdock}
+      HELPDOCK_APP_PASSWORD: ${HELPDOCK_APP_PASSWORD:?set HELPDOCK_APP_PASSWORD in .env}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Runs once, on an empty data directory. See the file for what it creates
+      # and why the first migration would otherwise be the one to do it.
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-helpdock.sql:ro
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Append-only file: losing Redis logs everyone out and drops queued jobs,
+    # which the outbox relay republishes, but there is no reason to lose it
+    # (DOMAIN-RULES §10).
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Object storage for development. A production install points S3_* at a real
+  # S3, R2 or MinIO deployment and never starts this (ARCHITECTURE §17).
+  minio:
+    image: minio/minio
+    profiles: ['dev']
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-helpdock}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Creates the bucket and exits. MinIO has no "create on first write".
+  minio-bucket:
+    image: minio/mc
+    profiles: ['dev']
+    restart: 'no'
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set helpdock http://minio:9000 "$${S3_ACCESS_KEY_ID}" "$${S3_SECRET_ACCESS_KEY}" &&
+        mc mb --ignore-existing "helpdock/$${S3_BUCKET}"
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-helpdock}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
+      S3_BUCKET: ${S3_BUCKET:-helpdock}
+
+  # Optional attachment scanning (ARCHITECTURE §17). Start it with
+  # `docker compose --profile clamav up -d`; it needs about 2 GB of memory.
+  clamav:
+    image: clamav/clamav
+    profiles: ['clamav']
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ['CMD', 'clamdcheck']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pg_data:
+  redis_data:
+  minio_data:
+  clamav_data:

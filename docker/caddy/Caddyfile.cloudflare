@@ -1,0 +1,47 @@
+# The same routing as ./Caddyfile, for an install whose hostnames are proxied by
+# Cloudflare (orange cloud). Select it with `CADDYFILE=./caddy/Caddyfile.cloudflare`
+# in `.env`; docs/guides/install.md has the rest.
+#
+# Two differences, both because Cloudflare terminates TLS for the visitor:
+#
+# 1. There is no on-demand TLS and no catch-all site. Cloudflare presents its own
+#    certificate, so Caddy never needs one for a brand domain — and leaving
+#    on-demand on would make every hostname anyone points at this origin cost an
+#    issuance attempt.
+# 2. Brand help-center domains are added to `helpdock_hosts` below by hand, or a
+#    wildcard that covers them is, because nothing issues them automatically any
+#    more. M5's custom-domain screen says so too.
+#
+# Cloudflare must be in "Full (strict)" mode with an origin certificate, or the
+# connection between Cloudflare and this server is not authenticated.
+
+{
+	email {$ACME_EMAIL}
+}
+
+(helpdock_upstream) {
+	handle /internal/* {
+		respond "Not found" 404
+	}
+
+	handle {
+		reverse_proxy api:3000 {
+			header_up X-Request-Id {http.request.uuid}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+}
+
+{$ADMIN_HOST}, {$API_HOST} {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	import helpdock_upstream
+}
+
+# Add each verified brand help-center domain here, then `docker compose restart
+# caddy`. Cloudflare terminates TLS in front of it, so no certificate is issued.
+# help.brand-a.example, help.brand-b.example {
+# 	import helpdock_upstream
+# }

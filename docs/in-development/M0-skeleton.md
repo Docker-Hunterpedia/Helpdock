@@ -15,20 +15,20 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
 | M0-01 | Monorepo | #4 | shipped (#21) |
-| M0-02 | Config loader | #5 | in review (#25) |
-| M0-03 | Database | #6 | in review (#28) |
-| M0-04 | Tenancy plumbing | #7 | in review (#33) |
+| M0-02 | Config loader | #5 | shipped (#25) |
+| M0-03 | Database | #6 | shipped (#28) |
+| M0-04 | Tenancy plumbing | #7 | shipped (#33) |
 | M0-05 | Auth | #8 | planned |
 | M0-06 | Roles and staff lifecycle | #9 | planned |
-| M0-07 | Admin shell | #10 | in review (#31) |
+| M0-07 | Admin shell | #10 | shipped (#26, #31); screenshot baselines tracked in #32 |
 | M0-08 | First-run wizard | #11 | planned |
 | M0-09 | Docker | #12 | planned |
 | M0-10 | Observability | #13 | planned |
 | M0-11 | CI | #14 | in progress (`ci` job and required status check from #21; coverage gate live; Testcontainers, CodeQL, image build pending) |
 | M0-12 | ADRs for the open decisions | #15 | shipped (#19) |
 | M0-13 | Realtime gateway skeleton | #16 | planned |
-| M0-14 | Transactional outbox | #17 | in review (#30) |
-| M0-15 | Outbound HTTP client with SSRF protection | #18 | in review (#24) |
+| M0-14 | Transactional outbox | #17 | shipped (#30) |
+| M0-15 | Outbound HTTP client with SSRF protection | #18 | shipped (#24) |
 
 ## Exit criteria
 
@@ -63,3 +63,10 @@ None yet.
 - #19 milestone doc + ADRs 0001–0005 (M0-12)
 - #20 DESIGN.md design system and UI rules
 - #21 monorepo scaffold, Biome, Vitest, `ci` workflow (M0-01, part of M0-11)
+- #24 SSRF-safe outbound HTTP client, `packages/net` (M0-15)
+- #25 config loader, secret encryption, settings invalidation (M0-02)
+- #26 design tokens, MUI theme, en/ar catalogs (M0-07 foundations)
+- #28 Drizzle schema, migrations, RLS, DB roles (M0-03)
+- #30 transactional outbox relay, `packages/jobs` (M0-14)
+- #31 admin shell with sign-in, TOTP, nav (M0-07)
+- #33 NestJS api, tenancy plumbing, permission guard (M0-04)

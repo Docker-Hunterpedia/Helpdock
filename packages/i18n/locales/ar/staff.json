@@ -1,6 +1,6 @@
 {
   "title": "الموظفون والأدوار",
-  "subtitle": "{{brand}} · {{people}} · دور المشاهد مفعّل",
+  "subtitle": "{{brand}} · {{people}} · {{viewer}}",
   "peopleCount_zero": "لا أشخاص",
   "peopleCount_one": "شخص واحد",
   "peopleCount_two": "شخصان",
@@ -15,7 +15,9 @@
     "departments": "الأقسام",
     "twoFactor": "التحقق بخطوتين",
     "lastActive": "آخر نشاط",
-    "rowActions": "إجراءات {{name}}"
+    "rowActions": "إجراءات {{name}}",
+    "caption": "كل من له دور في {{brand}}",
+    "self": "أنت"
   },
   "roles": {
     "admin": "مدير",
@@ -40,7 +42,8 @@
   },
   "lastActive": {
     "now": "الآن",
-    "yesterday": "أمس"
+    "yesterday": "أمس",
+    "never": "لم يسجّل دخولًا بعد"
   },
   "pendingInvite": {
     "line": "{{invited}} · {{expires}}",
@@ -75,6 +78,67 @@
     "emailPlaceholder": "name@example.com",
     "roleLabel": "الدور في {{brand}}",
     "departmentsLabel": "الأقسام",
-    "submit": "إرسال الدعوة"
+    "submit": "إرسال الدعوة",
+    "emailRequired": "أدخل بريدًا إلكترونيًا.",
+    "emailInvalid": "أدخل بريدًا إلكترونيًا مثل name@example.com.",
+    "viewerOff": "دور المشاهد معطّل في هذا التثبيت."
+  },
+  "viewerEnabled": "دور المشاهد مفعّل",
+  "viewerDisabled": "دور المشاهد معطّل",
+  "installAdmin": "مدير التثبيت",
+  "status": {
+    "active": "نشط",
+    "invited": "دعوة معلّقة",
+    "deactivated": "غير مفعّل"
+  },
+  "empty": {
+    "heading": "لا أحد هنا بعد",
+    "body": "ادعُ أول شخص إلى {{brand}} وسيظهر هنا.",
+    "noMatchesHeading": "لا أحد يطابق هذا البحث",
+    "noMatchesBody": "جرّب جزءًا من الاسم أو من البريد الإلكتروني."
+  },
+  "actions": {
+    "changeRole": "تغيير الدور",
+    "deactivate": "إلغاء التفعيل",
+    "reactivate": "إعادة التفعيل",
+    "remove": "إزالة من {{brand}}",
+    "resend": "إعادة إرسال الدعوة",
+    "revoke": "إلغاء الدعوة"
+  },
+  "roleDialog": {
+    "title": "تغيير الدور",
+    "description": "يحتفظ {{name}} بحسابه، ويتغيّر فقط ما يستطيع فعله في {{brand}}. تنتهي جلساته المفتوحة ليسري الدور الجديد فورًا.",
+    "submit": "حفظ الدور"
+  },
+  "confirm": {
+    "deactivate": {
+      "title": "إلغاء تفعيل {{name}}؟",
+      "body": "سيُسجَّل خروجه من كل مكان، ويُستبعد من الحضور ومن التوزيع الدوري، وتتوقف إشعاراته. يمكنك إعادة تفعيله لاحقًا.",
+      "submit": "إلغاء التفعيل"
+    },
+    "remove": {
+      "title": "إزالة {{name}} من {{brand}}؟",
+      "body": "سيفقد دوره في هذه العلامة التجارية وتنتهي كل جلساته. أدواره في العلامات الأخرى لا تتأثر.",
+      "submit": "إزالة"
+    },
+    "revoke": {
+      "title": "إلغاء الدعوة المرسلة إلى {{email}}؟",
+      "body": "سيتوقف الرابط عن العمل. يمكنك دعوة العنوان نفسه مرة أخرى بعد ذلك.",
+      "submit": "إلغاء الدعوة"
+    }
+  },
+  "toast": {
+    "invited": "أُرسلت الدعوة إلى {{email}}.",
+    "resent": "دعوة جديدة في طريقها إلى {{email}}.",
+    "revoked": "أُلغيت الدعوة المرسلة إلى {{email}}.",
+    "roleChanged": "أصبح {{name}} الآن {{role}} في {{brand}}.",
+    "deactivated": "أُلغي تفعيل {{name}}.",
+    "reactivated": "أُعيد تفعيل {{name}}.",
+    "removed": "أُزيل {{name}} من {{brand}}.",
+    "failed": "لم ينجح ذلك. لم يتغيّر شيء.",
+    "selfChange": "لا يمكنك تغيير دورك بنفسك.",
+    "lastInstallAdmin": "هذا آخر مدير تثبيت، فلا يمكن إلغاء تفعيله.",
+    "outOfScope": "يمكنك إدارة موظفي الدعم والمشاهدين في أقسامك فقط.",
+    "viewerDisabled": "دور المشاهد معطّل في هذا التثبيت."
   }
 }

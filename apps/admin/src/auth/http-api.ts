@@ -1,60 +1,53 @@
 import type {
-  AuthErrorBody,
   AuthMethods,
+  InviteAcceptRequest,
   OauthProvider,
+  PublicInvite,
+  RecoveryCodes,
   Session,
   SignInResult,
+  TotpEnrolment,
 } from '@helpdock/schemas';
 import {
   authMethodsSchema,
   authSessionResponseSchema,
-  errorResponseSchema,
+  publicInviteSchema,
+  recoveryCodesSchema,
   sessionSchema,
   signInResponseSchema,
+  totpEnrolmentSchema,
 } from '@helpdock/schemas';
 import { type AuthApi, AuthError } from './api.js';
+import { HttpTransport } from './http-transport.js';
 
 /**
- * The real auth service (M0-05).
+ * The real auth service (M0-05), plus the two flows M0-06 adds: enrolling a
+ * second factor, and accepting an invitation.
  *
- * **The access token lives in a field on this object and nowhere else.** Not in
- * `localStorage`, not in `sessionStorage`, not in a cookie this script can
- * read: those survive a tab being closed and are readable by any script that
- * gets injected, and a ten-minute token that survives neither is worth much
- * less to an attacker. A reload starts with no token and calls `refresh()`,
- * which is what the `httpOnly` cookie is for.
- *
- * **A 401 is retried exactly once, and only when a token was sent.** With a
- * token, a 401 means it expired, so the adapter refreshes and repeats the
- * request; a second 401 means the session is gone and retrying again would be a
- * loop. Without a token there is nothing to refresh, and the 401 is the answer
- * itself — a wrong password or a wrong authenticator code — which must reach
- * the screen unchanged.
+ * The token, the refresh and the error mapping live in {@link HttpTransport},
+ * which this shares with `HttpStaffApi` — see the reasoning there.
  */
 export class HttpAuthApi implements AuthApi {
-  readonly #baseUrl: string;
-  #accessToken: string | null = null;
-  /** In-flight refresh, so ten requests failing at once produce one refresh. */
-  #refreshing: Promise<boolean> | null = null;
+  readonly #transport: HttpTransport;
 
-  constructor(baseUrl = '/api') {
-    this.#baseUrl = baseUrl;
+  constructor(transport: HttpTransport = new HttpTransport()) {
+    this.#transport = transport;
   }
 
   async authMethods(): Promise<AuthMethods> {
-    return authMethodsSchema.parse(await this.#request('GET', '/auth/methods'));
+    return authMethodsSchema.parse(await this.#transport.request('GET', '/auth/methods'));
   }
 
   async signInWithPassword(email: string, password: string): Promise<SignInResult> {
     const response = signInResponseSchema.parse(
-      await this.#request('POST', '/auth/sign-in', { email: email.trim(), password }),
+      await this.#transport.request('POST', '/auth/sign-in', { email: email.trim(), password }),
     );
 
     return this.#keepSession(response);
   }
 
   async requestMagicLink(email: string): Promise<void> {
-    await this.#request('POST', '/auth/magic-link', { email: email.trim() });
+    await this.#transport.request('POST', '/auth/magic-link', { email: email.trim() });
   }
 
   async verifyTotp(
@@ -64,7 +57,7 @@ export class HttpAuthApi implements AuthApi {
   ): Promise<Session> {
     const result = this.#keepSession(
       signInResponseSchema.parse(
-        await this.#request('POST', '/auth/totp', { challengeId, code, trustDevice }),
+        await this.#transport.request('POST', '/auth/totp', { challengeId, code, trustDevice }),
       ),
     );
 
@@ -74,7 +67,7 @@ export class HttpAuthApi implements AuthApi {
   async useRecoveryCode(challengeId: string, code: string): Promise<Session> {
     const result = this.#keepSession(
       signInResponseSchema.parse(
-        await this.#request('POST', '/auth/recovery-code', { challengeId, code }),
+        await this.#transport.request('POST', '/auth/recovery-code', { challengeId, code }),
       ),
     );
 
@@ -82,37 +75,81 @@ export class HttpAuthApi implements AuthApi {
   }
 
   oauthStartUrl(provider: OauthProvider): string {
-    return `${this.#baseUrl}/auth/oauth/${provider}/start`;
+    return `${this.#transport.baseUrl}/auth/oauth/${provider}/start`;
   }
 
   async exchange(code: string): Promise<Session> {
     const response = authSessionResponseSchema.parse(
-      await this.#request('POST', '/auth/exchange', { code }),
+      await this.#transport.request('POST', '/auth/exchange', { code }),
     );
-    this.#accessToken = response.accessToken;
+    this.#transport.accessToken = response.accessToken;
 
     return response.session;
   }
 
   async requestPasswordReset(email: string): Promise<void> {
-    await this.#request('POST', '/auth/password/forgot', { email: email.trim() });
+    await this.#transport.request('POST', '/auth/password/forgot', { email: email.trim() });
   }
 
   async resetPassword(token: string, password: string): Promise<void> {
-    await this.#request('POST', '/auth/password/reset', { token, password });
+    await this.#transport.request('POST', '/auth/password/reset', { token, password });
   }
+
+  // ------------------------------------------------------------------
+  // Enrolling a second factor (M0-06)
+  // ------------------------------------------------------------------
+
+  /**
+   * Stages a secret and returns what the QR code encodes. Nothing is enabled
+   * until {@link confirmTotp} proves the authenticator actually holds it, so a
+   * code that did not save cannot lock anybody out.
+   */
+  async enrolTotp(): Promise<TotpEnrolment> {
+    return totpEnrolmentSchema.parse(await this.#transport.request('POST', '/auth/totp/enrol'));
+  }
+
+  async confirmTotp(code: string): Promise<RecoveryCodes> {
+    return recoveryCodesSchema.parse(
+      await this.#transport.request('POST', '/auth/totp/confirm', { code }),
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Invitations (M0-06)
+  // ------------------------------------------------------------------
+
+  /** Reads the invitation without spending it, so a refresh costs nothing. */
+  async previewInvite(token: string): Promise<PublicInvite> {
+    return publicInviteSchema.parse(
+      await this.#transport.request('GET', `/auth/invites/${encodeURIComponent(token)}`),
+    );
+  }
+
+  async acceptInvite(token: string, request: InviteAcceptRequest): Promise<SignInResult> {
+    const response = signInResponseSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `/auth/invites/${encodeURIComponent(token)}/accept`,
+        request,
+      ),
+    );
+
+    return this.#keepSession(response);
+  }
+
+  // ------------------------------------------------------------------
 
   /**
    * On a cold load there is no token yet, so this refreshes first. A browser
    * with no valid cookie gets `null`, which is what sends it to sign-in.
    */
   async me(): Promise<Session | null> {
-    if (this.#accessToken === null && !(await this.#refresh())) {
+    if (this.#transport.accessToken === null && !(await this.#transport.refresh())) {
       return null;
     }
 
     try {
-      return sessionSchema.parse(await this.#request('GET', '/auth/me'));
+      return sessionSchema.parse(await this.#transport.request('GET', '/auth/me'));
     } catch (error) {
       if (error instanceof AuthError) {
         return null;
@@ -123,11 +160,20 @@ export class HttpAuthApi implements AuthApi {
 
   async signOut(): Promise<void> {
     try {
-      await this.#request('POST', '/auth/sign-out');
+      await this.#transport.request('POST', '/auth/sign-out');
     } finally {
       // Whatever the server said, this tab is signed out: keeping a token after
       // asking for it to be revoked would be the worst of both.
-      this.#accessToken = null;
+      this.#transport.accessToken = null;
+    }
+  }
+
+  /** Every browser, and every browser this account trusted (DOMAIN-RULES §12). */
+  async signOutEverywhere(): Promise<void> {
+    try {
+      await this.#transport.request('POST', '/auth/sign-out-everywhere');
+    } finally {
+      this.#transport.accessToken = null;
     }
   }
 
@@ -138,7 +184,7 @@ export class HttpAuthApi implements AuthApi {
       return response;
     }
 
-    this.#accessToken = response.accessToken;
+    this.#transport.accessToken = response.accessToken;
     return { kind: 'session', session: response.session };
   }
 
@@ -151,90 +197,4 @@ export class HttpAuthApi implements AuthApi {
 
     return result.session;
   }
-
-  async #request(
-    method: string,
-    path: string,
-    body?: unknown,
-    { retry = true }: { readonly retry?: boolean } = {},
-  ): Promise<unknown> {
-    const sent = this.#accessToken;
-    const response = await fetch(`${this.#baseUrl}${path}`, {
-      method,
-      // The refresh cookie is `SameSite=Lax` and the admin is served from the
-      // same origin as the api, so this is what carries it.
-      credentials: 'same-origin',
-      headers: {
-        accept: 'application/json',
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(sent === null ? {} : { authorization: `Bearer ${sent}` }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-
-    if (response.status === 401 && retry && sent !== null) {
-      this.#accessToken = null;
-      if (await this.#refresh()) {
-        return this.#request(method, path, body, { retry: false });
-      }
-    }
-
-    if (!response.ok) {
-      throw await toAuthError(response);
-    }
-
-    return response.status === 204 ? undefined : response.json();
-  }
-
-  async #refresh(): Promise<boolean> {
-    this.#refreshing ??= this.#refreshOnce().finally(() => {
-      this.#refreshing = null;
-    });
-
-    return this.#refreshing;
-  }
-
-  async #refreshOnce(): Promise<boolean> {
-    const response = await fetch(`${this.#baseUrl}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { accept: 'application/json' },
-    });
-
-    if (!response.ok) {
-      return false;
-    }
-
-    const parsed = authSessionResponseSchema.safeParse(await response.json());
-    if (!parsed.success) {
-      return false;
-    }
-
-    this.#accessToken = parsed.data.accessToken;
-    return true;
-  }
 }
-
-/**
- * Turns a failed response into an `AuthError`. The api puts the detail the
- * screens need in `error.auth`; anything else — a proxy's HTML error page, a
- * network failure — is `unavailable`, because the screens have exactly one
- * sentence for "something went wrong".
- */
-const toAuthError = async (response: Response): Promise<AuthError> => {
-  let detail: AuthErrorBody | undefined;
-  try {
-    detail = errorResponseSchema.parse(await response.json()).error.auth;
-  } catch {
-    detail = undefined;
-  }
-
-  if (detail === undefined) {
-    return new AuthError('unavailable');
-  }
-
-  return new AuthError(
-    detail.code,
-    detail.attemptsLeft === undefined ? {} : { attemptsLeft: detail.attemptsLeft },
-  );
-};

@@ -6,7 +6,7 @@ import { usePreferences } from '../app/providers.tsx';
 import { useSemanticTokens } from '../app/tokens.js';
 import { useSession } from '../auth/session.tsx';
 import { BrandSwitcher } from './brand-switcher.tsx';
-import { ADMIN_NAV, type NavItem, PRIMARY_NAV } from './nav-items.js';
+import { ADMIN_NAV, type NavItem, navFor, PRIMARY_NAV } from './nav-items.js';
 import { UserMenu } from './user-menu.tsx';
 
 export const SIDEBAR_WIDTH = 220;
@@ -82,6 +82,10 @@ export function Sidebar({
   const tokens = useSemanticTokens();
   const session = useSession();
   const counts = session.navCounts ?? {};
+  // Chrome only: the api refuses the request whatever the sidebar draws.
+  // "Staff and roles" is for the two roles that hold `staff:manage`; "System"
+  // is install-wide and is offered to an install admin alone.
+  const adminNav = navFor(ADMIN_NAV, session.user);
 
   return (
     <Box
@@ -125,16 +129,11 @@ export function Sidebar({
         </Typography>
 
         <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {/* The System page is install-wide — schema, queues, the database
-              role — so only an install admin is offered it. A brand admin who
-              reaches the path anyway is refused by the api, not by the nav. */}
-          {ADMIN_NAV.filter((item) => item.key !== 'system' || session.user.installAdmin).map(
-            (item) => (
-              <Box component="li" key={item.key}>
-                <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
-              </Box>
-            ),
-          )}
+          {adminNav.map((item) => (
+            <Box component="li" key={item.key}>
+              <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+            </Box>
+          ))}
         </Box>
       </Box>
 

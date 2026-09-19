@@ -7,8 +7,10 @@ export const ROUTES = {
   authComplete: '/sign-in/complete',
   passwordResetSent: '/sign-in/reset-sent',
   passwordReset: '/sign-in/reset',
-  /** M0-06 replaces this with the real enrolment screen. */
+  /** The two-step second-factor enrolment of `Admin/Enrol2FA` (M0-06). */
   totpEnrolment: '/sign-in/enrol',
+  /** Public: the only screen somebody without an account ever reaches. */
+  acceptInvite: '/invite/:token',
   oauthCallback: '/oauth/callback',
   tickets: '/tickets',
   contacts: '/contacts',
@@ -19,7 +21,12 @@ export const ROUTES = {
   system: '/admin/system',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
+  /** A person's own account: password, second factor, signed-in browsers. */
+  security: '/me/security',
 } as const;
+
+/** The invite link the api emails, with the token in it. */
+export const inviteRoute = (token: string): string => `/invite/${encodeURIComponent(token)}`;
 
 /** Where a sign-in lands when nothing asked for a particular screen. */
 export const DEFAULT_SIGNED_IN_ROUTE = ROUTES.tickets;

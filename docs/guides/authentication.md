@@ -8,7 +8,9 @@ has to configure. Specified by [REQUIREMENTS
 Implemented by M0-05.
 
 Visitors (the widget, M4) and API keys (M8) are different principals with
-different credentials and are not covered here.
+different credentials and are not covered here. What an account may *do* once it
+has signed in is [staff and roles](staff-and-roles.md), which also covers
+invitations and a person's own security page.
 
 ## The four ways in
 
@@ -118,8 +120,18 @@ the install.
 2. `POST /api/auth/totp/confirm` with a live code enables the second factor and
    returns **ten recovery codes, once**.
 
-The screen that draws the QR code is M0-06. An install with `auth.require2fa` on
-sends an account that has no authenticator to a page that says so.
+The screen that draws the QR code is `/sign-in/enrol`, which an install with
+`auth.require2fa` on sends an account without an authenticator to. It stages the
+secret, draws it as a QR code and as a key that can be typed, and hands over the
+recovery codes behind a checkbox that says they have been saved. The QR is drawn
+in the browser as SVG, because the `otpauth://` URI is a credential and asking a
+server to draw it would put it in a second place. [Staff and
+roles](staff-and-roles.md#two-factor-enrolment) walks through it.
+
+Turning the second factor **off** again, and redrawing the recovery codes, are
+on the security page and each cost a live code: a session proves somebody signed
+in, not that the person at the keyboard now is the account holder. Neither is
+offered while `auth.require2fa` is on.
 
 ### Recovery codes
 
@@ -159,6 +171,16 @@ A password reset ends **every** session the account holds, everywhere, and
 forgets every browser it trusted. Somebody resets a password because they think
 somebody else has it.
 
+### A token in a path never reaches the log
+
+A query string never reaches the request log at all, so the password reset's
+token is safe by construction. The sign-in link and the staff invitation put
+theirs in a *path*, and the invitation's is served as a page by the admin SPA —
+through the catch-all route, which never reaches a handler that knows what the
+segment is. So `RequestContextMiddleware` collapses `/invite/<token>` and
+`/api/auth/magic-link/<token>` to `:token` before the line is written, where
+every request passes, rather than in each handler.
+
 ### Sending
 
 SMTP arrives with M2. Until then the development sender writes one line to the
@@ -193,7 +215,8 @@ Three things make the flow safe:
 
 Matching is by **verified address only** and no account is created: owning a
 Google address is not a reason to be staff here. An unrecognised address answers
-`no-account`. M0-06 is where people are invited.
+`no-account`. People are invited on [the staff
+screen](staff-and-roles.md#inviting-somebody).
 
 ### Configuring a provider
 
@@ -233,7 +256,9 @@ and the app goes to its code screen.
 | Sign out everywhere | Every family, and every trusted browser |
 | Password reset | The same as signing out everywhere |
 | Refresh-token reuse | That family, immediately |
-| Role or department change (M0-06) | The family, so the next refresh carries new claims |
+| Role or department change | Every family, so the next refresh carries new claims |
+| Deactivation, or removal from a brand | Every family, and every trusted browser |
+| Password change from the security page | Every family but the one it was done on |
 
 Revoking a family marks every access token it issued in the last ten minutes, so
 a token already in a browser stops working on its next request rather than when
@@ -253,7 +278,9 @@ whole budget at the end of one window and again at the start of the next.
 |---|---|
 | Sign-in, per address | 5 attempts per 15 minutes |
 | Sign-in, per IP | 20 attempts per 15 minutes |
-| Sign-in link and password reset, per address | 5 per 15 minutes |
+| Sign-in link, password reset and staff invitation, per address | 5 per 15 minutes |
+| Reading or accepting an invitation, per IP | 30 per 15 minutes |
+| Re-proving a credential from inside a session, per account | 5 per 15 minutes |
 
 Over the limit, the answer is `unavailable` — the same answer a lock gives, so
 neither confirms that an address exists. A successful sign-in gives that
@@ -261,6 +288,12 @@ address its budget back.
 
 The address is hashed before it becomes a key, so Redis holds no list of who has
 tried to sign in here.
+
+The last bucket is the one the security page spends. Signing in has a spendable
+challenge — three attempts, then a fifteen-minute lock — and the routes that
+re-prove a credential from inside a session have none, so the budget is the
+lock. It covers `POST /api/me/password`, `POST /api/me/totp/disable` and
+`POST /api/me/recovery-codes/regenerate`.
 
 ## Settings
 
@@ -272,6 +305,7 @@ it in the UI ([ARCHITECTURE §4](../planning/ARCHITECTURE.md#4-configuration-mod
 |---|---|---|
 | `auth.require2fa` | `false` | Require an authenticator for every staff account |
 | `auth.magicLinkTtlMinutes` | `10` | Lifetime of a sign-in link |
+| `roles.viewerEnabled` | `true` | Whether the read-only Viewer role can be assigned ([staff and roles](staff-and-roles.md#the-viewer-toggle)) |
 | `auth.jwtSigningKey` | generated | The ES256 key pair. Secret, generated at first boot, never set by hand |
 | `oauth.google.clientId` / `…clientSecret` | empty | Empty disables the button |
 | `oauth.github.clientId` / `…clientSecret` | empty | Empty disables the button |
@@ -300,6 +334,12 @@ No new `.env` key. Auth derives everything it needs from `APP_MASTER_KEY`, which
 | `POST /api/auth/sign-out-everywhere` | `@Authenticated()` | Every browser |
 | `POST /api/auth/totp/enrol` | `@Authenticated()` | Stage a secret for a QR code |
 | `POST /api/auth/totp/confirm` | `@Authenticated()` | Enable it, return recovery codes |
+| `GET /api/auth/invites/:token` | `@Public()` | Read an invitation without spending it |
+| `POST /api/auth/invites/:token/accept` | `@Public()` | Spend it, and sign in |
+
+The `/api/me/*` routes that change a password, turn the second factor off or
+list the browsers an account is signed in on are in [staff and
+roles](staff-and-roles.md#endpoints).
 
 A failure answers with the api's one error body, plus the detail the sign-in
 screens need:
@@ -336,8 +376,10 @@ with `NODE_ENV=production`, because the password is published here:
 | Password | `helpdock dev password` |
 
 Running it twice is safe and does not reset a password that has been changed.
-`--with-totp` also enrols an authenticator and prints the secret; `--json`
-prints one machine-readable line, which is what the browser tests read.
+`--with-totp` also enrols an authenticator and prints the secret;
+`--with-invite` leaves one unaccepted invitation and prints its link, so the
+invite screen has something live to open; `--json` prints one machine-readable
+line, which is what the browser tests read.
 
 To run the admin app against a real api rather than the fixture:
 

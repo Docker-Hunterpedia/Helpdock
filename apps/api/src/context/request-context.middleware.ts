@@ -118,13 +118,43 @@ export class RequestContextMiddleware implements NestMiddleware {
  * hands it over as-is. Cutting would log the host and its userinfo, and an
  * install-scope route writes this same value into `audit_log.targetId`.
  */
+/**
+ * Paths whose last segment *is* a credential, collapsed before the line is
+ * written.
+ *
+ * A query string never reaches the log, so a token in one is safe. A token in a
+ * path is not: the log is read by more people than the database is, and an
+ * unspent invitation in it is a working way into an account for seven days. The
+ * handler that owns such a route rewrites `context.path` too, but that is not
+ * enough on its own — the admin SPA serves `/invite/<token>` as a *document*,
+ * through the catch-all route, which never reaches a handler that knows what
+ * the segment is. So the redaction lives here, where every request passes.
+ */
+const CREDENTIAL_PATHS: readonly RegExp[] = [
+  // The invite link people are emailed (M0-06), as a page and as the api call.
+  /^(\/api\/auth)?\/invites?\/[^/]+/,
+  // The sign-in link (M0-05), for the same reason.
+  /^\/api\/auth\/magic-link\/[^/]+/,
+];
+
+export const redactCredentialSegments = (path: string): string => {
+  for (const pattern of CREDENTIAL_PATHS) {
+    const match = pattern.exec(path);
+    if (match !== null) {
+      return `${match[0].slice(0, match[0].lastIndexOf('/'))}/:token${path.slice(match[0].length)}`;
+    }
+  }
+
+  return path;
+};
+
 const pathOf = (url: string | undefined): string => {
   if (url === undefined) {
     return '/';
   }
 
   try {
-    return new URL(url, 'http://helpdock.invalid').pathname;
+    return redactCredentialSegments(new URL(url, 'http://helpdock.invalid').pathname);
   } catch {
     /* c8 ignore next 2 -- `URL` with a base parses anything Node accepted as a target. */
     return '/';

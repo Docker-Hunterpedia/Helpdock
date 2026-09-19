@@ -24,3 +24,17 @@ export const brandsOf = (principal: Principal): readonly string[] =>
 /** The id recorded in `app.principal_id` and on audit rows. A worker is named by its job. */
 export const principalIdOf = (principal: Principal): string =>
   principal.type === 'system' ? principal.jobId : principal.id;
+
+/**
+ * The staff id behind the current request. Every `@Authenticated()` route that
+ * acts on "me" needs it and none of them may take it from a parameter, so it is
+ * resolved in one place from what the guard already proved.
+ */
+export const requireStaffPrincipalId = (principal: Principal | null): string => {
+  /* c8 ignore next 3 -- the guard refuses anything else before a handler runs. */
+  if (principal === null || principal.type !== 'staff') {
+    throw new Error('A staff route ran without a staff principal');
+  }
+
+  return principal.id;
+};

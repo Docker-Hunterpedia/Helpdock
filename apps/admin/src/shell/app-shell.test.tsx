@@ -2,11 +2,17 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
 import { renderApp } from '../test/render.tsx';
-import { signedInMockApi } from '../test/signed-in.js';
+import { signedInMockApis } from '../test/signed-in.js';
+
+/** `signedInMockApis` names the pair the way the app does; `renderApp` names them as props. */
+const signedIn = ({ auth, staff }: Awaited<ReturnType<typeof signedInMockApis>>) => ({
+  authApi: auth,
+  staffApi: staff,
+});
 
 const renderShell = async (path = '/tickets') => {
   const rendered = renderApp(<AppRoutes />, {
-    authApi: await signedInMockApi(),
+    ...signedIn(await signedInMockApis()),
     initialEntries: [path],
   });
   await screen.findByRole('navigation', { name: 'Main' });

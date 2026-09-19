@@ -45,6 +45,36 @@ export const EMAIL_DISPATCH_RULE: RateLimitRule = {
 };
 
 /**
+ * Per account, for the routes that re-prove a credential from inside a session:
+ * the current password, and a live authenticator code before the second factor
+ * is weakened.
+ *
+ * The sign-in second factor has a spendable challenge with three attempts and a
+ * fifteen-minute lock; these have no challenge to spend, so the budget is the
+ * lock. Six digits with a one-step window is three valid codes at any instant
+ * out of a million — unlimited guesses would be minutes of work, and the
+ * routes it protects hand back ten standalone recovery codes or turn the second
+ * factor off.
+ */
+export const STEP_UP_RULE: RateLimitRule = {
+  bucket: 'step-up',
+  limit: 5,
+  windowSeconds: 15 * 60,
+};
+
+/**
+ * Per IP, for the two public invite routes. An invite token is 256 bits, so
+ * guessing one is not the threat; what this bounds is somebody walking the
+ * endpoint to find out whether a token they already hold is still live, and the
+ * argon2 work an accept request costs.
+ */
+export const INVITE_LOOKUP_RULE: RateLimitRule = {
+  bucket: 'invite-lookup',
+  limit: 30,
+  windowSeconds: 15 * 60,
+};
+
+/**
  * Trim, count, add, expire — in one round trip, so two requests racing cannot
  * both see a count below the limit.
  */

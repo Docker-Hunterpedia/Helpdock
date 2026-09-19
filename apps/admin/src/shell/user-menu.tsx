@@ -1,6 +1,6 @@
 import { Avatar, Box, Divider, ListItemIcon, Menu, MenuItem, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
-import { Check, Languages, LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { Check, Languages, LogOut, Monitor, Moon, ShieldCheck, Sun } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { otherLocale, useT } from '../app/i18n.js';
@@ -102,6 +102,20 @@ export function UserMenu(): ReactNode {
         onClose={close}
         slotProps={{ list: { 'aria-label': menuLabel } }}
       >
+        <MenuItem
+          onClick={() => {
+            close();
+            void navigate(ROUTES.security);
+          }}
+        >
+          <ListItemIcon>
+            <ShieldCheck size={16} aria-hidden="true" />
+          </ListItemIcon>
+          {t('me:security.title')}
+        </MenuItem>
+
+        <Divider />
+
         <MenuItem
           onClick={() => {
             setLocale(other);

@@ -106,6 +106,11 @@ export class RedisStub {
     return 'OK';
   }
 
+  /** One round trip for many keys; a missing one is `null` in its place. */
+  async mget(...keys: string[]): Promise<(string | null)[]> {
+    return Promise.all(keys.map((key) => this.get(key)));
+  }
+
   async getdel(key: string): Promise<string | null> {
     const value = await this.get(key);
     this.#entries.delete(key);
@@ -157,6 +162,10 @@ export class RedisStub {
   async hget(key: string, field: string): Promise<string | null> {
     const entry = this.#live(key);
     return entry?.data.kind === 'hash' ? (entry.data.value.get(field) ?? null) : null;
+  }
+
+  async hmget(key: string, ...fields: string[]): Promise<(string | null)[]> {
+    return Promise.all(fields.map((field) => this.hget(key, field)));
   }
 
   // -- sets ----------------------------------------------------------
@@ -335,6 +344,18 @@ class ChainableStub {
 
   expire(...args: Parameters<RedisStub['expire']>): this {
     return this.#queued(() => this.#stub.expire(...args));
+  }
+
+  smembers(...args: Parameters<RedisStub['smembers']>): this {
+    return this.#queued(() => this.#stub.smembers(...args));
+  }
+
+  hget(...args: Parameters<RedisStub['hget']>): this {
+    return this.#queued(() => this.#stub.hget(...args));
+  }
+
+  hmget(...args: Parameters<RedisStub['hmget']>): this {
+    return this.#queued(() => this.#stub.hmget(...args));
   }
 
   async exec(): Promise<[null, unknown][]> {

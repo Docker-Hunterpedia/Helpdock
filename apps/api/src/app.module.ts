@@ -31,6 +31,7 @@ import { ConfigModule } from './runtime/config.module.js';
 import { DbModule } from './runtime/db.module.js';
 import { SettingsModule } from './runtime/settings.module.js';
 import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js';
+import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
 
@@ -78,6 +79,7 @@ export class AppModule implements NestModule {
         SettingsModule.forRoot(options.settings, options.redis),
         AuthModule.forRoot(options.auth),
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
+        StaffModule.forRoot({ logger: options.logger }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

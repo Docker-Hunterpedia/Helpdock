@@ -12,6 +12,7 @@ import { DEV_ADMIN_PASSWORD, seedDevInstall } from './dev-seed.js';
  * | Flag | |
  * |---|---|
  * | `--with-totp` | Enrols a second factor and reports the secret. The browser test that drives the real api needs one it can produce codes from. |
+ * | `--with-invite` | Leaves one unaccepted invitation and reports its token, so the invite screen has a live link to open. |
  * | `--json` | Prints one JSON line instead of prose, for a script to read. |
  */
 
@@ -37,6 +38,7 @@ const main = async (): Promise<void> => {
       db,
       env,
       withTotp: flags.has('--with-totp'),
+      withInvite: flags.has('--with-invite'),
       log: say,
     });
 
@@ -50,6 +52,9 @@ const main = async (): Promise<void> => {
     );
     if (seeded.totpSecret !== null) {
       process.stdout.write(`  authenticator secret: ${seeded.totpSecret}\n`);
+    }
+    if (seeded.inviteToken !== null) {
+      process.stdout.write(`\nA pending invitation: ${env.APP_URL}/invite/${seeded.inviteToken}\n`);
     }
   } finally {
     await close();

@@ -1,10 +1,15 @@
 import type {
   AuthMethods,
+  InviteAcceptRequest,
   OauthProvider,
+  PublicInvite,
+  RecoveryCodes,
   Session,
   SessionBrand,
   SignInResult,
+  TotpEnrolment,
 } from '@helpdock/schemas';
+import { MOCK_ENROLMENT_CODE, MOCK_TOTP_SECRET, type MockStaffApi } from '../staff/mock-api.js';
 import { type AuthApi, AuthError } from './api.js';
 
 /**
@@ -71,11 +76,20 @@ interface Challenge {
 
 export class MockAuthApi implements AuthApi {
   readonly #challenges = new Map<string, Challenge>();
+  /**
+   * The same fixture the staff screens read, so an invitation sent on one
+   * screen is the invitation the accept screen finds (M0-06).
+   */
+  readonly #staff: MockStaffApi | undefined;
   #session: Session | null = null;
   #challengeCounter = 0;
   #recoveryCodeUsed = false;
   /** What a real install would store as a trusted-device cookie. */
   #trustedDevice = false;
+
+  constructor(staff?: MockStaffApi) {
+    this.#staff = staff;
+  }
 
   /** Every method is on: the fixture exists to exercise every screen. */
   async authMethods(): Promise<AuthMethods> {
@@ -170,6 +184,56 @@ export class MockAuthApi implements AuthApi {
     await delay(MAGIC_LINK_DELAY_MS);
   }
 
+  /**
+   * A fixed secret, so the QR the enrolment screen draws is the same every run
+   * and a browser test can assert on it without decoding an image.
+   */
+  async enrolTotp(): Promise<TotpEnrolment> {
+    return {
+      secret: MOCK_TOTP_SECRET,
+      uri: `otpauth://totp/Helpdock:${encodeURIComponent(MOCK_EMAIL)}?secret=${MOCK_TOTP_SECRET}&issuer=Helpdock`,
+    };
+  }
+
+  async confirmTotp(code: string): Promise<RecoveryCodes> {
+    if (code !== MOCK_ENROLMENT_CODE) {
+      throw new AuthError('totp-mismatch');
+    }
+
+    return (
+      this.#staff?.markTotpEnabled() ?? {
+        recoveryCodes: Array.from(
+          { length: 10 },
+          (_unused, index) => `RC-AB${index}-${1000 + index * 7}`,
+        ),
+      }
+    );
+  }
+
+  async previewInvite(token: string): Promise<PublicInvite> {
+    const invite = this.#staff?.inviteFor(token);
+    if (invite === undefined) {
+      throw new AuthError('challenge-expired');
+    }
+
+    return invite;
+  }
+
+  async acceptInvite(token: string, _request: InviteAcceptRequest): Promise<SignInResult> {
+    const invite = this.#staff?.inviteFor(token);
+    if (invite === undefined) {
+      throw new AuthError('challenge-expired');
+    }
+
+    this.#staff?.spendInvite(token);
+    // An install that requires 2FA sends a brand new account to enrolment
+    // before it ever sees a screen; the fixture always does, because that is
+    // the path the enrolment screen exists for.
+    this.#challengeCounter += 1;
+
+    return { kind: 'totp-enrolment-required', challengeId: `mock-enrol-${this.#challengeCounter}` };
+  }
+
   async me(): Promise<Session | null> {
     return this.#session;
   }
@@ -177,6 +241,11 @@ export class MockAuthApi implements AuthApi {
   async signOut(): Promise<void> {
     this.#session = null;
     this.#challenges.clear();
+  }
+
+  async signOutEverywhere(): Promise<void> {
+    this.#trustedDevice = false;
+    await this.signOut();
   }
 
   #requireChallenge(challengeId: string): Challenge {

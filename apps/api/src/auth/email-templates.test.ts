@@ -19,7 +19,7 @@ describe('renderAuthEmail', () => {
       name: 'Lina',
       url: URL_WITH_TOKEN,
       locale: 'en',
-      ttlMinutes: 10,
+      expiresIn: 10,
     });
 
     expect(message.subject).toBe('Your sign-in link for Helpdock');
@@ -33,7 +33,7 @@ describe('renderAuthEmail', () => {
       to: 'lina@helpdock.com',
       url: URL_WITH_TOKEN,
       locale: 'ar',
-      ttlMinutes: 10,
+      expiresIn: 10,
     });
 
     expect(message.html).toContain('dir="rtl"');
@@ -47,7 +47,7 @@ describe('renderAuthEmail', () => {
       to: 'lina@helpdock.com',
       url: URL_WITH_TOKEN,
       locale: 'en',
-      ttlMinutes: 1,
+      expiresIn: 1,
     });
 
     expect(message.text).toContain('The link expires in 1 minute.');
@@ -59,7 +59,7 @@ describe('renderAuthEmail', () => {
       to: 'lina@helpdock.com',
       url: URL_WITH_TOKEN,
       locale: 'en',
-      ttlMinutes: 10,
+      expiresIn: 10,
     });
 
     expect(message.subject).toBe('Reset your Helpdock password');
@@ -72,7 +72,7 @@ describe('renderAuthEmail', () => {
       to: 'lina@helpdock.com',
       url: URL_WITH_TOKEN,
       locale: 'en',
-      ttlMinutes: 10,
+      expiresIn: 10,
     });
 
     expect(message.text).toContain(URL_WITH_TOKEN);
@@ -85,7 +85,7 @@ describe('renderAuthEmail', () => {
       to: 'lina@helpdock.com',
       url: URL_WITH_TOKEN,
       locale: 'en',
-      ttlMinutes: 10,
+      expiresIn: 10,
     });
 
     expect(message.html).toContain('?a=1&amp;b=2');
@@ -98,7 +98,7 @@ describe('renderAuthEmail', () => {
       to: 'a"><script>alert(1)</script>@helpdock.com',
       url: URL_WITH_TOKEN,
       locale: 'en',
-      ttlMinutes: 10,
+      expiresIn: 10,
     });
 
     expect(message.html).not.toContain('<script>');
@@ -111,7 +111,7 @@ describe('renderAuthEmail', () => {
         to: 'lina@helpdock.com',
         url: URL_WITH_TOKEN,
         locale,
-        ttlMinutes: 10,
+        expiresIn: 10,
       });
 
       expect(message.text).not.toContain('passwordReset.');

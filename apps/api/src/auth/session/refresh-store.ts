@@ -44,6 +44,15 @@ export interface IssuedRefreshToken {
   readonly token: string;
 }
 
+/** One browser, as {@link RefreshStore.familiesOf} reports it. Seconds, not milliseconds. */
+export interface RefreshFamily {
+  readonly familyId: string;
+  readonly issuedAt: number;
+  readonly lastUsedAt: number;
+  /** Already truncated to {@link MAX_USER_AGENT_LENGTH}; empty when none was sent. */
+  readonly userAgent: string;
+}
+
 /**
  * Compare-and-set in one round trip. Two refreshes racing on the same token
  * would otherwise both read the current hash, both match it, and both succeed —
@@ -71,6 +80,22 @@ const newToken = (): string => randomBytes(TOKEN_BYTES).toString('base64url');
 
 export const truncateUserAgent = (userAgent: string | undefined): string =>
   (userAgent ?? '').slice(0, MAX_USER_AGENT_LENGTH);
+
+/**
+ * A stored epoch-seconds field, or `null` when Redis had nothing there.
+ *
+ * `Number(null)` is 0 and `Number.isFinite(0)` is true, so the missing field
+ * has to be recognised before it is coerced. Getting this wrong turns a family
+ * whose record has expired into a browser that has been signed in since 1970.
+ */
+const toSeconds = (value: string | null | undefined): number | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? seconds : null;
+};
 
 export class RefreshStore {
   readonly #redis: Redis;
@@ -162,6 +187,97 @@ export class RefreshStore {
       .sadd(familySessionsKey(familyId), sessionId)
       .expire(familySessionsKey(familyId), ACCESS_TOKEN_TTL_SECONDS)
       .exec();
+  }
+
+  /**
+   * Every family this user still holds, newest first. The security page lists
+   * them as browsers, and the staff table derives "last active" from the newest
+   * `lastUsedAt` among them (M0-06).
+   *
+   * A family id in the index whose record has expired is dropped from the index
+   * on the way past, so the set does not accumulate ids Redis has already
+   * forgotten.
+   */
+  async familiesOf(userId: string): Promise<RefreshFamily[]> {
+    const familyIds = await this.#redis.smembers(userFamiliesKey(userId));
+    if (familyIds.length === 0) {
+      return [];
+    }
+
+    const pipeline = this.#redis.multi();
+    for (const familyId of familyIds) {
+      pipeline.hmget(familyKey(familyId), 'issuedAt', 'lastUsedAt', 'ua');
+    }
+    const results = (await pipeline.exec()) ?? [];
+
+    const families: RefreshFamily[] = [];
+    const stale: string[] = [];
+
+    for (const [index, familyId] of familyIds.entries()) {
+      const fields = results[index]?.[1] as (string | null)[] | undefined;
+      // The absent field has to be tested before it is coerced: `Number(null)`
+      // is 0, and 0 is finite, so a family whose hash has expired would
+      // otherwise be reported as a live browser signed in at the epoch.
+      const issuedAt = toSeconds(fields?.[0]);
+      const lastUsedAt = toSeconds(fields?.[1]);
+
+      if (issuedAt === null || lastUsedAt === null) {
+        stale.push(familyId);
+        continue;
+      }
+
+      families.push({ familyId, issuedAt, lastUsedAt, userAgent: fields?.[2] ?? '' });
+    }
+
+    if (stale.length > 0) {
+      await this.#redis.srem(userFamiliesKey(userId), ...stale);
+    }
+
+    return families.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+  }
+
+  /**
+   * The newest `lastUsedAt` of each user, in two round trips however many users
+   * are asked about. The staff table shows "Last active" for everybody at once,
+   * and walking {@link familiesOf} per row would be a round trip per person.
+   *
+   * Users with no live family are absent from the map rather than zero, so the
+   * caller can tell "never signed in" from "signed in at the epoch".
+   */
+  async lastActiveOf(userIds: readonly string[]): Promise<Map<string, number>> {
+    const lastActive = new Map<string, number>();
+    if (userIds.length === 0) {
+      return lastActive;
+    }
+
+    const families = this.#redis.multi();
+    for (const userId of userIds) {
+      families.smembers(userFamiliesKey(userId));
+    }
+    const familyResults = (await families.exec()) ?? [];
+
+    const owners: string[] = [];
+    const timestamps = this.#redis.multi();
+    for (const [index, userId] of userIds.entries()) {
+      for (const familyId of (familyResults[index]?.[1] as string[] | undefined) ?? []) {
+        owners.push(userId);
+        timestamps.hget(familyKey(familyId), 'lastUsedAt');
+      }
+    }
+
+    if (owners.length === 0) {
+      return lastActive;
+    }
+
+    const timestampResults = (await timestamps.exec()) ?? [];
+    for (const [index, userId] of owners.entries()) {
+      const seconds = toSeconds(timestampResults[index]?.[1] as string | null | undefined);
+      if (seconds !== null) {
+        lastActive.set(userId, Math.max(lastActive.get(userId) ?? 0, seconds));
+      }
+    }
+
+    return lastActive;
   }
 
   /** The user the family belongs to, or `null` when there is no such family. */

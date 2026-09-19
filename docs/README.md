@@ -9,7 +9,7 @@ Project documents are organised by lifecycle stage. A document moves between fol
 | [`completed/`](completed/) | Specs for shipped features, updated to describe what was actually built. Reference for maintainers. | Never. Superseded docs get a note pointing to the replacement. |
 | [`decisions/`](decisions/) | Architecture Decision Records (ADRs). One file per decision, numbered, never edited after acceptance. | Never. A reversed decision gets a new ADR that supersedes it. |
 
-Guides live under [`guides/`](guides/), starting with [development.md](guides/development.md) on installing, building and testing the monorepo. Install, configuration, channel and API guides are added as the features they describe ship.
+Guides live under [`guides/`](guides/), starting with [development.md](guides/development.md) on installing, building and testing the monorepo. [authentication.md](guides/authentication.md) covers signing in; [staff-and-roles.md](guides/staff-and-roles.md) covers who may do what once signed in. Configuration, channel and API guides are added as the features they describe ship.
 
 ## Conventions
 

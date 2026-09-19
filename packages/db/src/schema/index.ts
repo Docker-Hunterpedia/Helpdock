@@ -1,6 +1,7 @@
 export * from './audit-log.js';
 export * from './brand-domains.js';
 export * from './brands.js';
+export * from './departments.js';
 export * from './enums.js';
 export * from './job-receipts.js';
 export * from './outbox.js';

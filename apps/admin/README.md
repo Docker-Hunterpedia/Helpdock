@@ -7,7 +7,10 @@ i18next, built from [`@helpdock/ui`](../../packages/ui/README.md) and
 
 M0-07 shipped the chrome: the sign-in screens, the shell, and one empty page per
 nav destination. M0-05 connected them to the real auth service; the in-memory
-fixture stays as the adapter the unit and browser suites run against.
+fixture stays as the adapter the unit and browser suites run against. M0-06
+replaced three of those empty pages with real ones — staff and roles, two-factor
+enrolment and the account's own security page — and added the public invite
+screen.
 
 M0-10 adds the first real screen, **System**, built from the design canvas
 artboard `Admin/System`. It reads a real endpoint
@@ -37,6 +40,8 @@ Open http://localhost:5273 and sign in with the fixture:
 | Password | `correct horse` |
 | Authenticator code | `482913` |
 | Recovery code | `RC-1234-5678` |
+| A live invitation | `/invite/mock-invite-token` |
+| One that has run out | `/invite/expired-invite-token` |
 
 Three wrong codes lock the challenge for the rest of the session, "Trust this
 browser" makes the next sign-in skip the second factor, and the sign-in link
@@ -60,9 +65,13 @@ index.html          sets lang/dir/color-scheme before the bundle runs
 src/app/            providers, routes, preferences, the typed t()
 src/auth/           the AuthApi boundary, its two adapters, session state
 src/screens/        sign in, the code screen, the link and reset confirmations,
-                    the redirect hand-off, pages
+                    the redirect hand-off, staff and roles, two-factor
+                    enrolment, the invite screen, the security page
+src/staff/          the StaffApi boundary and its two adapters
 src/shell/          sidebar, brand switcher, user menu, page header, empty state
-src/ui/             the small pieces DESIGN §6 has no component for yet
+src/ui/             the small pieces DESIGN §6 has no component for yet: the
+                    toast stack, the confirmation dialog, the password-strength
+                    bar, and the QR encoder the enrolment screen draws with
 src/install/        what the sign-in screen may know before anyone signs in
 src/screens/admin/system/   the System page (M0-10), its api client and formatters
 e2e/                Playwright, one project per locale
@@ -137,9 +146,28 @@ brands and their verified help-center domains; the checked-in values are the dev
 fixture, and they are what a `vite preview` or a build served by anything else
 shows.
 
-### The auth boundary
+### The screens M0-06 added
 
-Everything the screens need is `AuthApi` in `src/auth/api.ts`. Its DTOs are Zod
+| Route | Artboard | |
+|---|---|---|
+| `/admin/staff` | `Admin/Staff` | The table, the invite dialog with its role cards and department chips, and every row action of DOMAIN-RULES §12. Visible to an Admin and a Team Leader; the sidebar hides it from everybody else, and the api refuses it whatever the sidebar draws. |
+| `/sign-in/enrol` | `Admin/Enrol2FA` | Two steps: scan, then save the recovery codes behind a checkbox. |
+| `/invite/:token` | `Admin/AcceptInvite` | Public, outside the shell: the only screen somebody without an account ever sees. |
+| `/me/security` | the `Admin/Settings` card and field patterns | Details, password, second factor, signed-in browsers. |
+
+The QR code is encoded in the browser by `src/ui/qr-encode.ts` — byte mode,
+error-correction level M, versions 1 to 10, which is what an `otpauth://` URI
+needs and nothing more. It is not a dependency: `qrcode` brings `pngjs`, `yargs`
+and `dijkstrajs` for a page that needs none of them, and a package outside the
+stack table in ARCHITECTURE §1 needs an ADR. The encoder is checked against the
+tables in ISO/IEC 18004 — the format strings, the version strings, the
+Reed-Solomon example in annex I — and then read back out of the matrix the way a
+scanner reads it.
+
+### The auth and staff boundaries
+
+Everything the screens need is `AuthApi` in `src/auth/api.ts` and `StaffApi` in
+`src/staff/api.ts`. Its DTOs are Zod
 schemas in [`@helpdock/schemas`](../../packages/schemas/src/auth.ts), so the api
 declares its responses against the same shapes the app parses them with. Two
 adapters implement it:
@@ -155,7 +183,16 @@ is written outside `packages/i18n`. The codes are `invalid-credentials`,
 `totp-mismatch` (with `attemptsLeft`), `totp-locked`, `challenge-expired`,
 `recovery-invalid`, `no-account` and `unavailable`.
 
-**`HttpAuthApi` holds the access token in a field and nowhere else** — not in
+The two http adapters share one `HttpTransport`, so there is one access token
+and one refresh in the app; the two fixtures share one `MockStaffApi`, so an
+invitation sent on the staff screen is the one the accept screen reads.
+`createApis()` builds each pair together for that reason.
+
+A staff refusal crosses as a `StaffError` carrying the rule that refused —
+`self`, `out-of-scope`, `viewer-disabled` or `last-install-admin` — which the
+screen turns into a toast.
+
+**`HttpTransport` holds the access token in a field and nowhere else** — not in
 `localStorage`, not in `sessionStorage`, not in a cookie a script can read. A
 reload starts with none and refreshes from the `httpOnly` cookie the api set. A
 401 is retried once, after a refresh, and only when a token was actually sent:
@@ -186,8 +223,10 @@ protected-route redirect and each screen's states.
 
 `e2e:api` is a second Playwright config with one project, `api`: it starts
 Postgres and Redis with Testcontainers, runs the built api as its own process,
-seeds an account with a known password and authenticator secret, and drives sign
-in → code → shell → sign out in a browser with `VITE_AUTH_API=http`. It needs
+seeds an account with a known password and authenticator secret plus one pending
+invitation, and drives sign in → code → shell → sign out, and invitation →
+acceptance → two-factor enrolment → signing in with both, in a browser with
+`VITE_AUTH_API=http`. It needs
 Docker and a `pnpm build`; without Docker it skips itself and says so. It is a
 separate config because a `webServer` and a `globalSetup` belong to a whole run,
 and putting it in the main one would start containers for the fixture suite too.

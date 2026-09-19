@@ -39,6 +39,15 @@ export const trustedDeviceKey = (userId: string, nonceHash: string): string =>
 /** A magic link, a password reset or an invite, addressed by the hash of the token. */
 export const emailTokenKey = (tokenHash: string): string => `auth:token:${tokenHash}`;
 
+/**
+ * The invite outstanding for one person in one brand (M0-06). It holds the hash
+ * of the token that was sent, so resending can delete the previous one, and the
+ * two timestamps the staff list prints; its TTL is the invite's own, so a row
+ * that says "pending" can never outlive the link it is about.
+ */
+export const pendingInviteKey = (brandId: string, userId: string): string =>
+  `auth:invite:${brandId}:${userId}`;
+
 /** The one-time code a redirect carries instead of an access token. */
 export const exchangeKey = (codeHash: string): string => `auth:exchange:${codeHash}`;
 

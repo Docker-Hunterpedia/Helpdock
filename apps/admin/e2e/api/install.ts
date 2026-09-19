@@ -37,6 +37,9 @@ export const E2E_WEB_ORIGIN = `http://localhost:${String(E2E_WEB_PORT)}`;
 export const TOTP_SECRET_ENV = 'HD_E2E_TOTP_SECRET';
 export const ACCOUNT_EMAIL_ENV = 'HD_E2E_EMAIL';
 export const ACCOUNT_PASSWORD_ENV = 'HD_E2E_PASSWORD';
+/** A live invitation the staff spec accepts. Seeded, because nothing logs a link. */
+export const INVITE_TOKEN_ENV = 'HD_E2E_INVITE_TOKEN';
+export const INVITEE_EMAIL = 'invitee@helpdock.test';
 /** Set when Docker is missing, so the specs skip with a reason instead of failing. */
 export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
 
@@ -132,8 +135,12 @@ export const startInstall = async (): Promise<RunningInstall> => {
   };
 
   const seeded = JSON.parse(
-    await run(path.join(apiRoot, 'dist/seed/seed-dev.js'), env, ['--with-totp', '--json']),
-  ) as { email: string; password: string; totpSecret: string };
+    await run(path.join(apiRoot, 'dist/seed/seed-dev.js'), env, [
+      '--with-totp',
+      '--with-invite',
+      '--json',
+    ]),
+  ) as { email: string; password: string; totpSecret: string; inviteToken: string };
 
   const api = spawn(process.execPath, [entry], {
     cwd: apiRoot,
@@ -154,6 +161,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
   process.env[ACCOUNT_EMAIL_ENV] = seeded.email;
   process.env[ACCOUNT_PASSWORD_ENV] = seeded.password;
   process.env[TOTP_SECRET_ENV] = seeded.totpSecret;
+  process.env[INVITE_TOKEN_ENV] = seeded.inviteToken;
 
   return {
     stop: async () => {

@@ -2,15 +2,15 @@
  * The seam between "something wants an email sent" and "SMTP happens".
  *
  * M0-05 needs to put a magic link and a password reset in front of a person,
- * and M2 is the milestone that brings Nodemailer, per-brand SMTP credentials
- * and the outbound queue. The interface is declared here so M2 implements it
- * without touching the auth service, and so dev and test have something honest
- * to run against in the meantime.
+ * M0-06 adds the staff invitation, and M2 is the milestone that brings
+ * Nodemailer, per-brand SMTP credentials and the outbound queue. The interface
+ * is declared here so M2 implements it without touching the services that send,
+ * and so dev and test have something honest to run against in the meantime.
  *
  * Anything with a real transport belongs behind the outbox (DOMAIN-RULES §6).
- * The two auth mails are the documented exception: neither is a domain change,
- * both are useless the moment their Redis token expires, and a queue that is
- * not built yet cannot carry them.
+ * These three are the documented exception: none is a domain change, each is
+ * useless the moment its Redis token expires, and a queue that is not built yet
+ * cannot carry them.
  */
 
 export interface EmailAddress {

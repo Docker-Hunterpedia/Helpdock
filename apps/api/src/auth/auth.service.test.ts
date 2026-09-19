@@ -241,6 +241,7 @@ beforeEach(async () => {
       keys: { kid: 'k1', privateKey, publicKey },
       logger: silentLogger(),
       appUrl: APP_URL,
+      settings,
     }),
     hasher,
     challenges: new TotpChallengeStore(created.redis),

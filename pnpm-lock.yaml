@@ -396,6 +396,9 @@ importers:
       socket.io-client:
         specifier: 4.8.3
         version: 4.8.3
+      testcontainers:
+        specifier: 12.1.0
+        version: 12.1.0
 
   apps/helpcenter: {}
 
@@ -403,7 +406,14 @@ importers:
 
   packages/ai: {}
 
-  packages/channels: {}
+  packages/channels:
+    dependencies:
+      '@helpdock/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      nodemailer:
+        specifier: 10.0.10
+        version: 10.0.10
 
   packages/config:
     dependencies:
@@ -3155,6 +3165,10 @@ packages:
   node-gyp-build@4.8.4:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
+
+  nodemailer@10.0.10:
+    resolution: {integrity: sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A==}
+    engines: {node: '>=20.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
@@ -6138,6 +6152,8 @@ snapshots:
     optional: true
 
   node-gyp-build@4.8.4: {}
+
+  nodemailer@10.0.10: {}
 
   normalize-path@3.0.0: {}
 

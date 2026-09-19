@@ -1,18 +1,46 @@
 {
   "title": "إعداد Helpdock",
   "systemStatus": "{{version}} · واجهة البرمجة والعامل يعملان بسلامة",
+  "systemStatusUnknown": "{{version}} · جارٍ فحص الخدمات",
+  "systemStatusDown": "{{version}} · بعض الخدمات غير جاهزة",
   "stepLabel": "{{index}} · {{label}}",
+  "progressLabel": "تقدّم الإعداد",
+  "stepDone": "مكتملة",
   "stepsRemaining_zero": "لم تبقَ خطوات",
   "stepsRemaining_one": "بقيت خطوة واحدة",
   "stepsRemaining_two": "بقيت خطوتان",
   "stepsRemaining_few": "بقيت {{count}} خطوات",
   "stepsRemaining_many": "بقيت {{count}} خطوة",
   "stepsRemaining_other": "بقيت {{count}} خطوة",
+  "back": "رجوع",
   "steps": {
     "account": "حساب المدير",
     "brand": "العلامة التجارية الأولى",
     "email": "البريد الصادر",
     "done": "تم"
+  },
+  "account": {
+    "title": "أنشئ حساب المدير",
+    "description": "هذا حساب مدير التثبيت: الحساب الوحيد الذي يصل إلى كل علامة تجارية وكل إعداد. يمكنك دعوة بقية الفريق لاحقًا.",
+    "nameLabel": "اسمك",
+    "emailLabel": "البريد الإلكتروني",
+    "passwordLabel": "كلمة المرور",
+    "passwordHint": "١٢ حرفًا على الأقل. أربع كلمات غير مترابطة أقوى من كلمة قصيرة مليئة بالرموز.",
+    "languageLabel": "لغتك",
+    "strengthLabel": "قوة كلمة المرور",
+    "strength": {
+      "weak": "يسهل تخمينها",
+      "fair": "مقبولة",
+      "good": "جيدة",
+      "strong": "قوية"
+    },
+    "submit": "إنشاء الحساب والمتابعة",
+    "nameRequired": "أدخل الاسم الذي سيراه زملاؤك.",
+    "emailRequired": "أدخل عنوان بريد إلكتروني.",
+    "emailInvalid": "أدخل عنوان بريد إلكتروني صالحًا.",
+    "passwordRequired": "اختر كلمة مرور.",
+    "passwordTooShort": "استخدم ١٢ حرفًا على الأقل.",
+    "passwordTooWeak": "كلمة المرور هذه يسهل تخمينها. جرّب عدة كلمات غير مترابطة."
   },
   "brand": {
     "title": "علامتك التجارية الأولى",
@@ -25,11 +53,69 @@
     "domainLabel": "نطاق مركز المساعدة",
     "domainOptional": "(اختياري، يمكنك التحقق منه لاحقًا)",
     "domainPlaceholder": "support.example.com",
-    "submit": "إنشاء العلامة التجارية والمتابعة"
+    "submit": "إنشاء العلامة التجارية والمتابعة",
+    "nameRequired": "أعطِ العلامة التجارية اسمًا.",
+    "prefixRequired": "اختر بادئة للتذاكر.",
+    "prefixInvalid": "استخدم من حرفين إلى ستة، من A-Z و0-9.",
+    "timezoneInvalid": "اختر منطقة زمنية من القائمة.",
+    "domainInvalid": "أدخل اسم مضيف مثل support.example.com.",
+    "prefixTaken": "هذه البادئة مستخدمة بالفعل في هذا التثبيت."
+  },
+  "email": {
+    "title": "البريد الصادر",
+    "description": "يرسل Helpdock روابط الدخول والإشعارات وردود التذاكر عبر خادم SMTP الخاص بك. يمكنك تغيير ذلك لاحقًا من الإعدادات.",
+    "hostLabel": "خادم SMTP",
+    "hostPlaceholder": "smtp.example.com",
+    "portLabel": "المنفذ",
+    "tlsLabel": "التشفير",
+    "tls": {
+      "starttls": "STARTTLS (587)",
+      "tls": "TLS (465)",
+      "none": "بدون"
+    },
+    "userLabel": "اسم المستخدم",
+    "userOptional": "(اختياري، لخادم لا يطلب مصادقة)",
+    "passwordLabel": "كلمة المرور",
+    "passwordHint": "تُشفَّر بمفتاحك الرئيسي، ولن تُعرض مرة أخرى بعد الحفظ.",
+    "fromAddressLabel": "عنوان المُرسِل",
+    "fromNameLabel": "اسم المُرسِل",
+    "test": "إرسال رسالة اختبار",
+    "testPending": "جارٍ إرسال رسالة اختبار",
+    "testDelivered": "تم التسليم إلى {{email}}.",
+    "testDeliveredWithResponse": "تم التسليم إلى {{email}}. ردّ الخادم: {{response}}",
+    "skip": "تخطٍّ الآن",
+    "submit": "حفظ ومتابعة",
+    "hostRequired": "أدخل اسم مضيف خادم SMTP.",
+    "portInvalid": "أدخل منفذًا بين ١ و٦٥٥٣٥.",
+    "fromAddressRequired": "أدخل العنوان الذي ستصدر منه الرسائل.",
+    "fromAddressInvalid": "أدخل عنوان بريد إلكتروني صالحًا.",
+    "fromNameRequired": "أدخل الاسم الذي سيراه المستلمون.",
+    "errors": {
+      "auth-failed": "رفض الخادم بيانات الاعتماد هذه. تحقّق من اسم المستخدم وكلمة المرور.",
+      "connection-refused": "تعذّر الوصول إلى الخادم. تحقّق من اسم المضيف والمنفذ.",
+      "tls-error": "فشل الاتصال المشفّر. جرّب إعداد تشفير مختلفًا.",
+      "timeout": "لم يستجب الخادم خلال عشر ثوانٍ.",
+      "rejected": "رفض الخادم الرسالة. تحقّق من عنوان المُرسِل.",
+      "unknown": "تعذّر إكمال الاختبار. تحقّق من البيانات وحاول مجددًا."
+    }
+  },
+  "done": {
+    "title": "Helpdock جاهز",
+    "description": "تم إعداد تثبيتك. كل ما يلي يمكن تغييره لاحقًا من الإعدادات.",
+    "adminLabel": "حساب المدير",
+    "brandLabel": "العلامة التجارية",
+    "brandValue": "{{name}} · {{prefix}}",
+    "emailLabel": "البريد الصادر",
+    "emailSkipped": "لم يُضبط بعد",
+    "twoFactor": "يتطلب هذا التثبيت المصادقة بخطوتين، لذا ستضبط تطبيق المصادقة في الخطوة التالية.",
+    "submit": "فتح Helpdock"
   },
   "masterKey": {
     "title": "احتفظ بمفتاحك الرئيسي في مكان آمن.",
     "body": "تُشفَّر الأسرار باستخدام {{envKey}} من ملف {{envFile}}. إذا فُقد المفتاح، فلا يمكن استرجاع بيانات الاعتماد المخزّنة.",
     "link": "طريقة الاحتفاظ بنسخة احتياطية منه"
-  }
+  },
+  "failed": "حدث خطأ ما. تحقّق من اتصالك وحاول مجددًا.",
+  "closed": "تم إعداد هذا التثبيت بالفعل. سجّل الدخول بدلًا من ذلك.",
+  "throttled": "محاولات كثيرة من هذا العنوان. انتظر بضع دقائق وحاول مجددًا."
 }

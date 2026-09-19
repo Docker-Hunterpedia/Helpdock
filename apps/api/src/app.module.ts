@@ -18,6 +18,7 @@ import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
 import { RequestContextMiddleware } from './context/request-context.middleware.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
+import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
@@ -77,13 +78,19 @@ export interface AppModuleOptions {
 @Module({})
 export class AppModule implements NestModule {
   static forRoot(options: AppModuleOptions): DynamicModule {
+    // Built once and imported twice, by `AppModule` and by `InstallModule`:
+    // the same object is one module to Nest, so the wizard signs its new admin
+    // in with the very `SessionService` every later request uses.
+    const auth = AuthModule.forRoot(options.auth);
+
     return {
       module: AppModule,
       imports: [
         ConfigModule.forRoot(options.env),
         DbModule.forRoot(options.db),
         SettingsModule.forRoot(options.settings, options.redis),
-        AuthModule.forRoot(options.auth),
+        auth,
+        InstallModule.forRoot({ auth, logger: options.logger }),
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
         RealtimeModule.forRoot({ ...options.realtime, logger: options.logger }),
         StaffModule.forRoot({ logger: options.logger }),

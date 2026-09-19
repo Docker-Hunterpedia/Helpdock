@@ -16,5 +16,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/channels"
+  },
+  "dependencies": {
+    "@helpdock/schemas": "workspace:*",
+    "nodemailer": "10.0.10"
   }
 }

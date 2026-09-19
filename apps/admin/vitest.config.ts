@@ -46,9 +46,9 @@ export default defineConfig({
       reporter: ['text', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx', 'src/vite-env.d.ts'],
-      // Raised from 70 with M0-06: the screens this milestone adds are the
-      // ones that change what a person may do, so they are the ones a number
-      // has to hold.
+      // Raised from 70 with M0-06, and kept there by M0-08: these screens
+      // change what a person may do and whether an install can be finished at
+      // all, so they are the ones a number has to hold.
       thresholds: {
         lines: 85,
       },

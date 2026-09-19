@@ -70,6 +70,18 @@ export const SETTING_DEFINITIONS = [
     description: 'SMTP port. 587 for STARTTLS, 465 for implicit TLS.',
   }),
   defineSetting({
+    key: 'smtp.tls',
+    // The same three values as `smtpTlsModeSchema` in `@helpdock/schemas`,
+    // spelled again because `packages/config` sits below that package. A unit
+    // test in `apps/api/src/install`, which imports both, holds them together.
+    schema: z.enum(['starttls', 'tls', 'none']),
+    default: 'starttls',
+    secret: false,
+    scope: 'brand',
+    description:
+      'How the SMTP connection is protected: starttls upgrades an open connection (587), tls is implicit TLS (465), none is an unencrypted relay.',
+  }),
+  defineSetting({
     key: 'smtp.user',
     schema: TEXT,
     default: '',
@@ -91,7 +103,15 @@ export const SETTING_DEFINITIONS = [
     default: '',
     secret: false,
     scope: 'brand',
-    description: 'Envelope and header From address, optionally with a display name.',
+    description: 'Envelope and header From address. The display name is smtp.fromName.',
+  }),
+  defineSetting({
+    key: 'smtp.fromName',
+    schema: TEXT,
+    default: '',
+    secret: false,
+    scope: 'brand',
+    description: 'Display name shown beside the From address, for example the brand name.',
   }),
   defineSetting({
     key: 'oauth.google.clientId',

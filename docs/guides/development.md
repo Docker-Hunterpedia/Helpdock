@@ -457,7 +457,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml \
 That publishes Postgres on 5432, Redis on 6379, MinIO on 9000 (console 9001) and
 Mailpit on 1025 (inbox at http://localhost:8025). Point the repository-root
 `.env` at `localhost` for each of them, as [API](#api) below shows. Mailpit is
-there for M2's outbound email and does nothing until then.
+what the first-run wizard's "Send a test email" can be pointed at — host
+`localhost`, port `1025`, encryption **None**, no username — and what M2's
+outbound email will use; the wizard's integration suite starts its own copy.
 
 Nothing is bind-mounted from the source tree. The containers run what the image
 contains; the code you are editing runs on the host.
@@ -554,6 +556,20 @@ curl -s -X POST localhost:3000/api/auth/sign-in \
 ```
 
 answers with an access token to send as `Authorization: Bearer …`.
+
+On a database with no accounts in it you can instead do what an operator does
+and take the first-run wizard. Point the browser at the api itself rather than
+at the Vite dev server — the wizard reads a meta tag the api rewrites into
+`index.html`, and Vite serves its own copy of that file — which means building
+the admin first and telling the api where it is:
+
+```bash
+pnpm build
+ADMIN_DIST_DIR="$PWD/apps/admin/dist" pnpm --filter @helpdock/api dev
+```
+
+Then open http://localhost:3000 and follow [the install
+guide](install.md#first-run).
 
 To exercise the tenancy plumbing without a session — a different principal
 shape, an api key, a worker — set

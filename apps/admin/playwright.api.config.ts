@@ -1,9 +1,22 @@
 import { defineConfig, devices } from '@playwright/test';
-import { E2E_API_ORIGIN, E2E_WEB_ORIGIN, E2E_WEB_PORT } from './e2e/api/install.js';
+import {
+  E2E_API_ORIGIN,
+  E2E_SETUP_ORIGIN,
+  E2E_WEB_ORIGIN,
+  E2E_WEB_PORT,
+} from './e2e/api/install.js';
 
 /**
- * The `api` project: the admin app built with `VITE_AUTH_API=http`, driven
+ * Two projects, both the admin app built with `VITE_AUTH_API=http` and driven
  * against a real api with a real Postgres and a real Redis behind it.
+ *
+ * `api` runs against the seeded install through the Vite dev server, which
+ * proxies `/api` so the two share an origin. `setup` runs against a second
+ * install that nobody has set up — what the first-run wizard needs and what the
+ * seeded one can never be again — and goes straight at that api, which serves
+ * `apps/admin/dist` itself. It has to: the install state reaches the app as a
+ * meta tag the api rewrites into `index.html`, and a dev server serves its own
+ * copy of that file with the development fixture in it.
  *
  * It is a second config rather than a project inside `playwright.config.ts`
  * because a `webServer` and a `globalSetup` belong to a whole run, not to a
@@ -32,7 +45,18 @@ export default defineConfig({
     trace: 'on-first-retry',
     viewport: { width: 1280, height: 800 },
   },
-  projects: [{ name: 'api', use: { ...devices['Desktop Chrome'], locale: 'en-GB' } }],
+  projects: [
+    {
+      name: 'api',
+      testMatch: /sign-in\.api\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: E2E_WEB_ORIGIN, locale: 'en-GB' },
+    },
+    {
+      name: 'setup',
+      testMatch: /setup\.api\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: E2E_SETUP_ORIGIN, locale: 'en-GB' },
+    },
+  ],
   webServer: {
     command: `pnpm exec vite --port ${String(E2E_WEB_PORT)} --strictPort`,
     url: E2E_WEB_ORIGIN,

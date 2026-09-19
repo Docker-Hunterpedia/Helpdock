@@ -16,6 +16,10 @@ M0-10 adds the first real screen, **System**, built from the design canvas
 artboard `Admin/System`. It reads a real endpoint
 (`GET /api/install/system`), so it is the one page that needs the api running.
 
+M0-08 adds the **first-run wizard**, from the artboard `Admin/Wizard`. It is
+the screen an install has before it has anything else, and it replaces every
+other route while the install is fresh.
+
 In production the api serves `dist/` at `/` on the admin host, with `no-store`
 on `index.html` and a year of `immutable` on everything Vite content-hashed into
 `assets/`; `apps/api/README.md` has the rules.
@@ -27,10 +31,16 @@ pnpm build                       # once, so @helpdock/ui and @helpdock/i18n have
 pnpm --filter @helpdock/admin dev
 ```
 
-The dev server proxies `/api` to `http://localhost:3000`, so the browser sees one
-origin and the `SameSite=Lax`, host-only refresh cookie the api sets is sent back
-to it. `VITE_API_ORIGIN` points the proxy elsewhere. With `VITE_AUTH_API=mock`,
-which is the default in dev, nothing is proxied because nothing is called.
+The dev server proxies `/api` and `/ready` to `http://localhost:3000`, so the
+browser sees one origin and the `SameSite=Lax`, host-only refresh cookie the api
+sets is sent back to it. `VITE_API_ORIGIN` points the proxy elsewhere. With
+`VITE_AUTH_API=mock`, which is the default in dev, nothing under `/api` is
+proxied because nothing is called.
+
+`index.html` carries the development fixture for the four `helpdock:*` meta
+tags, including `helpdock:install-state=configured`. The dev server serves that
+file as it is, so `pnpm dev` always shows the sign-in screen rather than the
+first-run wizard; in production the api rewrites the tags per install.
 
 Open http://localhost:5273 and sign in with the fixture:
 
@@ -73,7 +83,8 @@ src/shell/          sidebar, brand switcher, user menu, page header, empty state
 src/ui/             the small pieces DESIGN §6 has no component for yet: the
                     toast stack, the confirmation dialog, the password-strength
                     bar, and the QR encoder the enrolment screen draws with
-src/install/        what the sign-in screen may know before anyone signs in
+src/install/        what the app may know before anyone signs in
+src/screens/setup/  the first-run wizard (M0-08): four steps, its api client
 src/screens/admin/system/   the System page (M0-10), its api client and formatters
 e2e/                Playwright, one project per locale
 e2e/api/            Playwright against a real api, its own config
@@ -82,6 +93,37 @@ e2e/api/            Playwright against a real api, its own config
 Imports reach `@helpdock/ui`, `@helpdock/i18n` and `@helpdock/schemas` only
 through their package entry points, and no app imports another app
 (`pnpm check:boundaries`).
+
+### The first-run wizard
+
+`src/screens/setup/` is M0-08: admin account, first brand, outgoing email, done.
+
+**Which app this build is** is decided before the first route renders.
+`readPublicInstallInfo()` reads the `helpdock:install-state` meta tag the api
+rewrites into `index.html`; `fresh` mounts the wizard and sends every other path
+to it, and `configured` does not mount `/setup` at all, so it falls to the
+catch-all like any other unknown path. Anything missing or unreadable is treated
+as `configured`: a build served from somewhere else must land on sign-in rather
+than offer to create an owner.
+
+Three rules it follows:
+
+- **Nothing is persisted.** Step data lives in a reducer (`setup-state.ts`) and
+  nowhere else — not in storage, not in the URL. A wizard takes minutes, the
+  password on step 1 has no business surviving a reload, and a half-finished one
+  is finished by starting it again.
+- **The language picker changes the app as it is chosen**, not on submit, so an
+  operator who picks Arabic reads the next three steps right to left (DESIGN §7).
+  The same value becomes the new account's `locale`.
+- **Finishing navigates the browser, not the router.** The install state is a
+  meta tag in a document that is already loaded, so only a fresh document knows
+  the wizard is over; the reload also picks the session up from the refresh
+  cookie step 2 set.
+
+Because the state arrives in the served HTML, the wizard cannot be exercised
+through the Vite dev server, which serves its own copy of `index.html` with the
+development fixture in it. `e2e/api/` therefore runs the wizard against a second
+api that serves `dist/` itself, which is the production topology.
 
 ### The System page
 
@@ -234,7 +276,7 @@ The contract is in [the realtime guide](../../docs/guides/realtime.md).
 
 ```bash
 pnpm --filter @helpdock/admin test            # Vitest, happy-dom
-pnpm --filter @helpdock/admin test:coverage   # the same, with the number
+pnpm --filter @helpdock/admin test:coverage   # the same, with the 85 % line gate
 pnpm --filter @helpdock/admin e2e             # Playwright, en and ar, the fixture
 pnpm --filter @helpdock/admin e2e:api         # Playwright against a real api
 ```
@@ -244,26 +286,40 @@ test exercises the same theme, catalogs and query client the browser gets. It
 covers the fixture's behaviour, form validation, locale and direction, the
 protected-route redirect and each screen's states.
 
-`e2e:api` is a second Playwright config with one project, `api`: it starts
-Postgres and Redis with Testcontainers, runs the built api as its own process,
-seeds an account with a known password and authenticator secret plus one pending
-invitation, and drives sign in → code → shell → sign out, and invitation →
-acceptance → two-factor enrolment → signing in with both, in a browser with
-`VITE_AUTH_API=http`. It needs
-Docker and a `pnpm build`; without Docker it skips itself and says so. It is a
-separate config because a `webServer` and a `globalSetup` belong to a whole run,
-and putting it in the main one would start containers for the fixture suite too.
+`e2e:api` is a second Playwright config with two projects. It starts Postgres
+and Redis with Testcontainers and runs the built api as its own process — twice,
+over two databases:
+
+- **`api`** drives the seeded install through the Vite dev server, which proxies
+  `/api` so the two share an origin: sign in → code → shell → sign out, and
+  invitation → acceptance → two-factor enrolment → signing in with both, with
+  `VITE_AUTH_API=http`.
+- **`setup`** drives the first-run wizard against a second install that nobody
+  has set up, straight at an api that serves `dist/` itself. It has to be a
+  second install, because "fresh" means the `users` table is empty and the
+  seeded account makes that impossible; and it has to skip Vite, because the
+  install state arrives as a meta tag the api rewrites into `index.html`.
+
+Both need Docker and a `pnpm build`; without Docker they skip themselves and say
+so. It is a separate config because a `webServer` and a `globalSetup` belong to
+a whole run, and putting it in the main one would start containers for the
+fixture suite too.
 
 The fixture suite has one project per locale and runs every spec twice, which
 is what catches a layout that only works in one direction. `@axe-core/playwright`
-scans sign in, the code screen, the shell and the System page — including their
-error banners, open menus and degraded states — against WCAG 2.1 A and AA, and
-the suite fails on any violation.
+scans sign in, the code screen, the shell, the System page and every step of the
+first-run wizard — including their error banners, open menus and degraded
+states — against WCAG 2.1 A and AA, and the suite fails on any violation.
 
 `e2e/system.spec.ts` stubs `GET /api/install/system` with Playwright's own
 `route`, using the same fixture as the unit tests
 (`src/screens/admin/system/fixtures.ts`), so the two cannot drift and no mock
 server is needed.
+
+`e2e/setup.spec.ts` does the same for the wizard (`e2e/setup-install.ts`), and
+rewrites the `helpdock:install-state` meta tag in the document the dev server
+serves rather than reaching into the app — so the page really does arrive saying
+`fresh`, which is the mechanism under test.
 
 ### Screenshots
 

@@ -187,11 +187,21 @@ logs one warning at boot and serves `/api` alone.
 | `/`, or any path that is not a file | `index.html`, `Cache-Control: no-store`, with the install meta tags rewritten |
 | `/api/…` with no matching route | the JSON 404 every other failure uses |
 
-The two `helpdock:*` meta tags are rewritten per request from this install's
-brands (`InstallInfoService`), because they are the only thing the sign-in card
-may know before anyone has signed in and no endpoint may enumerate brands to an
-anonymous visitor. A database that is down falls back to the `APP_URL` host
-rather than failing the page.
+The four `helpdock:*` meta tags are rewritten per request by
+`InstallInfoService`, because they are everything the app may know before anyone
+has signed in and no endpoint may enumerate an install to an anonymous visitor.
+
+| Tag | What it carries |
+|---|---|
+| `helpdock:primary-domain` | Help-center host of the install's first brand, for the sign-in caption |
+| `helpdock:brand-count` | How many brands this install serves |
+| `helpdock:install-state` | `fresh` while the `users` table is empty, `configured` afterwards (M0-08) |
+| `helpdock:version` | The api's own version, for the wizard's caption |
+
+A database that is down falls back to the `APP_URL` host rather than failing the
+page, and to `configured`: the state tag decides whether the app offers to
+create an install admin, and an outage is not a reason to offer that to a
+stranger.
 
 `index.html` also leaves with a `Content-Security-Policy` of its own, replacing
 the `default-src 'none'` every api response carries — under which the SPA could
@@ -207,6 +217,46 @@ nonce, in `apps/admin`.
 decides what a path means. Fastify's router prefers a static route to the
 controller's `/*`, which is what keeps `/health`, `/ready` and every declared
 `/api/…` route reachable.
+
+## The first-run wizard
+
+`src/install/` holds M0-08: the four steps an operator takes on a machine where
+nothing has been set up yet. They are the only routes in the api that write
+without a principal, because the first of them creates the person everything
+else is checked against.
+
+What stands in for authorisation:
+
+- **Step 1** is refused unless the install is `fresh`, which means the `users`
+  table is empty (`install-state.ts`). The check is repeated inside the
+  transaction, behind `pg_advisory_xact_lock`, so two browsers posting at the
+  same instant produce one admin and one 409.
+- **Steps 2 to 4** are refused unless they present the token step 1 issued, in
+  the `x-helpdock-setup` header. It lives in Redis for thirty minutes under the
+  SHA-256 of its value, carries no claims, and is spent when the wizard
+  finishes. Every route answers 409 from then on.
+- **Every call** is counted against a per-address budget: thirty for the wizard
+  as a whole, and ten for the SMTP test, which is the only call in the api that
+  opens a socket to a host the caller named.
+- **Every call** is also refused with 403 when `Sec-Fetch-Site` says a browser
+  made it from another site (`same-site.ts`). A credential-free write is the one
+  kind a `SameSite=Lax` cookie cannot protect: a page on another origin could
+  post step 1 blind — it could not read the answer, but it chose the password.
+
+Every write runs in an install-scope transaction as
+`principal_type = system`, `principal_id = install.setup`, and leaves an
+`install.setup.admin`, `install.setup.brand` or `install.setup.smtp` row in
+`audit_log`. The SMTP row records the host, the port and the TLS mode, never the
+username or the password.
+
+The admin is signed in on **step 2**, not step 1: a session names the brand it
+lands in, and until the brand exists the account holds no role, so
+`SessionService.open` correctly refuses to open one.
+
+The fresh-install window is the one moment an install trusts whoever reaches it,
+because there is nobody yet to check against. [The install
+guide](../../docs/guides/install.md#first-run) tells operators to finish the
+wizard before the host is reachable from anywhere else.
 
 ## Authentication
 
@@ -315,6 +365,11 @@ routes answers 401 without a valid bearer token.
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
 | `GET /api/install/system` | `@Requires('install:admin')` | The System page's read. Audited. |
 | `GET /api/install/system/queues` | `@Requires('install:admin')` | Every queue, paginated. Audited. |
+| `POST /api/install/setup/admin` | `@Public()` | [The first-run wizard](#the-first-run-wizard). 409 once the install has an account. |
+| `POST /api/install/setup/brand` | `@Public()` | 409 without the wizard token. Sets the refresh cookie. |
+| `POST /api/install/setup/smtp` | `@Public()` | Saves or skips the `smtp.*` settings. |
+| `POST /api/install/setup/smtp/test` | `@Public()` | Sends one message with the credentials in the body. |
+| `POST /api/install/setup/complete` | `@Public()` | Spends the wizard token. |
 | `GET /internal/domain-check` | `@Public()` | Caddy's on-demand TLS gate. 200 for a verified help-center domain, 403 otherwise. |
 | `/api/auth/*` | mostly `@Public()` | Signing in. [The authentication guide](../../docs/guides/authentication.md#endpoints) lists them. |
 | `GET /socket.io` | handshake | The `/staff` namespace. [The realtime guide](../../docs/guides/realtime.md). |
@@ -416,6 +471,11 @@ say so, when Docker is not running.
 `src/observability/observability.integration.test.ts` boots the same stack again
 to prove `/metrics` is served and guarded and that the System page's read
 reports a live install.
+
+`src/install/setup.integration.test.ts` adds a third container,
+`axllent/mailpit`, and takes a genuinely empty install through all four wizard
+steps — including Nodemailer delivering the test message to that mail server and
+the advisory lock turning two simultaneous first accounts into one.
 
 `src/testing/` is test scaffolding — an `ExecutionContext` double and a probe
 controller that reads the session settings back from inside a handler.

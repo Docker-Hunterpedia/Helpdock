@@ -4,6 +4,9 @@ import { MockContactsApi } from '../contacts/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TicketingApi } from '../ticketing/api.js';
+import { HttpTicketingApi } from '../ticketing/http-api.js';
+import { MockTicketingApi } from '../ticketing/mock-api.js';
 import type { AuthApi } from './api.js';
 import { HttpAuthApi } from './http-api.js';
 import { HttpTransport } from './http-transport.js';
@@ -17,6 +20,7 @@ export interface AdminApis {
   readonly auth: AuthApi;
   readonly staff: StaffApi;
   readonly contacts: ContactsApi;
+  readonly ticketing: TicketingApi;
 }
 
 /**
@@ -53,10 +57,16 @@ export function createApis(
       auth: new HttpAuthApi(transport),
       staff: new HttpStaffApi(transport),
       contacts: new HttpContactsApi(transport),
+      ticketing: new HttpTicketingApi(transport),
     };
   }
 
   const staff = new MockStaffApi();
 
-  return { auth: new MockAuthApi(staff), staff, contacts: new MockContactsApi() };
+  return {
+    auth: new MockAuthApi(staff),
+    staff,
+    contacts: new MockContactsApi(),
+    ticketing: new MockTicketingApi(),
+  };
 }

@@ -6,6 +6,7 @@ import {
   Server,
   Settings,
   ShieldUser,
+  SlidersHorizontal,
   Ticket,
   Users,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ export type NavKey =
   | 'helpCenter'
   | 'reports'
   | 'settings'
+  | 'ticketing'
   | 'staff'
   | 'system';
 
@@ -74,6 +76,12 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   helpCenter: item('helpCenter', ROUTES.helpCenter, BookOpen, { placeholder: true }),
   reports: item('reports', ROUTES.reports, ChartColumn, { placeholder: true }),
   settings: item('settings', ROUTES.settings, Settings, { placeholder: true }),
+  // How this brand's tickets are shaped and routed (M1-01). Offered to the two
+  // roles that may change any of it: an Admin everywhere, a Team Leader in the
+  // departments they lead (DOMAIN-RULES §1.2).
+  ticketing: item('ticketing', ROUTES.ticketing, SlidersHorizontal, {
+    roles: ['admin', 'teamLeader'],
+  }),
   // "Staff and roles" is the Admin and Team Leader screen: they are the two
   // roles that hold `staff:manage` (DOMAIN-RULES §1.2).
   staff: item('staff', ROUTES.staff, ShieldUser, { roles: ['admin', 'teamLeader'] }),
@@ -92,6 +100,7 @@ export const PRIMARY_NAV: readonly NavItem[] = [
 
 export const ADMIN_NAV: readonly NavItem[] = [
   NAV_BY_KEY.settings,
+  NAV_BY_KEY.ticketing,
   NAV_BY_KEY.staff,
   NAV_BY_KEY.system,
 ];

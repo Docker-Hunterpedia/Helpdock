@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { passwordSchema } from './auth.js';
-import { localeSchema } from './brand.js';
+import { localeSchema, timezoneSchema } from './brand.js';
 
 /**
  * The first-run wizard (M0-08). One install, four steps: the admin account, the
@@ -53,26 +53,6 @@ export const TICKET_PREVIEW_NUMBER = 1042;
 
 export const ticketNumberPreview = (prefix: string): string =>
   `${prefix || 'HD'}-${String(TICKET_PREVIEW_NUMBER)}`;
-
-/**
- * `Intl.supportedValuesOf('timeZone')` is the list every current browser and
- * Node 24 agree on, so the picker and the api validate against the same names.
- * It leaves out `UTC`, which is the column default and a perfectly good answer
- * for an install that has not decided yet, so it is added back.
- */
-let timeZones: ReadonlySet<string> | undefined;
-
-export const supportedTimeZones = (): ReadonlySet<string> => {
-  timeZones ??= new Set(['UTC', ...Intl.supportedValuesOf('timeZone')]);
-
-  return timeZones;
-};
-
-export const isSupportedTimeZone = (value: string): boolean => supportedTimeZones().has(value);
-
-export const timezoneSchema = z
-  .string()
-  .refine(isSupportedTimeZone, 'must be an IANA time zone name');
 
 /**
  * A help-center hostname, stored unverified until M5 checks its TXT record. The

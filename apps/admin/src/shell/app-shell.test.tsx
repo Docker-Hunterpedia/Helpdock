@@ -57,6 +57,7 @@ describe('AppShell', () => {
       'Help center36',
       'Reports9',
       'Settings',
+      'Ticketing',
       'Staff and roles',
       'System',
     ]);

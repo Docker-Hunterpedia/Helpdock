@@ -1,5 +1,13 @@
 import { createKeyring, decodeMasterKey, type Env, encryptSecret } from '@helpdock/config';
-import { auditLog, brands, type Db, userBrandRoles, users, withSystem } from '@helpdock/db';
+import {
+  auditLog,
+  brands,
+  type Db,
+  departments,
+  userBrandRoles,
+  users,
+  withSystem,
+} from '@helpdock/db';
 import { eq, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { EmailTokenStore } from '../auth/email-token.store.js';
@@ -28,6 +36,8 @@ export const DEV_ADMIN_PASSWORD = 'helpdock dev password';
 const DEV_ADMIN_NAME = 'Dev Admin';
 const DEV_BRAND_NAME = 'Helpdock Dev';
 const DEV_BRAND_PREFIX = 'HD';
+/** The department the brand starts with, as the wizard's does. */
+const DEV_DEPARTMENT_NAME = 'General';
 
 export class SeedRefusedError extends Error {
   constructor(message: string) {
@@ -109,6 +119,15 @@ export const seedDevInstall = async ({
       .insert(userBrandRoles)
       .values({ userId, brandId, role: 'admin' })
       .onConflictDoNothing({ target: [userBrandRoles.userId, userBrandRoles.brandId] });
+
+    // The same department the first-run wizard gives a brand (M1-01). Without
+    // it the development install is the one shape a real one never has — a
+    // brand with nowhere to file a ticket — and every screen that picks a
+    // department starts empty.
+    await tx
+      .insert(departments)
+      .values({ brandId, name: DEV_DEPARTMENT_NAME, sortOrder: 0 })
+      .onConflictDoNothing({ target: [departments.brandId, departments.name] });
   });
 
   log(

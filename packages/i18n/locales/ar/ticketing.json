@@ -1,0 +1,107 @@
+{
+  "title": "التذاكر والتوجيه",
+  "subtitle": "علامة {{brand}} · كيف تُصاغ التذاكر وتُوجَّه",
+  "tabList": "إعدادات التذاكر",
+  "tabs": {
+    "departments": "الأقسام",
+    "statuses": "الحالات",
+    "priorities": "الأولويات",
+    "tags": "الوسوم",
+    "customFields": "الحقول المخصّصة",
+    "templates": "القوالب",
+    "views": "العروض",
+    "assignment": "الإسناد"
+  },
+  "soon": {
+    "heading": "لم تُبنَ بعد",
+    "body": "تصل {{tab}} مع {{milestone}}."
+  },
+  "departments": {
+    "add": "إضافة قسم",
+    "table": {
+      "caption": "أقسام {{brand}}",
+      "name": "القسم",
+      "teams": "الفرق",
+      "members": "الأشخاص",
+      "defaultTeam": "الفريق الافتراضي",
+      "rowActions": "إجراءات {{name}}",
+      "dragHandle": "إعادة ترتيب {{name}}",
+      "select": "تحرير {{name}}"
+    },
+    "noDefaultTeam": "لا يوجد",
+    "actions": {
+      "edit": "تحرير",
+      "moveUp": "نقل لأعلى",
+      "moveDown": "نقل لأسفل",
+      "delete": "حذف"
+    },
+    "empty": {
+      "heading": "لا توجد أقسام بعد",
+      "body": "يحدّد القسم مكان تسجيل التذكرة ومن يمكنه رؤيتها. أضف القسم الأول لبدء التوجيه."
+    },
+    "editor": {
+      "heading": "تحرير القسم",
+      "newHeading": "قسم جديد",
+      "name": "الاسم",
+      "nameAr": "الاسم (بالعربية)",
+      "nameArHint": "اختياري. يظهر للموظفين والعملاء الذين يقرؤون بالعربية.",
+      "defaultTeam": "الفريق الافتراضي",
+      "defaultTeamHint": "المكان الذي تصل إليه التذكرة عندما لا تختار أي قاعدة فريقًا.",
+      "none": "لا يوجد",
+      "save": "حفظ",
+      "create": "إنشاء قسم",
+      "delete": "حذف القسم",
+      "nothing": {
+        "heading": "لم يُحدَّد شيء",
+        "body": "اختر قسمًا لتحرير اسمه وفريقه الافتراضي."
+      }
+    },
+    "confirm": {
+      "delete": {
+        "title": "حذف {{name}}؟",
+        "body": "تُحذف فرقه وأعضاؤها معه. أما التذاكر المسجّلة تحته فيجب نقلها أولًا.",
+        "submit": "حذف القسم"
+      }
+    },
+    "teams": {
+      "heading": "الفرق في {{name}}",
+      "add": "إضافة فريق",
+      "namePlaceholder": "اسم الفريق",
+      "empty": "لا توجد فرق بعد. الفريق مجموعة داخل هذا القسم يمكن توجيه العمل إليها.",
+      "rowActions": "إجراءات {{name}}",
+      "rename": "إعادة التسمية",
+      "renameLabel": "الاسم الجديد لـ {{name}}",
+      "save": "حفظ",
+      "delete": "حذف الفريق",
+      "members": "الأعضاء",
+      "noMembers": "لا أحد بعد",
+      "addMember": "إضافة شخص",
+      "picker": "من يُضاف إلى {{team}}",
+      "removeMember": "إزالة {{name}} من {{team}}",
+      "confirm": {
+        "delete": {
+          "title": "حذف {{name}}؟",
+          "body": "يحتفظ أعضاؤه بأدوارهم في العلامة التجارية؛ يُحذف الفريق وحده.",
+          "submit": "حذف الفريق"
+        }
+      }
+    }
+  },
+  "toast": {
+    "departmentCreated": "تمت إضافة {{name}}",
+    "departmentUpdated": "تم حفظ {{name}}",
+    "departmentDeleted": "تم حذف {{name}}",
+    "reordered": "تم حفظ الترتيب الجديد",
+    "teamCreated": "تمت إضافة {{name}}",
+    "teamRenamed": "تم حفظ {{name}}",
+    "teamDeleted": "تم حذف {{name}}",
+    "memberAdded": "تمت إضافة {{name}} إلى {{team}}",
+    "memberRemoved": "تمت إزالة {{name}} من {{team}}",
+    "failed": "لم ينجح ذلك. حاول مرة أخرى.",
+    "outOfScope": "أنت لا تقود هذا القسم.",
+    "lastDepartment": "تحتفظ كل علامة تجارية بقسم واحد على الأقل.",
+    "departmentInUse": "ما زالت هناك تذاكر تابعة لهذا القسم. انقلها أولًا.",
+    "nameTaken": "هذا الاسم مستخدم بالفعل.",
+    "notEligible": "لا يملك هذا الشخص دورًا في هذه العلامة التجارية يصل إلى هذا القسم."
+  }
+}

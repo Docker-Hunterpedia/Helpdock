@@ -1,0 +1,107 @@
+{
+  "title": "Ticketing",
+  "subtitle": "{{brand}} brand · how tickets are shaped and routed",
+  "tabList": "Ticketing settings",
+  "tabs": {
+    "departments": "Departments",
+    "statuses": "Statuses",
+    "priorities": "Priorities",
+    "tags": "Tags",
+    "customFields": "Custom fields",
+    "templates": "Templates",
+    "views": "Views",
+    "assignment": "Assignment"
+  },
+  "soon": {
+    "heading": "Not built yet",
+    "body": "{{tab}} arrives with {{milestone}}."
+  },
+  "departments": {
+    "add": "Add department",
+    "table": {
+      "caption": "Departments of {{brand}}",
+      "name": "Department",
+      "teams": "Teams",
+      "members": "People",
+      "defaultTeam": "Default team",
+      "rowActions": "Actions for {{name}}",
+      "dragHandle": "Reorder {{name}}",
+      "select": "Edit {{name}}"
+    },
+    "noDefaultTeam": "None",
+    "actions": {
+      "edit": "Edit",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "delete": "Delete"
+    },
+    "empty": {
+      "heading": "No departments yet",
+      "body": "A department decides where a ticket is filed and who can see it. Add the first one to start routing."
+    },
+    "editor": {
+      "heading": "Edit department",
+      "newHeading": "New department",
+      "name": "Name",
+      "nameAr": "Name (Arabic)",
+      "nameArHint": "Optional. Shown to staff and customers reading in Arabic.",
+      "defaultTeam": "Default team",
+      "defaultTeamHint": "Where a ticket lands when no rule picks a team.",
+      "none": "None",
+      "save": "Save",
+      "create": "Create department",
+      "delete": "Delete department",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a department to edit its name and its default team."
+      }
+    },
+    "confirm": {
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body": "Its teams and their members go with it. Tickets already filed under it have to be moved first.",
+        "submit": "Delete department"
+      }
+    },
+    "teams": {
+      "heading": "Teams in {{name}}",
+      "add": "Add team",
+      "namePlaceholder": "Team name",
+      "empty": "No teams yet. A team is a group inside this department that work can be routed to.",
+      "rowActions": "Actions for {{name}}",
+      "rename": "Rename",
+      "renameLabel": "New name for {{name}}",
+      "save": "Save",
+      "delete": "Delete team",
+      "members": "Members",
+      "noMembers": "Nobody yet",
+      "addMember": "Add someone",
+      "picker": "Who to add to {{team}}",
+      "removeMember": "Remove {{name}} from {{team}}",
+      "confirm": {
+        "delete": {
+          "title": "Delete {{name}}?",
+          "body": "Its members keep their roles in the brand; only the team goes.",
+          "submit": "Delete team"
+        }
+      }
+    }
+  },
+  "toast": {
+    "departmentCreated": "{{name}} added",
+    "departmentUpdated": "{{name}} saved",
+    "departmentDeleted": "{{name}} deleted",
+    "reordered": "New order saved",
+    "teamCreated": "{{name}} added",
+    "teamRenamed": "{{name}} saved",
+    "teamDeleted": "{{name}} deleted",
+    "memberAdded": "{{name}} added to {{team}}",
+    "memberRemoved": "{{name}} removed from {{team}}",
+    "failed": "That did not work. Try again.",
+    "outOfScope": "You do not lead that department.",
+    "lastDepartment": "A brand keeps at least one department.",
+    "departmentInUse": "Tickets still belong to this department. Move them first.",
+    "nameTaken": "That name is already taken.",
+    "notEligible": "That person holds no role in this brand that reaches this department."
+  }
+}

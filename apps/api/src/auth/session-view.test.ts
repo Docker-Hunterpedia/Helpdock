@@ -32,6 +32,7 @@ const brand = (id: string, name: string, prefix: string): Brand => ({
   defaultLocale: 'en',
   timezone: 'UTC',
   status: 'active',
+  settings: {},
   deletedAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),

@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { isUuid, uuidv7 } from '../uuid.js';
 import { brandStatusEnum, localeEnum } from './enums.js';
 
@@ -22,6 +23,18 @@ export const brands = pgTable('brands', {
   /** IANA zone used for business hours and SLA clocks (DOMAIN-RULES §3). */
   timezone: text('timezone').notNull().default('UTC'),
   status: brandStatusEnum('status').notNull().default('active'),
+  /**
+   * Per-brand ticketing behaviour, validated by `brandSettingsSchema` in
+   * `@helpdock/schemas` (M1-01). A column rather than rows in `settings`
+   * because these are the brand's own fields — one row read with the brand,
+   * not a key-value lookup per field — and because `settings` is install-wide
+   * configuration an operator may pin with an environment variable, which none
+   * of these may ever be.
+   *
+   * Every key in the schema carries a default, so the column default only has
+   * to be valid JSON: a row written before a key existed still parses.
+   */
+  settings: jsonb('settings').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true })

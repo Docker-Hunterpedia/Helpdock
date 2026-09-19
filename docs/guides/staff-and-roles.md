@@ -26,8 +26,9 @@ an install admin reaches a brand's data by being given a role in it.
 
 ### Departments
 
-Departments arrive properly with M1. M0-06 ships the table so that assigning
-them is real, and the rule that decides what an assignment means is:
+Departments are created, named, ordered and given teams on **Admin → Ticketing**
+(M1-01) — see [ticketing settings](ticketing-settings.md). This page is where
+they are *assigned*, and the rule that decides what an assignment means is:
 
 | Role | An empty department list means |
 |---|---|
@@ -38,6 +39,14 @@ them is real, and the rule that decides what an assignment means is:
 The last row is deliberate. An Agent with nothing assigned must see nothing;
 reading their empty list as "everything" would be the one mistake that hands a
 new starter the whole brand.
+
+**Teams are narrower than departments, and follow from them.** A department
+holds teams, and a team holds people (M1-01). Somebody may only be put on a team
+whose department their own scope already reaches, so a team can never contain
+somebody who cannot see the tickets it would be assigned. Changing a person's
+departments here therefore changes which teams they may be added to; it does not
+remove them from a team they are already on, but the team lists stop showing
+anybody who has lost their role in the brand.
 
 ### Attempts, and what is rate-limited
 
@@ -241,7 +250,7 @@ instead, with the user id and the reason.
 
 | Route | Declaration | |
 |---|---|---|
-| `GET /api/brands/:brandId/departments` | `@Requires('brand:read')` | The chip picker's options |
+| `GET /api/brands/:brandId/departments` | `@Requires('brand:read')` | The chip picker's options. Owned by M1-01; see [ticketing settings](ticketing-settings.md#endpoints) |
 | `GET /api/brands/:brandId/staff` | `@Requires('staff:manage')` | The list, with `?search=` |
 | `POST /api/brands/:brandId/staff/invites` | `@Requires('staff:manage')` | Invite an address |
 | `POST /api/brands/:brandId/staff/invites/:userId/resend` | `@Requires('staff:manage')` | New token, old one destroyed |
@@ -312,9 +321,9 @@ Redis token expires.
 
 ## Known gaps
 
-- **Departments have no screen.** M0-06 creates the table and assigns from it;
-  M1-01 is where they are created, named and given business hours, an SLA policy
-  and an `on_unassign` setting.
+- **A department has no business hours, SLA policy or `on_unassign` setting
+  yet.** M1-01 gives departments a screen, teams and an order; business hours are
+  M3, the SLA policy is M3, and `on_unassign` arrives with M1-07's assignment.
 - **`on_unassign` is not implemented.** Deactivating somebody or narrowing their
   scope leaves their tickets assigned to them. The hooks the M1 work fills in are
   named in `apps/api/src/staff/lifecycle-hooks.ts`.
@@ -325,8 +334,9 @@ Redis token expires.
 - **A Team Leader reads the whole brand's roster**, not only their own
   departments: `user_brand_roles` is brand-scoped, not department-scoped, and
   DOMAIN-RULES §1.2 does not narrow reading the list. They can act on their own
-  departments alone. Narrowing the read is a product decision for M1, when
-  departments have a screen.
+  departments alone — including on the Ticketing screen, where they may edit
+  only the departments they lead. Narrowing the *read* is still a product
+  decision nobody has taken.
 - **An account added to a second brand is not emailed about it.** The role is
   created and nothing is sent; there is no "you were added to a brand" message
   until M2 brings a real transport and a template for it.

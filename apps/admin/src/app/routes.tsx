@@ -5,6 +5,7 @@ import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
+import { TicketingPage } from '../screens/admin/ticketing/ticketing-page.tsx';
 import { AuthComplete } from '../screens/auth-complete.tsx';
 import { AccountPage } from '../screens/contacts/account-page.tsx';
 import { ContactPage } from '../screens/contacts/contact-page.tsx';
@@ -86,6 +87,10 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.contactNew} element={<NewContactPage />} />
           <Route path={ROUTES.account} element={<AccountPage />} />
           <Route path={ROUTES.contact} element={<ContactPage />} />
+          {/* M1-01. `/admin/ticketing` with no tab redirects to the first one,
+              which the page itself does, so both paths are one component. */}
+          <Route path={ROUTES.ticketing} element={<TicketingPage />} />
+          <Route path={ROUTES.ticketingTab} element={<TicketingPage />} />
           <Route path={ROUTES.security} element={<SecurityScreen />} />
         </Route>
       </Route>

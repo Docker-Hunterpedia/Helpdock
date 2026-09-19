@@ -60,6 +60,8 @@ describe('@helpdock/db', () => {
       'job-receipts.ts',
       'outbox.ts',
       'settings.ts',
+      'team-members.ts',
+      'teams.ts',
       'user-brand-roles.ts',
       'users.ts',
     ]);

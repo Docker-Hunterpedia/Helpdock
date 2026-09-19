@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { staffRefusalSchema } from './staff.js';
+import { ticketingRefusalSchema } from './ticketing.js';
 
 /**
  * The one body shape every failed request answers with. The api's exception
@@ -57,6 +58,12 @@ export const errorResponseSchema = z.object({
     contact: z
       .object({ reason: contactRefusalSchema, problem: identityProblemSchema.optional() })
       .optional(),
+    /**
+     * Only on a refused ticketing-settings action (M1-01). Same idea as
+     * `staff` above: the status says "forbidden" or "conflict", this says
+     * which rule refused, and the Ticketing screen turns it into a sentence.
+     */
+    ticketing: z.object({ reason: ticketingRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

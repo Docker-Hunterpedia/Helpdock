@@ -14,6 +14,7 @@ import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
 import type { PrincipalResolver } from './auth/principal-resolver.js';
+import { BrandsModule } from './brands/brands.module.js';
 import { ContactsModule } from './contacts/contacts.module.js';
 import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
@@ -24,8 +25,6 @@ import type { Logger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
-import { BrandsController } from './routes/brands.controller.js';
-import { BrandsService } from './routes/brands.service.js';
 import { DomainCheckController } from './routes/domain-check.controller.js';
 import { DomainCheckService } from './routes/domain-check.service.js';
 import { HealthController } from './routes/health.controller.js';
@@ -91,6 +90,7 @@ export class AppModule implements NestModule {
         DbModule.forRoot(options.db),
         SettingsModule.forRoot(options.settings, options.redis),
         auth,
+        BrandsModule.forRoot({ logger: options.logger }),
         InstallModule.forRoot({ auth, logger: options.logger }),
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
         RealtimeModule.forRoot({ ...options.realtime, logger: options.logger }),
@@ -102,7 +102,6 @@ export class AppModule implements NestModule {
       controllers: [
         HealthController,
         MeController,
-        BrandsController,
         DomainCheckController,
         ...(options.extraControllers ?? []),
       ],
@@ -110,7 +109,6 @@ export class AppModule implements NestModule {
         { provide: LOGGER, useValue: options.logger },
         { provide: PRINCIPAL_RESOLVER, useValue: options.principalResolver },
         { provide: BRAND_RESOLVER, useValue: options.brandResolver ?? new NoopBrandResolver() },
-        BrandsService,
         DomainCheckService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionGuard },

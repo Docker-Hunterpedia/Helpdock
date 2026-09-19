@@ -7,11 +7,13 @@ import type {
   FieldError,
   IdentityProblem,
   StaffRefusal,
+  TicketingRefusal,
 } from '@helpdock/schemas';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
 import { AuthFailure } from '../auth/auth-failure.js';
+import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
@@ -37,6 +39,8 @@ export interface MappedError {
   readonly staff?: StaffRefusal;
   /** Only on a refused contact action; see `contacts/contact-failure.ts`. */
   readonly contact?: { readonly reason: ContactRefusal; readonly problem?: IdentityProblem };
+  /** Only on a refused ticketing-settings action; see `brands/ticketing-failure.ts`. */
+  readonly ticketing?: TicketingRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -118,6 +122,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // Before the generic branch, for the reason the ones above give.
+  if (error instanceof TicketingFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'forbidden',
+      message: error.message,
+      ticketing: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -162,5 +177,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.auth === undefined ? {} : { auth: mapped.auth }),
     ...(mapped.staff === undefined ? {} : { staff: { reason: mapped.staff } }),
     ...(mapped.contact === undefined ? {} : { contact: mapped.contact }),
+    ...(mapped.ticketing === undefined ? {} : { ticketing: { reason: mapped.ticketing } }),
   },
 });

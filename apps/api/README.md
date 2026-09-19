@@ -358,6 +358,35 @@ Four things are easy to get wrong here and are written down where they happen:
   Without that, a Team Leader of any brand could attach a stranger's account as
   an agent of a department they lead and then disable it install-wide.
 
+## Brands, departments and teams
+
+`src/brands/` holds M1-01: the brand itself, the departments under it, the teams
+inside those, and who is on them. What it does and how an operator thinks about
+it is [the ticketing settings
+guide](../../docs/guides/ticketing-settings.md); what follows is for somebody
+reading the code.
+
+| File | |
+|---|---|
+| `department-scope.ts` | Who may change what. Pure functions over values the caller has already read, so DOMAIN-RULES §1.2 is transcribed in one place and is testable without a database. |
+| `department-deletion.ts` | The two reasons a department may not be deleted, as named calls. `ticketsInDepartment` answers zero until M1-02 creates the table; everything around it — the refusal, the status, the sentence, the test — already exists. |
+| `ticketing-failure.ts` | A refusal by a rule rather than by a permission, in the shape `staff-failure.ts` uses and for the same reason. |
+| `install-brands.service.ts` | An additional brand, in one transaction. |
+| `departments.repository.ts` | Every read and write, through the request's own transaction, so the policies do the filtering. |
+
+Three things are easy to get wrong here and are written down where they happen:
+
+- **Two permissions, because §1.2 draws two lines.** Which departments a brand
+  *has* is `brand:manage` — Admin only. What is *inside* one is `staff:manage`,
+  narrowed to the departments a Team Leader actually leads.
+- **A reorder is the whole list.** A partial one is a 400 rather than a silent
+  half-reorder, and both the drag handle and the row menu build it the same way.
+- **`InstallBrandsService` widens `app.brand_ids` inside its own transaction**
+  so the new brand's role and department are visible to the policies. It is
+  `SET LOCAL`, on an `install:admin` route, with an id the method generated a
+  statement earlier — and the alternative, a second transaction, could commit a
+  brand's departments after the brand itself rolled back.
+
 ### The development principal header
 
 `HeaderPrincipalResolver` reads a whole principal out of the
@@ -390,11 +419,13 @@ routes answers 401 without a valid bearer token.
 | `GET /api/me` | `@Authenticated()` | The principal. |
 | `GET /api/brands` | `@Authenticated()` | Brands the principal holds a role in. |
 | `GET /api/install/brands` | `@Requires('install:admin')` | Every brand. Audited. |
+| `POST /api/install/brands` | `@Requires('install:admin')` | An additional brand, with a role, a department and a ticket sequence. Audited. |
 | `GET /api/brands/:brandId` | `@Requires('brand:read')` | One brand. |
+| `PATCH /api/brands/:brandId` | `@Requires('brand:manage')` | Name, default locale, time zone, ticketing settings. Never the prefix. |
 | `/api/brands/:brandId/staff/*` | `@Requires('staff:manage')` | Staff and roles. [The guide](../../docs/guides/staff-and-roles.md#endpoints) lists them. |
-| `GET /api/brands/:brandId/departments` | `@Requires('brand:read')` | The department picker's options. |
 | `/api/brands/:brandId/contacts/*` | `@Requires('contact:read'\|'contact:write')` | Contacts, identifiers, notes, duplicate suggestions and erasure. [The guide](../../docs/guides/contacts.md#api) lists them. |
 | `/api/brands/:brandId/accounts/*` | `@Requires('contact:read'\|'contact:write')` | The customer companies of a brand. |
+| `/api/brands/:brandId/departments*` | `brand:read` to read, `brand:manage` to add, delete or reorder, `staff:manage` to edit one and its teams | Departments, teams and team members. [The guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `GET /api/brands/:brandId/presence` | `@Requires('staff:read')` | Who is online in that brand. [The realtime guide](../../docs/guides/realtime.md#presence). |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |

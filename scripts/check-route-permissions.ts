@@ -8,47 +8,26 @@
  * so a `@SubscribeMessage` handler on a `@WebSocketGateway` counts as a route
  * here and is held to the same rule.
  *
- * Run with `pnpm check:routes`. Exits non-zero and names every handler.
- *
- * It is a token scan with TypeScript's own scanner rather than a regex: the
- * scanner is what the compiler uses, so a decorator name inside a string or a
- * comment is a `StringLiteral` or trivia and cannot be mistaken for one. A full
- * parse is not available — TypeScript 7's parser is native and its JavaScript
- * API exposes the scanner and the AST types, not `createSourceFile`.
+ * Run with `pnpm check:routes`. Exits non-zero and names every handler. The
+ * scanner it walks with is in `controller-scan.ts`, shared with
+ * `check-route-validation.ts`.
  */
-import { readdir, readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { createScanner, SyntaxKind } from 'typescript/unstable/ast';
 
-/** Decorators that turn a method into an HTTP route or a socket event handler. */
-const ROUTE_DECORATORS = new Set([
-  'Get',
-  'Post',
-  'Put',
-  'Patch',
-  'Delete',
-  'Head',
-  'Options',
-  'All',
-  'Search',
-  'Sse',
-  'SubscribeMessage',
-]);
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import {
+  appSourceFiles,
+  HANDLER_HOST_DECORATORS,
+  ROUTE_DECORATORS,
+  readDecorator,
+  SyntaxKind,
+  skipParens,
+  type Token,
+  tokenize,
+} from './controller-scan.ts';
 
 /** Decorators that satisfy the rule. One of them, on the handler or its class. */
 const DECLARATION_DECORATORS = new Set(['Public', 'Authenticated', 'Requires']);
-
-/** Class decorators that make a class a place route handlers may live. */
-const HANDLER_HOST_DECORATORS = new Set(['Controller', 'WebSocketGateway']);
-
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx']);
-const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist', 'build', 'coverage', '.turbo', 'e2e']);
-/**
- * Tests are not routes. They are also where the guard's own "a handler that
- * declares nothing is refused" case is proved, which needs a controller that
- * declares nothing.
- */
-const TEST_FILE = /\.(?:test|spec)\.tsx?$/;
 
 export interface UndeclaredRoute {
   /** Repository-relative, POSIX-separated path of the file. */
@@ -59,107 +38,6 @@ export interface UndeclaredRoute {
   /** The decorator that made it a handler, for the message. */
   readonly route: string;
 }
-
-interface Token {
-  readonly kind: SyntaxKind;
-  readonly text: string;
-}
-
-/**
- * `scan()` alone cannot read a template literal with a substitution in it: it
- * stops at `${`, and the `}` that ends the substitution comes back as an
- * ordinary closing brace. Everything after it — the template's own text — is
- * then scanned as if it were code, which both corrupts the brace depth this
- * checker tracks and can stall the scanner outright, because text like a CSS
- * colour reads as an invalid private identifier that consumes nothing.
- *
- * Rescanning that brace as the next template span is what the compiler's own
- * parser does, and it keeps template text out of the token stream entirely.
- */
-const tokenize = (source: string, file: string): Token[] => {
-  const scanner = createScanner(true, undefined, source);
-  const tokens: Token[] = [];
-  let templateDepth = 0;
-  let lastEnd = -1;
-
-  for (;;) {
-    let kind = scanner.scan();
-    if (kind === SyntaxKind.EndOfFile) {
-      return tokens;
-    }
-
-    if (kind === SyntaxKind.CloseBraceToken && templateDepth > 0) {
-      kind = scanner.reScanTemplateToken(false);
-    }
-    if (kind === SyntaxKind.TemplateHead) {
-      templateDepth += 1;
-    } else if (kind === SyntaxKind.TemplateTail) {
-      templateDepth -= 1;
-    }
-
-    // A scanner that returns a token without consuming anything would loop
-    // until the process runs out of memory. Saying where it stopped is the
-    // difference between a fixable report and a heap dump.
-    const end = scanner.getTokenEnd();
-    if (end <= lastEnd) {
-      throw new Error(
-        `${file}: the scanner stopped making progress at offset ${String(end)}; this file cannot be checked`,
-      );
-    }
-    lastEnd = end;
-
-    tokens.push({ kind, text: scanner.getTokenText() });
-  }
-};
-
-/** Index just past the `)` that closes the `(` at `start`, or `start` if there is none. */
-const skipParens = (tokens: readonly Token[], start: number): number => {
-  if (tokens[start]?.kind !== SyntaxKind.OpenParenToken) {
-    return start;
-  }
-
-  let depth = 0;
-  for (let index = start; index < tokens.length; index += 1) {
-    const kind = tokens[index]?.kind;
-    if (kind === SyntaxKind.OpenParenToken) {
-      depth += 1;
-    } else if (kind === SyntaxKind.CloseParenToken) {
-      depth -= 1;
-      if (depth === 0) {
-        return index + 1;
-      }
-    }
-  }
-  return tokens.length;
-};
-
-/**
- * Reads `@Name` or `@Namespace.Name` at `index` and returns the name plus where
- * the decorator ends. Arguments are skipped without being looked at, so a
- * decorator nested in another one's arguments is never collected.
- */
-const readDecorator = (
-  tokens: readonly Token[],
-  index: number,
-): { readonly name: string; readonly next: number } | undefined => {
-  if (tokens[index]?.kind !== SyntaxKind.AtToken) {
-    return undefined;
-  }
-
-  let cursor = index + 1;
-  let name = tokens[cursor]?.text;
-  if (name === undefined || tokens[cursor]?.kind !== SyntaxKind.Identifier) {
-    return undefined;
-  }
-  cursor += 1;
-
-  while (tokens[cursor]?.kind === SyntaxKind.DotToken) {
-    name = tokens[cursor + 1]?.text ?? name;
-    cursor += 2;
-  }
-
-  return { name, next: skipParens(tokens, cursor) };
-};
 
 interface ClassFrame {
   readonly name: string;
@@ -185,7 +63,7 @@ export function findUndeclaredRoutes(params: {
   let frame: ClassFrame | undefined;
 
   for (let index = 0; index < tokens.length; ) {
-    const token = tokens[index];
+    const token: Token | undefined = tokens[index];
     /* c8 ignore next 3 -- the loop condition already bounds `index`. */
     if (token === undefined) {
       break;
@@ -289,55 +167,13 @@ const undeclaredRoute = ({
     : { file, className: frame.name, handler, route };
 };
 
-async function collectSourceFiles(directory: string, repoRoot: string): Promise<string[]> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const absolute = path.join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      if (!IGNORED_DIRECTORIES.has(entry.name)) {
-        files.push(...(await collectSourceFiles(absolute, repoRoot)));
-      }
-      continue;
-    }
-
-    if (SOURCE_EXTENSIONS.has(path.extname(entry.name)) && !TEST_FILE.test(entry.name)) {
-      files.push(path.relative(repoRoot, absolute).split(path.sep).join('/'));
-    }
-  }
-
-  return files;
-}
-
 function formatUndeclared(route: UndeclaredRoute): string {
   return `  ${route.file}: ${route.className}.${route.handler} is @${route.route}() with no @Requires, @Authenticated or @Public`;
 }
 
 async function main(): Promise<void> {
   const repoRoot = path.resolve(import.meta.dirname, '..');
-  const appsRoot = path.join(repoRoot, 'apps');
-
-  const apps = (await readdir(appsRoot, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(appsRoot, entry.name, 'src'));
-
-  const files: string[] = [];
-  for (const root of apps) {
-    // An app that has no `src/` yet is a placeholder, not a failure. Anything
-    // else — a permissions problem, a broken symlink — has to stop the check,
-    // or it would silently scan nothing and report success.
-    const scanned = await collectSourceFiles(root, repoRoot).catch(
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === 'ENOENT') {
-          return [];
-        }
-        throw error;
-      },
-    );
-    files.push(...scanned);
-  }
+  const files = await appSourceFiles(repoRoot);
 
   const undeclared: UndeclaredRoute[] = [];
   for (const file of files) {

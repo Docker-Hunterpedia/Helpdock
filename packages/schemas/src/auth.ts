@@ -125,6 +125,44 @@ export const totpConfirmRequestSchema = z.object({ code: z.string().regex(/^\d{6
 export type TotpConfirmRequest = z.infer<typeof totpConfirmRequestSchema>;
 
 // --------------------------------------------------------------------------
+// Paths and query strings
+// --------------------------------------------------------------------------
+
+/**
+ * The `:token` segment of a sign-in link. It bounds the segment; whether the
+ * token exists and has not been spent is Redis's answer, not a schema's, and an
+ * unknown one has to land on a screen rather than on a 400.
+ *
+ * 200 characters is what `inviteTokenParamSchema` allows for the same reason:
+ * far more than the 32-byte token encodes to, far less than a body that would
+ * cost anything to hash.
+ */
+export const magicLinkTokenParamSchema = z.object({ token: z.string().min(1).max(200) });
+export type MagicLinkTokenParam = z.infer<typeof magicLinkTokenParamSchema>;
+
+/**
+ * The `:provider` segment of the two OAuth routes, as a *shape*. Which
+ * providers exist is `oauthProviderSchema`, and the handler applies that itself
+ * rather than leaving it to a pipe: both routes answer a browser with a
+ * redirect, and a pipe can only answer with a body. An unknown provider is
+ * therefore `no-account` on a screen, not a 400 nobody can read.
+ */
+export const oauthProviderParamSchema = z.object({ provider: z.string().min(1).max(32) });
+export type OauthProviderParam = z.infer<typeof oauthProviderParamSchema>;
+
+/**
+ * What a provider puts in the query string when it sends the browser back.
+ * Both are optional because a refusal — or a person who declined on the consent
+ * screen — arrives with neither, and that case is a screen too. Anything else
+ * the provider appends is dropped here rather than reaching the handler.
+ */
+export const oauthCallbackQuerySchema = z.object({
+  code: z.string().max(4096).optional(),
+  state: z.string().max(4096).optional(),
+});
+export type OauthCallbackQuery = z.infer<typeof oauthCallbackQuerySchema>;
+
+// --------------------------------------------------------------------------
 // Responses
 // --------------------------------------------------------------------------
 

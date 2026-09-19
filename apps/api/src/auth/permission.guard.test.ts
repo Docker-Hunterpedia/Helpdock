@@ -3,6 +3,7 @@ import { BadRequestException, Controller, ForbiddenException, Get } from '@nestj
 import { Reflector } from '@nestjs/core';
 import { WsException } from '@nestjs/websockets';
 import { describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import type { Logger } from '../logging/logger.js';
 import { fakeExecutionContext } from '../testing/execution-context.js';
@@ -127,12 +128,44 @@ describe('PermissionGuard', () => {
       ).toThrow(ForbiddenException);
     });
 
-    it('refuses a brand id that is not a uuid', () => {
-      expect(() =>
+    /**
+     * The guard runs before the handler's pipe, so it is the guard that refuses
+     * a malformed `:brandId` — and it does so with `brandIdParamSchema`, so the
+     * body carries the field rather than a sentence (issue #36).
+     */
+    it('refuses a brand id that is not a uuid, naming the field', () => {
+      let thrown: unknown;
+      try {
         run({
           route: 'brand',
           principal: staff({ [BRAND_A]: { role: 'admin', departmentIds: 'all' } }),
           params: { brandId: 'nope' },
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(ZodError);
+      expect((thrown as ZodError).issues.map((issue) => issue.path)).toEqual([['brandId']]);
+    });
+
+    it('refuses a path that names the install scope', () => {
+      expect(() =>
+        run({
+          route: 'brand',
+          principal: staff({ [INSTALL_SCOPE_BRAND_ID]: { role: 'admin', departmentIds: 'all' } }),
+          params: { brandId: INSTALL_SCOPE_BRAND_ID },
+        }),
+      ).toThrow(BadRequestException);
+    });
+
+    it('refuses a host that names no brand this route can act on', () => {
+      expect(() =>
+        run({
+          route: 'brand',
+          principal: staff({ [BRAND_A]: { role: 'admin', departmentIds: 'all' } }),
+          params: {},
+          hostBrandId: INSTALL_SCOPE_BRAND_ID,
         }),
       ).toThrow(BadRequestException);
     });

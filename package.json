@@ -25,10 +25,15 @@
     "test:integration": "vitest run --project=integration",
     "test:watch": "vitest",
     "check:boundaries": "node scripts/check-app-boundaries.ts",
-    "check:routes": "node scripts/check-route-permissions.ts"
+    "check:routes": "node scripts/check-route-permissions.ts",
+    "check:validation": "node scripts/check-route-validation.ts",
+    "changeset": "changeset",
+    "changeset:version": "changeset version"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@changesets/changelog-github": "1.0.1",
+    "@changesets/cli": "3.0.3",
     "@types/node": "24.13.5",
     "@vitest/coverage-v8": "5.0.1",
     "turbo": "2.10.13",

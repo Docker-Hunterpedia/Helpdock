@@ -38,7 +38,7 @@ export class RealtimePublisher {
     room: string,
     event: E,
     payload: ServerEventPayload<E>,
-    options: { readonly seq?: number } = {},
+    options: { readonly seq?: number; readonly local?: boolean } = {},
   ): void {
     const namespace = this.#namespace;
     if (namespace === null) {
@@ -47,7 +47,39 @@ export class RealtimePublisher {
       return;
     }
 
-    namespace.to(roomSchema.parse(room)).emit(event, this.envelope(event, payload, options));
+    // `local` restricts the emit to this replica's own sockets. It is for the
+    // one caller whose fan-out has already happened —
+    // {@link ./broadcast.js RealtimeEmitSubscriber}, which every replica runs
+    // on a message every replica receives. Without it the Redis adapter would
+    // fan that message out again and a room would hear the frame once per
+    // replica.
+    const target = options.local === true ? namespace.local : namespace;
+
+    target.to(roomSchema.parse(room)).emit(event, this.envelope(event, payload, options));
+  }
+
+  /**
+   * Turns every socket of this replica out of a room, so the next thing a
+   * client does is re-join and be authorised again.
+   *
+   * A room is authorised once, when it is joined. A ticket that moves
+   * department changes who may read it, and a socket that joined while the
+   * ticket was in the old department would otherwise keep hearing about it:
+   * ids only, never a body, but "an internal note was just added to the ticket
+   * you lost" is still more than nothing. `#requireLiveSession` covers a
+   * revoked session; this covers a changed scope.
+   *
+   * Local, for the same reason {@link emitToRoom}'s `local` exists: every
+   * replica is told, and each turns out its own.
+   */
+  evictRoom(room: string): void {
+    const namespace = this.#namespace;
+    /* c8 ignore next 3 -- there is nothing to evict before `afterInit`. */
+    if (namespace === null) {
+      return;
+    }
+
+    void namespace.local.in(roomSchema.parse(room)).socketsLeave(roomSchema.parse(room));
   }
 
   /** Exported for the tests, and because a seq-bearing envelope is worth naming. */

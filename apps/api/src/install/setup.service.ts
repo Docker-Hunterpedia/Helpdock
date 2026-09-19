@@ -9,6 +9,7 @@ import {
   type DbTransaction,
   departments,
   INSTALL_SCOPE_BRAND_ID,
+  seedBrandStatuses,
   userBrandRoles,
   users,
   uuidv7,
@@ -435,6 +436,11 @@ export class SetupService {
     }
 
     await tx.insert(departments).values({ brandId, name: DEFAULT_DEPARTMENT_NAME });
+
+    // A brand with no statuses is a brand no ticket can be filed in
+    // (DOMAIN-RULES §2.1), so the six built-in ones are written in the same
+    // transaction as the brand rather than on first use.
+    await seedBrandStatuses(tx, brandId);
 
     await tx.insert(auditLog).values({
       brandId: INSTALL_SCOPE_BRAND_ID,

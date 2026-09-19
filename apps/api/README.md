@@ -396,6 +396,8 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/contacts/*` | `@Requires('contact:read'\|'contact:write')` | Contacts, identifiers, notes, duplicate suggestions and erasure. [The guide](../../docs/guides/contacts.md#api) lists them. |
 | `/api/brands/:brandId/accounts/*` | `@Requires('contact:read'\|'contact:write')` | The customer companies of a brand. |
 | `GET /api/brands/:brandId/presence` | `@Requires('staff:read')` | Who is online in that brand. [The realtime guide](../../docs/guides/realtime.md#presence). |
+| `GET /api/brands/:brandId/ticket-statuses` | `@Requires('ticket:read')` | The brand's statuses. [The ticket guide](../../docs/guides/tickets.md#endpoints). |
+| `/api/brands/:brandId/tickets/*` | `ticket:read` / `ticket:write` | Tickets, their threads and their activity. [The ticket guide](../../docs/guides/tickets.md#endpoints) lists them. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
@@ -429,6 +431,37 @@ shared secret of [ARCHITECTURE
 stand in its place: `docker/caddy/Caddyfile` answers 404 to `/internal/*` from
 outside, so the route is reachable only from inside the Compose network, and the
 handler rate-limits per source address.
+
+## Tickets
+
+`src/tickets/` holds M1-02 and M1-03: the ticket, its thread and its activity
+log. What the model is and what the endpoints answer is [the ticket
+guide](../../docs/guides/tickets.md); what follows is for somebody reading the
+code.
+
+| File | |
+|---|---|
+| `tickets.repository.ts` | Every statement, and not one of them filters by brand or department. The request's transaction carries the scope and the policies apply it (DOMAIN-RULES §1.3); a `WHERE brand_id = …` on top would be a second place for isolation to live, and the one that is easy to forget on the next query. |
+| `ticket-query.ts` | The list's `WHERE` and `ORDER BY`, built from the parsed query. Pure, so what a filter compiles to is asserted against rendered SQL rather than against a database. |
+| `cursor.ts` | Keyset pagination. The cursor is opaque but is **not** a token: every row it can reach is a row the policies would have shown anyway, so a forged one is a differently-ordered page. It is validated all the same. |
+| `status-change.ts` | The seam M1-08 replaces. Today it refuses a status that is not this brand's and keeps `closed_at` in step with the system state; the transition table of §2.2 goes here. |
+| `ticket-activity.ts` | The activity row, written in the caller's transaction. |
+| `ticket-events.ts` | The four outbox events and the handler the worker registers for them. |
+| `ticket-view.ts` | Rows to the wire shapes, in one place, so a column added to a table does not quietly become a field in a response. |
+
+Four things are easy to get wrong here and are written down where they happen:
+
+- **`seq` is assigned under a lock on the *ticket* row**, and the `client_id`
+  lookup happens inside it. Swapping the two would make a retry that arrives
+  mid-commit write a second message (DOMAIN-RULES §7).
+- **A ticket in another department answers 404, not 403.** The transaction
+  cannot see the row, so the api genuinely does not know whether it exists;
+  "forbidden" would confirm that it does.
+- **Nothing emits to a socket from a request.** A ticket change reaches a socket
+  through the outbox and the worker (§6), which is also why `TicketsModule` does
+  not depend on `RealtimeModule`.
+- **The `tagId` filter answers 400 until M1-06.** A filter that is accepted and
+  not applied would quietly show rows the reader asked to exclude.
 
 ## Observability
 
@@ -538,10 +571,18 @@ only when a test passes it as an extra controller.
   `:provider` segment rather than listing the providers, because both OAuth
   routes answer a browser with a redirect and a pipe can only answer with a
   body.
-- `ticket:<id>` socket rooms are refused until M1 has a table to check them
-  against, and the `/widget` namespace is M4. `src/realtime/` is the whole
-  gateway; [the realtime guide](../../docs/guides/realtime.md) is what to read
-  before adding an event to it.
+- The `/widget` namespace is M4. `src/realtime/` is the whole gateway; [the
+  realtime guide](../../docs/guides/realtime.md) is what to read before adding
+  an event to it.
+- **A department move out of the actor's own scope is refused.** DOMAIN-RULES
+  §1.2 allows it — it is how escalation works — and the `WITH CHECK` half of the
+  department policy does not. Escalation by a *rule* works, because a rule runs
+  as the system principal with every department (§1.4); a restricted agent
+  moving a ticket by hand into a department they cannot see gets a 403. M1-08
+  owns closing it.
+- **`tickets.contact_id` and `tickets.team_id` carry no foreign key** until
+  M1-04 and M1-01 create the tables they point at. The columns are here so that
+  neither milestone has to backfill every row already written.
 - There is no instrumentation for the `postgres` driver or for BullMQ, so
   neither appears as its own span. Both gaps are explained in the
   [operations guide](../../docs/guides/operations.md#what-is-instrumented).

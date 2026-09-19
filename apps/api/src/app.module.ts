@@ -37,6 +37,8 @@ import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js'
 import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
+import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
+import { TicketsModule } from './tickets/tickets.module.js';
 
 /**
  * The request lifecycle of ARCHITECTURE §6, in the order Nest runs it:
@@ -95,7 +97,14 @@ export class AppModule implements NestModule {
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
         RealtimeModule.forRoot({ ...options.realtime, logger: options.logger }),
         StaffModule.forRoot({ logger: options.logger }),
-        ContactsModule.forRoot(),
+        // M1-04 left two null providers behind for the contact screens; M1-02
+        // fills them in. They live in `tickets/` so that contacts never learn
+        // the ticket schema (`contacts/providers.ts` says why).
+        ContactsModule.forRoot({
+          ticketStats: new DbTicketStatsProvider(),
+          timeline: new DbContactTimelineProvider(),
+        }),
+        TicketsModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

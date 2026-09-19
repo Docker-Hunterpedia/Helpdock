@@ -233,3 +233,19 @@ describe('the request schemas', () => {
     expect(contactSearchQuerySchema.safeParse({ limit: '500' }).success).toBe(false);
   });
 });
+
+describe('contactSearchQuerySchema, applied twice', () => {
+  it('survives a second pass, because the query is parsed by two pipes', () => {
+    // The global `ZodValidationPipe` and the one the parameter names both run.
+    // `z.stringbool()` alone refuses the boolean the first produced, which made
+    // `?hasOpenTickets=true` a 400 rather than a filter.
+    const once = contactSearchQuerySchema.parse({ hasOpenTickets: 'true', duplicates: 'false' });
+
+    expect(once).toMatchObject({ hasOpenTickets: true, duplicates: false });
+    expect(contactSearchQuerySchema.parse(once)).toEqual(once);
+  });
+
+  it('still refuses a value that is neither', () => {
+    expect(contactSearchQuerySchema.safeParse({ hasOpenTickets: 'perhaps' }).success).toBe(false);
+  });
+});

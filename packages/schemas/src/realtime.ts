@@ -98,6 +98,8 @@ export const REALTIME_EVENTS = {
   presenceHeartbeat: 'presence:heartbeat',
 
   presenceChanged: 'presence:changed',
+  ticketChanged: 'ticket:changed',
+  ticketMessage: 'ticket:message',
 } as const;
 
 export const roomJoinSchema = z.object({
@@ -128,9 +130,48 @@ export const presenceChangedSchema = z.object({
 });
 export type PresenceChanged = z.infer<typeof presenceChangedSchema>;
 
-/** Every server → client event and the payload it carries. M1 and M4 extend it. */
+/**
+ * A ticket was created or something about it moved (M1-02). It carries ids and
+ * never content: "the REST API is the source of truth; sockets are
+ * notifications" (§7), so a screen re-reads the ticket rather than patching it
+ * from a frame. That is also what makes an internal note impossible to leak
+ * over a socket — there is no body in the payload to leak.
+ *
+ * `departmentId` is the department the ticket is in *now*, so a client holding
+ * a `department:` room knows whether the ticket has just arrived in it or just
+ * left it.
+ */
+export const ticketChangedSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  departmentId: z.uuid(),
+  /** The outbox event this came from: `ticket.created` or `ticket.updated`. */
+  event: z.enum(['ticket.created', 'ticket.updated']),
+});
+export type TicketChanged = z.infer<typeof ticketChangedSchema>;
+
+/**
+ * A message was added to a ticket (M1-03). The envelope's `seq` is this
+ * message's, which is the cursor a client compares with its own `last_seq` and
+ * catches up from over REST when it finds a gap (§7).
+ */
+export const ticketMessageEventSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  departmentId: z.uuid(),
+  messageId: z.uuid(),
+  seq: z.int().positive(),
+  kind: z.enum(['public', 'note', 'system', 'ai']),
+  /** `ticket.replied` or `ticket.note_added`. */
+  event: z.enum(['ticket.replied', 'ticket.note_added']),
+});
+export type TicketMessageEvent = z.infer<typeof ticketMessageEventSchema>;
+
+/** Every server → client event and the payload it carries. M4 extends it again. */
 export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.presenceChanged]: presenceChangedSchema,
+  [REALTIME_EVENTS.ticketChanged]: ticketChangedSchema,
+  [REALTIME_EVENTS.ticketMessage]: ticketMessageEventSchema,
 } as const;
 
 export type ServerEvent = keyof typeof REALTIME_EVENT_PAYLOADS;

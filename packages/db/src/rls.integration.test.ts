@@ -19,6 +19,10 @@ import {
   departments,
   outbox,
   settings,
+  ticketActivity,
+  ticketMessages,
+  ticketStatuses,
+  tickets,
   userBrandRoles,
   users,
 } from './schema/index.js';
@@ -52,9 +56,11 @@ const brandB = uuidv7();
 const userId = uuidv7();
 
 /**
- * The contact tables point at each other, so their fixture rows are seeded with
- * ids chosen here rather than read back: a `contact_notes` row needs a contact
- * that already exists, and both brands insert the same set.
+ * Fixture rows point at each other — a `contact_notes` row needs a contact, a
+ * ticket needs a department and a status, a message needs a ticket — so their
+ * ids are chosen here rather than read back, and both brands insert the same
+ * set. Each table still holds exactly one row per brand, which is what the
+ * assertions below count on.
  */
 /** A UUID derived from the brand's, so the two brands never collide. */
 const idFor = (brandId: string, marker: string): string =>
@@ -64,7 +70,28 @@ const accountId = (brandId: string): string => idFor(brandId, 'a');
 const contactId = (brandId: string): string => idFor(brandId, 'c');
 const otherContactId = (brandId: string): string => idFor(brandId, 'd');
 
-/** One row per tenant table, written by the brand that owns it. */
+const perBrand = (): Record<string, string> => ({ [brandA]: uuidv7(), [brandB]: uuidv7() });
+const departmentId = perBrand();
+const statusId = perBrand();
+const ticketId = perBrand();
+
+/** Unique per row for the columns that are unique inside a brand or a ticket. */
+let sequence = 0;
+const nextNumber = (): number => {
+  sequence += 1;
+  return sequence;
+};
+
+/**
+ * One row per tenant table, written by the brand that owns it.
+ *
+ * The department-scoped tables — `tickets`, `ticket_messages`,
+ * `ticket_activity` — are here for the *cross-brand* half of DOMAIN-RULES §1.6,
+ * which is what this suite proves for every table alike. The same-brand,
+ * other-department half needs two departments and two principals inside one
+ * brand and is proved where those exist: `apps/api/src/tickets/tickets.integration.test.ts`,
+ * at the HTTP layer and in raw SQL.
+ */
 const fixtures = [
   {
     name: 'user_brand_roles',
@@ -74,7 +101,7 @@ const fixtures = [
   {
     name: 'departments',
     insert: (tx: DbTransaction, brandId: string) =>
-      tx.insert(departments).values({ brandId, name: 'Support' }),
+      tx.insert(departments).values({ id: departmentId[brandId], brandId, name: 'Support' }),
   },
   {
     name: 'brand_domains',
@@ -158,6 +185,69 @@ const fixtures = [
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(outbox).values({ brandId, event: 'test.seeded', payload: { seeded: true } }),
   },
+  {
+    name: 'ticket_statuses',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketStatuses).values({
+        id: statusId[brandId],
+        brandId,
+        name: 'Open',
+        systemState: 'open',
+        isDefault: true,
+        color: 'info',
+      }),
+  },
+  {
+    name: 'tickets',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(tickets).values({
+        id: ticketId[brandId],
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        number: nextNumber(),
+        prefix: 'T',
+        subject: 'Seeded',
+        statusId: statusId[brandId] ?? '',
+        channel: 'manual',
+      }),
+  },
+  {
+    name: 'ticket_messages',
+    // A child row of an invisible ticket is refused by the trigger before the
+    // policy is ever consulted: it finds no parent, so there is no department
+    // to denormalise. Refused earlier is still refused.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketMessages).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        // Whatever is passed is overwritten by the trigger with the parent
+        // ticket's department. A ticket this transaction cannot see leaves it
+        // null and NOT NULL refuses the row, which is why the cross-brand
+        // insert below fails even before the policy is consulted.
+        departmentId: departmentId[brandId] ?? '',
+        seq: nextNumber(),
+        kind: 'public',
+        authorType: 'staff',
+        bodyHtml: '<p>seeded</p>',
+        bodyText: 'seeded',
+        channel: 'manual',
+      }),
+  },
+  {
+    name: 'ticket_activity',
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketActivity).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        actorType: 'system',
+        actorId: 'test',
+        action: 'ticket.created',
+        via: 'system',
+      }),
+  },
 ] as const;
 
 const brandIdsIn = async (tx: DbTransaction, table: string): Promise<string[]> => {
@@ -221,7 +311,8 @@ describe.skipIf(!hasDocker)('row-level security', () => {
     );
   });
 
-  describe.each(fixtures)('$name', ({ name, insert }) => {
+  describe.each(fixtures)('$name', ({ name, insert, ...fixture }) => {
+    const refusal = 'refusal' in fixture ? fixture.refusal : /row-level security/i;
     it('shows brand A only its own rows', async () => {
       const visible = await withSystem(db, brandA, (tx) => brandIdsIn(tx, name));
 
@@ -259,7 +350,7 @@ describe.skipIf(!hasDocker)('row-level security', () => {
         (error: unknown) => error as { cause?: { message?: string } },
       );
 
-      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+      expect(rejection?.cause?.message).toMatch(refusal);
     });
 
     it('updates none of brand B rows', async () => {

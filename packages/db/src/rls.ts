@@ -45,6 +45,13 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'settings', departmentScoped: false },
   { name: 'audit_log', departmentScoped: false },
   { name: 'outbox', departmentScoped: false },
+  // A brand's status list is not a ticket: an Agent has to read the name of the
+  // status a ticket in their own department is in, and the list is the same
+  // list for every department.
+  { name: 'ticket_statuses', departmentScoped: false },
+  { name: 'tickets', departmentScoped: true },
+  { name: 'ticket_messages', departmentScoped: true },
+  { name: 'ticket_activity', departmentScoped: true },
 ];
 
 /**

@@ -98,6 +98,12 @@ are registered, retries, and ends in the failed set. `settings.changed` ships
 registered, with a handler that only logs, so a fresh install has one working
 path through the whole chain.
 
+Registering the same event twice throws. The registry is process-wide, so a
+caller that may run more than once in a process — a test that starts several
+workers — registers through a dependency rather than at import time;
+`apps/api/src/worker/start-worker.ts` is the worked example, and the four ticket
+events of M1-02 and M1-03 are registered there.
+
 ## Writing an idempotent consumer
 
 `createWorker` validates the payload, opens `withSystem(db, brandId, …)` and

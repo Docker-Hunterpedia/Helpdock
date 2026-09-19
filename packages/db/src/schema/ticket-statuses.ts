@@ -1,0 +1,56 @@
+import { boolean, integer, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { uuidv7 } from '../uuid.js';
+import { brands } from './brands.js';
+import { statusColorEnum, ticketSystemStateEnum } from './enums.js';
+
+/**
+ * The statuses one brand offers (DOMAIN-RULES §2.1). Four system states are
+ * fixed; the statuses a person picks from are rows, so a brand can add
+ * "Waiting on supplier" without the SLA engine or the reports learning a new
+ * word — every row maps to one of the four.
+ *
+ * Brand-scoped, not department-scoped: a status list belongs to the brand, and
+ * an Agent in one department has to be able to read the name of the status a
+ * ticket in their own department is in.
+ *
+ * `is_system` marks the six rows {@link ../ticket-statuses.js seedBrandStatuses}
+ * writes for every brand. They may be renamed and recoloured but never deleted,
+ * because code refers to them: the reopen path needs the default open status,
+ * merge needs Merged, and spam needs Spam (DOMAIN-RULES §2.2, §2.4).
+ */
+export const ticketStatuses = pgTable(
+  'ticket_statuses',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    brandId: uuid('brand_id')
+      .notNull()
+      .references(() => brands.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 60 }).notNull(),
+    /** Arabic label. Null means the brand has not translated this status yet. */
+    nameAr: varchar('name_ar', { length: 60 }),
+    systemState: ticketSystemStateEnum('system_state').notNull(),
+    /** While a ticket is in this status, both SLA clocks are paused (§3.2). */
+    pausesSla: boolean('pauses_sla').notNull().default(false),
+    /** The ball is with the customer; time-based rules and reports read it (§2.1). */
+    awaitingCustomer: boolean('awaiting_customer').notNull().default(false),
+    /** The status a new or reopened ticket lands in. One per brand. */
+    isDefault: boolean('is_default').notNull().default(false),
+    /** Seeded with the brand and undeletable; see the note above. */
+    isSystem: boolean('is_system').notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
+    color: statusColorEnum('color').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  // Two statuses of one brand with the same name would be indistinguishable in
+  // the status picker, which is the only place anybody chooses one.
+  (table) => [unique('ticket_statuses_brand_name_key').on(table.brandId, table.name)],
+);
+
+export type TicketStatus = typeof ticketStatuses.$inferSelect;
+export type NewTicketStatus = typeof ticketStatuses.$inferInsert;

@@ -1,8 +1,11 @@
 # In development
 
-Active milestone documents:
+No milestone is in progress.
 
-- [M0-skeleton.md](M0-skeleton.md) — **M0 Skeleton**, in progress since 2026-09-18 ([PRD](../planning/PRD.md#m0-skeleton)).
+M0 Skeleton shipped on 2026-09-19 and its document moved to
+[`../completed/M0-skeleton.md`](../completed/M0-skeleton.md).
+**M1 Ticketing core** is next ([PRD](../planning/PRD.md#m1-ticketing-core)); its
+document belongs here the day it starts.
 
 When a milestone starts, add a file here named `M<n>-<slug>.md` using this template:
 

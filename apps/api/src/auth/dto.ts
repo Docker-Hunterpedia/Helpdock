@@ -3,6 +3,9 @@ import {
   authSessionResponseSchema,
   exchangeRequestSchema,
   magicLinkRequestSchema,
+  magicLinkTokenParamSchema,
+  oauthCallbackQuerySchema,
+  oauthProviderParamSchema,
   passwordForgotRequestSchema,
   passwordResetRequestSchema,
   recoveryCodeRequestSchema,
@@ -31,6 +34,9 @@ export class SignInRequestDto extends createZodDto(signInRequestSchema) {}
  * still holds.
  */
 export class MagicLinkRequestDto extends createZodDto(magicLinkRequestSchema) {}
+export class MagicLinkTokenParamDto extends createZodDto(magicLinkTokenParamSchema) {}
+export class OauthProviderParamDto extends createZodDto(oauthProviderParamSchema) {}
+export class OauthCallbackQueryDto extends createZodDto(oauthCallbackQuerySchema) {}
 export class TotpRequestDto extends createZodDto(totpRequestSchema) {}
 export class TotpConfirmRequestDto extends createZodDto(totpConfirmRequestSchema) {}
 export class RecoveryCodeRequestDto extends createZodDto(recoveryCodeRequestSchema) {}

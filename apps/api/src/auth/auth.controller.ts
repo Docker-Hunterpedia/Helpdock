@@ -33,6 +33,9 @@ import {
   AuthSessionResponseDto,
   ExchangeRequestDto,
   MagicLinkRequestDto,
+  MagicLinkTokenParamDto,
+  OauthCallbackQueryDto,
+  OauthProviderParamDto,
   PasswordForgotRequestDto,
   PasswordResetRequestDto,
   RecoveryCodeRequestDto,
@@ -71,13 +74,14 @@ import { SessionService } from './session/session.service.js';
  * person is sent, which is what keeps the callbacks from being an open
  * redirect.
  *
- * **Every body names its schema.** The global `ZodValidationPipe` finds a DTO's
- * schema through `design:paramtypes`, which only exists when the build emits
- * decorator metadata; a transform that drops it — esbuild does — turns
- * validation off silently, and a handler here would then be handed whatever
- * JSON arrived. Naming the DTO on the parameter is the same pipe with the same
- * schema, decided at the call site instead of inferred, so these routes
- * validate wherever they run.
+ * **Every body, path parameter and query names its schema.** The global
+ * `ZodValidationPipe` finds a DTO's schema through `design:paramtypes`, which
+ * only exists when the build emits decorator metadata; a transform that drops
+ * it — esbuild does — turns validation off silently, and a handler here would
+ * then be handed whatever arrived. Naming the DTO on the parameter is the same
+ * pipe with the same schema, decided at the call site instead of inferred, so
+ * these routes validate wherever they run. `pnpm check:validation` keeps it
+ * that way for the next route somebody adds.
  */
 @Controller('api/auth')
 export class AuthController {
@@ -189,7 +193,7 @@ export class AuthController {
   @Get('magic-link/:token')
   @Public()
   async consumeMagicLink(
-    @Param('token') token: string,
+    @Param(new ZodValidationPipe(MagicLinkTokenParamDto)) { token }: MagicLinkTokenParamDto,
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
@@ -239,7 +243,10 @@ export class AuthController {
 
   @Get('oauth/:provider/start')
   @Public()
-  async startOauth(@Param('provider') provider: string, @Res() reply: FastifyReply): Promise<void> {
+  async startOauth(
+    @Param(new ZodValidationPipe(OauthProviderParamDto)) { provider }: OauthProviderParamDto,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
     const url = await this.#auth.startOauth(this.#provider(provider));
     await reply.redirect(url, HttpStatus.FOUND);
   }
@@ -247,9 +254,8 @@ export class AuthController {
   @Get('oauth/:provider/callback')
   @Public()
   async oauthCallback(
-    @Param('provider') provider: string,
-    @Query('code') code: string | undefined,
-    @Query('state') state: string | undefined,
+    @Param(new ZodValidationPipe(OauthProviderParamDto)) { provider }: OauthProviderParamDto,
+    @Query(new ZodValidationPipe(OauthCallbackQueryDto)) { code, state }: OauthCallbackQueryDto,
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
@@ -452,6 +458,12 @@ export class AuthController {
     reply.clearCookie(REFRESH_COOKIE, refreshCookieAttributes(this.#env.APP_URL));
   }
 
+  /**
+   * Which providers exist, applied here rather than by the parameter's pipe:
+   * both OAuth routes answer a browser with a redirect, and a pipe can only
+   * answer with a body. `oauthProviderParamSchema` bounds the segment; this
+   * turns an unknown one into a refusal the sign-in screen can render.
+   */
   #provider(value: string): OauthProvider {
     const parsed = oauthProviderSchema.safeParse(value);
     if (!parsed.success) {

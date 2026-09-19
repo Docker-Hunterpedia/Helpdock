@@ -2,7 +2,7 @@
 
 Open-source customer support platform: ticketing, help center, live chat widget and grounded AI, in one deploy that serves many brands. A self-hosted alternative to Zoho Desk, Zendesk and Freshdesk.
 
-> **Status:** pre-alpha. The product is fully specified but not yet implemented. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
+> **Status:** pre-alpha. **M0 Skeleton shipped** on 2026-09-19; **M1 Ticketing core** is next. What works today: `docker compose up`, the first-run wizard, sign-in with a password and a second factor, staff and roles, and the System page — in English and Arabic. There is no ticketing yet. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, [what M0 actually built](docs/completed/M0-skeleton.md), plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
 
 ## Why Helpdock
 
@@ -21,24 +21,24 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 
 ## Roadmap
 
-| Milestone | Scope |
-|---|---|
-| M0 | Monorepo skeleton, config, database and RLS, auth, admin shell, Compose, CI |
-| M1 | Ticketing core |
-| M2 | Email channel |
-| M3 | Automation and SLAs |
-| M4 | Widget and realtime |
-| M5 | Help center |
-| M6 | Telegram |
-| M7 | AI |
-| M8 | API, webhooks, reports |
-| M9 | Hardening and 1.0 release |
+| Milestone | Scope | Status |
+|---|---|---|
+| M0 | Monorepo skeleton, config, database and RLS, auth, admin shell, Compose, CI | [shipped](docs/completed/M0-skeleton.md) |
+| M1 | Ticketing core | next |
+| M2 | Email channel | planned |
+| M3 | Automation and SLAs | planned |
+| M4 | Widget and realtime | planned |
+| M5 | Help center | planned |
+| M6 | Telegram | planned |
+| M7 | AI | planned |
+| M8 | API, webhooks, reports | planned |
+| M9 | Hardening and 1.0 release | planned |
 
 Milestones are grouped into five phases with deliverables and exit criteria in the [PRD](docs/planning/PRD.md). All project documents live under [docs/](docs/), organised by lifecycle stage.
 
 ## Development
 
-Node.js 24 and pnpm 12, then `pnpm install`. The root scripts are `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm format`. See [docs/guides/development.md](docs/guides/development.md) for the workspace layout, how to add a package and how CI runs.
+Node.js 24 and pnpm 12, then `pnpm install`. The root scripts are `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm format`. See [docs/guides/development.md](docs/guides/development.md) for the workspace layout, how to add a package and how CI runs, and [docs/guides/release.md](docs/guides/release.md) for how a commit becomes a published image.
 
 ## Contributing
 

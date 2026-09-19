@@ -1,0 +1,141 @@
+name: Release
+
+# ARCHITECTURE §16: a `v*` tag publishes the multi-architecture image to GHCR
+# and opens a GitHub Release carrying the changelog and a CycloneDX SBOM.
+#
+# The tag is the trigger and the only input. It is cut from a commit whose `ci`
+# run was green — nothing here re-runs the test suite, because a release must
+# ship the artefact that was tested, not a second build of a moving branch.
+# `docs/guides/release.md` is the procedure.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    permissions:
+      # The Release, its notes and the SBOM asset.
+      contents: write
+      # `ghcr.io/docker-hunterpedia/helpdock`. `GITHUB_TOKEN` is enough; no
+      # personal access token is stored anywhere.
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The image build and the release notes only read the tree. The
+          # `contents: write` token this job holds is used by the release
+          # action, which takes it as an input rather than out of `.git/config`.
+          persist-credentials: false
+
+      # Every value the shell below reads arrives as an environment variable,
+      # never as a `${{ }}` substitution inside the script: a tag name is
+      # attacker-influencable text, and substituting it would splice it into the
+      # script itself.
+      - name: Read the version from the tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # A tag with a hyphen in its version is a pre-release — `v1.0.0-rc.1`.
+          # It is published under its own tag and marked as a pre-release, and
+          # it never moves `:latest`.
+          case "$version" in
+            *-*) prerelease=true ;;
+            *)   prerelease=false ;;
+          esac
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+          {
+            echo 'tags<<TAGS_EOF'
+            echo "ghcr.io/docker-hunterpedia/helpdock:$version"
+            if [ "$prerelease" = 'false' ]; then
+              echo 'ghcr.io/docker-hunterpedia/helpdock:latest'
+            fi
+            echo 'TAGS_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # `linux/arm64` is built under emulation. It is slow and it is correct:
+      # the Dockerfile downloads no architecture-specific binary, so one recipe
+      # produces both images.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.version.outputs.tags }}
+          build-args: |
+            HELPDOCK_VERSION=${{ steps.version.outputs.version }}
+            HELPDOCK_GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # From the image that was just pushed, not from the working tree: the SBOM
+      # has to describe what an operator will run, which includes the base
+      # image's Debian packages and ffmpeg, not only this repository's
+      # `node_modules`.
+      - name: Generate the SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ghcr.io/docker-hunterpedia/helpdock:${{ steps.version.outputs.version }}
+          format: cyclonedx-json
+          output-file: helpdock-${{ steps.version.outputs.version }}.cdx.json
+          artifact-name: helpdock-${{ steps.version.outputs.version }}.cdx.json
+          upload-release-assets: false
+
+      - name: Collect the release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The section of CHANGELOG.md whose heading starts `## <version> `.
+          # `index(…) == 1` rather than a regex, so the dots in a version are
+          # never read as wildcards.
+          awk -v prefix="## $VERSION " '
+            index($0, prefix) == 1 { capture = 1; next }
+            capture && index($0, "## ") == 1 { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            printf 'No CHANGELOG.md section for %s. The generated notes below are all there is.\n' \
+              "$VERSION" > release-notes.md
+          fi
+
+      - name: Create the release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          name: Helpdock ${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          # Appended below the changelog: the merged pull requests and the new
+          # contributors, which the changelog deliberately does not list.
+          generate_release_notes: true
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          files: helpdock-${{ steps.version.outputs.version }}.cdx.json
+          fail_on_unmatched_files: true

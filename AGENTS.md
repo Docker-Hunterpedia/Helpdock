@@ -12,7 +12,7 @@ Helpdock is an open-source (AGPL-3.0), self-hosted customer support platform: ti
 - [DESIGN.md](DESIGN.md) defines the design system ("Quiet desk"): tokens, type scale, components, RTL rules, brand theming limits and the accessibility checklist. Every screen in admin, widget and help center is built from it.
 - [docs/planning/DOMAIN-RULES.md](docs/planning/DOMAIN-RULES.md) defines behaviour: the authorization matrix, ticket transitions, SLA maths, identity and ownership, knowledge visibility, the outbox, the realtime delivery contract, embeddings, AI quality gate, operations, retention and SSRF rules. When code and this file disagree, the code is wrong.
 
-Current state: pre-alpha. No application code exists yet. The first milestone is M0 Skeleton.
+Current state: pre-alpha. **M0 Skeleton shipped on 2026-09-19** — see [docs/completed/M0-skeleton.md](docs/completed/M0-skeleton.md) for what was built and the ten gaps it left open. No milestone is in progress; **M1 Ticketing core** is next, and nothing in `apps/*` handles a ticket yet.
 
 ## Repository layout
 

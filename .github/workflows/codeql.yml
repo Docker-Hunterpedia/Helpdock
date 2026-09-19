@@ -1,0 +1,63 @@
+name: CodeQL
+
+# Static analysis, the half of ARCHITECTURE §15's security line that does not
+# need a running stack. Semgrep's Nest rules and the ZAP baseline scan against
+# the Compose stack are M9-05; they are not here.
+#
+# It is a workflow of its own rather than a step of `ci`, because an analysis
+# takes minutes, uploads to a different place (the security tab, not the run
+# log) and has to keep running on a schedule long after the last commit —
+# advisories appear for code that has not changed.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Mondays, early, off the hour so the whole world's cron does not land at
+    # once. The same window `renovate.json` uses.
+    - cron: '17 3 * * 1'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze
+    runs-on: ubuntu-latest
+    permissions:
+      # Writing the results to the security tab is the point of the job.
+      security-events: write
+      # CodeQL reads the workflow run's own metadata to attach the analysis.
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The analysis reads the sources and uploads through the action's own
+          # token; nothing needs a credential in `.git/config`.
+          persist-credentials: false
+
+      # One language: everything in this repository is TypeScript, and the one
+      # Dockerfile and the shell scripts are not something CodeQL analyses.
+      #
+      # `security-extended` on top of the default pack: it adds the queries with
+      # a higher false-positive rate, which is the right trade for a codebase
+      # this size and for the rules in AGENTS.md — SSRF, path traversal and
+      # injection are exactly what the extra queries look for.
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      # No build step: the JavaScript/TypeScript extractor reads the sources.
+      - name: Analyse
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          category: /language:javascript-typescript

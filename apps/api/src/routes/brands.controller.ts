@@ -1,11 +1,11 @@
 import type { Brand, BrandList } from '@helpdock/schemas';
 import { Controller, Get, Inject, NotFoundException, Param } from '@nestjs/common';
-import { ZodSerializerDto } from 'nestjs-zod';
+import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { brandsOf } from '../auth/principal.js';
 import { Authenticated, Requires } from '../auth/route-declaration.js';
 import { requireRequestContext } from '../context/request-context.js';
 import { BrandsService } from './brands.service.js';
-import { BrandDto, type BrandIdParamDto, BrandListDto } from './dto.js';
+import { BrandDto, BrandIdParamDto, BrandListDto } from './dto.js';
 
 /**
  * Three thin reads that exercise every branch of the tenancy plumbing: a route
@@ -51,7 +51,9 @@ export class BrandsController {
   @Get('brands/:brandId')
   @Requires('brand:read')
   @ZodSerializerDto(BrandDto)
-  async find(@Param() { brandId }: BrandIdParamDto): Promise<Brand> {
+  async find(
+    @Param(new ZodValidationPipe(BrandIdParamDto)) { brandId }: BrandIdParamDto,
+  ): Promise<Brand> {
     const brand = await this.#brands.find(brandId);
     if (brand === undefined) {
       throw new NotFoundException('No such brand');

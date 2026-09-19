@@ -3,6 +3,9 @@ import {
   authErrorSchema,
   authMethodsSchema,
   emailTokenPayloadSchema,
+  magicLinkTokenParamSchema,
+  oauthCallbackQuerySchema,
+  oauthProviderParamSchema,
   PASSWORD_MIN_LENGTH,
   passwordResetRequestSchema,
   sessionClaimsSchema,
@@ -209,5 +212,32 @@ describe('emailTokenPayloadSchema', () => {
     });
 
     expect(invite).toMatchObject({ role: 'agent', departmentIds: [BRAND_ID] });
+  });
+});
+
+describe('the path and query schemas the auth routes name', () => {
+  it('bounds a sign-in link token instead of judging it', () => {
+    expect(magicLinkTokenParamSchema.safeParse({ token: 'abc' }).success).toBe(true);
+    expect(magicLinkTokenParamSchema.safeParse({ token: '' }).success).toBe(false);
+    expect(magicLinkTokenParamSchema.safeParse({ token: 'x'.repeat(201) }).success).toBe(false);
+  });
+
+  it('bounds the provider segment, leaving which providers exist to the handler', () => {
+    expect(oauthProviderParamSchema.safeParse({ provider: 'google' }).success).toBe(true);
+    // Not a provider this install has. The handler answers `no-account` on a
+    // screen, which a pipe could not do, so the schema must let it through.
+    expect(oauthProviderParamSchema.safeParse({ provider: 'facebook' }).success).toBe(true);
+    expect(oauthProviderParamSchema.safeParse({ provider: '' }).success).toBe(false);
+  });
+
+  it('accepts a callback with neither code nor state, which is how a refusal arrives', () => {
+    expect(oauthCallbackQuerySchema.parse({})).toEqual({});
+  });
+
+  it('drops whatever else the provider appended', () => {
+    expect(oauthCallbackQuerySchema.parse({ code: 'c', state: 's', scope: 'email' })).toEqual({
+      code: 'c',
+      state: 's',
+    });
   });
 });

@@ -559,10 +559,23 @@ describe.skipIf(!hasDocker)('the api', () => {
       expect(response.json()).toMatchObject({ error: { code: 'not_found' } });
     });
 
-    it('refuses a brand id that is not a uuid', async () => {
+    /**
+     * Issue #36: this route's DTO used to be imported with `import type`, which
+     * erases the metadata the global pipe reads, so nothing parsed the path and
+     * the 400 was the guard's own sentence. Both halves are now in place — the
+     * handler names its schema, and the guard refuses with the same one — and
+     * what proves it from outside is the field in the body.
+     */
+    it('refuses a brand id that is not a uuid, and names the field', async () => {
       const response = await get('/api/brands/not-a-uuid', brandAAdmin());
 
       expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: {
+          code: 'validation_failed',
+          fields: [{ path: 'brandId' }],
+        },
+      });
     });
 
     it('refuses a viewer on a route that needs a write permission', async () => {

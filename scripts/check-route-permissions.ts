@@ -8,47 +8,22 @@
  * so a `@SubscribeMessage` handler on a `@WebSocketGateway` counts as a route
  * here and is held to the same rule.
  *
- * Run with `pnpm check:routes`. Exits non-zero and names every handler.
- *
- * It is a token scan with TypeScript's own scanner rather than a regex: the
- * scanner is what the compiler uses, so a decorator name inside a string or a
- * comment is a `StringLiteral` or trivia and cannot be mistaken for one. A full
- * parse is not available — TypeScript 7's parser is native and its JavaScript
- * API exposes the scanner and the AST types, not `createSourceFile`.
+ * Run with `pnpm check:routes`. Exits non-zero and names every handler. It
+ * walks with `controller-scan.ts`, shared with `check-route-validation.ts`.
  */
-import { readdir, readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { createScanner, SyntaxKind } from 'typescript/unstable/ast';
 
-/** Decorators that turn a method into an HTTP route or a socket event handler. */
-const ROUTE_DECORATORS = new Set([
-  'Get',
-  'Post',
-  'Put',
-  'Patch',
-  'Delete',
-  'Head',
-  'Options',
-  'All',
-  'Search',
-  'Sse',
-  'SubscribeMessage',
-]);
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import {
+  appSourceFiles,
+  forEachMethod,
+  HANDLER_HOST_DECORATORS,
+  type MethodSite,
+  ROUTE_DECORATORS,
+} from './controller-scan.ts';
 
 /** Decorators that satisfy the rule. One of them, on the handler or its class. */
 const DECLARATION_DECORATORS = new Set(['Public', 'Authenticated', 'Requires']);
-
-/** Class decorators that make a class a place route handlers may live. */
-const HANDLER_HOST_DECORATORS = new Set(['Controller', 'WebSocketGateway']);
-
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx']);
-const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist', 'build', 'coverage', '.turbo', 'e2e']);
-/**
- * Tests are not routes. They are also where the guard's own "a handler that
- * declares nothing is refused" case is proved, which needs a controller that
- * declares nothing.
- */
-const TEST_FILE = /\.(?:test|spec)\.tsx?$/;
 
 export interface UndeclaredRoute {
   /** Repository-relative, POSIX-separated path of the file. */
@@ -60,114 +35,22 @@ export interface UndeclaredRoute {
   readonly route: string;
 }
 
-interface Token {
-  readonly kind: SyntaxKind;
-  readonly text: string;
-}
+const declares = (decorators: readonly string[]): boolean =>
+  decorators.some((name) => DECLARATION_DECORATORS.has(name));
 
-/**
- * `scan()` alone cannot read a template literal with a substitution in it: it
- * stops at `${`, and the `}` that ends the substitution comes back as an
- * ordinary closing brace. Everything after it — the template's own text — is
- * then scanned as if it were code, which both corrupts the brace depth this
- * checker tracks and can stall the scanner outright, because text like a CSS
- * colour reads as an invalid private identifier that consumes nothing.
- *
- * Rescanning that brace as the next template span is what the compiler's own
- * parser does, and it keeps template text out of the token stream entirely.
- */
-const tokenize = (source: string, file: string): Token[] => {
-  const scanner = createScanner(true, undefined, source);
-  const tokens: Token[] = [];
-  let templateDepth = 0;
-  let lastEnd = -1;
-
-  for (;;) {
-    let kind = scanner.scan();
-    if (kind === SyntaxKind.EndOfFile) {
-      return tokens;
-    }
-
-    if (kind === SyntaxKind.CloseBraceToken && templateDepth > 0) {
-      kind = scanner.reScanTemplateToken(false);
-    }
-    if (kind === SyntaxKind.TemplateHead) {
-      templateDepth += 1;
-    } else if (kind === SyntaxKind.TemplateTail) {
-      templateDepth -= 1;
-    }
-
-    // A scanner that returns a token without consuming anything would loop
-    // until the process runs out of memory. Saying where it stopped is the
-    // difference between a fixable report and a heap dump.
-    const end = scanner.getTokenEnd();
-    if (end <= lastEnd) {
-      throw new Error(
-        `${file}: the scanner stopped making progress at offset ${String(end)}; this file cannot be checked`,
-      );
-    }
-    lastEnd = end;
-
-    tokens.push({ kind, text: scanner.getTokenText() });
-  }
-};
-
-/** Index just past the `)` that closes the `(` at `start`, or `start` if there is none. */
-const skipParens = (tokens: readonly Token[], start: number): number => {
-  if (tokens[start]?.kind !== SyntaxKind.OpenParenToken) {
-    return start;
-  }
-
-  let depth = 0;
-  for (let index = start; index < tokens.length; index += 1) {
-    const kind = tokens[index]?.kind;
-    if (kind === SyntaxKind.OpenParenToken) {
-      depth += 1;
-    } else if (kind === SyntaxKind.CloseParenToken) {
-      depth -= 1;
-      if (depth === 0) {
-        return index + 1;
-      }
-    }
-  }
-  return tokens.length;
-};
-
-/**
- * Reads `@Name` or `@Namespace.Name` at `index` and returns the name plus where
- * the decorator ends. Arguments are skipped without being looked at, so a
- * decorator nested in another one's arguments is never collected.
- */
-const readDecorator = (
-  tokens: readonly Token[],
-  index: number,
-): { readonly name: string; readonly next: number } | undefined => {
-  if (tokens[index]?.kind !== SyntaxKind.AtToken) {
+/** Whether this method is a handler that declared nothing. */
+const undeclaredRoute = (file: string, method: MethodSite): UndeclaredRoute | undefined => {
+  if (!method.classDecorators.some((name) => HANDLER_HOST_DECORATORS.has(name))) {
     return undefined;
   }
 
-  let cursor = index + 1;
-  let name = tokens[cursor]?.text;
-  if (name === undefined || tokens[cursor]?.kind !== SyntaxKind.Identifier) {
+  const route = method.decorators.find((name) => ROUTE_DECORATORS.has(name));
+  if (route === undefined || declares(method.classDecorators) || declares(method.decorators)) {
     return undefined;
   }
-  cursor += 1;
 
-  while (tokens[cursor]?.kind === SyntaxKind.DotToken) {
-    name = tokens[cursor + 1]?.text ?? name;
-    cursor += 2;
-  }
-
-  return { name, next: skipParens(tokens, cursor) };
+  return { file, className: method.className, handler: method.name, route };
 };
-
-interface ClassFrame {
-  readonly name: string;
-  /** A `@Controller` or a `@WebSocketGateway`; anything else holds no routes. */
-  readonly isHandlerHost: boolean;
-  readonly declared: boolean;
-  readonly bodyDepth: number;
-}
 
 /**
  * Every route or socket-event handler in one file that declares neither a
@@ -177,138 +60,16 @@ export function findUndeclaredRoutes(params: {
   readonly file: string;
   readonly source: string;
 }): UndeclaredRoute[] {
-  const tokens = tokenize(params.source, params.file);
   const undeclared: UndeclaredRoute[] = [];
 
-  let depth = 0;
-  let pending: string[] = [];
-  let frame: ClassFrame | undefined;
-
-  for (let index = 0; index < tokens.length; ) {
-    const token = tokens[index];
-    /* c8 ignore next 3 -- the loop condition already bounds `index`. */
-    if (token === undefined) {
-      break;
-    }
-
-    const decorator = readDecorator(tokens, index);
-    if (decorator !== undefined) {
-      pending.push(decorator.name);
-      index = decorator.next;
-      continue;
-    }
-
-    switch (token.kind) {
-      case SyntaxKind.ClassKeyword: {
-        const name = tokens[index + 1]?.text ?? '(anonymous)';
-        frame = {
-          name,
-          isHandlerHost: pending.some((decoratorName) =>
-            HANDLER_HOST_DECORATORS.has(decoratorName),
-          ),
-          declared: pending.some((decoratorName) => DECLARATION_DECORATORS.has(decoratorName)),
-          bodyDepth: depth + 1,
-        };
-        pending = [];
-        index += 2;
-        continue;
-      }
-      case SyntaxKind.OpenBraceToken:
-        depth += 1;
-        pending = [];
-        index += 1;
-        continue;
-      case SyntaxKind.CloseBraceToken:
-        depth -= 1;
-        pending = [];
-        if (frame !== undefined && depth < frame.bodyDepth) {
-          frame = undefined;
-        }
-        index += 1;
-        continue;
-      case SyntaxKind.SemicolonToken:
-        pending = [];
-        index += 1;
-        continue;
-      default:
-        break;
-    }
-
-    // A method is a name followed by `(` at the depth of the class body. A
-    // property holding a function is `name = (…) =>`, which the `=` rules out.
-    const isMember =
-      frame !== undefined &&
-      depth === frame.bodyDepth &&
-      token.kind === SyntaxKind.Identifier &&
-      tokens[index + 1]?.kind === SyntaxKind.OpenParenToken;
-
-    if (!isMember || frame === undefined) {
-      index += 1;
-      continue;
-    }
-
-    const finding = undeclaredRoute({
-      file: params.file,
-      frame,
-      handler: token.text,
-      decorators: pending,
-    });
+  forEachMethod(params, (method) => {
+    const finding = undeclaredRoute(params.file, method);
     if (finding !== undefined) {
       undeclared.push(finding);
     }
-
-    pending = [];
-    // Past the parameter list, so parameter decorators are never collected.
-    index = skipParens(tokens, index + 1);
-  }
+  });
 
   return undeclared;
-}
-
-/** Whether this member is a handler that declared nothing. */
-const undeclaredRoute = ({
-  file,
-  frame,
-  handler,
-  decorators,
-}: {
-  readonly file: string;
-  readonly frame: ClassFrame;
-  readonly handler: string;
-  readonly decorators: readonly string[];
-}): UndeclaredRoute | undefined => {
-  if (!frame.isHandlerHost) {
-    return undefined;
-  }
-
-  const route = decorators.find((name) => ROUTE_DECORATORS.has(name));
-  const declared = frame.declared || decorators.some((name) => DECLARATION_DECORATORS.has(name));
-
-  return route === undefined || declared
-    ? undefined
-    : { file, className: frame.name, handler, route };
-};
-
-async function collectSourceFiles(directory: string, repoRoot: string): Promise<string[]> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const absolute = path.join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      if (!IGNORED_DIRECTORIES.has(entry.name)) {
-        files.push(...(await collectSourceFiles(absolute, repoRoot)));
-      }
-      continue;
-    }
-
-    if (SOURCE_EXTENSIONS.has(path.extname(entry.name)) && !TEST_FILE.test(entry.name)) {
-      files.push(path.relative(repoRoot, absolute).split(path.sep).join('/'));
-    }
-  }
-
-  return files;
 }
 
 function formatUndeclared(route: UndeclaredRoute): string {
@@ -317,27 +78,7 @@ function formatUndeclared(route: UndeclaredRoute): string {
 
 async function main(): Promise<void> {
   const repoRoot = path.resolve(import.meta.dirname, '..');
-  const appsRoot = path.join(repoRoot, 'apps');
-
-  const apps = (await readdir(appsRoot, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(appsRoot, entry.name, 'src'));
-
-  const files: string[] = [];
-  for (const root of apps) {
-    // An app that has no `src/` yet is a placeholder, not a failure. Anything
-    // else — a permissions problem, a broken symlink — has to stop the check,
-    // or it would silently scan nothing and report success.
-    const scanned = await collectSourceFiles(root, repoRoot).catch(
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === 'ENOENT') {
-          return [];
-        }
-        throw error;
-      },
-    );
-    files.push(...scanned);
-  }
+  const files = await appSourceFiles(repoRoot);
 
   const undeclared: UndeclaredRoute[] = [];
   for (const file of files) {

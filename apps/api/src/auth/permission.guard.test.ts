@@ -3,6 +3,7 @@ import { BadRequestException, Controller, ForbiddenException, Get } from '@nestj
 import { Reflector } from '@nestjs/core';
 import { WsException } from '@nestjs/websockets';
 import { describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import type { Logger } from '../logging/logger.js';
 import { fakeExecutionContext } from '../testing/execution-context.js';
@@ -127,14 +128,45 @@ describe('PermissionGuard', () => {
       ).toThrow(ForbiddenException);
     });
 
-    it('refuses a brand id that is not a uuid', () => {
-      expect(() =>
+    /**
+     * The guard runs before the handler's pipe, so it is the guard that refuses
+     * a malformed `:brandId` — and it does so with `brandIdParamSchema`, so the
+     * body carries the field rather than a sentence (issue #36).
+     */
+    it('refuses a brand id that is not a uuid, naming the field', () => {
+      expect.assertions(2);
+
+      try {
         run({
           route: 'brand',
           principal: staff({ [BRAND_A]: { role: 'admin', departmentIds: 'all' } }),
           params: { brandId: 'nope' },
+        });
+      } catch (error) {
+        expect(error).toBeInstanceOf(ZodError);
+        expect((error as ZodError).issues.map((issue) => issue.path)).toEqual([['brandId']]);
+      }
+    });
+
+    it('refuses a path that names the install scope, which is a different refusal', () => {
+      expect(() =>
+        run({
+          route: 'brand',
+          principal: staff({ [INSTALL_SCOPE_BRAND_ID]: { role: 'admin', departmentIds: 'all' } }),
+          params: { brandId: INSTALL_SCOPE_BRAND_ID },
         }),
-      ).toThrow(BadRequestException);
+      ).toThrow(new BadRequestException('brandId may not name the install scope'));
+    });
+
+    it('blames the host, not a field, when the host named the unusable brand', () => {
+      expect(() =>
+        run({
+          route: 'brand',
+          principal: staff({ [BRAND_A]: { role: 'admin', departmentIds: 'all' } }),
+          params: {},
+          hostBrandId: INSTALL_SCOPE_BRAND_ID,
+        }),
+      ).toThrow(new BadRequestException('The host does not name a brand this route can act on'));
     });
 
     it('refuses to guess a brand for a principal that holds several', () => {

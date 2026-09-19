@@ -1,9 +1,9 @@
 import type { BrandPresence } from '@helpdock/schemas';
 import { brandPresenceSchema } from '@helpdock/schemas';
 import { Controller, Get, Inject, Param } from '@nestjs/common';
-import { createZodDto, ZodSerializerDto } from 'nestjs-zod';
+import { createZodDto, ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Requires } from '../auth/route-declaration.js';
-import type { BrandIdParamDto } from '../routes/dto.js';
+import { BrandIdParamDto } from '../routes/dto.js';
 import { PresenceService } from './presence.service.js';
 
 export class BrandPresenceDto extends createZodDto(brandPresenceSchema) {}
@@ -27,7 +27,9 @@ export class PresenceController {
   @Get('brands/:brandId/presence')
   @Requires('staff:read')
   @ZodSerializerDto(BrandPresenceDto)
-  async brandPresence(@Param() { brandId }: BrandIdParamDto): Promise<BrandPresence> {
+  async brandPresence(
+    @Param(new ZodValidationPipe(BrandIdParamDto)) { brandId }: BrandIdParamDto,
+  ): Promise<BrandPresence> {
     return {
       brandId,
       presence: await this.#presence.mapOf(brandId),

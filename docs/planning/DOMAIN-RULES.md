@@ -34,6 +34,8 @@ Contacts and accounts are brand-scoped, not department-scoped. An agent viewing 
 
 Reading them (`contact:read`) comes with every role, including Viewer. Editing them, adding or removing an identifier, writing a note and dismissing a duplicate suggestion (`contact:write`) follow the "Edits tickets" column: Admin, Team Leader and Agent, never Viewer. **Erasing** a contact (§11) is Admin only, in the brand the contact belongs to, because it destroys history that no permission can give back.
 
+Team membership follows the same ceiling as role changes: a Team Leader may add only Agents and Viewers whose department scope covers the team's department; Admins and other Team Leaders can be added to a team only by an Admin. Assignment (M1-07) therefore never lets a Team Leader route work to an Admin.
+
 Moving a ticket to a department the actor cannot see is allowed (it is how escalation works); the ticket disappears from their view afterwards and the activity log records it.
 
 ### 1.3 Enforcement layers

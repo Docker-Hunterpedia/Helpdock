@@ -13,6 +13,24 @@ const IPV6_BITS = 128;
 const NO_CIDRS: readonly string[] = [];
 
 /**
+ * pino's levels, lowest first, plus `silent`. Declared here rather than
+ * imported from pino because `@helpdock/config` is loaded by the admin build
+ * and the widget too, and neither of them has a logger.
+ */
+export const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+/** ARCHITECTURE §14: "log level per env". `info` is the level an install runs at. */
+const DEFAULT_LOG_LEVEL: LogLevel = 'info';
+
+/**
+ * Short enough to type, long enough that guessing it is not a way in. A
+ * `/metrics` token is a bearer credential, so it is held to the same floor as
+ * any other.
+ */
+const MIN_METRICS_TOKEN_LENGTH = 16;
+
+/**
  * The process environment as Node hands it over: string values, or absent. An
  * empty or whitespace-only value counts as absent, so a key left blank in
  * `.env.example` behaves like one that was never set.
@@ -100,6 +118,19 @@ export const envSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .describe('must be "development", "test" or "production"'),
+  LOG_LEVEL: z
+    .enum(LOG_LEVELS)
+    .default(DEFAULT_LOG_LEVEL)
+    .describe(
+      `optional; must be one of ${LOG_LEVELS.join(', ')}, default ${DEFAULT_LOG_LEVEL} (ARCHITECTURE §14)`,
+    ),
+  METRICS_TOKEN: z
+    .string()
+    .min(MIN_METRICS_TOKEN_LENGTH)
+    .optional()
+    .describe(
+      `optional; at least ${MIN_METRICS_TOKEN_LENGTH} characters. A bearer token that lets a scraper outside the private network read /metrics; without it only private and loopback addresses may`,
+    ),
   PORT: z.coerce
     .number()
     .int()

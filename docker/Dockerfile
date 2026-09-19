@@ -86,13 +86,23 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT}/health`).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 
-ENTRYPOINT ["node", "dist/main.js"]
+# `--import` preloads the OpenTelemetry SDK. An instrumentation works by
+# replacing the exports of the module it patches, so it has to run before
+# anything has imported `http`, `fastify` or `ioredis` (ARCHITECTURE §14).
+# Nothing is traced unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so this costs a
+# module load and nothing else.
+ENTRYPOINT ["node", "--import", "./dist/observability/instrumentation.js", "dist/main.js"]
 
-# Last, so a version change rebuilds only this layer.
+# Last, so a version or a commit change rebuilds only this layer.
 ARG HELPDOCK_VERSION=0.0.0
+# The commit the image was built from, shown on the admin System page. Without
+# it the page says `unknown`, which is true rather than wrong.
+ARG HELPDOCK_GIT_SHA=unknown
+ENV HELPDOCK_GIT_SHA=${HELPDOCK_GIT_SHA}
 LABEL org.opencontainers.image.title="Helpdock" \
       org.opencontainers.image.description="Open-source, self-hosted customer support platform." \
       org.opencontainers.image.source="https://github.com/Docker-Hunterpedia/Helpdock" \
       org.opencontainers.image.documentation="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/install.md" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
-      org.opencontainers.image.version="${HELPDOCK_VERSION}"
+      org.opencontainers.image.version="${HELPDOCK_VERSION}" \
+      org.opencontainers.image.revision="${HELPDOCK_GIT_SHA}"

@@ -84,6 +84,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       APP_ROLE: 'api',
       APP_MASTER_KEY: MASTER_KEY,
       NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
       PORT: 0,
       TRUST_PROXY: false,
       DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/helpdock`,
@@ -164,7 +165,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
 
     const env = envFor();
     const logger = createLogger({
-      env: { APP_ROLE: 'api', NODE_ENV: 'test' },
+      env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' },
       level: 'info',
       destination: {
         write: (line: string) => {

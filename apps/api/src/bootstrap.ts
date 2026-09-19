@@ -26,6 +26,10 @@ import { SessionPrincipalResolver } from './auth/session/session-principal-resol
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
 import { securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
+import type { BootFacts } from './observability/boot-facts.js';
+import { registerHttpMetrics } from './observability/http-metrics.js';
+import type { Metrics } from './observability/metrics.js';
+import { METRICS } from './observability/tokens.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
 import { resolveAdminDist } from './static/admin-assets.js';
 import { startWorker } from './worker/start-worker.js';
@@ -52,6 +56,12 @@ export interface Runtime {
   readonly logger: Logger;
   /** Generated on the first boot of an install and shared by every replica (M0-05). */
   readonly signingKeys: SigningKeys;
+  /**
+   * What boot learned and the request path cannot ask for again: the role check
+   * that decided whether this process may serve at all (DOMAIN-RULES §1.5), and
+   * the migration count, which only the owner connection may read.
+   */
+  readonly bootFacts: BootFacts;
   close(): Promise<void>;
 }
 
@@ -65,12 +75,19 @@ export const createRuntime = async ({
   env,
   logger = createLogger({ env }),
 }: CreateRuntimeOptions): Promise<Runtime> => {
+  // A worker never migrates, so it never learns the count: the migration log
+  // lives in the `drizzle` schema, which the runtime role deliberately cannot
+  // read (DOMAIN-RULES §1.5). The System page is served by an api replica,
+  // which does.
+  let migrationsApplied: number | null = null;
+
   if (env.APP_ROLE === 'api') {
-    await runMigrations({
+    const migrations = await runMigrations({
       migrationUrl: env.DATABASE_MIGRATION_URL,
       appRolePassword: appRolePasswordFromUrl(env.DATABASE_URL),
       log: (message) => logger.info(message),
     });
+    migrationsApplied = migrations.total;
   }
 
   const { db, close: closeDb } = createDb({ url: env.DATABASE_URL });
@@ -124,6 +141,7 @@ export const createRuntime = async ({
       settings,
       logger,
       signingKeys,
+      bootFacts: { runtimeRole: facts, migrationsApplied },
       close: async () => {
         for (const close of closers) {
           await close();
@@ -173,6 +191,7 @@ export const createApiApp = async ({
       settings: runtime.settings,
       redis: runtime.redis,
       logger,
+      bootFacts: runtime.bootFacts,
       auth: {
         signingKeys: runtime.signingKeys,
         logger,
@@ -220,6 +239,11 @@ export const createApiApp = async ({
   } else {
     await app.register(fastifyStatic, { root: adminDist, serve: false });
   }
+
+  // Before `init()`, because Fastify refuses a hook added after the instance is
+  // ready, and on the Fastify instance rather than as a Nest interceptor so
+  // that 401s, 403s and 404s are counted too (see `http-metrics.ts`).
+  registerHttpMetrics(app.getHttpAdapter().getInstance(), app.get<Metrics>(METRICS));
 
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

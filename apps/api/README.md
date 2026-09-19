@@ -17,6 +17,13 @@ development guide](../../docs/guides/development.md#api). In short:
 stripping does not transform decorators, so the api is always compiled before it
 runs.
 
+The `dev` and `start` scripts and the Docker entrypoint all preload the
+OpenTelemetry SDK with `--import ./dist/observability/instrumentation.js`. An
+instrumentation patches the module it wraps, so it has to run before anything
+has imported `http`, `fastify` or `ioredis`. Nothing is traced unless
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set
+([operations guide](../../docs/guides/operations.md#tracing)).
+
 ## Boot sequence
 
 `main.ts` does one thing: load the environment and call `start(env)`. What
@@ -259,6 +266,9 @@ routes answers 401 without a valid bearer token.
 | `GET /api/brands` | `@Authenticated()` | Brands the principal holds a role in. |
 | `GET /api/install/brands` | `@Requires('install:admin')` | Every brand. Audited. |
 | `GET /api/brands/:brandId` | `@Requires('brand:read')` | One brand. |
+| `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
+| `GET /api/install/system` | `@Requires('install:admin')` | The System page's read. Audited. |
+| `GET /api/install/system/queues` | `@Requires('install:admin')` | Every queue, paginated. Audited. |
 | `GET /internal/domain-check` | `@Public()` | Caddy's on-demand TLS gate. 200 for a verified help-center domain, 403 otherwise. |
 | `/api/auth/*` | mostly `@Public()` | Signing in. [The authentication guide](../../docs/guides/authentication.md#endpoints) lists them. |
 | `GET /*` | `@Public()` | The admin SPA, above. |
@@ -281,6 +291,30 @@ shared secret of [ARCHITECTURE
 stand in its place: `docker/caddy/Caddyfile` answers 404 to `/internal/*` from
 outside, so the route is reachable only from inside the Compose network, and the
 handler rate-limits per source address.
+
+## Observability
+
+`src/observability/` holds M0-10: the metrics registry and the `/metrics`
+endpoint, the 15-second sampler behind the gauges, and the System page's read.
+`src/logging/logger.ts` is the pino logger every line goes through.
+
+What an operator needs to know — the log fields, why `/metrics` answers 404 to a
+stranger, which OpenTelemetry variables turn tracing on, and what the System
+page's numbers mean — is in the
+[operations guide](../../docs/guides/operations.md).
+
+Two shapes worth knowing while reading the code:
+
+- **`/metrics` is `@Public()` but not public.** `MetricsGuard` decides, on the
+  socket's peer address (never `x-forwarded-for`) or on `METRICS_TOKEN`. A
+  request that arrived through a trusted proxy gets no credit for the peer
+  address at all — behind a proxy that address is the proxy's — so it must carry
+  the token.
+- **The outbox backlog and the migration count are not queried by the request.**
+  The relay reports the backlog to Redis because an install-scope transaction
+  cannot see another brand's `outbox` rows; the migration count is read at boot
+  by the owner connection because the runtime role is not granted the `drizzle`
+  schema. `src/observability/boot-facts.ts` is what carries the second.
 
 ## Errors
 
@@ -329,6 +363,10 @@ and runs the negative suite of [DOMAIN-RULES
 §1.6](../../docs/planning/DOMAIN-RULES.md#16-required-negative-tests) at the HTTP
 layer. It skips itself, and says so, when Docker is not running.
 
+`src/observability/observability.integration.test.ts` boots the same stack again
+to prove `/metrics` is served and guarded and that the System page's read
+reports a live install.
+
 `src/testing/` is test scaffolding — an `ExecutionContext` double and a probe
 controller that reads the session settings back from inside a handler.
 `tsconfig.json` keeps it out of the build, and the app mounts the controller
@@ -350,5 +388,10 @@ only when a test passes it as an extra controller.
   rather than inherit silence. `pnpm check:routes` covers `@Controller`
   handlers only; M0-13 extends it to `@SubscribeMessage`. M0-05 publishes
   `principal.revoked` on Redis with nothing subscribed to it yet.
-- `/metrics` and OpenTelemetry are M0-10. The logger here is deliberately small
-  enough to extend rather than replace.
+- `socket_connections` is registered and stays at zero until M0-13 sets it.
+- There is no instrumentation for the `postgres` driver or for BullMQ, so
+  neither appears as its own span. Both gaps are explained in the
+  [operations guide](../../docs/guides/operations.md#what-is-instrumented).
+- The System page's Worker card and the three outbox metrics read the relay's
+  heartbeat, so they say "not reporting" whenever no `APP_ROLE=worker` replica
+  is running. That is the state they are built to show.

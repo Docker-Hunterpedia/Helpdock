@@ -14,7 +14,12 @@ const db = {} as Db;
 interface Harness {
   readonly deps: WorkerDependencies;
   readonly calls: string[];
-  readonly started: { redisUrl?: string; listenUrl?: string; relayRedis?: unknown };
+  readonly started: {
+    redisUrl?: string;
+    listenUrl?: string;
+    relayRedis?: unknown;
+    relayStatus?: unknown;
+  };
 }
 
 const harness = (): Harness => {
@@ -38,10 +43,11 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('worker.close') };
       },
-      startRelay: ({ redis, listenUrl }) => {
+      startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
         started.relayRedis = redis;
+        started.relayStatus = status;
         return { stop: async () => void calls.push('relay.stop') };
       },
     },
@@ -67,6 +73,19 @@ describe('startWorker', () => {
     expect(started.redisUrl).toBe(env.REDIS_URL);
     // `LISTEN outbox` needs a connection of its own on the runtime role.
     expect(started.listenUrl).toBe(env.DATABASE_URL);
+  });
+
+  it('gives the relay somewhere to report its cycles', () => {
+    const { deps, started } = harness();
+
+    startWorker({ env, db, log: silentLogger, deps });
+
+    // Without a `status` store the relay never writes `hd:relay:last`, and the
+    // System page's Worker card and all three outbox metrics are silently dead
+    // (ARCHITECTURE §14). It is the same connection BullMQ uses, because BullMQ
+    // owns its client and does not lend it out.
+    expect(started.relayStatus).toBe(started.relayRedis);
+    expect(started.relayStatus).toBeDefined();
   });
 
   it('shuts down relay, then worker, then connection', async () => {

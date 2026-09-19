@@ -5,7 +5,10 @@ import { createLogger } from '../logging/logger.js';
 import { InstallInfoService } from './install-info.service.js';
 
 const env = { APP_URL: 'https://support.example.com' } as Env;
-const logger = createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test' }, level: 'silent' });
+const logger = createLogger({
+  env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' },
+  level: 'silent',
+});
 
 describe('InstallInfoService', () => {
   it('falls back to the APP_URL host when the database is unreachable', async () => {

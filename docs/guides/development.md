@@ -601,13 +601,36 @@ running migrations: a worker waits for an `APP_ROLE=api` replica to migrate,
 polling for up to 60 seconds. It then registers the `outbox.event` consumer and
 starts the outbox relay, in that order, and shuts them down in the reverse one
 (`apps/api/src/worker/start-worker.ts`, following
-[`packages/jobs/README.md`](../../packages/jobs/README.md)).
+[`packages/jobs/README.md`](../../packages/jobs/README.md)). The relay reports
+each cycle to Redis, which is what the System page's Worker card and the
+`outbox_relay_up` metric read; with no worker running, both say so.
 
 ```bash
 cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml \
   up -d --build worker
 docker compose logs -f worker
 ```
+
+### Watching it run
+
+Logs are pino JSON on stdout. With `NODE_ENV=development` they are prettified
+instead, so a dev loop is readable without a pipe. `LOG_LEVEL` sets the level;
+`info` is one line per request.
+
+`GET /metrics` answers from `localhost`, so a local Prometheus or a plain `curl`
+reaches it with no token:
+
+```bash
+curl -s localhost:3000/metrics | head
+```
+
+Tracing is off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set. With a collector
+running, set it in `.env` and spans go there; the `dev` script already preloads
+the SDK with `--import`.
+
+The [operations guide](operations.md) is the reference for all three, and for
+what the admin System page shows.
+>>>>>>> 5b72ee5 (feat: observability and the admin System page (M0-10))
 
 ### Routes declare their permission
 

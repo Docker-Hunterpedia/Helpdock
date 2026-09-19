@@ -6,6 +6,7 @@ export * from './outbox.js';
 export * from './queues.js';
 export * from './redis.js';
 export * from './relay.js';
+export * from './relay-status.js';
 export * from './retention.js';
 export * from './validation.js';
 export * from './waiter.js';

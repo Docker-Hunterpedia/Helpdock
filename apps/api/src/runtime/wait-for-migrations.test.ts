@@ -4,7 +4,10 @@ import { createLogger } from '../logging/logger.js';
 import { MigrationsNotReadyError, waitForMigrations } from './wait-for-migrations.js';
 
 const silentLogger = () =>
-  createLogger({ env: { APP_ROLE: 'worker', NODE_ENV: 'test' }, level: 'silent' });
+  createLogger({
+    env: { APP_ROLE: 'worker', NODE_ENV: 'test', LOG_LEVEL: 'silent' },
+    level: 'silent',
+  });
 
 /** `db.select().from(table).limit(0)`, answering with whatever the script says. */
 const dbThatFails = (times: number): Db => {

@@ -9,7 +9,7 @@ import {
   withTenant,
 } from '@helpdock/db';
 import { type ConnectionOptions, type JobsOptions, Queue } from 'bullmq';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import {
   OUTBOX_RELAY_INTERVAL_MS,
@@ -19,6 +19,7 @@ import {
 } from './jobs.js';
 import { type JobLogger, silentLogger } from './logger.js';
 import { QUEUE_NAMES } from './queues.js';
+import { type RelayStatusStore, writeRelayStatus } from './relay-status.js';
 import { createWaiter } from './waiter.js';
 
 /**
@@ -118,18 +119,36 @@ export const listRelayBrandIds = async (db: Db): Promise<readonly string[]> => {
   return rows.map((row) => row.id);
 };
 
-/** The subset of `brandIds` that has unpublished rows, read in batches. */
-export const findBrandsWithUnpublishedRows = async (
+/** A brand with work waiting, and how much of it. */
+export interface UnpublishedBrand {
+  readonly brandId: string;
+  readonly rows: number;
+}
+
+/**
+ * The subset of `brandIds` that has unpublished rows, with a count each, read in
+ * batches.
+ *
+ * The count comes from the same grouped statement that finds the brands, so
+ * knowing the size of the backlog costs nothing on top of knowing that there is
+ * one. It is what the relay reports for `outbox_unpublished_rows` (ARCHITECTURE
+ * §14) and what the admin System page shows beside the worker.
+ */
+export const findUnpublishedRowCounts = async (
   db: Db,
   brandIds: readonly string[],
-): Promise<readonly string[]> => {
-  const pending: string[] = [];
+): Promise<readonly UnpublishedBrand[]> => {
+  const pending: UnpublishedBrand[] = [];
 
   for (const batch of chunk(brandIds, BRAND_DISCOVERY_BATCH)) {
     const rows = await withTenant(db, discoveryContext(batch), (tx) =>
-      tx.selectDistinct({ brandId: outbox.brandId }).from(outbox).where(isNull(outbox.publishedAt)),
+      tx
+        .select({ brandId: outbox.brandId, rows: count() })
+        .from(outbox)
+        .where(isNull(outbox.publishedAt))
+        .groupBy(outbox.brandId),
     );
-    pending.push(...rows.map((row) => row.brandId));
+    pending.push(...rows.map((row) => ({ brandId: row.brandId, rows: row.rows })));
   }
 
   return pending;
@@ -243,6 +262,8 @@ export interface RelayCycleOptions {
 
 export interface RelayCycleResult {
   readonly published: number;
+  /** Unpublished rows across every brand this relay owns, as the cycle started. */
+  readonly pending: number;
   /** Brands that had unpublished rows when the cycle started. */
   readonly brands: number;
   /** Brands another replica was already publishing. */
@@ -263,17 +284,18 @@ export const runRelayCycle = async ({
 }: RelayCycleOptions): Promise<RelayCycleResult> => {
   const candidates = brandIds ?? (await listRelayBrandIds(db));
   if (candidates.length === 0) {
-    return { published: 0, brands: 0, skipped: 0, failed: 0, hasMore: false };
+    return { published: 0, pending: 0, brands: 0, skipped: 0, failed: 0, hasMore: false };
   }
 
-  const pending = await findBrandsWithUnpublishedRows(db, candidates);
+  const waiting = await findUnpublishedRowCounts(db, candidates);
+  const pending = waiting.reduce((total, brand) => total + brand.rows, 0);
 
   let published = 0;
   let skipped = 0;
   let failed = 0;
   let hasMore = false;
 
-  for (const brandId of pending) {
+  for (const { brandId } of waiting) {
     try {
       const result = await publishBrand({ db, queue, brandId, batchSize, log });
       published += result.published;
@@ -288,7 +310,7 @@ export const runRelayCycle = async ({
     }
   }
 
-  return { published, brands: pending.length, skipped, failed, hasMore };
+  return { published, pending, brands: waiting.length, skipped, failed, hasMore };
 };
 
 export interface StartOutboxRelayOptions {
@@ -306,6 +328,13 @@ export interface StartOutboxRelayOptions {
   readonly listenUrl?: string | undefined;
   /** Brands this relay owns. Defaults to every brand. */
   readonly brandIds?: readonly string[] | undefined;
+  /**
+   * Where each cycle is reported, for `/metrics` and the admin System page
+   * (ARCHITECTURE §14). Pass the same connection given as `redis`; BullMQ owns
+   * its own client and does not lend it out. Without it the relay runs exactly
+   * as before and the System page says the worker has not reported.
+   */
+  readonly status?: RelayStatusStore | undefined;
 }
 
 export interface OutboxRelay {
@@ -330,6 +359,7 @@ export const startOutboxRelay = ({
   batchSize = DEFAULT_BATCH_SIZE,
   listenUrl,
   brandIds,
+  status,
 }: StartOutboxRelayOptions): OutboxRelay => {
   const queue = new Queue(QUEUE_NAMES.outbox, { connection: redis });
   const waiter = createWaiter();
@@ -349,6 +379,31 @@ export const startOutboxRelay = ({
     unlisten = () => subscription.unlisten();
   };
 
+  /**
+   * Publishing the heartbeat must never be able to stop the relay: a Redis that
+   * refuses the write is a blind operator, and a relay that stopped over it
+   * would be a lost side effect.
+   */
+  const report = async (result: RelayCycleResult, durationMs: number): Promise<void> => {
+    if (status === undefined) {
+      return;
+    }
+
+    try {
+      await writeRelayStatus(status, {
+        at: new Date().toISOString(),
+        durationMs,
+        pending: result.pending,
+        published: result.published,
+        brands: result.brands,
+        skipped: result.skipped,
+        failed: result.failed,
+      });
+    } catch (error) {
+      log.warn({ err: error }, 'outbox relay could not publish its cycle status');
+    }
+  };
+
   const run = async (): Promise<void> => {
     try {
       await subscribe();
@@ -363,7 +418,9 @@ export const startOutboxRelay = ({
 
     while (!stopped) {
       try {
+        const startedAt = Date.now();
         const result = await runRelayCycle({ db, queue, batchSize, log, brandIds });
+        await report(result, Date.now() - startedAt);
         if (result.hasMore) {
           continue;
         }

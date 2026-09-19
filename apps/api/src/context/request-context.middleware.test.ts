@@ -66,7 +66,7 @@ const run = async ({
   const middleware = new RequestContextMiddleware(
     { TRUST_PROXY: trustProxy } as Env,
     createLogger({
-      env: { APP_ROLE: 'api', NODE_ENV: 'test' },
+      env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' },
       level: 'trace',
       destination: stream,
     }),

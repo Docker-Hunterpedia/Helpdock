@@ -17,6 +17,8 @@ export const ROUTES = {
   settings: '/admin/settings',
   staff: '/admin/staff',
   system: '/admin/system',
+  /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
+  systemQueues: '/admin/system/queues',
 } as const;
 
 /** Where a sign-in lands when nothing asked for a particular screen. */

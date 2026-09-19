@@ -7,6 +7,7 @@ import {
   type JobLogger,
   type OutboxRelay,
   outboxEventJob,
+  type RelayStatusStore,
   startOutboxRelay,
 } from '@helpdock/jobs';
 import type { Redis } from 'ioredis';
@@ -36,14 +37,21 @@ export interface Closable {
 export interface WorkerDependencies {
   createConnection(url: string): Redis;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
-  startRelay(options: { db: Db; redis: Redis; log: JobLogger; listenUrl: string }): OutboxRelay;
+  startRelay(options: {
+    db: Db;
+    redis: Redis;
+    log: JobLogger;
+    listenUrl: string;
+    status: RelayStatusStore;
+  }): OutboxRelay;
 }
 
 export const workerDependencies: WorkerDependencies = {
   createConnection: (url) => createQueueConnection(url),
   createEventWorker: ({ redis, db, log }) =>
     createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
-  startRelay: ({ db, redis, log, listenUrl }) => startOutboxRelay({ db, redis, log, listenUrl }),
+  startRelay: ({ db, redis, log, listenUrl, status }) =>
+    startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
 
 export interface StartWorkerOptions {
@@ -61,7 +69,18 @@ export const startWorker = ({
 }: StartWorkerOptions): Closable => {
   const connection = deps.createConnection(env.REDIS_URL);
   const worker = deps.createEventWorker({ redis: connection, db, log });
-  const relay = deps.startRelay({ db, redis: connection, log, listenUrl: env.DATABASE_URL });
+  // `status` is the same connection. The relay reports each cycle under
+  // `hd:relay:last`, which is where `/metrics` and the System page learn that a
+  // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
+  // BullMQ owns its own client and does not lend it out, so the heartbeat needs
+  // one it can use. Without it those readings are silently dead.
+  const relay = deps.startRelay({
+    db,
+    redis: connection,
+    log,
+    listenUrl: env.DATABASE_URL,
+    status: connection,
+  });
 
   let closing: Promise<void> | undefined;
   const shutDown = async (): Promise<void> => {

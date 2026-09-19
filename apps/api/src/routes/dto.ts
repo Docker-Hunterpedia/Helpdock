@@ -6,6 +6,9 @@ import {
   healthSchema,
   meSchema,
   readinessSchema,
+  systemQueuePageSchema,
+  systemQueuesQuerySchema,
+  systemStatusSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 
@@ -26,3 +29,6 @@ export class BrandDto extends createZodDto(brandSchema) {}
 export class BrandListDto extends createZodDto(brandListSchema) {}
 export class BrandIdParamDto extends createZodDto(brandIdParamSchema) {}
 export class DomainCheckResultDto extends createZodDto(domainCheckResultSchema) {}
+export class SystemStatusDto extends createZodDto(systemStatusSchema) {}
+export class SystemQueuePageDto extends createZodDto(systemQueuePageSchema) {}
+export class SystemQueuesQueryDto extends createZodDto(systemQueuesQuerySchema) {}

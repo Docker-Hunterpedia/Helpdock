@@ -126,6 +126,7 @@ describe.skipIf(!hasDocker)('the api', () => {
       APP_ROLE: 'api',
       APP_MASTER_KEY: MASTER_KEY,
       NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
       PORT: 0,
       TRUST_PROXY: false,
       DATABASE_URL: appUrlFor('helpdock'),
@@ -142,7 +143,10 @@ describe.skipIf(!hasDocker)('the api', () => {
     }) as Env;
 
   const silentLogger = () =>
-    createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test' }, level: 'silent' });
+    createLogger({
+      env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'info' },
+      level: 'silent',
+    });
 
   const createDatabase = async (name: string): Promise<void> => {
     await owner.db.execute(sql.raw(`CREATE DATABASE ${name}`));
@@ -666,7 +670,7 @@ describe.skipIf(!hasDocker)('the api', () => {
     it('logs which database role it verified, without colliding with APP_ROLE', async () => {
       const lines: Record<string, unknown>[] = [];
       const collecting = createLogger({
-        env: { APP_ROLE: 'api', NODE_ENV: 'test' },
+        env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'info' },
         level: 'info',
         destination: {
           write: (line: string) => {
@@ -748,6 +752,7 @@ describe.skipIf(!hasDocker)('/ready when Redis is gone', () => {
         APP_ROLE: 'api',
         APP_MASTER_KEY: MASTER_KEY,
         NODE_ENV: 'test',
+        LOG_LEVEL: 'silent',
         PORT: 0,
         TRUST_PROXY: false,
         DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/${postgres.getDatabase()}`,
@@ -761,7 +766,10 @@ describe.skipIf(!hasDocker)('/ready when Redis is gone', () => {
         ADMIN_DIST_DIR: adminDist,
         OUTBOUND_ALLOW_CIDRS: [],
       } as Env,
-      logger: createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test' }, level: 'silent' }),
+      logger: createLogger({
+        env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'info' },
+        level: 'silent',
+      }),
     });
     app = await createApiApp({ runtime });
   });

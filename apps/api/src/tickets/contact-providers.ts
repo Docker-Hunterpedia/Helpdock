@@ -122,11 +122,11 @@ export class DbContactTimelineProvider implements ContactTimelineProvider {
    *
    * The items come from the request's own transaction, so the policies decide
    * what is in the list. `hiddenCount` cannot: a row the policy hides is a row
-   * no scoped query can count. It comes from
-   * `helpdock_contact_ticket_count`, a `SECURITY DEFINER` function that
-   * elevates past the *department* predicate and not past the brand one — it
-   * refuses a brand that is not in `app.brand_ids` — and that returns a
-   * number and never a row.
+   * no scoped query can count. It comes from `helpdock_contact_ticket_count`,
+   * which turns `app.all_departments` on for one call and leaves
+   * `app.brand_ids` alone — past the department predicate and not past the
+   * brand one, with the caller's own rights, returning a number and never a
+   * row. The migration that declares it says why in full.
    *
    * That is exactly what DOMAIN-RULES §1.2 asks for: "the timeline shows a
    * count of hidden tickets so the agent knows history exists". The agent

@@ -212,12 +212,15 @@ Two things are worth knowing about the real ones:
   counts are department-scoped like everything else: "an agent viewing a contact
   timeline sees only the tickets they are allowed to see" (§1.2).
 - **`hiddenCount` cannot come from a scoped read** — a row the policy hides is a
-  row no scoped query can count. It comes from
-  `helpdock_contact_ticket_count`, a `SECURITY DEFINER` function that elevates
-  past the *department* predicate and not past the brand one: it refuses a brand
-  that is not in `app.brand_ids`, and it returns a number, so there is no row
-  for it to leak. The agent learns that history exists and nothing about what is
-  in it.
+  row no scoped query can count. It comes from `helpdock_contact_ticket_count`,
+  which turns `app.all_departments` on for the duration of one call and leaves
+  `app.brand_ids` alone. So it looks past the *department* predicate and not
+  past the brand one: another brand's rows stay invisible to it exactly as they
+  are to every other read, and it counts them as zero rather than raising. It
+  runs with the caller's own rights — row-level security here is `FORCE`d, which
+  binds the table owner too, so `SECURITY DEFINER` would buy nothing and cost an
+  audit — and it returns a *number*, so there is no row for it to leak. The
+  agent learns that history exists and nothing about what is in it.
 
 `csat` and `averageFirstReplySeconds` are still null: CSAT is M1-12 and the
 first-response clock is M3-02, and a zero would read as "rated badly" and

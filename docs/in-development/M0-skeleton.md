@@ -19,7 +19,7 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-03 | Database | #6 | shipped (#28) |
 | M0-04 | Tenancy plumbing | #7 | shipped (#33) |
 | M0-05 | Auth | #8 | in review (#37) |
-| M0-06 | Roles and staff lifecycle | #9 | in review (#PR) |
+| M0-06 | Roles and staff lifecycle | #9 | in review (#42) |
 | M0-07 | Admin shell | #10 | shipped (#26, #31); screenshot baselines tracked in #32 |
 | M0-08 | First-run wizard | #11 | planned |
 | M0-09 | Docker | #12 | in review (#35) |

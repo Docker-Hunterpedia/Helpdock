@@ -1,12 +1,13 @@
 import type { Locale } from '@helpdock/i18n';
 import { SUPPORTED_LNGS } from '@helpdock/i18n';
-import type { PasswordStrength, SetupAdminRequest } from '@helpdock/schemas';
-import { estimatePasswordStrength, PASSWORD_STRENGTHS } from '@helpdock/schemas';
-import { Box, Button, OutlinedInput, Select, Typography } from '@mui/material';
+import type { SetupAdminRequest } from '@helpdock/schemas';
+import { PASSWORD_MIN_LENGTH } from '@helpdock/schemas';
+import { Box, Button, OutlinedInput, Select } from '@mui/material';
 import { type ReactNode, useState } from 'react';
 import { useT } from '../../app/i18n.js';
-import { useSemanticTokens } from '../../app/tokens.js';
 import { Field, fieldDescribedBy } from '../../ui/field.tsx';
+import { passwordStrength } from '../../ui/password-strength.js';
+import { PasswordStrengthBar } from '../../ui/password-strength-bar.tsx';
 import { StepFrame } from './setup-layout.tsx';
 
 /**
@@ -18,13 +19,11 @@ import { StepFrame } from './setup-layout.tsx';
  * `locale` column is set to.
  */
 
-export type PasswordIssue = 'required' | 'short' | 'weak';
-
 /** The same shape as `sign-in-form.ts`: one issue per field, the first one wins. */
 export interface AccountStepErrors {
   name?: 'required';
   email?: 'required' | 'invalid';
-  password?: PasswordIssue;
+  password?: 'required' | 'short';
 }
 
 export interface AccountDraft {
@@ -34,7 +33,6 @@ export interface AccountDraft {
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 12;
 
 export function validateAccount({ name, email, password }: AccountDraft): AccountStepErrors {
   const errors: AccountStepErrors = {};
@@ -48,53 +46,16 @@ export function validateAccount({ name, email, password }: AccountDraft): Accoun
     errors.email = 'invalid';
   }
 
+  // Length is the only rule, and it is the one the api enforces too: the bar
+  // below the field is a hint, never a second policy (M0-06,
+  // `ui/password-strength.ts`).
   if (password === '') {
     errors.password = 'required';
-  } else if (password.length < MIN_PASSWORD_LENGTH) {
+  } else if (password.length < PASSWORD_MIN_LENGTH) {
     errors.password = 'short';
-  } else if (estimatePasswordStrength(password).strength === 'weak') {
-    // The same rule the api enforces, so the meter never promises something
-    // the server then refuses (`@helpdock/schemas/password-strength`).
-    errors.password = 'weak';
   }
 
   return errors;
-}
-
-/** Four steps, lit up to the reading. Colour is never the only signal: the word is there too. */
-function StrengthMeter({ password }: { readonly password: string }): ReactNode {
-  const t = useT();
-  const tokens = useSemanticTokens();
-  const { strength, score } = estimatePasswordStrength(password);
-
-  const hue: Record<PasswordStrength, string> = {
-    weak: tokens['status.danger'],
-    fair: tokens['status.warning'],
-    good: tokens['status.success'],
-    strong: tokens['status.success'],
-  };
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, marginBlockStart: '6px' }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
-        {PASSWORD_STRENGTHS.map((_step, index) => (
-          <Box
-            key={PASSWORD_STRENGTHS[index]}
-            aria-hidden="true"
-            sx={{
-              height: 4,
-              borderRadius: 2,
-              backgroundColor:
-                password !== '' && index <= score ? hue[strength] : tokens['border.default'],
-            }}
-          />
-        ))}
-      </Box>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        {`${t('wizard:account.strengthLabel')}: ${t(`wizard:account.strength.${strength}`)}`}
-      </Typography>
-    </Box>
-  );
 }
 
 export interface AccountStepProps {
@@ -115,6 +76,7 @@ export function AccountStep({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<AccountStepErrors>({});
+  const strength = passwordStrength(password);
 
   const submit = (): void => {
     const found = validateAccount({ name, email, password });
@@ -136,10 +98,14 @@ export function AccountStep({
     errors.password === 'required'
       ? t('wizard:account.passwordRequired')
       : errors.password === 'short'
-        ? t('wizard:account.passwordTooShort')
-        : errors.password === 'weak'
-          ? t('wizard:account.passwordTooWeak')
-          : undefined;
+        ? t('wizard:account.passwordTooShort', { count: PASSWORD_MIN_LENGTH })
+        : undefined;
+  // The bar is decorative, so the reading is said in the hint, which is what
+  // `aria-describedby` points at (M0-06, `ui/password-strength-bar.tsx`).
+  const passwordHint = t('wizard:account.passwordHint', {
+    count: PASSWORD_MIN_LENGTH,
+    strength: t(`wizard:account.strength.${strength.level}`),
+  });
 
   return (
     <StepFrame
@@ -194,7 +160,7 @@ export function AccountStep({
         <Field
           id="setup-password"
           label={t('wizard:account.passwordLabel')}
-          hint={t('wizard:account.passwordHint')}
+          hint={passwordHint}
           error={passwordError}
         >
           <OutlinedInput
@@ -211,14 +177,14 @@ export function AccountStep({
                 dir: 'ltr',
                 autoComplete: 'new-password',
                 'aria-describedby': fieldDescribedBy('setup-password', {
-                  hint: t('wizard:account.passwordHint'),
+                  hint: passwordHint,
                   error: passwordError,
                 }),
               },
             }}
           />
         </Field>
-        <StrengthMeter password={password} />
+        <PasswordStrengthBar strength={strength} />
       </Box>
 
       <Field id="setup-locale" label={t('wizard:account.languageLabel')}>

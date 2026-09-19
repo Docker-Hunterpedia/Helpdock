@@ -249,9 +249,16 @@ Every write runs in an install-scope transaction as
 `audit_log`. The SMTP row records the host, the port and the TLS mode, never the
 username or the password.
 
+Step 2 writes the brand, the admin's `user_brand_roles` row as `admin`, the
+brand's `General` department and, when one was given, an unverified
+`brand_domains` row — all in one transaction that names both the install scope
+and the new brand.
+
 The admin is signed in on **step 2**, not step 1: a session names the brand it
 lands in, and until the brand exists the account holds no role, so
-`SessionService.open` correctly refuses to open one.
+`SessionService.open` correctly refuses to open one. It is also what keeps the
+install-admin floor M0-06 added satisfied: the account has a membership from the
+moment it has anything.
 
 The fresh-install window is the one moment an install trusts whoever reaches it,
 because there is nobody yet to check against. [The install

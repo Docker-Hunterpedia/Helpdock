@@ -25,22 +25,20 @@
     "nameLabel": "اسمك",
     "emailLabel": "البريد الإلكتروني",
     "passwordLabel": "كلمة المرور",
-    "passwordHint": "١٢ حرفًا على الأقل. أربع كلمات غير مترابطة أقوى من كلمة قصيرة مليئة بالرموز.",
+    "passwordHint": "{{count}} حرفًا على الأقل. {{strength}}",
     "languageLabel": "لغتك",
-    "strengthLabel": "قوة كلمة المرور",
     "strength": {
-      "weak": "يسهل تخمينها",
-      "fair": "مقبولة",
-      "good": "جيدة",
-      "strong": "قوية"
+      "weak": "ضعيفة.",
+      "fair": "مقبولة.",
+      "good": "جيدة.",
+      "strong": "قوية."
     },
     "submit": "إنشاء الحساب والمتابعة",
     "nameRequired": "أدخل الاسم الذي سيراه زملاؤك.",
     "emailRequired": "أدخل عنوان بريد إلكتروني.",
     "emailInvalid": "أدخل عنوان بريد إلكتروني صالحًا.",
     "passwordRequired": "اختر كلمة مرور.",
-    "passwordTooShort": "استخدم ١٢ حرفًا على الأقل.",
-    "passwordTooWeak": "كلمة المرور هذه يسهل تخمينها. جرّب عدة كلمات غير مترابطة."
+    "passwordTooShort": "استخدم {{count}} حرفًا على الأقل."
   },
   "brand": {
     "title": "علامتك التجارية الأولى",

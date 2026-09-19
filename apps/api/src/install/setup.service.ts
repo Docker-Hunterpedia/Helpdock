@@ -7,6 +7,7 @@ import {
   brands,
   type Db,
   type DbTransaction,
+  departments,
   INSTALL_SCOPE_BRAND_ID,
   userBrandRoles,
   users,
@@ -89,6 +90,14 @@ export const SETUP_SMTP_TEST_IP_RULE: RateLimitRule = {
   limit: 10,
   windowSeconds: 15 * 60,
 };
+
+/**
+ * The department every brand starts with. A brand with none is supported
+ * (M0-06), but an operator who has just been told a brand is "one support desk"
+ * should find one department in it rather than an empty picker on the first
+ * screen that asks for one.
+ */
+export const DEFAULT_DEPARTMENT_NAME = 'General';
 
 /** The `smtp.*` keys the wizard writes. Also what it reports as env-locked. */
 const SMTP_KEYS = [
@@ -243,7 +252,7 @@ export class SetupService {
           timezone: input.timezone,
         },
         helpcenterDomain: input.helpcenterDomain ?? null,
-        departmentCreated: false,
+        departmentCreated: true,
       },
       issued,
     };
@@ -425,9 +434,7 @@ export class SetupService {
       });
     }
 
-    // The brand's default department, "General", belongs here. The
-    // `departments` table arrives with M0-06; until it does there is nothing
-    // to insert, and `departmentCreated` in the response says so.
+    await tx.insert(departments).values({ brandId, name: DEFAULT_DEPARTMENT_NAME });
 
     await tx.insert(auditLog).values({
       brandId: INSTALL_SCOPE_BRAND_ID,
@@ -440,6 +447,7 @@ export class SetupService {
         userId,
         prefix: input.prefix,
         helpcenterDomain: input.helpcenterDomain ?? null,
+        department: DEFAULT_DEPARTMENT_NAME,
       },
     });
   }

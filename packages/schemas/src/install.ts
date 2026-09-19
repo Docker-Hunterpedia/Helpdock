@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { passwordSchema } from './auth.js';
 import { localeSchema } from './brand.js';
-import { isPasswordAcceptable } from './password-strength.js';
 
 /**
  * The first-run wizard (M0-08). One install, four steps: the admin account, the
@@ -89,16 +88,6 @@ export const helpcenterDomainSchema = z
   .transform((value) => value.trim().toLowerCase().replace(/\.$/, ''))
   .refine((value) => DOMAIN.test(value), 'must be a hostname such as support.example.com');
 
-/**
- * The password floor is `passwordSchema`'s twelve characters; on top of it the
- * wizard refuses what its own meter would draw as weak, so the meter is not
- * advice the server then contradicts.
- */
-export const setupPasswordSchema = passwordSchema.refine(
-  isPasswordAcceptable,
-  'is too easy to guess',
-);
-
 // --------------------------------------------------------------------------
 // Step 1 — the admin account
 // --------------------------------------------------------------------------
@@ -106,7 +95,10 @@ export const setupPasswordSchema = passwordSchema.refine(
 export const setupAdminRequestSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.email().max(320),
-  password: setupPasswordSchema,
+  // `passwordSchema`'s twelve characters, and nothing else: composition rules
+  // push people towards `Passw0rd!` (M0-06, `ui/password-strength.ts`). The
+  // bar on the step is a hint, not a second policy.
+  password: passwordSchema,
   locale: localeSchema,
 });
 export type SetupAdminRequest = z.infer<typeof setupAdminRequestSchema>;
@@ -149,9 +141,9 @@ export const setupBrandResponseSchema = z.object({
   /** Null when no domain was given; never verified at this point. */
   helpcenterDomain: z.string().nullable(),
   /**
-   * Whether the brand's default department was created. False until the
-   * `departments` table lands with M0-06, and the wizard says nothing about it
-   * either way.
+   * Whether the brand's default department was created. The wizard says
+   * nothing about it on screen; it is here so a client can tell an empty brand
+   * from one that was set up.
    */
   departmentCreated: z.boolean(),
 });

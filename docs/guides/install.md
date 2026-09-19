@@ -110,7 +110,7 @@ Four steps, none of which can be got wrong permanently except one:
 | Step | What it asks for |
 |---|---|
 | **1 Admin account** | Your name, email, a password of at least twelve characters, and your language. This account is the *install administrator*: the only one that reaches every brand and every setting. The language you pick here is the one the rest of the wizard, and your admin, are shown in — pick العربية and the whole thing turns around. |
-| **2 First brand** | The brand's name, a **ticket prefix**, its default language, its timezone, and optionally the hostname its help center will answer on. |
+| **2 First brand** | The brand's name, a **ticket prefix**, its default language, its timezone, and optionally the hostname its help center will answer on. The brand is created with one department, **General**; rename it or add more in admin. |
 | **3 Outgoing email** | Your SMTP server, port, encryption, credentials and the address mail comes from. **Send a test email** delivers one to the address from step 1 and shows you what the server said. You may skip this and set it up later in admin. |
 | **4 Done** | What was created, and the way in. |
 

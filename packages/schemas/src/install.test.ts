@@ -5,7 +5,6 @@ import {
   isSupportedTimeZone,
   setupAdminRequestSchema,
   setupBrandRequestSchema,
-  setupPasswordSchema,
   setupSmtpRequestSchema,
   smtpTestResultSchema,
   ticketNumberPreview,
@@ -76,14 +75,6 @@ describe('helpcenterDomainSchema', () => {
   );
 });
 
-describe('setupPasswordSchema', () => {
-  it('refuses a short password on length and a long one on guessability', () => {
-    expect(setupPasswordSchema.safeParse('short').success).toBe(false);
-    expect(setupPasswordSchema.safeParse('password1234').success).toBe(false);
-    expect(setupPasswordSchema.safeParse('a very long passphrase').success).toBe(true);
-  });
-});
-
 describe('setupAdminRequestSchema', () => {
   const valid = {
     name: ' Lina ',
@@ -98,6 +89,15 @@ describe('setupAdminRequestSchema', () => {
 
   it('refuses a locale Helpdock does not ship', () => {
     expect(setupAdminRequestSchema.safeParse({ ...valid, locale: 'fr' }).success).toBe(false);
+  });
+
+  it('enforces the twelve-character floor and nothing more about the password', () => {
+    // Composition rules push people towards `Passw0rd!`; the bar on the step
+    // is a hint, not a second policy (M0-06, `ui/password-strength.ts`).
+    expect(setupAdminRequestSchema.safeParse({ ...valid, password: 'short' }).success).toBe(false);
+    expect(setupAdminRequestSchema.safeParse({ ...valid, password: 'twelveletter' }).success).toBe(
+      true,
+    );
   });
 });
 

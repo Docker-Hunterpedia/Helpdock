@@ -31,31 +31,27 @@ describe('validateAccount', () => {
     [{ email: 'lina@' }, { email: 'invalid' }],
     [{ password: '' }, { password: 'required' }],
     [{ password: 'elevenchar' }, { password: 'short' }],
-    [{ password: 'password1234' }, { password: 'weak' }],
   ])('refuses %j', (override, expected) => {
     expect(validateAccount({ ...draft, ...override })).toEqual(expected);
   });
 
-  it('refuses the weak password the api would refuse, and no other', () => {
-    // The meter and the server share `estimatePasswordStrength`, so a password
-    // that passes here can never be rejected on submit.
-    expect(validateAccount({ ...draft, password: 'twelveletter' })).toEqual({});
+  it('applies the length floor and no composition rule, as the api does', () => {
+    // A rule the form enforced and the server did not would be a rule nobody
+    // could explain; the bar under the field is a hint (M0-06).
+    expect(validateAccount({ ...draft, password: 'password1234' })).toEqual({});
   });
 });
 
 describe('AccountStep', () => {
-  it('says nothing about strength before anything is typed', () => {
-    render();
-
-    expect(screen.getByText('Password strength: Too easy to guess')).toBeInTheDocument();
-  });
-
-  it('names the strength in words, so nothing depends on the meter’s colour', async () => {
+  it('names the reading in words, so nothing depends on the bar’s colour', async () => {
     const { user } = render();
+
+    // The bar is `aria-hidden`; the hint is what `aria-describedby` points at.
+    expect(screen.getByText('At least 12 characters. Weak.')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Password'), 'a very long passphrase');
 
-    expect(screen.getByText('Password strength: Strong')).toBeInTheDocument();
+    expect(screen.getByText('At least 12 characters. Strong.')).toBeInTheDocument();
   });
 
   it('shows one message per rejected field rather than submitting', async () => {

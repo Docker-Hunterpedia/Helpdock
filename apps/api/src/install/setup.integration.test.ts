@@ -10,6 +10,7 @@ import {
   brands,
   createDb,
   type DbHandle,
+  departments,
   INSTALL_SCOPE_BRAND_ID,
   userBrandRoles,
   users,
@@ -144,7 +145,7 @@ describe.skipIf(!hasDocker)('the first-run wizard', () => {
   /** Back to a fresh install, so a test that needs one is not the first one only. */
   const reset = async (): Promise<void> => {
     await owner.db.execute(
-      sql`TRUNCATE ${users}, ${brands}, ${userBrandRoles}, ${brandDomains}, ${auditLog} CASCADE`,
+      sql`TRUNCATE ${users}, ${brands}, ${userBrandRoles}, ${brandDomains}, ${departments}, ${auditLog} CASCADE`,
     );
     await owner.db.execute(sql`DELETE FROM settings WHERE key LIKE 'smtp.%'`);
     await runtime.redis.flushdb();
@@ -222,8 +223,7 @@ describe.skipIf(!hasDocker)('the first-run wizard', () => {
     expect(brand.json()).toMatchObject({
       brand: { name: BRAND.name, prefix: 'ACME', timezone: 'Europe/Berlin' },
       helpcenterDomain: 'support.acme.test',
-      // `departments` lands with M0-06; until then there is nothing to create.
-      departmentCreated: false,
+      departmentCreated: true,
     });
     // The admin is signed in from here on: the brand exists, so a session has
     // somewhere to land.
@@ -384,10 +384,26 @@ describe.skipIf(!hasDocker)('the first-run wizard', () => {
       async (tx) => ({
         roles: await tx.select().from(userBrandRoles),
         domains: await tx.select().from(brandDomains),
+        departments: await tx.select().from(departments),
         audit: await tx.select().from(auditLog),
       }),
     );
-    expect(theirs).toEqual({ roles: [], domains: [], audit: [] });
+    expect(theirs).toEqual({ roles: [], domains: [], departments: [], audit: [] });
+  }, 120_000);
+
+  it('gives the brand a department to file tickets under', async () => {
+    const { setupToken } = await createAdmin();
+    const brand = await post('/api/install/setup/brand', BRAND, setupToken);
+    const { brand: created } = brand.json() as { brand: { id: string } };
+
+    const rows = await owner.db
+      .select({ name: departments.name, brandId: departments.brandId })
+      .from(departments);
+
+    // A brand with no departments is supported (M0-06), but an operator who
+    // was just told a brand is "one support desk" should not meet an empty
+    // picker on the first screen that asks for one.
+    expect(rows).toEqual([{ name: 'General', brandId: created.id }]);
   }, 120_000);
 
   it('stores the help center domain unverified, so Caddy issues it no certificate', async () => {
@@ -448,8 +464,8 @@ describe.skipIf(!hasDocker)('the first-run wizard', () => {
     expect(allowed.statusCode).toBe(201);
   }, 120_000);
 
-  it('refuses a password the strength rule would not accept', async () => {
-    const weak = await post('/api/install/setup/admin', { ...ADMIN, password: 'password1234' });
+  it('refuses a password under the twelve-character floor', async () => {
+    const weak = await post('/api/install/setup/admin', { ...ADMIN, password: 'eleven char' });
 
     expect(weak.statusCode).toBe(400);
     expect((weak.json() as { error: { code: string } }).error.code).toBe('validation_failed');

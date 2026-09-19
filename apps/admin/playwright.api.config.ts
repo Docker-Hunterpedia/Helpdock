@@ -48,7 +48,9 @@ export default defineConfig({
   projects: [
     {
       name: 'api',
-      testMatch: /sign-in\.api\.spec\.ts/,
+      // Everything but the wizard, so a spec added later joins this project
+      // without anybody having to remember to name it here.
+      testIgnore: /setup\.api\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: E2E_WEB_ORIGIN, locale: 'en-GB' },
     },
     {

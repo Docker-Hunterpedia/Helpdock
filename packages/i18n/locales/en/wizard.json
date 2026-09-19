@@ -21,22 +21,20 @@
     "nameLabel": "Your name",
     "emailLabel": "Email",
     "passwordLabel": "Password",
-    "passwordHint": "At least 12 characters. Four unrelated words beat a short password with symbols in it.",
+    "passwordHint": "At least {{count}} characters. {{strength}}",
     "languageLabel": "Your language",
-    "strengthLabel": "Password strength",
     "strength": {
-      "weak": "Too easy to guess",
-      "fair": "Fair",
-      "good": "Good",
-      "strong": "Strong"
+      "weak": "Weak.",
+      "fair": "Fair.",
+      "good": "Good.",
+      "strong": "Strong."
     },
     "submit": "Create account and continue",
     "nameRequired": "Enter the name colleagues will see.",
     "emailRequired": "Enter an email address.",
     "emailInvalid": "Enter a valid email address.",
     "passwordRequired": "Choose a password.",
-    "passwordTooShort": "Use at least 12 characters.",
-    "passwordTooWeak": "That password is too easy to guess. Try a few unrelated words."
+    "passwordTooShort": "Use at least {{count}} characters."
   },
   "brand": {
     "title": "Your first brand",

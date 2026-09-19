@@ -63,6 +63,12 @@ jobs:
       - name: Api coverage gate
         run: pnpm --filter @helpdock/api test:coverage
 
+      # The admin has a gate of its own from M0-08: the first-run wizard is the
+      # one screen an operator cannot skip, and the root gate in
+      # `vitest.config.ts` measures `packages/*` only.
+      - name: Admin coverage gate
+        run: pnpm --filter @helpdock/admin test:coverage
+
       - name: Build
         run: pnpm build
 

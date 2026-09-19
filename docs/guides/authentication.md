@@ -362,6 +362,10 @@ English crosses that boundary.
 
 ## The development install
 
+The first account on a real install is created by [the first-run
+wizard](install.md#first-run), which is the only thing an install with no
+accounts will show. For development there is a shortcut:
+
 ```bash
 pnpm build
 pnpm --filter @helpdock/api seed:dev

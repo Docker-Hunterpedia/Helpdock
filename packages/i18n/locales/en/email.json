@@ -29,5 +29,10 @@
     "expiry_one": "The invitation expires in {{count}} day.",
     "expiry_other": "The invitation expires in {{count}} days.",
     "ignore": "If you were not expecting this, you can ignore this message. No account exists until you accept."
+  },
+  "smtpTest": {
+    "subject": "{{appName}} test message",
+    "heading": "Your mail server works",
+    "body": "This message was sent through {{host}} by the Helpdock setup wizard. Receiving it means outgoing email is configured correctly."
   }
 }

@@ -1,14 +1,40 @@
 {
   "title": "Set up Helpdock",
   "systemStatus": "{{version}} · api + worker healthy",
+  "systemStatusUnknown": "{{version}} · checking services",
+  "systemStatusDown": "{{version}} · some services are not ready",
   "stepLabel": "{{index}} · {{label}}",
+  "progressLabel": "Setup progress",
+  "stepDone": "done",
   "stepsRemaining_one": "{{count}} step left",
   "stepsRemaining_other": "{{count}} steps left",
+  "back": "Back",
   "steps": {
     "account": "Admin account",
     "brand": "First brand",
     "email": "Outgoing email",
     "done": "Done"
+  },
+  "account": {
+    "title": "Create your admin account",
+    "description": "This is the install administrator: the one account that reaches every brand and every setting. You can invite the rest of the team afterwards.",
+    "nameLabel": "Your name",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "passwordHint": "At least {{count}} characters. {{strength}}",
+    "languageLabel": "Your language",
+    "strength": {
+      "weak": "Weak.",
+      "fair": "Fair.",
+      "good": "Good.",
+      "strong": "Strong."
+    },
+    "submit": "Create account and continue",
+    "nameRequired": "Enter the name colleagues will see.",
+    "emailRequired": "Enter an email address.",
+    "emailInvalid": "Enter a valid email address.",
+    "passwordRequired": "Choose a password.",
+    "passwordTooShort": "Use at least {{count}} characters."
   },
   "brand": {
     "title": "Your first brand",
@@ -21,11 +47,69 @@
     "domainLabel": "Help center domain",
     "domainOptional": "(optional, you can verify it later)",
     "domainPlaceholder": "support.example.com",
-    "submit": "Create brand and continue"
+    "submit": "Create brand and continue",
+    "nameRequired": "Give the brand a name.",
+    "prefixRequired": "Choose a ticket prefix.",
+    "prefixInvalid": "Use 2 to 6 characters, A-Z and 0-9.",
+    "timezoneInvalid": "Choose a timezone from the list.",
+    "domainInvalid": "Enter a hostname such as support.example.com.",
+    "prefixTaken": "That prefix is already in use on this install."
+  },
+  "email": {
+    "title": "Outgoing email",
+    "description": "Helpdock sends sign-in links, notifications and ticket replies through your own SMTP relay. You can change all of this later in Settings.",
+    "hostLabel": "SMTP server",
+    "hostPlaceholder": "smtp.example.com",
+    "portLabel": "Port",
+    "tlsLabel": "Encryption",
+    "tls": {
+      "starttls": "STARTTLS (587)",
+      "tls": "TLS (465)",
+      "none": "None"
+    },
+    "userLabel": "Username",
+    "userOptional": "(optional, for a relay that does not authenticate)",
+    "passwordLabel": "Password",
+    "passwordHint": "Encrypted with your master key. It is never shown again after you save.",
+    "fromAddressLabel": "From address",
+    "fromNameLabel": "From name",
+    "test": "Send a test email",
+    "testPending": "Sending a test message",
+    "testDelivered": "Delivered to {{email}}.",
+    "testDeliveredWithResponse": "Delivered to {{email}}. The server answered: {{response}}",
+    "skip": "Skip for now",
+    "submit": "Save and continue",
+    "hostRequired": "Enter the SMTP server's hostname.",
+    "portInvalid": "Enter a port between 1 and 65535.",
+    "fromAddressRequired": "Enter the address mail will come from.",
+    "fromAddressInvalid": "Enter a valid email address.",
+    "fromNameRequired": "Enter the name recipients will see.",
+    "errors": {
+      "auth-failed": "The server refused those credentials. Check the username and password.",
+      "connection-refused": "Could not reach that server. Check the hostname and the port.",
+      "tls-error": "The encrypted connection failed. Try a different encryption setting.",
+      "timeout": "The server did not answer within ten seconds.",
+      "rejected": "The server refused the message. Check the From address.",
+      "unknown": "The test could not be completed. Check the details and try again."
+    }
+  },
+  "done": {
+    "title": "Helpdock is ready",
+    "description": "Your install is set up. Everything below can be changed later in Settings.",
+    "adminLabel": "Admin account",
+    "brandLabel": "Brand",
+    "brandValue": "{{name}} · {{prefix}}",
+    "emailLabel": "Outgoing email",
+    "emailSkipped": "Not configured yet",
+    "twoFactor": "This install requires two-factor authentication, so you will set up an authenticator app next.",
+    "submit": "Open Helpdock"
   },
   "masterKey": {
     "title": "Keep your master key safe.",
     "body": "Secrets are encrypted with {{envKey}} from your {{envFile}}. If it is lost, stored credentials cannot be recovered.",
     "link": "How to back it up"
-  }
+  },
+  "failed": "Something went wrong. Check your connection and try again.",
+  "closed": "This install has already been set up. Sign in instead.",
+  "throttled": "Too many attempts from this address. Wait a few minutes and try again."
 }

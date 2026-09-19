@@ -1,5 +1,7 @@
 /** Every path in the admin app, in one place so links cannot drift. */
 export const ROUTES = {
+  /** The first-run wizard. Mounted only while the install is `fresh` (M0-08). */
+  setup: '/setup',
   signIn: '/sign-in',
   totp: '/sign-in/totp',
   magicLinkSent: '/sign-in/link-sent',

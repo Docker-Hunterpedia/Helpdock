@@ -105,6 +105,20 @@ grep -q 'helpdock:primary-domain' <<< "${body}" \
   || { echo 'FAIL the root did not return the admin index.html' >&2; exit 1; }
 echo 'ok   the root carries the install meta tags'
 
+# The M0 exit criterion: a clean machine reaches the first-run wizard. The
+# database this stack came up with is empty, so the api has to say `fresh`.
+grep -q 'name="helpdock:install-state" content="fresh"' <<< "${body}" \
+  || { echo 'FAIL a brand-new install did not offer the first-run wizard' >&2; exit 1; }
+echo 'ok   a brand-new install reports itself as fresh'
+
+setup_status="$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H 'content-type: application/json' -H 'sec-fetch-site: cross-site' \
+  -d '{"name":"Nope","email":"nope@example.test","password":"a very long passphrase","locale":"en"}' \
+  http://127.0.0.1:3000/api/install/setup/admin)"
+[[ "${setup_status}" == '403' ]] \
+  || { echo "FAIL setup accepted a cross-site request (${setup_status})" >&2; exit 1; }
+echo 'ok   setup refuses a browser that came from another site'
+
 # The worker only starts once the api is healthy, so it is still booting when
 # the checks above run.
 for _ in $(seq 1 20); do

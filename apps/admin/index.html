@@ -5,12 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <!--
-      Read by `src/install/public-info.ts` for the sign-in caption. The api
-      rewrites them per install when it serves this file; the values below are
-      the development fixture.
+      Read by `src/install/public-info.ts` for the sign-in caption, for the
+      wizard's version caption, and to decide whether this install has been set
+      up at all. The api rewrites them per install when it serves this file; the
+      values below are the development fixture, and `configured` is what keeps
+      `pnpm dev` on the sign-in screen rather than in the wizard.
     -->
     <meta name="helpdock:primary-domain" content="support.helpdock.com" />
     <meta name="helpdock:brand-count" content="3" />
+    <meta name="helpdock:install-state" content="configured" />
+    <meta name="helpdock:version" content="0.1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Helpdock</title>
     <!--

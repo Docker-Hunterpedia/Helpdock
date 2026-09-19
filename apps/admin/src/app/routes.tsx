@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 import { RequireSession } from '../auth/require-session.tsx';
+import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
@@ -9,6 +10,7 @@ import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
 import { SecurityScreen } from '../screens/security.tsx';
+import { SetupPage } from '../screens/setup/setup-page.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
 import { StaffScreen } from '../screens/staff.tsx';
 import { Totp } from '../screens/totp.tsx';
@@ -28,8 +30,24 @@ import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from './route-paths.js';
  * `/invite/:token` is public for the same reason the sign-in screens are: the
  * token in the path is the credential, and somebody following it has no session
  * to require.
+ *
+ * A **fresh install has one screen**: nobody can sign in to an install with no
+ * accounts in it, so every path goes to the wizard until it has been finished
+ * (M0-08). On a configured install `/setup` is not a route at all, and the
+ * catch-all below sends it where every other unknown path goes.
  */
 export function AppRoutes(): ReactNode {
+  const install = useMemo(() => readPublicInstallInfo(), []);
+
+  if (install.installState === 'fresh') {
+    return (
+      <Routes>
+        <Route path={ROUTES.setup} element={<SetupPage />} />
+        <Route path="*" element={<Navigate to={ROUTES.setup} replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
       <Route path={ROUTES.signIn} element={<SignIn />} />

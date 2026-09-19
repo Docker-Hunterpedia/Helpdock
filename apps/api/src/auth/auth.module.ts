@@ -47,6 +47,12 @@ export interface AuthModuleOptions {
 export interface AuthRuntime {
   readonly sessions: SessionService;
   readonly auth: AuthService;
+  /**
+   * Exported because the first-run wizard hashes the install admin's password
+   * (M0-08). One instance per process holds the pepper, so a second hasher
+   * would be a second place `APP_MASTER_KEY` is decoded.
+   */
+  readonly hasher: PasswordHasher;
 }
 
 /** Builds the auth object graph, once per process. */
@@ -114,7 +120,7 @@ export const createAuthRuntime = ({
     appUrl: env.APP_URL,
   });
 
-  return { sessions, auth };
+  return { sessions, auth, hasher };
 };
 
 /** The whole graph, built once per process and shared by both providers below. */
@@ -161,8 +167,13 @@ export class AuthModule {
           inject: [AUTH_RUNTIME],
           useFactory: (runtime: AuthRuntime): SessionService => runtime.sessions,
         },
+        {
+          provide: PasswordHasher,
+          inject: [AUTH_RUNTIME],
+          useFactory: (runtime: AuthRuntime): PasswordHasher => runtime.hasher,
+        },
       ],
-      exports: [AuthService, SessionService],
+      exports: [AuthService, SessionService, PasswordHasher],
     };
   }
 }

@@ -174,6 +174,8 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
 | Avatar | 20 · 24 · 28 · 36 px circles, initials in weight 600. Staff use teal100/teal700; contacts use n200/n700; the assigned agent on a row uses solid teal with white. Unassigned = dashed n400 ring. Presence dot 8 px bottom-end. |
 | ChannelIcon | 14 px Lucide icon + caption label in `text.secondary`. |
 | PresenceDot | 8 px: online success, away warning, offline n400. |
+| StepProgress | One 4 px bar per step above a caption, as an `<ol>`. Done = solid `action.primary` with a check icon and the word "done"; current = the same hue at 50 % with the caption in weight 600 and `aria-current="step"`; later = `border.default` with the caption in `text.secondary`. A remaining count sits below. Used by the first-run wizard (`Admin/Wizard`); M7-10 appends a step to it. |
+| PasswordStrengthBar | Four 4 px segments under a password field, filled to the reading in `status.danger` / `status.warning` / `status.info` / `status.success`. `aria-hidden`: the same judgement is named in the field's hint, which is what a screen reader reads. It is a hint and never a policy — the only rule the api enforces is the twelve-character floor. |
 
 ### 6.3 Content
 
@@ -287,3 +289,4 @@ Every PR that touches UI ticks these in the description:
 | 2026-09-18 | 1.0. Direction "Quiet desk" chosen over "Editorial ink" and "Signal". Canvas published. |
 | 2026-09-19 | 1.1. Made three rules concrete after implementing `packages/ui`: dark status lift +0.20 L, dark brand accent lift +0.21 L, derivation of the `neutral` and `cool` ramps. Contrast figures replaced by the measured ones. |
 | 2026-09-19 | 1.2. Added the §5 rule for OAuth provider marks after building the admin shell: Lucide v1 has no brand icons, so the two are inlined rather than adding a second icon set. |
+| 2026-09-19 | 1.3. Added StepProgress to §6.2 for the first-run wizard (`Admin/Wizard`), and PasswordStrengthBar for the bar M0-06 built and the wizard reuses. A step that is merely later uses `text.secondary`, not `text.disabled`: the latter is 2.3:1 on the canvas, which §10 does not allow for a label anyone is meant to read. |

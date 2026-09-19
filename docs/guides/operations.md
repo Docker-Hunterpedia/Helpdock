@@ -269,6 +269,38 @@ Two are worth knowing:
 
 ---
 
+## The master key
+
+`APP_MASTER_KEY` in `.env` is 32 bytes of base64 that every secret Helpdock
+stores is encrypted with: SMTP and OAuth credentials, CAPTCHA secrets, the token
+signing key, and from M7 the LLM provider keys. It is also the input the
+password pepper and the trusted-device cookie signature are derived from.
+
+**Back it up with the database, somewhere other than the server.** Nothing can
+recover a stored secret without it — not a database dump, not a support request
+([DOMAIN-RULES
+§10](../planning/DOMAIN-RULES.md#10-operations-and-recovery)). This is what the
+first-run wizard's note is about, and it is the one thing an operator can get
+irreversibly wrong on day one.
+
+```bash
+# Generate it, once, before the first start:
+openssl rand -base64 32
+
+# Compare the running stack's key with your backup without printing either:
+cd Helpdock/docker
+grep '^APP_MASTER_KEY=' .env | cut -d= -f2- | openssl dgst -sha256 | cut -c1-24
+```
+
+Run the same line against your backup copy. Equal fingerprints mean the backup
+opens what the database holds.
+
+Rotation (`APP_MASTER_KEY_PREVIOUS` and `helpdock keys rotate`) arrives with
+M9-06; each encrypted value already records the key generation that wrote it, so
+the two keys can coexist when it does.
+
+---
+
 ## Still to come
 
 - **M8-05** embeds Bull Board in the System page ([ADR

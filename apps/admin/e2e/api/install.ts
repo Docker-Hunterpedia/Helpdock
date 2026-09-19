@@ -33,6 +33,22 @@ export const E2E_WEB_PORT = Number(process.env.HD_E2E_WEB_PORT ?? 5274);
 export const E2E_API_ORIGIN = `http://localhost:${String(E2E_API_PORT)}`;
 export const E2E_WEB_ORIGIN = `http://localhost:${String(E2E_WEB_PORT)}`;
 
+/**
+ * The second install, the one nobody has set up yet (M0-08). It is a separate
+ * database and a separate api process rather than a reset of the first,
+ * because "fresh" means the `users` table is empty, and the seeded account the
+ * sign-in specs need makes that impossible to share.
+ *
+ * It has no Vite in front of it: this process serves `apps/admin/dist` itself,
+ * which is the production topology (ARCHITECTURE §3) and the only way the
+ * wizard can be tested at all — the install state reaches the app as a meta tag
+ * the api rewrites into `index.html`, and a dev server serves its own copy of
+ * that file with the development fixture in it.
+ */
+export const E2E_SETUP_API_PORT = Number(process.env.HD_E2E_SETUP_API_PORT ?? 3098);
+export const E2E_SETUP_ORIGIN = `http://localhost:${String(E2E_SETUP_API_PORT)}`;
+const SETUP_DATABASE = 'helpdock_setup';
+
 /** How the seeded account reaches the spec, which runs in another process. */
 export const TOTP_SECRET_ENV = 'HD_E2E_TOTP_SECRET';
 export const ACCOUNT_EMAIL_ENV = 'HD_E2E_EMAIL';
@@ -45,6 +61,7 @@ export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(here, '../../../api');
+const adminDist = path.resolve(here, '../../dist');
 
 export interface RunningInstall {
   stop(): Promise<void>;
@@ -104,9 +121,9 @@ const waitForHealth = async (origin: string, timeoutMs = 60_000): Promise<void> 
 
 export const startInstall = async (): Promise<RunningInstall> => {
   const entry = path.join(apiRoot, 'dist/main.js');
-  if (!existsSync(entry)) {
+  if (!existsSync(entry) || !existsSync(path.join(adminDist, 'index.html'))) {
     throw new Error(
-      'apps/api is not built. Run `pnpm build` before `pnpm --filter @helpdock/admin e2e:api`.',
+      'apps/api or apps/admin is not built. Run `pnpm build` before `pnpm --filter @helpdock/admin e2e:api`.',
     );
   }
 
@@ -115,24 +132,68 @@ export const startInstall = async (): Promise<RunningInstall> => {
     new RedisContainer(REDIS_IMAGE).start(),
   ])) as [StartedPostgreSqlContainer, StartedRedisContainer];
 
-  const env: NodeJS.ProcessEnv = {
+  const host = postgres.getHost();
+  const port = String(postgres.getPort());
+  const owner = `${postgres.getUsername()}:${postgres.getPassword()}`;
+
+  const envFor = ({
+    appUrl,
+    apiPort,
+    database,
+    redisDb,
+    servesAdmin = false,
+  }: {
+    appUrl: string;
+    apiPort: number;
+    database: string;
+    redisDb: number;
+    servesAdmin?: boolean;
+  }): NodeJS.ProcessEnv => ({
     // The browser talks to Vite, which proxies `/api` here, so as far as the
     // cookie is concerned there is one origin. `APP_URL` is the web origin
     // because that is where the api redirects a magic link back to.
-    APP_URL: E2E_WEB_ORIGIN,
+    APP_URL: appUrl,
     APP_ROLE: 'api',
     APP_MASTER_KEY: MASTER_KEY,
     NODE_ENV: 'test',
-    PORT: String(E2E_API_PORT),
-    DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${String(postgres.getPort())}/${postgres.getDatabase()}`,
-    DATABASE_MIGRATION_URL: postgres.getConnectionUri(),
-    REDIS_URL: redis.getConnectionUrl(),
+    PORT: String(apiPort),
+    DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${host}:${port}/${database}`,
+    DATABASE_MIGRATION_URL: `postgres://${owner}@${host}:${port}/${database}`,
+    // A database of its own, so the two installs cannot see each other's
+    // sessions, rate-limit counters or signing key.
+    REDIS_URL: `${redis.getConnectionUrl()}/${String(redisDb)}`,
     S3_ENDPOINT: 'http://minio:9000',
     S3_REGION: 'us-east-1',
     S3_BUCKET: 'helpdock',
     S3_ACCESS_KEY_ID: 'access',
     S3_SECRET_ACCESS_KEY: 'secret',
-  };
+    ...(servesAdmin ? { ADMIN_DIST_DIR: adminDist } : {}),
+  });
+
+  const env = envFor({
+    appUrl: E2E_WEB_ORIGIN,
+    apiPort: E2E_API_PORT,
+    database: postgres.getDatabase(),
+    redisDb: 0,
+  });
+
+  const setupEnv = envFor({
+    appUrl: E2E_SETUP_ORIGIN,
+    apiPort: E2E_SETUP_API_PORT,
+    database: SETUP_DATABASE,
+    redisDb: 1,
+    servesAdmin: true,
+  });
+
+  await postgres.exec([
+    'psql',
+    '-U',
+    postgres.getUsername(),
+    '-d',
+    postgres.getDatabase(),
+    '-c',
+    `CREATE DATABASE ${SETUP_DATABASE}`,
+  ]);
 
   const seeded = JSON.parse(
     await run(path.join(apiRoot, 'dist/seed/seed-dev.js'), env, [
@@ -142,17 +203,25 @@ export const startInstall = async (): Promise<RunningInstall> => {
     ]),
   ) as { email: string; password: string; totpSecret: string; inviteToken: string };
 
-  const api = spawn(process.execPath, [entry], {
-    cwd: apiRoot,
-    env: { ...process.env, ...env },
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
+  const processes = [env, setupEnv].map((processEnv) =>
+    spawn(process.execPath, [entry], {
+      cwd: apiRoot,
+      env: { ...process.env, ...processEnv },
+      stdio: ['ignore', 'ignore', 'inherit'],
+    }),
+  );
+
+  const stopEverything = async (signal: NodeJS.Signals): Promise<void> => {
+    for (const child of processes) {
+      child.kill(signal);
+    }
+    await Promise.all([postgres.stop(), redis.stop()]);
+  };
 
   try {
-    await waitForHealth(E2E_API_ORIGIN);
+    await Promise.all([waitForHealth(E2E_API_ORIGIN), waitForHealth(E2E_SETUP_ORIGIN)]);
   } catch (error) {
-    api.kill('SIGKILL');
-    await Promise.all([postgres.stop(), redis.stop()]);
+    await stopEverything('SIGKILL');
     throw error;
   }
 
@@ -163,10 +232,5 @@ export const startInstall = async (): Promise<RunningInstall> => {
   process.env[TOTP_SECRET_ENV] = seeded.totpSecret;
   process.env[INVITE_TOKEN_ENV] = seeded.inviteToken;
 
-  return {
-    stop: async () => {
-      api.kill('SIGTERM');
-      await Promise.all([postgres.stop(), redis.stop()]);
-    },
-  };
+  return { stop: () => stopEverything('SIGTERM') };
 };

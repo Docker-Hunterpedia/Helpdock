@@ -514,6 +514,10 @@ describe.skipIf(!hasDocker)('the api', () => {
         defaultLocale: 'en',
         timezone: 'UTC',
         status: 'active',
+        // A brand created before M1-01 has an empty `settings` column, and the
+        // output schema fills it with the DOMAIN-RULES §2.3 defaults rather
+        // than answering with a shape the client cannot use.
+        settings: { autoAwaitOnAgentReply: true, reopenPolicy: { kind: 'within_days', days: 7 } },
       });
     });
 

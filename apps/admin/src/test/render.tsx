@@ -9,12 +9,16 @@ import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TicketingApi } from '../ticketing/api.js';
+import { MockTicketingApi } from '../ticketing/mock-api.js';
 
 export interface RenderAppOptions {
   readonly authApi?: AuthApi;
   /** Defaults to a fresh fixture, so a screen that reads it always has one. */
   readonly staffApi?: StaffApi;
   readonly contactsApi?: ContactsApi;
+  /** Defaults to a fresh fixture, for the Ticketing screens. */
+  readonly ticketingApi?: TicketingApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -23,6 +27,7 @@ export interface RenderedApp extends RenderResult {
   readonly authApi: AuthApi;
   readonly staffApi: StaffApi;
   readonly contactsApi: ContactsApi;
+  readonly ticketingApi: TicketingApi;
 }
 
 /**
@@ -35,6 +40,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const authApi =
     options.authApi ?? new MockAuthApi(staffApi instanceof MockStaffApi ? staffApi : undefined);
   const contactsApi = options.contactsApi ?? new MockContactsApi();
+  const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -43,6 +49,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       authApi={authApi}
       staffApi={staffApi}
       contactsApi={contactsApi}
+      ticketingApi={ticketingApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -52,5 +59,5 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     </AppProviders>,
   );
 
-  return { ...result, user: userEvent.setup(), authApi, staffApi, contactsApi };
+  return { ...result, user: userEvent.setup(), authApi, staffApi, contactsApi, ticketingApi };
 }

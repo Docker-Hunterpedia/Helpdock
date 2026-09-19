@@ -3,6 +3,7 @@ import { type UseQueryResult, useQuery, useQueryClient } from '@tanstack/react-q
 import { createContext, type ReactNode, useCallback, useContext } from 'react';
 import type { ContactsApi } from '../contacts/api.js';
 import type { StaffApi } from '../staff/api.js';
+import type { TicketingApi } from '../ticketing/api.js';
 import type { AuthApi } from './api.js';
 
 /** One cache entry holds the session; every screen reads it from there. */
@@ -11,25 +12,31 @@ const SESSION_QUERY_KEY = ['auth', 'session'] as const;
 const AuthApiContext = createContext<AuthApi | null>(null);
 const StaffApiContext = createContext<StaffApi | null>(null);
 const ContactsApiContext = createContext<ContactsApi | null>(null);
+const TicketingApiContext = createContext<TicketingApi | null>(null);
 const SessionContext = createContext<Session | null>(null);
 
 export function AuthApiProvider({
   api,
   staffApi,
   contactsApi,
+  ticketingApi,
   children,
 }: {
   readonly api: AuthApi;
   /** Optional so a test that only exercises auth can leave it out. */
   readonly staffApi?: StaffApi | undefined;
   readonly contactsApi?: ContactsApi | undefined;
+  /** Optional for the same reason; the Ticketing screens are the only readers. */
+  readonly ticketingApi?: TicketingApi | undefined;
   readonly children: ReactNode;
 }): ReactNode {
   return (
     <AuthApiContext.Provider value={api}>
       <StaffApiContext.Provider value={staffApi ?? null}>
         <ContactsApiContext.Provider value={contactsApi ?? null}>
-          {children}
+          <TicketingApiContext.Provider value={ticketingApi ?? null}>
+            {children}
+          </TicketingApiContext.Provider>
         </ContactsApiContext.Provider>
       </StaffApiContext.Provider>
     </AuthApiContext.Provider>
@@ -49,6 +56,15 @@ export function useStaffApi(): StaffApi {
   const api = useContext(StaffApiContext);
   if (!api) {
     throw new Error('useStaffApi needs an <AuthApiProvider> with a staffApi above it');
+  }
+
+  return api;
+}
+
+export function useTicketingApi(): TicketingApi {
+  const api = useContext(TicketingApiContext);
+  if (!api) {
+    throw new Error('useTicketingApi needs an <AuthApiProvider> with a ticketingApi above it');
   }
 
   return api;

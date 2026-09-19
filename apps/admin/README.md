@@ -89,6 +89,8 @@ src/ui/             the small pieces DESIGN §6 has no component for yet: the
 src/install/        what the app may know before anyone signs in
 src/screens/setup/  the first-run wizard (M0-08): four steps, its api client
 src/screens/admin/system/   the System page (M0-10), its api client and formatters
+src/screens/admin/ticketing/  the Ticketing settings (M1-01): the tab row, the
+                    Departments tab and its side editor, the reorder helper
 e2e/                Playwright, one project per locale
 e2e/api/            Playwright against a real api, its own config
 ```
@@ -228,11 +230,32 @@ Merge is drawn on the duplicate row and disabled, with the reason on the
 button's own label rather than in a tooltip alone: acting on a suggestion is
 M1-13.
 
-### The auth and staff boundaries
+### The screens M1-01 added
 
-Everything the screens need is `AuthApi` in `src/auth/api.ts` and `StaffApi` in
-`src/staff/api.ts`. Its DTOs are Zod
-schemas in [`@helpdock/schemas`](../../packages/schemas/src/auth.ts), so the api
+| Route | Artboard | |
+|---|---|---|
+| `/admin/ticketing` | `Admin/Ticketing` | The tab row of the whole of M1's settings, redirecting to the first tab. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
+| `/admin/ticketing/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
+| `/admin/ticketing/{statuses,priorities,tags,custom-fields,templates,views,assignment}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Statuses and Priorities with M1-02, Views with M1-05, Tags, Custom fields and Templates with M1-06, Assignment with M1-07. Any other segment redirects to the first tab. |
+
+Reordering has three ways in and one path out. The drag handle is a real button
+— so it is reachable by Tab and answers `↑`/`↓` — and the row menu offers **Move
+up** and **Move down**; all three build the new order through
+`src/screens/admin/ticketing/reorder.ts` and send it whole, so the keyboard
+route cannot drift from the pointer one (DESIGN §10).
+
+The brand's own fields — name, language, time zone, ticketing settings — have an
+endpoint (`PATCH /api/brands/:brandId`, on `TicketingApi`) but no screen: they
+belong on **Admin → Settings** as a "Brand" tab, and that page is still the
+milestone placeholder with no artboard. The guide says so
+([ticketing settings](../../docs/guides/ticketing-settings.md#brand-settings)).
+
+### The api boundaries
+
+Everything the screens need is `AuthApi` in `src/auth/api.ts`, `StaffApi` in
+`src/staff/api.ts`, `ContactsApi` in `src/contacts/api.ts` and `TicketingApi` in
+`src/ticketing/api.ts`. Their DTOs are Zod
+schemas in [`@helpdock/schemas`](../../packages/schemas/src/), so the api
 declares its responses against the same shapes the app parses them with. Two
 adapters implement it:
 

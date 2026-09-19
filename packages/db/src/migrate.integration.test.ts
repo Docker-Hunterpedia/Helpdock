@@ -23,6 +23,7 @@ const MIGRATION_TAGS = [
   '0006_contacts_and_accounts',
   '0007_tickets',
   '0008_ticket_department_sync',
+  '0009_departments_teams_and_brand_settings',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

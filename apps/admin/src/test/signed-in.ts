@@ -2,6 +2,7 @@ import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE, MockAuthApi } from '../auth/
 import type { AdminApis } from '../auth/select-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import { MockTicketingApi } from '../ticketing/mock-api.js';
 
 /**
  * The pair of fixtures with a session already in them, obtained the way a
@@ -23,5 +24,10 @@ export async function signedInMockApis(): Promise<AdminApis> {
 
   await auth.verifyTotp(result.challengeId, MOCK_TOTP_CODE, { trustDevice: false });
 
-  return { auth, staff, contacts: new MockContactsApi() };
+  return {
+    auth,
+    staff,
+    contacts: new MockContactsApi(),
+    ticketing: new MockTicketingApi(),
+  };
 }

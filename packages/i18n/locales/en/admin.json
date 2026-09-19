@@ -7,6 +7,7 @@
     "helpCenter": "Help center",
     "reports": "Reports",
     "adminGroup": "Admin",
+    "ticketing": "Ticketing",
     "settings": "Settings",
     "staff": "Staff and roles",
     "system": "System"
@@ -44,7 +45,8 @@
       "reports": "Volume, response times, SLA and CSAT for this brand.",
       "settings": "Install-wide · applies to every brand.",
       "staff": "Who can work in this brand, and what they are allowed to do.",
-      "system": "Version, migrations, queues and storage for this install."
+      "system": "Version, migrations, queues and storage for this install.",
+      "ticketing": "Departments, statuses, priorities and routing for this brand."
     },
     "empty": {
       "heading": "Nothing here yet",
@@ -55,7 +57,8 @@
         "reports": "Reports arrive with milestone M8.",
         "settings": "Install settings arrive with the rest of milestone M0.",
         "staff": "Staff and roles arrive with the rest of milestone M0.",
-        "system": "The system page arrives with milestone M8."
+        "system": "The system page arrives with milestone M8.",
+        "ticketing": "Ticketing settings arrive with milestone M1."
       }
     }
   }

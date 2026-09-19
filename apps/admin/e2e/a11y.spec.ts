@@ -12,6 +12,7 @@ import {
   openContacts,
   openSecurity,
   openStaff,
+  openTicketing,
   signIn,
   submitPassword,
 } from './flows.js';
@@ -102,6 +103,34 @@ test.describe('accessibility', () => {
 
     await page.getByRole('button', { name: t('staff:invite'), exact: true }).click();
     await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the ticketing settings have no violations, list, editor and menu alike', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTicketing(page, locale);
+    expect(await violations(page)).toEqual([]);
+
+    // With the side editor filled and the teams section open, which is the
+    // state most of the controls only exist in.
+    await page
+      .getByRole('button', { name: t('ticketing:departments.table.select', { name: 'Support' }) })
+      .click();
+    await page.getByLabel(t('ticketing:departments.editor.defaultTeam')).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await page
+      .getByRole('button', {
+        name: t('ticketing:departments.table.rowActions', { name: 'Support' }),
+      })
+      .click();
+    await page.getByRole('menu').waitFor();
 
     expect(await violations(page)).toEqual([]);
   });

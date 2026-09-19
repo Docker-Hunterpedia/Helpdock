@@ -3,7 +3,6 @@ import type { Brand, DbTransaction, Department as DepartmentRow, User } from '@h
 import { createI18n, type Locale } from '@helpdock/i18n';
 import type {
   BrandRole,
-  DepartmentList,
   StaffInviteRequest,
   StaffList,
   StaffMember,
@@ -97,12 +96,6 @@ export class StaffService {
       ),
       viewerEnabled: await this.#viewerEnabled(),
     };
-  }
-
-  async departments(tx: DbTransaction): Promise<DepartmentList> {
-    const rows = await this.#parts.staff.departments(tx);
-
-    return { departments: rows.map(({ id, name }) => ({ id, name })) };
   }
 
   // ------------------------------------------------------------------

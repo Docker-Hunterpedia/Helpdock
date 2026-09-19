@@ -33,6 +33,12 @@ export interface TenantTable {
 export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'user_brand_roles', departmentScoped: false },
   { name: 'departments', departmentScoped: false },
+  // Not department-scoped: §1.3 lists the six ticket-scoped tables and neither
+  // of these is one. A Team Leader configuring their own departments is a
+  // service-layer rule (`brands/department-scope.ts`), as it already is for
+  // `departments` itself.
+  { name: 'teams', departmentScoped: false },
+  { name: 'team_members', departmentScoped: false },
   { name: 'brand_domains', departmentScoped: false },
   // Contacts and accounts are brand-scoped and never department-scoped
   // (DOMAIN-RULES §1.2): an Agent may open any contact in the brand, and it is

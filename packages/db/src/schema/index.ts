@@ -11,6 +11,8 @@ export * from './enums.js';
 export * from './job-receipts.js';
 export * from './outbox.js';
 export * from './settings.js';
+export * from './team-members.js';
+export * from './teams.js';
 export * from './ticket-activity.js';
 export * from './ticket-messages.js';
 export * from './ticket-statuses.js';

@@ -80,6 +80,14 @@ export async function openContact(page: Page, locale: Locale, name: string): Pro
   await page.getByRole('heading', { name, level: 1 }).waitFor();
 }
 
+/** Opens the Ticketing settings, which land on the Departments tab (M1-01). */
+export async function openTicketing(page: Page, locale: Locale): Promise<void> {
+  const t = strings(locale);
+
+  await page.getByRole('link', { name: new RegExp(t('admin:nav.ticketing')) }).click();
+  await page.getByRole('table').waitFor();
+}
+
 export async function openSecurity(
   page: Page,
   locale: Locale,

@@ -8,6 +8,7 @@ import {
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { errorBody, mapError } from './error-response.js';
 
@@ -92,5 +93,35 @@ describe('errorBody', () => {
     const body = errorBody(mapError(new ZodValidationException(zodErrorFor({}))), 'req-8');
 
     expect(body.error.fields).toHaveLength(2);
+  });
+
+  it('carries the ticketing refusal, which is what the screen turns into a sentence', () => {
+    const body = errorBody(mapError(new TicketingFailure('last-department')), 'req-9');
+
+    expect(body.error).toMatchObject({
+      code: 'conflict',
+      requestId: 'req-9',
+      ticketing: { reason: 'last-department' },
+    });
+  });
+});
+
+describe('a refused ticketing action', () => {
+  it('is a permission answer when the department is outside the actor’s scope', () => {
+    const mapped = mapError(new TicketingFailure('out-of-scope'));
+
+    expect(mapped).toMatchObject({ status: 403, code: 'forbidden', ticketing: 'out-of-scope' });
+    expect(mapped.unexpected).toBe(false);
+  });
+
+  it('is a conflict when a rule, not a permission, refused', () => {
+    for (const reason of [
+      'last-department',
+      'department-in-use',
+      'name-taken',
+      'not-eligible',
+    ] as const) {
+      expect(mapError(new TicketingFailure(reason)).status).toBe(409);
+    }
   });
 });

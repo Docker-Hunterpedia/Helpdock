@@ -13,6 +13,7 @@ import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
 import type { ContactsApi } from '../contacts/api.js';
 import type { StaffApi } from '../staff/api.js';
+import type { TicketingApi } from '../ticketing/api.js';
 import { ToastProvider } from '../ui/toasts.tsx';
 import {
   resolveInitialLocale,
@@ -84,6 +85,8 @@ export interface AppProvidersProps {
   readonly staffApi?: StaffApi;
   /** Defaults to the matching adapter. The contact screens need it. */
   readonly contactsApi?: ContactsApi;
+  /** Defaults to the matching adapter. Only the Ticketing screens read it. */
+  readonly ticketingApi?: TicketingApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -107,6 +110,7 @@ export function AppProviders({
   authApi,
   staffApi,
   contactsApi,
+  ticketingApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -124,6 +128,7 @@ export function AppProviders({
   const api = authApi ?? fallback.auth;
   const staff = staffApi ?? fallback.staff;
   const contacts = contactsApi ?? fallback.contacts;
+  const ticketing = ticketingApi ?? fallback.ticketing;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -178,7 +183,12 @@ export function AppProviders({
           <CssBaseline />
           <I18nextProvider i18n={i18n}>
             <QueryClientProvider client={client}>
-              <AuthApiProvider api={api} staffApi={staff} contactsApi={contacts}>
+              <AuthApiProvider
+                api={api}
+                staffApi={staff}
+                contactsApi={contacts}
+                ticketingApi={ticketing}
+              >
                 <ToastProvider>
                   <Router>{children}</Router>
                 </ToastProvider>

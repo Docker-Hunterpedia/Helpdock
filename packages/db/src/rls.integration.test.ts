@@ -19,6 +19,8 @@ import {
   departments,
   outbox,
   settings,
+  teamMembers,
+  teams,
   ticketActivity,
   ticketMessages,
   ticketStatuses,
@@ -57,10 +59,12 @@ const userId = uuidv7();
 
 /**
  * Fixture rows point at each other — a `contact_notes` row needs a contact, a
- * ticket needs a department and a status, a message needs a ticket — so their
- * ids are chosen here rather than read back, and both brands insert the same
- * set. Each table still holds exactly one row per brand, which is what the
- * assertions below count on.
+ * ticket needs a department and a status, a message needs a ticket, a team
+ * member needs a team — so their ids are chosen here rather than read back, and
+ * both brands insert the same set. That is also what lets the "refuses to
+ * insert a row for brand B" case replay an insert from the wrong brand's
+ * transaction, naming ids it cannot see. Each table still holds exactly one row
+ * per brand, which is what the assertions below count on.
  */
 /** A UUID derived from the brand's, so the two brands never collide. */
 const idFor = (brandId: string, marker: string): string =>
@@ -69,9 +73,9 @@ const idFor = (brandId: string, marker: string): string =>
 const accountId = (brandId: string): string => idFor(brandId, 'a');
 const contactId = (brandId: string): string => idFor(brandId, 'c');
 const otherContactId = (brandId: string): string => idFor(brandId, 'd');
-
 const perBrand = (): Record<string, string> => ({ [brandA]: uuidv7(), [brandB]: uuidv7() });
 const departmentId = perBrand();
+const teamId = perBrand();
 const statusId = perBrand();
 const ticketId = perBrand();
 
@@ -102,6 +106,21 @@ const fixtures = [
     name: 'departments',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(departments).values({ id: departmentId[brandId], brandId, name: 'Support' }),
+  },
+  {
+    name: 'teams',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(teams).values({
+        id: teamId[brandId] ?? '',
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        name: 'Front line',
+      }),
+  },
+  {
+    name: 'team_members',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(teamMembers).values({ brandId, teamId: teamId[brandId] ?? '', userId }),
   },
   {
     name: 'brand_domains',

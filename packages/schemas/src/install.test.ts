@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
+// The time-zone rule lives with the brand, whose column it validates; the
+// wizard's brand step and `PATCH /api/brands/:id` both import it from there.
+import { isSupportedTimeZone, timezoneSchema } from './brand.js';
 import {
   helpcenterDomainSchema,
   installStateSchema,
-  isSupportedTimeZone,
   setupAdminRequestSchema,
   setupBrandRequestSchema,
   setupSmtpRequestSchema,
   smtpTestResultSchema,
   ticketNumberPreview,
   ticketPrefixSchema,
-  timezoneSchema,
 } from './install.js';
 
 describe('installStateSchema', () => {

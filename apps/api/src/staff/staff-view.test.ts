@@ -7,7 +7,11 @@ const SUPPORT: Department = {
   id: '0199f4b2-6a91-7c27-9a1f-0000000000a1',
   brandId: '0199f4b2-6a91-7c27-9a1f-00000000000f',
   name: 'Support',
+  nameAr: null,
+  defaultTeamId: null,
+  sortOrder: 0,
   createdAt: new Date('2026-09-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-09-01T00:00:00.000Z'),
 };
 
 const VIEWER_ID = '0199f4b2-6a91-7c27-9a1f-00000000000c';

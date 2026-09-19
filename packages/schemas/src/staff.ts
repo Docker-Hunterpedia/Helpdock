@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { passwordSchema, staffRoleSchema } from './auth.js';
 import { localeSchema } from './brand.js';
+import { departmentSchema } from './ticketing.js';
 
 /**
  * The wire contract for staff and roles (M0-06): the list an administrator
@@ -49,18 +50,10 @@ export type StaffRefusal = z.infer<typeof staffRefusalSchema>;
 // --------------------------------------------------------------------------
 
 /**
- * The chip picker's options. M1-01 grows this into the real department — business
- * hours, SLA policy, `on_unassign`, its inbox — and this shape stays the subset
- * the staff screens need.
+ * The chip picker's options. The shape itself lives in `ticketing.ts`, which is
+ * where departments are defined and managed (M1-01); the staff screens read
+ * this subset of it and nothing more.
  */
-export const departmentSchema = z.object({
-  id: z.uuid(),
-  name: z.string().min(1).max(120),
-});
-export type Department = z.infer<typeof departmentSchema>;
-
-export const departmentListSchema = z.object({ departments: z.array(departmentSchema) });
-export type DepartmentList = z.infer<typeof departmentListSchema>;
 
 /**
  * `'all'` or the explicit list, as the table cell and the chip field read it.

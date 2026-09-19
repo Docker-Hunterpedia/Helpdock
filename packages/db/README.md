@@ -35,14 +35,21 @@ const roles = await withTenant(
 ## Schema
 
 Tables live in `src/schema/`, one file each, re-exported from
-`src/schema/index.ts`. M0 left nine; M1-02 and M1-03 added four:
+`src/schema/index.ts`. Twenty of them; M1-01 added `teams` and `team_members`:
 
 | Table | Scope | Notes |
 |---|---|---|
 | `users` | global | Staff accounts. Unique on `lower(email)`, so addresses compare case-insensitively without the `citext` extension. |
-| `brands` | global | The tenant. `prefix` is unique, and DOMAIN-RULES §11 keeps it reserved after a brand is deleted. Inserting a row creates that brand's ticket sequence. |
+| `brands` | global | The tenant. `prefix` is unique, and DOMAIN-RULES §11 keeps it reserved after a brand is deleted. Inserting a row creates that brand's ticket sequence. `settings` is the brand's own ticketing behaviour, validated by `brandSettingsSchema` in `@helpdock/schemas`. |
 | `user_brand_roles` | tenant | One role per user per brand. `department_ids` null means every department; an empty array means none, which is what an Agent with nothing assigned has. |
-| `departments` | tenant | The unit a Team Leader leads and an Agent belongs to. M0-06 needs it to exist so that assignment is real; M1-01 adds business hours, the SLA policy, `on_unassign` and the inbox. Unique on `(brand_id, name)`. |
+| `departments` | tenant | The unit a Team Leader leads and an Agent belongs to. Unique on `(brand_id, name)`. M1-01 adds `name_ar`, `sort_order` and `default_team_id`; business hours and the SLA policy are M3, `on_unassign` is M1-07, the inbox is M2. |
+| `teams` | tenant | A group inside one department (M1-01). Unique on `(department_id, name)`; carries `brand_id` as well, because every policy filters on it. |
+| `team_members` | tenant | Who is on a team (M1-01). Unique on `(team_id, user_id)`. No foreign key to `user_brand_roles`: the rule that a member must hold a role reaching the department is checked in the service. |
+| `contacts` | tenant | A person as one brand knows them (M1-04). Brand-scoped, never department-scoped: the *timeline* hides the tickets a viewer may not read. |
+| `contact_identities` | tenant | The addresses, phone numbers and channel ids a contact writes from (M1-04). Auto-merge only on verified matches (DOMAIN-RULES §4.4). |
+| `contact_notes` | tenant | Internal notes on a contact (M1-04). |
+| `contact_duplicate_suggestions` | tenant | Pairs that look like one person (M1-04). Acting on one is M1-13. |
+| `accounts` | tenant | The customer company a contact belongs to (M1-04). `domain` is unique per brand, not per install. |
 | `brand_domains` | tenant | Hostnames a brand owns. `domain` is unique install-wide. M0 reads it for Caddy's on-demand TLS check; M5 creates and verifies rows. |
 | `settings` | tenant | Primary key `(key, brand_id)`. `value` is JSON, or the `v1.…` envelope for a secret. |
 | `audit_log` | tenant | Who did what. `actor_id` is text: a system actor is a job id. |

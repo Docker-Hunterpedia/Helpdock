@@ -24,6 +24,10 @@ export const ROUTES = {
   helpCenter: '/help-center',
   reports: '/reports',
   settings: '/admin/settings',
+  /** How this brand's tickets are shaped and routed (M1-01). */
+  ticketing: '/admin/ticketing',
+  /** One tab of it. `/admin/ticketing` alone redirects to the first. */
+  ticketingTab: '/admin/ticketing/:tab',
   staff: '/admin/staff',
   system: '/admin/system',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
@@ -40,6 +44,9 @@ export const accountRoute = (accountId: string): string =>
 
 /** The invite link the api emails, with the token in it. */
 export const inviteRoute = (token: string): string => `/invite/${encodeURIComponent(token)}`;
+
+/** One tab of the Ticketing settings, by its url segment. */
+export const ticketingRoute = (tab: string): string => `${ROUTES.ticketing}/${tab}`;
 
 /** Where a sign-in lands when nothing asked for a particular screen. */
 export const DEFAULT_SIGNED_IN_ROUTE = ROUTES.tickets;

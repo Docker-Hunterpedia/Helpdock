@@ -26,12 +26,14 @@ import type {
   SmtpCredentials,
   SmtpTestResult,
 } from '@helpdock/schemas';
+import { DEFAULT_DEPARTMENT_NAME } from '@helpdock/schemas';
 import { ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
-import { ZodError } from 'zod';
+import type { ZodError } from 'zod';
 import type { PasswordHasher } from '../auth/password.js';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import type { IssuedSession, SessionService } from '../auth/session/session.service.js';
+import { fieldAlreadyTaken, isUniqueViolation } from '../http/unique-violation.js';
 import type { Logger } from '../logging/logger.js';
 import { readInstallState } from './install-state.js';
 import { renderSmtpTestEmail } from './setup-email.js';
@@ -91,14 +93,6 @@ export const SETUP_SMTP_TEST_IP_RULE: RateLimitRule = {
   limit: 10,
   windowSeconds: 15 * 60,
 };
-
-/**
- * The department every brand starts with. A brand with none is supported
- * (M0-06), but an operator who has just been told a brand is "one support desk"
- * should find one department in it rather than an empty picker on the first
- * screen that asks for one.
- */
-export const DEFAULT_DEPARTMENT_NAME = 'General';
 
 /** The `smtp.*` keys the wizard writes. Also what it reports as env-locked. */
 const SMTP_KEYS = [
@@ -526,46 +520,9 @@ const wizardClosed = (): ConflictException =>
   new ConflictException('This install has already been set up');
 
 /**
- * A `ZodError` rather than a `ConflictException`, because the client has to
- * tell this apart from "the wizard is closed", which is the api's other 409,
- * and because it *is* a rejected field: the exception filter turns it into a
- * 400 with `fields: [{ path: 'prefix', … }]`, which the step draws under the
- * prefix input (`http/error-response.ts`).
- *
  * Both unique indexes on this transaction are on values the step collected, so
  * either one is reported against the prefix only when the domain was not the
  * cause; naming both would be guessing.
  */
 const prefixOrDomainTaken = (input: SetupBrandRequest): ZodError =>
-  new ZodError([
-    {
-      code: 'custom',
-      path: [input.helpcenterDomain === undefined ? 'prefix' : 'prefixOrDomain'],
-      message: 'is already in use on this install',
-      input,
-    },
-  ]);
-
-/** Postgres's `unique_violation`. */
-const UNIQUE_VIOLATION = '23505';
-
-/**
- * Whether this failure is the prefix, or the domain, already being taken.
- *
- * The chain is walked because Drizzle wraps a driver error in a
- * `DrizzleQueryError` and puts the original on `cause`; reading `code` off the
- * top would see nothing and turn a rejected field into a 500.
- */
-const isUniqueViolation = (error: unknown): boolean => {
-  for (let current = error, depth = 0; current !== undefined && depth < 5; depth += 1) {
-    if (typeof current !== 'object' || current === null) {
-      return false;
-    }
-    if ((current as { readonly code?: unknown }).code === UNIQUE_VIOLATION) {
-      return true;
-    }
-    current = (current as { readonly cause?: unknown }).cause;
-  }
-
-  return false;
-};
+  fieldAlreadyTaken(input.helpcenterDomain === undefined ? 'prefix' : 'prefixOrDomain', input);

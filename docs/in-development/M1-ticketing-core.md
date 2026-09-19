@@ -12,7 +12,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 ## Deliverables
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M1-01 | Brands | #45 | planned |
+| M1-01 | Brands | #45 | in review (#66) |
 | M1-02 | Tickets | #46 | in review (#63) |
 | M1-03 | Messages | #47 | in review (#63) |
 | M1-04 | Contacts and accounts | #48 | in review (#64) |

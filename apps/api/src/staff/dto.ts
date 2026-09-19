@@ -1,6 +1,5 @@
 import {
   brandStaffParamSchema,
-  departmentListSchema,
   inviteAcceptRequestSchema,
   inviteTokenParamSchema,
   passwordChangeRequestSchema,
@@ -32,7 +31,6 @@ import { createZodDto } from 'nestjs-zod';
 export class StaffListDto extends createZodDto(staffListSchema) {}
 export class StaffMemberDto extends createZodDto(staffMemberSchema) {}
 export class StaffSearchQueryDto extends createZodDto(staffSearchQuerySchema) {}
-export class DepartmentListDto extends createZodDto(departmentListSchema) {}
 
 export class StaffInviteRequestDto extends createZodDto(staffInviteRequestSchema) {}
 export class StaffUpdateRequestDto extends createZodDto(staffUpdateRequestSchema) {}

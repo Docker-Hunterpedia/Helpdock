@@ -1,6 +1,6 @@
 import type { Brand } from '@helpdock/db';
 import { brands } from '@helpdock/db';
-import type { DepartmentList, StaffList, StaffMember } from '@helpdock/schemas';
+import type { StaffList, StaffMember } from '@helpdock/schemas';
 import {
   Body,
   Controller,
@@ -21,7 +21,6 @@ import { Requires } from '../auth/route-declaration.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 import {
   BrandStaffParamDto,
-  DepartmentListDto,
   StaffInviteRequestDto,
   StaffListDto,
   StaffMemberDto,
@@ -35,6 +34,11 @@ import type { StaffActor } from './staff-scope.js';
  * Staff and roles for one brand. Every route is `@Requires('staff:manage')`,
  * which an Admin and a Team Leader hold and nobody else does; what a Team
  * Leader may then do with it is `staff-scope.ts`.
+ *
+ * The department list this screen's chip picker reads is not here: it belongs
+ * to the brand's shape, so `brands/departments.controller.ts` owns
+ * `GET /api/brands/:brandId/departments` (M1-01) and answers a superset of what
+ * this screen parses.
  *
  * The brand comes from the `:brandId` path parameter, so the permission is
  * checked in that brand and the transaction names only that brand
@@ -55,13 +59,6 @@ export class StaffController {
 
   constructor(@Inject(StaffService) staff: StaffService) {
     this.#staff = staff;
-  }
-
-  @Get('departments')
-  @Requires('brand:read')
-  @ZodSerializerDto(DepartmentListDto)
-  departments(): Promise<DepartmentList> {
-    return this.#staff.departments(getTx());
   }
 
   @Get('staff')

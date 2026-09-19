@@ -36,6 +36,8 @@ describe('the schema', () => {
       'job_receipts',
       'outbox',
       'settings',
+      'team_members',
+      'teams',
       'ticket_activity',
       'ticket_messages',
       'ticket_statuses',
@@ -184,6 +186,26 @@ describe('the indexes and constraints', () => {
       'channel',
       'external_message_id',
     ]);
+  });
+
+  it('keeps a team name unique inside its department', () => {
+    const unique = configOf('teams').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual(['department_id', 'name']);
+  });
+
+  it('puts somebody on a team once', () => {
+    const unique = configOf('team_members').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual(['team_id', 'user_id']);
+  });
+
+  it('lets a department lose its default team without losing the department', () => {
+    const foreignKey = configOf('departments').foreignKeys.find((entry) =>
+      entry.reference().columns.some((column) => column.name === 'default_team_id'),
+    );
+
+    expect(foreignKey?.onDelete).toBe('set null');
   });
 
   it('keys a setting by key and scope together', () => {

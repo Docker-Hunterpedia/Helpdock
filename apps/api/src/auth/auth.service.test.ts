@@ -53,6 +53,7 @@ const brand = (id = BRAND_ID): Brand => ({
   defaultLocale: 'en',
   timezone: 'UTC',
   status: 'active',
+  settings: {},
   deletedAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),

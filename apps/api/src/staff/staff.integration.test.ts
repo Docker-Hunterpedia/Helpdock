@@ -1069,6 +1069,10 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
   // ------------------------------------------------------------------
 
   describe('the departments list', () => {
+    // The route itself belongs to M1-01 (`brands/departments.controller.ts`);
+    // what this asserts is what the staff screen's chip picker reads from it.
+    // `General` is the department the development seed gives every brand, as
+    // the first-run wizard does.
     it('names this brand’s departments and nothing else', async () => {
       const token = await signInAsAdmin();
 
@@ -1079,7 +1083,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       expect(response.statusCode).toBe(200);
       expect(
         (response.json() as { departments: { name: string }[] }).departments.map((d) => d.name),
-      ).toEqual(['Billing', 'Support']);
+      ).toEqual(['Billing', 'General', 'Support']);
     });
   });
 

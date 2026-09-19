@@ -40,8 +40,14 @@ export interface StaffTarget {
   readonly departmentIds: readonly string[] | 'all';
 }
 
-/** The roles a Team Leader may touch at all (DOMAIN-RULES §1.2). */
-const LED_ROLES: readonly BrandRole[] = ['agent', 'viewer'];
+/**
+ * The roles a Team Leader may touch at all (DOMAIN-RULES §1.2).
+ *
+ * Exported because team membership follows the same ceiling — §1.2 again — and
+ * `brands/department-scope.ts` must not keep a second copy of the list: two
+ * copies are two things to change when a fifth role arrives.
+ */
+export const LED_ROLES: readonly BrandRole[] = ['agent', 'viewer'];
 
 /**
  * Whether `outer` covers `inner`. `'all'` covers everything, and nothing but

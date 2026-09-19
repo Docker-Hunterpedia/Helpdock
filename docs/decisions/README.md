@@ -14,6 +14,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0004](0004-bull-board-for-queues.md) | Embed Bull Board for queue inspection, with a custom summary on the System page | accepted |
 | [0005](0005-single-embedding-model-per-install.md) | One embedding model per install, with no per-brand override in v1 | accepted |
 | [0006](0006-fastify-adapter-for-the-api.md) | Run NestJS on the Fastify adapter | accepted |
+| [0007](0007-html-sanitizer.md) | Use sanitize-html for message bodies | accepted |
 
 ## Template
 

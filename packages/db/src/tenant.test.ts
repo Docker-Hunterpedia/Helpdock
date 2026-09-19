@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { DbTransaction } from './client.js';
 import { SESSION_SETTINGS } from './rls.js';
 import {
+  currentDepartmentScope,
   INSTALL_SCOPE_BRAND_ID,
   systemContext,
   type TenantContext,
@@ -12,6 +14,7 @@ import { uuidv7 } from './uuid.js';
 const brandA = uuidv7();
 const brandB = uuidv7();
 const departmentA = uuidv7();
+const departmentB = uuidv7();
 
 const context = (overrides: Partial<TenantContext> = {}): TenantContext => ({
   brandIds: [brandA],
@@ -122,5 +125,42 @@ describe('systemContext', () => {
 describe('INSTALL_SCOPE_BRAND_ID', () => {
   it('is a uuid, so it passes the same validation as a real brand', () => {
     expect(() => tenantSessionSettings(systemContext(INSTALL_SCOPE_BRAND_ID))).not.toThrow();
+  });
+});
+
+describe('currentDepartmentScope', () => {
+  /** Answers whatever `current_setting` would; nothing else is queried. */
+  const txReturning = (row: Record<string, string | null>) =>
+    ({ execute: () => Promise.resolve([row]) }) as unknown as DbTransaction;
+
+  it('reads an unrestricted scope as `all`', async () => {
+    await expect(
+      currentDepartmentScope(txReturning({ all_departments: 'true', department_ids: '{}' })),
+    ).resolves.toBe('all');
+  });
+
+  it('reads the explicit list the transaction carries', async () => {
+    await expect(
+      currentDepartmentScope(
+        txReturning({
+          all_departments: 'false',
+          department_ids: `{${departmentA},${departmentB}}`,
+        }),
+      ),
+    ).resolves.toEqual([departmentA, departmentB]);
+  });
+
+  it('reads an empty list as no departments, which is what an Agent with none has', async () => {
+    await expect(
+      currentDepartmentScope(txReturning({ all_departments: 'false', department_ids: '{}' })),
+    ).resolves.toEqual([]);
+  });
+
+  it('answers nothing outside a tenant transaction, as the policies do', async () => {
+    // `current_setting(…, true)` is null when the setting was never set, and
+    // the failure mode has to be "nothing", never "everything".
+    await expect(
+      currentDepartmentScope(txReturning({ all_departments: null, department_ids: null })),
+    ).resolves.toEqual([]);
   });
 });

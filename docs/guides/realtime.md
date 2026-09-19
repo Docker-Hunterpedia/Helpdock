@@ -93,8 +93,19 @@ this order:
 | Room | Rule |
 |---|---|
 | `brand:<id>` | The principal holds a role in that brand, and the room is the brand the message named. |
-| `department:<id>` | The principal's department scope in that brand is an explicit list containing the id. An *unrestricted* scope (`all`) is refused until M1: a room name carries no brand, `all` means "every department of that brand", and with no departments table nothing can prove the two agree. An explicit list needs no table — the list is itself per-brand. |
-| `ticket:<id>` | Refused. M1 owns tickets; the shape exists so M1 has nothing to invent, and "no check" never means "allowed". |
+| `department:<id>` | An explicit department list containing the id needs no query: the list is itself per-brand, so membership proves both the brand and the scope. An *unrestricted* scope (`all`) does need one — a room name carries no brand, and `all` means "every department *of that brand*" — so `departments` is read inside a transaction scoped to the brand the join named. |
+| `ticket:<id>` | The ticket exists inside the principal's own scope. The check is the *same* question `GET /api/brands/:brandId/tickets/:ticketId` asks, asked the same way: a transaction carrying the principal's brand and departments, and the policies answering. "No such ticket" and "not in your departments" are therefore one answer, and neither confirms the other. |
+
+`department:` and `ticket:` also re-ask the permission the *route* they mirror
+declares, `ticket:read`, rather than resting on the `brand:read` the join itself
+is declared with. Every role that holds one holds the other today; asking anyway
+is what stops the next role from being able to subscribe to traffic it cannot
+fetch.
+
+The two that need a read go through `RoomScopeReader`
+(`apps/api/src/realtime/room-reader.ts`). It is the only place in the app that
+opens a tenant transaction outside the request lifecycle for a staff principal,
+which is why it is one file with two reads in it.
 
 Every event — not only a join — re-asks two things first, because a socket
 outlives the token it was opened with:
@@ -122,10 +133,26 @@ acknowledgement, with the codes above plus `invalid_payload` and
 
 Server to client:
 
-| Event | Payload |
-|---|---|
-| `presence:changed` | `{ userId, brandId, status }` |
-| `revoked` | `{ code: 'session_revoked', message }`, immediately before the socket is closed |
+| Event | Payload | Envelope `seq` |
+|---|---|---|
+| `presence:changed` | `{ userId, brandId, status }` | `null` |
+| `ticket:changed` | `{ brandId, ticketId, departmentId, event }` where `event` is `ticket.created` or `ticket.updated` | `null` |
+| `ticket:message` | `{ brandId, ticketId, departmentId, messageId, seq, kind, event }` where `event` is `ticket.replied` or `ticket.note_added` | the message's `seq` |
+| `revoked` | `{ code: 'session_revoked', message }`, immediately before the socket is closed | — |
+
+The two ticket events carry **ids and no content**. That is what "the REST API
+is the source of truth; sockets are notifications" means in practice: a screen
+re-reads the ticket rather than patching it from a frame, and an internal note
+has no body in the payload to leak. `departmentId` is the department the ticket
+is in *now*, so a client holding a `department:` room can tell whether the
+ticket has just arrived in it or just left it.
+
+Each one reaches `ticket:<id>` — whoever has the ticket open — and
+`department:<id>`, because a new ticket has to appear in a list nobody was
+looking at. A ticket that moves department reaches the room it has *left* too,
+and the server then turns every socket out of `ticket:<id>`: a room is
+authorised when it is joined, and who may read that ticket has just changed.
+The clients re-join and are authorised again, which nobody sees.
 
 Every event emitted through `RealtimePublisher` travels in an envelope.
 `revoked` is the exception: the revocation subscriber sends it bare, because it
@@ -247,7 +274,7 @@ of meaning (DESIGN §10).
 | Milestone | Adds |
 |---|---|
 | M1-07 | The auto-unassign timer behind `STAFF_OFFLINE_HOOK`. |
-| M1-09 | `ticket:<id>` rooms — the room check, and the collision indicator on top of them. |
+| M1-09 | The collision indicator, on top of the `ticket:<id>` rooms M1-02 opened. |
 | M3-07 | In-app notifications, as new server events through `RealtimePublisher`. |
 | M4-03 | The widget handshake's origin allow-list and its per-visitor and per-IP throttles. |
 | M4-04 | The `/widget` namespace and the full delivery contract for conversations: `client_id`, real `seq` values, cursor catch-up and the SSE fallback. |
@@ -256,6 +283,33 @@ Adding an event is three steps: a schema and a name in
 `packages/schemas/src/realtime.ts`, an `emitToRoom` call through
 `RealtimePublisher`, and — if clients send it — a `@SubscribeMessage` handler
 with its `@Requires(...)`.
+
+## Emitting from a worker
+
+`APP_ROLE=worker` drains the queues and runs no Nest application, so it holds no
+Socket.IO namespace and cannot emit. `APP_ROLE=api` holds the sockets and runs no
+queue. A side effect that ends in a socket frame therefore crosses one process
+boundary, over the same Redis pub/sub shape `principal.revoked` already uses
+(`apps/api/src/realtime/broadcast.ts`):
+
+```
+worker   →  PUBLISH helpdock:realtime:emit   { rooms, event, data, seq }
+api      →  RealtimeEmitSubscriber → RealtimePublisher.emitToRoom(…, { local: true })
+```
+
+`local: true` is not an optimisation. Every replica subscribes and every replica
+receives the message, and the Socket.IO Redis adapter would fan a normal emit out
+again — so a room would hear the same frame once per replica. The fan-out has
+already happened by the time the subscriber runs, so each replica does the last
+hop to its own sockets alone.
+
+Both halves of the message are parsed on arrival — the envelope and the payload,
+through the event's own schema — because it crosses a process boundary and
+anything with `PUBLISH` on that Redis can write to the channel. A frame that
+does not match is dropped rather than thrown on: this runs inside a Redis
+`message` handler, where a throw is an unhandled rejection. An event a replica
+does not know, which is what a rolling deploy looks like, is dropped the same
+way; the screen re-reads over REST anyway.
 
 ## Known gaps
 

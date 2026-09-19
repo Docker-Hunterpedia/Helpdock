@@ -1,9 +1,11 @@
+import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import type { Logger } from '../logging/logger.js';
 import type { Metrics } from '../observability/metrics.js';
 import { METRICS } from '../observability/tokens.js';
-import { LOGGER, REDIS } from '../runtime/tokens.js';
+import { DB, LOGGER, REDIS } from '../runtime/tokens.js';
+import { RealtimeEmitSubscriber } from './broadcast.js';
 import type { SocketSessionResolver } from './handshake.js';
 import type { SocketConnectionsGauge } from './metrics.js';
 import { PresenceController } from './presence.controller.js';
@@ -11,10 +13,12 @@ import { PresenceService } from './presence.service.js';
 import { PresenceStore } from './presence.store.js';
 import { RealtimePublisher } from './publisher.js';
 import { RevocationSubscriber } from './revocation.subscriber.js';
+import { DbRoomScopeReader, type RoomScopeReader } from './room-reader.js';
 import { SocketRegistry } from './socket-registry.js';
 import { type SessionRevocations, StaffGateway } from './staff.gateway.js';
 import { NoopStaffOfflineHook, type StaffOfflineHook } from './staff-offline.hook.js';
 import {
+  ROOM_SCOPE_READER,
   SESSION_REVOCATIONS,
   SOCKET_CONNECTIONS_GAUGE,
   SOCKET_SESSION_RESOLVER,
@@ -36,6 +40,8 @@ export interface RealtimeModuleOptions {
   readonly connectionsGauge?: SocketConnectionsGauge;
   /** M1-07 replaces this with the fifteen-minute auto-unassign timer. */
   readonly staffOfflineHook?: StaffOfflineHook;
+  /** Defaults to the real one over `DB`. The unit tests pass a fake. */
+  readonly roomScopeReader?: RoomScopeReader;
 }
 
 /**
@@ -70,6 +76,13 @@ export class RealtimeModule {
           provide: STAFF_OFFLINE_HOOK,
           useValue: options.staffOfflineHook ?? new NoopStaffOfflineHook(),
         },
+        options.roomScopeReader === undefined
+          ? {
+              provide: ROOM_SCOPE_READER,
+              inject: [DB],
+              useFactory: (db: Db): RoomScopeReader => new DbRoomScopeReader(db),
+            }
+          : { provide: ROOM_SCOPE_READER, useValue: options.roomScopeReader },
         {
           provide: PresenceStore,
           useFactory: (redis: Redis) => new PresenceStore(redis),
@@ -79,6 +92,8 @@ export class RealtimeModule {
         RealtimePublisher,
         SocketRegistry,
         RevocationSubscriber,
+        // Every api replica subscribes; the worker publishes (see broadcast.ts).
+        RealtimeEmitSubscriber,
         // `@UseFilters(AckExceptionFilter)` on the gateway is enough for Nest to
         // build the filter out of this module; listing it here as well would
         // only create a second instance of it.

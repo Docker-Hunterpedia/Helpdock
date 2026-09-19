@@ -9,3 +9,5 @@ export const SOCKET_SESSION_RESOLVER = Symbol('helpdock.socket-session-resolver'
 export const SESSION_REVOCATIONS = Symbol('helpdock.session-revocations');
 export const SOCKET_CONNECTIONS_GAUGE = Symbol('helpdock.socket-connections-gauge');
 export const STAFF_OFFLINE_HOOK = Symbol('helpdock.staff-offline-hook');
+/** The reads a `ticket:` or unrestricted `department:` join needs (M1-02). */
+export const ROOM_SCOPE_READER = Symbol('helpdock.room-scope-reader');

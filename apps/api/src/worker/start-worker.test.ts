@@ -38,6 +38,10 @@ const harness = (): Harness => {
         calls.push('connection.create');
         return connection;
       },
+      registerHandlers: (redis) => {
+        calls.push('handlers.register');
+        expect(redis).toBe(connection);
+      },
       createEventWorker: ({ redis }) => {
         calls.push('worker.create');
         expect(redis).toBe(connection);
@@ -55,14 +59,19 @@ const harness = (): Harness => {
 };
 
 describe('startWorker', () => {
-  it('registers the consumer before the relay that feeds it', () => {
+  it('registers the handlers and the consumer before the relay that feeds them', () => {
     const { deps, calls } = harness();
 
     startWorker({ env, db, log: silentLogger, deps });
 
     // A job that arrives before its consumer exists burns attempts
     // (packages/jobs/README.md).
-    expect(calls).toEqual(['connection.create', 'worker.create', 'relay.start']);
+    expect(calls).toEqual([
+      'connection.create',
+      'handlers.register',
+      'worker.create',
+      'relay.start',
+    ]);
   });
 
   it('gives the relay and the worker one connection, and the relay the LISTEN url', () => {

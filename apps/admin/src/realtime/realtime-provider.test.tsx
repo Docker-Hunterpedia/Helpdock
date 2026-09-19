@@ -21,8 +21,13 @@ const OMAR = '0192c3f0-1a2b-7c3d-8e4f-00000000000b';
  * Short enough that the watcher's real timer fires well inside `waitFor`'s
  * budget. Fake timers would not help: the watcher is armed in a mount effect,
  * so installing them afterwards leaves that timeout on the real clock.
+ *
+ * Only the away-timer tests ask for it. Every other test runs with a window
+ * longer than any test run, because a timer that can fire during a test about
+ * something else is a race, and on a slow machine it loses.
  */
 const IDLE_MS = 20;
+const NEVER_IDLE_MS = 600_000;
 
 /** A client a test drives: it never opens anything and announces on demand. */
 class TestClient implements RealtimeClient {
@@ -85,10 +90,10 @@ const session = async (): Promise<Session> => {
   return found;
 };
 
-const renderProbe = async (client: TestClient) =>
+const renderProbe = async (client: TestClient, idleMs = NEVER_IDLE_MS) =>
   renderApp(
     <SessionProvider session={await session()}>
-      <RealtimeProvider client={client} idleMs={IDLE_MS}>
+      <RealtimeProvider client={client} idleMs={idleMs}>
         <Probe />
       </RealtimeProvider>
     </SessionProvider>,
@@ -155,6 +160,19 @@ describe('RealtimeProvider', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('away'));
   });
 
+  it('puts nothing on the wire for a status this person is already in', async () => {
+    const { user } = await renderProbe(client);
+    client.announce(MOCK_USER.id, 'online');
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('online'));
+
+    // The account menu and the away timer can reach the same conclusion; the
+    // second one to do so must not cost a round trip.
+    await user.click(screen.getByRole('button', { name: 'away' }));
+    await user.click(screen.getByRole('button', { name: 'away' }));
+
+    expect(client.set).toEqual(['away']);
+  });
+
   it('stops the client when the screen goes away', async () => {
     const { unmount } = await renderProbe(client);
 
@@ -165,9 +183,14 @@ describe('RealtimeProvider', () => {
 
   describe('the away timer', () => {
     it('sets away after the idle window and back to online on the next keypress', async () => {
-      const { user } = await renderProbe(client);
+      const { user } = await renderProbe(client, IDLE_MS);
       client.announce(MOCK_USER.id, 'online');
       await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('online'));
+
+      // The window between mounting and getting here is not ours to bound, and
+      // the timer only restarts on a sign of life. This is that sign, so the
+      // idle window that follows starts from a point the test chose.
+      await user.keyboard('x');
 
       await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('away'));
       expect(client.set).toEqual(['away']);
@@ -179,7 +202,7 @@ describe('RealtimeProvider', () => {
     });
 
     it('leaves someone who is already offline alone', async () => {
-      await renderProbe(client);
+      await renderProbe(client, IDLE_MS);
 
       // Long enough for the watcher to have fired had it been going to.
       await new Promise((resolve) => setTimeout(resolve, IDLE_MS * 5));

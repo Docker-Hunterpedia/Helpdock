@@ -59,9 +59,15 @@ export function RealtimeProvider({ children, client, idleMs }: RealtimeProviderP
   const [connection, setConnection] = useState<RealtimeConnection>('connecting');
   const [presence, setPresence] = useState<PresenceMap>(EMPTY_PRESENCE);
   const status = statusOf(presence, userId);
-  // Read inside the activity watcher, which is set up once and must not be torn
-  // down and rebuilt every time the status changes. Written in an effect rather
-  // than during render, because a render has to be free of side effects.
+  /**
+   * What this person's status is right now, readable synchronously.
+   *
+   * The activity watcher needs it: the watcher is set up once and must not be
+   * torn down and rebuilt every time the status changes, so it cannot close
+   * over `status`. Reconciled in an effect — a render has to be free of side
+   * effects — and written directly by `setStatus`, because a caller must not
+   * see a stale value in the window before that effect has flushed.
+   */
   const statusRef = useRef<PresenceStatus>(status);
   useEffect(() => {
     statusRef.current = status;
@@ -95,8 +101,25 @@ export function RealtimeProvider({ children, client, idleMs }: RealtimeProviderP
     };
   }, [realtimeClient, brandId]);
 
+  /**
+   * Announce a status this person is not already in, and show it at once
+   * rather than waiting for the round trip (presence is ephemeral; nothing
+   * depends on the acknowledgement).
+   *
+   * The early return is what makes it idempotent. Two things call this — the
+   * account menu and the away timer — and they can agree: without the guard, a
+   * toggle to `away` a moment after the timer reached the same conclusion
+   * would put a second `presence:set` on the wire for no change at all. The
+   * ref is updated before the state so that the second caller sees the first
+   * one's decision even within a single tick.
+   */
   const setStatus = useCallback(
     (status: SettablePresenceStatus) => {
+      if (statusRef.current === status) {
+        return;
+      }
+      statusRef.current = status;
+
       void realtimeClient.setPresence(status);
       setPresence((current) => applyPresenceChange(current, { userId, brandId, status }));
     },

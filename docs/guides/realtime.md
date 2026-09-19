@@ -190,6 +190,10 @@ minutes with no pointer, key, wheel or touch event and no tab becoming visible,
 the admin sends `presence:set` with `away`; the next sign of life sends
 `online`. The user menu has the same toggle for saying so deliberately.
 
+Either path is a no-op for a status the person is already in, so the two cannot
+double up: a toggle to `away` a moment after the timer reached the same
+conclusion costs nothing.
+
 ### The hook M1 needs
 
 `StaffOfflineHook.onStaffOffline(userId, brandId, since)` fires when the last of

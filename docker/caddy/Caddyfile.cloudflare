@@ -14,9 +14,8 @@
 #
 # Cloudflare must be in "Full (strict)" mode with an origin certificate, or the
 # connection between Cloudflare and this server is not authenticated.
-
 {
-	email {$ACME_EMAIL}
+	email "{$ACME_EMAIL}"
 }
 
 (helpdock_upstream) {

@@ -105,6 +105,12 @@ grep -q 'helpdock:primary-domain' <<< "${body}" \
   || { echo 'FAIL the root did not return the admin index.html' >&2; exit 1; }
 echo 'ok   the root carries the install meta tags'
 
+# The worker only starts once the api is healthy, so it is still booting when
+# the checks above run.
+for _ in $(seq 1 20); do
+  "${compose[@]}" logs --no-color worker | grep -q 'Worker ready' && break
+  sleep 3
+done
 "${compose[@]}" logs --no-color worker | grep -q 'Worker ready' \
   || { echo 'FAIL the worker did not start the relay' >&2; exit 1; }
 echo 'ok   the worker started the outbox relay'

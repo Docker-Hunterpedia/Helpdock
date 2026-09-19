@@ -43,6 +43,13 @@
       "when": 1789786115143,
       "tag": "0005_departments",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789832783556,
+      "tag": "0006_contacts_and_accounts",
+      "breakpoints": true
     }
   ]
 }

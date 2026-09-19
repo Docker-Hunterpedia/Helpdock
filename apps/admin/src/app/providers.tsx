@@ -11,6 +11,7 @@ import { BrowserRouter } from 'react-router';
 import type { AuthApi } from '../auth/api.js';
 import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
+import type { ContactsApi } from '../contacts/api.js';
 import type { StaffApi } from '../staff/api.js';
 import { ToastProvider } from '../ui/toasts.tsx';
 import {
@@ -81,6 +82,8 @@ export interface AppProvidersProps {
   readonly authApi?: AuthApi;
   /** Defaults to the matching adapter; a test passing one passes both. */
   readonly staffApi?: StaffApi;
+  /** Defaults to the matching adapter. The contact screens need it. */
+  readonly contactsApi?: ContactsApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -103,6 +106,7 @@ export function AppProviders({
   children,
   authApi,
   staffApi,
+  contactsApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -119,6 +123,7 @@ export function AppProviders({
   const [fallback] = useState(createApis);
   const api = authApi ?? fallback.auth;
   const staff = staffApi ?? fallback.staff;
+  const contacts = contactsApi ?? fallback.contacts;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -173,7 +178,7 @@ export function AppProviders({
           <CssBaseline />
           <I18nextProvider i18n={i18n}>
             <QueryClientProvider client={client}>
-              <AuthApiProvider api={api} staffApi={staff}>
+              <AuthApiProvider api={api} staffApi={staff} contactsApi={contacts}>
                 <ToastProvider>
                   <Router>{children}</Router>
                 </ToastProvider>

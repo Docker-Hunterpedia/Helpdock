@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { authErrorSchema } from './auth.js';
+import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { staffRefusalSchema } from './staff.js';
 
 /**
@@ -47,6 +48,15 @@ export const errorResponseSchema = z.object({
      * refused, which is what the staff screen turns into a sentence.
      */
     staff: z.object({ reason: staffRefusalSchema }).optional(),
+    /**
+     * Only on a refused contact action (M1-04), and read the same way: which
+     * rule refused, and — when an identifier was the problem — how it was
+     * wrong, so the field's hint can say "that is not an email address" rather
+     * than "that did not work".
+     */
+    contact: z
+      .object({ reason: contactRefusalSchema, problem: identityProblemSchema.optional() })
+      .optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

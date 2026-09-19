@@ -114,6 +114,15 @@ describe('component overrides', () => {
     expect(overrides.MuiTableCell?.styleOverrides?.root).toMatchObject({ height: '44px' });
   });
 
+  it('gives the segmented control its own text token, not MUI\u2019s translucent black', () => {
+    // DESIGN §10: the unselected option has to clear 4.5:1 on the canvas, and
+    // MUI's default `rgba(0, 0, 0, 0.54)` does not.
+    expect(overrides.MuiToggleButton?.styleOverrides?.root).toMatchObject({
+      height: '32px',
+      color: tokens.semantic.light['text.secondary'],
+    });
+  });
+
   it('underlines the selected tab with 2 px of the accent', () => {
     expect(overrides.MuiTabs?.styleOverrides?.indicator).toMatchObject({
       height: '2px',

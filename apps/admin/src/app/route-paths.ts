@@ -16,6 +16,11 @@ export const ROUTES = {
   oauthCallback: '/oauth/callback',
   tickets: '/tickets',
   contacts: '/contacts',
+  /** The create form, on a route of its own so it can be linked to (M1-04). */
+  contactNew: '/contacts/new',
+  contact: '/contacts/:contactId',
+  /** Nested under contacts because an account is a group of them, not a peer. */
+  account: '/contacts/accounts/:accountId',
   helpCenter: '/help-center',
   reports: '/reports',
   settings: '/admin/settings',
@@ -26,6 +31,12 @@ export const ROUTES = {
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
 } as const;
+
+export const contactRoute = (contactId: string): string =>
+  `/contacts/${encodeURIComponent(contactId)}`;
+
+export const accountRoute = (accountId: string): string =>
+  `/contacts/accounts/${encodeURIComponent(accountId)}`;
 
 /** The invite link the api emails, with the token in it. */
 export const inviteRoute = (token: string): string => `/invite/${encodeURIComponent(token)}`;

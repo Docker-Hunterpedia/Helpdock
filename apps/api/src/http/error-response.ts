@@ -1,15 +1,18 @@
 import { TenantContextError } from '@helpdock/db';
 import type {
   AuthErrorBody,
+  ContactRefusal,
   ErrorCode,
   ErrorResponse,
   FieldError,
+  IdentityProblem,
   StaffRefusal,
 } from '@helpdock/schemas';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
 import { AuthFailure } from '../auth/auth-failure.js';
+import { ContactFailure } from '../contacts/contact-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 
@@ -32,6 +35,8 @@ export interface MappedError {
   readonly auth?: AuthErrorBody;
   /** Only on a refused staff action; see `staff/staff-failure.ts`. */
   readonly staff?: StaffRefusal;
+  /** Only on a refused contact action; see `contacts/contact-failure.ts`. */
+  readonly contact?: { readonly reason: ContactRefusal; readonly problem?: IdentityProblem };
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -100,6 +105,19 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  if (error instanceof ContactFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      contact: {
+        reason: error.reason,
+        ...(error.problem === undefined ? {} : { problem: error.problem }),
+      },
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -143,5 +161,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.fields === undefined ? {} : { fields: [...mapped.fields] }),
     ...(mapped.auth === undefined ? {} : { auth: mapped.auth }),
     ...(mapped.staff === undefined ? {} : { staff: { reason: mapped.staff } }),
+    ...(mapped.contact === undefined ? {} : { contact: mapped.contact }),
   },
 });

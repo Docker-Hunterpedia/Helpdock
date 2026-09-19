@@ -1,3 +1,6 @@
+import type { ContactsApi } from '../contacts/api.js';
+import { HttpContactsApi } from '../contacts/http-api.js';
+import { MockContactsApi } from '../contacts/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
@@ -9,10 +12,11 @@ import { MockAuthApi } from './mock-api.js';
 export const AUTH_API_ADAPTERS = ['mock', 'http'] as const;
 export type AuthApiAdapter = (typeof AUTH_API_ADAPTERS)[number];
 
-/** The two adapters the app is built from, always from the same source. */
+/** The adapters the app is built from, always from the same source. */
 export interface AdminApis {
   readonly auth: AuthApi;
   readonly staff: StaffApi;
+  readonly contacts: ContactsApi;
 }
 
 /**
@@ -30,10 +34,11 @@ export function resolveAuthApiAdapter(
 }
 
 /**
- * Both adapters at once, sharing what they have to share: the http pair share
+ * Every adapter at once, sharing what they have to share: the http three share
  * one {@link HttpTransport}, so there is one access token and one refresh; the
- * mock pair share one fixture, so an invitation sent on the staff screen is the
- * one the accept screen reads.
+ * mock auth and staff pair share one fixture, so an invitation sent on the
+ * staff screen is the one the accept screen reads. The contacts fixture stands
+ * alone: nothing in auth reads a contact.
  */
 export function createApis(
   adapter: AuthApiAdapter = resolveAuthApiAdapter(
@@ -44,10 +49,14 @@ export function createApis(
   if (adapter === 'http') {
     const transport = new HttpTransport();
 
-    return { auth: new HttpAuthApi(transport), staff: new HttpStaffApi(transport) };
+    return {
+      auth: new HttpAuthApi(transport),
+      staff: new HttpStaffApi(transport),
+      contacts: new HttpContactsApi(transport),
+    };
   }
 
   const staff = new MockStaffApi();
 
-  return { auth: new MockAuthApi(staff), staff };
+  return { auth: new MockAuthApi(staff), staff, contacts: new MockContactsApi() };
 }

@@ -8,9 +8,14 @@ import { runMigrations } from './migrate.js';
 import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
+  accounts,
   auditLog,
   brandDomains,
   brands,
+  contactDuplicateSuggestions,
+  contactIdentities,
+  contactNotes,
+  contacts,
   departments,
   outbox,
   settings,
@@ -46,6 +51,19 @@ const brandA = uuidv7();
 const brandB = uuidv7();
 const userId = uuidv7();
 
+/**
+ * The contact tables point at each other, so their fixture rows are seeded with
+ * ids chosen here rather than read back: a `contact_notes` row needs a contact
+ * that already exists, and both brands insert the same set.
+ */
+/** A UUID derived from the brand's, so the two brands never collide. */
+const idFor = (brandId: string, marker: string): string =>
+  `${brandId.slice(0, 24)}${marker}${brandId.slice(25)}`;
+
+const accountId = (brandId: string): string => idFor(brandId, 'a');
+const contactId = (brandId: string): string => idFor(brandId, 'c');
+const otherContactId = (brandId: string): string => idFor(brandId, 'd');
+
 /** One row per tenant table, written by the brand that owns it. */
 const fixtures = [
   {
@@ -68,6 +86,53 @@ const fixtures = [
         domain: `support.${brandId}.example`,
         kind: 'helpcenter',
         txtToken: 'helpdock-verification=seeded',
+      }),
+  },
+  {
+    name: 'accounts',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(accounts).values({ id: accountId(brandId), brandId, name: 'Acme GmbH' }),
+  },
+  {
+    name: 'contacts',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(contacts).values([
+        { id: contactId(brandId), brandId, accountId: accountId(brandId), name: 'Mona Khalil' },
+        { id: otherContactId(brandId), brandId, name: 'Mona K.' },
+      ]),
+  },
+  {
+    name: 'contact_identities',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(contactIdentities).values({
+        brandId,
+        contactId: contactId(brandId),
+        kind: 'email',
+        // The same address in both brands, which is the point: an identifier is
+        // unique inside a brand and says nothing about the brand next door.
+        value: 'mona@example.com',
+        verified: true,
+        source: 'test',
+      }),
+  },
+  {
+    name: 'contact_notes',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(contactNotes).values({
+        brandId,
+        contactId: contactId(brandId),
+        authorId: userId,
+        bodyText: 'Prefers Arabic.',
+      }),
+  },
+  {
+    name: 'contact_duplicate_suggestions',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(contactDuplicateSuggestions).values({
+        brandId,
+        contactId: otherContactId(brandId),
+        otherContactId: contactId(brandId),
+        reason: 'email',
       }),
   },
   {
@@ -160,7 +225,8 @@ describe.skipIf(!hasDocker)('row-level security', () => {
     it('shows brand A only its own rows', async () => {
       const visible = await withSystem(db, brandA, (tx) => brandIdsIn(tx, name));
 
-      expect(visible).toEqual([brandA]);
+      expect(new Set(visible)).toEqual(new Set([brandA]));
+      expect(visible.length).toBeGreaterThan(0);
     });
 
     it('hides brand B behind an IN subquery', async () => {
@@ -172,7 +238,7 @@ describe.skipIf(!hasDocker)('row-level security', () => {
         return [...rows].map((row) => row.brand_id);
       });
 
-      expect(visible).toEqual([brandA]);
+      expect(new Set(visible)).toEqual(new Set([brandA]));
     });
 
     it('hides brand B behind a join', async () => {
@@ -184,7 +250,7 @@ describe.skipIf(!hasDocker)('row-level security', () => {
         return [...rows].map((row) => row.brand_id);
       });
 
-      expect(visible).toEqual([brandA]);
+      expect(new Set(visible)).toEqual(new Set([brandA]));
     });
 
     it('refuses to insert a row for brand B', async () => {
@@ -232,7 +298,7 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       expect(deleted).toBe(0);
       // And brand B still has its row.
       const survivors = await withSystem(db, brandB, (tx) => brandIdsIn(tx, name));
-      expect(survivors).toEqual([brandB]);
+      expect(new Set(survivors)).toEqual(new Set([brandB]));
     });
 
     it('shows nothing at all without a tenant context', async () => {

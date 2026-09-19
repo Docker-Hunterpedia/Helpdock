@@ -190,7 +190,8 @@ if a policy ends up ahead of its `CREATE TABLE`.
 
 `departments` is the worked example: `0005_departments.sql` carries the
 `CREATE TABLE` and its four policies in one file, and `rls.integration.test.ts`
-gained one fixture row.
+gained one fixture row. `0006_contacts_and_accounts.sql` is the same shape for
+five tables at once.
 
 ## Tests
 
@@ -200,6 +201,10 @@ migrations, the negative suite and the settings store; they skip themselves and
 say so when Docker is not running.
 
 ## Known gaps
+
+- `tickets.contact_id` has no foreign key to `contacts`. M1-02 creates the
+  column and M1-04 created the table; the constraint belongs to whichever of the
+  two lands second.
 
 - A brand-scoped `PostgresSettingsStore` reads and writes only its own rows. It
   does not fall back to the install-wide value for a key a brand has not

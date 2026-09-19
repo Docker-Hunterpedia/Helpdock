@@ -1,0 +1,198 @@
+{
+  "title": "Contacts",
+  "subtitle": "{{people}} · {{accounts}}",
+  "peopleCount_one": "{{count}} person",
+  "peopleCount_other": "{{count}} people",
+  "accountCount_one": "{{count}} account",
+  "accountCount_other": "{{count}} accounts",
+  "newContact": "New contact",
+  "newAccount": "New account",
+  "searchPlaceholder": "Name, email, phone, @telegram",
+  "accountSearchPlaceholder": "Company or domain",
+  "segment": {
+    "label": "What to list",
+    "people": "People",
+    "accounts": "Accounts"
+  },
+  "filters": {
+    "label": "Filters",
+    "account": "Account: {{name}}",
+    "accountAny": "Account: any",
+    "openTickets": "Has open tickets",
+    "tagAny": "Tag: any",
+    "clear": "Clear {{filter}}",
+    "duplicates_one": "{{count}} possible duplicate",
+    "duplicates_other": "{{count}} possible duplicates",
+    "review": "Review"
+  },
+  "table": {
+    "caption": "Contacts of {{brand}}",
+    "contact": "Contact",
+    "account": "Account",
+    "channels": "Channels",
+    "open": "Open",
+    "csat": "CSAT",
+    "lastTicket": "Last ticket",
+    "accountName": "Account",
+    "domain": "Domain",
+    "people": "People",
+    "created": "Created"
+  },
+  "channel": {
+    "email": "Email",
+    "phone": "Phone",
+    "telegram": "Telegram",
+    "visitor": "Web chat",
+    "external": "Customer id"
+  },
+  "identity": {
+    "verified": "verified",
+    "unverified": "unverified",
+    "linked": "linked",
+    "none": "No identifier yet",
+    "add": "Add identifier",
+    "remove": "Remove {{value}}",
+    "kindLabel": "Kind",
+    "valueLabel": "Identifier",
+    "hint": "Nothing an agent types counts as proof. A channel verifies it."
+  },
+  "anonymous": {
+    "badge": "anonymous",
+    "source": "widget on {{domain}}"
+  },
+  "pagination": {
+    "range": "{{from}}–{{to}} of {{total}}",
+    "previous": "Previous page",
+    "next": "Next page"
+  },
+  "empty": {
+    "heading": "No contacts yet",
+    "body": "People appear here the first time they write to {{brand}} on any channel.",
+    "noMatchesHeading": "Nothing matches that search",
+    "noMatchesBody": "Try part of a name, an address, a phone number or a Telegram id.",
+    "accountsHeading": "No accounts yet",
+    "accountsBody": "An account groups the people who work at one company.",
+    "accountContactsHeading": "Nobody is filed here yet",
+    "accountContactsBody": "Open a contact and set its account to file them under this company."
+  },
+  "detail": {
+    "breadcrumb": "Contacts",
+    "edit": "Edit",
+    "newTicket": "New ticket",
+    "moreActions": "More actions for {{name}}",
+    "erased": "This contact has been erased and can no longer be changed.",
+    "timeline": "Timeline",
+    "visibleTickets_one": "{{count}} ticket you can see",
+    "visibleTickets_other": "{{count}} tickets you can see",
+    "hidden_one": "{{count}} more in a department you are not in",
+    "hidden_other": "{{count}} more in departments you are not in",
+    "hiddenRow_one": "{{count}} ticket is hidden from your role.",
+    "hiddenRow_other": "{{count}} tickets are hidden from your role.",
+    "timelineSegment": "What to show",
+    "all": "All",
+    "open": "Open",
+    "notes": "Notes",
+    "noTickets": "No tickets yet",
+    "noTicketsBody": "Tickets arrive with the ticketing milestone.",
+    "note": "Note",
+    "noteBy": "{{author}} · {{date}}",
+    "addNote": "Add a note",
+    "notePlaceholder": "Something the next agent should know",
+    "saveNote": "Save note"
+  },
+  "identities": {
+    "title": "Identities",
+    "duplicate": "Possible duplicate: {{name}} ({{identifier}}).",
+    "duplicateSameAccount": "Same account.",
+    "duplicateReason": {
+      "email": "Same email address.",
+      "phone": "Same phone number.",
+      "telegram": "Same Telegram chat.",
+      "visitor": "Same visitor id.",
+      "external": "Same customer id."
+    },
+    "merge": "Merge",
+    "mergeUnavailable": "Merge arrives with M1-13",
+    "notTheSame": "Not the same"
+  },
+  "details": {
+    "title": "Details",
+    "account": "Account",
+    "noAccount": "No account",
+    "language": "Language",
+    "timezone": "Timezone",
+    "customerId": "Customer id",
+    "edit": "Edit details"
+  },
+  "stats": {
+    "title": "Stats",
+    "tickets": "Tickets",
+    "csat": "CSAT",
+    "firstReply": "Avg first reply"
+  },
+  "dialog": {
+    "createTitle": "New contact",
+    "createSubmit": "Create contact",
+    "editTitle": "Edit {{name}}",
+    "editSubmit": "Save changes",
+    "nameLabel": "Name",
+    "accountLabel": "Account",
+    "localeLabel": "Language",
+    "timezoneLabel": "Timezone",
+    "externalIdLabel": "Customer id",
+    "identityKindLabel": "Identifier kind",
+    "identityValueLabel": "Identifier",
+    "accountNameLabel": "Company name",
+    "accountDomainLabel": "Email domain",
+    "accountDomainHint": "People writing from this domain are offered this account.",
+    "accountCreateTitle": "New account",
+    "accountCreateSubmit": "Create account",
+    "accountEditTitle": "Edit {{name}}",
+    "accountEditSubmit": "Save changes"
+  },
+  "confirm": {
+    "anonymiseTitle": "Erase {{name}}?",
+    "anonymiseBody": "Their name, addresses, phone numbers and ids are replaced with hashes and their notes are deleted. Tickets stay. This cannot be undone.",
+    "anonymiseSubmit": "Erase contact",
+    "removeIdentityTitle": "Remove this identifier?",
+    "removeIdentityBody": "Messages that arrive from it will start a new contact instead.",
+    "removeIdentitySubmit": "Remove"
+  },
+  "actions": {
+    "anonymise": "Erase contact"
+  },
+  "toast": {
+    "created": "{{name}} added.",
+    "updated": "{{name}} updated.",
+    "noteAdded": "Note added.",
+    "identityAdded": "Identifier added.",
+    "identityRemoved": "Identifier removed.",
+    "duplicateDismissed": "Marked as a different person.",
+    "anonymised": "{{name}} erased.",
+    "accountCreated": "{{name}} added.",
+    "accountUpdated": "{{name}} updated.",
+    "identityTaken": "Another contact in this brand already holds that identifier.",
+    "lastIdentity": "A contact keeps at least one identifier.",
+    "anonymiseForbidden": "Only an administrator of this brand may erase a contact.",
+    "alreadyAnonymised": "This contact has been erased and can no longer be changed.",
+    "domainTaken": "Another account of this brand already claims that domain.",
+    "failed": "That did not work. Try again."
+  },
+  "problem": {
+    "empty": "Enter a value.",
+    "invalid-email": "That is not an email address.",
+    "phone-not-international": "Write the number in international form, starting with +.",
+    "invalid-phone": "That is not a phone number.",
+    "invalid-telegram": "A Telegram chat id is a number.",
+    "invalid-visitor": "A visitor id is the id the widget issued.",
+    "too-long": "That is too long."
+  },
+  "accounts": {
+    "title": "Accounts",
+    "breadcrumb": "Accounts",
+    "caption": "{{total}} in {{brand}}",
+    "contacts": "Contacts",
+    "domain": "Domain",
+    "noDomain": "No domain"
+  }
+}

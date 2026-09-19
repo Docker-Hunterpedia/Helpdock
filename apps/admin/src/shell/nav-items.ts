@@ -70,7 +70,7 @@ const item = (
 
 export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   tickets: item('tickets', ROUTES.tickets, Ticket, { placeholder: true }),
-  contacts: item('contacts', ROUTES.contacts, Users, { placeholder: true }),
+  contacts: item('contacts', ROUTES.contacts, Users),
   helpCenter: item('helpCenter', ROUTES.helpCenter, BookOpen, { placeholder: true }),
   reports: item('reports', ROUTES.reports, ChartColumn, { placeholder: true }),
   settings: item('settings', ROUTES.settings, Settings, { placeholder: true }),

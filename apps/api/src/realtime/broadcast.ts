@@ -27,6 +27,8 @@ export const realtimeEmitSchema = z.object({
   data: z.unknown(),
   /** The cursor of DOMAIN-RULES §7, or null for an event nothing replays. */
   seq: z.int().nonnegative().nullable(),
+  /** Rooms to turn out after delivering; see {@link RealtimeBroadcastInput.evict}. */
+  evict: z.array(roomSchema).max(4).default([]),
 });
 export type RealtimeEmit = z.infer<typeof realtimeEmitSchema>;
 
@@ -35,6 +37,13 @@ export interface RealtimeBroadcastInput {
   readonly event: ServerEvent;
   readonly data: unknown;
   readonly seq: number | null;
+  /**
+   * Rooms whose members must be turned out after the frame is delivered,
+   * because what they were authorised for has changed. A ticket that moves
+   * department is the one case in M1: every socket in `ticket:<id>` joined
+   * under the old department's scope.
+   */
+  readonly evict?: readonly string[];
 }
 
 /** What a worker-side caller sees. One method, so a test passes a recorder. */
@@ -54,10 +63,10 @@ export class RedisRealtimeBroadcast implements RealtimeBroadcast {
     this.#redis = redis;
   }
 
-  async emit({ rooms, event, data, seq }: RealtimeBroadcastInput): Promise<void> {
+  async emit({ rooms, event, data, seq, evict = [] }: RealtimeBroadcastInput): Promise<void> {
     await this.#redis.publish(
       REALTIME_EMIT_CHANNEL,
-      JSON.stringify({ rooms: [...rooms], event, data, seq }),
+      JSON.stringify({ rooms: [...rooms], event, data, seq, evict: [...evict] }),
     );
   }
 }
@@ -118,13 +127,13 @@ export class RealtimeEmitSubscriber implements OnModuleInit, OnModuleDestroy {
    * with `PUBLISH` on this Redis can write to the channel.
    */
   deliver(message: string): void {
-    const parsed = realtimeEmitSchema.safeParse(safeJson(message));
-    if (!parsed.success) {
+    const envelope = realtimeEmitSchema.safeParse(safeJson(message));
+    if (!envelope.success) {
       this.#logger.warn('Ignored a malformed realtime emit message');
       return;
     }
 
-    const { rooms, event, data, seq } = parsed.data;
+    const { rooms, event, data, seq, evict } = envelope.data;
     if (!isServerEvent(event)) {
       // A replica running an older build does not know an event a newer worker
       // published. Dropping it is right: the screen re-reads over REST anyway.
@@ -132,11 +141,28 @@ export class RealtimeEmitSubscriber implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // The *payload* is parsed here and not only on the way out. The publisher
+    // parses it too, but it throws on a mismatch, and this runs inside a Redis
+    // `message` handler where a throw is an unhandled rejection rather than a
+    // refused frame. Dropping is the right answer for a payload that crossed a
+    // process boundary and did not match the event it named.
+    const payload = REALTIME_EVENT_PAYLOADS[event].safeParse(data);
+    if (!payload.success) {
+      this.#logger.warn({ event }, 'Ignored a realtime emit whose payload did not match its event');
+      return;
+    }
+
     for (const room of rooms) {
-      this.#publisher.emitToRoom(room, event, data as never, {
+      this.#publisher.emitToRoom(room, event, payload.data, {
         ...(seq === null ? {} : { seq }),
         local: true,
       });
+    }
+
+    // After the frame, not before: the clients being turned out are told what
+    // happened first, and re-join through the same check they passed once.
+    for (const room of evict) {
+      this.#publisher.evictRoom(room);
     }
   }
 }

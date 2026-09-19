@@ -58,6 +58,30 @@ export class RealtimePublisher {
     target.to(roomSchema.parse(room)).emit(event, this.envelope(event, payload, options));
   }
 
+  /**
+   * Turns every socket of this replica out of a room, so the next thing a
+   * client does is re-join and be authorised again.
+   *
+   * A room is authorised once, when it is joined. A ticket that moves
+   * department changes who may read it, and a socket that joined while the
+   * ticket was in the old department would otherwise keep hearing about it:
+   * ids only, never a body, but "an internal note was just added to the ticket
+   * you lost" is still more than nothing. `#requireLiveSession` covers a
+   * revoked session; this covers a changed scope.
+   *
+   * Local, for the same reason {@link emitToRoom}'s `local` exists: every
+   * replica is told, and each turns out its own.
+   */
+  evictRoom(room: string): void {
+    const namespace = this.#namespace;
+    /* c8 ignore next 3 -- there is nothing to evict before `afterInit`. */
+    if (namespace === null) {
+      return;
+    }
+
+    void namespace.local.in(roomSchema.parse(room)).socketsLeave(roomSchema.parse(room));
+  }
+
   /** Exported for the tests, and because a seq-bearing envelope is worth naming. */
   envelope<E extends ServerEvent>(
     event: E,

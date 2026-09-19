@@ -14,10 +14,14 @@
 -- being a superuser.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;--> statement-breakpoint
 
+-- `gin_trgm_ops` serves both `%` (similarity) and `<%` (word similarity); the
+-- query uses `<%`, because a search term is one word against a whole subject
+-- line and `%` compares two strings whole.
 CREATE INDEX "tickets_subject_trgm_idx" ON "tickets" USING gin ("subject" gin_trgm_ops);--> statement-breakpoint
 
--- Fills `department_id` from the parent ticket on the way in. Nothing passes
--- the column, so nothing can pass a wrong one.
+-- Fills `department_id` from the parent ticket on the way in. Whatever a caller
+-- passes is overwritten, so a caller cannot file a message under a department
+-- its ticket is not in.
 --
 -- Deliberately *not* SECURITY DEFINER: the SELECT is subject to the caller's
 -- row-level security, so a ticket the caller cannot see yields no row and the
@@ -56,10 +60,10 @@ BEFORE INSERT ON public.ticket_activity
 FOR EACH ROW
 EXECUTE FUNCTION public.helpdock_ticket_child_department();--> statement-breakpoint
 
--- A ticket that moves department takes its thread with it. Without this the
--- messages of a ticket escalated from Support to Billing would stay readable by
--- Support and invisible to Billing, which is the opposite of what the move
--- means.
+-- A ticket that moves department takes its thread *and* its activity log with
+-- it. Without this, the messages of a ticket escalated from Support to Billing
+-- would stay readable by Support and invisible to Billing, which is the
+-- opposite of what the move means.
 --
 -- Also invoker rights: the UPDATE is bound by the same policies, so the rows
 -- only move where the actor could have written them anyway.

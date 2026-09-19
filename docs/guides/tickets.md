@@ -126,6 +126,24 @@ the sanitised html by the same call, so the text can never come from a body the
 sanitiser has not seen. Remote `<img src>` is blocked by default and `cid:`
 references are kept for M1-10 to resolve; M2-07 adds the per-brand toggle.
 
+Two things about the sanitiser are worth knowing before rendering a body:
+
+- **A URL survives only if it is absolute.** A scheme allowlist is applied only
+  to a URL that has a scheme, so `src="/pixel.gif"` and `href="/settings"` are
+  dropped outright: a relative URL in a message from a stranger resolves against
+  whatever page renders it, which makes it a read receipt fired by the reader's
+  own browser, or a link that looks like a genuine in-app one.
+- **`body_text` is text, and only text.** Entities are decoded, so a message
+  that literally reads `<script>alert(1)</script>` comes back as those
+  characters. That is right for the email text part, the list preview and AI
+  retrieval — and it must never be interpolated into HTML. `body_html` is the
+  field that is safe to render.
+
+A body is refused with 400 when it carries more than 6,000 HTML tags. The
+sanitiser's cost is super-linear in nesting depth rather than in size, and it
+runs synchronously inside the request's open transaction, so a body built to be
+expensive would stall every other request on the replica.
+
 ## Activity
 
 `ticket_activity` is part of the ticket, not the brand's administrative trail:
@@ -162,11 +180,16 @@ The third hop exists because `APP_ROLE=worker` runs no Nest application and hold
 no Socket.IO namespace, while `APP_ROLE=api` runs no queue. It is the same Redis
 pub/sub shape `principal.revoked` already uses.
 
-Each event reaches two rooms: `ticket:<id>` (whoever has the ticket open) and
+Each event reaches `ticket:<id>` (whoever has the ticket open) and
 `department:<id>` (whoever has a queue open, because a new ticket has to appear
-in a list nobody was looking at). The payloads carry **ids only** — no body — so
-an internal note cannot leak over a socket, and a screen re-reads over REST.
-See [the realtime guide](realtime.md#rooms).
+in a list nobody was looking at). A move reaches the *old* department's room as
+well, or the ticket would sit in a queue it has left until somebody reloaded,
+and it turns the ticket room out: everyone in it joined under the old
+department's scope, so they re-join through the same check they passed once.
+
+The payloads carry **ids only** — no body — so an internal note cannot leak over
+a socket, and a screen re-reads over REST. See
+[the realtime guide](realtime.md#rooms).
 
 ## Endpoints
 
@@ -268,6 +291,13 @@ two are never written apart. `contactId` is optional until M1-04 exists.
 
 A department outside the actor's own scope answers `403` with a sentence rather
 than letting the policy answer `500`.
+
+`teamId` is refused with 400 until M1-01 creates `teams`, for the reason `tagId`
+is: `tickets.team_id` has no foreign key yet, so any uuid would be stored
+permanently. An `assigneeId` must belong to somebody who holds a role in the
+brand — `tickets.assignee_id` references the *global* `users` table, so the
+foreign key alone would accept a stranger. Which *department* an assignee must
+be in is M1-07's question.
 
 ### Replying
 

@@ -53,19 +53,18 @@ describe('nextTicketNumber', () => {
 
 describe('nextMessageSeq', () => {
   it('locks the ticket row before reading the maximum', async () => {
-    // Twenty replies arriving at once queue on that lock, one transaction at a
-    // time, so no two of them read the same maximum.
+    // Statement *order* is the whole correctness argument, and it is the one
+    // thing a real database cannot be asked about directly: twenty replies
+    // arriving at once queue on that lock, one transaction at a time, so no two
+    // of them read the same maximum. What the counter actually produces under
+    // contention is proved against Postgres in
+    // `apps/api/src/tickets/tickets.integration.test.ts`.
     const { tx, statements } = recordingTx([[{ id: TICKET }], [{ seq: 4 }]]);
 
-    expect(await nextMessageSeq(tx, TICKET)).toBe(4);
+    await nextMessageSeq(tx, TICKET);
+
     expect(statements[0]).toContain('FOR UPDATE');
     expect(statements[1]).toContain('max(seq)');
-  });
-
-  it('starts a thread at 1', async () => {
-    const { tx } = recordingTx([[{ id: TICKET }], [{ seq: 1 }]]);
-
-    expect(await nextMessageSeq(tx, TICKET)).toBe(1);
   });
 
   it('refuses a ticket the transaction cannot see, rather than handing back 1', async () => {

@@ -15,9 +15,10 @@ import {
   ticketMessages,
   ticketStatuses,
   tickets,
+  userBrandRoles,
 } from '@helpdock/db';
 import type { TicketListQuery } from '@helpdock/schemas';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, desc, eq, gt } from 'drizzle-orm';
 import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
 
 /**
@@ -147,6 +148,21 @@ export class TicketRepository {
     return scope === 'all' || scope.includes(departmentId);
   }
 
+  /**
+   * Whether that person holds a role in this brand. `user_brand_roles` is
+   * brand-scoped, so the policy answers "in this brand" and the `WHERE`
+   * answers "this person".
+   */
+  async isBrandMember(tx: DbTransaction, userId: string): Promise<boolean> {
+    const rows = await tx
+      .select({ userId: userBrandRoles.userId })
+      .from(userBrandRoles)
+      .where(eq(userBrandRoles.userId, userId))
+      .limit(1);
+
+    return rows.length > 0;
+  }
+
   nextNumber(tx: DbTransaction, brandId: string): Promise<number> {
     return nextTicketNumber(tx, brandId);
   }
@@ -233,6 +249,12 @@ export class TicketRepository {
 
   // ----------------------------------------------------------------- activity
 
+  /**
+   * The **newest** `limit` entries, newest first. The caller reverses them for
+   * the thread: a long-running ticket's hundred most recent changes are what a
+   * reader needs, and `ORDER BY created_at ASC LIMIT 100` would hand back the
+   * first hundred and drop every change since.
+   */
   async activityOf(
     tx: DbTransaction,
     ticketId: string,
@@ -242,7 +264,7 @@ export class TicketRepository {
       .select()
       .from(ticketActivity)
       .where(eq(ticketActivity.ticketId, ticketId))
-      .orderBy(asc(ticketActivity.createdAt), asc(ticketActivity.id))
+      .orderBy(desc(ticketActivity.createdAt), desc(ticketActivity.id))
       .limit(limit);
   }
 }

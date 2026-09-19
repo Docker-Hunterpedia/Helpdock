@@ -76,8 +76,8 @@ CREATE TABLE "tickets" (
 	"closed_at" timestamp with time zone,
 	"custom" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"search" "tsvector" GENERATED ALWAYS AS (to_tsvector('english', coalesce("tickets"."subject", ''))) STORED,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp (3) with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp (3) with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "tickets_brand_number_key" UNIQUE("brand_id","number")
 );
 --> statement-breakpoint

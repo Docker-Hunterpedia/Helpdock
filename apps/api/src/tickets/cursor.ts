@@ -18,15 +18,30 @@ import { z } from 'zod';
  * value from a query string reaches a comparison against a typed column.
  */
 
-/** The sort key of the last row on a page, and its id as the tiebreaker. */
-export const ticketCursorSchema = z.object({
-  /** The sort the page was read under. A cursor from another sort is refused. */
-  s: z.enum(['updatedAt', 'createdAt', 'number', 'priority']),
-  d: z.enum(['asc', 'desc']),
-  /** The sort column's value: an ISO timestamp, a number, or a priority. */
-  v: z.union([z.string().max(64), z.number()]),
-  id: z.uuid(),
-});
+const direction = z.enum(['asc', 'desc']);
+
+/**
+ * The sort key of the last row on a page, and its id as the tiebreaker.
+ *
+ * `v` is typed **per sort**, not as "a string or a number". The value reaches
+ * a row comparison against a typed column, so a cursor claiming
+ * `{"s":"number","v":"abc"}` would otherwise be accepted here and raise
+ * `invalid input syntax for type bigint` in Postgres — a 500 and an error log
+ * for what is a caller's malformed input. No rows could leak either way, since
+ * a cursor only reorders a page row-level security has already scoped, but
+ * "the caller's mistake answers 400" is the contract this file states.
+ */
+export const ticketCursorSchema = z.discriminatedUnion('s', [
+  z.object({ s: z.literal('updatedAt'), d: direction, v: z.iso.datetime(), id: z.uuid() }),
+  z.object({ s: z.literal('createdAt'), d: direction, v: z.iso.datetime(), id: z.uuid() }),
+  z.object({ s: z.literal('number'), d: direction, v: z.int().positive(), id: z.uuid() }),
+  z.object({
+    s: z.literal('priority'),
+    d: direction,
+    v: z.enum(['low', 'medium', 'high', 'urgent']),
+    id: z.uuid(),
+  }),
+]);
 
 export interface TicketCursor {
   readonly sort: TicketSort;

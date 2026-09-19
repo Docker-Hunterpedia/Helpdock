@@ -1,5 +1,6 @@
 import { type DepartmentScope, parseRoom, type SocketError } from '@helpdock/schemas';
-import type { RoomScopeReader } from './room-reader.js';
+import { principalHasPermission } from '../auth/permissions.js';
+import type { RoomScopeQuery, RoomScopeReader } from './room-reader.js';
 import type { StaffPrincipal } from './socket.js';
 
 /**
@@ -76,26 +77,56 @@ export const authorizeRoom = async ({
       // same brand, or a member of brand A could listen to brand B by naming A.
       return parsed.id === brandId ? ALLOWED : refuse('That room belongs to another brand');
     case 'department':
-      // An explicit list needs no query: the list is itself per-brand, so
-      // membership proves both the brand and the scope. `'all'` does need one —
-      // a room name carries no brand, and `'all'` means "every department *of
-      // that brand*" — so the departments table is asked (M1-01, M1-02).
-      if (Array.isArray(scope)) {
-        return scope.includes(parsed.id)
-          ? ALLOWED
-          : refuse('That department is outside your scope');
+    case 'ticket': {
+      // "Joining a room runs the same permission check as the corresponding
+      // REST read" (§1.4). The join itself is declared `brand:read`, because
+      // that is what a `brand:` room needs; these two mirror routes that
+      // declare `ticket:read`, and every role that holds one holds the other
+      // *today*. Asking anyway is what keeps that from becoming a silent
+      // subscription the next role can make and not fetch.
+      if (!principalHasPermission(principal, brandId, 'ticket:read')) {
+        return refuse('You may not read tickets in that brand');
       }
 
-      return (await reader.departmentInScope({ ...query, departmentId: parsed.id }))
-        ? ALLOWED
-        : refuse('That department is outside your scope');
-    case 'ticket':
-      // The same question `GET /api/brands/:brandId/tickets/:ticketId` asks,
-      // asked the same way: the policies decide, so "no such ticket for you"
-      // and "no such ticket" are one answer and neither confirms the other
-      // department's ticket exists.
-      return (await reader.ticketInScope({ ...query, ticketId: parsed.id }))
-        ? ALLOWED
-        : refuse('That ticket is outside your scope');
+      return parsed.kind === 'department'
+        ? departmentRoomFor(scope, query, parsed.id, reader)
+        : ticketRoomFor(query, parsed.id, reader);
+    }
   }
 };
+
+/**
+ * An explicit list needs no query: the list is itself per-brand, so membership
+ * proves both the brand and the scope. `'all'` does need one — a room name
+ * carries no brand, and `'all'` means "every department *of that brand*" — so
+ * the departments table is asked.
+ */
+const departmentRoomFor = async (
+  scope: DepartmentScope,
+  query: RoomScopeQuery,
+  departmentId: string,
+  reader: RoomScopeReader,
+): Promise<RoomAuthorization> => {
+  if (Array.isArray(scope)) {
+    return scope.includes(departmentId) ? ALLOWED : refuse('That department is outside your scope');
+  }
+
+  return (await reader.departmentInScope({ ...query, departmentId }))
+    ? ALLOWED
+    : refuse('That department is outside your scope');
+};
+
+/**
+ * The same question `GET /api/brands/:brandId/tickets/:ticketId` asks, asked the
+ * same way: the policies decide, so "no such ticket for you" and "no such
+ * ticket" are one answer and neither confirms the other department's ticket
+ * exists.
+ */
+const ticketRoomFor = async (
+  query: RoomScopeQuery,
+  ticketId: string,
+  reader: RoomScopeReader,
+): Promise<RoomAuthorization> =>
+  (await reader.ticketInScope({ ...query, ticketId }))
+    ? ALLOWED
+    : refuse('That ticket is outside your scope');

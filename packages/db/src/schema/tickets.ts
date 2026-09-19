@@ -55,7 +55,11 @@ export const tickets = pgTable(
     departmentId: uuid('department_id')
       .notNull()
       .references(() => departments.id, { onDelete: 'restrict' }),
-    /** From the brand's own sequence, so numbers are dense and per-brand. */
+    /**
+     * From the brand's own sequence. Per brand, and deliberately *not* dense:
+     * `nextval` is non-transactional, so a rolled-back creation burns a number
+     * (see `ticket-numbers.ts`).
+     */
     number: bigint('number', { mode: 'number' }).notNull(),
     /**
      * The brand's prefix as it was when the ticket was created. Copied rather
@@ -107,8 +111,20 @@ export const tickets = pgTable(
     search: tsvector('search').generatedAlwaysAs(
       (): SQL => sql`to_tsvector('english', coalesce(${tickets.subject}, ''))`,
     ),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
+    /**
+     * Millisecond precision, unlike every other timestamp in the schema, and
+     * the same for `updated_at`. Both are **cursor** columns: the ticket list
+     * pages by keyset, and the cursor carries the value as an ISO-8601 string,
+     * which JavaScript's `Date` — what the driver hands back — cannot hold
+     * beyond milliseconds. A `timestamptz` with the default microsecond
+     * precision would therefore be compared against a *truncated* copy of
+     * itself: ascending, the boundary row satisfies `>` again and the client
+     * pages forever; descending, any row inside the sub-millisecond window is
+     * silently skipped. Storing what the cursor can carry removes the
+     * mismatch rather than papering over it.
+     */
+    createdAt: timestamp('created_at', { withTimezone: true, precision: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, precision: 3 })
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),

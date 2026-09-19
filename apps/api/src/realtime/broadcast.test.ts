@@ -37,6 +37,7 @@ describe('RedisRealtimeBroadcast', () => {
         event: REALTIME_EVENTS.ticketChanged,
         data: frame,
         seq: null,
+        evict: [],
       }),
     );
   });
@@ -111,6 +112,44 @@ describe('RealtimeEmitSubscriber', () => {
     expect(emit).toHaveBeenCalledTimes(2);
   });
 
+  it('turns the named rooms out after delivering the frame', () => {
+    // Order matters: the clients being turned out are told what happened first,
+    // and re-join through the same check they passed once.
+    const order: string[] = [];
+    const publisher = new RealtimePublisher();
+    vi.spyOn(publisher, 'emitToRoom').mockImplementation(() => void order.push('emit'));
+    vi.spyOn(publisher, 'evictRoom').mockImplementation(() => void order.push('evict'));
+
+    subscriberWith(publisher).deliver(
+      message({
+        rooms: [ticketRoom(TICKET)],
+        event: REALTIME_EVENTS.ticketChanged,
+        data: frame,
+        seq: null,
+        evict: [ticketRoom(TICKET)],
+      }),
+    );
+
+    expect(order).toEqual(['emit', 'evict']);
+  });
+
+  it('turns nobody out when the message names no room to evict', () => {
+    const publisher = new RealtimePublisher();
+    vi.spyOn(publisher, 'emitToRoom').mockImplementation(() => {});
+    const evict = vi.spyOn(publisher, 'evictRoom').mockImplementation(() => {});
+
+    subscriberWith(publisher).deliver(
+      message({
+        rooms: [ticketRoom(TICKET)],
+        event: REALTIME_EVENTS.ticketChanged,
+        data: frame,
+        seq: null,
+      }),
+    );
+
+    expect(evict).not.toHaveBeenCalled();
+  });
+
   it('ignores a message that is not JSON', () => {
     const publisher = new RealtimePublisher();
     const emit = vi.spyOn(publisher, 'emitToRoom').mockImplementation(() => {});
@@ -128,6 +167,26 @@ describe('RealtimeEmitSubscriber', () => {
 
     subscriberWith(publisher).deliver(
       message({ rooms: ['*'], event: REALTIME_EVENTS.ticketChanged, data: frame, seq: null }),
+    );
+
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('ignores a payload that does not match the event it named', () => {
+    // Only the envelope was parsed before; the payload crosses the same process
+    // boundary and anything with PUBLISH on this Redis can write it. A throw
+    // here would be an unhandled rejection inside a Redis message handler, so
+    // the frame is dropped instead.
+    const publisher = new RealtimePublisher();
+    const emit = vi.spyOn(publisher, 'emitToRoom').mockImplementation(() => {});
+
+    subscriberWith(publisher).deliver(
+      message({
+        rooms: [ticketRoom(TICKET)],
+        event: REALTIME_EVENTS.ticketChanged,
+        data: { brandId: BRAND, ticketId: 'not-a-uuid' },
+        seq: null,
+      }),
     );
 
     expect(emit).not.toHaveBeenCalled();

@@ -28,6 +28,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The image build and the release notes only read the tree. The
+          # `contents: write` token this job holds is used by the release
+          # action, which takes it as an input rather than out of `.git/config`.
+          persist-credentials: false
 
       # Every value the shell below reads arrives as an environment variable,
       # never as a `${{ }}` substitution inside the script: a tag name is

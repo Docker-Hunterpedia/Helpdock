@@ -31,8 +31,14 @@ jobs:
       # token itself in an expression.
       DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
     steps:
+      # `persist-credentials: false` because this job pushes nothing. By default
+      # `checkout` leaves the run's token in `.git/config`, where every install
+      # script, build plugin and test in the steps below could read it — and on
+      # a pull request those steps are running the contributor's code.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Anonymous pulls from Docker Hub are rate limited per IP, and a
       # GitHub-hosted runner shares its address with everybody else's. This job

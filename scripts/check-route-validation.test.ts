@@ -13,27 +13,20 @@ const finding = (handler: string, decorator: string, argument: string) => ({
 });
 
 describe('findUnvalidatedParameters', () => {
-  it('accepts a parameter that names its schema', () => {
+  it.each([
+    ['the whole object', '@Param(new ZodValidationPipe(BrandIdParamDto)) params: BrandIdParamDto'],
+    ['a named key', "@Param('id', new ZodValidationPipe(idSchema)) id: string"],
+    [
+      'a raw schema rather than a DTO',
+      '@Body(new ZodValidationPipe(setupSmtpRequestSchema)) body: SetupSmtpRequest',
+    ],
+  ])('accepts a parameter that names its schema for %s', (_form, parameter) => {
     expect(
       scan(`
         @Controller('api')
         class C {
-          @Get('brands/:brandId')
-          find(@Param(new ZodValidationPipe(BrandIdParamDto)) { brandId }: BrandIdParamDto) {
-            return brandId;
-          }
-        }
-      `),
-    ).toEqual([]);
-  });
-
-  it('accepts a named key alongside the pipe', () => {
-    expect(
-      scan(`
-        @Controller('api')
-        class C {
-          @Get('a/:id')
-          read(@Param('id', new ZodValidationPipe(idSchema)) id: string) { return id; }
+          @Get('a')
+          read(${parameter}) { return 1; }
         }
       `),
     ).toEqual([]);
@@ -199,6 +192,12 @@ describe('findUnvalidatedParameters', () => {
     expect(scan('export const answer = 42;\n')).toEqual([]);
   });
 
+  /**
+   * The same regression `check-route-permissions.test.ts` carries: a CSS colour
+   * inside a template used to be scanned as a private identifier that consumed
+   * nothing, and the checker looped until it ran out of memory (M0-05). Both
+   * checks walk the one scanner now, and both prove it here.
+   */
   it('reads a template literal as one span, not as code with a brace in it', () => {
     expect(
       scan(`

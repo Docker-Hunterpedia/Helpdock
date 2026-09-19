@@ -38,6 +38,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The analysis reads the sources and uploads through the action's own
+          # token; nothing needs a credential in `.git/config`.
+          persist-credentials: false
 
       # One language: everything in this repository is TypeScript, and the one
       # Dockerfile and the shell scripts are not something CodeQL analyses.

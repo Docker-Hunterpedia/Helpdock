@@ -134,7 +134,8 @@ describe('PermissionGuard', () => {
      * body carries the field rather than a sentence (issue #36).
      */
     it('refuses a brand id that is not a uuid, naming the field', () => {
-      let thrown: unknown;
+      expect.assertions(2);
+
       try {
         run({
           route: 'brand',
@@ -142,24 +143,22 @@ describe('PermissionGuard', () => {
           params: { brandId: 'nope' },
         });
       } catch (error) {
-        thrown = error;
+        expect(error).toBeInstanceOf(ZodError);
+        expect((error as ZodError).issues.map((issue) => issue.path)).toEqual([['brandId']]);
       }
-
-      expect(thrown).toBeInstanceOf(ZodError);
-      expect((thrown as ZodError).issues.map((issue) => issue.path)).toEqual([['brandId']]);
     });
 
-    it('refuses a path that names the install scope', () => {
+    it('refuses a path that names the install scope, which is a different refusal', () => {
       expect(() =>
         run({
           route: 'brand',
           principal: staff({ [INSTALL_SCOPE_BRAND_ID]: { role: 'admin', departmentIds: 'all' } }),
           params: { brandId: INSTALL_SCOPE_BRAND_ID },
         }),
-      ).toThrow(BadRequestException);
+      ).toThrow(new BadRequestException('brandId may not name the install scope'));
     });
 
-    it('refuses a host that names no brand this route can act on', () => {
+    it('blames the host, not a field, when the host named the unusable brand', () => {
       expect(() =>
         run({
           route: 'brand',
@@ -167,7 +166,7 @@ describe('PermissionGuard', () => {
           params: {},
           hostBrandId: INSTALL_SCOPE_BRAND_ID,
         }),
-      ).toThrow(BadRequestException);
+      ).toThrow(new BadRequestException('The host does not name a brand this route can act on'));
     });
 
     it('refuses to guess a brand for a principal that holds several', () => {

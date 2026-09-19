@@ -11,7 +11,7 @@ import type { Db } from '@helpdock/db';
 import { uuidv7 } from '@helpdock/db';
 import type { SmtpCredentials, SmtpTestResult } from '@helpdock/schemas';
 import { ConflictException, HttpException } from '@nestjs/common';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import type { SessionService } from '../auth/session/session.service.js';
@@ -109,8 +109,13 @@ const settingsWith = (env: Record<string, string> = {}): Settings =>
     invalidation: noInvalidation,
   });
 
+/**
+ * Never reached here: the only caller is `createBrand`, and the cases in this
+ * file stop before it. Opening a real session is what the integration suite and
+ * the api browser test do.
+ */
 const sessions = {
-  open: vi.fn(() => Promise.resolve(null)),
+  open: () => Promise.reject(new Error('the unit suite never opens a session')),
 } as unknown as SessionService;
 
 interface Harness {

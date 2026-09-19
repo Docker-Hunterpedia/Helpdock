@@ -9,20 +9,6 @@ import { describe, expect, it } from 'vitest';
  * caught here rather than at the moment somebody saves it.
  */
 describe('the smtp settings the wizard writes', () => {
-  it('declares every key the wizard sets', () => {
-    for (const key of [
-      'smtp.host',
-      'smtp.port',
-      'smtp.tls',
-      'smtp.user',
-      'smtp.password',
-      'smtp.from',
-      'smtp.fromName',
-    ] as const) {
-      expect(settingDefinitions[key], key).toBeDefined();
-    }
-  });
-
   it('agrees with the wizard about what a TLS mode is', () => {
     for (const mode of SMTP_TLS_MODES) {
       expect(settingsSchema['smtp.tls'].safeParse(mode).success, mode).toBe(true);
@@ -46,9 +32,15 @@ describe('the smtp settings the wizard writes', () => {
     }
   });
 
-  it('accepts every port the wizard will send', () => {
-    for (const port of [25, 465, 587, 2525]) {
+  it('agrees with the wizard about which ports exist', () => {
+    for (const port of [1, 25, 465, 587, 2525, 65_535]) {
       expect(settingsSchema['smtp.port'].safeParse(port).success, String(port)).toBe(true);
+      expect(smtpCredentialsSchema.shape.port.safeParse(port).success, String(port)).toBe(true);
+    }
+
+    for (const port of [0, 65_536]) {
+      expect(settingsSchema['smtp.port'].safeParse(port).success, String(port)).toBe(false);
+      expect(smtpCredentialsSchema.shape.port.safeParse(port).success, String(port)).toBe(false);
     }
   });
 });

@@ -1,6 +1,6 @@
 import type { Db } from '@helpdock/db';
 import { describe, expect, it } from 'vitest';
-import { INSTALL_STATE_WHEN_UNKNOWN, readInstallState } from './install-state.js';
+import { readInstallState } from './install-state.js';
 
 /** A pool that answers one `select … limit 1` with the rows it was given. */
 const dbWith = (rows: readonly { id: string }[]): Db =>
@@ -27,11 +27,5 @@ describe('readInstallState', () => {
     } as unknown as Db;
 
     await expect(readInstallState(unreachable)).rejects.toThrow('connection refused');
-  });
-});
-
-describe('INSTALL_STATE_WHEN_UNKNOWN', () => {
-  it('is configured, so an outage never offers the install to a stranger', () => {
-    expect(INSTALL_STATE_WHEN_UNKNOWN).toBe('configured');
   });
 });

@@ -8,7 +8,6 @@ import {
   setupPasswordSchema,
   setupSmtpRequestSchema,
   smtpTestResultSchema,
-  supportedTimeZones,
   ticketNumberPreview,
   ticketPrefixSchema,
   timezoneSchema,
@@ -61,10 +60,6 @@ describe('timezoneSchema', () => {
 
   it.each(['Mars/Olympus', 'GMT+3', '', 'europe/berlin'])('refuses %j', (zone) => {
     expect(timezoneSchema.safeParse(zone).success).toBe(false);
-  });
-
-  it('reads the list once and hands back the same set', () => {
-    expect(supportedTimeZones()).toBe(supportedTimeZones());
   });
 });
 

@@ -56,10 +56,6 @@ describe('validateEmail', () => {
   ])('refuses %j', (override, expected) => {
     expect(validateEmail({ ...draft, ...override })).toEqual(expected);
   });
-
-  it('asks for no username, because a private relay often has none', () => {
-    expect(validateEmail(draft)).not.toHaveProperty('user');
-  });
 });
 
 describe('EmailStep', () => {

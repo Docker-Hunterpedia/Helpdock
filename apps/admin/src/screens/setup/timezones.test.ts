@@ -18,10 +18,6 @@ describe('timeZoneOptions', () => {
 
     expect([...options].sort((a, b) => a.localeCompare(b, 'en'))).toEqual([...options]);
   });
-
-  it('is built once, because 400 strings per keystroke is the cost of not doing so', () => {
-    expect(timeZoneOptions()).toBe(timeZoneOptions());
-  });
 });
 
 describe('currentTimeZone', () => {

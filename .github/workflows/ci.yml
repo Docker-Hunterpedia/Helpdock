@@ -41,6 +41,11 @@ jobs:
       - name: Check app import boundaries
         run: pnpm check:boundaries
 
+      # DOMAIN-RULES §1.3: "Missing decorator fails the request in development
+      # and in CI." The permission guard is the runtime half; this is CI's.
+      - name: Check route permission declarations
+        run: pnpm check:routes
+
       - name: Typecheck
         run: pnpm typecheck
 

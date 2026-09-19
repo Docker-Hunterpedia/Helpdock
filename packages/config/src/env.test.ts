@@ -48,6 +48,20 @@ describe('loadEnv', () => {
     expect(env.PORT).toBe(3000);
     expect(env.OUTBOUND_ALLOW_CIDRS).toEqual([]);
     expect(env.APP_MASTER_KEY_PREVIOUS).toBeUndefined();
+    expect(env.TRUST_PROXY).toBe(false);
+  });
+
+  it('reads TRUST_PROXY as a boolean, in the spellings an operator reaches for', () => {
+    for (const value of ['true', '1', 'yes', 'on', 'TRUE']) {
+      expect(loadEnv(envWith({ TRUST_PROXY: value })).TRUST_PROXY, value).toBe(true);
+    }
+    for (const value of ['false', '0', 'no', 'off']) {
+      expect(loadEnv(envWith({ TRUST_PROXY: value })).TRUST_PROXY, value).toBe(false);
+    }
+  });
+
+  it('refuses a TRUST_PROXY it would have to guess at, rather than defaulting to trust', () => {
+    expectInvalidKeys(envWith({ TRUST_PROXY: 'maybe' }), ['TRUST_PROXY']);
   });
 
   it('parses the port and the outbound allow-list', () => {

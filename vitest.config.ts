@@ -30,12 +30,18 @@ export default defineConfig({
               new URL('packages/config/src/index.ts', import.meta.url),
             ),
             '@helpdock/db': fileURLToPath(new URL('packages/db/src/index.ts', import.meta.url)),
+            '@helpdock/schemas': fileURLToPath(
+              new URL('packages/schemas/src/index.ts', import.meta.url),
+            ),
           },
         },
         test: {
           name: 'integration',
           root: import.meta.dirname,
-          include: ['packages/*/src/**/*.integration.test.ts'],
+          include: [
+            'packages/*/src/**/*.integration.test.ts',
+            'apps/*/src/**/*.integration.test.ts',
+          ],
           testTimeout: 120_000,
           hookTimeout: 300_000,
         },

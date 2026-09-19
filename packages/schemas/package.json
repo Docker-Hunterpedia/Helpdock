@@ -16,5 +16,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/schemas"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
   }
 }

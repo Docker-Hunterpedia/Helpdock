@@ -10,7 +10,8 @@
     "packages/*/scripts/**/*.ts",
     "packages/*/drizzle.config.ts",
     "apps/*/src/**/*.test.ts",
-    "packages/*/src/**/*.test.ts"
+    "packages/*/src/**/*.test.ts",
+    "apps/*/src/testing/**/*.ts"
   ],
   "exclude": ["apps/admin"]
 }

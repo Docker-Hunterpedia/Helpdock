@@ -1,0 +1,202 @@
+import helmet from '@fastify/helmet';
+import {
+  createKeyring,
+  createSettings,
+  type Env,
+  RedisInvalidation,
+  type Settings,
+} from '@helpdock/config';
+import {
+  appRolePasswordFromUrl,
+  assertRuntimeRoleIsSafe,
+  createDb,
+  type Db,
+  PostgresSettingsStore,
+  runMigrations,
+} from '@helpdock/db';
+import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Redis } from 'ioredis';
+import { AppModule, type AppModuleOptions } from './app.module.js';
+import { createPrincipalResolver } from './auth/principal-resolver.js';
+import { securityHeaderOptions } from './http/security-headers.js';
+import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
+import { waitForMigrations } from './runtime/wait-for-migrations.js';
+
+/**
+ * Boot, in the order ARCHITECTURE §6 and DOMAIN-RULES §1.5 require:
+ *
+ * 1. `loadEnv()` — done by the caller, because nothing below can run without it.
+ * 2. `APP_ROLE=api` only: run the migrations as the owner role, under the
+ *    advisory lock, so several replicas starting together migrate once.
+ * 3. Open the runtime pool.
+ * 4. `APP_ROLE=worker` only: wait for an api replica to have migrated.
+ * 5. `assertRuntimeRoleIsSafe` — refuse to serve if this connection could
+ *    bypass row-level security.
+ * 6. Settings, over the `settings` table with Redis invalidation.
+ * 7. Listen, for `APP_ROLE=api`.
+ */
+
+export interface Runtime {
+  readonly env: Env;
+  readonly db: Db;
+  readonly redis: Redis;
+  readonly settings: Settings;
+  readonly logger: Logger;
+  close(): Promise<void>;
+}
+
+export interface CreateRuntimeOptions {
+  readonly env: Env;
+  /** Overrides the logger boot would build. Tests pass a silent one. */
+  readonly logger?: Logger;
+}
+
+export const createRuntime = async ({
+  env,
+  logger = createLogger({ env }),
+}: CreateRuntimeOptions): Promise<Runtime> => {
+  if (env.APP_ROLE === 'api') {
+    await runMigrations({
+      migrationUrl: env.DATABASE_MIGRATION_URL,
+      appRolePassword: appRolePasswordFromUrl(env.DATABASE_URL),
+      log: (message) => logger.info(message),
+    });
+  }
+
+  const { db, close: closeDb } = createDb({ url: env.DATABASE_URL });
+  const closers: (() => Promise<unknown>)[] = [closeDb];
+
+  try {
+    if (env.APP_ROLE === 'worker') {
+      await waitForMigrations({ db, logger });
+    }
+
+    const facts = await assertRuntimeRoleIsSafe(db);
+    logger.info(
+      {
+        // Not `role`: every line already carries `role: APP_ROLE`, and a
+        // repeated key is a line only the last writer wins in.
+        databaseRole: facts.roleName,
+        superuser: facts.superuser,
+        bypassRls: facts.bypassRls,
+        ownedTables: facts.ownedTables,
+      },
+      'Runtime database role verified; row-level security cannot be bypassed.',
+    );
+
+    const invalidation = await RedisInvalidation.connect({
+      url: env.REDIS_URL,
+      onError: (error) => logger.error({ err: error }, 'Redis invalidation channel error'),
+    });
+    closers.unshift(() => invalidation.close());
+
+    const redis = new Redis(env.REDIS_URL, { lazyConnect: true });
+    redis.on('error', (error: Error) => logger.error({ err: error }, 'Redis client error'));
+    await redis.connect();
+    closers.unshift(() => redis.quit());
+
+    const settings = createSettings({
+      env: process.env,
+      store: new PostgresSettingsStore({ db }),
+      keyring: createKeyring(env),
+      invalidation,
+    });
+    closers.unshift(() => settings.close());
+
+    return {
+      env,
+      db,
+      redis,
+      settings,
+      logger,
+      close: async () => {
+        for (const close of closers) {
+          await close();
+        }
+      },
+    };
+  } catch (error) {
+    // Everything opened so far has to be given back, or a failed boot leaves
+    // connections behind and the next restart finds fewer of them. A failure to
+    // close is logged and then dropped: the error that stopped the boot is the
+    // one the operator has to read, and it must not be replaced by the
+    // consequences of it.
+    for (const close of closers) {
+      await close().catch((closeError: unknown) => {
+        logger.warn(
+          { err: closeError },
+          'Failed to close a resource while unwinding a failed boot',
+        );
+      });
+    }
+    throw error;
+  }
+};
+
+export type ApiApp = NestFastifyApplication;
+
+export interface CreateApiAppOptions {
+  readonly runtime: Runtime;
+  readonly extraControllers?: AppModuleOptions['extraControllers'];
+  readonly brandResolver?: AppModuleOptions['brandResolver'];
+}
+
+export const createApiApp = async ({
+  runtime,
+  extraControllers,
+  brandResolver,
+}: CreateApiAppOptions): Promise<ApiApp> => {
+  const { env, logger } = runtime;
+
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule.forRoot({
+      env,
+      db: runtime.db,
+      settings: runtime.settings,
+      redis: runtime.redis,
+      logger,
+      principalResolver: createPrincipalResolver({ env, logger }),
+      ...(brandResolver === undefined ? {} : { brandResolver }),
+      ...(extraControllers === undefined ? {} : { extraControllers }),
+    }),
+    // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
+    // same promise `TRUST_PROXY` makes about `x-request-id`, so it is the same
+    // switch (REQUIREMENTS §5.1).
+    new FastifyAdapter({ trustProxy: env.TRUST_PROXY }),
+    { logger: new NestPinoLogger(logger), bufferLogs: false },
+  );
+
+  await app.register(helmet, securityHeaderOptions({ appUrl: env.APP_URL }));
+  await app.init();
+  await app.getHttpAdapter().getInstance().ready();
+
+  return app;
+};
+
+/**
+ * The entry point's body, kept here so `main.ts` stays a single call and so a
+ * test can start the same process shape without spawning one.
+ */
+export const start = async (env: Env): Promise<{ close: () => Promise<void> }> => {
+  const runtime = await createRuntime({ env });
+
+  if (env.APP_ROLE === 'worker') {
+    // The queues themselves are M0-14. What a worker has today is a verified
+    // database role, settings and a logger, which is what the outbox relay will
+    // be handed when it arrives.
+    runtime.logger.info('Worker runtime ready; no queues are registered yet (M0-14).');
+    return { close: () => runtime.close() };
+  }
+
+  const app = await createApiApp({ runtime });
+  await app.listen({ port: env.PORT, host: '0.0.0.0' });
+  runtime.logger.info({ port: env.PORT }, 'api listening');
+
+  return {
+    close: async () => {
+      await app.close();
+      await runtime.close();
+    },
+  };
+};

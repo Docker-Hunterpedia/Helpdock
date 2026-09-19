@@ -1,0 +1,96 @@
+import type { Env, Settings } from '@helpdock/config';
+import type { Db } from '@helpdock/db';
+import {
+  type DynamicModule,
+  type MiddlewareConsumer,
+  Module,
+  type NestModule,
+  type Type,
+} from '@nestjs/common';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import type { Redis } from 'ioredis';
+import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
+import { AuthGuard } from './auth/auth.guard.js';
+import { PermissionGuard } from './auth/permission.guard.js';
+import type { PrincipalResolver } from './auth/principal-resolver.js';
+import type { BrandResolver } from './context/brand-resolver.js';
+import { NoopBrandResolver } from './context/brand-resolver.js';
+import { RequestContextMiddleware } from './context/request-context.middleware.js';
+import { AllExceptionsFilter } from './http/exception.filter.js';
+import type { Logger } from './logging/logger.js';
+import { BrandsController } from './routes/brands.controller.js';
+import { BrandsService } from './routes/brands.service.js';
+import { HealthController } from './routes/health.controller.js';
+import { MeController } from './routes/me.controller.js';
+import { ConfigModule } from './runtime/config.module.js';
+import { DbModule } from './runtime/db.module.js';
+import { ReadinessService } from './runtime/readiness.service.js';
+import { SettingsModule } from './runtime/settings.module.js';
+import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js';
+import { TenantInterceptor } from './tenant/tenant.interceptor.js';
+
+/**
+ * The request lifecycle of ARCHITECTURE §6, in the order Nest runs it:
+ *
+ * 1. `RequestContextMiddleware` — request id, host brand, AsyncLocalStorage.
+ * 2. `AuthGuard` — the principal, or 401.
+ * 3. `PermissionGuard` — `@Requires`, the target brand, the tenant scope, or 403.
+ * 4. `ZodSerializerInterceptor` — the response's output schema, outside the
+ *    transaction so parsing does not hold a connection.
+ * 5. `TenantInterceptor` — the transaction with the `app.*` settings.
+ * 6. `ZodValidationPipe` — the request's input schemas.
+ * 7. `AllExceptionsFilter` — one body shape for every failure.
+ *
+ * Global guards run in the order they are registered, and global interceptors
+ * nest in that order too: the first registered is the outermost.
+ */
+
+export interface AppModuleOptions {
+  readonly env: Env;
+  readonly db: Db;
+  readonly settings: Settings;
+  readonly redis: Redis;
+  readonly logger: Logger;
+  readonly principalResolver: PrincipalResolver;
+  /** Defaults to {@link NoopBrandResolver}; M5 supplies the real one. */
+  readonly brandResolver?: BrandResolver;
+  /** Controllers a test mounts alongside the real ones. Empty in production. */
+  readonly extraControllers?: readonly Type<unknown>[];
+}
+
+@Module({})
+export class AppModule implements NestModule {
+  static forRoot(options: AppModuleOptions): DynamicModule {
+    return {
+      module: AppModule,
+      imports: [
+        ConfigModule.forRoot(options.env),
+        DbModule.forRoot(options.db),
+        SettingsModule.forRoot(options.settings, options.redis),
+      ],
+      controllers: [
+        HealthController,
+        MeController,
+        BrandsController,
+        ...(options.extraControllers ?? []),
+      ],
+      providers: [
+        { provide: LOGGER, useValue: options.logger },
+        { provide: PRINCIPAL_RESOLVER, useValue: options.principalResolver },
+        { provide: BRAND_RESOLVER, useValue: options.brandResolver ?? new NoopBrandResolver() },
+        BrandsService,
+        ReadinessService,
+        { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: PermissionGuard },
+        { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
+        { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
+        { provide: APP_PIPE, useClass: ZodValidationPipe },
+        { provide: APP_FILTER, useClass: AllExceptionsFilter },
+      ],
+    };
+  }
+
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestContextMiddleware).forRoutes('{*path}');
+  }
+}

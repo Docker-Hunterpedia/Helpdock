@@ -52,7 +52,34 @@ describe('the message schemas', () => {
   });
 
   it('names a payload schema for every server event, so nothing can be emitted unchecked', () => {
-    expect(Object.keys(REALTIME_EVENT_PAYLOADS)).toEqual([REALTIME_EVENTS.presenceChanged]);
+    expect(Object.keys(REALTIME_EVENT_PAYLOADS)).toEqual([
+      REALTIME_EVENTS.presenceChanged,
+      REALTIME_EVENTS.ticketChanged,
+      REALTIME_EVENTS.ticketMessage,
+    ]);
+  });
+
+  it('carries no message body on a ticket event, so a note cannot leak over a socket', () => {
+    // "The REST API is the source of truth; sockets are notifications" (§7): a
+    // screen re-reads the ticket rather than patching it from a frame, and the
+    // frame therefore needs no body to leak.
+    const payload = REALTIME_EVENT_PAYLOADS[REALTIME_EVENTS.ticketMessage];
+
+    expect(Object.keys(payload.shape)).toEqual([
+      'brandId',
+      'ticketId',
+      'departmentId',
+      'messageId',
+      'seq',
+      'kind',
+      'event',
+    ]);
+  });
+
+  it('gives a ticket change the department it is in now, so a queue knows it has left', () => {
+    const payload = REALTIME_EVENT_PAYLOADS[REALTIME_EVENTS.ticketChanged];
+
+    expect(Object.keys(payload.shape)).toContain('departmentId');
   });
 });
 

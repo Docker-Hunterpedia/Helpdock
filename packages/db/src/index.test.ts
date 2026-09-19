@@ -8,6 +8,8 @@ import * as roles from './roles.js';
 import * as schema from './schema/index.js';
 import * as settingsStore from './settings-store.js';
 import * as tenant from './tenant.js';
+import * as ticketNumbers from './ticket-numbers.js';
+import * as ticketStatuses from './ticket-statuses.js';
 import * as uuid from './uuid.js';
 
 const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
@@ -17,6 +19,8 @@ const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'roles.ts': roles,
   'settings-store.ts': settingsStore,
   'tenant.ts': tenant,
+  'ticket-numbers.ts': ticketNumbers,
+  'ticket-statuses.ts': ticketStatuses,
   'uuid.ts': uuid,
 };
 
@@ -60,6 +64,11 @@ describe('@helpdock/db', () => {
       'job-receipts.ts',
       'outbox.ts',
       'settings.ts',
+      'ticket-activity.ts',
+      'ticket-messages.ts',
+      'ticket-statuses.ts',
+      'tickets.ts',
+      'tsvector.ts',
       'user-brand-roles.ts',
       'users.ts',
     ]);

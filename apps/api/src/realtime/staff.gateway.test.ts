@@ -14,6 +14,7 @@ import { InMemorySocketConnectionsGauge } from './metrics.js';
 import { PresenceService } from './presence.service.js';
 import { PresenceStore } from './presence.store.js';
 import { RealtimePublisher } from './publisher.js';
+import type { RoomScopeReader } from './room-reader.js';
 import { HandshakeRefusal, type StaffSocket } from './socket.js';
 import { SocketRegistry } from './socket-registry.js';
 import { StaffGateway } from './staff.gateway.js';
@@ -22,6 +23,7 @@ import { NoopStaffOfflineHook } from './staff-offline.hook.js';
 const BRAND_A = '01937f5e-7e53-7000-8000-00000000000a';
 const BRAND_B = '01937f5e-7e53-7000-8000-00000000000b';
 const DEPARTMENT = '01937f5e-7e53-7000-8000-000000000011';
+const TICKET = '01937f5e-7e53-7000-8000-0000000000a1';
 const LINA = '01937f5e-7e53-7000-8000-000000000001';
 
 const principal: Principal = {
@@ -30,6 +32,18 @@ const principal: Principal = {
   brands: { [BRAND_A]: { role: 'agent', departmentIds: [DEPARTMENT] } },
   installAdmin: false,
 };
+
+/**
+ * What the policies would answer. The gateway only has to pass it through to
+ * `authorizeRoom`, whose own suite covers what it decides with it.
+ */
+const roomReaderAllowing = (overrides: Partial<RoomScopeReader> = {}): RoomScopeReader => ({
+  ticketInScope: () => Promise.resolve(true),
+  departmentInScope: () => Promise.resolve(true),
+  ...overrides,
+});
+
+const roomReader = roomReaderAllowing();
 
 interface Harness {
   readonly gateway: StaffGateway;
@@ -76,7 +90,7 @@ const closed = async (socket: { disconnected: boolean }): Promise<boolean> => {
   return socket.disconnected;
 };
 
-const harness = (): Harness => {
+const harness = (readerOverrides: Partial<RoomScopeReader> = {}): Harness => {
   const redis = new RedisStub();
   const publisher = new RealtimePublisher();
   const presence = new PresenceService(
@@ -95,6 +109,7 @@ const harness = (): Harness => {
     publisher,
     new SocketRegistry(),
     gauge,
+    roomReaderAllowing(readerOverrides),
     silentLogger(),
   );
 
@@ -177,12 +192,21 @@ describe('StaffGateway', () => {
       expect(await closed(socket)).toBe(true);
     });
 
-    it('refuses ticket rooms until M1 fills the check in', async () => {
+    it('joins a ticket room the policies allow, and records no presence for it', async () => {
+      const socket = socketOf('s1');
+
       expect(
-        await harnessed.gateway.join(socketOf('s1'), {
-          brandId: BRAND_A,
-          room: ticketRoom(BRAND_A),
-        }),
+        await harnessed.gateway.join(socket, { brandId: BRAND_A, room: ticketRoom(TICKET) }),
+      ).toEqual({ ok: true, data: { room: ticketRoom(TICKET) } });
+      expect(socket.rooms.has(ticketRoom(TICKET))).toBe(true);
+      expect(socket.data.brandIds.size).toBe(0);
+    });
+
+    it('refuses a ticket room the policies hide', async () => {
+      const gateway = harness({ ticketInScope: () => Promise.resolve(false) }).gateway;
+
+      expect(
+        await gateway.join(socketOf('s1'), { brandId: BRAND_A, room: ticketRoom(TICKET) }),
       ).toMatchObject({ ok: false, error: { code: 'forbidden' } });
     });
   });
@@ -303,6 +327,7 @@ describe('StaffGateway', () => {
         new RealtimePublisher(),
         new SocketRegistry(),
         new InMemorySocketConnectionsGauge(),
+        roomReader,
         logger,
       );
       const middlewares: ((socket: unknown, next: (error?: Error) => void) => void)[] = [];
@@ -331,6 +356,7 @@ describe('StaffGateway', () => {
         new RealtimePublisher(),
         new SocketRegistry(),
         new InMemorySocketConnectionsGauge(),
+        roomReader,
         silentLogger(),
       );
       gateway.afterInit(namespaceCapturing(middlewares));

@@ -1,5 +1,13 @@
 import { createKeyring, decodeMasterKey, type Env, encryptSecret } from '@helpdock/config';
-import { auditLog, brands, type Db, userBrandRoles, users, withSystem } from '@helpdock/db';
+import {
+  auditLog,
+  brands,
+  type Db,
+  seedBrandStatuses,
+  userBrandRoles,
+  users,
+  withSystem,
+} from '@helpdock/db';
 import { eq, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { EmailTokenStore } from '../auth/email-token.store.js';
@@ -109,6 +117,9 @@ export const seedDevInstall = async ({
       .insert(userBrandRoles)
       .values({ userId, brandId, role: 'admin' })
       .onConflictDoNothing({ target: [userBrandRoles.userId, userBrandRoles.brandId] });
+
+    // Idempotent, so re-seeding an install that already has them adds nothing.
+    await seedBrandStatuses(tx, brandId);
   });
 
   log(

@@ -29,10 +29,12 @@ import { parseMessage, socketRefusal } from './messages.js';
 import type { SocketConnectionsGauge } from './metrics.js';
 import { PresenceService } from './presence.service.js';
 import { RealtimePublisher } from './publisher.js';
+import type { RoomScopeReader } from './room-reader.js';
 import { authorizeRoom } from './rooms.js';
 import { HandshakeRefusal, type StaffSocket, userIdOf } from './socket.js';
 import { SocketRegistry } from './socket-registry.js';
 import {
+  ROOM_SCOPE_READER,
   SESSION_REVOCATIONS,
   SOCKET_CONNECTIONS_GAUGE,
   SOCKET_SESSION_RESOLVER,
@@ -45,11 +47,12 @@ import {
  * 1. **Handshake.** `auth.token` is the access token, verified by the same
  *    session resolver the HTTP guards use. No principal, no connection —
  *    refused with a code, never left hanging.
- * 2. **Rooms.** `brand:`, `department:` and (from M1) `ticket:`. The permission
- *    is checked by the global `PermissionGuard` from the `@Requires` below, the
- *    department scope by `authorizeRoom`, and the session's revocation is
- *    re-asked on every join so a socket opened ten minutes ago cannot outlive
- *    its session by joining something new.
+ * 2. **Rooms.** `brand:`, `department:` and `ticket:`. The permission is
+ *    checked by the global `PermissionGuard` from the `@Requires` below, the
+ *    department scope by `authorizeRoom` — which asks the same policies a REST
+ *    read would — and the session's revocation is re-asked on every join so a
+ *    socket opened ten minutes ago cannot outlive its session by joining
+ *    something new.
  * 3. **Presence.** Derived from the `brand:` rooms this namespace holds, across
  *    every replica.
  *
@@ -76,6 +79,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   readonly #publisher: RealtimePublisher;
   readonly #registry: SocketRegistry;
   readonly #gauge: SocketConnectionsGauge;
+  readonly #rooms: RoomScopeReader;
   readonly #logger: Logger;
 
   constructor(
@@ -85,6 +89,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     @Inject(RealtimePublisher) publisher: RealtimePublisher,
     @Inject(SocketRegistry) registry: SocketRegistry,
     @Inject(SOCKET_CONNECTIONS_GAUGE) gauge: SocketConnectionsGauge,
+    @Inject(ROOM_SCOPE_READER) rooms: RoomScopeReader,
     @Inject(LOGGER) logger: Logger,
   ) {
     this.#resolver = resolver;
@@ -93,6 +98,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     this.#publisher = publisher;
     this.#registry = registry;
     this.#gauge = gauge;
+    this.#rooms = rooms;
     this.#logger = logger;
   }
 
@@ -166,7 +172,12 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     const { brandId, room } = parseMessage(roomJoinSchema, body);
     await this.#requireLiveSession(socket);
 
-    const authorization = authorizeRoom({ principal: socket.data.principal, brandId, room });
+    const authorization = await authorizeRoom({
+      principal: socket.data.principal,
+      brandId,
+      room,
+      reader: this.#rooms,
+    });
     if (!authorization.ok) {
       return { ok: false, error: authorization.error };
     }

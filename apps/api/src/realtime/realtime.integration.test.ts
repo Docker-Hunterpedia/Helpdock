@@ -323,20 +323,25 @@ describe.skipIf(!hasDocker)('the realtime gateway', () => {
       });
     });
 
-    it('refuses a ticket room until M1 can check one', async () => {
+    it('refuses a ticket room for a ticket that does not exist for this principal', async () => {
       const socket = await connect(0, (await signIn()).token);
 
+      // M1-02 fills this check in against `tickets`, and the policies answer:
+      // "no such ticket" and "not in your departments" are one answer, so
+      // neither confirms the other. The ticket rooms that *are* joinable are
+      // proved in `tickets/tickets.integration.test.ts`, which has tickets.
       expect(await join(socket, ticketRoom(uuidv7()))).toMatchObject({
         ok: false,
         error: { code: 'forbidden' },
       });
     });
 
-    it('refuses an unrestricted scope a department room, because nothing can check one yet', async () => {
+    it('refuses an unrestricted scope a department that is not this brand’s', async () => {
       const socket = await connect(0, (await signIn()).token);
 
       // The seeded account is an Admin, whose department scope is `all` — and
-      // `all` means "of this brand", which no table can prove before M1.
+      // `all` means "every department *of this brand*". M1-02 proves that
+      // against the `departments` table; an id no brand owns is refused.
       expect(await join(socket, departmentRoom(uuidv7()))).toMatchObject({
         ok: false,
         error: { code: 'forbidden' },

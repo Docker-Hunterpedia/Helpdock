@@ -11,3 +11,4 @@ export * from './principal.js';
 export * from './realtime.js';
 export * from './staff.js';
 export * from './system.js';
+export * from './ticket.js';

@@ -124,6 +124,40 @@ export const withTenant = <T>(
   });
 };
 
+/**
+ * The department scope the *current transaction* carries, read back out of the
+ * session settings.
+ *
+ * It exists so that a service can refuse a request with a sentence instead of
+ * letting a policy refuse it with a 500. A handler that is about to write a row
+ * into a department has to know whether this principal reaches it, and asking
+ * the transaction is the one way to know that cannot drift: it is literally the
+ * value the `WITH CHECK` half of the policy will be evaluated against.
+ *
+ * Outside a tenant transaction the settings are unset and this answers `[]`,
+ * which is the same fail-closed reading the policies take.
+ */
+export const currentDepartmentScope = async (
+  tx: DbTransaction,
+): Promise<readonly string[] | 'all'> => {
+  const rows = await tx.execute<{ all_departments: string | null; department_ids: string | null }>(
+    sql`SELECT current_setting(${SESSION_SETTINGS.allDepartments}, true) AS all_departments,
+               current_setting(${SESSION_SETTINGS.departmentIds}, true) AS department_ids`,
+  );
+
+  const row = [...rows][0];
+  if (row?.all_departments === 'true') {
+    return 'all';
+  }
+
+  // The setting is a Postgres array literal of uuids, `{a,b}`, written by
+  // `tenantSessionSettings`; anything else means no scope at all.
+  const literal = row?.department_ids ?? '';
+  const inner = literal.startsWith('{') && literal.endsWith('}') ? literal.slice(1, -1) : '';
+
+  return inner.length === 0 ? [] : inner.split(',');
+};
+
 /** The context a worker runs under: one brand, every department (DOMAIN-RULES §1.4). */
 export const systemContext = (brandId: string, jobId = SYSTEM_PRINCIPAL_ID): TenantContext => ({
   brandIds: [brandId],

@@ -36,6 +36,10 @@ describe('the schema', () => {
       'job_receipts',
       'outbox',
       'settings',
+      'ticket_activity',
+      'ticket_messages',
+      'ticket_statuses',
+      'tickets',
       'user_brand_roles',
       'users',
     ]);
@@ -104,6 +108,67 @@ describe('the indexes and constraints', () => {
     const unique = configOf('departments').uniqueConstraints[0];
 
     expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'name']);
+  });
+
+  it('keeps a status name unique inside its brand, so the picker has no twins', () => {
+    const unique = configOf('ticket_statuses').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'name']);
+  });
+
+  it('numbers tickets per brand and refuses a duplicate', () => {
+    const unique = configOf('tickets').uniqueConstraints[0];
+
+    expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'number']);
+  });
+
+  it('carries the ticket list index set of PRD M1-15', () => {
+    const names = configOf('tickets').indexes.map((entry) => entry.config.name);
+
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'tickets_brand_department_status_updated_idx',
+        'tickets_brand_assignee_idx',
+        'tickets_search_idx',
+      ]),
+    );
+  });
+
+  it('derives the search vector rather than letting a writer forget it', () => {
+    const search = configOf('tickets').columns.find((column) => column.name === 'search');
+
+    expect(search?.generated?.type).toBe('always');
+  });
+
+  it('makes seq unique per ticket, which is the backstop under the lock', () => {
+    const index = configOf('ticket_messages').indexes.find(
+      (entry) => entry.config.name === 'ticket_messages_ticket_seq_key',
+    );
+
+    expect(index?.config.unique).toBe(true);
+  });
+
+  it('dedupes a retried send on (ticket, client_id), over the rows that have one', () => {
+    const index = configOf('ticket_messages').indexes.find(
+      (entry) => entry.config.name === 'ticket_messages_ticket_client_key',
+    );
+
+    expect(index?.config.unique).toBe(true);
+    // Partial: most rows have no `client_id`, and a full index would carry them.
+    expect(index?.config.where).toBeDefined();
+  });
+
+  it('dedupes an inbound message per brand and channel (DOMAIN-RULES §6)', () => {
+    const index = configOf('ticket_messages').indexes.find(
+      (entry) => entry.config.name === 'ticket_messages_external_key',
+    );
+
+    expect(index?.config.unique).toBe(true);
+    expect(index?.config.columns.map((column) => 'name' in column && column.name)).toEqual([
+      'brand_id',
+      'channel',
+      'external_message_id',
+    ]);
   });
 
   it('keys a setting by key and scope together', () => {

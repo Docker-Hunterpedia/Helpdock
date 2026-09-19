@@ -8,22 +8,18 @@
  * so a `@SubscribeMessage` handler on a `@WebSocketGateway` counts as a route
  * here and is held to the same rule.
  *
- * Run with `pnpm check:routes`. Exits non-zero and names every handler. The
- * scanner it walks with is in `controller-scan.ts`, shared with
- * `check-route-validation.ts`.
+ * Run with `pnpm check:routes`. Exits non-zero and names every handler. It
+ * walks with `controller-scan.ts`, shared with `check-route-validation.ts`.
  */
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   appSourceFiles,
+  forEachMethod,
   HANDLER_HOST_DECORATORS,
+  type MethodSite,
   ROUTE_DECORATORS,
-  readDecorator,
-  SyntaxKind,
-  skipParens,
-  type Token,
-  tokenize,
 } from './controller-scan.ts';
 
 /** Decorators that satisfy the rule. One of them, on the handler or its class. */
@@ -39,13 +35,22 @@ export interface UndeclaredRoute {
   readonly route: string;
 }
 
-interface ClassFrame {
-  readonly name: string;
-  /** A `@Controller` or a `@WebSocketGateway`; anything else holds no routes. */
-  readonly isHandlerHost: boolean;
-  readonly declared: boolean;
-  readonly bodyDepth: number;
-}
+const declares = (decorators: readonly string[]): boolean =>
+  decorators.some((name) => DECLARATION_DECORATORS.has(name));
+
+/** Whether this method is a handler that declared nothing. */
+const undeclaredRoute = (file: string, method: MethodSite): UndeclaredRoute | undefined => {
+  if (!method.classDecorators.some((name) => HANDLER_HOST_DECORATORS.has(name))) {
+    return undefined;
+  }
+
+  const route = method.decorators.find((name) => ROUTE_DECORATORS.has(name));
+  if (route === undefined || declares(method.classDecorators) || declares(method.decorators)) {
+    return undefined;
+  }
+
+  return { file, className: method.className, handler: method.name, route };
+};
 
 /**
  * Every route or socket-event handler in one file that declares neither a
@@ -55,117 +60,17 @@ export function findUndeclaredRoutes(params: {
   readonly file: string;
   readonly source: string;
 }): UndeclaredRoute[] {
-  const tokens = tokenize(params.source, params.file);
   const undeclared: UndeclaredRoute[] = [];
 
-  let depth = 0;
-  let pending: string[] = [];
-  let frame: ClassFrame | undefined;
-
-  for (let index = 0; index < tokens.length; ) {
-    const token: Token | undefined = tokens[index];
-    /* c8 ignore next 3 -- the loop condition already bounds `index`. */
-    if (token === undefined) {
-      break;
-    }
-
-    const decorator = readDecorator(tokens, index);
-    if (decorator !== undefined) {
-      pending.push(decorator.name);
-      index = decorator.next;
-      continue;
-    }
-
-    switch (token.kind) {
-      case SyntaxKind.ClassKeyword: {
-        const name = tokens[index + 1]?.text ?? '(anonymous)';
-        frame = {
-          name,
-          isHandlerHost: pending.some((decoratorName) =>
-            HANDLER_HOST_DECORATORS.has(decoratorName),
-          ),
-          declared: pending.some((decoratorName) => DECLARATION_DECORATORS.has(decoratorName)),
-          bodyDepth: depth + 1,
-        };
-        pending = [];
-        index += 2;
-        continue;
-      }
-      case SyntaxKind.OpenBraceToken:
-        depth += 1;
-        pending = [];
-        index += 1;
-        continue;
-      case SyntaxKind.CloseBraceToken:
-        depth -= 1;
-        pending = [];
-        if (frame !== undefined && depth < frame.bodyDepth) {
-          frame = undefined;
-        }
-        index += 1;
-        continue;
-      case SyntaxKind.SemicolonToken:
-        pending = [];
-        index += 1;
-        continue;
-      default:
-        break;
-    }
-
-    // A method is a name followed by `(` at the depth of the class body. A
-    // property holding a function is `name = (…) =>`, which the `=` rules out.
-    const isMember =
-      frame !== undefined &&
-      depth === frame.bodyDepth &&
-      token.kind === SyntaxKind.Identifier &&
-      tokens[index + 1]?.kind === SyntaxKind.OpenParenToken;
-
-    if (!isMember || frame === undefined) {
-      index += 1;
-      continue;
-    }
-
-    const finding = undeclaredRoute({
-      file: params.file,
-      frame,
-      handler: token.text,
-      decorators: pending,
-    });
+  forEachMethod(params, (method) => {
+    const finding = undeclaredRoute(params.file, method);
     if (finding !== undefined) {
       undeclared.push(finding);
     }
-
-    pending = [];
-    // Past the parameter list, so parameter decorators are never collected.
-    index = skipParens(tokens, index + 1);
-  }
+  });
 
   return undeclared;
 }
-
-/** Whether this member is a handler that declared nothing. */
-const undeclaredRoute = ({
-  file,
-  frame,
-  handler,
-  decorators,
-}: {
-  readonly file: string;
-  readonly frame: ClassFrame;
-  readonly handler: string;
-  readonly decorators: readonly string[];
-}): UndeclaredRoute | undefined => {
-  if (!frame.isHandlerHost) {
-    return undefined;
-  }
-
-  const route = decorators.find((name) => ROUTE_DECORATORS.has(name));
-  const declared = frame.declared || decorators.some((name) => DECLARATION_DECORATORS.has(name));
-
-  return route === undefined || declared
-    ? undefined
-    : { file, className: frame.name, handler, route };
-};
 
 function formatUndeclared(route: UndeclaredRoute): string {
   return `  ${route.file}: ${route.className}.${route.handler} is @${route.route}() with no @Requires, @Authenticated or @Public`;

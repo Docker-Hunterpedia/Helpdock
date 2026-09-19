@@ -159,6 +159,110 @@ export const readDecorator = (
   return { name, argumentTokens, next };
 };
 
+export interface MethodSite {
+  readonly className: string;
+  /** Decorator names on the class itself: `Controller`, `Requires`, … */
+  readonly classDecorators: readonly string[];
+  readonly name: string;
+  /** Decorator names on the method itself: `Get`, `Public`, … */
+  readonly decorators: readonly string[];
+  /** The tokens between the method's own `(` and its `)`. */
+  readonly parameterTokens: readonly Token[];
+}
+
+/**
+ * Calls `visit` for every method of every class in one file, with the
+ * decorators of both and the method's parameter list. Which of those count as a
+ * route, and what a route then has to carry, is each check's own rule.
+ *
+ * A method is a name followed by `(` at the depth of the class body. A property
+ * holding a function is `name = (…) =>`, which the `=` rules out.
+ */
+export function forEachMethod(
+  params: { readonly file: string; readonly source: string },
+  visit: (site: MethodSite) => void,
+): void {
+  const tokens = tokenize(params.source, params.file);
+
+  let depth = 0;
+  let pending: string[] = [];
+  let frame:
+    | { readonly name: string; readonly decorators: string[]; readonly bodyDepth: number }
+    | undefined;
+
+  for (let index = 0; index < tokens.length; ) {
+    const token = tokens[index];
+    /* c8 ignore next 3 -- the loop condition already bounds `index`. */
+    if (token === undefined) {
+      break;
+    }
+
+    const decorator = readDecorator(tokens, index);
+    if (decorator !== undefined) {
+      pending.push(decorator.name);
+      index = decorator.next;
+      continue;
+    }
+
+    switch (token.kind) {
+      case SyntaxKind.ClassKeyword: {
+        frame = {
+          name: tokens[index + 1]?.text ?? '(anonymous)',
+          decorators: pending,
+          bodyDepth: depth + 1,
+        };
+        pending = [];
+        index += 2;
+        continue;
+      }
+      case SyntaxKind.OpenBraceToken:
+        depth += 1;
+        pending = [];
+        index += 1;
+        continue;
+      case SyntaxKind.CloseBraceToken:
+        depth -= 1;
+        pending = [];
+        if (frame !== undefined && depth < frame.bodyDepth) {
+          frame = undefined;
+        }
+        index += 1;
+        continue;
+      case SyntaxKind.SemicolonToken:
+        pending = [];
+        index += 1;
+        continue;
+      default:
+        break;
+    }
+
+    const isMethod =
+      frame !== undefined &&
+      depth === frame.bodyDepth &&
+      token.kind === SyntaxKind.Identifier &&
+      tokens[index + 1]?.kind === SyntaxKind.OpenParenToken;
+
+    if (!isMethod || frame === undefined) {
+      index += 1;
+      continue;
+    }
+
+    const afterParameters = skipParens(tokens, index + 1);
+    visit({
+      className: frame.name,
+      classDecorators: frame.decorators,
+      name: token.text,
+      decorators: pending,
+      parameterTokens: tokens.slice(index + 2, afterParameters - 1),
+    });
+
+    pending = [];
+    // Past the parameter list, so a parameter's decorators are never read as
+    // the next method's.
+    index = afterParameters;
+  }
+}
+
 async function collectSourceFiles(directory: string, repoRoot: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];

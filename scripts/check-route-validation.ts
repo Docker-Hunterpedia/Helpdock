@@ -5,11 +5,12 @@
  *
  * Why naming it is not optional (issue #36): nestjs-zod's *global*
  * `ZodValidationPipe` finds a DTO's schema through the `design:paramtypes`
- * metadata the compiler emits for a decorated parameter. An `import type` — which
- * Biome's `useImportType` writes by itself for a DTO used only as a type — erases
- * that metadata, and a transform that never emits it (esbuild, which Vitest uses)
- * removes it everywhere at once. Validation then stops silently: the handler is
- * handed whatever arrived, and the only sign is a 400 that no longer happens.
+ * metadata the compiler emits for a decorated parameter. An `import type` —
+ * which Biome's `useImportType` writes by itself for a DTO used only as a type —
+ * erases that metadata, and a transform that never emits it (esbuild, which
+ * Vitest uses) removes it everywhere at once. Validation then stops silently:
+ * the handler is handed whatever arrived, and the only sign is a 400 that no
+ * longer happens.
  *
  * Naming the schema on the parameter is the same pipe with the same schema,
  * decided at the call site instead of inferred, so the route validates wherever
@@ -17,21 +18,22 @@
  *
  * Run with `pnpm check:validation`. Exits non-zero and names every parameter.
  *
- * Out of scope, deliberately: socket events. `@MessageBody()` on the `/staff`
- * gateway is typed `unknown` and parsed inside the handler with
- * `parseMessage(schema, body)`, because a pipe cannot answer through an
- * acknowledgement. The type is the contract there, and the compiler checks it.
+ * Only `@Controller` classes. A `@WebSocketGateway` takes `@MessageBody() body:
+ * unknown` and parses it inside the handler with `parseMessage(schema, body)`,
+ * because a pipe cannot answer through an acknowledgement; the type is the
+ * contract there, and the compiler checks it.
  */
+
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   appSourceFiles,
+  forEachMethod,
+  type MethodSite,
   ROUTE_DECORATORS,
   readDecorator,
   SyntaxKind,
-  skipParens,
   type Token,
-  tokenize,
 } from './controller-scan.ts';
 
 /** Parameter decorators that hand a handler something the caller chose. */
@@ -39,12 +41,6 @@ const INPUT_DECORATORS = new Set(['Param', 'Query', 'Body']);
 
 /** The pipe that has to appear in their arguments. */
 const VALIDATION_PIPE = 'ZodValidationPipe';
-
-/**
- * Only HTTP. A `@WebSocketGateway` has no pipe that can answer through an
- * acknowledgement, so its rule is the one in the file comment above.
- */
-const CONTROLLER_DECORATOR = 'Controller';
 
 export interface UnvalidatedParameter {
   /** Repository-relative, POSIX-separated path of the file. */
@@ -57,14 +53,6 @@ export interface UnvalidatedParameter {
   readonly argument: string;
 }
 
-interface ClassFrame {
-  readonly name: string;
-  readonly isController: boolean;
-  readonly bodyDepth: number;
-}
-
-const textOf = (tokens: readonly Token[]): string => tokens.map((token) => token.text).join('');
-
 /**
  * Whether the decorator's arguments name the validation pipe. An identifier,
  * never a string: a comment or a string that happens to contain the pipe's name
@@ -76,18 +64,9 @@ const namesThePipe = (argumentTokens: readonly Token[]): boolean =>
   );
 
 /** The input parameters of one handler that are not parsed by a named schema. */
-const unvalidatedParametersOf = ({
-  file,
-  className,
-  handler,
-  parameterTokens,
-}: {
-  readonly file: string;
-  readonly className: string;
-  readonly handler: string;
-  readonly parameterTokens: readonly Token[];
-}): UnvalidatedParameter[] => {
+const unvalidatedParametersOf = (file: string, method: MethodSite): UnvalidatedParameter[] => {
   const findings: UnvalidatedParameter[] = [];
+  const { parameterTokens } = method;
 
   for (let index = 0; index < parameterTokens.length; ) {
     const decorator = readDecorator(parameterTokens, index);
@@ -99,10 +78,10 @@ const unvalidatedParametersOf = ({
     if (INPUT_DECORATORS.has(decorator.name) && !namesThePipe(decorator.argumentTokens)) {
       findings.push({
         file,
-        className,
-        handler,
+        className: method.className,
+        handler: method.name,
         decorator: decorator.name,
-        argument: textOf(decorator.argumentTokens),
+        argument: decorator.argumentTokens.map((token) => token.text).join(''),
       });
     }
 
@@ -120,87 +99,17 @@ export function findUnvalidatedParameters(params: {
   readonly file: string;
   readonly source: string;
 }): UnvalidatedParameter[] {
-  const tokens = tokenize(params.source, params.file);
   const findings: UnvalidatedParameter[] = [];
 
-  let depth = 0;
-  let pending: string[] = [];
-  let frame: ClassFrame | undefined;
+  forEachMethod(params, (method) => {
+    const isRoute =
+      method.classDecorators.includes('Controller') &&
+      method.decorators.some((name) => ROUTE_DECORATORS.has(name));
 
-  for (let index = 0; index < tokens.length; ) {
-    const token: Token | undefined = tokens[index];
-    /* c8 ignore next 3 -- the loop condition already bounds `index`. */
-    if (token === undefined) {
-      break;
+    if (isRoute) {
+      findings.push(...unvalidatedParametersOf(params.file, method));
     }
-
-    const decorator = readDecorator(tokens, index);
-    if (decorator !== undefined) {
-      pending.push(decorator.name);
-      index = decorator.next;
-      continue;
-    }
-
-    switch (token.kind) {
-      case SyntaxKind.ClassKeyword: {
-        frame = {
-          name: tokens[index + 1]?.text ?? '(anonymous)',
-          isController: pending.includes(CONTROLLER_DECORATOR),
-          bodyDepth: depth + 1,
-        };
-        pending = [];
-        index += 2;
-        continue;
-      }
-      case SyntaxKind.OpenBraceToken:
-        depth += 1;
-        pending = [];
-        index += 1;
-        continue;
-      case SyntaxKind.CloseBraceToken:
-        depth -= 1;
-        pending = [];
-        if (frame !== undefined && depth < frame.bodyDepth) {
-          frame = undefined;
-        }
-        index += 1;
-        continue;
-      case SyntaxKind.SemicolonToken:
-        pending = [];
-        index += 1;
-        continue;
-      default:
-        break;
-    }
-
-    const isMember =
-      frame !== undefined &&
-      depth === frame.bodyDepth &&
-      token.kind === SyntaxKind.Identifier &&
-      tokens[index + 1]?.kind === SyntaxKind.OpenParenToken;
-
-    if (!isMember || frame === undefined) {
-      index += 1;
-      continue;
-    }
-
-    const afterParameters = skipParens(tokens, index + 1);
-    if (frame.isController && pending.some((name) => ROUTE_DECORATORS.has(name))) {
-      findings.push(
-        ...unvalidatedParametersOf({
-          file: params.file,
-          className: frame.name,
-          handler: token.text,
-          // Between the `(` and its `)`, so the handler's own decorators are
-          // never read as its parameters'.
-          parameterTokens: tokens.slice(index + 2, afterParameters - 1),
-        }),
-      );
-    }
-
-    pending = [];
-    index = afterParameters;
-  }
+  });
 
   return findings;
 }

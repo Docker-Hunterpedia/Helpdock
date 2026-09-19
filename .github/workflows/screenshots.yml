@@ -11,8 +11,6 @@ name: Screenshots
 # different font set is not a baseline, it is a future false failure.
 on:
   workflow_dispatch:
-  push:
-    branches: [feat/m0-11-ci-and-close-out]
   pull_request:
     paths:
       - 'apps/admin/src/**'

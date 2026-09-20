@@ -1,3 +1,4 @@
+import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { isAuthError } from '../auth/api.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
@@ -218,7 +219,13 @@ describe('the brand', () => {
 
     const updated = await api.updateBrand(BRAND, {
       name: 'Renamed',
-      settings: { autoAwaitOnAgentReply: false, reopenPolicy: { kind: 'never' } },
+      // Sent whole, as the endpoint requires: a half-sent object would silently
+      // reset the key it left out, which is why `contentPolicy` is here too.
+      settings: {
+        autoAwaitOnAgentReply: false,
+        reopenPolicy: { kind: 'never' },
+        contentPolicy: DEFAULT_CONTENT_POLICY,
+      },
     });
 
     expect(updated).toMatchObject({

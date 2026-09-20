@@ -175,6 +175,8 @@ export interface CreateApiAppOptions {
   readonly brandResolver?: AppModuleOptions['brandResolver'];
   /** Tests substitute a sender they can read the magic link back out of. */
   readonly emailSender?: AppModuleOptions['auth']['emailSender'];
+  /** M1-10's bucket. Boot leaves it out and the module builds one from `S3_*`. */
+  readonly objectStorage?: AppModuleOptions['objectStorage'];
 }
 
 export const createApiApp = async ({
@@ -182,6 +184,7 @@ export const createApiApp = async ({
   extraControllers,
   brandResolver,
   emailSender,
+  objectStorage,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -211,6 +214,7 @@ export const createApiApp = async ({
       realtime: { sessionResolver, revocations: refreshStore },
       principalResolver: createPrincipalResolver({ env, logger, session: sessionResolver }),
       ...(brandResolver === undefined ? {} : { brandResolver }),
+      ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the

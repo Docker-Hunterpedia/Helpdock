@@ -1,10 +1,12 @@
 import type {
+  Attachment as AttachmentRow,
   TicketActivityEntry as TicketActivityRow,
   TicketMessage as TicketMessageRow,
   Ticket as TicketRow,
   TicketStatus as TicketStatusRow,
 } from '@helpdock/db';
 import type { Ticket, TicketActivityEntry, TicketMessage, TicketStatus } from '@helpdock/schemas';
+import { toAttachment } from '../media/attachment-view.js';
 
 /**
  * Rows to the wire shapes of `@helpdock/schemas`. The output DTO parses these
@@ -64,7 +66,15 @@ export const toTicket = (ticket: TicketRow, status: TicketStatusRow): Ticket => 
   updatedAt: ticket.updatedAt.toISOString(),
 });
 
-export const toTicketMessage = (row: TicketMessageRow): TicketMessage => ({
+/**
+ * M1-10 added `attachments`. It is a parameter rather than a read here because
+ * a thread page resolves every message's attachments in one query; a mapper
+ * that fetched its own would be one query per row.
+ */
+export const toTicketMessage = (
+  row: TicketMessageRow,
+  attachments: readonly AttachmentRow[] = [],
+): TicketMessage => ({
   id: row.id,
   ticketId: row.ticketId,
   seq: row.seq,
@@ -75,6 +85,7 @@ export const toTicketMessage = (row: TicketMessageRow): TicketMessage => ({
   bodyHtml: row.bodyHtml,
   bodyText: row.bodyText,
   channel: row.channel,
+  attachments: attachments.map(toAttachment),
   createdAt: row.createdAt.toISOString(),
 });
 

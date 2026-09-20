@@ -4,6 +4,7 @@ import type {
   TicketStatus as TicketStatusRow,
 } from '@helpdock/db';
 import type { BrandSettings, ReopenPolicy } from '@helpdock/schemas';
+import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityActor } from '../ticket-activity.js';
 import { TicketLifecycleHooks } from './hooks.js';
@@ -97,6 +98,9 @@ interface Recorder {
 const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
   autoAwaitOnAgentReply: autoAwait,
   reopenPolicy: policy,
+  // M1-10 nested the brand's content policy in `settings`. The lifecycle never
+  // reads it; it is here because the whole object is what the column holds.
+  contentPolicy: DEFAULT_CONTENT_POLICY,
 });
 
 const harness = (options: {

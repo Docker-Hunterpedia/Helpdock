@@ -1,4 +1,5 @@
 import { type DynamicModule, Module } from '@nestjs/common';
+import { MediaRepository } from '../media/media.repository.js';
 import { TicketLifecycleHooks } from './lifecycle/hooks.js';
 import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from './lifecycle/lifecycle.service.js';
@@ -39,6 +40,12 @@ export class TicketsModule {
         TicketLifecycleRepository,
         TicketLifecycleService,
         TicketingSettingsService,
+        // M1-10. `MediaRepository` is listed rather than imported from
+        // `MediaModule`: it is stateless — every method takes the request's
+        // transaction — so a second instance costs nothing, and importing a
+        // dynamic module for one stateless class would tie the two modules'
+        // construction together.
+        MediaRepository,
       ],
     };
   }

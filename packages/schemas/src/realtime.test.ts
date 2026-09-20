@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attachmentChangedSchema,
   brandRoom,
   departmentRoom,
   parseRoom,
@@ -56,7 +57,39 @@ describe('the message schemas', () => {
       REALTIME_EVENTS.presenceChanged,
       REALTIME_EVENTS.ticketChanged,
       REALTIME_EVENTS.ticketMessage,
+      REALTIME_EVENTS.attachmentChanged,
     ]);
+  });
+
+  it('carries no URL on an attachment event, so a signed URL cannot outlive its check', () => {
+    // A presigned URL is issued to a caller authorised on the parent ticket at
+    // that moment; one broadcast to a room would outlive that (DOMAIN-RULES
+    // §4.5). The frame names the row and the client asks for a URL of its own.
+    expect(Object.keys(attachmentChangedSchema.shape).sort()).toEqual([
+      'attachmentId',
+      'brandId',
+      'departmentId',
+      'status',
+      'ticketId',
+    ]);
+  });
+
+  it('only reports an attachment that has finished, either way', () => {
+    const frame = {
+      brandId: BRAND,
+      ticketId: BRAND,
+      departmentId: BRAND,
+      attachmentId: BRAND,
+    };
+
+    for (const status of ['ready', 'rejected', 'infected']) {
+      expect(attachmentChangedSchema.safeParse({ ...frame, status }).success, status).toBe(true);
+    }
+    // Nothing is emitted while it is still being worked on: the composer's
+    // placeholder is already showing that.
+    expect(attachmentChangedSchema.safeParse({ ...frame, status: 'processing' }).success).toBe(
+      false,
+    );
   });
 
   it('carries no message body on a ticket event, so a note cannot leak over a socket', () => {

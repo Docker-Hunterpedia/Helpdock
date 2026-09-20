@@ -8,6 +8,18 @@ const MAX_PORT = 65_535;
 const DEFAULT_PORT = 3000;
 /** Where `docker/Dockerfile` copies `apps/admin/dist`, so an image needs no `.env` entry. */
 const DEFAULT_ADMIN_DIST_DIR = '/app/admin';
+
+/**
+ * The media worker spawns ffmpeg rather than linking a binding, so what it
+ * needs is a path. Bare names resolve on `PATH`, which is what the image
+ * installs them as; an operator running the api outside the image points these
+ * at their own build (docs/guides/attachments.md).
+ */
+const DEFAULT_FFMPEG_PATH = 'ffmpeg';
+const DEFAULT_FFPROBE_PATH = 'ffprobe';
+
+/** clamd's registered port. The Compose `clamav` profile listens on it. */
+const DEFAULT_CLAMAV_PORT = 3310;
 const IPV4_BITS = 32;
 const IPV6_BITS = 128;
 const NO_CIDRS: readonly string[] = [];
@@ -156,6 +168,40 @@ export const envSchema = z.object({
   S3_BUCKET: z.string().min(1).describe('must be the bucket that holds attachments and images'),
   S3_ACCESS_KEY_ID: z.string().min(1).describe('must be the S3 access key id'),
   S3_SECRET_ACCESS_KEY: z.string().min(1).describe('must be the S3 secret access key'),
+  S3_FORCE_PATH_STYLE: z
+    .stringbool()
+    .default(false)
+    .describe(
+      'optional; must be "true" or "false", default false. "true" addresses the bucket as a path (endpoint/bucket/key) rather than as a subdomain, which MinIO and most other S3-compatible servers need',
+    ),
+  FFMPEG_PATH: z
+    .string()
+    .min(1)
+    .default(DEFAULT_FFMPEG_PATH)
+    .describe(
+      `optional; path to the ffmpeg binary the media worker spawns, default ${DEFAULT_FFMPEG_PATH} (resolved on PATH)`,
+    ),
+  FFPROBE_PATH: z
+    .string()
+    .min(1)
+    .default(DEFAULT_FFPROBE_PATH)
+    .describe(
+      `optional; path to the ffprobe binary the media worker spawns, default ${DEFAULT_FFPROBE_PATH} (resolved on PATH)`,
+    ),
+  CLAMAV_HOST: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'optional; host of a clamd daemon. Set it and uploaded files are scanned before they are served; leave it unset and scanning is skipped (ARCHITECTURE §17)',
+    ),
+  CLAMAV_PORT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_PORT)
+    .default(DEFAULT_CLAMAV_PORT)
+    .describe(`optional; clamd's TCP port, default ${DEFAULT_CLAMAV_PORT}`),
   ADMIN_DIST_DIR: z
     .string()
     .min(1)

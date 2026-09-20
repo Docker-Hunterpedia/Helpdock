@@ -109,7 +109,11 @@ services:
   # Object storage for development. A production install points S3_* at a real
   # S3, R2 or MinIO deployment and never starts this (ARCHITECTURE §17).
   minio:
-    image: minio/minio
+    # Quay rather than Docker Hub, and pinned: Docker Hub meters anonymous
+    # pulls per address, which makes `docker compose up` fail on a shared or
+    # CI address for a reason that has nothing to do with this stack. Quay is
+    # MinIO's own registry and does not.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     profiles: ['dev']
     restart: unless-stopped
     command: ['server', '/data', '--console-address', ':9001']
@@ -126,7 +130,7 @@ services:
 
   # Creates the bucket and exits. MinIO has no "create on first write".
   minio-bucket:
-    image: minio/mc
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     profiles: ['dev']
     restart: 'no'
     depends_on:

@@ -103,3 +103,59 @@ export const statusColorEnum = pgEnum('status_color', [
   'info',
   'escalated',
 ]);
+
+/**
+ * What an attachment is, which decides what the media pipeline does to it
+ * (ARCHITECTURE §9). `audio` is read against the brand's **voice** policy;
+ * REQUIREMENTS §4.6 names the control and the pipeline names the bytes.
+ */
+export const attachmentKindEnum = pgEnum('attachment_kind', ['image', 'video', 'audio', 'file']);
+
+/**
+ * Where an attachment is in the pipeline. `ready` is the only state a presigned
+ * download is issued for, because it is the only one whose bytes have been
+ * sniffed, re-encoded and scanned.
+ */
+export const attachmentStatusEnum = pgEnum('attachment_status', [
+  'pending',
+  'processing',
+  'ready',
+  'rejected',
+  'infected',
+]);
+
+/** The outcome of the optional ClamAV pass (ARCHITECTURE §9, §17). */
+export const attachmentScanStatusEnum = pgEnum('attachment_scan_status', [
+  'skipped',
+  'clean',
+  'infected',
+  'error',
+]);
+
+/**
+ * Who uploaded an attachment. Narrower than {@link messageAuthorTypeEnum}: an
+ * AI writes text and uploads nothing in v1 (AGENTS.md).
+ */
+export const attachmentUploaderTypeEnum = pgEnum('attachment_uploader_type', [
+  'staff',
+  'contact',
+  'system',
+]);
+
+/**
+ * Why an attachment was refused. A closed vocabulary, because the value is
+ * returned to the client and written to the log: a tool's stderr would carry
+ * the worker's paths and the name of every binary on it.
+ */
+export const attachmentRejectReasonEnum = pgEnum('attachment_reject_reason', [
+  'mime_mismatch',
+  'mime_not_allowed',
+  'kind_disabled',
+  'too_large',
+  'object_missing',
+  'unreadable',
+  'timeout',
+  'scan_error',
+  'infected',
+  'processing_failed',
+]);

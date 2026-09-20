@@ -95,6 +95,10 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       S3_BUCKET: 'helpdock',
       S3_ACCESS_KEY_ID: 'access',
       S3_SECRET_ACCESS_KEY: 'secret',
+      S3_FORCE_PATH_STYLE: true,
+      FFMPEG_PATH: 'ffmpeg',
+      FFPROBE_PATH: 'ffprobe',
+      CLAMAV_PORT: 3310,
       // No admin build is served here; these tests speak to `/api/auth` only,
       // and the static module answers with its "no build found" warning.
       ADMIN_DIST_DIR: 'apps/admin/dist',

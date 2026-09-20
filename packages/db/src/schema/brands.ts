@@ -33,6 +33,10 @@ export const brands = pgTable('brands', {
    *
    * Every key in the schema carries a default, so the column default only has
    * to be valid JSON: a row written before a key existed still parses.
+   *
+   * M1-10 put `contentPolicy` in here rather than in a column of its own, for
+   * the same reasons: it is the brand's own configuration, it is read whole
+   * with the brand, and nothing queries across brands by it.
    */
   settings: jsonb('settings').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

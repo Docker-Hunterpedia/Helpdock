@@ -1,4 +1,9 @@
-import type { PresenceChanged, PresenceMap, SettablePresenceStatus } from '@helpdock/schemas';
+import type {
+  AttachmentChanged,
+  PresenceChanged,
+  PresenceMap,
+  SettablePresenceStatus,
+} from '@helpdock/schemas';
 
 /**
  * What the admin needs from the realtime gateway, and nothing else.
@@ -14,6 +19,13 @@ export type RealtimeConnection = 'connecting' | 'connected' | 'closed';
 export interface RealtimeListener {
   connection?(state: RealtimeConnection): void;
   presenceChanged?(change: PresenceChanged): void;
+  /**
+   * The media pipeline finished with an attachment (M1-10). It is a
+   * notification, not the truth: the composer re-reads the row over REST, which
+   * is what {@link ../media/use-attachment.js useAttachment} does with it
+   * (DOMAIN-RULES §7).
+   */
+  attachmentChanged?(change: AttachmentChanged): void;
 }
 
 export interface RealtimeClient {
@@ -47,6 +59,12 @@ export class RealtimeListeners {
   presenceChanged(change: PresenceChanged): void {
     for (const listener of [...this.#listeners]) {
       listener.presenceChanged?.(change);
+    }
+  }
+
+  attachmentChanged(change: AttachmentChanged): void {
+    for (const listener of [...this.#listeners]) {
+      listener.attachmentChanged?.(change);
     }
   }
 }

@@ -9,6 +9,7 @@ import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
   accounts,
+  attachments,
   auditLog,
   brandDomains,
   brands,
@@ -265,6 +266,27 @@ const fixtures = [
         actorId: 'test',
         action: 'ticket.created',
         via: 'system',
+      }),
+  },
+  {
+    name: 'attachments',
+    // The third child of a ticket, and refused the same way for the same
+    // reason: the shared trigger finds no parent, so there is no department to
+    // denormalise (M1-10).
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(attachments).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        uploaderType: 'staff',
+        uploaderId: userId,
+        // Unique across the install, so each brand's fixture needs its own.
+        s3Key: `brands/${brandId}/tickets/seeded/original`,
+        originalName: 'seeded.png',
+        mime: 'image/png',
+        size: 12,
+        kind: 'image',
       }),
   },
 ] as const;

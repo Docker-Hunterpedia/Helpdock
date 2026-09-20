@@ -22,6 +22,8 @@ import { RequestContextMiddleware } from './context/request-context.middleware.j
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
+import { MediaModule } from './media/media.module.js';
+import type { ObjectStorage } from './media/storage.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
@@ -73,6 +75,12 @@ export interface AppModuleOptions {
   readonly realtime: Omit<RealtimeModuleOptions, 'logger'>;
   /** Defaults to {@link NoopBrandResolver}; M5 supplies the real one. */
   readonly brandResolver?: BrandResolver;
+  /**
+   * The bucket M1-10's attachment routes presign against. Boot leaves it out
+   * and `MediaModule` builds an S3 client from the bootstrap keys; a suite
+   * passes a double so the routes can be exercised without one.
+   */
+  readonly objectStorage?: ObjectStorage;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -105,6 +113,12 @@ export class AppModule implements NestModule {
           timeline: new DbContactTimelineProvider(),
         }),
         TicketsModule.forRoot(),
+        // M1-10. `forRoot` builds the S3 client from the bootstrap keys unless
+        // a caller hands it a bucket double, which is what the suites do.
+        MediaModule.forRoot({
+          env: options.env,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+        }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

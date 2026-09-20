@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
 
 /**
  * The wire contract for tickets and their threads (M1-02, M1-03), shared by the
@@ -230,6 +231,13 @@ export const ticketMessageSchema = z.object({
   bodyHtml: z.string(),
   bodyText: z.string(),
   channel: ticketChannelSchema,
+  /**
+   * What was sent with it (M1-10). Embedded rather than referenced for the
+   * reason the status is: a thread row draws a thumbnail, and a row that had to
+   * resolve its own attachments would render before it knew whether there were
+   * any. Empty for every message that carries none.
+   */
+  attachments: z.array(attachmentSchema).default([]),
   createdAt: z.iso.datetime(),
 });
 export type TicketMessage = z.infer<typeof ticketMessageSchema>;
@@ -401,6 +409,18 @@ export const messageCreateRequestSchema = z.object({
    * have their own keys, but the admin always sends one.
    */
   clientId: z.uuid().optional(),
+  /**
+   * Attachments to send with it (M1-10), each already presigned, uploaded and
+   * confirmed against **this** ticket by **this** principal. The api links them
+   * in the same transaction as the message, and refuses the whole send if any
+   * one of them cannot be linked — a message that quietly dropped a file is a
+   * message somebody believes they sent with it.
+   *
+   * The ceiling here is the schema's; the real limit is the brand's
+   * `maxAttachmentsPerMessage` and is enforced by the handler, because a policy
+   * is per brand and a schema is not.
+   */
+  attachmentIds: z.array(z.uuid()).max(ATTACHMENTS_PER_MESSAGE_CEILING).optional(),
 });
 export type MessageCreateRequest = z.infer<typeof messageCreateRequestSchema>;
 

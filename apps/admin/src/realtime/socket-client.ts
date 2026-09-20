@@ -1,4 +1,5 @@
 import {
+  attachmentChangedEnvelopeSchema,
   brandPresenceSchema,
   brandRoom,
   PRESENCE_HEARTBEAT_INTERVAL_MS,
@@ -185,6 +186,16 @@ export class SocketRealtimeClient implements RealtimeClient {
       const parsed = presenceChangedEnvelopeSchema.safeParse(envelope);
       if (parsed.success) {
         this.#listeners.presenceChanged(parsed.data.data);
+      }
+    });
+
+    // M1-10. The frame arrives on `ticket:<id>`, which M1-15's ticket view
+    // joins; relaying it here rather than there keeps every parse of a server
+    // frame in one file.
+    socket.on(REALTIME_EVENTS.attachmentChanged, (envelope) => {
+      const parsed = attachmentChangedEnvelopeSchema.safeParse(envelope);
+      if (parsed.success) {
+        this.#listeners.attachmentChanged(parsed.data.data);
       }
     });
 

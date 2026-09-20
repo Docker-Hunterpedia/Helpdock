@@ -669,8 +669,17 @@ export class MockTicketsApi implements TicketsApi {
 
 const isoNow = (): string => new Date().toISOString();
 
-/** Good enough for a fixture: the api extracts text with the sanitiser. */
-const textOf = (html: string): string => html.replaceAll(/<[^>]*>/g, '').trim();
+/**
+ * The text of a body, the way `body_text` is the text of `body_html`.
+ *
+ * The parser, not a regular expression over the markup: stripping `<...>` with
+ * a pattern is the mistake that leaves `<scr<script>ipt>` behind, and a fixture
+ * that taught that habit would be read as the way to do it. The api extracts
+ * its own text with the sanitiser that produced the html (ADR 0007); this is
+ * the fixture standing in for that, and it is not a sanitiser either.
+ */
+const textOf = (html: string): string =>
+  new DOMParser().parseFromString(html, 'text/html').body.textContent?.trim() ?? '';
 
 const PRIORITY_ORDER: Record<TicketPriority, number> = { low: 0, medium: 1, high: 2, urgent: 3 };
 

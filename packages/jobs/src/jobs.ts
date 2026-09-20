@@ -158,11 +158,52 @@ export const maintenanceRetentionJob = defineJob({
   schedule: { cron: '0 3 * * *' },
 });
 
-/** Every job M0 defines, by name. Bull Board and the metrics reader iterate it. */
+export const mediaProcessPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The row the whole job is about, and the key every delivery dedupes on. */
+  attachmentId: z.uuid(),
+});
+
+export type MediaProcessPayload = z.infer<typeof mediaProcessPayloadSchema>;
+
+/**
+ * The media pipeline's one job (ARCHITECTURE §9, §13): sniff the uploaded
+ * object's magic bytes, re-encode or transcode it, scan it, and leave the row
+ * `ready` or `rejected`.
+ *
+ * It is a queue of its own rather than an outbox handler because the work is
+ * measured in seconds of CPU — sharp and ffmpeg — and the `outbox` queue is the
+ * path every other side effect in the install shares. What *does* go through
+ * the outbox is the request for it: `attachment.uploaded` is written in the
+ * same transaction as the confirm, and its handler adds this job with
+ * `jobId = attachmentId`, so a confirm that rolls back never queues anything and
+ * a redelivered event never queues twice (DOMAIN-RULES §6).
+ *
+ * Three attempts, spaced widely: the failures worth retrying are a bucket that
+ * blinked, not bytes that will decode differently next time. Anything the
+ * pipeline judges — a MIME that does not match the magic bytes, an image that
+ * will not decode — marks the row `rejected` and *returns*, because retrying a
+ * verdict only delays it.
+ */
+export const mediaProcessJob = defineJob({
+  name: 'media.process',
+  queue: QUEUE_NAMES.media,
+  schema: mediaProcessPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `media.process:${payload.attachmentId}`,
+});
+
+/** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,
   [maintenanceRetentionJob.name]: maintenanceRetentionJob,
+  [mediaProcessJob.name]: mediaProcessJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

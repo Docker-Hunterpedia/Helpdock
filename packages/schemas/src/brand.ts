@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { contentPolicySchema } from './media.js';
 
 /** The interface and content languages Helpdock ships with (REQUIREMENTS §3). */
 export const localeSchema = z.enum(['en', 'ar']);
@@ -68,6 +69,14 @@ export const brandSettingsSchema = z.object({
     kind: 'within_days',
     days: REOPEN_WITHIN_DAYS_DEFAULT,
   }),
+  /**
+   * What the brand allows in a message: text, emoji, images, video, voice and
+   * files (M1-10). It lives in here rather than in a column of its own for the
+   * reasons above — it is the brand's own configuration, read whole with the
+   * brand, and never queried across brands. See
+   * {@link ./media.js contentPolicySchema}.
+   */
+  contentPolicy: contentPolicySchema.default(contentPolicySchema.parse({})),
 });
 export type BrandSettings = z.infer<typeof brandSettingsSchema>;
 

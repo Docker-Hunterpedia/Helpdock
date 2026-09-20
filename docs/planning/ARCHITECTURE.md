@@ -309,9 +309,11 @@ services:
   worker:   { image: ghcr.io/docker-hunterpedia/helpdock:latest, env_file: .env, environment: { APP_ROLE: worker }, depends_on: [postgres, redis] }
   postgres: { image: pgvector/pgvector:pg17, volumes: [pg_data:/var/lib/postgresql/data] }
   redis:    { image: redis:7-alpine, command: ["redis-server","--appendonly","yes"], volumes: [redis_data:/data] }
-  minio:    { image: minio/minio, profiles: [dev] }        # prod: external S3
-  clamav:   { image: clamav/clamav, profiles: [clamav] }   # optional
+  minio:    { image: quay.io/minio/minio, profiles: [dev] }   # prod: external S3
+  clamav:   { image: clamav/clamav, profiles: [clamav] }      # optional
 ```
+
+MinIO is pulled from Quay, MinIO's own registry, rather than from Docker Hub, and pinned to a release tag: Docker Hub meters anonymous pulls per address, so a shared or CI address fails `docker compose up` for a reason that has nothing to do with this stack (M1-10).
 
 `.env.example` documents every bootstrap key (`DATABASE_URL` is the runtime role, `DATABASE_MIGRATION_URL` the owner role); the wizard at first `/` creates the admin, the first brand, and tests SMTP (LLM step arrives with M7). Backup, restore, upgrade and key-rotation procedures: DOMAIN-RULES §10.
 

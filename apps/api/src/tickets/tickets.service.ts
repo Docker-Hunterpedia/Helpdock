@@ -30,6 +30,10 @@ import {
 } from '@nestjs/common';
 import type { Principal } from '../auth/principal.js';
 import { getTx } from '../context/request-context.js';
+import { readContentPolicy } from '../media/content-policy.js';
+import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
+import { MediaRepository } from '../media/media.repository.js';
+import { uploaderFor } from '../media/uploader.js';
 import { InvalidCursorError } from './cursor.js';
 import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import {
@@ -75,15 +79,18 @@ export class TicketsService {
   readonly #tickets: TicketRepository;
   readonly #lifecycle: TicketLifecycleService;
   readonly #lifecycleReads: TicketLifecycleRepository;
+  readonly #attachments: MediaRepository;
 
   constructor(
     @Inject(TicketRepository) tickets: TicketRepository,
     @Inject(TicketLifecycleService) lifecycle: TicketLifecycleService,
     @Inject(TicketLifecycleRepository) lifecycleReads: TicketLifecycleRepository,
+    @Inject(MediaRepository) attachments: MediaRepository,
   ) {
     this.#tickets = tickets;
     this.#lifecycle = lifecycle;
     this.#lifecycleReads = lifecycleReads;
+    this.#attachments = attachments;
   }
 
   // -------------------------------------------------------------------- reads
@@ -429,6 +436,21 @@ export class TicketsService {
       channel: target.channel,
     });
 
+    // M1-10. Inside the same transaction as the insert, so a message never
+    // commits without the files somebody believes they sent with it — and a
+    // refusal rolls the message back rather than sending a shortened one.
+    //
+    // The two ticket ids are deliberately both passed. The uploads were made
+    // against the ticket the caller addressed; the message may have landed on a
+    // continuation of it (§2.3), and an attachment whose `ticket_id` disagreed
+    // with its message's would be invisible to the very thread that renders it.
+    const attachments = await this.#linkAttachments(tx, brandId, principal, {
+      ticketId,
+      landingTicketId: target.id,
+      messageId: message.id,
+      attachmentIds: input.attachmentIds ?? [],
+    });
+
     const action = input.kind === 'note' ? 'ticket.note_added' : 'ticket.replied';
 
     await writeTicketActivity(tx, {
@@ -465,10 +487,61 @@ export class TicketsService {
       },
     );
 
-    return toTicketMessage(message);
+    return toTicketMessage(message, attachments);
   }
 
   // ---------------------------------------------------------------- internals
+
+  /**
+   * M1-10's seam. The rules are the media pipeline's — count, ticket, uploader,
+   * state — and live in `media/link.ts`; what belongs here is turning a refusal
+   * into a status code and reading the rows back so the response carries what
+   * the thread will render.
+   */
+  async #linkAttachments(
+    tx: DbTransaction,
+    brandId: string,
+    principal: Principal,
+    input: {
+      ticketId: string;
+      landingTicketId: string;
+      messageId: string;
+      attachmentIds: readonly string[];
+    },
+  ) {
+    if (input.attachmentIds.length === 0) {
+      return [];
+    }
+
+    const uploader = uploaderFor(principal);
+    const policy = readContentPolicy(await this.#attachments.contentPolicy(tx, brandId));
+
+    try {
+      await linkAttachmentsToMessage(
+        tx,
+        {
+          ticketId: input.ticketId,
+          landingTicketId: input.landingTicketId,
+          messageId: input.messageId,
+          attachmentIds: input.attachmentIds,
+          policy,
+          uploaderType: uploader.type,
+          uploaderId: uploader.id,
+        },
+        this.#attachments,
+      );
+    } catch (error) {
+      if (error instanceof AttachmentLinkError) {
+        throw error.problem === 'not_found'
+          ? new NotFoundException(error.message)
+          : new BadRequestException(error.message);
+      }
+      /* c8 ignore next 2 -- nothing else in that call throws. */
+      throw error;
+    }
+
+    return (await this.#attachments.ofMessages(tx, [input.messageId])).get(input.messageId) ?? [];
+  }
 
   async #messagePage(
     tx: DbTransaction,
@@ -478,9 +551,14 @@ export class TicketsService {
     const rows = await this.#tickets.messagesAfter(tx, ticketId, query.after, query.limit);
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
+    // M1-10: one statement for the whole page, not one per row.
+    const attachments = await this.#attachments.ofMessages(
+      tx,
+      page.map((message) => message.id),
+    );
 
     return {
-      messages: page.map(toTicketMessage),
+      messages: page.map((message) => toTicketMessage(message, attachments.get(message.id))),
       nextAfter: rows.length > query.limit && last !== undefined ? last.seq : null,
     };
   }

@@ -2,11 +2,20 @@ import type { Db } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
 import type { Redis } from 'ioredis';
 import { describe, expect, it } from 'vitest';
-import { startWorker, type WorkerDependencies } from './start-worker.js';
+import { startWorker, type WorkerDependencies, type WorkerEnv } from './start-worker.js';
 
-const env = {
+const env: WorkerEnv = {
   REDIS_URL: 'redis://redis:6379',
   DATABASE_URL: 'postgres://helpdock_app:pw@postgres:5432/helpdock',
+  S3_ENDPOINT: 'http://minio:9000',
+  S3_REGION: 'us-east-1',
+  S3_BUCKET: 'helpdock',
+  S3_ACCESS_KEY_ID: 'access',
+  S3_SECRET_ACCESS_KEY: 'secret',
+  S3_FORCE_PATH_STYLE: true,
+  FFMPEG_PATH: 'ffmpeg',
+  FFPROBE_PATH: 'ffprobe',
+  CLAMAV_PORT: 3310,
 };
 
 const db = {} as Db;
@@ -38,14 +47,20 @@ const harness = (): Harness => {
         calls.push('connection.create');
         return connection;
       },
-      registerHandlers: (redis) => {
+      registerHandlers: ({ redis }) => {
         calls.push('handlers.register');
         expect(redis).toBe(connection);
+        return { close: async () => void calls.push('producers.close') };
       },
       createEventWorker: ({ redis }) => {
         calls.push('worker.create');
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('worker.close') };
+      },
+      createMediaWorker: ({ redis }) => {
+        calls.push('media.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('media.close') };
       },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
@@ -59,7 +74,7 @@ const harness = (): Harness => {
 };
 
 describe('startWorker', () => {
-  it('registers the handlers and the consumer before the relay that feeds them', () => {
+  it('registers the handlers and both consumers before the relay that feeds them', () => {
     const { deps, calls } = harness();
 
     startWorker({ env, db, log: silentLogger, deps });
@@ -70,11 +85,12 @@ describe('startWorker', () => {
       'connection.create',
       'handlers.register',
       'worker.create',
+      'media.create',
       'relay.start',
     ]);
   });
 
-  it('gives the relay and the worker one connection, and the relay the LISTEN url', () => {
+  it('gives the relay and the workers one connection, and the relay the LISTEN url', () => {
     const { deps, started } = harness();
 
     startWorker({ env, db, log: silentLogger, deps });
@@ -97,16 +113,23 @@ describe('startWorker', () => {
     expect(started.relayStatus).toBeDefined();
   });
 
-  it('shuts down relay, then worker, then connection', async () => {
+  it('shuts down relay, then workers, then producers, then connection', async () => {
     const { deps, calls } = harness();
     const host = startWorker({ env, db, log: silentLogger, deps });
 
     calls.length = 0;
     await host.close();
 
-    // The relay stops adding jobs first, and the connection closes last so an
-    // in-flight job still has Redis to report to.
-    expect(calls).toEqual(['relay.stop', 'worker.close', 'connection.quit']);
+    // The relay stops adding jobs first; the event worker drains before the
+    // media worker, because it is what adds media jobs; the connection closes
+    // last so an in-flight job still has Redis to report to.
+    expect(calls).toEqual([
+      'relay.stop',
+      'worker.close',
+      'media.close',
+      'producers.close',
+      'connection.quit',
+    ]);
   });
 
   it('shuts down once, however many signals arrive', async () => {
@@ -117,6 +140,12 @@ describe('startWorker', () => {
     await Promise.all([host.close(), host.close()]);
     await host.close();
 
-    expect(calls).toEqual(['relay.stop', 'worker.close', 'connection.quit']);
+    expect(calls).toEqual([
+      'relay.stop',
+      'worker.close',
+      'media.close',
+      'producers.close',
+      'connection.quit',
+    ]);
   });
 });

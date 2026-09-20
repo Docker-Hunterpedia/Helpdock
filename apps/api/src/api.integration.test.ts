@@ -18,7 +18,7 @@ import {
   users,
   uuidv7,
 } from '@helpdock/db';
-import type { Principal } from '@helpdock/schemas';
+import { DEFAULT_CONTENT_POLICY, type Principal } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { and, eq, sql } from 'drizzle-orm';
@@ -137,6 +137,10 @@ describe.skipIf(!hasDocker)('the api', () => {
       S3_BUCKET: 'helpdock',
       S3_ACCESS_KEY_ID: 'access',
       S3_SECRET_ACCESS_KEY: 'secret',
+      S3_FORCE_PATH_STYLE: true,
+      FFMPEG_PATH: 'ffmpeg',
+      FFPROBE_PATH: 'ffprobe',
+      CLAMAV_PORT: 3310,
       ADMIN_DIST_DIR: adminDist,
       OUTBOUND_ALLOW_CIDRS: [],
       ...overrides,
@@ -516,8 +520,13 @@ describe.skipIf(!hasDocker)('the api', () => {
         status: 'active',
         // A brand created before M1-01 has an empty `settings` column, and the
         // output schema fills it with the DOMAIN-RULES §2.3 defaults rather
-        // than answering with a shape the client cannot use.
-        settings: { autoAwaitOnAgentReply: true, reopenPolicy: { kind: 'within_days', days: 7 } },
+        // than answering with a shape the client cannot use. M1-10's content
+        // policy is filled the same way.
+        settings: {
+          autoAwaitOnAgentReply: true,
+          reopenPolicy: { kind: 'within_days', days: 7 },
+          contentPolicy: DEFAULT_CONTENT_POLICY,
+        },
       });
     });
 
@@ -780,6 +789,10 @@ describe.skipIf(!hasDocker)('/ready when Redis is gone', () => {
         S3_BUCKET: 'helpdock',
         S3_ACCESS_KEY_ID: 'access',
         S3_SECRET_ACCESS_KEY: 'secret',
+        S3_FORCE_PATH_STYLE: true,
+        FFMPEG_PATH: 'ffmpeg',
+        FFPROBE_PATH: 'ffprobe',
+        CLAMAV_PORT: 3310,
         ADMIN_DIST_DIR: adminDist,
         OUTBOUND_ALLOW_CIDRS: [],
       } as Env,

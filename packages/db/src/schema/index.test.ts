@@ -25,6 +25,7 @@ describe('the schema', () => {
   it('declares the tables shipped so far (ARCHITECTURE §5)', () => {
     expect([...byName.keys()].sort()).toEqual([
       'accounts',
+      'attachments',
       'audit_log',
       'brand_domains',
       'brands',

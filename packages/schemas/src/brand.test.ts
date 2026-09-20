@@ -7,12 +7,16 @@ import {
   defaultBrandSettings,
   parseBrandSettings,
 } from './brand.js';
+import { DEFAULT_CONTENT_POLICY } from './media.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
 
 const settings = {
   autoAwaitOnAgentReply: true,
   reopenPolicy: { kind: 'within_days', days: 7 },
+  // M1-10 nested the brand's content policy in here rather than adding a column
+  // of its own; it fills itself in the same way every other key does.
+  contentPolicy: DEFAULT_CONTENT_POLICY,
 };
 
 const row = {
@@ -49,6 +53,7 @@ describe('brandSettingsSchema', () => {
     expect(brandSettingsSchema.parse({})).toEqual({
       autoAwaitOnAgentReply: true,
       reopenPolicy: { kind: 'within_days', days: 7 },
+      contentPolicy: DEFAULT_CONTENT_POLICY,
     });
   });
 
@@ -91,7 +96,20 @@ describe('parseBrandSettings', () => {
   it('keeps what a brand actually chose', () => {
     expect(
       parseBrandSettings({ autoAwaitOnAgentReply: false, reopenPolicy: { kind: 'never' } }),
-    ).toEqual({ autoAwaitOnAgentReply: false, reopenPolicy: { kind: 'never' } });
+    ).toEqual({
+      autoAwaitOnAgentReply: false,
+      reopenPolicy: { kind: 'never' },
+      contentPolicy: DEFAULT_CONTENT_POLICY,
+    });
+  });
+
+  it('keeps a content policy a brand narrowed, and fills the rest of it', () => {
+    const narrowed = parseBrandSettings({
+      contentPolicy: { video: { enabled: false, maxBytes: 1_000, allowedMime: ['video/mp4'] } },
+    });
+
+    expect(narrowed.contentPolicy.video.enabled).toBe(false);
+    expect(narrowed.contentPolicy.image).toEqual(DEFAULT_CONTENT_POLICY.image);
   });
 
   it('falls back to the defaults rather than throwing on a column edited by hand', () => {

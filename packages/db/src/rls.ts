@@ -58,6 +58,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'tickets', departmentScoped: true },
   { name: 'ticket_messages', departmentScoped: true },
   { name: 'ticket_activity', departmentScoped: true },
+  // An attachment is a child of a ticket, so it is department-scoped like the
+  // thread it hangs off. It is also what makes DOMAIN-RULES §4.5 structural: a
+  // presigned URL is issued from a row, and a row in another department is not
+  // a row this transaction can read.
+  { name: 'attachments', departmentScoped: true },
 ];
 
 /**

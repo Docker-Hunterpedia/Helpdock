@@ -80,6 +80,7 @@ src/screens/        sign in, the code screen, the link and reset confirmations,
 src/realtime/       the socket client, presence and the away timer
 src/staff/          the StaffApi boundary and its two adapters
 src/contacts/       the ContactsApi boundary and its two adapters
+src/media/          the attachment uploader and the watch hook (M1-10)
 src/screens/contacts/       the contact list, one contact, the create form, one
                     account, and the dialogs they share
 src/shell/          sidebar, brand switcher, user menu, page header, empty state
@@ -229,6 +230,67 @@ scanner reads it.
 Merge is drawn on the duplicate row and disabled, with the reason on the
 button's own label rather than in a tooltip alone: acting on a suggestion is
 M1-13.
+
+### Attachments (M1-10)
+
+`src/media/` is the client half of the media pipeline. There is no screen: the
+composer and the thread are M1-15, and this is the contract they build on. What
+the pipeline does on the server is [the attachments
+guide](../../docs/guides/attachments.md).
+
+```ts
+import { HttpAttachmentUploader, kindOf, wouldAccept } from '../media/upload.js';
+import { useAttachment } from '../media/use-attachment.js';
+
+const uploader = new HttpAttachmentUploader(transport);
+
+// Before the file picker accepts it: a courtesy, not a check. The api applies
+// the same rules to the presign request and again to the stored object.
+const verdict = wouldAccept(policy, file);   // { ok: true } | { ok: false, problem }
+
+// presign → PUT (with progress) → confirm. Resolves once the api has accepted
+// the object; the row comes back `processing`.
+const uploaded = await uploader.upload({
+  brandId,
+  ticketId,
+  file,
+  onProgress: ({ ratio }) => setProgress(ratio),
+  signal: abortController.signal,
+});
+
+// Then, per placeholder: a socket frame cuts the wait short and a backing-off
+// poll is the guarantee. `settling` is true until the row reaches `ready`,
+// `rejected` or `infected`.
+const { attachment, settling, timedOut } = useAttachment({
+  brandId,
+  ticketId,
+  attachmentId: uploaded.id,
+  uploader,
+  realtime,          // optional; without one it polls
+  initial: uploaded,
+});
+```
+
+Five things M1-15 should know:
+
+- **`upload` resolves at `processing`, not at `ready`.** The composer can send
+  the message immediately — the api accepts an attachment that is still being
+  worked on — and the thread renders a placeholder until `attachment:changed`
+  arrives.
+- **Send the ids with the message.** `POST …/messages` takes `attachmentIds`,
+  and the api links them in the same transaction. It refuses the *whole* send if
+  any one of them cannot be linked, so a failure is a message that was not sent
+  rather than one that quietly lost a file.
+- **Nothing here knows the bucket.** A URL to render comes from
+  `GET …/attachments/:id?variant=thumb320`, lives five minutes, and has to be
+  asked for again after that — so it belongs in component state, not in a cache
+  with a long life.
+- **`UploadError.problem` is a key**, like every other failure in this app, so
+  the sentence a person reads is a translated string.
+- **The realtime listener is optional.** `useAttachment` polls without one; with
+  one it also re-reads when a frame names its attachment. The frame carries no
+  URL and no variants, so it is only ever a reason to look again
+  (DOMAIN-RULES §7).
 
 ### The screens M1-01 added
 

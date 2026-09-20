@@ -100,6 +100,7 @@ export const REALTIME_EVENTS = {
   presenceChanged: 'presence:changed',
   ticketChanged: 'ticket:changed',
   ticketMessage: 'ticket:message',
+  attachmentChanged: 'attachment:changed',
 } as const;
 
 export const roomJoinSchema = z.object({
@@ -172,11 +173,32 @@ export const ticketMessageEventSchema = z.object({
 });
 export type TicketMessageEvent = z.infer<typeof ticketMessageEventSchema>;
 
+/**
+ * The media pipeline finished with an attachment (M1-10). The composer and the
+ * thread render a placeholder from the moment an upload is confirmed, and this
+ * is what tells them to stop: `ready` means the variants exist and a download
+ * can be asked for, `rejected` and `infected` mean it never will.
+ *
+ * Ids and a status, like every other frame here — the URL is not in it, because
+ * a presigned URL is issued to a caller who has been authorised on the parent
+ * ticket *at that moment*, and a URL broadcast to a room would outlive that
+ * check (DOMAIN-RULES §4.5).
+ */
+export const attachmentChangedSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  departmentId: z.uuid(),
+  attachmentId: z.uuid(),
+  status: z.enum(['ready', 'rejected', 'infected']),
+});
+export type AttachmentChanged = z.infer<typeof attachmentChangedSchema>;
+
 /** Every server → client event and the payload it carries. M4 extends it again. */
 export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.presenceChanged]: presenceChangedSchema,
   [REALTIME_EVENTS.ticketChanged]: ticketChangedSchema,
   [REALTIME_EVENTS.ticketMessage]: ticketMessageEventSchema,
+  [REALTIME_EVENTS.attachmentChanged]: attachmentChangedSchema,
 } as const;
 
 export type ServerEvent = keyof typeof REALTIME_EVENT_PAYLOADS;
@@ -209,6 +231,7 @@ export interface RealtimeEnvelope<T> {
 }
 
 export const presenceChangedEnvelopeSchema = realtimeEnvelopeSchema(presenceChangedSchema);
+export const attachmentChangedEnvelopeSchema = realtimeEnvelopeSchema(attachmentChangedSchema);
 
 // ------------------------------------------------------------------ acks
 

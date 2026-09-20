@@ -168,11 +168,15 @@ request transaction: one brand, every department, `principal_type = system`, and
 ([DOMAIN-RULES §1.4](../../docs/planning/DOMAIN-RULES.md#14-workers-and-websockets)).
 A job that needs several brands enqueues one child job per brand.
 
-`src/worker/start-worker.ts` is what `APP_ROLE=worker` boots. It takes the three
-things `@helpdock/jobs` needs — a queue connection, the `outbox.event` consumer
-and the relay — through an interface, so a unit test proves the start and
-shutdown order without Redis. Adding a consumed event means calling
-`registerEventHandler` there, before the worker is created.
+`src/worker/start-worker.ts` is what `APP_ROLE=worker` boots. It takes what
+`@helpdock/jobs` needs — a queue connection, the `outbox.event` consumer, the
+`media.process` consumer and the relay — through an interface, so a unit test
+proves the start and shutdown order without Redis. Adding a consumed event means
+calling `registerEventHandler` there, before the workers are created.
+
+The media worker runs at concurrency 1. sharp and ffmpeg are CPU-bound, and four
+conversions at once on a small VPS starve everything else on it; more replicas
+is how this scales, not more concurrency.
 
 ## Serving the admin SPA
 
@@ -506,6 +510,44 @@ Four things are easy to get wrong here and are written down where they happen:
   not depend on `RealtimeModule`.
 - **The `tagId` filter answers 400 until M1-06.** A filter that is accepted and
   not applied would quietly show rows the reader asked to exclude.
+
+M1-10 added one thing to the message path: `POST …/messages` accepts
+`attachmentIds`, and `TicketsService` calls `linkAttachmentsToMessage` from
+`src/media/link.ts` inside the same transaction as the insert. The rules it
+enforces are the media pipeline's; what stays here is turning a refusal into a
+status code.
+
+## Attachments
+
+`src/media/` holds M1-10: presign, confirm, download, delete, and the
+`media.process` worker. What the pipeline does and what the endpoints answer is
+[the attachments guide](../../docs/guides/attachments.md); what follows is for
+somebody reading the code.
+
+| File | |
+|---|---|
+| `storage.ts` | The bucket. It lives in `apps/api` rather than in `packages/channels` because a bucket is not a channel and nothing outside this process needs one in M1; the interface is the whole surface, so M5's public image prefix can move it to a package of its own by renaming the file. |
+| `keys.ts` | `brands/<brandId>/tickets/<ticketId>/<attachmentId>/<variant>`. Every segment is a uuid or a name from a closed set, and a segment that is not a uuid throws — so nothing a caller typed can reach the bucket's namespace. |
+| `magic-bytes.ts` | The sniffer, and [ADR 0009](../../docs/decisions/0009-magic-byte-sniffing.md) for why it is a table here rather than `file-type`. |
+| `content-policy.ts` | The brand's policy and the one function both the presign endpoint and the worker measure an upload against, so the two cannot drift. |
+| `variants.ts` | What each kind is turned into, and the numbers ARCHITECTURE §9 fixes. |
+| `process.job.ts` | The worker. A verdict about the bytes marks the row and returns; only infrastructure throws and is retried. |
+| `ffmpeg.ts` | `execFile` with an argument array and no shell, a deadline on every call, and `-protocol_whitelist file` so a crafted "voice note" cannot make the worker fetch a URL. |
+| `link.ts` | `linkAttachmentsToMessage`, called from `tickets/tickets.service.ts`. |
+
+Four things are easy to get wrong here and are written down where they happen:
+
+- **A rejection at confirm is answered, not thrown.** The request runs inside
+  the tenant transaction, so an exception rolls the `rejected` row back and
+  leaves the attachment at `pending` with nothing saying why.
+- **The uploaded object is deleted for an image and a voice note** unless the
+  brand keeps originals. Re-encoding is what disarms a polyglot; keeping the
+  original keeps exactly what it exists to get rid of.
+- **`reject_reason` is a key and never a tool's stderr**, which quotes the
+  worker's paths and the binaries on it.
+- **`media.process` holds its transaction for the length of the conversion**,
+  because `createWorker` claims the receipt before the handler runs. Every step
+  has a deadline for that reason, and `MEDIA_BUDGET_MS` is their sum.
 
 ## Observability
 

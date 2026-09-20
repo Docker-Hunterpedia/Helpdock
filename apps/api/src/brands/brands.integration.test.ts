@@ -137,6 +137,10 @@ describe.skipIf(!hasDocker)('brands, departments and teams', () => {
       S3_BUCKET: 'helpdock',
       S3_ACCESS_KEY_ID: 'access',
       S3_SECRET_ACCESS_KEY: 'secret',
+      S3_FORCE_PATH_STYLE: true,
+      FFMPEG_PATH: 'ffmpeg',
+      FFPROBE_PATH: 'ffprobe',
+      CLAMAV_PORT: 3310,
       ADMIN_DIST_DIR: 'apps/admin/dist',
       OUTBOUND_ALLOW_CIDRS: [],
     }) as Env;

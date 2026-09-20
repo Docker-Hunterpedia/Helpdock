@@ -21,7 +21,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-07 | Assignment | #51 | planned |
 | M1-08 | Ticket state machine | #52 | in review (#69) |
 | M1-09 | Merge and split with the exact semantics in D §2.4 | #53 | planned |
-| M1-10 | Media pipeline | #54 | planned |
+| M1-10 | Media pipeline | #54 | in review (#71) |
 | M1-11 | Spam | #55 | planned |
 | M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | planned |
 | M1-13 | Contact identity rules | #57 | planned |

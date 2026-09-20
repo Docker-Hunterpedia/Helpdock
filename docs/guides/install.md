@@ -75,9 +75,30 @@ database.** Without it, every stored secret is unrecoverable
 ([DOMAIN-RULES §10](../planning/DOMAIN-RULES.md#10-operations-and-recovery)).
 
 The `S3_*` keys point at object storage for attachments and article images.
-Nothing reads them until M1, so any non-empty values start the stack; for a
+Every attachment lives there, and **the bucket must be private**: Helpdock
+serves each object through a presigned URL that lives five minutes and is issued
+only after the caller has been authorised on the parent ticket. Give the
+credentials read, write and delete on that one bucket and nothing else.
+
+Set `S3_FORCE_PATH_STYLE=true` for MinIO, Ceph and most other self-hosted
+gateways, which address a bucket as a path; Amazon S3 does not want it. For a
 local MinIO, `docker compose --profile dev up -d minio minio-bucket` starts one
-and creates the bucket.
+and creates the bucket — MinIO has no "create on first write", so the `mc`
+sidecar is what makes it.
+
+Two optional keys belong to the same pipeline
+([the attachments guide](attachments.md#configuration)):
+
+- `FFMPEG_PATH` and `FFPROBE_PATH` say where the worker finds ffmpeg, which it
+  spawns to normalise voice notes to Opus and to take a video's poster frame.
+  The image installs both, so a Compose deployment needs neither key. Without
+  them, images and files still work and audio and video are rejected.
+- `CLAMAV_HOST` turns on antivirus scanning of uploaded files. The stack ships a
+  profile for it — `docker compose --profile clamav up -d`, then
+  `CLAMAV_HOST=clamav` — and it wants about 2 GB of memory, which is why it is
+  off by default. A host that is set and unreachable **rejects** uploads rather
+  than passing them: an install that asked for scanning and quietly got none is
+  worse than one that never asked.
 
 Then:
 

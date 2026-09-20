@@ -1,4 +1,5 @@
 export * from './accounts.js';
+export * from './attachments.js';
 export * from './audit-log.js';
 export * from './brand-domains.js';
 export * from './brands.js';

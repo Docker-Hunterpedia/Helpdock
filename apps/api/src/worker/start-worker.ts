@@ -5,12 +5,20 @@ import {
   createQueueConnection,
   createWorker,
   type JobLogger,
+  mediaProcessJob,
   type OutboxRelay,
   outboxEventJob,
+  QUEUE_NAMES,
   type RelayStatusStore,
   startOutboxRelay,
 } from '@helpdock/jobs';
+import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
+import { createMediaTools } from '../media/ffmpeg.js';
+import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
+import { createClamavScanner, type FileScanner } from '../media/scanner.js';
+import { createS3Client, S3ObjectStorage } from '../media/storage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 
@@ -35,7 +43,7 @@ export interface Closable {
   close(): Promise<void>;
 }
 
-/** The four things this module does. Boot passes BullMQ; a test passes doubles. */
+/** What this module does. Boot passes BullMQ; a test passes doubles. */
 export interface WorkerDependencies {
   createConnection(url: string): Redis;
   /**
@@ -44,8 +52,10 @@ export interface WorkerDependencies {
    * a second registration of the same event — which is what a test starting
    * several workers in one process would do.
    */
-  registerHandlers(redis: Redis): void;
+  registerHandlers(options: { redis: Redis; env: WorkerEnv }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /** M1-10's `media.process` consumer: sharp, ffmpeg and the optional scanner. */
+  createMediaWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -55,20 +65,92 @@ export interface WorkerDependencies {
   }): OutboxRelay;
 }
 
+/** The bootstrap keys the worker's half of M1-10 reads (ARCHITECTURE §4). */
+export type WorkerEnv = Pick<
+  Env,
+  | 'REDIS_URL'
+  | 'DATABASE_URL'
+  | 'S3_ENDPOINT'
+  | 'S3_REGION'
+  | 'S3_BUCKET'
+  | 'S3_ACCESS_KEY_ID'
+  | 'S3_SECRET_ACCESS_KEY'
+  | 'S3_FORCE_PATH_STYLE'
+  | 'FFMPEG_PATH'
+  | 'FFPROBE_PATH'
+  | 'CLAMAV_HOST'
+  | 'CLAMAV_PORT'
+>;
+
+/**
+ * The scanner, or nothing. ARCHITECTURE §17 makes ClamAV optional and
+ * `CLAMAV_HOST` is the switch: unset means every file is `scan_status =
+ * skipped`, and a host that is set and unreachable is a rejection rather than a
+ * silent pass (`scanner.ts`).
+ */
+const scannerFor = (env: WorkerEnv): FileScanner | undefined =>
+  env.CLAMAV_HOST === undefined
+    ? undefined
+    : createClamavScanner({
+        host: env.CLAMAV_HOST,
+        port: env.CLAMAV_PORT,
+        timeoutMs: TIMEOUTS_MS.scan,
+      });
+
 export const workerDependencies: WorkerDependencies = {
   createConnection: (url) => createQueueConnection(url),
   // The broadcast publishes on the same connection: a ticket event ends in a
   // socket frame, and only an `APP_ROLE=api` replica holds sockets
   // (`realtime/broadcast.ts`).
-  registerHandlers: (redis) => registerTicketEventHandlers(new RedisRealtimeBroadcast(redis)),
+  registerHandlers: ({ redis }) => {
+    const broadcast = new RedisRealtimeBroadcast(redis);
+    registerTicketEventHandlers(broadcast);
+
+    // `attachment.uploaded` ends in a job on the `media` queue, so its handler
+    // needs a producer. It is the one outbox handler that adds a job, and it
+    // may: it runs after the confirm committed, and `jobId = attachmentId`
+    // makes a redelivery a no-op (`media/attachment-events.ts`).
+    const media = new Queue(QUEUE_NAMES.media, { connection: redis });
+    registerAttachmentEventHandlers({
+      broadcast,
+      queue: {
+        add: async ({ jobId, payload }) => {
+          await media.add(mediaProcessJob.name, payload, {
+            ...mediaProcessJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+
+    return { close: () => media.close() };
+  },
   createEventWorker: ({ redis, db, log }) =>
     createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
+  createMediaWorker: ({ redis, db, log, env }) =>
+    createWorker(
+      mediaProcessJob,
+      createMediaProcessor({
+        storage: new S3ObjectStorage(createS3Client(env), env.S3_BUCKET),
+        tools: createMediaTools({ ffmpeg: env.FFMPEG_PATH, ffprobe: env.FFPROBE_PATH }),
+        scanner: scannerFor(env),
+      }),
+      {
+        redis,
+        db,
+        log,
+        // One at a time. sharp and ffmpeg are CPU-bound and a worker that runs
+        // four conversions at once on a small VPS starves everything else on
+        // it; more replicas is the way to scale this, not more concurrency.
+        concurrency: 1,
+      },
+    ),
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
 
 export interface StartWorkerOptions {
-  readonly env: Pick<Env, 'REDIS_URL' | 'DATABASE_URL'>;
+  readonly env: WorkerEnv;
   readonly db: Db;
   readonly log: JobLogger;
   readonly deps?: WorkerDependencies;
@@ -81,9 +163,10 @@ export const startWorker = ({
   deps = workerDependencies,
 }: StartWorkerOptions): Closable => {
   const connection = deps.createConnection(env.REDIS_URL);
-  // Before the worker exists, for the reason at the top of this file.
-  deps.registerHandlers(connection);
+  // Before either worker exists, for the reason at the top of this file.
+  const producers = deps.registerHandlers({ redis: connection, env });
   const worker = deps.createEventWorker({ redis: connection, db, log });
+  const media = deps.createMediaWorker({ redis: connection, db, log, env });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -101,6 +184,11 @@ export const startWorker = ({
   const shutDown = async (): Promise<void> => {
     await relay.stop();
     await worker.close();
+    // After the event worker, because that is what adds media jobs: closing the
+    // media worker first would leave a job queued with nothing draining it,
+    // which is harmless but slower to notice than the other order's bug.
+    await media.close();
+    await producers.close();
     await connection.quit();
   };
 

@@ -16,6 +16,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0006](0006-fastify-adapter-for-the-api.md) | Run NestJS on the Fastify adapter | accepted |
 | [0007](0007-html-sanitizer.md) | Use sanitize-html for message bodies | accepted |
 | [0008](0008-phone-normalisation.md) | Normalise phone numbers in-house, international format only in v1 | accepted |
+| [0009](0009-magic-byte-sniffing.md) | Sniff upload MIME types with a table in-house, not with `file-type` | accepted |
 
 ## Template
 

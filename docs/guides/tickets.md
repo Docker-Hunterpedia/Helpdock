@@ -469,7 +469,12 @@ be in is M1-07's question.
 ```http
 POST /api/brands/:brandId/tickets/:ticketId/messages
 
-{ "kind": "public", "bodyHtml": "<p>On its way.</p>", "clientId": "0199f4b2-…" }
+{
+  "kind": "public",
+  "bodyHtml": "<p>On its way.</p>",
+  "clientId": "0199f4b2-…",
+  "attachmentIds": ["0199f4c1-…"]
+}
 ```
 
 `kind` is `public` or `note` and is **required** — a note posted as a public
@@ -480,6 +485,15 @@ The response carries the `seq`. Posting the same `clientId` twice returns the
 first message. A reply also bumps the ticket's `updated_at`, so it rises to the
 front of the queue it just became urgent in, even though none of the ticket's
 own columns moved.
+
+`attachmentIds` is optional and names uploads already presigned, uploaded and
+confirmed against **this** ticket by **this** principal (M1-10). They are linked
+in the same transaction as the message, so a message never commits without the
+files somebody believes they sent with it — and the whole send is refused rather
+than shortened if any one of them cannot be linked. Every message carries its
+`attachments` on the way back out, and on every later read of the thread. [The
+attachments guide](attachments.md#sending-attachments-with-a-message) has the
+rules.
 
 A message on the wire carries neither `external_message_id` nor `ai_meta` nor
 its denormalised `department_id`: the first is a channel's threading handle, the
@@ -508,7 +522,7 @@ with `seq > last_seq + 1`, or that reconnects, calls this.
 | M1-06 | `tags`, `ticket_tags` and custom field definitions — the `tagId` filter starts working |
 | M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
-| M1-10 | `attachments`, keyed to `ticket_messages.id`, and presigned URLs issued after authorization on the parent ticket |
+| M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Spam semantics on the seeded Spam status, and the sender block list |
 | M1-15 | The admin UI, from the `Admin · ticket view` artboard |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |

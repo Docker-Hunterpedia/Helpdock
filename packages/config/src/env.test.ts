@@ -54,6 +54,40 @@ describe('loadEnv', () => {
     expect(env.ADMIN_DIST_DIR).toBe('/app/admin');
   });
 
+  it('leaves the media pipeline on its defaults: real S3, PATH binaries, no scanner', () => {
+    const env = loadEnv(completeEnv);
+
+    // Amazon S3 does not want path-style addressing; MinIO does, and the dev
+    // stack turns it on rather than the schema defaulting an install to it.
+    expect(env.S3_FORCE_PATH_STYLE).toBe(false);
+    expect(env.FFMPEG_PATH).toBe('ffmpeg');
+    expect(env.FFPROBE_PATH).toBe('ffprobe');
+    // Unset means "skip scanning", never "scan against localhost".
+    expect(env.CLAMAV_HOST).toBeUndefined();
+    expect(env.CLAMAV_PORT).toBe(3310);
+  });
+
+  it('takes a MinIO-shaped storage configuration and a clamd of its own', () => {
+    const env = loadEnv(
+      envWith({
+        S3_FORCE_PATH_STYLE: 'true',
+        FFMPEG_PATH: '/opt/ffmpeg/bin/ffmpeg',
+        CLAMAV_HOST: 'clamav',
+        CLAMAV_PORT: '3311',
+      }),
+    );
+
+    expect(env.S3_FORCE_PATH_STYLE).toBe(true);
+    expect(env.FFMPEG_PATH).toBe('/opt/ffmpeg/bin/ffmpeg');
+    expect(env.CLAMAV_HOST).toBe('clamav');
+    expect(env.CLAMAV_PORT).toBe(3311);
+  });
+
+  it('refuses a scanner port that is not one, rather than scanning nothing quietly', () => {
+    expectInvalidKeys(envWith({ CLAMAV_PORT: 'clamd' }), ['CLAMAV_PORT']);
+    expectInvalidKeys(envWith({ S3_FORCE_PATH_STYLE: 'sometimes' }), ['S3_FORCE_PATH_STYLE']);
+  });
+
   it('reads TRUST_PROXY as a boolean, in the spellings an operator reaches for', () => {
     for (const value of ['true', '1', 'yes', 'on', 'TRUE']) {
       expect(loadEnv(envWith({ TRUST_PROXY: value })).TRUST_PROXY, value).toBe(true);

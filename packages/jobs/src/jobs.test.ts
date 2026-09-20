@@ -3,6 +3,7 @@ import {
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   maintenanceRetentionJob,
+  mediaProcessJob,
   OUTBOX_RELAY_INTERVAL_MS,
   outboxEventJob,
   outboxRelayJob,
@@ -107,5 +108,32 @@ describe('idempotencyKeyFor', () => {
     expect(
       idempotencyKeyFor(maintenanceRetentionJob, { brandId, olderThanDays: 7 }, 'job-42'),
     ).toBe('maintenance.retention:job-42');
+  });
+
+  it('keys media.process by the attachment, so a requeued upload is processed once', () => {
+    const attachmentId = '01924f00-0000-7000-8000-0000000000bb';
+
+    expect(idempotencyKeyFor(mediaProcessJob, { brandId, attachmentId }, 'first')).toBe(
+      `media.process:${attachmentId}`,
+    );
+    expect(idempotencyKeyFor(mediaProcessJob, { brandId, attachmentId }, 'first')).toBe(
+      idempotencyKeyFor(mediaProcessJob, { brandId, attachmentId }, 'second'),
+    );
+  });
+});
+
+describe('media.process payloads', () => {
+  it('accepts the brand and the attachment', () => {
+    const payload = { brandId, attachmentId: '01924f00-0000-7000-8000-0000000000bb' };
+
+    expect(parseJobPayload(mediaProcessJob, payload)).toEqual(payload);
+  });
+
+  it('refuses a payload with no attachment to process', () => {
+    expect(() => parseJobPayload(mediaProcessJob, { brandId })).toThrow(PayloadValidationError);
+  });
+
+  it('runs on the media queue of ARCHITECTURE §13', () => {
+    expect(mediaProcessJob.queue).toBe('media');
   });
 });

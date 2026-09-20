@@ -47,7 +47,9 @@ jobs:
       # Testcontainers' own `ryuk` reaper — so a busy hour used to fail a run for
       # a reason unrelated to the code. Authenticating lifts the limit. It is
       # optional on purpose: a fork has no such secret, and the run must still
-      # work without one.
+      # work without one — which is why M1-10's MinIO comes from Quay instead
+      # (`docker-compose.yml`, `media.integration.test.ts`): a fork without the
+      # secret would otherwise fail on the one image this job cannot do without.
       - name: Log in to Docker Hub
         if: env.DOCKERHUB_CONFIGURED == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -63,6 +65,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+
+      # The media pipeline spawns ffmpeg and ffprobe for voice notes and video
+      # posters (ARCHITECTURE §9), and `docker/Dockerfile` installs them into
+      # the image. The integration suite that exercises them skips itself when
+      # they are absent, so without this step the encoding assertions would
+      # silently not run. `ffmpeg` on the runner image pulls `ffprobe` with it.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

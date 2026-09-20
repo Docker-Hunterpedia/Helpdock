@@ -9,6 +9,7 @@ import arStaff from '../locales/ar/staff.json' with { type: 'json' };
 import arSystem from '../locales/ar/system.json' with { type: 'json' };
 import arTicket from '../locales/ar/ticket.json' with { type: 'json' };
 import arTicketing from '../locales/ar/ticketing.json' with { type: 'json' };
+import arTickets from '../locales/ar/tickets.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
@@ -21,6 +22,7 @@ import enStaff from '../locales/en/staff.json' with { type: 'json' };
 import enSystem from '../locales/en/system.json' with { type: 'json' };
 import enTicket from '../locales/en/ticket.json' with { type: 'json' };
 import enTicketing from '../locales/en/ticketing.json' with { type: 'json' };
+import enTickets from '../locales/en/tickets.json' with { type: 'json' };
 import enWizard from '../locales/en/wizard.json' with { type: 'json' };
 
 /** DESIGN §7 and REQUIREMENTS: English and Modern Standard Arabic in v1. */
@@ -38,6 +40,7 @@ export const NAMESPACES = [
   'settings',
   'staff',
   'contacts',
+  'tickets',
   'me',
   'email',
   'system',
@@ -59,6 +62,7 @@ export const resources = {
     settings: enSettings,
     staff: enStaff,
     contacts: enContacts,
+    tickets: enTickets,
     me: enMe,
     email: enEmail,
     system: enSystem,
@@ -73,6 +77,7 @@ export const resources = {
     settings: arSettings,
     staff: arStaff,
     contacts: arContacts,
+    tickets: arTickets,
     me: arMe,
     email: arEmail,
     system: arSystem,

@@ -11,10 +11,18 @@ import {
   SOCKET_IO_PATH,
   STAFF_NAMESPACE,
   socketErrorSchema,
+  ticketChangedEnvelopeSchema,
+  ticketMessageEnvelopeSchema,
+  ticketViewingEnvelopeSchema,
 } from '@helpdock/schemas';
 import { io } from 'socket.io-client';
 import { backoffDelay } from './backoff.js';
-import { type RealtimeClient, type RealtimeListener, RealtimeListeners } from './client.js';
+import {
+  type RealtimeClient,
+  type RealtimeListener,
+  RealtimeListeners,
+  RoomMemberships,
+} from './client.js';
 
 /**
  * The real connection to the `/staff` namespace.
@@ -77,6 +85,7 @@ const isTerminal = (error: unknown): boolean => {
 
 export class SocketRealtimeClient implements RealtimeClient {
   readonly #listeners = new RealtimeListeners();
+  readonly #memberships = new RoomMemberships();
   readonly #token: () => Promise<string | null>;
   readonly #connect: SocketFactory;
   readonly #fetch: typeof globalThis.fetch;
@@ -108,6 +117,9 @@ export class SocketRealtimeClient implements RealtimeClient {
     }
 
     this.#close();
+    // Rooms are per brand: a `ticket:` room held under the brand being left
+    // must not be re-joined under the one being arrived at.
+    this.#memberships.clear();
     this.#brandId = brandId;
     this.#attempt = 0;
     void this.#open(this.#epoch);
@@ -115,6 +127,7 @@ export class SocketRealtimeClient implements RealtimeClient {
 
   stop(): void {
     this.#brandId = null;
+    this.#memberships.clear();
     this.#close();
     this.#listeners.connection('closed');
   }
@@ -147,6 +160,42 @@ export class SocketRealtimeClient implements RealtimeClient {
     }
 
     await this.#socket.emitWithAck(REALTIME_EVENTS.presenceSet, { brandId, status });
+  }
+
+  /**
+   * A room is wanted until the handle is called. The join is sent now if there
+   * is a socket, and again on every reconnect — a room is authorised when it is
+   * joined, and a socket that has just come back has joined nothing.
+   */
+  joinRoom(room: string): () => void {
+    if (this.#memberships.acquire(room)) {
+      void this.#joinRoom(room);
+    }
+
+    let held = true;
+
+    return () => {
+      if (!held) {
+        return;
+      }
+      held = false;
+
+      if (this.#memberships.release(room)) {
+        void this.#socket?.emitWithAck(REALTIME_EVENTS.roomLeave, { room });
+      }
+    };
+  }
+
+  announceViewing(ticketId: string): void {
+    const brandId = this.#brandId;
+    if (this.#socket === null || brandId === null) {
+      return;
+    }
+
+    // Nothing waits on the acknowledgement: it says only that the relay
+    // happened, and a collision indicator that has not been told is simply a
+    // collision indicator with nothing to draw.
+    void this.#socket.emitWithAck(REALTIME_EVENTS.ticketViewing, { brandId, ticketId });
   }
 
   // ------------------------------------------------------------------
@@ -196,6 +245,24 @@ export class SocketRealtimeClient implements RealtimeClient {
       const parsed = attachmentChangedEnvelopeSchema.safeParse(envelope);
       if (parsed.success) {
         this.#listeners.attachmentChanged(parsed.data.data);
+    socket.on(REALTIME_EVENTS.ticketChanged, (envelope) => {
+      const parsed = ticketChangedEnvelopeSchema.safeParse(envelope);
+      if (parsed.success) {
+        this.#listeners.ticketChanged(parsed.data.data);
+      }
+    });
+
+    socket.on(REALTIME_EVENTS.ticketMessage, (envelope) => {
+      const parsed = ticketMessageEnvelopeSchema.safeParse(envelope);
+      if (parsed.success) {
+        this.#listeners.ticketMessage(parsed.data.data);
+      }
+    });
+
+    socket.on(REALTIME_EVENTS.ticketViewing, (envelope) => {
+      const parsed = ticketViewingEnvelopeSchema.safeParse(envelope);
+      if (parsed.success) {
+        this.#listeners.ticketViewing(parsed.data.data);
       }
     });
 
@@ -238,10 +305,31 @@ export class SocketRealtimeClient implements RealtimeClient {
 
     if (ack.success && ack.data.ok) {
       this.#listeners.connection('connected');
+      // Whatever a screen still wants. A room is authorised when it is joined
+      // and this socket has joined nothing, so every one of them is asked for
+      // again through the same check it passed before.
+      for (const room of this.#memberships.rooms()) {
+        void this.#joinRoom(room);
+      }
       return;
     }
 
     this.#scheduleReconnect();
+  }
+
+  /**
+   * A refusal here is not retried. Unlike the brand room, a `department:` or
+   * `ticket:` room can be refused for a reason a fresh token does not change —
+   * the ticket moved to a department this person is not in — and the screen
+   * re-reads over REST regardless, where it gets the honest 404.
+   */
+  async #joinRoom(room: string): Promise<void> {
+    const brandId = this.#brandId;
+    if (this.#socket === null || brandId === null) {
+      return;
+    }
+
+    await this.#socket.emitWithAck(REALTIME_EVENTS.roomJoin, { brandId, room });
   }
 
   #startHeartbeat(socket: RealtimeSocket): void {

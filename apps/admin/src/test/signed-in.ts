@@ -3,6 +3,7 @@ import type { AdminApis } from '../auth/select-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
+import { MockTicketsApi } from '../tickets/mock-api.js';
 
 /**
  * The pair of fixtures with a session already in them, obtained the way a
@@ -29,5 +30,6 @@ export async function signedInMockApis(): Promise<AdminApis> {
     staff,
     contacts: new MockContactsApi(),
     ticketing: new MockTicketingApi(),
+    tickets: new MockTicketsApi(),
   };
 }

@@ -5,6 +5,7 @@ import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { useSemanticTokens } from '../app/tokens.js';
 import { useSession } from '../auth/session.tsx';
+import { TicketViewsNav } from '../screens/tickets/views-nav.tsx';
 import { BrandSwitcher } from './brand-switcher.tsx';
 import { ADMIN_NAV, type NavItem, navFor, PRIMARY_NAV } from './nav-items.js';
 import { UserMenu } from './user-menu.tsx';
@@ -111,6 +112,10 @@ export function Sidebar({
             </Box>
           ))}
         </Box>
+
+        {/* DESIGN §6.5: the "Views" group sits under the primary nav, because
+            it is a set of ways into the destination above it (M1-15). */}
+        <TicketViewsNav onNavigate={onNavigate} />
 
         <Typography
           component="p"

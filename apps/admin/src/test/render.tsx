@@ -11,6 +11,8 @@ import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
+import type { TicketsApi } from '../tickets/api.js';
+import { MockTicketsApi } from '../tickets/mock-api.js';
 
 export interface RenderAppOptions {
   readonly authApi?: AuthApi;
@@ -19,6 +21,7 @@ export interface RenderAppOptions {
   readonly contactsApi?: ContactsApi;
   /** Defaults to a fresh fixture, for the Ticketing screens. */
   readonly ticketingApi?: TicketingApi;
+  readonly ticketsApi?: TicketsApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -28,6 +31,7 @@ export interface RenderedApp extends RenderResult {
   readonly staffApi: StaffApi;
   readonly contactsApi: ContactsApi;
   readonly ticketingApi: TicketingApi;
+  readonly ticketsApi: TicketsApi;
 }
 
 /**
@@ -41,6 +45,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     options.authApi ?? new MockAuthApi(staffApi instanceof MockStaffApi ? staffApi : undefined);
   const contactsApi = options.contactsApi ?? new MockContactsApi();
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
+  const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -50,6 +55,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       staffApi={staffApi}
       contactsApi={contactsApi}
       ticketingApi={ticketingApi}
+      ticketsApi={ticketsApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -59,5 +65,13 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     </AppProviders>,
   );
 
-  return { ...result, user: userEvent.setup(), authApi, staffApi, contactsApi, ticketingApi };
+  return {
+    ...result,
+    user: userEvent.setup(),
+    authApi,
+    staffApi,
+    contactsApi,
+    ticketingApi,
+    ticketsApi,
+  };
 }

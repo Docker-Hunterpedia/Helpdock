@@ -1,7 +1,22 @@
 import { MOCK_EMAIL } from '../src/auth/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { openContact, openContacts, signIn, submitPassword } from './flows.js';
+import {
+  openContact,
+  openContacts,
+  openTicket,
+  openTickets,
+  signIn,
+  submitPassword,
+} from './flows.js';
 import { strings } from './strings.js';
+
+/**
+ * The ticket fixture dates itself from the moment it is built — a breached SLA
+ * has to still read "breached 2h" next year — so the two ticket screens fix the
+ * browser's clock first. Everything they print is then a fixed distance from a
+ * fixed instant, and the pixels stop moving.
+ */
+const FIXED_CLOCK = new Date('2026-09-19T12:00:00.000Z');
 
 /**
  * One baseline per screen per locale, so an accidental layout change in either
@@ -64,6 +79,32 @@ test.describe('reference screens @screenshot', () => {
     await page.getByRole('table').waitFor();
 
     await expect(page).toHaveScreenshot('contacts-list.png', { fullPage: true });
+  });
+
+  test('the ticket list', async ({ page, appLocale: locale }) => {
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+    // The rows arrive after the heading does.
+    await page.getByRole('link', { name: /HD-1042/ }).waitFor();
+
+    // The workspace is exactly one viewport high and scrolls inside itself
+    // (DESIGN §6.5), so a full-page shot would be the viewport plus a margin
+    // of nothing.
+    await expect(page).toHaveScreenshot('tickets-list.png');
+  });
+
+  test('one ticket', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signIn(page, locale);
+    // The fixture's fullest ticket: every badge, all four kinds of message, an
+    // activity event between them and a colleague viewing it.
+    await openTicket(page, locale);
+    await page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') }).waitFor();
+
+    await expect(page).toHaveScreenshot('ticket-view.png');
   });
 
   test('one contact', async ({ page, appLocale: locale }) => {

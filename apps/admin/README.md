@@ -312,12 +312,41 @@ belong on **Admin → Settings** as a "Brand" tab, and that page is still the
 milestone placeholder with no artboard. The guide says so
 ([ticketing settings](../../docs/guides/ticketing-settings.md#brand-settings)).
 
+### The ticket workspace
+
+`src/screens/tickets/` is M1-15's first part, built from the
+`Admin · ticket view` artboard: a 360 px list beside the thread beside a 300 px
+details panel, with the two drawers of DESIGN §6.5 below 1280 px and 1024 px.
+The new-ticket dialog has no artboard of its own and follows the `Admin/Staff`
+invite dialog exactly.
+
+Four decisions are worth knowing before changing it:
+
+- **It is one route.** `/tickets/*` matches both the list and one ticket, and
+  the id is read from the path. Two routes rendering the same component would
+  remount it on every open and close, throwing away the composer's draft and
+  whichever sends were still in flight.
+- **The URL is the state**, as on the contact screens: the view, the search
+  term and every filter live in the query string.
+- **A send is "sent" when it holds a `seq`** (DOMAIN-RULES §7), not when the
+  request returns 200 and not when a socket says so. Until then the bubble says
+  "sending", and after ten seconds "not sent, retry" — which re-posts the same
+  `clientId`, so a retry of a request that actually worked gets the original
+  message back instead of posting twice.
+- **No socket frame is ever applied to the cache.** `ticket:changed` re-reads
+  the ticket; `ticket:message` reads `?after=<the highest seq held>`; a
+  reconnection does the same. One recovery, not three.
+
+What the screen leaves disabled and which milestone turns it on is in
+[the ticket guide](../../docs/guides/tickets.md#the-admin-workspace), along
+with the two reads it wants that the api does not offer yet.
+
 ### The api boundaries
 
 Everything the screens need is `AuthApi` in `src/auth/api.ts`, `StaffApi` in
-`src/staff/api.ts`, `ContactsApi` in `src/contacts/api.ts` and `TicketingApi` in
-`src/ticketing/api.ts`. Their DTOs are Zod
-schemas in [`@helpdock/schemas`](../../packages/schemas/src/), so the api
+`src/staff/api.ts`, `ContactsApi` in `src/contacts/api.ts`, `TicketingApi` in
+`src/ticketing/api.ts` and `TicketsApi` in `src/tickets/api.ts`. Their DTOs are
+Zod schemas in [`@helpdock/schemas`](../../packages/schemas/src/), so the api
 declares its responses against the same shapes the app parses them with. Two
 adapters implement it:
 
@@ -374,7 +403,14 @@ the browser tests run against.
 and applies `presence:changed` events to it, and sets the person away after five
 minutes without a pointer, key, wheel or touch event and without the tab
 becoming visible again. `useRealtime()` gives their own
-status and the toggle the user menu uses; `usePresence(brandId)` gives the map.
+status, the toggle the user menu uses and the client itself; `usePresence(brandId)`
+gives the map.
+
+A screen that needs a room of its own holds one through `joinRoom(room)`, which
+counts holders and leaves only when the last one lets go — the ticket workspace
+holds `ticket:<id>` and a `department:<id>` per queue on screen at the same
+time — and re-joins everything after a reconnect, because a room is authorised
+when it is joined and a socket that has just come back has joined nothing.
 
 The contract is in [the realtime guide](../../docs/guides/realtime.md).
 
@@ -400,6 +436,9 @@ over two databases:
   `/api` so the two share an origin: sign in → code → shell → sign out, and
   invitation → acceptance → two-factor enrolment → signing in with both, with
   `VITE_AUTH_API=http`.
+- **`api`** also drives one ticket end to end: typed in, replied to, noted and
+  closed, then reloaded — which is the `seq`, the note's `kind` and the
+  transition hook being the api's rather than the browser's.
 - **`setup`** drives the first-run wizard against a second install that nobody
   has set up, straight at an api that serves `dist/` itself. It has to be a
   second install, because "fresh" means the `users` table is empty and the
@@ -421,6 +460,11 @@ states — against WCAG 2.1 A and AA, and the suite fails on any violation.
 `route`, using the same fixture as the unit tests
 (`src/screens/admin/system/fixtures.ts`), so the two cannot drift and no mock
 server is needed.
+
+`e2e/screenshots.spec.ts` fixes the browser's clock before the two ticket
+screens. The ticket fixture dates itself from the moment it is built — a
+breached SLA has to still read "breached 2h" next year — so without a fixed
+clock every run would render different minutes.
 
 `e2e/setup.spec.ts` does the same for the wizard (`e2e/setup-install.ts`), and
 rewrites the `helpdock:install-state` meta tag in the document the dev server

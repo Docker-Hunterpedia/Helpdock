@@ -97,6 +97,13 @@ export const REALTIME_EVENTS = {
   presenceSet: 'presence:set',
   presenceHeartbeat: 'presence:heartbeat',
 
+  /**
+   * Both directions. A client says "I have this ticket open" and the server
+   * relays the same name to everybody else in `ticket:<id>`, which is what the
+   * collision indicator is drawn from (M1-15; M1-09 owns the rest of §2.4).
+   */
+  ticketViewing: 'ticket:viewing',
+
   presenceChanged: 'presence:changed',
   ticketChanged: 'ticket:changed',
   ticketMessage: 'ticket:message',
@@ -192,6 +199,26 @@ export const attachmentChangedSchema = z.object({
   status: z.enum(['ready', 'rejected', 'infected']),
 });
 export type AttachmentChanged = z.infer<typeof attachmentChangedSchema>;
+ * What a client sends when it has a ticket open, repeated while it stays open.
+ *
+ * It exists because a room is not a membership list: Socket.IO can say who is
+ * in `ticket:<id>` on this replica only, and "who else is looking at this"
+ * has to be true across every replica. Saying so periodically is the cheapest
+ * thing that is true everywhere, and it needs no new store: whoever is in the
+ * room hears it, and a name nobody has repeated inside
+ * {@link TICKET_VIEWING_TTL_MS} has stopped looking.
+ */
+export const ticketViewingRequestSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+});
+export type TicketViewingRequest = z.infer<typeof ticketViewingRequestSchema>;
+
+/** The same announcement, relayed to the rest of the room with who made it. */
+export const ticketViewingSchema = ticketViewingRequestSchema.extend({
+  userId: z.uuid(),
+});
+export type TicketViewing = z.infer<typeof ticketViewingSchema>;
 
 /** Every server → client event and the payload it carries. M4 extends it again. */
 export const REALTIME_EVENT_PAYLOADS = {
@@ -199,6 +226,7 @@ export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.ticketChanged]: ticketChangedSchema,
   [REALTIME_EVENTS.ticketMessage]: ticketMessageEventSchema,
   [REALTIME_EVENTS.attachmentChanged]: attachmentChangedSchema,
+  [REALTIME_EVENTS.ticketViewing]: ticketViewingSchema,
 } as const;
 
 export type ServerEvent = keyof typeof REALTIME_EVENT_PAYLOADS;
@@ -232,6 +260,9 @@ export interface RealtimeEnvelope<T> {
 
 export const presenceChangedEnvelopeSchema = realtimeEnvelopeSchema(presenceChangedSchema);
 export const attachmentChangedEnvelopeSchema = realtimeEnvelopeSchema(attachmentChangedSchema);
+export const ticketChangedEnvelopeSchema = realtimeEnvelopeSchema(ticketChangedSchema);
+export const ticketMessageEnvelopeSchema = realtimeEnvelopeSchema(ticketMessageEventSchema);
+export const ticketViewingEnvelopeSchema = realtimeEnvelopeSchema(ticketViewingSchema);
 
 // ------------------------------------------------------------------ acks
 
@@ -277,6 +308,9 @@ export type RoomAck = z.infer<typeof roomAckSchema>;
 export const presenceAckSchema = socketAckSchema(z.object({ status: presenceStatusSchema }));
 export type PresenceAck = z.infer<typeof presenceAckSchema>;
 
+export const ticketViewingAckSchema = socketAckSchema(z.object({ ticketId: z.uuid() }));
+export type TicketViewingAck = z.infer<typeof ticketViewingAckSchema>;
+
 /** `presence:heartbeat` answers with nothing but "still here". */
 export const heartbeatAckSchema = socketAckSchema(z.object({ at: z.iso.datetime() }));
 export type HeartbeatAck = z.infer<typeof heartbeatAckSchema>;
@@ -289,3 +323,8 @@ export const PRESENCE_HEARTBEAT_INTERVAL_MS = 25_000;
 export const PRESENCE_REAPER_INTERVAL_MS = 30_000;
 /** How long without a pointer, key or focus event before a client calls itself away. */
 export const PRESENCE_AWAY_AFTER_MS = 5 * 60 * 1000;
+
+/** How often a client with a ticket open says so, and how long a saying lasts. */
+export const TICKET_VIEWING_INTERVAL_MS = 30_000;
+/** Three intervals, so two announcements may be lost before a name is dropped. */
+export const TICKET_VIEWING_TTL_MS = 90_000;

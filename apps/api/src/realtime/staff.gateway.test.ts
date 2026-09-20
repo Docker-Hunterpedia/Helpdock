@@ -52,13 +52,32 @@ interface Harness {
   readonly revoked: Set<string>;
 }
 
+interface Relayed {
+  readonly room: string;
+  readonly event: string;
+  readonly payload: unknown;
+}
+
 const socketOf = (
   id: string,
-): StaffSocket & { rooms: Set<string>; disconnected: boolean; data: StaffSocket['data'] } => {
+): StaffSocket & {
+  rooms: Set<string>;
+  disconnected: boolean;
+  relayed: Relayed[];
+  data: StaffSocket['data'];
+} => {
+  const relayed: Relayed[] = [];
   const socket = {
     id,
     rooms: new Set<string>(),
     disconnected: false,
+    relayed,
+    // `socket.to(room)` excludes the sender, which is what a relay is.
+    to: (room: string) => ({
+      emit: (event: string, payload: unknown) => {
+        relayed.push({ room, event, payload });
+      },
+    }),
     data: {
       principal,
       sessionId: `sid-${id}`,
@@ -79,7 +98,7 @@ const socketOf = (
     },
   };
 
-  // biome-ignore lint/suspicious/noExplicitAny: the gateway uses id, data, join, leave and disconnect.
+  // biome-ignore lint/suspicious/noExplicitAny: the gateway uses id, data, join, leave, to and disconnect.
   return socket as any;
 };
 
@@ -370,6 +389,55 @@ describe('StaffGateway', () => {
       });
 
       expect(socket.data).toMatchObject({ principal, sessionId: 'sid', familyId: 'fam' });
+    });
+  });
+
+  describe('ticket:viewing', () => {
+    it('relays the announcement to the rest of the ticket room', async () => {
+      const socket = socketOf('s1');
+
+      const ack = await harnessed.gateway.viewing(socket, { brandId: BRAND_A, ticketId: TICKET });
+
+      expect(ack).toEqual({ ok: true, data: { ticketId: TICKET } });
+      expect(socket.relayed).toEqual([
+        {
+          room: ticketRoom(TICKET),
+          event: 'ticket:viewing',
+          payload: expect.objectContaining({
+            seq: null,
+            data: { brandId: BRAND_A, ticketId: TICKET, userId: LINA },
+          }),
+        },
+      ]);
+    });
+
+    it('refuses a ticket outside the caller\u2019s departments, and relays nothing', async () => {
+      const refusing = harness({ ticketInScope: () => Promise.resolve(false) });
+      const socket = socketOf('s1');
+
+      const ack = await refusing.gateway.viewing(socket, { brandId: BRAND_A, ticketId: TICKET });
+
+      expect(ack).toEqual({ ok: false, error: expect.objectContaining({ code: 'forbidden' }) });
+      expect(socket.relayed).toEqual([]);
+    });
+
+    it('refuses a brand the caller holds no role in', async () => {
+      const socket = socketOf('s1');
+
+      const ack = await harnessed.gateway.viewing(socket, { brandId: BRAND_B, ticketId: TICKET });
+
+      expect(ack).toEqual({ ok: false, error: expect.objectContaining({ code: 'forbidden' }) });
+    });
+
+    it('closes a socket whose session has been revoked rather than relaying', async () => {
+      const socket = socketOf('s1');
+      harnessed.revoked.add(socket.data.sessionId);
+
+      await expect(
+        harnessed.gateway.viewing(socket, { brandId: BRAND_A, ticketId: TICKET }),
+      ).rejects.toThrow();
+      expect(socket.relayed).toEqual([]);
+      expect(await closed(socket)).toBe(true);
     });
   });
 });

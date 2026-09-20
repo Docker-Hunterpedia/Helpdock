@@ -126,6 +126,7 @@ Client to server, all acknowledged:
 | `room:leave` | `{ room }` | `@Authenticated()` | `{ ok: true, data: { room } }` |
 | `presence:set` | `{ brandId, status: 'online' \| 'away' }` | `@Requires('brand:read')` | `{ ok: true, data: { status } }` |
 | `presence:heartbeat` | `{}` | `@Authenticated()` | `{ ok: true, data: { at } }` |
+| `ticket:viewing` | `{ brandId, ticketId }` | `@Requires('ticket:read')` | `{ ok: true, data: { ticketId } }` |
 
 A refusal is `{ ok: false, error: { code, message } }` on the same
 acknowledgement, with the codes above plus `invalid_payload` and
@@ -138,6 +139,7 @@ Server to client:
 | `presence:changed` | `{ userId, brandId, status }` | `null` |
 | `ticket:changed` | `{ brandId, ticketId, departmentId, event }` where `event` is `ticket.created` or `ticket.updated` | `null` |
 | `ticket:message` | `{ brandId, ticketId, departmentId, messageId, seq, kind, event }` where `event` is `ticket.replied` or `ticket.note_added` | the message's `seq` |
+| `ticket:viewing` | `{ brandId, ticketId, userId }` — relayed to the *rest* of `ticket:<id>` | `null` |
 | `revoked` | `{ code: 'session_revoked', message }`, immediately before the socket is closed | — |
 
 The two ticket events carry **ids and no content**. That is what "the REST API
@@ -153,6 +155,18 @@ looking at. A ticket that moves department reaches the room it has *left* too,
 and the server then turns every socket out of `ticket:<id>`: a room is
 authorised when it is joined, and who may read that ticket has just changed.
 The clients re-join and are authorised again, which nobody sees.
+
+`ticket:viewing` is the one event that travels in both directions, and the only
+one a client originates. It exists because **a room is not a membership list**:
+Socket.IO can enumerate the sockets in `ticket:<id>` that *this replica* is
+holding, and "is anybody else looking at this" has to be true across every
+replica. So the clients say so instead — every
+`TICKET_VIEWING_INTERVAL_MS` while a ticket is open — the gateway authorises
+each announcement exactly as it authorises the join and relays it to the rest of
+the room, and each client drops a name nobody has repeated inside
+`TICKET_VIEWING_TTL_MS`. Nothing is stored anywhere, which is what makes
+"closed the tab", "lost the network" and "went to lunch with it open" one
+answer. It carries ids and no content, like the other two ticket events.
 
 Every event emitted through `RealtimePublisher` travels in an envelope.
 `revoked` is the exception: the revocation subscriber sends it bare, because it
@@ -274,7 +288,7 @@ of meaning (DESIGN §10).
 | Milestone | Adds |
 |---|---|
 | M1-07 | The auto-unassign timer behind `STAFF_OFFLINE_HOOK`. |
-| M1-09 | The collision indicator, on top of the `ticket:<id>` rooms M1-02 opened. |
+| M1-09 | The rest of DOMAIN-RULES §2.4. M1-15 built the collision indicator on `ticket:viewing`; a server-side register of who holds what would replace it. |
 | M3-07 | In-app notifications, as new server events through `RealtimePublisher`. |
 | M4-03 | The widget handshake's origin allow-list and its per-visitor and per-IP throttles. |
 | M4-04 | The `/widget` namespace and the full delivery contract for conversations: `client_id`, real `seq` values, cursor catch-up and the SSE fallback. |

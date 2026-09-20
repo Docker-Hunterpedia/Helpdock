@@ -79,7 +79,10 @@ const seedStatuses = (): TicketStatus[] => [
     sortOrder: 3,
   }),
   status(MOCK_STATUS_CLOSED, 'Closed', 'مغلقة', 'closed', 'success', { sortOrder: 4 }),
-  status(MOCK_STATUS_SPAM, 'Spam', 'مزعجة', 'closed', 'danger', { sortOrder: 5 }),
+  status(MOCK_STATUS_SPAM, 'Spam', 'مزعجة', 'closed', 'danger', {
+    excludedFromReports: true,
+    sortOrder: 5,
+  }),
   status(MOCK_STATUS_MERGED, 'Merged', 'مدمجة', 'closed', 'info', { sortOrder: 6 }),
 ];
 
@@ -100,6 +103,8 @@ function status(
     awaitingCustomer: false,
     isDefault: false,
     isSystem: true,
+    // M1-11 reads it on Spam; the seed sets it there and nowhere else.
+    excludedFromReports: false,
     sortOrder: 0,
     color,
     ...overrides,

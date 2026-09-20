@@ -18,6 +18,7 @@ export const testStatus = (overrides: Partial<TicketStatus> = {}): TicketStatus 
   awaitingCustomer: false,
   isDefault: true,
   isSystem: true,
+  excludedFromReports: false,
   sortOrder: 1,
   color: 'info',
   ...overrides,

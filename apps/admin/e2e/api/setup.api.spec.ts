@@ -69,7 +69,7 @@ test.describe('the first-run wizard against the real api', () => {
 
     // Into the shell, signed in, with the brand the wizard created.
     await expect(
-      page.getByRole('heading', { name: t('admin:nav.tickets'), level: 1 }),
+      page.getByRole('heading', { name: t('tickets:views.myOpen'), level: 1 }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: t('admin:brandSwitcher.action') })).toContainText(
       BRAND_NAME,

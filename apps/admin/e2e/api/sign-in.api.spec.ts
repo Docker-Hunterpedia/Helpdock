@@ -43,7 +43,7 @@ test.describe('against the real api', () => {
     await page.getByRole('button', { name: t('auth:totp.submit') }).click();
 
     await expect(
-      page.getByRole('heading', { name: t('admin:nav.tickets'), level: 1 }),
+      page.getByRole('heading', { name: t('tickets:views.myOpen'), level: 1 }),
     ).toBeVisible();
 
     // The refresh token is a cookie the page cannot read, and the access token

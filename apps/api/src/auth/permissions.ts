@@ -26,6 +26,14 @@ import type { BrandRole, Principal } from './principal.js';
  * anybody but an Admin inside the service (DOMAIN-RULES §11), because it is not
  * an edit: it destroys history no permission can give back.
  *
+ * `ticketing:manage` is what shapes a brand's ticketing vocabulary — its tags,
+ * its custom field definitions, its ticket templates. It follows the "Manages
+ * config" column: the Admin has "everything in the brand", and the Team Leader
+ * has "macros, canned responses…", of which these three are the M1 half. It is
+ * deliberately separate from `brand:manage`, which an Admin alone holds: adding
+ * a tag does not change how the brand routes work, and adding a department
+ * does.
+ *
  * `staff:read` is the one permission every role holds. §1.2 restricts *tickets*
  * by department, never colleagues: an Agent has to see which of them is online
  * before taking a ticket (M1-07 assignment, M1-09 collision), and a Viewer
@@ -35,6 +43,7 @@ import type { BrandRole, Principal } from './principal.js';
 export const PERMISSIONS = [
   'ticket:read',
   'ticket:write',
+  'ticketing:manage',
   'contact:read',
   'contact:write',
   'brand:read',
@@ -65,6 +74,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
   admin: [
     'ticket:read',
     'ticket:write',
+    'ticketing:manage',
     'contact:read',
     'contact:write',
     'brand:read',
@@ -82,6 +92,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
   team_leader: [
     'ticket:read',
     'ticket:write',
+    'ticketing:manage',
     'contact:read',
     'contact:write',
     'brand:read',

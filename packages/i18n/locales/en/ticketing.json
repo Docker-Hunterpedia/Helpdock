@@ -111,7 +111,20 @@
     "statusIsSystem": "A seeded status can be renamed, never deleted.",
     "statusIsDefault": "Make another status the default before deleting this one.",
     "statusStateFixed": "A seeded status's system state and flags cannot change.",
-    "defaultMustBeOpen": "The default status is where a new or reopened ticket lands, so it has to be open."
+    "defaultMustBeOpen": "The default status is where a new or reopened ticket lands, so it has to be open.",
+    "tagCreated": "{{name}} added",
+    "tagUpdated": "{{name}} saved",
+    "tagDeleted": "{{name}} deleted",
+    "tagsReordered": "New tag order saved",
+    "fieldCreated": "{{name}} added",
+    "fieldUpdated": "{{name}} saved",
+    "fieldDeleted": "{{name}} deleted",
+    "fieldsReordered": "New field order saved",
+    "templateCreated": "{{name}} added",
+    "templateUpdated": "{{name}} saved",
+    "templateDeleted": "{{name}} deleted",
+    "fieldInUse": "Rows already carry values for this field, so its type cannot change.",
+    "optionInUse": "Rows still carry one of the options you removed."
   },
   "statuses": {
     "add": "Add status",
@@ -192,6 +205,209 @@
       "days": "days, otherwise a new linked ticket",
       "daysLabel": "Days the ticket stays reopenable",
       "save": "Save reply behaviour"
+    }
+  },
+  "tags": {
+    "add": "Add tag",
+    "table": {
+      "caption": "Tags of {{brand}}",
+      "colour": "Colour",
+      "name": "Tag",
+      "nameAr": "Name (Arabic)",
+      "tickets": "Tickets",
+      "rowActions": "Actions for {{name}}",
+      "dragHandle": "Reorder {{name}}",
+      "select": "Edit {{name}}"
+    },
+    "actions": {
+      "edit": "Edit",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "delete": "Delete"
+    },
+    "empty": {
+      "heading": "No tags yet",
+      "body": "A tag is a label agents put on a ticket to find it again. Add the first one to start filing."
+    },
+    "editor": {
+      "heading": "Edit tag",
+      "newHeading": "New tag",
+      "name": "Name",
+      "nameAr": "Name (Arabic)",
+      "nameArHint": "Optional. Shown on the chip when the desk is in Arabic.",
+      "colour": "Colour",
+      "colourOption": "{{colour}}",
+      "save": "Save",
+      "create": "Create tag",
+      "delete": "Delete tag",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a tag to edit its name and its colour."
+      }
+    },
+    "colours": {
+      "info": "Blue",
+      "success": "Green",
+      "warning": "Amber",
+      "escalated": "Violet",
+      "sand": "Sand",
+      "stone": "Stone",
+      "clay": "Clay",
+      "bark": "Bark"
+    },
+    "confirm": {
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body_one": "{{count}} ticket keeps no tag. The ticket itself is untouched.",
+        "body_other": "{{count}} tickets keep no tag. The tickets themselves are untouched.",
+        "submit": "Delete tag"
+      }
+    }
+  },
+  "customFields": {
+    "targets": {
+      "ticket": "Ticket",
+      "contact": "Contact",
+      "account": "Account"
+    },
+    "types": {
+      "text": "Text",
+      "number": "Number",
+      "date": "Date",
+      "select": "Select",
+      "multi_select": "Multi-select",
+      "checkbox": "Checkbox"
+    },
+    "table": {
+      "caption": "Custom fields on a {{target}}",
+      "label": "Label",
+      "key": "Key",
+      "type": "Type",
+      "required": "Required",
+      "shownOn": "Shown to",
+      "rowActions": "Actions for {{name}}",
+      "dragHandle": "Reorder {{name}}",
+      "select": "Edit {{name}}"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "shown": {
+      "agents": "Everyone",
+      "adminsOnly": "Admins only"
+    },
+    "actions": {
+      "edit": "Edit",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "delete": "Delete"
+    },
+    "empty": {
+      "heading": "No custom fields yet",
+      "body": "A custom field keeps something this brand needs that Helpdock does not ship. Add the first one."
+    },
+    "editor": {
+      "heading": "Edit field",
+      "newHeading": "New field",
+      "label": "Label",
+      "labelAr": "Label (Arabic)",
+      "labelArHint": "Optional. Shown when the desk is in Arabic.",
+      "key": "Key",
+      "keyHint": "Lower-case letters, digits and underscores. It cannot be changed afterwards.",
+      "keyLocked": "The key is fixed once the field exists, because every stored value is written under it.",
+      "type": "Type",
+      "typeLocked": "The type is fixed while rows carry a value for this field.",
+      "options": "Options",
+      "optionsHint": "One choice per row. Reorder with the arrow buttons or ↑ and ↓.",
+      "optionLabel": "Option {{position}}",
+      "addOption": "Add option",
+      "removeOption": "Remove {{name}}",
+      "moveOptionUp": "Move {{name}} up",
+      "moveOptionDown": "Move {{name}} down",
+      "required": "Required",
+      "requiredHint": "A required field has to be filled in when a ticket is created.",
+      "placement": "Placement",
+      "agentVisible": "Visible to agents",
+      "agentVisibleHint": "Off keeps the field for administrators and rules. It hides it; it does not protect it.",
+      "save": "Save",
+      "create": "Create field",
+      "delete": "Delete field",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a field to edit its label, its type and its options."
+      }
+    },
+    "confirm": {
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body_one": "{{count}} row carries a value for it. The value stays in the database and stops being shown.",
+        "body_other": "{{count}} rows carry a value for it. The values stay in the database and stop being shown.",
+        "submit": "Delete field"
+      },
+      "force": {
+        "title": "Remove options that are in use?",
+        "body": "Some rows still carry the options you removed. Saving clears the option from them.",
+        "submit": "Remove anyway"
+      }
+    },
+    "addTo": "Add {{target}} field"
+  },
+  "templates": {
+    "add": "Add template",
+    "table": {
+      "caption": "Ticket templates of {{brand}}",
+      "name": "Template",
+      "department": "Department",
+      "priority": "Priority",
+      "usage": "Used",
+      "rowActions": "Actions for {{name}}",
+      "select": "Edit {{name}}"
+    },
+    "anyDepartment": "Chosen when filing",
+    "priorities": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "empty": {
+      "heading": "No templates yet",
+      "body": "A template fills in the subject, the body and the fields of a ticket an agent files by hand. Add the first one."
+    },
+    "editor": {
+      "heading": "Edit template",
+      "newHeading": "New template",
+      "name": "Name",
+      "department": "Department",
+      "priority": "Priority",
+      "subject": "Subject",
+      "subjectHint": "Placeholders you can use:",
+      "body": "Body",
+      "bodyHint": "Plain text in this release. The rich composer arrives with M5.",
+      "defaultTags": "Default tags",
+      "defaultTagsHint": "Applied to every ticket made from this template.",
+      "customDefaults": "Custom field defaults",
+      "preview": "Preview",
+      "previewHeading": "Preview",
+      "previewClose": "Close preview",
+      "unknownPlaceholders": "Not a placeholder Helpdock knows: {{names}}",
+      "save": "Save",
+      "create": "Create template",
+      "delete": "Delete template",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a template to edit its subject, its body and what it fills in."
+      }
+    },
+    "confirm": {
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body": "Tickets already filed from it are untouched. Nothing else changes.",
+        "submit": "Delete template"
+      }
     }
   }
 }

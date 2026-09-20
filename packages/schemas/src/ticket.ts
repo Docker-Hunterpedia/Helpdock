@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
+import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
 
 /**
  * The wire contract for tickets and their threads (M1-02, M1-03), shared by the
@@ -204,6 +205,17 @@ export const ticketSchema = z.object({
   slaBreached: z.boolean(),
   closedAt: z.iso.datetime().nullable(),
   custom: z.record(z.string(), z.unknown()),
+  /**
+   * The chips this ticket carries (M1-06), embedded for the reason the status
+   * is: every row draws them, and a row that had to resolve its own tag ids
+   * would render before it knew what it was showing.
+   *
+   * **Optional**, and the api always fills it. Optional because the field
+   * arrived after the ticket did: a client built against the M1-02 shape, and a
+   * fixture written against it, stay valid, and a renderer that has not learned
+   * about tags yet draws nothing rather than crashing on `undefined`.
+   */
+  tags: z.array(tagSchema).optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -322,8 +334,19 @@ export const ticketListQuerySchema = z.object({
    * caller ask for both at once.
    */
   assigneeId: coerceArray(z.union([z.uuid(), z.literal('unassigned')])).optional(),
-  /** M1-06 owns `tags`. Declared here so the list's shape does not change under the UI. */
+  /**
+   * Tags, with **all-of** semantics: a ticket matches when it carries every tag
+   * named, not any of them. Two chips in a filter are how somebody narrows a
+   * queue, and "any" would widen it instead — the one reading that is wrong in
+   * the direction that shows rows the reader asked to exclude.
+   *
+   * Two spellings, one filter. `tagId` is what M1-02 declared and what a query
+   * string writes as `tagId=a&tagId=b`; `tagIds` is the same thing said once,
+   * which is what a client assembling a saved view sends. They are merged, so
+   * naming both is naming their union.
+   */
   tagId: coerceArray(z.uuid()).optional(),
+  tagIds: coerceArray(z.uuid()).optional(),
   /** Free text over the subject: full-text first, trigram for the misspelled. */
   q: z.string().trim().min(1).max(200).optional(),
   sort: ticketSortSchema.default('updatedAt'),
@@ -349,31 +372,69 @@ export type TicketList = z.infer<typeof ticketListSchema>;
  * Manual creation. The body is the first message of the thread, so a ticket is
  * never created empty — a ticket with no message is a row nobody can answer.
  */
-export const ticketCreateRequestSchema = z.object({
-  subject: z.string().trim().min(1).max(TICKET_SUBJECT_MAX),
-  /** Rich text as the composer wrote it. Sanitised by the api before it is stored. */
-  bodyHtml: z.string().min(1).max(MESSAGE_BODY_MAX),
-  departmentId: z.uuid(),
-  priority: ticketPrioritySchema.default('medium'),
-  /** M1-04 owns contacts; until then a ticket may be filed without one. */
-  contactId: z.uuid().optional(),
-  assigneeId: z.uuid().optional(),
-  teamId: z.uuid().optional(),
-  /** Defaults to `manual`, which is what a ticket typed into the admin is. */
-  channel: ticketChannelSchema.default('manual'),
-  /**
-   * The `client_id` the **first message** is stored with.
-   *
-   * It does not make creation idempotent, and cannot: the uniqueness DOMAIN-RULES
-   * §7 defines is `(conversation_id, client_id)`, and a conversation does not
-   * exist until the ticket does. A retried `POST /tickets` therefore creates a
-   * second ticket. What it is for is the reply path: the admin's composer holds
-   * one id for the message it is sending, and the first message is a message.
-   * Idempotent creation needs a key that outlives the request — M2-04's
-   * threading key for email, M4's conversation id for the widget.
-   */
-  clientId: z.uuid().optional(),
-});
+export const ticketCreateRequestSchema = z
+  .object({
+    /**
+     * Required unless a template supplies one. The three fields a ticket cannot
+     * be written without — subject, body and department — are optional here and
+     * checked below, because a template exists precisely to fill them.
+     */
+    subject: z.string().trim().min(1).max(TICKET_SUBJECT_MAX).optional(),
+    /** Rich text as the composer wrote it. Sanitised by the api before it is stored. */
+    bodyHtml: z.string().min(1).max(MESSAGE_BODY_MAX).optional(),
+    departmentId: z.uuid().optional(),
+    /** Absent means "whatever the template says", or `medium` when there is none. */
+    priority: ticketPrioritySchema.optional(),
+    /** M1-04 owns contacts; until then a ticket may be filed without one. */
+    contactId: z.uuid().optional(),
+    assigneeId: z.uuid().optional(),
+    teamId: z.uuid().optional(),
+    /** Defaults to `manual`, which is what a ticket typed into the admin is. */
+    channel: ticketChannelSchema.default('manual'),
+    /**
+     * A ticket template (M1-06). The **id**, never a copy of the template: the
+     * api applies it, so a template edited between the picker rendering and the
+     * ticket being filed is applied as it now is, and an API client gets the
+     * same behaviour without reimplementing it. Anything named beside it wins
+     * over what the template says.
+     */
+    templateId: z.uuid().optional(),
+    /** Tags to start with, on top of the template's own. */
+    tagIds: z.array(z.uuid()).max(MAX_TAGS_PER_BRAND).optional(),
+    /**
+     * Custom field values, keyed by `custom_field_defs.key`. Validated against
+     * the brand's ticket definitions: an unknown key is refused, and every
+     * required field has to be present (`@helpdock/schemas/custom-fields`).
+     */
+    custom: z.record(z.string(), z.unknown()).optional(),
+    /**
+     * The `client_id` the **first message** is stored with.
+     *
+     * It does not make creation idempotent, and cannot: the uniqueness DOMAIN-RULES
+     * §7 defines is `(conversation_id, client_id)`, and a conversation does not
+     * exist until the ticket does. A retried `POST /tickets` therefore creates a
+     * second ticket. What it is for is the reply path: the admin's composer holds
+     * one id for the message it is sending, and the first message is a message.
+     * Idempotent creation needs a key that outlives the request — M2-04's
+     * threading key for email, M4's conversation id for the widget.
+     */
+    clientId: z.uuid().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.templateId !== undefined) {
+      return;
+    }
+
+    for (const field of ['subject', 'bodyHtml', 'departmentId'] as const) {
+      if (value[field] === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'Required unless the request names a template',
+        });
+      }
+    }
+  });
 export type TicketCreateRequest = z.infer<typeof ticketCreateRequestSchema>;
 
 /**
@@ -391,6 +452,16 @@ export const ticketUpdateRequestSchema = z.object({
   teamId: z.uuid().nullable().optional(),
   assigneeId: z.uuid().nullable().optional(),
   statusId: z.uuid().optional(),
+  /**
+   * Custom field values to write over the stored ones (M1-06). A **patch**: a
+   * key that is absent is left alone and a key set to `null` is cleared, so
+   * `required` is not enforced here — a request that names two fields says
+   * nothing about the other eight.
+   *
+   * Tags are not here. They are replaced as a set through
+   * `PUT /tickets/:ticketId/tags`, which writes its own activity row.
+   */
+  custom: z.record(z.string(), z.unknown()).optional(),
 });
 export type TicketUpdateRequest = z.infer<typeof ticketUpdateRequestSchema>;
 

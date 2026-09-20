@@ -207,3 +207,213 @@ describe('a refusal', () => {
     expect(isTicketingError(error) && error.reason).toBe('out-of-scope');
   });
 });
+
+// --------------------------------------------------------------------- M1-06
+
+const TAG = '0192c3f0-1a2b-7c3d-8e4f-000000000101';
+const FIELD = '0192c3f0-1a2b-7c3d-8e4f-000000000201';
+const TEMPLATE = '0192c3f0-1a2b-7c3d-8e4f-000000000301';
+
+const tag = { id: TAG, name: 'Refund', nameAr: null, color: 'info', sortOrder: 0, ticketCount: 2 };
+
+const field = {
+  id: FIELD,
+  target: 'ticket',
+  key: 'tier',
+  label: 'Plan tier',
+  labelAr: null,
+  type: 'select',
+  options: ['gold'],
+  required: false,
+  agentVisible: true,
+  sortOrder: 0,
+};
+
+const template = {
+  id: TEMPLATE,
+  name: 'Refund request',
+  departmentId: null,
+  priority: 'medium',
+  subject: 'Refund',
+  bodyText: 'Hello',
+  defaultTagIds: [],
+  customDefaults: {},
+  usageCount: 0,
+};
+
+describe('tags', () => {
+  it('asks the brand for its tags and parses the list', async () => {
+    fetchMock.mockResolvedValue(json({ tags: [tag] }));
+
+    await expect(api.tags(BRAND)).resolves.toEqual({ tags: [tag] });
+    expect(lastCall().url).toContain(`/brands/${BRAND}/tags`);
+  });
+
+  it('creates one', async () => {
+    fetchMock.mockResolvedValue(json(tag));
+
+    await api.createTag(BRAND, { name: 'Refund', color: 'info' });
+
+    expect(lastCall().init.method).toBe('POST');
+  });
+
+  it('updates one', async () => {
+    fetchMock.mockResolvedValue(json(tag));
+
+    await api.updateTag(BRAND, TAG, { color: 'success' });
+
+    expect(lastCall().url).toContain(`/tags/${TAG}`);
+    expect(lastCall().init.method).toBe('PATCH');
+  });
+
+  it('sends the whole order', async () => {
+    fetchMock.mockResolvedValue(json({ tags: [tag] }));
+
+    await api.reorderTags(BRAND, [TAG]);
+
+    expect(lastCall().url).toContain('/tags/reorder');
+    expect(String(lastCall().init.body)).toContain(TAG);
+  });
+
+  it('reads the usage before a delete', async () => {
+    fetchMock.mockResolvedValue(json({ tagId: TAG, ticketCount: 4 }));
+
+    await expect(api.tagUsage(BRAND, TAG)).resolves.toEqual({ tagId: TAG, ticketCount: 4 });
+    expect(lastCall().url).toContain(`/tags/${TAG}/usage`);
+  });
+
+  it('deletes one', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await api.deleteTag(BRAND, TAG);
+
+    expect(lastCall().init.method).toBe('DELETE');
+  });
+
+  it('turns a duplicate name into the refusal the screen knows', async () => {
+    fetchMock.mockResolvedValue(ticketingFailure('name-taken'));
+
+    const failure = await api
+      .createTag(BRAND, { name: 'Refund', color: 'info' })
+      .catch((error: unknown) => error);
+
+    expect(isTicketingError(failure)).toBe(true);
+  });
+});
+
+describe('custom fields', () => {
+  it('asks for every target at once when none is named', async () => {
+    fetchMock.mockResolvedValue(json({ fields: [field] }));
+
+    await expect(api.customFields(BRAND)).resolves.toEqual({ fields: [field] });
+    expect(lastCall().url).not.toContain('target=');
+  });
+
+  it('narrows to one target when one is', async () => {
+    fetchMock.mockResolvedValue(json({ fields: [field] }));
+
+    await api.customFields(BRAND, 'contact');
+
+    expect(lastCall().url).toContain('target=contact');
+  });
+
+  it('creates one', async () => {
+    fetchMock.mockResolvedValue(json(field));
+
+    await api.createCustomField(BRAND, {
+      target: 'ticket',
+      key: 'tier',
+      label: 'Plan tier',
+      type: 'select',
+      options: ['gold'],
+      required: false,
+      agentVisible: true,
+    });
+
+    expect(lastCall().init.method).toBe('POST');
+  });
+
+  it('carries force on an update, which is how an option in use is removed', async () => {
+    fetchMock.mockResolvedValue(json(field));
+
+    await api.updateCustomField(BRAND, FIELD, { options: [], force: true });
+
+    expect(String(lastCall().init.body)).toContain('"force":true');
+  });
+
+  it('sends the target with a reorder, because each target has its own order', async () => {
+    fetchMock.mockResolvedValue(json({ fields: [field] }));
+
+    await api.reorderCustomFields(BRAND, 'ticket', [FIELD]);
+
+    expect(String(lastCall().init.body)).toContain('"target":"ticket"');
+  });
+
+  it('reads the usage, options included', async () => {
+    fetchMock.mockResolvedValue(json({ fieldId: FIELD, rows: 3, optionRows: { gold: 2 } }));
+
+    await expect(api.customFieldUsage(BRAND, FIELD)).resolves.toEqual({
+      fieldId: FIELD,
+      rows: 3,
+      optionRows: { gold: 2 },
+    });
+  });
+
+  it('deletes one', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await api.deleteCustomField(BRAND, FIELD);
+
+    expect(lastCall().init.method).toBe('DELETE');
+  });
+});
+
+describe('ticket templates', () => {
+  it('asks the brand for its templates', async () => {
+    fetchMock.mockResolvedValue(json({ templates: [template] }));
+
+    await expect(api.ticketTemplates(BRAND)).resolves.toEqual({ templates: [template] });
+  });
+
+  it('creates one', async () => {
+    fetchMock.mockResolvedValue(json(template));
+
+    await api.createTicketTemplate(BRAND, {
+      name: 'Refund request',
+      priority: 'medium',
+      subject: 'Refund',
+      bodyText: 'Hello',
+      defaultTagIds: [],
+      customDefaults: {},
+    });
+
+    expect(lastCall().init.method).toBe('POST');
+  });
+
+  it('updates one', async () => {
+    fetchMock.mockResolvedValue(json(template));
+
+    await api.updateTicketTemplate(BRAND, TEMPLATE, { priority: 'high' });
+
+    expect(lastCall().url).toContain(`/ticket-templates/${TEMPLATE}`);
+  });
+
+  it('deletes one', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await api.deleteTicketTemplate(BRAND, TEMPLATE);
+
+    expect(lastCall().init.method).toBe('DELETE');
+  });
+
+  it('asks the api to render the preview rather than filling it here', async () => {
+    fetchMock.mockResolvedValue(
+      json({ subject: 'Refund for Mona', bodyText: 'Hello Mona', unknownPlaceholders: [] }),
+    );
+
+    await expect(api.previewTicketTemplate(BRAND, TEMPLATE)).resolves.toMatchObject({
+      subject: 'Refund for Mona',
+    });
+    expect(lastCall().url).toContain('/preview');
+  });
+});

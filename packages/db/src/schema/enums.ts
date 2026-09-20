@@ -159,3 +159,46 @@ export const attachmentRejectReasonEnum = pgEnum('attachment_reject_reason', [
   'infected',
   'processing_failed',
 ]);
+
+/**
+ * The eight tints a tag may be drawn in (DESIGN §6.2): the four status tints a
+ * tag is allowed to borrow, and four steps of the warm neutral ramp. The danger
+ * tint is deliberately absent — red means "breached" or "destructive" on this
+ * desk, and a tag a brand invents must never be able to claim it.
+ *
+ * A key rather than a hex value, for the reason {@link statusColorEnum} gives:
+ * a theme change never rewrites rows, and a brand cannot smuggle a ninth colour
+ * in through a tag name.
+ */
+export const tagColorEnum = pgEnum('tag_color', [
+  'info',
+  'success',
+  'warning',
+  'escalated',
+  'sand',
+  'stone',
+  'clay',
+  'bark',
+]);
+
+/** What a custom field hangs off (REQUIREMENTS §4.1). */
+export const customFieldTargetEnum = pgEnum('custom_field_target', [
+  'ticket',
+  'contact',
+  'account',
+]);
+
+/**
+ * The six field types of REQUIREMENTS §4.1. The list is closed: every type has
+ * a validator in `@helpdock/schemas/custom-fields` and an editor in the admin,
+ * so a seventh is a deliberate change in three places rather than a row a brand
+ * can write.
+ */
+export const customFieldTypeEnum = pgEnum('custom_field_type', [
+  'text',
+  'number',
+  'date',
+  'select',
+  'multi_select',
+  'checkbox',
+]);

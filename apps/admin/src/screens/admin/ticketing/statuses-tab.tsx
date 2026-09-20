@@ -15,7 +15,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown,
   ArrowUp,
@@ -39,6 +39,7 @@ import { useToast } from '../../../ui/toasts.tsx';
 import { moveBy, moveTo } from './reorder.js';
 import { ReplyBehaviourCard } from './reply-behaviour-card.tsx';
 import { type StatusDraft, StatusEditor } from './status-editor.tsx';
+import { useTicketingAction } from './use-ticketing-action.js';
 
 /**
  * The Statuses tab of `Admin/Ticketing`: the brand's statuses, the side editor,
@@ -132,7 +133,7 @@ export function StatusesTab(): ReactNode {
     });
   };
 
-  const create = useStatusAction(
+  const create = useTicketingAction(
     (draft: StatusDraft) =>
       api.createStatus(brand.id, {
         name: draft.name,
@@ -147,7 +148,7 @@ export function StatusesTab(): ReactNode {
     report,
   );
 
-  const update = useStatusAction(
+  const update = useTicketingAction(
     (input: { status: TicketStatus; draft: StatusDraft }) =>
       api.updateStatus(brand.id, input.status.id, input.draft),
     (input) => t('ticketing:toast.statusUpdated', { name: input.draft.name }),
@@ -155,28 +156,28 @@ export function StatusesTab(): ReactNode {
     report,
   );
 
-  const makeDefault = useStatusAction(
+  const makeDefault = useTicketingAction(
     (status: TicketStatus) => api.updateStatus(brand.id, status.id, { isDefault: true }),
     (status) => t('ticketing:toast.statusUpdated', { name: status.name }),
     refresh,
     report,
   );
 
-  const remove = useStatusAction(
+  const remove = useTicketingAction(
     (status: TicketStatus) => api.deleteStatus(brand.id, status.id),
     (status) => t('ticketing:toast.statusDeleted', { name: status.name }),
     refresh,
     report,
   );
 
-  const reorder = useStatusAction(
+  const reorder = useTicketingAction(
     (order: readonly string[]) => api.reorderStatuses(brand.id, [...order]),
     () => t('ticketing:toast.statusesReordered'),
     refresh,
     report,
   );
 
-  const replyBehaviour = useStatusAction(
+  const replyBehaviour = useTicketingAction(
     (next: { autoAwaitOnAgentReply: boolean; reopenPolicy: ReopenPolicy }) =>
       api.updateReplyBehaviour(brand.id, next),
     () => t('ticketing:toast.replyBehaviourSaved'),
@@ -544,28 +545,4 @@ function FlagCell({ on }: { readonly on: boolean }): ReactNode {
       </Box>
     </>
   ) : null;
-}
-
-/**
- * One mutation, wired the same way every time: invalidate what the server just
- * changed, then say so in a toast, and turn a refusal into the sentence its code
- * names. The same shape `departments-tab.tsx` uses, because the two tabs answer
- * failures identically.
- */
-function useStatusAction<TInput, TResult>(
-  run: (input: TInput) => Promise<TResult>,
-  message: (input: TInput) => string,
-  refresh: () => Promise<void>,
-  report: (error: unknown) => void,
-) {
-  const toast = useToast();
-
-  return useMutation({
-    mutationFn: run,
-    onSuccess: async (_result: TResult, input: TInput) => {
-      await refresh();
-      toast({ tone: 'success', message: message(input) });
-    },
-    onError: report,
-  });
 }

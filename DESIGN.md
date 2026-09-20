@@ -170,7 +170,7 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
 | StatusBadge | 22 px pill, tint background, 6 px dot in the solid hue, caption text in `status.text`. One per system state plus custom statuses inherit their mapped state's hue. |
 | PriorityBadge | 22 px, radius md. Low = neutral outline; Medium = info outline; High = warning outline; Urgent = solid danger with white text. |
 | SlaTimer | 22 px, radius md, mono 12. Running = green clock icon, remaining time. At risk (< 20 % left) = warning. Breached = danger tint with "Breached 2h". Paused = neutral, "paused". |
-| Tag | 22 px, radius md, 12 px weight 500. Color chosen from a fixed set of 8 tints (info, success, warning, escalated tints plus four neutral-warm tints); never the danger tint. Overflow collapses to "+n". |
+| Tag | 22 px, radius md, 12 px weight 500, 1 px border in the matching hue. Color is one of eight keys: `info`, `success`, `warning`, `escalated` — the four status tints a tag may borrow — plus `sand`, `stone`, `clay` and `bark`, four steps of the warm neutral ramp (`bg.canvas`, `bg.muted`, `border.default`, `border.strong`). **Never the danger tint**: red means breached or destructive. Overflow collapses to "+n". |
 | Avatar | 20 · 24 · 28 · 36 px circles, initials in weight 600. Staff use teal100/teal700; contacts use n200/n700; the assigned agent on a row uses solid teal with white. Unassigned = dashed n400 ring. Presence dot 8 px bottom-end. |
 | ChannelIcon | 14 px Lucide icon + caption label in `text.secondary`. |
 | PresenceDot | 8 px: online success, away warning, offline n400. |
@@ -291,3 +291,4 @@ Every PR that touches UI ticks these in the description:
 | 2026-09-19 | 1.2. Gave SegmentedControl its own theme override (M1-04): MUI's default unselected colour is a translucent black that fails §10 on the canvas. |
 | 2026-09-19 | 1.2. Added the §5 rule for OAuth provider marks after building the admin shell: Lucide v1 has no brand icons, so the two are inlined rather than adding a second icon set. |
 | 2026-09-19 | 1.3. Added StepProgress to §6.2 for the first-run wizard (`Admin/Wizard`), and PasswordStrengthBar for the bar M0-06 built and the wizard reuses. A step that is merely later uses `text.secondary`, not `text.disabled`: the latter is 2.3:1 on the canvas, which §10 does not allow for a label anyone is meant to read. |
+| 2026-09-20 | 1.4. Named the eight tag tints in §6.2 (M1-06). The four neutral ones are steps of the warm ramp rather than new values, so a brand's `surfaceTone` moves them and dark mode needs no second table; each tag also gets a 1 px border, because `sand` on a white card is otherwise invisible. |

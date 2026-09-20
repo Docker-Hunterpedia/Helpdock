@@ -41,6 +41,12 @@ export default defineConfig({
     environment: 'happy-dom',
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
+    // A screen test drives real controls through `user-event`, which is slow
+    // under v8 instrumentation and slower again when every worker is busy:
+    // `test:coverage` failed several of these at the 5 s default while the same
+    // tests passed on their own. Still a firm ceiling — a hung test fails, it
+    // does not hang the run.
+    testTimeout: 20_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

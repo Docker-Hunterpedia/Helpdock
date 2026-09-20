@@ -2,29 +2,54 @@ import type {
   Brand,
   BrandSettings,
   BrandUpdateRequest,
+  CustomFieldCreateRequest,
+  CustomFieldDef,
+  CustomFieldDefList,
+  CustomFieldTarget,
+  CustomFieldUpdateRequest,
+  CustomFieldUsage,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  TagCreateRequest,
+  TagList,
+  TagSummary,
+  TagUpdateRequest,
+  TagUsage,
   TeamList,
   TicketStatus,
   TicketStatusCreateRequest,
   TicketStatusList,
   TicketStatusUpdateRequest,
   TicketStatusUsage,
+  TicketTemplate,
+  TicketTemplateCreateRequest,
+  TicketTemplateList,
+  TicketTemplatePreview,
+  TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
 import {
   brandSchema,
   brandSettingsSchema,
+  customFieldDefListSchema,
+  customFieldDefSchema,
+  customFieldUsageSchema,
   departmentSummaryListSchema,
   departmentSummarySchema,
   eligibleMemberListSchema,
+  tagListSchema,
+  tagSummarySchema,
+  tagUsageSchema,
   teamListSchema,
   ticketStatusListSchema,
   ticketStatusSchema,
   ticketStatusUsageSchema,
+  ticketTemplateListSchema,
+  ticketTemplatePreviewSchema,
+  ticketTemplateSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
 import type { TicketingApi } from './api.js';
@@ -214,6 +239,125 @@ export class HttpTicketingApi implements TicketingApi {
     );
   }
 
+  // ---------------------------------------------------------------- M1-06
+
+  async tags(brandId: string): Promise<TagList> {
+    return tagListSchema.parse(await this.#transport.request('GET', this.#tags(brandId)));
+  }
+
+  async createTag(brandId: string, request: TagCreateRequest): Promise<TagSummary> {
+    return tagSummarySchema.parse(
+      await this.#transport.request('POST', this.#tags(brandId), request),
+    );
+  }
+
+  async updateTag(brandId: string, tagId: string, request: TagUpdateRequest): Promise<TagSummary> {
+    return tagSummarySchema.parse(
+      await this.#transport.request('PATCH', this.#tag(brandId, tagId), request),
+    );
+  }
+
+  async reorderTags(brandId: string, tagIds: string[]): Promise<TagList> {
+    return tagListSchema.parse(
+      await this.#transport.request('POST', `${this.#tags(brandId)}/reorder`, { tagIds }),
+    );
+  }
+
+  async tagUsage(brandId: string, tagId: string): Promise<TagUsage> {
+    return tagUsageSchema.parse(
+      await this.#transport.request('GET', `${this.#tag(brandId, tagId)}/usage`),
+    );
+  }
+
+  async deleteTag(brandId: string, tagId: string): Promise<void> {
+    await this.#transport.request('DELETE', this.#tag(brandId, tagId));
+  }
+
+  async customFields(brandId: string, target?: CustomFieldTarget): Promise<CustomFieldDefList> {
+    const query = target === undefined ? '' : `?target=${encodeURIComponent(target)}`;
+
+    return customFieldDefListSchema.parse(
+      await this.#transport.request('GET', `${this.#fields(brandId)}${query}`),
+    );
+  }
+
+  async createCustomField(
+    brandId: string,
+    request: CustomFieldCreateRequest,
+  ): Promise<CustomFieldDef> {
+    return customFieldDefSchema.parse(
+      await this.#transport.request('POST', this.#fields(brandId), request),
+    );
+  }
+
+  async updateCustomField(
+    brandId: string,
+    fieldId: string,
+    request: CustomFieldUpdateRequest,
+  ): Promise<CustomFieldDef> {
+    return customFieldDefSchema.parse(
+      await this.#transport.request('PATCH', this.#field(brandId, fieldId), request),
+    );
+  }
+
+  async reorderCustomFields(
+    brandId: string,
+    target: CustomFieldTarget,
+    fieldIds: string[],
+  ): Promise<CustomFieldDefList> {
+    return customFieldDefListSchema.parse(
+      await this.#transport.request('POST', `${this.#fields(brandId)}/reorder`, {
+        target,
+        fieldIds,
+      }),
+    );
+  }
+
+  async customFieldUsage(brandId: string, fieldId: string): Promise<CustomFieldUsage> {
+    return customFieldUsageSchema.parse(
+      await this.#transport.request('GET', `${this.#field(brandId, fieldId)}/usage`),
+    );
+  }
+
+  async deleteCustomField(brandId: string, fieldId: string): Promise<void> {
+    await this.#transport.request('DELETE', this.#field(brandId, fieldId));
+  }
+
+  async ticketTemplates(brandId: string): Promise<TicketTemplateList> {
+    return ticketTemplateListSchema.parse(
+      await this.#transport.request('GET', this.#templates(brandId)),
+    );
+  }
+
+  async createTicketTemplate(
+    brandId: string,
+    request: TicketTemplateCreateRequest,
+  ): Promise<TicketTemplate> {
+    return ticketTemplateSchema.parse(
+      await this.#transport.request('POST', this.#templates(brandId), request),
+    );
+  }
+
+  async updateTicketTemplate(
+    brandId: string,
+    templateId: string,
+    request: TicketTemplateUpdateRequest,
+  ): Promise<TicketTemplate> {
+    return ticketTemplateSchema.parse(
+      await this.#transport.request('PATCH', this.#template(brandId, templateId), request),
+    );
+  }
+
+  async deleteTicketTemplate(brandId: string, templateId: string): Promise<void> {
+    await this.#transport.request('DELETE', this.#template(brandId, templateId));
+  }
+
+  async previewTicketTemplate(brandId: string, templateId: string): Promise<TicketTemplatePreview> {
+    return ticketTemplatePreviewSchema.parse(
+      await this.#transport.request('GET', `${this.#template(brandId, templateId)}/preview`),
+    );
+  }
+
   // ------------------------------------------------------------------
 
   #statuses(brandId: string): string {
@@ -238,5 +382,29 @@ export class HttpTicketingApi implements TicketingApi {
 
   #team(brandId: string, departmentId: string, teamId: string): string {
     return `${this.#department(brandId, departmentId)}/teams/${encodeURIComponent(teamId)}`;
+  }
+
+  #tags(brandId: string): string {
+    return `${this.#brand(brandId)}/tags`;
+  }
+
+  #tag(brandId: string, tagId: string): string {
+    return `${this.#tags(brandId)}/${encodeURIComponent(tagId)}`;
+  }
+
+  #fields(brandId: string): string {
+    return `${this.#brand(brandId)}/custom-fields`;
+  }
+
+  #field(brandId: string, fieldId: string): string {
+    return `${this.#fields(brandId)}/${encodeURIComponent(fieldId)}`;
+  }
+
+  #templates(brandId: string): string {
+    return `${this.#brand(brandId)}/ticket-templates`;
+  }
+
+  #template(brandId: string, templateId: string): string {
+    return `${this.#templates(brandId)}/${encodeURIComponent(templateId)}`;
   }
 }

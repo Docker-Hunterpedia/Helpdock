@@ -16,6 +16,7 @@ will be built on.
 ```
 tickets ──< ticket_messages          one thread per ticket, ordered by `seq`
         ──< ticket_activity          who changed what, and how
+        ──< ticket_tags ──> tags     the chips, the brand's own list
         ──> ticket_statuses          the brand's own list, mapped to four system states
 ```
 
@@ -25,6 +26,8 @@ tickets ──< ticket_messages          one thread per ticket, ordered by `seq`
 | `tickets` | brand **and department** | `department_id` is not null. A ticket with no department would be invisible to everyone. |
 | `ticket_messages` | brand **and department** | `department_id` is denormalised from the ticket by trigger. |
 | `ticket_activity` | brand **and department** | The same, and for the same reason. |
+| `ticket_tags` | brand **and department** | The same again (M1-06). The primary key is `(ticket_id, tag_id)`, so adding a tag twice is one row. |
+| `tags`, `custom_field_defs`, `ticket_templates` | brand | Configuration, not tickets: the same list in every department. [Ticketing settings](ticketing-settings.md) covers them. |
 
 ### Department scope
 
@@ -117,6 +120,76 @@ Numbers are not dense. `nextval` is non-transactional by design — that is what
 lets two requests draw two numbers without waiting for each other — so a
 rolled-back creation burns its number. A gap is not a defect; a duplicate would
 be, and `tickets_brand_number_key` is what would catch one.
+
+## Tags and custom values
+
+A ticket carries two things a brand defines for itself (M1-06). Both are
+described in [Ticketing settings](ticketing-settings.md); what follows is what
+they look like on a ticket.
+
+### Tags
+
+The chips are **embedded in the ticket**, exactly as the status is, because
+every list row draws them and a row that had to resolve its own tag ids would
+render before it knew what it was showing:
+
+```json
+{
+  "id": "0199f4b2-…",
+  "subject": "Refund for order 42",
+  "tags": [{ "id": "0199f4b2-…", "name": "Refund", "nameAr": "استرداد", "color": "info" }]
+}
+```
+
+`tags` is **optional on the wire** and the api always fills it: it arrived after
+the ticket did, so a client built against the M1-02 shape and a fixture written
+against it stay valid, and a renderer that has not learned about tags draws
+nothing rather than crashing on `undefined`.
+
+They are replaced as a **set**, never added and removed one at a time:
+
+```http
+PUT /api/brands/:brandId/tickets/:ticketId/tags
+
+{ "tagIds": ["0199f4b2-…", "0199f4b3-…"] }
+```
+
+That makes it idempotent, it is one activity row instead of four when an agent
+changes three chips at once, and two agents editing the same ticket end at one
+of the two sets rather than at a mixture of both. A replace that changes nothing
+writes nothing — no `ticket.tags.changed` row, no outbox event — for the same
+reason a `PATCH` that changes nothing does not.
+
+A change bumps `updated_at`, because the list orders by it and a ticket that has
+just become urgent must not sit at the bottom of the queue.
+
+An id that is not this brand's answers **404**. A ticket in another department
+answers 404 too, from the policy: the `ticket_tags_department` trigger looks the
+parent up under the caller's own row-level security, finds nothing, and the
+insert never happens — the same shape `ticket_messages` and `attachments` use.
+
+### Custom values
+
+`tickets.custom` is a jsonb object keyed by `custom_field_defs.key`. Every write
+is validated against the brand's own *ticket* definitions before it reaches the
+column, so a value that does not fit its type, or a key nobody defined, is a
+**400** rather than a row somebody believes they saved.
+
+```http
+POST /api/brands/:brandId/tickets
+{ …, "custom": { "tier": "gold", "renews_on": "2026-03-01" } }
+
+PATCH /api/brands/:brandId/tickets/:ticketId
+{ "custom": { "tier": "silver", "renews_on": null } }
+```
+
+A `POST` is a **create**: every required field has to arrive. A `PATCH` is a
+**patch**: a key it omits is left alone, and a key set to `null` is cleared. The
+stored object never holds a null, so "unset" has one representation.
+
+A key whose definition has since been deleted is filtered out on the way to a
+screen rather than rewritten out of the row, so deleting a definition is not a
+migration over the whole brand and re-creating it brings its values back.
 
 ## Messages and `seq`
 
@@ -348,11 +421,13 @@ which departments it reaches is the policies'.
 | `GET /tickets` | `ticket:read` | A filtered, sorted, cursor-paged list |
 | `POST /tickets` | `ticket:write` | A ticket and its first message |
 | `GET /tickets/:ticketId` | `ticket:read` | The ticket, the first page of its thread and its activity |
-| `PATCH /tickets/:ticketId` | `ticket:write` | Subject, priority, department, assignee, status. Setting a team answers 400 until M1-01; clearing one with `null` is allowed |
+| `PATCH /tickets/:ticketId` | `ticket:write` | Subject, priority, department, assignee, status, custom values. Setting a team answers 400 until M1-01; clearing one with `null` is allowed |
 | `GET /tickets/:ticketId/messages` | `ticket:read` | The thread after a `seq` |
 | `POST /tickets/:ticketId/messages` | `ticket:write` | A public reply or an internal note |
 | `DELETE /tickets/:ticketId` | `brand:manage` | Soft-deletes it (§2.2). Admin only: hiding a ticket from the whole brand is not an edit |
 | `GET /tickets/:ticketId/activity` | `ticket:read` | The newest 100 activity entries, oldest first. It does not page yet |
+| `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
+| `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
 
 ### Listing
 
@@ -364,6 +439,7 @@ GET /api/brands/:brandId/tickets
   &departmentId=<uuid>        repeatable
   &channel=email              repeatable: email | chat | telegram | form | api | manual
   &assigneeId=<uuid>          repeatable; the value `unassigned` is a chip of its own
+  &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  free text over the subject
   &sort=updatedAt             updatedAt | createdAt | number | priority
   &direction=desc             asc | desc
@@ -411,8 +487,11 @@ operator against the subject, through `tickets_subject_trgm_idx`. Full text will
 not match `renewa` against "renewal"; the trigram half will. Both bind the term
 as a parameter.
 
-`tagId` is declared and **refused with 400** until M1-06 exists. A filter that is
-accepted and not applied would quietly show rows the reader asked to exclude.
+`tagId` has **all-of** semantics (M1-06): a ticket matches when it carries every
+tag named, not any of them. Two chips in a filter are how somebody narrows a
+queue, and "any" would widen it — the reading that is wrong in the direction
+that shows rows the reader asked to exclude. `tagIds` is the same filter under
+another name, and naming both is naming their union.
 
 ### Creating
 
@@ -427,9 +506,25 @@ Content-Type: application/json
   "priority": "medium",
   "channel": "manual",
   "contactId": "0199f4b2-…",
+  "tagIds": ["0199f4b2-…"],
+  "custom": { "tier": "gold" },
   "clientId": "0199f4b2-…"
 }
 ```
+
+Or from a template, which fills whatever the request leaves out:
+
+```http
+POST /api/brands/:brandId/tickets
+
+{ "templateId": "0199f4b2-…", "contactId": "0199f4b2-…" }
+```
+
+`subject`, `bodyHtml` and `departmentId` are required **unless** the request
+names a `templateId`; a request with neither is a 400 naming the three fields.
+A template that itself names no department leaves the request to name one, and a
+request that names neither is refused. Everything the request does name wins
+over what the template says.
 
 `contactId` is optional: a ticket typed into the admin may have nobody attached
 yet, and M1-13's identity rules are what attach one later. It is a foreign key
@@ -457,9 +552,8 @@ medium" is an entry nobody reads and a phantom `ticket.updated` makes every
 screen re-read for nothing. An *empty* body is a 400, so a caller retrying a
 failed write can still tell the two apart.
 
-`teamId` is refused with 400 until M1-01 creates `teams`, for the reason `tagId`
-is: `tickets.team_id` has no foreign key yet, so any uuid would be stored
-permanently. An `assigneeId` must belong to somebody who holds a role in the
+`teamId` is refused with 400 until M1-01 creates `teams`: `tickets.team_id` has
+no foreign key yet, so any uuid would be stored permanently. An `assigneeId` must belong to somebody who holds a role in the
 brand — `tickets.assignee_id` references the *global* `users` table, so the
 foreign key alone would accept a stranger. Which *department* an assignee must
 be in is M1-07's question.
@@ -519,12 +613,13 @@ with `seq > last_seq + 1`, or that reconnects, calls this.
 | Milestone | Adds |
 |---|---|
 | M1-13 | Identity rules: verified matches, automatic merge, participants (contact + CCs) |
-| M1-06 | `tags`, `ticket_tags` and custom field definitions — the `tagId` filter starts working |
 | M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Spam semantics on the seeded Spam status, and the sender block list |
-| M1-15 | The admin UI, from the `Admin · ticket view` artboard |
+| M1-15 | The admin UI, from the `Admin · ticket view` artboard — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
+| M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |
 | M3-02 | The SLA engine, filling `first_response_due_at`, `resolution_due_at` and `sla_breached` |
+| M7 | AI that suggests tags, a priority and a department for a ticket |
 | M5 | Per-locale search configuration; `tickets.search` uses `english` for every brand today |

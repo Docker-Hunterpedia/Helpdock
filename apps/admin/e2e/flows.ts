@@ -88,6 +88,41 @@ export async function openTicketing(page: Page, locale: Locale): Promise<void> {
   await page.getByRole('table').waitFor();
 }
 
+/**
+ * Opens one tab of the Ticketing settings. Through the tab row rather than
+ * `page.goto`, for the reason `openStaff` gives: the fixture keeps its session
+ * in memory, so a reload signs the browser out.
+ *
+ * It waits for a control only the *destination* tab has. Waiting for "a table"
+ * would return at once, because the tab being left already has one — and the
+ * assertions would then run against the list they were told to leave.
+ */
+export async function openTicketingTab(
+  page: Page,
+  locale: Locale,
+  segment: 'departments' | 'tags' | 'custom-fields' | 'templates',
+): Promise<void> {
+  const t = strings(locale);
+  const tab = {
+    departments: 'departments',
+    tags: 'tags',
+    'custom-fields': 'customFields',
+    templates: 'templates',
+  } as const;
+  const arrived = {
+    departments: t('ticketing:departments.add'),
+    tags: t('ticketing:tags.add'),
+    'custom-fields': t('ticketing:customFields.addTo', {
+      target: t('ticketing:customFields.targets.ticket').toLocaleLowerCase(),
+    }),
+    templates: t('ticketing:templates.add'),
+  } as const;
+
+  await openTicketing(page, locale);
+  await page.getByRole('tab', { name: t(`ticketing:tabs.${tab[segment]}`) }).click();
+  await page.getByRole('button', { name: arrived[segment], exact: true }).waitFor();
+}
+
 export async function openSecurity(
   page: Page,
   locale: Locale,

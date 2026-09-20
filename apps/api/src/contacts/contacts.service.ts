@@ -21,6 +21,7 @@ import type {
 } from '@helpdock/schemas';
 import { CONTACT_PAGE_SIZE } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
+import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
 import { ERASED_CONTACT_NAME, erasedIdentityValue, erasureSummary } from './anonymise.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
@@ -186,12 +187,25 @@ export class ContactsService {
 
     await this.#requireAccount(tx, request.accountId ?? null);
 
+    // M1-06: a patch over the stored `custom` object, validated against the
+    // brand's *contact* definitions. One function for all three targets, so a
+    // brand's fields mean the same thing on a contact as on a ticket
+    // (`ticketing/custom-values.ts`).
+    const custom =
+      request.custom === undefined
+        ? undefined
+        : mergeCustomValues(
+            contact.custom,
+            (await parseCustomValues(tx, 'contact', request.custom, { partial: true })) ?? {},
+          );
+
     const changes = {
       ...(request.name === undefined ? {} : { name: request.name }),
       ...(request.accountId === undefined ? {} : { accountId: request.accountId ?? null }),
       ...(request.locale === undefined ? {} : { locale: request.locale ?? null }),
       ...(request.timezone === undefined ? {} : { timezone: request.timezone ?? null }),
       ...(request.externalId === undefined ? {} : { externalId: request.externalId ?? null }),
+      ...(custom === undefined ? {} : { custom }),
     };
 
     await this.#repository.updateContact(tx, contactId, changes);

@@ -256,7 +256,13 @@ export function TicketsPage(): ReactNode {
     },
     onSuccess: async (detail) => {
       setDialogOpen(false);
-      await queryClient.invalidateQueries({ queryKey: ticketKeys.brand(brand.id) });
+      // The lists and the sidebar counts, not the whole brand: the statuses
+      // and the open ticket cannot have changed, and refetching them would
+      // make every creation wait on reads nobody is waiting for.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brand.id) }),
+        queryClient.invalidateQueries({ queryKey: ticketKeys.counts(brand.id) }),
+      ]);
       toast({
         tone: 'success',
         message: t('tickets:toast.created', {

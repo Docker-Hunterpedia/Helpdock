@@ -23,5 +23,7 @@ export const ticketKeys = {
    * open on the view the count is for.
    */
   count: (brandId: string, view: string) => ['tickets', brandId, 'count', view] as const,
+  /** Every sidebar count, for the invalidation a created ticket needs. */
+  counts: (brandId: string) => ['tickets', brandId, 'count'] as const,
   detail: (brandId: string, ticketId: string) => ['tickets', brandId, 'detail', ticketId] as const,
 } as const;

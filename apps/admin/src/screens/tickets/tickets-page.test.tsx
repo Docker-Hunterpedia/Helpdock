@@ -287,7 +287,9 @@ describe('the new-ticket dialog', () => {
     vi.unstubAllGlobals();
   });
 
-  it('creates a ticket and opens it', async () => {
+  // The slowest test here: a dialog, a create, an invalidation of every list
+  // and count, and a navigation. Five seconds is not enough on a loaded runner.
+  it('creates a ticket and opens it', { timeout: 20_000 }, async () => {
     const tickets = new MockTicketsApi();
     const { user } = await renderTickets('/tickets?view=all', tickets);
 

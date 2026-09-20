@@ -26,7 +26,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | planned |
 | M1-13 | Contact identity rules | #57 | planned |
 | M1-14 | Data retention settings per brand and nightly | #58 | planned |
-| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#PR) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it |
+| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#70) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it |
 
 ## Exit criteria
 Copied from the PRD, ticked as they are met.

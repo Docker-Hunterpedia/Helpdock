@@ -118,7 +118,7 @@
     "send": "Send reply",
     "sendNote": "Add note",
     "attach": "Attach a file",
-    "attachUnavailable": "Attachments arrive with the media pipeline (M1-10).",
+    "attachFiles": "Choose files to attach",
     "canned": "Canned response",
     "cannedUnavailable": "Canned responses arrive with M3.",
     "translate": "Translate AR",
@@ -202,5 +202,15 @@
   "keyboard": {
     "label": "Keyboard shortcuts",
     "hint": "j and k move through the list, r replies, n writes a note, Esc closes."
+  },
+  "attachments": {
+    "settling": "processing",
+    "refused": "refused",
+    "remove": "Remove {{name}}",
+    "kind_disabled": "This brand does not accept that kind of file.",
+    "too_large": "That file is larger than this brand allows.",
+    "mime_not_allowed": "This brand does not accept that file type.",
+    "upload_failed": "That file did not upload. Try again.",
+    "cancelled": "That upload was cancelled."
   }
 }

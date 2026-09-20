@@ -22,6 +22,7 @@ const pending: PendingMessage = {
   kind: 'public',
   bodyHtml: '<p>On its way.</p>',
   bodyText: 'On its way.',
+  attachmentIds: [],
   createdAt: '2026-09-19T11:00:00.000Z',
   sentAt: 0,
   state: 'sending',

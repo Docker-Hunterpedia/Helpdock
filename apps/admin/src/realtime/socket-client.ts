@@ -245,6 +245,9 @@ export class SocketRealtimeClient implements RealtimeClient {
       const parsed = attachmentChangedEnvelopeSchema.safeParse(envelope);
       if (parsed.success) {
         this.#listeners.attachmentChanged(parsed.data.data);
+      }
+    });
+
     socket.on(REALTIME_EVENTS.ticketChanged, (envelope) => {
       const parsed = ticketChangedEnvelopeSchema.safeParse(envelope);
       if (parsed.success) {

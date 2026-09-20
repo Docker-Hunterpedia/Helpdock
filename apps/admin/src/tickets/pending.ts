@@ -28,6 +28,13 @@ export interface PendingMessage {
   readonly kind: Exclude<TicketMessageKind, 'system' | 'ai'>;
   readonly bodyHtml: string;
   readonly bodyText: string;
+  /**
+   * What was uploaded and is going with it (M1-10). Held on the send rather
+   * than beside it, because a retry has to carry the same files: the api links
+   * them in the message's own transaction and refuses the whole send if one of
+   * them cannot be linked.
+   */
+  readonly attachmentIds: readonly string[];
   /** When the composer sent it, which is where it sits in the thread. */
   readonly createdAt: string;
   /** Epoch milliseconds of the attempt, for the ten-second rule. */

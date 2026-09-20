@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   MessageCreateRequest,
   Ticket,
   TicketActivityEntry,
@@ -21,6 +22,7 @@ import {
   MOCK_CONTACT_MONA,
   MOCK_CONTACT_VISITOR,
 } from '../contacts/mock-api.js';
+import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
 import type { TicketQuery, TicketsApi } from './api.js';
 
@@ -239,6 +241,7 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
     authorType: 'contact',
     authorId: null,
     bodyHtml: `<p>${overrides.bodyText}</p>`,
+    attachments: [],
     channel: 'email',
     createdAt: at(-1 * HOUR),
     ...overrides,
@@ -252,6 +255,24 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       authorId: MOCK_CONTACT_MONA,
       bodyText:
         'I returned order 42 three weeks ago and the refund has still not reached my account. The return was confirmed by email on the 2nd.',
+      attachments: [
+        {
+          id: '0192c3f0-1a2b-7c3d-8e4f-0000000000a1',
+          ticketId: MOCK_TICKET_REFUND,
+          messageId: msgId(1),
+          uploaderType: 'contact',
+          originalName: 'return-confirmation.pdf',
+          mime: 'application/pdf',
+          kind: 'file',
+          size: 83_968,
+          status: 'ready',
+          rejectReason: null,
+          scanStatus: 'clean',
+          variants: {},
+          createdAt: at(-26 * HOUR),
+          processedAt: at(-26 * HOUR),
+        },
+      ],
       createdAt: at(-26 * HOUR),
     }),
     message({
@@ -402,8 +423,15 @@ export class MockTicketsApi implements TicketsApi {
   #messages: TicketMessage[];
   #activity: TicketActivityEntry[];
   #sequence = 0;
+  readonly #uploads: MockAttachmentUploader | undefined;
 
-  constructor(now: number = Date.now()) {
+  /**
+   * The uploader fixture, when there is one, so that a file attached in the
+   * composer is the file the thread then draws — the same arrangement
+   * `MockAuthApi` and `MockStaffApi` have, and for the same reason.
+   */
+  constructor(uploads?: MockAttachmentUploader, now: number = Date.now()) {
+    this.#uploads = uploads;
     const seeded = seed(this.#statuses, now);
     this.#tickets = seeded.tickets;
     this.#messages = seeded.messages;
@@ -493,6 +521,7 @@ export class MockTicketsApi implements TicketsApi {
         authorId: MOCK_SELF_ID,
         bodyHtml: request.bodyHtml,
         bodyText: textOf(request.bodyHtml),
+        attachments: [],
         channel: ticket.channel,
         createdAt: now,
       },
@@ -582,6 +611,7 @@ export class MockTicketsApi implements TicketsApi {
       authorId: MOCK_SELF_ID,
       bodyHtml: request.bodyHtml,
       bodyText: textOf(request.bodyHtml),
+      attachments: this.#link(ticketId, request.attachmentIds ?? []),
       channel: request.kind === 'note' ? 'manual' : ticket.channel,
       createdAt: isoNow(),
     };
@@ -623,6 +653,18 @@ export class MockTicketsApi implements TicketsApi {
       messages: page,
       nextAfter: page.length < all.length && last !== undefined ? last.seq : null,
     };
+  }
+
+  /**
+   * The rows for the ids a send named. An id this fixture cannot resolve is
+   * dropped rather than invented: the api refuses the whole send in that case,
+   * and a fixture that made one up would hide the refusal from every test.
+   */
+  #link(ticketId: string, attachmentIds: readonly string[]): Attachment[] {
+    return attachmentIds
+      .map((id) => this.#uploads?.row(id))
+      .filter((row): row is Attachment => row !== undefined)
+      .map((row) => ({ ...row, ticketId }));
   }
 
   #activityOf(ticketId: string): TicketActivityEntry[] {

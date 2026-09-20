@@ -597,6 +597,28 @@ client drops a name nobody has repeated for 90 s. Nothing is stored, and
 answer. M1-09 owns the rest of §2.4; if it grows a server-side register, this
 is what it replaces.
 
+### Attachments
+
+Attach is real from M1-10. A file goes up as soon as it is chosen: the brand's
+content policy is checked in the browser first, so a file the brand would
+refuse costs no bytes, and the api applies the same rules to the presign
+request and again to the stored object — a client's opinion is not an
+authorisation.
+
+**A message may be sent while the pipeline is still working.** `upload`
+resolves at `processing`, the ids travel with the send as `attachmentIds`, and
+the api links them in the message's own transaction; it refuses the *whole*
+send if any one of them cannot be linked, so a failure is a message that was
+not sent rather than one that quietly lost a file. A retry carries the same ids
+for the same reason it carries the same `clientId`.
+
+A chip has three states, because the pipeline has three answers: working on it,
+done, and refused. A refusal is drawn rather than hidden — the file is not
+coming, and a chip that quietly disappeared would leave somebody believing they
+had sent it. No thumbnails: a render URL is presigned, lives five minutes and
+has to be asked for per attachment, so a thread of them would be a burst of
+requests for pictures nobody has opened.
+
 ### Keyboard
 
 `j` and `k` move through the list and open what they land on, `r` puts the
@@ -608,7 +630,6 @@ anything typed into a field is left alone, as is anything carrying a modifier.
 
 | Drawn | State | Owner |
 |---|---|---|
-| Attach | disabled, with the reason on the control | M1-10 |
 | Canned response, Macro | disabled, with the reason | M3 |
 | Translate | disabled, with the reason | M7 |
 | Tags | not drawn at all until a ticket has any | M1-06 |

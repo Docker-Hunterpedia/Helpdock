@@ -7,6 +7,8 @@ import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import { MockAttachmentUploader } from '../media/mock-uploader.js';
+import type { AttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
@@ -22,6 +24,7 @@ export interface RenderAppOptions {
   /** Defaults to a fresh fixture, for the Ticketing screens. */
   readonly ticketingApi?: TicketingApi;
   readonly ticketsApi?: TicketsApi;
+  readonly uploader?: AttachmentUploader;
   readonly initialEntries?: readonly string[];
 }
 
@@ -32,6 +35,7 @@ export interface RenderedApp extends RenderResult {
   readonly contactsApi: ContactsApi;
   readonly ticketingApi: TicketingApi;
   readonly ticketsApi: TicketsApi;
+  readonly uploader: AttachmentUploader;
 }
 
 /**
@@ -46,6 +50,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const contactsApi = options.contactsApi ?? new MockContactsApi();
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
   const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
+  const uploader = options.uploader ?? new MockAttachmentUploader();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -56,6 +61,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       contactsApi={contactsApi}
       ticketingApi={ticketingApi}
       ticketsApi={ticketsApi}
+      uploader={uploader}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -73,5 +79,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     contactsApi,
     ticketingApi,
     ticketsApi,
+    uploader,
   };
 }

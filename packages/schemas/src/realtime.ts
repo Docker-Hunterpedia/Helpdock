@@ -199,6 +199,8 @@ export const attachmentChangedSchema = z.object({
   status: z.enum(['ready', 'rejected', 'infected']),
 });
 export type AttachmentChanged = z.infer<typeof attachmentChangedSchema>;
+
+/**
  * What a client sends when it has a ticket open, repeated while it stays open.
  *
  * It exists because a room is not a membership list: Socket.IO can say who is

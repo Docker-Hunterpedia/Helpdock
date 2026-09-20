@@ -1,5 +1,11 @@
 import { dir } from '@helpdock/i18n';
-import type { TicketDetail, TicketPriority, TicketUpdateRequest } from '@helpdock/schemas';
+import type {
+  Attachment,
+  TicketDetail,
+  TicketPriority,
+  TicketUpdateRequest,
+} from '@helpdock/schemas';
+import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { Box, Button, Drawer } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TicketIcon } from 'lucide-react';
@@ -7,7 +13,13 @@ import { type ReactNode, useEffect, useMemo, useReducer, useState } from 'react'
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { useContactsApi, useTicketsApi } from '../../auth/session.tsx';
+import {
+  useAttachmentUploader,
+  useContactsApi,
+  useTicketingApi,
+  useTicketsApi,
+} from '../../auth/session.tsx';
+import { isUploadError, wouldAccept } from '../../media/upload.js';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { ticketKeys } from '../../tickets/keys.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
@@ -66,12 +78,16 @@ export function TicketView({
   const { locale } = usePreferences();
   const api = useTicketsApi();
   const contactsApi = useContactsApi();
+  const ticketingApi = useTicketingApi();
+  const uploader = useAttachmentUploader();
   const queryClient = useQueryClient();
   const toast = useToast();
 
   const [mode, setMode] = useState<ComposerMode>('reply');
   const [body, setBody] = useState('');
   const [thenStatusId, setThenStatusId] = useState('');
+  const [attachments, setAttachments] = useState<readonly Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [pending, dispatch] = useReducer(pendingReducer, [] as readonly PendingMessage[]);
 
   const detail = useQuery({
@@ -80,6 +96,19 @@ export function TicketView({
   });
 
   const { viewerIds } = useTicketRoom(brandId, ticketId, viewer.id);
+
+  /**
+   * The brand's content policy, for the picker's courtesy check. It is the
+   * brand read M1-01 added rather than a copy of the defaults: a brand that
+   * has turned video off must not be offered a video picker that then fails.
+   */
+  const brand = useQuery({
+    queryKey: ['brand', brandId],
+    queryFn: () => ticketingApi.brand(brandId),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const policy = brand.data?.settings.contentPolicy ?? DEFAULT_CONTENT_POLICY;
 
   const contactId = detail.data?.ticket.contactId ?? null;
 
@@ -137,6 +166,9 @@ export function TicketView({
         kind: message.kind,
         bodyHtml: message.bodyHtml,
         clientId: message.clientId,
+        ...(message.attachmentIds.length === 0
+          ? {}
+          : { attachmentIds: [...message.attachmentIds] }),
       }),
     onSuccess: async (saved, message) => {
       dispatch({ type: 'acknowledged', clientId: message.clientId });
@@ -268,6 +300,7 @@ export function TicketView({
       kind: mode === 'note' ? 'note' : 'public',
       bodyHtml: paragraph(text),
       bodyText: text,
+      attachmentIds: attachments.map((attachment) => attachment.id),
       createdAt: new Date().toISOString(),
       sentAt: Date.now(),
       state: 'sending',
@@ -275,7 +308,42 @@ export function TicketView({
 
     dispatch({ type: 'queued', message });
     setBody('');
+    setAttachments([]);
     send.mutate(message);
+  };
+
+  /**
+   * Each file goes up as it is chosen. The policy check first, so a file the
+   * brand would refuse costs no bytes; the api applies the same rules to the
+   * presign request and again to the stored object.
+   */
+  const attach = async (files: readonly File[]): Promise<void> => {
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const verdict = wouldAccept(policy, file);
+        if (!verdict.ok) {
+          toast({ tone: 'danger', message: t(`tickets:attachments.${verdict.problem}`) });
+          continue;
+        }
+
+        try {
+          const uploaded = await uploader.upload({ brandId, ticketId, file });
+          setAttachments((held) => [...held, uploaded]);
+        } catch (error) {
+          toast({
+            tone: 'danger',
+            message: t(
+              isUploadError(error)
+                ? `tickets:attachments.${error.problem}`
+                : 'tickets:attachments.upload_failed',
+            ),
+          });
+        }
+      }
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -327,11 +395,21 @@ export function TicketView({
             statuses={directory.statuses}
             thenStatusId={thenStatusId}
             busy={send.isPending}
-            attachmentsAvailable={false}
+            attachments={attachments}
+            uploading={uploading}
+            // Until the brand read answers, the defaults are what the picker
+            // measures against; the api is the one that decides either way.
+            attachmentsEnabled={!brand.isPending || brand.isError}
             focusSignal={focusToken?.at}
             onModeChange={setMode}
             onBodyChange={setBody}
             onThenStatusChange={setThenStatusId}
+            onAttach={(files) => {
+              void attach(files);
+            }}
+            onRemoveAttachment={(attachmentId) => {
+              setAttachments((held) => held.filter((row) => row.id !== attachmentId));
+            }}
             onSend={queueSend}
           />
         </Box>

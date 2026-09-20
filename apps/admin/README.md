@@ -320,7 +320,7 @@ details panel, with the two drawers of DESIGN §6.5 below 1280 px and 1024 px.
 The new-ticket dialog has no artboard of its own and follows the `Admin/Staff`
 invite dialog exactly.
 
-Four decisions are worth knowing before changing it:
+Five decisions are worth knowing before changing it:
 
 - **It is one route.** `/tickets/*` matches both the list and one ticket, and
   the id is read from the path. Two routes rendering the same component would
@@ -336,6 +336,10 @@ Four decisions are worth knowing before changing it:
 - **No socket frame is ever applied to the cache.** `ticket:changed` re-reads
   the ticket; `ticket:message` reads `?after=<the highest seq held>`; a
   reconnection does the same. One recovery, not three.
+- **A file does not hold the send up.** M1-10's `upload` resolves at
+  `processing`, so the composer sends the ids with the message and the thread
+  draws a chip that settles on its own. The picker checks the brand's content
+  policy first as a courtesy; the api checks it twice more.
 
 What the screen leaves disabled and which milestone turns it on is in
 [the ticket guide](../../docs/guides/tickets.md#the-admin-workspace), along

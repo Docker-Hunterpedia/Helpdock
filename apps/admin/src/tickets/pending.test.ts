@@ -14,6 +14,7 @@ const queued = (overrides: Partial<PendingMessage> = {}): PendingMessage => ({
   kind: 'public',
   bodyHtml: '<p>On its way.</p>',
   bodyText: 'On its way.',
+  attachmentIds: [],
   createdAt: '2026-09-19T12:00:00.000Z',
   sentAt: 1_000,
   state: 'sending',

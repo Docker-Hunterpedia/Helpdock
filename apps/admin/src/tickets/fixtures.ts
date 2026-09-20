@@ -60,6 +60,7 @@ export const testMessage = (
   authorId: null,
   bodyHtml: '<p>Body</p>',
   bodyText: 'Body',
+  attachments: [],
   channel: 'email',
   createdAt: new Date(NOW - HOUR).toISOString(),
   ...overrides,

@@ -1,4 +1,4 @@
-import type { TicketStatus } from '@helpdock/schemas';
+import type { Attachment, TicketStatus } from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -16,6 +16,7 @@ import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import { statusName } from './format.js';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 
@@ -24,11 +25,18 @@ import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
  * recipient caption, the textarea, and a toolbar with attach, canned response,
  * translate, "then set status" and the primary send.
  *
- * Three of those five do nothing yet and say so on the control itself rather
- * than only in a tooltip: attachments are M1-10, canned responses are M3 and
- * translation is M7. A disabled control whose only explanation is a hover is
- * invisible to a keyboard and to a screen reader (DESIGN §10), so each carries
- * its sentence in `title` *and* in its accessible description.
+ * Two of those five do nothing yet and say so on the control itself rather than
+ * only in a tooltip: canned responses are M3 and translation is M7. A disabled
+ * control whose only explanation is a hover is invisible to a keyboard and to a
+ * screen reader (DESIGN §10), so each carries its sentence in text only a
+ * screen reader reads.
+ *
+ * **Attach is real from M1-10.** A file goes up as soon as it is chosen and the
+ * message may be sent while the pipeline is still working on it: `upload`
+ * resolves at `processing`, the ids travel with the send, and the api links
+ * them in the same transaction. A file the brand's policy would refuse is
+ * refused here, in the picker, rather than after a minute of uploading — and
+ * again by the api, because a client's opinion is not an authorisation.
  *
  * **Note mode tints the whole card.** It is the one state where getting it
  * wrong is unrecoverable — a note posted as a public reply has left the
@@ -46,8 +54,12 @@ export interface ComposerProps {
   /** The status to move to after a successful send, or '' to leave it alone. */
   readonly thenStatusId: string;
   readonly busy: boolean;
-  /** M1-10 has not landed, so the attach button is drawn and disabled. */
-  readonly attachmentsAvailable: boolean;
+  /** What has been uploaded and not yet sent, in the order it was chosen. */
+  readonly attachments: readonly Attachment[];
+  /** True while a file is still going up; the send waits for it. */
+  readonly uploading: boolean;
+  /** Null while the brand's policy has not been read; the button waits for it. */
+  readonly attachmentsEnabled: boolean;
   /**
    * Changes whenever `r` or `n` was pressed. The composer owns the caret
    * rather than being handed a ref, because the element the caret belongs in
@@ -57,6 +69,8 @@ export interface ComposerProps {
   onModeChange(mode: ComposerMode): void;
   onBodyChange(body: string): void;
   onThenStatusChange(statusId: string): void;
+  onAttach(files: readonly File[]): void;
+  onRemoveAttachment(attachmentId: string): void;
   onSend(): void;
 }
 
@@ -67,11 +81,15 @@ export function Composer({
   statuses,
   thenStatusId,
   busy,
-  attachmentsAvailable,
+  attachments,
+  uploading,
+  attachmentsEnabled,
   focusSignal,
   onModeChange,
   onBodyChange,
   onThenStatusChange,
+  onAttach,
+  onRemoveAttachment,
   onSend,
 }: ComposerProps): ReactNode {
   const t = useT();
@@ -80,6 +98,7 @@ export function Composer({
   const bodyId = useId();
   const statusId = useId();
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const note = mode === 'note';
 
   // A layout effect: refs are attached and the caret moves before the browser
@@ -151,15 +170,52 @@ export function Composer({
         slotProps={{ htmlInput: { 'aria-label': t('tickets:composer.bodyLabel') } }}
       />
 
+      {attachments.length === 0 ? null : (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+          {attachments.map((attachment) => (
+            <AttachmentChip
+              key={attachment.id}
+              name={attachment.originalName}
+              size={attachment.size}
+              state={chipState(attachment)}
+              onRemove={() => {
+                onRemoveAttachment(attachment.id);
+              }}
+            />
+          ))}
+        </Box>
+      )}
+
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <Unavailable
-          available={attachmentsAvailable}
-          reason={t('tickets:composer.attachUnavailable')}
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          hidden
+          // Named, not hidden from assistive technology: `hidden` already
+          // keeps it off the screen, and the button above is what opens it.
+          aria-label={t('tickets:composer.attachFiles')}
+          tabIndex={-1}
+          onChange={(event) => {
+            const chosen = [...(event.target.files ?? [])];
+            // Cleared so that choosing the same file twice in a row is two
+            // events rather than one; a browser fires nothing for a repeat.
+            event.target.value = '';
+            if (chosen.length > 0) {
+              onAttach(chosen);
+            }
+          }}
+        />
+        <IconButton
+          size="small"
+          aria-label={t('tickets:composer.attach')}
+          disabled={!attachmentsEnabled || uploading}
+          onClick={() => {
+            fileRef.current?.click();
+          }}
         >
-          <IconButton size="small" aria-label={t('tickets:composer.attach')} disabled>
-            <Paperclip size={16} aria-hidden="true" />
-          </IconButton>
-        </Unavailable>
+          <Paperclip size={16} aria-hidden="true" />
+        </IconButton>
 
         <Unavailable available={false} reason={t('tickets:composer.cannedUnavailable')}>
           <Button
@@ -202,7 +258,11 @@ export function Composer({
           ))}
         </TextField>
 
-        <Button type="submit" variant="contained" disabled={busy || body.trim() === ''}>
+        <Button
+          type="submit"
+          variant="contained"
+          disabled={busy || uploading || body.trim() === ''}
+        >
           {t(note ? 'tickets:composer.sendNote' : 'tickets:composer.send')}
         </Button>
       </Box>

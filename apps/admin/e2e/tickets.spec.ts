@@ -196,6 +196,38 @@ test.describe('one ticket', () => {
     ).toBeVisible();
   });
 
+  test('sends a file with a reply, and draws the one the contact sent', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    const thread = page.getByRole('list', { name: t('tickets:thread.label') });
+    await expect(thread.getByText('return-confirmation.pdf')).toBeVisible();
+
+    await page.getByRole('button', { name: t('tickets:composer.attach') }).click();
+    await page.getByLabel(t('tickets:composer.attachFiles')).setInputFiles({
+      name: 'receipt.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('a receipt'),
+    });
+
+    // The chip is there before the pipeline has finished: `upload` resolves at
+    // `processing` and the send does not wait for `ready` (M1-10).
+    const composer = page.getByRole('form', { name: t('tickets:composer.label') });
+    await expect(composer.getByText('receipt.pdf')).toBeVisible();
+
+    await page
+      .getByRole('textbox', { name: t('tickets:composer.bodyLabel') })
+      .fill('The receipt is attached.');
+    await page.getByRole('button', { name: t('tickets:composer.send') }).click();
+
+    await expect(thread.getByText('receipt.pdf')).toBeVisible();
+    await expect(composer.getByText('receipt.pdf')).toHaveCount(0);
+  });
+
   test('changes the priority from the details panel', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

@@ -5,6 +5,7 @@ import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import type { PendingMessage } from '../../tickets/pending.js';
 import type { ThreadItem } from '../../tickets/thread.js';
+import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import { messageTime } from './format.js';
 import {
   type BubbleKind,
@@ -103,6 +104,18 @@ export function Thread({
                   }
                   meta={metaOf(item.message, names, locale, now)}
                   bodyHtml={item.message.bodyHtml}
+                  {...(item.message.attachments.length === 0
+                    ? {}
+                    : {
+                        attachments: item.message.attachments.map((attachment) => (
+                          <AttachmentChip
+                            key={attachment.id}
+                            name={attachment.originalName}
+                            size={attachment.size}
+                            state={chipState(attachment)}
+                          />
+                        )),
+                      })}
                 />
               )
             ) : (

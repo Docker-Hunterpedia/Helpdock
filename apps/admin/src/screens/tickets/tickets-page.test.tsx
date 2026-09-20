@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
+import { MockAttachmentUploader } from '../../media/mock-uploader.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { MOCK_TICKET_REFUND, MockTicketsApi } from '../../tickets/mock-api.js';
@@ -30,13 +31,19 @@ const wideViewport = (): void => {
   }));
 };
 
-const renderTickets = async (entry = '/tickets', ticketsApi?: MockTicketsApi) => {
-  const { auth, staff, contacts, tickets } = await signedInMockApis();
+const renderTickets = async (
+  entry = '/tickets',
+  ticketsApi?: MockTicketsApi,
+  uploader?: MockAttachmentUploader,
+) => {
+  const apis = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
-    authApi: auth,
-    staffApi: staff,
-    contactsApi: contacts,
-    ticketsApi: ticketsApi ?? tickets,
+    authApi: apis.auth,
+    staffApi: apis.staff,
+    contactsApi: apis.contacts,
+    ticketingApi: apis.ticketing,
+    ticketsApi: ticketsApi ?? apis.tickets,
+    uploader: uploader ?? apis.uploader,
     initialEntries: [entry],
   });
 
@@ -162,8 +169,12 @@ describe('one ticket', () => {
     vi.unstubAllGlobals();
   });
 
-  const openRefund = async (ticketsApi?: MockTicketsApi) => {
-    const rendered = await renderTickets(`/tickets/${MOCK_TICKET_REFUND}?view=all`, ticketsApi);
+  const openRefund = async (ticketsApi?: MockTicketsApi, uploader?: MockAttachmentUploader) => {
+    const rendered = await renderTickets(
+      `/tickets/${MOCK_TICKET_REFUND}?view=all`,
+      ticketsApi,
+      uploader,
+    );
     await screen.findByRole('heading', { name: /Refund for order 42/ });
 
     return rendered;
@@ -272,6 +283,62 @@ describe('one ticket', () => {
 
     expect(within(details).getByText('ORD-4812')).toBeVisible();
     expect(within(details).getByText(/read-only until M1-06/)).toBeVisible();
+  });
+
+  it('draws the file the contact sent, with its size', async () => {
+    await openRefund();
+    const thread = screen.getByRole('list', { name: 'Conversation' });
+
+    expect(within(thread).getByText('return-confirmation.pdf')).toBeVisible();
+    expect(within(thread).getByText('82 KB')).toBeVisible();
+  });
+
+  it('uploads a chosen file and sends its id with the reply', async () => {
+    const uploads = new MockAttachmentUploader();
+    const tickets = new MockTicketsApi(uploads);
+    const { user } = await openRefund(tickets, uploads);
+
+    await user.upload(
+      screen.getByLabelText('Choose files to attach'),
+      new File(['hello'], 'receipt.pdf', { type: 'application/pdf' }),
+    );
+
+    // The chip appears before the pipeline has finished with it: `upload`
+    // resolves at `processing` and the send does not wait (M1-10).
+    expect(await screen.findByText('receipt.pdf')).toBeVisible();
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Here it is.');
+    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+
+    await waitFor(async () => {
+      const { messages } = await tickets.messages('brand', MOCK_TICKET_REFUND, 4);
+      expect(messages[0]?.attachments.map((row) => row.originalName)).toEqual(['receipt.pdf']);
+    });
+  });
+
+  it('refuses a file the brand’s policy would not take, before any bytes go up', async () => {
+    const { user } = await openRefund();
+
+    await user.upload(
+      screen.getByLabelText('Choose files to attach'),
+      new File(['x'], 'installer.exe', { type: 'application/x-msdownload' }),
+    );
+
+    expect(await screen.findByText(/does not accept that file type/)).toBeVisible();
+    expect(screen.queryByText('installer.exe')).not.toBeInTheDocument();
+  });
+
+  it('takes a chosen file back before it has been sent', async () => {
+    const { user } = await openRefund();
+    await user.upload(
+      screen.getByLabelText('Choose files to attach'),
+      new File(['hello'], 'receipt.pdf', { type: 'application/pdf' }),
+    );
+    await screen.findByText('receipt.pdf');
+
+    await user.click(screen.getByRole('button', { name: 'Remove receipt.pdf' }));
+
+    expect(screen.queryByText('receipt.pdf')).not.toBeInTheDocument();
   });
 
   it('says one thing about a ticket it cannot read, whatever the reason', async () => {

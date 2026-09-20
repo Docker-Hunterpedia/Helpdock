@@ -194,6 +194,19 @@ describe('mergeCustomValues', () => {
 
     expect(stored).toEqual({ plan: 'gold' });
   });
+
+  it.each(['__proto__', 'constructor', 'prototype'])(
+    'makes %s an ordinary entry rather than a prototype',
+    (key) => {
+      // `customFieldKeySchema` already refuses these, but this function is
+      // exported from a package and "safe because of who calls it" is not safe.
+      const merged = mergeCustomValues({}, JSON.parse(`{"${key}": {"polluted": true}}`));
+
+      expect(Object.hasOwn(merged, key)).toBe(true);
+      expect({}).not.toHaveProperty('polluted');
+      expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
+    },
+  );
 });
 
 describe('visibleCustomValues', () => {
@@ -216,6 +229,18 @@ describe('visibleCustomValues', () => {
     expect(visibleCustomValues({ plan: 'gold', gone: 'x' }, [def('plan')])).toEqual({
       plan: 'gold',
     });
+  });
+
+  it('cannot be made to set a prototype by a key in the stored column', () => {
+    const stored = JSON.parse('{"__proto__": {"polluted": true}, "plan": "gold"}') as Record<
+      string,
+      unknown
+    >;
+
+    const visible = visibleCustomValues(stored, [def('plan')]);
+
+    expect(visible).toEqual({ plan: 'gold' });
+    expect({}).not.toHaveProperty('polluted');
   });
 });
 

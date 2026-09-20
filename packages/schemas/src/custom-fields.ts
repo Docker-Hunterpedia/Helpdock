@@ -327,26 +327,29 @@ export const customValuesSchema = (
  * would mean every reader — the details panel, an export, a rule condition —
  * had to know both.
  *
- * The assignment is safe against prototype pollution by construction rather
- * than by a guard: every key here came through {@link customFieldKeySchema},
- * which requires a leading lower-case letter, so `__proto__` and `constructor`
- * cannot be among them.
+ * It is built through a `Map` and `Object.fromEntries` rather than by assigning
+ * `merged[key]`. Assignment goes through `[[Set]]`, so a key of `__proto__`
+ * would reach the prototype setter instead of becoming an entry;
+ * `Object.fromEntries` defines own properties and has no such door.
+ * {@link customFieldKeySchema} already makes that key impossible on the way in,
+ * but a function exported from a package is called by code this file cannot
+ * see, and "safe because of who calls it" is not safe.
  */
 export const mergeCustomValues = (
   current: Record<string, unknown>,
   patch: Record<string, unknown>,
 ): Record<string, unknown> => {
-  const merged: Record<string, unknown> = { ...current };
+  const merged = new Map(Object.entries(current));
 
   for (const [key, value] of Object.entries(patch)) {
     if (value === null || value === undefined) {
-      delete merged[key];
+      merged.delete(key);
     } else {
-      merged[key] = value;
+      merged.set(key, value);
     }
   }
 
-  return merged;
+  return Object.fromEntries(merged);
 };
 
 /**
@@ -357,19 +360,16 @@ export const mergeCustomValues = (
  * does not rewrite every row that used it, because that is a migration over the
  * whole brand for a change somebody may undo in a minute — so reads filter
  * rather than trusting what is stored.
+ *
+ * Built with `Object.fromEntries` for the reason {@link mergeCustomValues}
+ * gives: the keys come from a stored jsonb column, which is not a place to
+ * assume anything about.
  */
 export const visibleCustomValues = (
   values: Record<string, unknown>,
   defs: readonly CustomFieldDef[],
 ): Record<string, unknown> => {
   const known = new Set(defs.map((def) => def.key));
-  const visible: Record<string, unknown> = {};
 
-  for (const [key, value] of Object.entries(values)) {
-    if (known.has(key)) {
-      visible[key] = value;
-    }
-  }
-
-  return visible;
+  return Object.fromEntries(Object.entries(values).filter(([key]) => known.has(key)));
 };

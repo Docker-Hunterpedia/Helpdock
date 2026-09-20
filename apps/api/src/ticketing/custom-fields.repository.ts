@@ -160,15 +160,18 @@ export class CustomFieldsRepository {
 
     const rows = await countOf(tx, table, sql`jsonb_exists(${column}, ${def.key})`);
 
-    const optionRows: Record<string, number> = {};
+    // Keyed by an *option*, which is any non-empty string a brand typed — so
+    // the object is built from entries rather than by assignment, and a choice
+    // somebody named `__proto__` is a count rather than a prototype.
+    const counted: [string, number][] = [];
     for (const option of def.options) {
       const count = await countOf(tx, table, optionPredicate(def, column, option));
       if (count > 0) {
-        optionRows[option] = count;
+        counted.push([option, count]);
       }
     }
 
-    return { rows, optionRows };
+    return { rows, optionRows: Object.fromEntries(counted) };
   }
 
   /**

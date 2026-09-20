@@ -29,10 +29,18 @@ const query = (filters: Partial<TicketListQuery> = {}) => ({
 type TicketFilters = Omit<TicketListQuery, 'sort' | 'direction' | 'cursor' | 'limit'>;
 
 describe('ticketFilters', () => {
-  it('asks for nothing when nothing was asked for', () => {
-    // Isolation is the policies' job, so "no filters" really is no WHERE at
-    // all — the transaction already narrows the rows.
-    expect(render(ticketFilters(query()))).toBeUndefined();
+  it('asks only that the ticket is not deleted when nothing was asked for', () => {
+    // Isolation is the policies' job, so "no filters" adds no brand or
+    // department predicate — the transaction already narrows the rows. The one
+    // clause that is always there is DOMAIN-RULES §2.2's "hidden from all
+    // views", which is not a filter a caller may turn off.
+    expect(render(ticketFilters(query()))?.sql).toBe('"tickets"."deleted_at" is null');
+  });
+
+  it('keeps the soft-delete clause alongside whatever was asked for', () => {
+    expect(render(ticketFilters(query({ statusId: [STATUS] })))?.sql).toContain(
+      '"tickets"."deleted_at" is null',
+    );
   });
 
   it('filters by status', () => {

@@ -1,5 +1,6 @@
 import type {
   Brand,
+  BrandSettings,
   BrandUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
@@ -7,8 +8,14 @@ import type {
   DepartmentUpdateRequest,
   EligibleMember,
   EligibleMemberList,
+  ReplyBehaviourUpdateRequest,
   Team,
   TeamList,
+  TicketStatus,
+  TicketStatusCreateRequest,
+  TicketStatusList,
+  TicketStatusUpdateRequest,
+  TicketStatusUsage,
 } from '@helpdock/schemas';
 import { defaultBrandSettings } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
@@ -76,6 +83,110 @@ const seedBrand = (): Brand => ({
   settings: defaultBrandSettings(),
 });
 
+/**
+ * The six rows `seedBrandStatuses` writes for every brand, plus one a brand
+ * added for itself — so the fixture has a deletable row, a default, and a
+ * system row whose flags the editor must refuse to move.
+ *
+ * The ids are fixed rather than generated, so a Playwright run can name one.
+ */
+const seedStatuses = (): TicketStatus[] => [
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000000e1',
+    name: 'Open',
+    nameAr: 'مفتوحة',
+    systemState: 'open',
+    pausesSla: false,
+    awaitingCustomer: false,
+    isDefault: true,
+    isSystem: true,
+    excludedFromReports: false,
+    sortOrder: 0,
+    color: 'info',
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000000e2',
+    name: 'Awaiting customer',
+    nameAr: 'بانتظار العميل',
+    systemState: 'on_hold',
+    pausesSla: true,
+    awaitingCustomer: true,
+    isDefault: false,
+    isSystem: true,
+    excludedFromReports: false,
+    sortOrder: 1,
+    color: 'warning',
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000000e3',
+    name: 'Escalated',
+    nameAr: 'مُصعَّدة',
+    systemState: 'escalated',
+    pausesSla: false,
+    awaitingCustomer: false,
+    isDefault: false,
+    isSystem: true,
+    excludedFromReports: false,
+    sortOrder: 2,
+    color: 'escalated',
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000000e4',
+    name: 'Closed',
+    nameAr: 'مغلقة',
+    systemState: 'closed',
+    pausesSla: false,
+    awaitingCustomer: false,
+    isDefault: false,
+    isSystem: true,
+    excludedFromReports: false,
+    sortOrder: 3,
+    color: 'success',
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000000e5',
+    name: 'Spam',
+    nameAr: 'بريد مزعج',
+    systemState: 'closed',
+    pausesSla: false,
+    awaitingCustomer: false,
+    isDefault: false,
+    isSystem: true,
+    excludedFromReports: true,
+    sortOrder: 4,
+    color: 'danger',
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000000e6',
+    name: 'Merged',
+    nameAr: 'مدمجة',
+    systemState: 'closed',
+    pausesSla: false,
+    awaitingCustomer: false,
+    isDefault: false,
+    isSystem: true,
+    excludedFromReports: true,
+    sortOrder: 5,
+    color: 'success',
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000000e7',
+    name: 'Waiting on supplier',
+    nameAr: 'بانتظار المورّد',
+    systemState: 'on_hold',
+    pausesSla: true,
+    awaitingCustomer: false,
+    isDefault: false,
+    isSystem: false,
+    excludedFromReports: false,
+    sortOrder: 6,
+    color: 'warning',
+  },
+];
+
+/** Which fields a seeded row refuses, mirroring `status-rules.ts`. */
+const FIXED_ON_SYSTEM_ROWS = ['systemState', 'pausesSla', 'awaitingCustomer'] as const;
+
 let nextId = 1;
 
 const newId = (kind: string): string => {
@@ -88,6 +199,14 @@ export class MockTicketingApi implements TicketingApi {
   #departments = seedDepartments();
   #teams: Team[] = [];
   #brand = seedBrand();
+  #statuses = seedStatuses();
+  /**
+   * How many tickets sit in each status, so the delete confirmation has a
+   * number to print. The real count comes from a `COUNT(*)` the api runs.
+   */
+  #ticketsByStatus: Record<string, number> = {
+    '0192c3f0-1a2b-7c3d-8e4f-0000000000e7': 12,
+  };
 
   async departments(_brandId: string): Promise<DepartmentSummaryList> {
     return { departments: this.#sorted().map((row) => this.#withCounts(row)) };
@@ -294,7 +413,170 @@ export class MockTicketingApi implements TicketingApi {
     return this.#brand;
   }
 
+  // ------------------------------------------------------------------ M1-08
+
+  async statuses(_brandId: string): Promise<TicketStatusList> {
+    return { statuses: this.#sortedStatuses() };
+  }
+
+  async createStatus(_brandId: string, request: TicketStatusCreateRequest): Promise<TicketStatus> {
+    this.#assertStatusNameFree(request.name);
+
+    const created: TicketStatus = {
+      id: newId('ee'),
+      name: request.name,
+      nameAr: request.nameAr ?? null,
+      systemState: request.systemState,
+      pausesSla: request.pausesSla,
+      awaitingCustomer: request.awaitingCustomer,
+      isDefault: false,
+      isSystem: false,
+      excludedFromReports: false,
+      sortOrder: this.#statuses.length,
+      color: request.color,
+    };
+    this.#statuses.push(created);
+
+    return created;
+  }
+
+  async updateStatus(
+    _brandId: string,
+    statusId: string,
+    request: TicketStatusUpdateRequest,
+  ): Promise<TicketStatus> {
+    const status = this.#requireStatus(statusId);
+    // The same rules `apps/api/src/tickets/lifecycle/status-rules.ts` applies,
+    // written out rather than imported because `apps/*` never import each other
+    // (ARCHITECTURE §2). The screens and the browser tests therefore meet the
+    // refusals the real service produces.
+    if (status.isSystem && FIXED_ON_SYSTEM_ROWS.some((field) => request[field] !== undefined)) {
+      throw new TicketingError('status-state-fixed');
+    }
+    if (request.isDefault === true && (request.systemState ?? status.systemState) !== 'open') {
+      throw new TicketingError('default-must-be-open');
+    }
+    if (status.isDefault && request.systemState !== undefined && request.systemState !== 'open') {
+      throw new TicketingError('default-must-be-open');
+    }
+    if (request.name !== undefined && request.name.toLowerCase() !== status.name.toLowerCase()) {
+      this.#assertStatusNameFree(request.name, statusId);
+    }
+
+    const updated: TicketStatus = {
+      ...status,
+      ...(request.name === undefined ? {} : { name: request.name }),
+      ...(request.nameAr === undefined ? {} : { nameAr: request.nameAr }),
+      ...(request.systemState === undefined ? {} : { systemState: request.systemState }),
+      ...(request.pausesSla === undefined ? {} : { pausesSla: request.pausesSla }),
+      ...(request.awaitingCustomer === undefined
+        ? {}
+        : { awaitingCustomer: request.awaitingCustomer }),
+      ...(request.color === undefined ? {} : { color: request.color }),
+      ...(request.isDefault === undefined ? {} : { isDefault: request.isDefault }),
+    };
+
+    this.#statuses = this.#statuses.map((row) => {
+      if (row.id === statusId) {
+        return updated;
+      }
+      return request.isDefault === true ? { ...row, isDefault: false } : row;
+    });
+
+    return updated;
+  }
+
+  async statusUsage(_brandId: string, statusId: string): Promise<TicketStatusUsage> {
+    const status = this.#requireStatus(statusId);
+    const fallback = this.#defaultStatus();
+
+    return {
+      statusId: status.id,
+      ticketCount: this.#ticketsByStatus[status.id] ?? 0,
+      fallbackStatusId: fallback.id,
+      fallbackName: fallback.name,
+    };
+  }
+
+  async deleteStatus(_brandId: string, statusId: string): Promise<void> {
+    const status = this.#requireStatus(statusId);
+    if (status.isSystem) {
+      throw new TicketingError('status-is-system');
+    }
+    if (status.isDefault) {
+      throw new TicketingError('status-is-default');
+    }
+
+    const fallback = this.#defaultStatus();
+    this.#ticketsByStatus[fallback.id] =
+      (this.#ticketsByStatus[fallback.id] ?? 0) + (this.#ticketsByStatus[statusId] ?? 0);
+    delete this.#ticketsByStatus[statusId];
+    this.#statuses = this.#statuses.filter((row) => row.id !== statusId);
+  }
+
+  async reorderStatuses(brandId: string, statusIds: string[]): Promise<TicketStatusList> {
+    this.#statuses = this.#statuses.map((row) => ({
+      ...row,
+      sortOrder: statusIds.indexOf(row.id) === -1 ? row.sortOrder : statusIds.indexOf(row.id),
+    }));
+
+    return this.statuses(brandId);
+  }
+
+  async updateReplyBehaviour(
+    _brandId: string,
+    request: ReplyBehaviourUpdateRequest,
+  ): Promise<BrandSettings> {
+    this.#brand = {
+      ...this.#brand,
+      settings: {
+        ...this.#brand.settings,
+        ...(request.autoAwaitOnAgentReply === undefined
+          ? {}
+          : { autoAwaitOnAgentReply: request.autoAwaitOnAgentReply }),
+        ...(request.reopenPolicy === undefined ? {} : { reopenPolicy: request.reopenPolicy }),
+      },
+    };
+
+    return this.#brand.settings;
+  }
+
   // ------------------------------------------------------------------
+
+  #sortedStatuses(): TicketStatus[] {
+    return [...this.#statuses].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+    );
+  }
+
+  #requireStatus(statusId: string): TicketStatus {
+    const status = this.#statuses.find((row) => row.id === statusId);
+    if (status === undefined) {
+      throw new AuthError('unavailable');
+    }
+
+    return status;
+  }
+
+  #defaultStatus(): TicketStatus {
+    const status = this.#statuses.find((row) => row.isDefault);
+    /* c8 ignore next 3 -- the seed always carries one, and nothing here clears the last. */
+    if (status === undefined) {
+      throw new AuthError('unavailable');
+    }
+
+    return status;
+  }
+
+  #assertStatusNameFree(name: string, exceptId?: string): void {
+    if (
+      this.#statuses.some(
+        (row) => row.id !== exceptId && row.name.toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      throw new TicketingError('name-taken');
+    }
+  }
 
   #sorted(): DepartmentSummary[] {
     return [...this.#departments].sort(

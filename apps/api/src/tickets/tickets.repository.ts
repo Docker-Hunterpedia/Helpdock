@@ -18,7 +18,7 @@ import {
   userBrandRoles,
 } from '@helpdock/db';
 import type { TicketListQuery } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm';
 import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
 
 /**
@@ -80,12 +80,18 @@ export class TicketRepository {
 
   // ------------------------------------------------------------------ tickets
 
+  /**
+   * One ticket, or `undefined` for a ticket of another department, of another
+   * brand, or one an Admin has soft-deleted (DOMAIN-RULES §2.2: "hidden from
+   * all views"). All three answer 404 in the handler, which is deliberate: a
+   * deleted ticket that answered 410 would confirm that it had existed.
+   */
   async findTicket(tx: DbTransaction, ticketId: string): Promise<TicketWithStatus | undefined> {
     const rows = await tx
       .select()
       .from(tickets)
       .innerJoin(ticketStatuses, statusJoin)
-      .where(eq(tickets.id, ticketId))
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
       .limit(1);
 
     const row = rows[0];
@@ -146,6 +152,24 @@ export class TicketRepository {
 
     const scope = await currentDepartmentScope(tx);
     return scope === 'all' || scope.includes(departmentId);
+  }
+
+  /**
+   * Whether the brand has a department with this id at all, whatever the
+   * caller's own scope is. `departments` is brand-scoped and never
+   * department-scoped, so an Agent may read the name of every department —
+   * which is what makes escalation into one of them a decision the service can
+   * take rather than a policy violation (DOMAIN-RULES §1.2, and
+   * `lifecycle/lifecycle.service.ts` for how the write is made).
+   */
+  async departmentExists(tx: DbTransaction, departmentId: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.id, departmentId))
+      .limit(1);
+
+    return rows.length > 0;
   }
 
   /**

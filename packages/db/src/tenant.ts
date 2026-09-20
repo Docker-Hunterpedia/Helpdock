@@ -177,3 +177,59 @@ export const withSystem = <T>(
   brandId: string,
   fn: (tx: DbTransaction) => Promise<T>,
 ): Promise<T> => withTenant(db, systemContext(brandId), fn);
+
+/**
+ * Runs `fn` with `departmentIds` added to the transaction's department scope,
+ * and puts the scope back afterwards.
+ *
+ * It exists for exactly one rule. DOMAIN-RULES §1.2: "Moving a ticket to a
+ * department the actor cannot see is allowed (it is how escalation works); the
+ * ticket disappears from their view afterwards and the activity log records
+ * it." The `WITH CHECK` half of the department policy refuses that write,
+ * because the row it would leave behind is one the writer may not read — which
+ * is the right default for every other statement on the table.
+ *
+ * The alternative would have been a second policy shape on `tickets` alone, or
+ * a `SECURITY DEFINER` function that bypasses row-level security. Both make the
+ * escalation path a place where isolation is decided *differently*; this makes
+ * it a place where the scope is briefly wider and the policy is the same one.
+ *
+ * Three properties make that safe, and all three are load-bearing:
+ *
+ * - **The brand is never widened.** `app.brand_ids` is untouched, so the widest
+ *   this can reach is another department of the brand the request has already
+ *   been authorised for.
+ * - **The window is one call.** The previous value is restored in a `finally`,
+ *   so a throw inside `fn` cannot leave a transaction running wide; and the
+ *   settings are `SET LOCAL` to begin with, so even a lost restore ends when
+ *   the transaction does.
+ * - **The ids are validated.** Anything that is not a UUID is refused before a
+ *   statement is built, and the value is bound as a parameter rather than
+ *   pasted into SQL — the same rule {@link tenantSessionSettings} follows.
+ *
+ * A transaction whose scope is already `'all'` runs `fn` unchanged: there is
+ * nothing to widen, and rewriting the setting would only narrow it.
+ */
+export const withWidenedDepartments = async <T>(
+  tx: DbTransaction,
+  departmentIds: readonly string[],
+  fn: () => Promise<T>,
+): Promise<T> => {
+  const scope = await currentDepartmentScope(tx);
+  if (scope === 'all') {
+    return fn();
+  }
+
+  const widened = [...new Set([...scope, ...departmentIds])];
+  const literal = uuidArrayLiteral('departmentIds', widened);
+
+  const setScope = (value: string): Promise<unknown> =>
+    tx.execute(sql`SELECT set_config(${SESSION_SETTINGS.departmentIds}, ${value}, true)`);
+
+  await setScope(literal);
+  try {
+    return await fn();
+  } finally {
+    await setScope(uuidArrayLiteral('departmentIds', scope));
+  }
+};

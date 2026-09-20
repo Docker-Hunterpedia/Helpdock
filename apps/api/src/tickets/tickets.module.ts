@@ -1,4 +1,9 @@
 import { type DynamicModule, Module } from '@nestjs/common';
+import { TicketLifecycleHooks } from './lifecycle/hooks.js';
+import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
+import { TicketLifecycleService } from './lifecycle/lifecycle.service.js';
+import { TicketingSettingsController } from './lifecycle/ticketing-settings.controller.js';
+import { TicketingSettingsService } from './lifecycle/ticketing-settings.service.js';
 import { TicketsController } from './tickets.controller.js';
 import { TicketRepository } from './tickets.repository.js';
 import { TicketsService } from './tickets.service.js';
@@ -23,8 +28,18 @@ export class TicketsModule {
   static forRoot(): DynamicModule {
     return {
       module: TicketsModule,
-      controllers: [TicketsController],
-      providers: [TicketRepository, TicketsService],
+      controllers: [TicketsController, TicketingSettingsController],
+      providers: [
+        TicketRepository,
+        TicketsService,
+        // M1-08. `TicketLifecycleHooks` is a provider rather than a registry so
+        // that M3-02's clocks and M1-12's survey replace one line here instead
+        // of editing the service that calls them (`lifecycle/hooks.ts`).
+        TicketLifecycleHooks,
+        TicketLifecycleRepository,
+        TicketLifecycleService,
+        TicketingSettingsService,
+      ],
     };
   }
 }

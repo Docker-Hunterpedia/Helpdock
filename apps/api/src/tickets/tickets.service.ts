@@ -31,9 +31,15 @@ import {
 import type { Principal } from '../auth/principal.js';
 import { getTx } from '../context/request-context.js';
 import { InvalidCursorError } from './cursor.js';
-import { applyStatusChange, UnknownStatusError } from './status-change.js';
+import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
+import {
+  escalateIntoUnseenDepartment,
+  type LifecycleContext,
+  TicketLifecycleService,
+} from './lifecycle/lifecycle.service.js';
+import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
-import { enqueueTicketEvent, TICKET_EVENTS } from './ticket-events.js';
+import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
 import { cursorAfter, sortValueOf } from './ticket-query.js';
 import { toTicket, toTicketActivity, toTicketMessage, toTicketStatus } from './ticket-view.js';
 import { TicketRepository } from './tickets.repository.js';
@@ -67,9 +73,17 @@ const ACTIVITY_PAGE = 100;
 @Injectable()
 export class TicketsService {
   readonly #tickets: TicketRepository;
+  readonly #lifecycle: TicketLifecycleService;
+  readonly #lifecycleReads: TicketLifecycleRepository;
 
-  constructor(@Inject(TicketRepository) tickets: TicketRepository) {
+  constructor(
+    @Inject(TicketRepository) tickets: TicketRepository,
+    @Inject(TicketLifecycleService) lifecycle: TicketLifecycleService,
+    @Inject(TicketLifecycleRepository) lifecycleReads: TicketLifecycleRepository,
+  ) {
     this.#tickets = tickets;
+    this.#lifecycle = lifecycle;
+    this.#lifecycleReads = lifecycleReads;
   }
 
   // -------------------------------------------------------------------- reads
@@ -226,21 +240,27 @@ export class TicketsService {
     }
 
     const tx = getTx();
+    const now = new Date();
     const actor = activityActorFor(principal);
     const { ticket, status } = await this.#require(tx, ticketId);
+    const context: LifecycleContext = { tx, brandId, actor, now };
 
     const { values, from, to } = plainChanges(ticket, input);
 
-    if (input.departmentId !== undefined && input.departmentId !== ticket.departmentId) {
-      await this.#requireDepartment(tx, input.departmentId);
-    }
+    // `null` for a move the actor's own scope already covers, and the target
+    // for an escalation — which is allowed, and is why this is not a refusal.
+    const escalation =
+      input.departmentId !== undefined && input.departmentId !== ticket.departmentId
+        ? await this.#resolveDepartmentMove(tx, input.departmentId)
+        : null;
+
     await this.#requireTeam(input.teamId ?? undefined);
     await this.#requireAssignee(tx, input.assigneeId ?? undefined);
 
     const statusResult =
       input.statusId === undefined
         ? undefined
-        : await this.#changeStatus(tx, ticket, status, input.statusId);
+        : await this.#changeStatus(tx, ticket, status, input.statusId, now);
 
     if (statusResult?.changed === true) {
       values.statusId = statusResult.statusId;
@@ -251,37 +271,65 @@ export class TicketsService {
       return toTicket(ticket, status);
     }
 
-    const updated = await this.#tickets.updateTicket(tx, ticketId, values);
-    /* c8 ignore next 3 -- the read above already proved the row is visible. */
-    if (updated === undefined) {
-      throw new NotFoundException('No such ticket');
+    /**
+     * The whole mutation, as one function, because on an escalation every
+     * statement in it has to run inside the same widened window: the `UPDATE`
+     * itself, the trigger that follows the ticket's messages and activity into
+     * the new department, and the activity rows whose own department the
+     * trigger then overwrites with it.
+     */
+    const write = async (): Promise<{ ticket: TicketRow; status: TicketStatusRow }> => {
+      const moved = await this.#tickets.updateTicket(tx, ticketId, values);
+      /* c8 ignore next 3 -- the read above already proved the row is visible. */
+      if (moved === undefined) {
+        throw new NotFoundException('No such ticket');
+      }
+
+      if (Object.keys(to).length > 0) {
+        await writeTicketActivity(tx, {
+          brandId,
+          ticketId,
+          departmentId: moved.departmentId,
+          actor,
+          action: 'ticket.updated',
+          from,
+          to,
+        });
+      }
+
+      if (statusResult?.changed === true) {
+        await writeTicketActivity(tx, {
+          brandId,
+          ticketId,
+          departmentId: moved.departmentId,
+          actor,
+          action: 'ticket.status.changed',
+          from: { statusId: status.id },
+          to: { statusId: statusResult.statusId },
+        });
+      }
+
+      // Inside the window too. A close or a reopen writes another activity row,
+      // and the `ticket_activity_department` trigger stamps it with the
+      // ticket's department — by now the new one, which the actor's own scope
+      // does not cover. Outside, the insert would be refused by the policy.
+      const moveStatus =
+        statusResult?.changed === true ? await this.#requireStatus(tx, moved.statusId) : status;
+      await this.#afterStatusChange(context, moved, status, moveStatus, statusResult);
+
+      return { ticket: moved, status: moveStatus };
+    };
+
+    const { ticket: updated, status: nextStatus } =
+      escalation === null
+        ? await write()
+        : await escalateIntoUnseenDepartment(tx, escalation, write);
+
+    if (escalation !== null) {
+      await this.#auditEscalation(context, ticket, escalation);
     }
 
-    if (Object.keys(to).length > 0) {
-      await writeTicketActivity(tx, {
-        brandId,
-        ticketId,
-        departmentId: updated.departmentId,
-        actor,
-        action: 'ticket.updated',
-        from,
-        to,
-      });
-    }
-
-    if (statusResult?.changed === true) {
-      await writeTicketActivity(tx, {
-        brandId,
-        ticketId,
-        departmentId: updated.departmentId,
-        actor,
-        action: 'ticket.status.changed',
-        from: { statusId: status.id },
-        to: { statusId: statusResult.statusId },
-      });
-    }
-
-    await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.updated, {
+    await enqueueTicketEvent(tx, brandId, ticketEventFor(statusResult), {
       ticketId,
       departmentId: updated.departmentId,
       // On a move, whoever is watching the queue the ticket has just left is in
@@ -291,10 +339,22 @@ export class TicketsService {
         : { previousDepartmentId: ticket.departmentId }),
     });
 
-    const nextStatus =
-      statusResult?.changed === true ? await this.#requireStatus(tx, updated.statusId) : status;
-
     return toTicket(updated, nextStatus);
+  }
+
+  /**
+   * DOMAIN-RULES §2.2 row 9: an Admin hides a ticket from every view. The row
+   * stays until M1-14's retention purges it (§11).
+   */
+  async remove(brandId: string, principal: Principal, ticketId: string): Promise<void> {
+    const tx = getTx();
+    const { ticket, status } = await this.#require(tx, ticketId);
+
+    await this.#lifecycle.softDelete(
+      { tx, brandId, actor: activityActorFor(principal), now: new Date() },
+      ticket,
+      status,
+    );
   }
 
   /**
@@ -313,39 +373,68 @@ export class TicketsService {
     input: MessageCreateRequest,
   ): Promise<TicketMessage> {
     const tx = getTx();
+    const now = new Date();
     const actor = activityActorFor(principal);
-    const { ticket } = await this.#require(tx, ticketId);
+    const authorType = authorTypeFor(principal);
+    const { ticket, status } = await this.#require(tx, ticketId);
+    const context: LifecycleContext = { tx, brandId, actor, now };
 
-    const seq = await this.#tickets.nextSeq(tx, ticketId);
+    // The lock comes first, on the ticket the reply was addressed to, so
+    // concurrent replies queue however the lifecycle then moves them (§7).
+    let seq = await this.#tickets.nextSeq(tx, ticketId);
 
     if (input.clientId !== undefined) {
       const existing = await this.#tickets.findMessageByClientId(tx, ticketId, input.clientId);
       if (existing !== undefined) {
         return toTicketMessage(existing);
       }
+
+      // A reply to a closed ticket may have landed on a ticket that continues
+      // it (§2.3). Without this, a retried send would create a second one.
+      const continued = await this.#lifecycleReads.findContinuationMessage(
+        tx,
+        ticketId,
+        input.clientId,
+      );
+      if (continued !== undefined) {
+        return toTicketMessage(continued);
+      }
     }
 
+    // DOMAIN-RULES §2.2 rows 1 and 5. It runs *before* the insert because on
+    // the continuation branch the message belongs to a ticket that does not
+    // exist yet, and it decides which ticket that is.
+    const landing =
+      input.kind === 'public' && authorType === 'contact'
+        ? await this.#lifecycle.onCustomerReply(context, ticket, status)
+        : { ticket, status, continued: false };
+
+    if (landing.ticket.id !== ticketId) {
+      seq = await this.#tickets.nextSeq(tx, landing.ticket.id);
+    }
+
+    const target = landing.ticket;
     const body = this.#body(input.bodyHtml);
     const message = await this.#tickets.insertMessage(tx, {
       brandId,
-      ticketId,
-      departmentId: ticket.departmentId,
+      ticketId: target.id,
+      departmentId: target.departmentId,
       seq,
       ...(input.clientId === undefined ? {} : { clientId: input.clientId }),
       kind: input.kind,
-      authorType: authorTypeFor(principal),
+      authorType,
       authorId: actor.actorId,
       bodyHtml: body.html,
       bodyText: body.text,
-      channel: ticket.channel,
+      channel: target.channel,
     });
 
     const action = input.kind === 'note' ? 'ticket.note_added' : 'ticket.replied';
 
     await writeTicketActivity(tx, {
       brandId,
-      ticketId,
-      departmentId: ticket.departmentId,
+      ticketId: target.id,
+      departmentId: target.departmentId,
       actor,
       action,
       to: { messageId: message.id, seq },
@@ -354,15 +443,22 @@ export class TicketsService {
     // The ticket has moved even though none of its own columns did: the list
     // orders by `updated_at`, and a reply that did not touch it would leave the
     // ticket at the bottom of the queue it just became urgent in.
-    await this.#tickets.updateTicket(tx, ticketId, {});
+    await this.#tickets.updateTicket(tx, target.id, {});
+
+    // §2.2 row 2. After the reply, because the toggle is about what the reply
+    // means and a status moved before the message existed would be a lie if the
+    // insert then failed.
+    if (input.kind === 'public' && authorType === 'staff') {
+      await this.#lifecycle.onAgentPublicReply(context, target, landing.status);
+    }
 
     await enqueueTicketEvent(
       tx,
       brandId,
       action === 'ticket.note_added' ? TICKET_EVENTS.noteAdded : TICKET_EVENTS.replied,
       {
-        ticketId,
-        departmentId: ticket.departmentId,
+        ticketId: target.id,
+        departmentId: target.departmentId,
         messageId: message.id,
         seq,
         kind: message.kind,
@@ -430,22 +526,121 @@ export class TicketsService {
     ticket: TicketRow,
     current: TicketStatusRow,
     requestedStatusId: string,
-  ) {
+    now: Date,
+  ): Promise<StatusChangeResult> {
     try {
       return applyStatusChange({
         requestedStatusId,
         current,
         next: await this.#tickets.findStatus(tx, requestedStatusId),
         closedAt: ticket.closedAt,
-        now: new Date(),
+        ticket,
+        // One event covers rows 3, 4 and 6 of §2.2. An agent "closing" a ticket
+        // *is* an agent setting a status whose system state is `closed`, and a
+        // reopen is the same act in the other direction: there is one control
+        // on the screen and it is a status picker. Which of the three happened
+        // is then read off the states, as `closing` and `reopening`.
+        event: 'agent.status',
+        now,
       });
     } catch (error) {
       if (error instanceof UnknownStatusError) {
         throw new NotFoundException(error.message);
       }
-      /* c8 ignore next 2 -- nothing else in that call throws. */
       throw error;
     }
+  }
+
+  /**
+   * The hooks a status change owes DOMAIN-RULES §2.2 and §3.5, once the row has
+   * moved and before the queue is told.
+   */
+  async #afterStatusChange(
+    context: LifecycleContext,
+    updated: TicketRow,
+    previous: TicketStatusRow,
+    next: TicketStatusRow,
+    result: StatusChangeResult | undefined,
+  ): Promise<void> {
+    if (result === undefined || !result.changed) {
+      return;
+    }
+
+    if (result.closing) {
+      await writeTicketActivity(context.tx, {
+        brandId: context.brandId,
+        ticketId: updated.id,
+        departmentId: updated.departmentId,
+        actor: context.actor,
+        action: 'ticket.closed',
+        from: { statusId: previous.id },
+        to: { statusId: next.id, closedAt: updated.closedAt?.toISOString() ?? null },
+      });
+      await this.#lifecycle.onClosed(context, updated, next);
+      return;
+    }
+
+    if (result.reopening) {
+      await writeTicketActivity(context.tx, {
+        brandId: context.brandId,
+        ticketId: updated.id,
+        departmentId: updated.departmentId,
+        actor: context.actor,
+        action: 'ticket.reopened',
+        from: { statusId: previous.id },
+        to: { statusId: next.id },
+      });
+      await this.#lifecycle.onReopened(context, updated, next);
+    }
+  }
+
+  /**
+   * Whether this move needs the widened window, and refuses the two cases that
+   * are not escalation at all.
+   *
+   * DOMAIN-RULES §1.2 allows a move into a department the actor cannot see —
+   * "it is how escalation works" — so an out-of-scope department is not a
+   * refusal here, which is the gap M1-02 named and left open. What is still
+   * refused is a department id that is not this brand's: the transaction cannot
+   * see it, so it answers as "no such department" rather than as an escalation
+   * into somewhere that does not exist.
+   */
+  async #resolveDepartmentMove(tx: DbTransaction, departmentId: string): Promise<string | null> {
+    if (await this.#tickets.departmentIsWritable(tx, departmentId)) {
+      return null;
+    }
+
+    if (!(await this.#tickets.departmentExists(tx, departmentId))) {
+      throw new NotFoundException('No such department in this brand');
+    }
+
+    return departmentId;
+  }
+
+  /**
+   * An escalation is audited, because the actor cannot read the ticket
+   * afterwards and the activity row goes with it into a department they cannot
+   * see. `audit_log` is brand-scoped, so an Admin reading the brand's trail can
+   * still find out where the ticket went.
+   */
+  async #auditEscalation(
+    context: LifecycleContext,
+    ticket: TicketRow,
+    departmentId: string,
+  ): Promise<void> {
+    await this.#lifecycleReads.writeAudit(context.tx, {
+      brandId: context.brandId,
+      actorType: context.actor.actorType,
+      actorId: context.actor.actorId,
+      action: 'ticket.escalated',
+      targetType: 'ticket',
+      targetId: ticket.id,
+      meta: {
+        number: ticket.number,
+        fromDepartmentId: ticket.departmentId,
+        toDepartmentId: departmentId,
+      },
+    });
   }
 
   async #requireStatus(tx: DbTransaction, statusId: string): Promise<TicketStatusRow> {
@@ -481,15 +676,13 @@ export class TicketsService {
   }
 
   /**
-   * A department outside the actor's own scope is refused here rather than by
-   * the policy, so the answer is a sentence and not a 500.
+   * Where a ticket may be **filed** at creation.
    *
-   * DOMAIN-RULES §1.2 says moving a ticket to a department the actor cannot see
-   * is allowed — it is how escalation works — and the `WITH CHECK` half of the
-   * department policy does not permit it. Escalation in v1 therefore happens
-   * through a rule, which runs as the system principal with every department
-   * (§1.4, M3-03), and a restricted agent moving a ticket by hand into a
-   * department they cannot see is refused. That gap is M1-08's to close.
+   * Creating is not escalating. §1.2 allows a ticket to be *moved* into a
+   * department the actor cannot see, because that is what escalation is; there
+   * is nothing to escalate about a ticket that does not exist yet, and a ticket
+   * created straight into a department the author cannot read would be a ticket
+   * nobody meant to file there. `#resolveDepartmentMove` is the other half.
    */
   async #requireDepartment(tx: DbTransaction, departmentId: string): Promise<void> {
     if (!(await this.#tickets.departmentIsWritable(tx, departmentId))) {
@@ -562,6 +755,23 @@ export class TicketsService {
     }
   }
 }
+
+/**
+ * Which outbox event a status change is. `ticket.closed` and `ticket.reopened`
+ * carry the same payload as `ticket.updated` and reach the same rooms; naming
+ * them is what lets M1-12's survey and M3's clocks consume one event instead of
+ * diffing two reads of the ticket (DOMAIN-RULES §2.2).
+ */
+const ticketEventFor = (result: StatusChangeResult | undefined): TicketEvent => {
+  if (result?.closing === true) {
+    return TICKET_EVENTS.closed;
+  }
+  if (result?.reopening === true) {
+    return TICKET_EVENTS.reopened;
+  }
+
+  return TICKET_EVENTS.updated;
+};
 
 /** Who a message is from, in the vocabulary of `ticket_messages.author_type`. */
 const authorTypeFor = (principal: Principal): 'staff' | 'contact' | 'system' | 'ai' => {

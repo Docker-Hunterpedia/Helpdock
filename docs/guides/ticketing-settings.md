@@ -4,10 +4,10 @@ How a brand's tickets are shaped and routed: departments, the teams inside
 them, and the brand-level behaviour that later deliverables read. The screen is
 **Admin → Ticketing**, and this guide follows its tab row.
 
-Only the **Departments** tab is built. The other seven exist so the row is whole
-and each says which deliverable fills it: Statuses and Priorities with M1-02,
-Views with M1-05, Tags, Custom fields and Templates with M1-06, Assignment with
-M1-07.
+Two tabs are built: **Departments** (M1-01) and **Statuses** (M1-08). The other
+six exist so the row is whole and each says which deliverable fills it:
+Priorities with M1-02, Views with M1-05, Tags, Custom fields and Templates with
+M1-06, Assignment with M1-07.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -20,6 +20,8 @@ version:
 | Rename a department, set its default team | yes | in the departments they lead | no |
 | Add, rename or delete a team | yes | in the departments they lead | no |
 | Put somebody on a team, or take them off | anybody | Agents and Viewers only | no |
+| Add, edit, reorder or delete a status | yes | yes | no |
+| Change the reply behaviour and the reopen policy | yes | yes | no |
 | Change the brand's name, language, time zone or settings | yes | no | no |
 
 "Which departments a brand has" is the brand's shape, so it stays with the
@@ -103,6 +105,108 @@ department opens its teams under the list.
 Teams are stored and served now; **assignment to them is M1-07** (round-robin
 per department, skills, load cap), and **business hours per department are M3**.
 
+## Statuses
+
+A status is what an agent picks from and what a badge is drawn from. Every one
+maps to one of the four **system states** of
+[DOMAIN-RULES §2.1](../planning/DOMAIN-RULES.md#21-states) — `open`, `on_hold`,
+`escalated`, `closed` — so SLA maths and reports stay the same however a brand
+names its own.
+
+Every brand starts with six, written by `seedBrandStatuses` when the brand is
+created:
+
+| Name | System state | Flags | Why it exists |
+|---|---|---|---|
+| Open | `open` | default | Where a new or reopened ticket lands |
+| Awaiting customer | `on_hold` | pauses SLA, awaiting customer | §2.1 ships it with every brand |
+| Escalated | `escalated` | — | So the fourth state is reachable without adding a status |
+| Closed | `closed` | — | §2.2 |
+| Spam | `closed` | excluded from reports | §2.1: no auto-responder, no CSAT, out of reports |
+| Merged | `closed` | excluded from reports | §2.4: what the secondary of a merge closes into |
+
+### The two flags, and the third
+
+| Flag | Meaning |
+|---|---|
+| **Pauses SLA clocks** | Both clocks stop while the ticket is in this status (§3.2) |
+| **Counts as awaiting customer** | The ball is with the customer; time-based rules and reports read it |
+| Excluded from reports | Not editable. Seeded on Spam and Merged; it is why a close into one schedules no survey |
+
+### What a seeded status accepts
+
+A seeded row may be **renamed, given an Arabic name, and recoloured**. Its
+system state and its two behaviour flags are fixed, because code refers to the
+row by them rather than by its name: the reopen path wants "the default open
+status", an agent reply wants "the awaiting-customer status". Changing them
+would rename the concept rather than the label, so the api answers
+`status-state-fixed`.
+
+Nothing deletes a seeded row (`status-is-system`), and nothing deletes the
+brand's default (`status-is-default`) — another status has to be made the
+default first, which is a deliberate second step rather than a silent
+reassignment.
+
+### The default status
+
+One per brand, and it has to be **open-like**: it is where a new ticket lands
+and where a reopen returns a ticket to, so a closed or on-hold default would
+mean a ticket created already finished, or a reopen that closes. The api answers
+`default-must-be-open` to either way of getting there.
+
+Move it with **Make default** in the row menu. The old default is cleared and
+the new one set in one transaction, so there is never a moment with two.
+
+### Deleting one
+
+Only a custom status, and only when it is not the default. Its tickets are
+**moved to the brand's default open status** rather than the delete being
+refused: a desk that cannot remove "Waiting on supplier" until it has hand-moved
+forty tickets will keep the status forever. Each moved ticket gets an activity
+row naming the change and an outbox event, so a queue somebody is watching sees
+it move.
+
+The screen asks the server for the count **before** it asks the person —
+"Delete · 12 tickets move to Open" — because that is a promise about other
+people's work and a number guessed in the browser is a promise the browser
+cannot keep.
+
+`closed_at` is left alone by the move. The fallback is an *open* status, so a
+closed ticket landing on it looks like a reopen — but a status being deleted is
+a configuration change, not a customer coming back, and §3.5's clocks are not
+restarted for it.
+
+### The order
+
+The brand's own, and what every picker draws. Reordering has three ways in and
+one path out: drag the handle, focus it and press `↑`/`↓`, or use **Move up** /
+**Move down** in the row menu. All three send the whole list.
+
+## Reply behaviour
+
+The card under the statuses table. It is the two settings
+[DOMAIN-RULES §2.3](../planning/DOMAIN-RULES.md#23-reopen-policy) lets a **Team
+Leader** change, and it is a route of its own for exactly that reason: `PATCH
+/api/brands/:brandId` carries the brand's time zone, which SLA clocks run on and
+which §1.2 keeps with the Admin.
+
+| Setting | Default | What it does |
+|---|---|---|
+| Move to Awaiting customer when an agent sends a public reply | on | §2.2: an agent's public reply on an `open` ticket moves it. A customer reply moves it back |
+| When a customer replies to a closed ticket | Reopen if closed within 7 days | §2.3; see [the ticket lifecycle](tickets.md#the-lifecycle) |
+
+The auto-await rule applies to `open` tickets only. A ticket on hold or
+escalated is somewhere deliberate, and §2.2 gives the row to `open` alone.
+
+The reopen policy's day count is shown only for "Reopen if closed within…": a
+number beside "Always reopen" is a control that does nothing, and a control that
+does nothing is one somebody will set and then be surprised by.
+
+Both are stored in `brands.settings`, and this route **merges** rather than
+replacing — a key a later milestone adds is not reset by a screen that predates
+it. `PATCH /api/brands/:brandId` still writes the object whole, because the
+screen there holds the whole object.
+
 ## Brand settings
 
 Each brand carries a small JSON object of ticketing behaviour. M1-01 stores and
@@ -110,8 +214,8 @@ serves it; the deliverables below act on it.
 
 | Key | Default | Meaning | Acted on by |
 |---|---|---|---|
-| `autoAwaitOnAgentReply` | `true` | Move a ticket to "Awaiting customer" when an agent sends a public reply (DOMAIN-RULES §2.1). | M1-08 |
-| `reopenPolicy` | `{ "kind": "within_days", "days": 7 }` | What a customer reply to a closed ticket does: `within_days` (1–365), `always`, or `never` (DOMAIN-RULES §2.3). | M1-08 |
+| `autoAwaitOnAgentReply` | `true` | Move a ticket to "Awaiting customer" when an agent sends a public reply (DOMAIN-RULES §2.1). | M1-08 ✓ |
+| `reopenPolicy` | `{ "kind": "within_days", "days": 7 }` | What a customer reply to a closed ticket does: `within_days` (1–365), `always`, or `never` (DOMAIN-RULES §2.3). | M1-08 ✓ |
 
 Every key has a default, so a brand created before a key existed reads as the
 current shape rather than failing. A column somebody edited by hand into
@@ -130,8 +234,9 @@ fixes it at creation.
 
 DOMAIN-RULES §2.3 lets a Team Leader set the reopen policy. `PATCH
 /api/brands/:brandId` is `brand:manage`, which only an Admin holds, because the
-same body carries the time zone; **M1-08** adds the narrower route a Team Leader
-reaches, where the policy is acted on.
+same body carries the time zone, so M1-08 added the narrower route a Team Leader
+reaches: `PATCH /api/brands/:brandId/ticketing/reply-behaviour`. See
+[Reply behaviour](#reply-behaviour) above.
 
 ## Adding a brand
 
@@ -171,6 +276,13 @@ there as well as in the brand it creates.
 | `GET …/departments/:departmentId/eligible-members` | `@Requires('staff:manage')` | Who the people picker may offer. |
 | `POST …/teams/:teamId/members` | `@Requires('staff:manage')` | Adds somebody eligible. 409 otherwise. |
 | `DELETE …/teams/:teamId/members/:userId` | `@Requires('staff:manage')` | Takes them off the team, not out of the brand. |
+| `GET /api/brands/:brandId/ticket-statuses` | `@Requires('ticket:read')` | The brand's statuses. Every agent draws a badge from it. |
+| `POST /api/brands/:brandId/ticket-statuses` | `@Requires('ticketing:manage')` | Creates a custom status at the end of the list. |
+| `POST …/ticket-statuses/reorder` | `@Requires('ticketing:manage')` | The whole order; a partial list is a 400. |
+| `GET …/ticket-statuses/:statusId/usage` | `@Requires('ticketing:manage')` | The count and the fallback the delete confirmation prints. |
+| `PATCH …/ticket-statuses/:statusId` | `@Requires('ticketing:manage')` | Name, Arabic name, colour, and — on a custom row — state, flags and default. |
+| `DELETE …/ticket-statuses/:statusId` | `@Requires('ticketing:manage')` | Custom rows only. Moves their tickets to the default open status. |
+| `PATCH …/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of §2.3. Team Leaders included. |
 | `PATCH /api/brands/:brandId` | `@Requires('brand:manage')` | Name, default locale, time zone, settings. Never the prefix. |
 | `POST /api/install/brands` | `@Requires('install:admin')` | An additional brand. Audited. |
 
@@ -186,6 +298,10 @@ the translated copy:
 | `department-in-use` | 409 | Tickets still belong to it (from M1-02). |
 | `name-taken` | 409 | Another department of the brand, or another team of the department, has that name. |
 | `not-eligible` | 409 | That person holds no role in this brand that reaches this department. |
+| `status-is-system` | 409 | A seeded status can be renamed and recoloured, never deleted. |
+| `status-is-default` | 409 | Make another status the default before deleting this one. |
+| `status-state-fixed` | 409 | A seeded status's system state and flags are what code refers to it by. |
+| `default-must-be-open` | 409 | The default is where a new or reopened ticket lands, so it has to be open-like. |
 
 A department of another brand is invisible to the request's transaction, so it
 answers **404**, not 403: "there is no such id" and "it is not yours" are the
@@ -199,6 +315,7 @@ Three tenant tables, all under a `FORCE`d row-level security policy on
 | Table | Columns that matter | Notes |
 |---|---|---|
 | `departments` | `name`, `name_ar`, `default_team_id`, `sort_order` | Unique on `(brand_id, name)`. `default_team_id` is `ON DELETE SET NULL`. |
+| `ticket_statuses` | `system_state`, `pauses_sla`, `awaiting_customer`, `is_default`, `is_system`, `excluded_from_reports`, `sort_order`, `color` | Unique on `(brand_id, name)`. Brand-scoped, never department-scoped: an Agent reads the name of the status their own ticket is in. |
 | `teams` | `department_id`, `name`, `sort_order` | Unique on `(department_id, name)`. Cascades from its department. |
 | `team_members` | `team_id`, `user_id` | Unique on `(team_id, user_id)`. Cascades from its team and from the account. |
 

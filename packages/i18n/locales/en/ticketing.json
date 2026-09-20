@@ -102,6 +102,96 @@
     "lastDepartment": "A brand keeps at least one department.",
     "departmentInUse": "Tickets still belong to this department. Move them first.",
     "nameTaken": "That name is already taken.",
-    "notEligible": "That person holds no role in this brand that reaches this department."
+    "notEligible": "That person holds no role in this brand that reaches this department.",
+    "statusCreated": "{{name}} added",
+    "statusUpdated": "{{name}} saved",
+    "statusDeleted": "{{name}} deleted",
+    "statusesReordered": "New order saved",
+    "replyBehaviourSaved": "Reply behaviour saved",
+    "statusIsSystem": "A seeded status can be renamed, never deleted.",
+    "statusIsDefault": "Make another status the default before deleting this one.",
+    "statusStateFixed": "A seeded status's system state and flags cannot change.",
+    "defaultMustBeOpen": "The default status is where a new or reopened ticket lands, so it has to be open."
+  },
+  "statuses": {
+    "add": "Add status",
+    "table": {
+      "caption": "Ticket statuses of {{brand}}",
+      "name": "Status",
+      "systemState": "System state",
+      "pausesSla": "Pauses SLA",
+      "awaitingCustomer": "Awaiting customer",
+      "tickets": "Tickets",
+      "rowActions": "Actions for {{name}}",
+      "dragHandle": "Reorder {{name}}",
+      "select": "Edit {{name}}",
+      "checked": "Yes"
+    },
+    "chips": {
+      "default": "default",
+      "custom": "custom",
+      "system": "system"
+    },
+    "states": {
+      "open": "Open",
+      "on_hold": "On hold",
+      "escalated": "Escalated",
+      "closed": "Closed"
+    },
+    "actions": {
+      "edit": "Edit",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "makeDefault": "Make default",
+      "delete": "Delete"
+    },
+    "editor": {
+      "heading": "Edit status · {{name}}",
+      "newHeading": "New status",
+      "name": "Name",
+      "nameAr": "Name (Arabic)",
+      "nameArHint": "Optional. Shown to customers reading in Arabic.",
+      "systemState": "System state",
+      "systemStateHint": "What SLA maths and reports treat this status as.",
+      "pausesSla": "Pauses SLA clocks",
+      "awaitingCustomer": "Counts as awaiting customer",
+      "colour": "Colour",
+      "save": "Save",
+      "create": "Create status",
+      "delete_one": "Delete · {{count}} ticket moves to {{fallback}}",
+      "delete_other": "Delete · {{count}} tickets move to {{fallback}}",
+      "systemNote": "A seeded status can be renamed and recoloured. Its state and flags are what the code refers to it by.",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a status to edit its name, its system state and its flags."
+      }
+    },
+    "colours": {
+      "info": "Blue",
+      "success": "Green",
+      "warning": "Amber",
+      "danger": "Red",
+      "escalated": "Purple"
+    },
+    "confirm": {
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body_one": "{{count}} ticket moves to {{fallback}}. This cannot be undone.",
+        "body_other": "{{count}} tickets move to {{fallback}}. This cannot be undone.",
+        "submit": "Delete status"
+      }
+    },
+    "reply": {
+      "heading": "Reply behaviour",
+      "autoAwait": "Move to Awaiting customer when an agent sends a public reply",
+      "autoAwaitHint": "A customer reply moves the ticket back to Open.",
+      "reopen": "When a customer replies to a closed ticket",
+      "reopenWithin": "Reopen if closed within…",
+      "reopenAlways": "Always reopen",
+      "reopenNever": "Always create a new ticket",
+      "days": "days, otherwise a new linked ticket",
+      "daysLabel": "Days the ticket stays reopenable",
+      "save": "Save reply behaviour"
+    }
   }
 }

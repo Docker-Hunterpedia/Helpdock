@@ -7,6 +7,7 @@ import arMe from '../locales/ar/me.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
 import arSystem from '../locales/ar/system.json' with { type: 'json' };
+import arTicket from '../locales/ar/ticket.json' with { type: 'json' };
 import arTicketing from '../locales/ar/ticketing.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
@@ -18,6 +19,7 @@ import enMe from '../locales/en/me.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
 import enSystem from '../locales/en/system.json' with { type: 'json' };
+import enTicket from '../locales/en/ticket.json' with { type: 'json' };
 import enTicketing from '../locales/en/ticketing.json' with { type: 'json' };
 import enWizard from '../locales/en/wizard.json' with { type: 'json' };
 
@@ -40,6 +42,9 @@ export const NAMESPACES = [
   'email',
   'system',
   'ticketing',
+  // Not a screen: the system messages the api writes into a ticket thread, in
+  // the contact's language rather than the reader's (M1-08, DOMAIN-RULES §2.3).
+  'ticket',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -58,6 +63,7 @@ export const resources = {
     email: enEmail,
     system: enSystem,
     ticketing: enTicketing,
+    ticket: enTicket,
   },
   ar: {
     common: arCommon,
@@ -71,6 +77,7 @@ export const resources = {
     email: arEmail,
     system: arSystem,
     ticketing: arTicketing,
+    ticket: arTicket,
   },
 };
 

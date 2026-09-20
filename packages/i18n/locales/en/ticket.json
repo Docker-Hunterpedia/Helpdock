@@ -1,0 +1,6 @@
+{
+  "system": {
+    "continuedFrom": "Continued from {{ticket}}",
+    "continuedIn": "Continued in {{ticket}}"
+  }
+}

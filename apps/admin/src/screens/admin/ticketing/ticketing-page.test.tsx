@@ -62,8 +62,14 @@ describe('the tab row', () => {
   });
 
   it('names the deliverable a tab is waiting for', async () => {
+    await renderTicketing('/admin/ticketing/tags');
+
+    expect(await screen.findByText('Tags arrives with M1-06.')).toBeInTheDocument();
+  });
+
+  it('draws the Statuses tab rather than a placeholder, since M1-08 filled it', async () => {
     await renderTicketing('/admin/ticketing/statuses');
 
-    expect(await screen.findByText('Statuses arrives with M1-02.')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Edit Open' })).toBeInTheDocument();
   });
 });

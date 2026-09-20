@@ -1,0 +1,6 @@
+{
+  "system": {
+    "continuedFrom": "متابعة لـ {{ticket}}",
+    "continuedIn": "تكملة في {{ticket}}"
+  }
+}

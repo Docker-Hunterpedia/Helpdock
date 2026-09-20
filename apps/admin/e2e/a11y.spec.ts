@@ -135,6 +135,46 @@ test.describe('accessibility', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('the statuses tab has no violations, list, editor and reply card alike', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTicketing(page, locale);
+    await page.getByRole('tab', { name: t('ticketing:tabs.statuses') }).click();
+    await page
+      .getByRole('button', { name: t('ticketing:statuses.table.select', { name: 'Open' }) })
+      .waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    // With the side editor filled, which is the state most of its controls only
+    // exist in — including the two disabled flags of a seeded row.
+    await page
+      .getByRole('button', {
+        name: t('ticketing:statuses.table.select', { name: 'Awaiting customer' }),
+      })
+      .click();
+    await page.getByText(t('ticketing:statuses.editor.systemNote')).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    // And with the confirmation open, which is a focus trap and a live region.
+    await page
+      .getByRole('button', {
+        name: t('ticketing:statuses.table.select', { name: 'Waiting on supplier' }),
+      })
+      .click();
+    await page
+      .getByRole('button', {
+        name: t('ticketing:statuses.editor.delete', { count: 12, fallback: 'Open' }),
+      })
+      .click();
+    await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('the contact list has no violations, filtered or empty', async ({
     page,
     appLocale: locale,

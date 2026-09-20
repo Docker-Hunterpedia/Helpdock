@@ -92,7 +92,10 @@ export const ticketFilters = ({
   direction,
   cursor,
 }: TicketFilterInput): SQL | undefined => {
-  const clauses: (SQL | undefined)[] = [];
+  // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views". It is
+  // first and unconditional rather than a filter the caller may ask for,
+  // because "all views" includes the ones added after this line was written.
+  const clauses: (SQL | undefined)[] = [isNull(tickets.deletedAt)];
 
   if (filters.statusId !== undefined && filters.statusId.length > 0) {
     clauses.push(inArray(tickets.statusId, [...filters.statusId]));
@@ -122,6 +125,7 @@ export const ticketFilters = ({
   }
 
   const present = clauses.filter((clause): clause is SQL => clause !== undefined);
+  /* c8 ignore next -- the soft-delete clause above is unconditional, so this is never empty. */
   return present.length === 0 ? undefined : and(...present);
 };
 

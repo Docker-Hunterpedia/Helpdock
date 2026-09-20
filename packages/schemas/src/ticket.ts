@@ -54,6 +54,11 @@ export const ticketStatusSchema = z.object({
   isDefault: z.boolean(),
   /** Seeded with the brand; it may be renamed and recoloured, never deleted. */
   isSystem: z.boolean(),
+  /**
+   * Spam and Merged (DOMAIN-RULES §2.1, §2.4). A close into such a status is
+   * not a resolution: no CSAT is scheduled, and reports leave the ticket out.
+   */
+  excludedFromReports: z.boolean(),
   sortOrder: z.int(),
   color: statusColorSchema,
 });
@@ -61,6 +66,104 @@ export type TicketStatus = z.infer<typeof ticketStatusSchema>;
 
 export const ticketStatusListSchema = z.object({ statuses: z.array(ticketStatusSchema) });
 export type TicketStatusList = z.infer<typeof ticketStatusListSchema>;
+
+export const TICKET_STATUS_NAME_MAX_LENGTH = 60;
+export const MAX_TICKET_STATUSES_PER_BRAND = 60;
+
+const ticketStatusNameSchema = z.string().trim().min(1).max(TICKET_STATUS_NAME_MAX_LENGTH);
+
+/**
+ * A status a brand adds for itself (M1-08). It maps to one of the four system
+ * states, because everything downstream — the SLA maths, the reports, the
+ * transition table of §2.2 — is written against those four and never against a
+ * name.
+ *
+ * `isDefault` is not here. Which status a new or reopened ticket lands in is a
+ * property of the *list*, not of a row being created, so it is moved by a
+ * `PATCH` on the row that is to hold it.
+ */
+export const ticketStatusCreateRequestSchema = z.object({
+  name: ticketStatusNameSchema,
+  nameAr: ticketStatusNameSchema.nullish(),
+  systemState: ticketSystemStateSchema,
+  pausesSla: z.boolean().default(false),
+  awaitingCustomer: z.boolean().default(false),
+  color: statusColorSchema,
+});
+export type TicketStatusCreateRequest = z.infer<typeof ticketStatusCreateRequestSchema>;
+
+/**
+ * Every field optional, and an empty body refused, for the reason
+ * `ticketUpdateRequestSchema` gives.
+ *
+ * A **system** row accepts only `name`, `nameAr`, `color` and `isDefault`: its
+ * state and its two flags are what code refers to it by, so changing them would
+ * rename the concept rather than the label (`packages/db/src/ticket-statuses.ts`).
+ * The api refuses the rest with `status-state-fixed` rather than ignoring it.
+ */
+export const ticketStatusUpdateRequestSchema = z
+  .object({
+    name: ticketStatusNameSchema.optional(),
+    nameAr: ticketStatusNameSchema.nullable().optional(),
+    systemState: ticketSystemStateSchema.optional(),
+    pausesSla: z.boolean().optional(),
+    awaitingCustomer: z.boolean().optional(),
+    color: statusColorSchema.optional(),
+    /** Only `true` is meaningful: a brand always has exactly one default. */
+    isDefault: z.literal(true).optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    'Send at least one field to change',
+  );
+export type TicketStatusUpdateRequest = z.infer<typeof ticketStatusUpdateRequestSchema>;
+
+/** The whole list in its new order, for the reason `departmentReorderRequestSchema` gives. */
+export const ticketStatusReorderRequestSchema = z.object({
+  statusIds: z.array(z.uuid()).min(1).max(MAX_TICKET_STATUSES_PER_BRAND),
+});
+export type TicketStatusReorderRequest = z.infer<typeof ticketStatusReorderRequestSchema>;
+
+/**
+ * What the delete confirmation asks for first: how many tickets would be moved,
+ * and where to. The screen prints "Delete · 12 tickets move to Open", so it
+ * needs both, and it needs them before it asks rather than after.
+ */
+export const ticketStatusUsageSchema = z.object({
+  statusId: z.uuid(),
+  ticketCount: z.int().nonnegative(),
+  /** The brand's default open status, which those tickets would move to. */
+  fallbackStatusId: z.uuid(),
+  fallbackName: z.string().min(1),
+});
+export type TicketStatusUsage = z.infer<typeof ticketStatusUsageSchema>;
+
+export const ticketStatusParamSchema = z.object({
+  brandId: z.uuid(),
+  statusId: z.uuid(),
+});
+export type TicketStatusParam = z.infer<typeof ticketStatusParamSchema>;
+
+// --------------------------------------------------------------------------
+// Lifecycle refusals
+// --------------------------------------------------------------------------
+
+/**
+ * A transition DOMAIN-RULES §2.2 does not have a row for, refused with 409.
+ *
+ * The status alone is too coarse to turn into a sentence — "conflict" is true
+ * of all three — and the ticket workspace has to say *which* rule refused, so
+ * the api sends the code and the screen picks the translated copy.
+ */
+export const ticketLifecycleRefusalSchema = z.enum([
+  /** The ticket is the secondary of a merge; its state belongs to the primary (§2.4). */
+  'ticket-merged',
+  /** The ticket is soft-deleted. Nothing acts on it until it is restored or purged. */
+  'ticket-deleted',
+  /** Reopening something that was never closed. */
+  'ticket-not-closed',
+]);
+export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema>;
 
 // --------------------------------------------------------------------------
 // The ticket

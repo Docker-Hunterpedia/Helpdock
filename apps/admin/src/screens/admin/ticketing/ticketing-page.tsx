@@ -8,12 +8,14 @@ import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { DepartmentsTab } from './departments-tab.tsx';
 import { NotBuiltYetTab } from './not-built-yet-tab.tsx';
-import { DEFAULT_TICKETING_TAB, TICKETING_TABS, tabForSegment } from './tabs.js';
+import { StatusesTab } from './statuses-tab.tsx';
+import { DEFAULT_TICKETING_TAB, TICKETING_TABS, type TicketingTab, tabForSegment } from './tabs.js';
 
 /**
  * `Admin/Ticketing`: the page header, the tab row, and whichever tab the url
- * names. Only the first tab is built — the rest are the routed placeholders
- * their M1 deliverables replace, which is why the row is whole from the start.
+ * names. Two tabs are built — Departments (M1-01) and Statuses (M1-08); the
+ * rest are the routed placeholders their M1 deliverables replace, which is why
+ * the row is whole from the start.
  *
  * The tabs are links rather than state, so a tab is a url somebody can send to
  * a colleague, the browser's back button works, and a reload lands where it
@@ -57,7 +59,22 @@ export function TicketingPage(): ReactNode {
         </Tabs>
       </Box>
 
-      {tab.key === 'departments' ? <DepartmentsTab /> : <NotBuiltYetTab tab={tab} />}
+      <TabBody tab={tab} />
     </>
   );
+}
+
+/**
+ * Which tab's body to draw. A function rather than a nested ternary, so adding
+ * the next built tab is a case and not another level of nesting.
+ */
+function TabBody({ tab }: { readonly tab: TicketingTab }): ReactNode {
+  switch (tab.key) {
+    case 'departments':
+      return <DepartmentsTab />;
+    case 'statuses':
+      return <StatusesTab />;
+    default:
+      return <NotBuiltYetTab tab={tab} />;
+  }
 }

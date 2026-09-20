@@ -39,6 +39,17 @@ export const ticketStatuses = pgTable(
     isDefault: boolean('is_default').notNull().default(false),
     /** Seeded with the brand and undeletable; see the note above. */
     isSystem: boolean('is_system').notNull().default(false),
+    /**
+     * "Spam (`closed`, excluded from reports)" — DOMAIN-RULES §2.1, and §2.4
+     * says the same of Merged. A ticket closed into such a status is not a
+     * resolution: no CSAT is scheduled for it (§2.2) and reporting leaves it
+     * out.
+     *
+     * A flag rather than a name, because a brand may rename Spam and code must
+     * still know what the row means — the same reasoning `is_default` and
+     * `awaiting_customer` are already written with.
+     */
+    excludedFromReports: boolean('excluded_from_reports').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     color: statusColorEnum('color').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

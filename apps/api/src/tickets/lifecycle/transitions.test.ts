@@ -1,7 +1,6 @@
 import type { TicketSystemState } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import {
-  isOpenLike,
   LIFECYCLE_EVENTS,
   type LifecycleEvent,
   SYSTEM_STATES,
@@ -93,10 +92,6 @@ describe('the transition table of DOMAIN-RULES §2.2', () => {
       });
     }
   }
-
-  it('calls everything but closed open-like, as §2.2 does', () => {
-    expect(SYSTEM_STATES.filter(isOpenLike)).toEqual(['open', 'on_hold', 'escalated']);
-  });
 });
 
 describe('the two facts checked before the table', () => {

@@ -42,9 +42,6 @@ export type LifecycleEvent = (typeof LIFECYCLE_EVENTS)[number];
 /** The four of DOMAIN-RULES §2.1, in the order the document lists them. */
 export const SYSTEM_STATES = ['open', 'on_hold', 'escalated', 'closed'] as const;
 
-/** `open`, `on_hold` and `escalated`: everything §2.2 calls "open-like". */
-export const isOpenLike = (state: TicketSystemState): boolean => state !== 'closed';
-
 /**
  * What a transition asks the service to do.
  *

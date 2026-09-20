@@ -39,6 +39,11 @@ export const PERMISSIONS = [
   'contact:write',
   'brand:read',
   'brand:manage',
+  // What a brand's tickets are *shaped* by: its statuses, and the reply
+  // behaviour of DOMAIN-RULES §2.3. Held by an Admin and a Team Leader, which
+  // is narrower than `brand:manage` (the brand's own fields, Admin only) and
+  // wider than nothing — §2.3 names the reopen policy as a Team Leader's.
+  'ticketing:manage',
   'staff:read',
   'staff:manage',
   'settings:read',
@@ -64,6 +69,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'contact:write',
     'brand:read',
     'brand:manage',
+    'ticketing:manage',
     'staff:read',
     'staff:manage',
     'settings:read',
@@ -79,6 +85,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'contact:read',
     'contact:write',
     'brand:read',
+    'ticketing:manage',
     'staff:read',
     'staff:manage',
     'settings:read',

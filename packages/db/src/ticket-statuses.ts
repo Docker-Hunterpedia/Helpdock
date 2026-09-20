@@ -13,6 +13,12 @@ import { ticketStatuses } from './schema/ticket-statuses.js';
  * path wants the default open status, merge wants Merged, spam wants Spam. The
  * columns those paths actually read are `is_default`, `system_state` and the
  * flags, so a brand renaming "Open" to "New" changes a label and nothing else.
+ *
+ * `excluded_from_reports` is the fourth such flag, added by M1-08: §2.1 words
+ * Spam as "closed, excluded from reports" and §2.4 says the same of Merged, and
+ * §2.2 makes it the reason a close schedules no CSAT. Without it, "is this the
+ * Spam status?" could only be answered by the row's name, which a brand may
+ * change.
  */
 export const BUILT_IN_TICKET_STATUSES = [
   {
@@ -23,6 +29,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: true,
+    excludedFromReports: false,
     sortOrder: 10,
     color: 'info',
   },
@@ -34,6 +41,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: true,
     awaitingCustomer: true,
     isDefault: false,
+    excludedFromReports: false,
     sortOrder: 20,
     color: 'warning',
   },
@@ -45,6 +53,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    excludedFromReports: false,
     sortOrder: 30,
     color: 'escalated',
   },
@@ -56,6 +65,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    excludedFromReports: false,
     sortOrder: 40,
     color: 'success',
   },
@@ -67,6 +77,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    excludedFromReports: true,
     sortOrder: 50,
     color: 'danger',
   },
@@ -78,6 +89,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    excludedFromReports: true,
     sortOrder: 60,
     color: 'success',
   },

@@ -35,6 +35,7 @@ export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
   awaitingCustomer: row.awaitingCustomer,
   isDefault: row.isDefault,
   isSystem: row.isSystem,
+  excludedFromReports: row.excludedFromReports,
   sortOrder: row.sortOrder,
   color: row.color,
 });

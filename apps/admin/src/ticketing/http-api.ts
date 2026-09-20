@@ -1,19 +1,30 @@
 import type {
   Brand,
+  BrandSettings,
   BrandUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
+  ReplyBehaviourUpdateRequest,
   TeamList,
+  TicketStatus,
+  TicketStatusCreateRequest,
+  TicketStatusList,
+  TicketStatusUpdateRequest,
+  TicketStatusUsage,
 } from '@helpdock/schemas';
 import {
   brandSchema,
+  brandSettingsSchema,
   departmentSummaryListSchema,
   departmentSummarySchema,
   eligibleMemberListSchema,
   teamListSchema,
+  ticketStatusListSchema,
+  ticketStatusSchema,
+  ticketStatusUsageSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
 import type { TicketingApi } from './api.js';
@@ -150,7 +161,68 @@ export class HttpTicketingApi implements TicketingApi {
     return brandSchema.parse(await this.#transport.request('PATCH', this.#brand(brandId), request));
   }
 
+  // ------------------------------------------------------------------ M1-08
+
+  async statuses(brandId: string): Promise<TicketStatusList> {
+    return ticketStatusListSchema.parse(
+      await this.#transport.request('GET', this.#statuses(brandId)),
+    );
+  }
+
+  async createStatus(brandId: string, request: TicketStatusCreateRequest): Promise<TicketStatus> {
+    return ticketStatusSchema.parse(
+      await this.#transport.request('POST', this.#statuses(brandId), request),
+    );
+  }
+
+  async updateStatus(
+    brandId: string,
+    statusId: string,
+    request: TicketStatusUpdateRequest,
+  ): Promise<TicketStatus> {
+    return ticketStatusSchema.parse(
+      await this.#transport.request('PATCH', this.#status(brandId, statusId), request),
+    );
+  }
+
+  async statusUsage(brandId: string, statusId: string): Promise<TicketStatusUsage> {
+    return ticketStatusUsageSchema.parse(
+      await this.#transport.request('GET', `${this.#status(brandId, statusId)}/usage`),
+    );
+  }
+
+  async deleteStatus(brandId: string, statusId: string): Promise<void> {
+    await this.#transport.request('DELETE', this.#status(brandId, statusId));
+  }
+
+  async reorderStatuses(brandId: string, statusIds: string[]): Promise<TicketStatusList> {
+    return ticketStatusListSchema.parse(
+      await this.#transport.request('POST', `${this.#statuses(brandId)}/reorder`, { statusIds }),
+    );
+  }
+
+  async updateReplyBehaviour(
+    brandId: string,
+    request: ReplyBehaviourUpdateRequest,
+  ): Promise<BrandSettings> {
+    return brandSettingsSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#brand(brandId)}/ticketing/reply-behaviour`,
+        request,
+      ),
+    );
+  }
+
   // ------------------------------------------------------------------
+
+  #statuses(brandId: string): string {
+    return `${this.#brand(brandId)}/ticket-statuses`;
+  }
+
+  #status(brandId: string, statusId: string): string {
+    return `${this.#statuses(brandId)}/${encodeURIComponent(statusId)}`;
+  }
 
   #brand(brandId: string): string {
     return `/brands/${encodeURIComponent(brandId)}`;

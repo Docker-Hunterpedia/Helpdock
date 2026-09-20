@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
+  auditLog,
   brands,
   createDb,
   type Db,
@@ -31,7 +32,9 @@ import {
   type TicketList,
   type TicketMessage,
   type TicketMessagePage,
+  type TicketStatus,
   type TicketStatusList,
+  type TicketStatusUsage,
   ticketRoom,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -141,7 +144,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
     }) as Env;
 
   const call = <T>(
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     who: Person,
     payload?: unknown,
@@ -156,7 +159,12 @@ describe.skipIf(!hasDocker)('tickets', () => {
         },
         ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }),
       })
-      .then((response) => ({ status: response.statusCode, body: response.json() as T }));
+      .then((response) => ({
+        status: response.statusCode,
+        // A 204 carries no body, and `json()` on an empty payload throws. The
+        // callers that use one assert on the status alone.
+        body: (response.body === '' ? undefined : response.json()) as T,
+      }));
 
   const brandPath = (brandId: string) => `/api/brands/${brandId}`;
 
@@ -1464,6 +1472,519 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(heard[0]?.seq).toBe(reply.body.seq);
       expect(heard[0]?.data.messageId).toBe(reply.body.id);
       expect(overheard).toEqual([]);
+    });
+  });
+
+  // ------------------------------------------------------- M1-08 lifecycle
+
+  /**
+   * DOMAIN-RULES §2.2 and §2.3 against a real database.
+   *
+   * `transitions.test.ts` proves the table and `lifecycle.service.test.ts`
+   * proves what the service does with each answer. What only a database can
+   * prove is here: that the escalation of §1.2 really writes through a policy
+   * that would otherwise refuse it, that a soft delete really disappears, and
+   * that a status delete really moves the tickets that pointed at it.
+   */
+  describe('the ticket state machine (M1-08)', () => {
+    const statusNamed = async (name: string): Promise<string> => {
+      const statuses = await call<TicketStatusList>(
+        'GET',
+        `${brandPath(seeded.brandId)}/ticket-statuses`,
+        ada,
+      );
+      const found = statuses.body.statuses.find((status) => status.name === name);
+      if (found === undefined) {
+        throw new Error(`no status named ${name}`);
+      }
+
+      return found.id;
+    };
+
+    const ticketRow = (ticketId: string) =>
+      withSystem(runtime.db, seeded.brandId, async (tx) => {
+        const rows = await tx.select().from(tickets).where(eq(tickets.id, ticketId));
+        return rows[0];
+      });
+
+    const activityOf = (ticketId: string) =>
+      withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ action: ticketActivity.action })
+          .from(ticketActivity)
+          .where(eq(ticketActivity.ticketId, ticketId)),
+      );
+
+    describe('closing and reopening', () => {
+      it('sets closed_at on the way in and clears it on the way out (§2.2, §3.5)', async () => {
+        const { ticket } = await createTicket(ada);
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: closedStatus,
+        });
+        expect((await ticketRow(ticket.id))?.closedAt).toBeInstanceOf(Date);
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: openStatus,
+        });
+        expect((await ticketRow(ticket.id))?.closedAt).toBeNull();
+      });
+
+      it('logs the close and the reopen beside the status change', async () => {
+        const { ticket } = await createTicket(ada);
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: closedStatus,
+        });
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: openStatus,
+        });
+
+        const actions = (await activityOf(ticket.id)).map((row) => row.action);
+        expect(actions).toContain('ticket.closed');
+        expect(actions).toContain('ticket.reopened');
+      });
+
+      it('names the close and the reopen as their own outbox events', async () => {
+        const { ticket } = await createTicket(ada);
+        await drainOutbox();
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: closedStatus,
+        });
+        expect((await unpublished()).map((row) => row.event)).toContain('ticket.closed');
+        await drainOutbox();
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: openStatus,
+        });
+        expect((await unpublished()).map((row) => row.event)).toContain('ticket.reopened');
+      });
+
+      /**
+       * Closed to Spam is one closure, not two. A ticket that closed twice is a
+       * ticket a resolution report counts twice.
+       */
+      it('keeps the first closed_at when moving between two closed statuses', async () => {
+        const { ticket } = await createTicket(ada);
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: closedStatus,
+        });
+        const first = (await ticketRow(ticket.id))?.closedAt;
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: await statusNamed('Spam'),
+        });
+
+        expect((await ticketRow(ticket.id))?.closedAt?.getTime()).toBe(first?.getTime());
+      });
+    });
+
+    describe('escalating into a department the actor cannot see (§1.2)', () => {
+      /**
+       * The gap M1-02 named and left open. Sam is an Agent confined to Support;
+       * Billing is invisible to them, and §1.2 allows the move all the same.
+       */
+      it('lets an Agent move a ticket to a department they cannot see', async () => {
+        const { ticket } = await createTicket(sam);
+
+        const moved = await call<Ticket>(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+          sam,
+          { departmentId: billing },
+        );
+
+        expect(moved.status).toBe(200);
+        expect(moved.body.departmentId).toBe(billing);
+      });
+
+      it('and then answers 404 when they read it again', async () => {
+        const { ticket } = await createTicket(sam);
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, sam, {
+          departmentId: billing,
+        });
+
+        expect(
+          (await call('GET', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, sam)).status,
+        ).toBe(404);
+
+        // The agent who now owns it can read it, so the ticket moved rather
+        // than vanishing.
+        expect(
+          (await call('GET', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, bo)).status,
+        ).toBe(200);
+      });
+
+      it('takes the thread and the activity log with it, under the widened scope', async () => {
+        const { ticket } = await createTicket(sam);
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, sam, {
+          departmentId: billing,
+        });
+
+        const moved = await withSystem(runtime.db, seeded.brandId, async (tx) => ({
+          messages: await tx
+            .select({ departmentId: ticketMessages.departmentId })
+            .from(ticketMessages)
+            .where(eq(ticketMessages.ticketId, ticket.id)),
+          activity: await tx
+            .select({ departmentId: ticketActivity.departmentId })
+            .from(ticketActivity)
+            .where(eq(ticketActivity.ticketId, ticket.id)),
+        }));
+
+        expect(moved.messages.every((row) => row.departmentId === billing)).toBe(true);
+        expect(moved.activity.every((row) => row.departmentId === billing)).toBe(true);
+      });
+
+      it('audits it, because the actor can no longer see the ticket', async () => {
+        const { ticket } = await createTicket(sam);
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, sam, {
+          departmentId: billing,
+        });
+
+        const audited = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select({ action: auditLog.action })
+            .from(auditLog)
+            .where(eq(auditLog.targetId, ticket.id)),
+        );
+
+        expect(audited.map((row) => row.action)).toContain('ticket.escalated');
+      });
+
+      it('puts the scope back, so the next request is narrow again', async () => {
+        // Two tickets: if the widening leaked past the one statement it is for,
+        // the escalated one would still be listable from Support afterwards.
+        const first = await createTicket(sam);
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${first.ticket.id}`, sam, {
+          departmentId: billing,
+        });
+
+        const second = await createTicket(sam);
+        const list = await call<TicketList>(
+          'GET',
+          `${brandPath(seeded.brandId)}/tickets?limit=100`,
+          sam,
+        );
+
+        const ids = list.body.tickets.map((row) => row.id);
+        expect(ids).toContain(second.ticket.id);
+        expect(ids).not.toContain(first.ticket.id);
+      });
+
+      /**
+       * Both halves in one request. The close writes a second activity row, and
+       * the trigger stamps it with the ticket's department — by then the one the
+       * actor cannot see — so it has to be written inside the same widened
+       * window as the move.
+       */
+      it('escalates and closes in one request', async () => {
+        const { ticket } = await createTicket(sam);
+
+        const moved = await call<Ticket>(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+          sam,
+          { departmentId: billing, statusId: closedStatus },
+        );
+
+        expect(moved.status).toBe(200);
+        expect(moved.body.departmentId).toBe(billing);
+        expect((await ticketRow(ticket.id))?.closedAt).toBeInstanceOf(Date);
+        expect((await activityOf(ticket.id)).map((row) => row.action)).toContain('ticket.closed');
+      });
+
+      it('still refuses a department id that is not this brands', async () => {
+        const { ticket } = await createTicket(sam);
+
+        const { status } = await call(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+          sam,
+          { departmentId: otherDepartment },
+        );
+
+        expect(status).toBe(404);
+      });
+    });
+
+    describe('soft deletion (§2.2)', () => {
+      it('hides the ticket from every view, and keeps the row', async () => {
+        const { ticket } = await createTicket(ada);
+
+        expect(
+          (await call('DELETE', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada)).status,
+        ).toBe(204);
+
+        expect(
+          (await call('GET', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada)).status,
+        ).toBe(404);
+
+        const list = await call<TicketList>(
+          'GET',
+          `${brandPath(seeded.brandId)}/tickets?limit=100`,
+          ada,
+        );
+        expect(list.body.tickets.map((row) => row.id)).not.toContain(ticket.id);
+
+        // The row is still there for retention to purge (§11).
+        expect((await ticketRow(ticket.id))?.deletedAt).toBeInstanceOf(Date);
+      });
+
+      it('is refused to an Agent, because it hides the ticket from the whole brand', async () => {
+        const { ticket } = await createTicket(sam);
+
+        const { status } = await call(
+          'DELETE',
+          `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+          sam,
+        );
+
+        expect(status).toBe(403);
+      });
+
+      it('answers 404 to every later request about it', async () => {
+        const { ticket } = await createTicket(ada);
+        await call('DELETE', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada);
+
+        // Invisible to a read, so the handler answers 404 before the transition
+        // table is consulted — which is the stronger of the two answers.
+        const { status } = await call(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+          ada,
+          { statusId: closedStatus },
+        );
+
+        expect(status).toBe(404);
+      });
+    });
+
+    describe('the Statuses tab endpoints', () => {
+      it('creates, renames and deletes a custom status', async () => {
+        const created = await call<TicketStatus>(
+          'POST',
+          `${brandPath(seeded.brandId)}/ticket-statuses`,
+          ada,
+          {
+            name: 'Waiting on supplier',
+            systemState: 'on_hold',
+            pausesSla: true,
+            awaitingCustomer: false,
+            color: 'warning',
+          },
+        );
+        expect(created.status).toBe(201);
+        expect(created.body.isSystem).toBe(false);
+
+        const renamed = await call<TicketStatus>(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${created.body.id}`,
+          ada,
+          { name: 'Waiting on vendor' },
+        );
+        expect(renamed.body.name).toBe('Waiting on vendor');
+
+        expect(
+          (
+            await call(
+              'DELETE',
+              `${brandPath(seeded.brandId)}/ticket-statuses/${created.body.id}`,
+              ada,
+            )
+          ).status,
+        ).toBe(204);
+      });
+
+      it('moves the tickets of a deleted status to the default, and logs each move', async () => {
+        const created = await call<TicketStatus>(
+          'POST',
+          `${brandPath(seeded.brandId)}/ticket-statuses`,
+          ada,
+          {
+            name: 'Waiting on legal',
+            systemState: 'on_hold',
+            pausesSla: false,
+            awaitingCustomer: false,
+            color: 'warning',
+          },
+        );
+        const { ticket } = await createTicket(ada);
+        await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+          statusId: created.body.id,
+        });
+
+        const usage = await call<TicketStatusUsage>(
+          'GET',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${created.body.id}/usage`,
+          ada,
+        );
+        expect(usage.body.ticketCount).toBe(1);
+        expect(usage.body.fallbackStatusId).toBe(openStatus);
+
+        await call(
+          'DELETE',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${created.body.id}`,
+          ada,
+        );
+
+        expect((await ticketRow(ticket.id))?.statusId).toBe(openStatus);
+        expect((await activityOf(ticket.id)).map((row) => row.action)).toContain(
+          'ticket.status.changed',
+        );
+      });
+
+      it('refuses to delete a seeded status, and says which rule refused', async () => {
+        const response = await call<{ error: { ticketing?: { reason: string } } }>(
+          'DELETE',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${closedStatus}`,
+          ada,
+        );
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.ticketing?.reason).toBe('status-is-system');
+      });
+
+      it('refuses to move a seeded statuss state or flags', async () => {
+        const response = await call<{ error: { ticketing?: { reason: string } } }>(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${closedStatus}`,
+          ada,
+          { pausesSla: true },
+        );
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.ticketing?.reason).toBe('status-state-fixed');
+      });
+
+      it('lets a seeded status be renamed, then puts the name back', async () => {
+        const response = await call<TicketStatus>(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${closedStatus}`,
+          ada,
+          { name: 'Resolved' },
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.name).toBe('Resolved');
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/ticket-statuses/${closedStatus}`, ada, {
+          name: 'Closed',
+        });
+      });
+
+      it('answers 404 for a status of another brand, not 403', async () => {
+        const { status } = await call(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${otherBrandStatus}`,
+          ada,
+          { name: 'Theirs' },
+        );
+
+        expect(status).toBe(404);
+      });
+
+      /**
+       * `tickets` is department-scoped, so a principal whose scope is not `'all'`
+       * would move only their own tickets and then be refused by the foreign
+       * key. Deleting a status is therefore `brand:manage`, exactly as deleting
+       * a department is, and so is the count that precedes it.
+       */
+      it('keeps the delete and its count with the Admin', async () => {
+        const created = await call<TicketStatus>(
+          'POST',
+          `${brandPath(seeded.brandId)}/ticket-statuses`,
+          ada,
+          {
+            name: 'Waiting on finance',
+            systemState: 'on_hold',
+            pausesSla: false,
+            awaitingCustomer: false,
+            color: 'warning',
+          },
+        );
+
+        // Bo is an Agent, and holds neither permission.
+        expect(
+          (
+            await call(
+              'GET',
+              `${brandPath(seeded.brandId)}/ticket-statuses/${created.body.id}/usage`,
+              bo,
+            )
+          ).status,
+        ).toBe(403);
+        expect(
+          (
+            await call(
+              'DELETE',
+              `${brandPath(seeded.brandId)}/ticket-statuses/${created.body.id}`,
+              bo,
+            )
+          ).status,
+        ).toBe(403);
+
+        await call(
+          'DELETE',
+          `${brandPath(seeded.brandId)}/ticket-statuses/${created.body.id}`,
+          ada,
+        );
+      });
+
+      it('is refused to an Agent, who manages no configuration at all', async () => {
+        const { status } = await call('POST', `${brandPath(seeded.brandId)}/ticket-statuses`, sam, {
+          name: 'Sneaky',
+          systemState: 'open',
+          pausesSla: false,
+          awaitingCustomer: false,
+          color: 'info',
+        });
+
+        expect(status).toBe(403);
+      });
+    });
+
+    describe('the reply-behaviour route (§2.3)', () => {
+      it('is refused to an Agent', async () => {
+        const { status } = await call(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/ticketing/reply-behaviour`,
+          sam,
+          { autoAwaitOnAgentReply: false },
+        );
+
+        expect(status).toBe(403);
+      });
+
+      it('writes only the keys it names, leaving the rest of settings alone', async () => {
+        const response = await call<{ autoAwaitOnAgentReply: boolean; reopenPolicy: unknown }>(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/ticketing/reply-behaviour`,
+          ada,
+          { reopenPolicy: { kind: 'never' } },
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.reopenPolicy).toEqual({ kind: 'never' });
+        // Untouched by a request that did not name it.
+        expect(response.body.autoAwaitOnAgentReply).toBe(true);
+
+        await call('PATCH', `${brandPath(seeded.brandId)}/ticketing/reply-behaviour`, ada, {
+          reopenPolicy: { kind: 'within_days', days: 7 },
+        });
+      });
+
+      it('refuses a window outside the schemas range', async () => {
+        const { status } = await call(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/ticketing/reply-behaviour`,
+          ada,
+          { reopenPolicy: { kind: 'within_days', days: 0 } },
+        );
+
+        expect(status).toBe(400);
+      });
     });
   });
 });

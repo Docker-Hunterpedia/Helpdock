@@ -100,6 +100,16 @@ export const tickets = pgTable(
     resolutionDueAt: timestamp('resolution_due_at', { withTimezone: true }),
     slaBreached: boolean('sla_breached').notNull().default(false),
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    /**
+     * Soft deletion by an Admin (DOMAIN-RULES §2.2): the row stays, every view
+     * stops showing it, and M1-14's retention job is what finally removes it.
+     *
+     * It is a column rather than a status because a deleted ticket has to keep
+     * the status it was in — restoring one, and reporting on what was deleted,
+     * both need it — and because "deleted" is not one of the four system states
+     * the SLA maths and the reports are written against.
+     */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
     /** Custom field values, keyed by `custom_field_defs.key` (M1-06). */
     custom: jsonb('custom').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     /**

@@ -433,7 +433,9 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/departments*` | `brand:read` to read the list and a department's teams, `brand:manage` to add, delete or reorder, `staff:manage` to edit one, its teams and its member picker | Departments, teams and team members. [The guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `GET /api/brands/:brandId/presence` | `@Requires('staff:read')` | Who is online in that brand. [The realtime guide](../../docs/guides/realtime.md#presence). |
 | `GET /api/brands/:brandId/ticket-statuses` | `@Requires('ticket:read')` | The brand's statuses. [The ticket guide](../../docs/guides/tickets.md#endpoints). |
-| `/api/brands/:brandId/tickets/*` | `ticket:read` / `ticket:write` | Tickets, their threads and their activity. [The ticket guide](../../docs/guides/tickets.md#endpoints) lists them. |
+| `/api/brands/:brandId/tickets/*` | `ticket:read` / `ticket:write`, and `brand:manage` for the soft delete | Tickets, their threads and their activity. [The ticket guide](../../docs/guides/tickets.md#endpoints) lists them. |
+| `/api/brands/:brandId/ticket-statuses/*` | `@Requires('ticketing:manage')` | The Statuses tab: create, edit, reorder, delete, and the count a delete confirmation prints. [The guide](../../docs/guides/ticketing-settings.md#statuses). |
+| `PATCH /api/brands/:brandId/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of DOMAIN-RULES §2.3 a Team Leader may change. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
@@ -470,8 +472,8 @@ handler rate-limits per source address.
 
 ## Tickets
 
-`src/tickets/` holds M1-02 and M1-03: the ticket, its thread and its activity
-log. What the model is and what the endpoints answer is [the ticket
+`src/tickets/` holds M1-02, M1-03 and M1-08: the ticket, its thread, its
+activity log and the state machine of DOMAIN-RULES §2. What the model is and what the endpoints answer is [the ticket
 guide](../../docs/guides/tickets.md); what follows is for somebody reading the
 code.
 
@@ -480,7 +482,13 @@ code.
 | `tickets.repository.ts` | Every statement, and not one of them filters by brand or department. The request's transaction carries the scope and the policies apply it (DOMAIN-RULES §1.3); a `WHERE brand_id = …` on top would be a second place for isolation to live, and the one that is easy to forget on the next query. |
 | `ticket-query.ts` | The list's `WHERE` and `ORDER BY`, built from the parsed query. Pure, so what a filter compiles to is asserted against rendered SQL rather than against a database. |
 | `cursor.ts` | Keyset pagination. The cursor is opaque but is **not** a token: every row it can reach is a row the policies would have shown anyway, so a forged one is a differently-ordered page. It is validated all the same. |
-| `status-change.ts` | The seam M1-08 replaces. Today it refuses a status that is not this brand's and keeps `closed_at` in step with the system state; the transition table of §2.2 goes here. |
+| `status-change.ts` | Where a status change lands: the transition table is consulted, a status that is not this brand's is refused, and `closed_at` is kept in step with the system state. It answers *whether* the move closed or reopened the ticket; what that costs is the service's. |
+| `lifecycle/transitions.ts` | DOMAIN-RULES §2.2 as one constant. `transitions.test.ts` holds a second copy typed out from the document and asserts the two agree cell by cell. |
+| `lifecycle/reopen-policy.ts` | §2.3, as a pure function of a policy, a `closed_at` and a `now`. The boundary — "less than N days" — is named in the test in both directions. |
+| `lifecycle/hooks.ts` | The three moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`. A provider, so they replace one line of `TicketsModule`. |
+| `lifecycle/lifecycle.service.ts` | The transitions carried out: the reply paths, the reopen, the continuation ticket and its two system messages, the soft delete. |
+| `lifecycle/status-rules.ts` | What may be done to a status row, as pure functions — the same shape `brands/department-scope.ts` uses, and for the same reason. |
+| `lifecycle/ticketing-settings.*` | The Statuses tab and the Reply behaviour card over HTTP, under the new `ticketing:manage`. |
 | `ticket-activity.ts` | The activity row, written in the caller's transaction. |
 | `ticket-events.ts` | The four outbox events and the handler the worker registers for them. |
 | `ticket-view.ts` | Rows to the wire shapes, in one place, so a column added to a table does not quietly become a field in a response. |
@@ -610,12 +618,15 @@ only when a test passes it as an extra controller.
 - The `/widget` namespace is M4. `src/realtime/` is the whole gateway; [the
   realtime guide](../../docs/guides/realtime.md) is what to read before adding
   an event to it.
-- **A department move out of the actor's own scope is refused.** DOMAIN-RULES
-  §1.2 allows it — it is how escalation works — and the `WITH CHECK` half of the
-  department policy does not. Escalation by a *rule* works, because a rule runs
-  as the system principal with every department (§1.4); a restricted agent
-  moving a ticket by hand into a department they cannot see gets a 403. M1-08
-  owns closing it.
+- **A department move out of the actor's own scope runs in a widened window.**
+  DOMAIN-RULES §1.2 allows it — it is how escalation works — and the `WITH
+  CHECK` half of the department policy does not. Rather than a second policy
+  shape or a `SECURITY DEFINER` function, the `UPDATE`, the trigger that follows
+  the thread and the activity row all run inside `withWidenedDepartments`
+  (`packages/db/src/tenant.ts`): the brand is never widened, the scope is
+  restored in a `finally`, and the audit row is written *outside* the window
+  because `audit_log` does not need it. Afterwards the ticket answers 404 to the
+  actor who moved it.
 - **`tickets.contact_id` and `tickets.team_id` carry no foreign key** until
   M1-04 and M1-01 create the tables they point at. The columns are here so that
   neither milestone has to backfill every row already written.

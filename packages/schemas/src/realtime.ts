@@ -145,8 +145,13 @@ export const ticketChangedSchema = z.object({
   brandId: z.uuid(),
   ticketId: z.uuid(),
   departmentId: z.uuid(),
-  /** The outbox event this came from: `ticket.created` or `ticket.updated`. */
-  event: z.enum(['ticket.created', 'ticket.updated']),
+  /**
+   * The outbox event this came from. `ticket.closed` and `ticket.reopened` are
+   * M1-08's: a client that only re-reads the ticket may treat all four alike,
+   * but a queue that hides closed tickets, and M1-12's survey, both need to
+   * know *which* change happened without diffing two reads (DOMAIN-RULES §2.2).
+   */
+  event: z.enum(['ticket.created', 'ticket.updated', 'ticket.closed', 'ticket.reopened']),
 });
 export type TicketChanged = z.infer<typeof ticketChangedSchema>;
 

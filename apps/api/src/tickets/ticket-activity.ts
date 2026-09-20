@@ -16,13 +16,27 @@ import type { Principal } from '../auth/principal.js';
  * passes what it read; the trigger makes it true.
  */
 
-/** The verbs M1-02 and M1-03 write. M1-07 to M1-11 add their own beside them. */
+/**
+ * The verbs M1-02 and M1-03 write, and the five M1-08 adds for the transitions
+ * of DOMAIN-RULES §2.2. M1-07, M1-09 and M1-11 add their own beside them.
+ *
+ * A transition writes `ticket.status.changed` *and*, where §2.2 names the
+ * event, one of the five: closing a ticket is a status change and a close, and
+ * a reader of the thread wants the second word. A continuation writes
+ * `ticket.continued` on both tickets, because each is half of the answer to
+ * "where did this conversation go?".
+ */
 export type TicketActivityAction =
   | 'ticket.created'
   | 'ticket.updated'
   | 'ticket.status.changed'
   | 'ticket.replied'
-  | 'ticket.note_added';
+  | 'ticket.note_added'
+  | 'ticket.closed'
+  | 'ticket.reopened'
+  | 'ticket.continued'
+  | 'ticket.deleted'
+  | 'ticket.escalated';
 
 /**
  * The actor behind a change, in the three words the activity log records.

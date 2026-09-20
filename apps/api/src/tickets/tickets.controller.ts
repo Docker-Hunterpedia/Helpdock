@@ -7,7 +7,19 @@ import type {
   TicketMessagePage,
   TicketStatusList,
 } from '@helpdock/schemas';
-import { Body, Controller, Get, Inject, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import type { Principal } from '../auth/principal.js';
 import { Requires } from '../auth/route-declaration.js';
@@ -128,6 +140,24 @@ export class TicketsController {
     @Body(new ZodValidationPipe(MessageCreateRequestDto)) body: MessageCreateRequestDto,
   ): Promise<TicketMessage> {
     return this.#tickets.addMessage(brandId, this.#principal(), ticketId, body);
+  }
+
+  /**
+   * DOMAIN-RULES §2.2's last row: "Soft-deleted by Admin — hidden from all
+   * views; purged by retention (§11)."
+   *
+   * `brand:manage`, which only an Admin holds: `ticket:write` is every agent's,
+   * and hiding a ticket from the whole brand is not an edit. The ticket keeps
+   * its status and its thread, and answers 404 from here on — the same answer a
+   * ticket in another department gives, for the same reason.
+   */
+  @Delete('tickets/:ticketId')
+  @Requires('brand:manage')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param(new ZodValidationPipe(TicketParamDto)) { brandId, ticketId }: TicketParamDto,
+  ): Promise<void> {
+    await this.#tickets.remove(brandId, this.#principal(), ticketId);
   }
 
   @Get('tickets/:ticketId/activity')

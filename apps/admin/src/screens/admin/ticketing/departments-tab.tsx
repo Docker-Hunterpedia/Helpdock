@@ -31,20 +31,12 @@ import { isAuthError } from '../../../auth/api.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { isTicketingError } from '../../../ticketing/api.js';
+import { refusalCopy } from '../../../ticketing/refusal-copy.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { type DepartmentDraft, DepartmentEditor } from './department-editor.tsx';
 import { DepartmentTeams } from './department-teams.tsx';
 import { moveBy, moveTo } from './reorder.js';
-
-/** Which sentence each refusal becomes. A constant, so it is not rebuilt per error. */
-const REFUSAL_COPY = {
-  'out-of-scope': 'ticketing:toast.outOfScope',
-  'last-department': 'ticketing:toast.lastDepartment',
-  'department-in-use': 'ticketing:toast.departmentInUse',
-  'name-taken': 'ticketing:toast.nameTaken',
-  'not-eligible': 'ticketing:toast.notEligible',
-} as const;
 
 /**
  * The Departments tab of `Admin/Ticketing`: the 820 px list on the start side,
@@ -115,7 +107,7 @@ export function DepartmentsTab(): ReactNode {
 
   const report = (error: unknown): void => {
     if (isTicketingError(error)) {
-      toast({ tone: 'danger', message: t(REFUSAL_COPY[error.reason]) });
+      toast({ tone: 'danger', message: t(refusalCopy(error.reason)) });
       return;
     }
 

@@ -1,13 +1,20 @@
 import type {
   Brand,
+  BrandSettings,
   BrandUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
+  ReplyBehaviourUpdateRequest,
   TeamList,
   TicketingRefusal,
+  TicketStatus,
+  TicketStatusCreateRequest,
+  TicketStatusList,
+  TicketStatusUpdateRequest,
+  TicketStatusUsage,
 } from '@helpdock/schemas';
 
 /**
@@ -58,6 +65,31 @@ export interface TicketingApi {
   /** The brand's own fields. The Settings screen edits these; M1-01 ships the call. */
   brand(brandId: string): Promise<Brand>;
   updateBrand(brandId: string, request: BrandUpdateRequest): Promise<Brand>;
+
+  // ---------------------------------------------------------------- M1-08
+
+  /** The brand's statuses, in their own order (DOMAIN-RULES §2.1). */
+  statuses(brandId: string): Promise<TicketStatusList>;
+  createStatus(brandId: string, request: TicketStatusCreateRequest): Promise<TicketStatus>;
+  updateStatus(
+    brandId: string,
+    statusId: string,
+    request: TicketStatusUpdateRequest,
+  ): Promise<TicketStatus>;
+  /**
+   * What the confirmation prints before it asks: how many tickets would move,
+   * and which status they move to.
+   */
+  statusUsage(brandId: string, statusId: string): Promise<TicketStatusUsage>;
+  deleteStatus(brandId: string, statusId: string): Promise<void>;
+  /** The whole list in its new order; the server refuses a partial one. */
+  reorderStatuses(brandId: string, statusIds: string[]): Promise<TicketStatusList>;
+
+  /** The two settings of DOMAIN-RULES §2.3 a Team Leader may change. */
+  updateReplyBehaviour(
+    brandId: string,
+    request: ReplyBehaviourUpdateRequest,
+  ): Promise<BrandSettings>;
 }
 
 /**

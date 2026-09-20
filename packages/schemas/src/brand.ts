@@ -75,6 +75,29 @@ export type BrandSettings = z.infer<typeof brandSettingsSchema>;
 export const defaultBrandSettings = (): BrandSettings => brandSettingsSchema.parse({});
 
 /**
+ * The "Reply behaviour" card of `Admin/Ticketing` (M1-08): the two settings
+ * DOMAIN-RULES §2.3 lets a **Team Leader** change, and no others.
+ *
+ * It is a route of its own rather than a corner of `PATCH /api/brands/:brandId`
+ * because that body also carries the brand's time zone, which SLA clocks run
+ * on and which §1.2 keeps with the Admin. A narrower body is the only way to
+ * give a Team Leader the reopen policy without giving them the rest.
+ *
+ * Both fields are optional and sending neither is refused, so "it worked" and
+ * "there was nothing to do" cannot look the same to a caller retrying a write.
+ */
+export const replyBehaviourUpdateRequestSchema = z
+  .object({
+    autoAwaitOnAgentReply: z.boolean().optional(),
+    reopenPolicy: reopenPolicySchema.optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    'Send at least one field to change',
+  );
+export type ReplyBehaviourUpdateRequest = z.infer<typeof replyBehaviourUpdateRequestSchema>;
+
+/**
  * The stored value, made safe to serve. A column that predates a key, or one an
  * operator edited by hand into something the schema refuses, becomes the
  * defaults rather than a 500: these settings describe behaviour, and behaviour

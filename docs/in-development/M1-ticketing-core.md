@@ -19,7 +19,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-05 | Views | #49 | planned |
 | M1-06 | Tags, custom fields (text, number, date, select | #50 | planned |
 | M1-07 | Assignment | #51 | planned |
-| M1-08 | Ticket state machine | #52 | planned |
+| M1-08 | Ticket state machine | #52 | in review (#PR) |
 | M1-09 | Merge and split with the exact semantics in D §2.4 | #53 | planned |
 | M1-10 | Media pipeline | #54 | planned |
 | M1-11 | Spam | #55 | planned |

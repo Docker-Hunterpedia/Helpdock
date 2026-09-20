@@ -6,10 +6,10 @@ import { HttpException, HttpStatus } from '@nestjs/common';
  *
  * The same shape as `staff/staff-failure.ts`, and for the same reason: the
  * status says "forbidden" or "conflict", which is true but is not a sentence.
- * The Ticketing screen has five things to say — you do not lead that
+ * The Ticketing screen has nine things to say — you do not lead that
  * department, a brand keeps one department, tickets still point at it, that
- * name is taken, that person cannot reach this department — and it picks
- * between them on this code.
+ * name is taken, that person cannot reach this department, and the four M1-08
+ * adds about a status row — and it picks between them on this code.
  *
  * The messages below are for the log and for `curl`. Nothing a person reads is
  * built from them.
@@ -22,6 +22,12 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'department-in-use': HttpStatus.CONFLICT,
   'name-taken': HttpStatus.CONFLICT,
   'not-eligible': HttpStatus.CONFLICT,
+  // M1-08's four. All conflicts: the actor holds `ticketing:manage`, and what
+  // refuses is the shape of the status list rather than their permission.
+  'status-is-system': HttpStatus.CONFLICT,
+  'status-is-default': HttpStatus.CONFLICT,
+  'status-state-fixed': HttpStatus.CONFLICT,
+  'default-must-be-open': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -30,6 +36,11 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
   'department-in-use': 'Tickets still belong to this department; move them first',
   'name-taken': 'Another one of this brand already has that name',
   'not-eligible': 'That person holds no role in this brand that reaches this department',
+  'status-is-system': 'A seeded status may be renamed and recoloured, never deleted',
+  'status-is-default': 'Make another status the default before deleting this one',
+  'status-state-fixed': "A seeded status's system state and flags are what code refers to it by",
+  'default-must-be-open':
+    'The default status is where a new or reopened ticket lands, so it has to be open',
 };
 
 export class TicketingFailure extends HttpException {

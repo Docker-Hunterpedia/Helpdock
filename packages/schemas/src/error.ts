@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { staffRefusalSchema } from './staff.js';
+import { ticketLifecycleRefusalSchema } from './ticket.js';
 import { ticketingRefusalSchema } from './ticketing.js';
 
 /**
@@ -64,6 +65,12 @@ export const errorResponseSchema = z.object({
      * which rule refused, and the Ticketing screen turns it into a sentence.
      */
     ticketing: z.object({ reason: ticketingRefusalSchema }).optional(),
+    /**
+     * Only on a transition DOMAIN-RULES §2.2 has no row for (M1-08). The status
+     * is 409 for all three, so the ticket workspace reads this to say whether
+     * the ticket is merged, deleted, or was never closed.
+     */
+    lifecycle: z.object({ reason: ticketLifecycleRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

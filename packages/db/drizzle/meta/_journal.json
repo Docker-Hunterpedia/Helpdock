@@ -71,6 +71,13 @@
       "when": 1789838683935,
       "tag": "0009_departments_teams_and_brand_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789843461092,
+      "tag": "0012_tickets_soft_delete_and_status_reporting",
+      "breakpoints": true
     }
   ]
 }

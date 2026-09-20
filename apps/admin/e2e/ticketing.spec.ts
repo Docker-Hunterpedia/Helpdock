@@ -60,11 +60,11 @@ test.describe('ticketing settings', () => {
     await signIn(page, locale);
     await openTicketing(page, locale);
 
-    await page.getByRole('tab', { name: t('ticketing:tabs.statuses') }).click();
+    await page.getByRole('tab', { name: t('ticketing:tabs.tags') }).click();
 
     await expect(
       page.getByText(
-        t('ticketing:soon.body', { tab: t('ticketing:tabs.statuses'), milestone: 'M1-02' }),
+        t('ticketing:soon.body', { tab: t('ticketing:tabs.tags'), milestone: 'M1-06' }),
       ),
     ).toBeVisible();
   });

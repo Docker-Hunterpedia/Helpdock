@@ -44,9 +44,25 @@ export const TICKET_EVENTS = {
   updated: 'ticket.updated',
   replied: 'ticket.replied',
   noteAdded: 'ticket.note_added',
+  /**
+   * The two transitions of DOMAIN-RULES §2.2 that other milestones subscribe
+   * to. Both carry the same payload as `ticket.updated` and reach the same
+   * rooms; what they add is a name, so M1-12's survey and M3's clocks can
+   * consume one event rather than diffing two reads of the ticket.
+   */
+  closed: 'ticket.closed',
+  reopened: 'ticket.reopened',
 } as const;
 
 export type TicketEvent = (typeof TICKET_EVENTS)[keyof typeof TICKET_EVENTS];
+
+/** The four that describe the ticket rather than a message in its thread. */
+const TICKET_CHANGE_EVENTS = new Set<string>([
+  TICKET_EVENTS.created,
+  TICKET_EVENTS.updated,
+  TICKET_EVENTS.closed,
+  TICKET_EVENTS.reopened,
+]);
 
 /**
  * What an outbox row for a ticket carries. Ids and the department, never a
@@ -119,7 +135,7 @@ export const createTicketEventHandler =
     const parsed = ticketEventPayloadSchema.parse(payload);
     const rooms = roomsFor(parsed);
 
-    if (event === TICKET_EVENTS.created || event === TICKET_EVENTS.updated) {
+    if (TICKET_CHANGE_EVENTS.has(event)) {
       const data = ticketChangedSchema.parse({
         brandId,
         ticketId: parsed.ticketId,

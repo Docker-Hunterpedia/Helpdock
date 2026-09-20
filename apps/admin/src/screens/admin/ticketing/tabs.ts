@@ -1,7 +1,7 @@
 /**
  * The tab row of `Admin/Ticketing`. Every tab exists from M1-01 so the row is
- * whole and the other M1 deliverables have a place to land; all but the first
- * draw the "not built yet" empty state until their milestone fills them.
+ * whole and the other M1 deliverables have a place to land; the ones no
+ * deliverable has filled yet draw the "not built yet" empty state.
  *
  * The milestone is on the tab rather than in prose so the empty state can name
  * it, and so the row itself is the list of what M1 still owes.
@@ -9,7 +9,7 @@
 
 export const TICKETING_TABS = [
   { key: 'departments', segment: 'departments', milestone: 'M1-01' },
-  { key: 'statuses', segment: 'statuses', milestone: 'M1-02' },
+  { key: 'statuses', segment: 'statuses', milestone: 'M1-08' },
   { key: 'priorities', segment: 'priorities', milestone: 'M1-02' },
   { key: 'tags', segment: 'tags', milestone: 'M1-06' },
   { key: 'customFields', segment: 'custom-fields', milestone: 'M1-06' },

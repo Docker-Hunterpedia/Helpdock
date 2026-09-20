@@ -218,6 +218,14 @@ export const ticketingRefusalSchema = z.enum([
   'name-taken',
   /** The person holds no role in this brand that reaches this department (409). */
   'not-eligible',
+  /** A seeded status may be renamed and recoloured, never deleted (409, M1-08). */
+  'status-is-system',
+  /** The brand's default status; another has to take the role first (409, M1-08). */
+  'status-is-default',
+  /** A seeded status's system state and flags are what code refers to it by (409, M1-08). */
+  'status-state-fixed',
+  /** A new or reopened ticket lands in the default, so it has to be open-like (409, M1-08). */
+  'default-must-be-open',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

@@ -6,7 +6,7 @@ what, and the endpoints a client calls. Specified by
 [ARCHITECTURE §5](../planning/ARCHITECTURE.md#5-data-model-core-tables) and
 [DOMAIN-RULES §2](../planning/DOMAIN-RULES.md#2-ticket-lifecycle) and
 [§7](../planning/DOMAIN-RULES.md#7-realtime-delivery-contract). Implemented by
-M1-02 (tickets) and M1-03 (messages).
+M1-02 (tickets), M1-03 (messages) and M1-08 (the state machine).
 
 There is no ticket screen yet. The admin UI is M1-15; this describes the api it
 will be built on.
@@ -52,13 +52,22 @@ that simply does not contain it, and a `forbidden` acknowledgement on a
 row, so the api genuinely does not know whether it exists, and "forbidden" would
 confirm that it does. No answer distinguishes "not found" from "not yours".
 
-**One gap, deliberately.** §1.2 says moving a ticket to a department the actor
-cannot see is allowed, because that is how escalation works. The `WITH CHECK`
-half of the policy does not permit it, and the policy shape is the same on every
-tenant table by design. So in v1 a *manual* move by a restricted agent into a
-department they cannot see is refused with 403, while escalation by a rule works
-— a rule runs as the system principal with every department (§1.4). Closing the
-gap for manual moves is M1-08's, with the state machine.
+**Escalation into a department you cannot see** is allowed — §1.2: "it is how
+escalation works" — and M1-08 is what made it work. The `WITH CHECK` half of the
+department policy would refuse the write, and the policy shape is deliberately
+the same on every tenant table, so the move runs inside a **briefly widened
+department scope** rather than under a second policy or a `SECURITY DEFINER`
+function (`packages/db/src/tenant.ts`, `withWidenedDepartments`).
+
+Three statements need that window and all three are inside it: the `UPDATE`,
+the `tickets_department_moved` trigger that follows the thread, and the activity
+row whose own department the trigger then overwrites. The brand is never
+widened, the previous scope is restored in a `finally`, and the audit row is
+written *outside* the window — `audit_log` is brand-scoped, so it does not need
+it, and writing it outside is the proof.
+
+Afterwards the ticket is gone from the actor's view: the `PATCH` answers 200,
+and the next `GET` answers 404. See [the lifecycle](#the-lifecycle) below.
 
 ### Statuses
 
@@ -81,9 +90,16 @@ Every brand is seeded with six when it is created, by `seedBrandStatuses`:
 | Spam | `closed` | — | §2.1: no auto-responder, no CSAT, excluded from reports |
 | Merged | `closed` | — | §2.4: what the secondary of a merge closes into |
 
+Spam and Merged additionally carry `excluded_from_reports`: §2.1 words Spam as
+"closed, excluded from reports" and §2.4 says the same of Merged, and §2.2 makes
+it the reason a close into one of them schedules no CSAT. It is a flag rather
+than a name, because a brand may rename Spam.
+
 They are marked `is_system`. A brand may rename and recolour them; nothing
 deletes them, because code refers to what they are rather than what they are
-called. `color` is one of the five status hues of
+called. Their **system state and their two behaviour flags are fixed** for the
+same reason — the api answers `status-state-fixed` to a request that would move
+one. `color` is one of the five status hues of
 [DESIGN §2.1](../../DESIGN.md#21-palettes) — a brand tints, it never adds a hue.
 
 A brand created before M1-02 has no statuses and cannot hold a ticket; the api
@@ -166,20 +182,137 @@ retention purges it with the ticket. `audit_log` stays what an admin reads.
 | `ticket.status.changed` | The status moved, through the transition hook |
 | `ticket.replied` | A public reply was added |
 | `ticket.note_added` | An internal note was added |
+| `ticket.closed` | The status change took the ticket **into** a closed state (M1-08) |
+| `ticket.reopened` | It took the ticket **out of** one (M1-08) |
+| `ticket.continued` | A customer reply past the reopen window started a new ticket; written on both (M1-08) |
+| `ticket.deleted` | An Admin soft-deleted it (M1-08) |
+| `ticket.escalated` | Recorded in `audit_log`, not here: the activity row moves with the ticket |
 
-`ticket.status.changed` is an activity action only. A status change travels as
-part of the `ticket.updated` **outbox** event; there is no fifth one.
+`ticket.status.changed` is written for **every** status move. A close or a
+reopen writes it *and* the more specific verb beside it, because a reader of the
+thread wants the second word.
 
 `via` is *how*: `ui` for the admin, `api` for an api key, `rule` for M3-03's
 rules, `ai` for M7, `system` for a worker. A field set to the value it already
 holds is not a change and is not logged.
 
+## The lifecycle
+
+[DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions) is the whole of
+it, and M1-08 implements it as **one constant**,
+`apps/api/src/tickets/lifecycle/transitions.ts`, rather than as rules spread
+across the handlers that cause each event. `transitions.test.ts` holds a second
+copy typed out from the document and asserts the two agree cell by cell, so a
+change to one without the other fails.
+
+| Current state | Event | Result |
+|---|---|---|
+| open, on hold, escalated | Customer public reply | The brand's **default open status**. `awaiting_customer` is cleared with it, because the flag lives on the status |
+| `open` | Agent public reply, toggle on | Awaiting customer |
+| any | Agent sets status | That status |
+| open-like | Agent closes | `closed_at` set, `onResolved`, and `onClosedForCsat` unless excluded |
+| `closed` | Customer reply | The reopen policy, below |
+| `closed` | Agent reopens | Default open status, `closed_at` cleared, `onReopened` |
+| any | Marked spam | Spam. M1-11 owns what else that means |
+| any | Merged | Merged. M1-09 owns the rest |
+| any | Soft-deleted by Admin | Hidden from every view; purged by retention (§11) |
+
+Two facts are checked **before** the table and refuse every event, because they
+answer all of them the same way: a ticket with `merged_into_id` belongs to the
+one it was merged into (§2.4), and a soft-deleted ticket is not acted on at all.
+Both answer **409** with `error.lifecycle.reason` — `ticket-merged`,
+`ticket-deleted`, or `ticket-not-closed` for a reopen of something that was
+never closed — so the screen picks a sentence rather than printing the api's.
+
+An agent "closing" a ticket *is* an agent setting a status whose system state is
+`closed`: there is one control on the screen and it is a status picker. Which of
+the three rows happened is read off the states afterwards, which is what decides
+whether `closed_at` moves and which hook fires.
+
+### Which status plays which part
+
+Never by name — a brand may rename any of them (`packages/db/src/ticket-statuses.ts`):
+
+| Part | Found by |
+|---|---|
+| Where a new or reopened ticket lands | `is_default` |
+| Awaiting customer | `awaiting_customer`, seeded rows first |
+| No CSAT, out of reports | `excluded_from_reports` |
+| The secondary of a merge | `merged_into_id` on the *ticket* |
+
+### The reopen policy
+
+[§2.3](../planning/DOMAIN-RULES.md#23-reopen-policy), per brand:
+
+| `reopenPolicy` | A customer reply to a closed ticket |
+|---|---|
+| `{ "kind": "within_days", "days": 7 }` | Reopens if `closed_at` is **less than** N days ago, otherwise a new ticket |
+| `{ "kind": "always" }` | Always reopens |
+| `{ "kind": "never" }` | Always a new ticket |
+
+"Less than N days ago" is taken literally: a reply at **exactly** N days creates
+a new ticket. The window is wall-clock time, not business hours — §3.1 says
+"business hours" where it means them, and a customer's week does not pause for a
+brand's holidays. A closed ticket with no `closed_at` reopens: of the two wrong
+answers, "the thread stayed together" is the one a customer can live with.
+
+**A reopen** returns the ticket to the default open status, clears `closed_at`,
+writes `ticket.reopened` to the activity log, fires `onReopened` and enqueues
+`ticket.reopened`.
+
+**A new ticket** gets `parent_id` = the closed ticket, the same department,
+contact, priority and channel, and a fresh number. Both tickets get a `system`
+message — "Continued from HD-1042" on the new one, "Continued in HD-1101" on the
+old — written in the **contact's** language, falling back to the brand's default
+locale. A desk that reads Arabic must not decide what an English-speaking
+customer is sent. Auto-responders treat it as a new ticket, which is M2's to
+honour: it is an ordinary ticket with a `parent_id`, and nothing suppresses
+anything.
+
+Retries are covered on both branches. The reply path looks for the `client_id`
+on the ticket that was written to **and** on any ticket continuing it, so a
+retried send never creates a second continuation (§7).
+
+### The hooks later milestones fill
+
+`apps/api/src/tickets/lifecycle/hooks.ts` names three moments and does nothing
+at any of them. They are a provider, so M3-02 and M1-12 replace one line of
+`TicketsModule` rather than editing the service that calls them.
+
+| Hook | Fires when | Filled by |
+|---|---|---|
+| `onResolved` | A ticket reaches a closed state, **including** spam and merge — a clock left running on a ticket nobody will touch again is a clock that breaches | M3-02 |
+| `onClosedForCsat` | The same, **unless** the ticket is merged or the status is `excluded_from_reports` | M1-12 |
+| `onReopened` | A closed ticket comes back, by policy or by an agent (§3.5) | M3-02 |
+
+Every hook runs inside the caller's transaction, after the ticket row has moved
+and before the outbox row is written, so whatever it writes commits with the
+transition or rolls back with it. A hook that needs a job enqueues it through
+the outbox like everything else; it must not enqueue directly and must not open
+a transaction of its own.
+
+### Soft deletion
+
+`DELETE /api/brands/:brandId/tickets/:ticketId`, `brand:manage`. It stamps
+`deleted_at` and nothing else: the ticket keeps the status it was in, because
+restoring one and reporting on what was deleted both need it.
+
+Every read narrows on `deleted_at IS NULL` from there — the list, the ticket's
+own URL, the thread, the activity — and all of them answer **404**, the same
+answer a ticket in another department gives. A 410 would confirm it had existed.
+The department-delete guard still counts it, which is what stops a department
+being removed out from under a ticket that could be restored.
+
 ## Side effects and realtime
 
 Every mutation writes its outbox row in the same transaction as the change
-([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)). Four
+([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)). Six
 events: `ticket.created`, `ticket.updated`, `ticket.replied`,
-`ticket.note_added`.
+`ticket.note_added`, and — from M1-08 — `ticket.closed` and `ticket.reopened`.
+
+The last two carry the same payload as `ticket.updated` and reach the same
+rooms. What they add is a name, so M1-12's survey and M3's clocks can consume
+one event instead of diffing two reads of the ticket.
 
 ```
 request  →  tickets + ticket_activity + outbox   (one transaction)
@@ -218,6 +351,7 @@ which departments it reaches is the policies'.
 | `PATCH /tickets/:ticketId` | `ticket:write` | Subject, priority, department, assignee, status. Setting a team answers 400 until M1-01; clearing one with `null` is allowed |
 | `GET /tickets/:ticketId/messages` | `ticket:read` | The thread after a `seq` |
 | `POST /tickets/:ticketId/messages` | `ticket:write` | A public reply or an internal note |
+| `DELETE /tickets/:ticketId` | `brand:manage` | Soft-deletes it (§2.2). Admin only: hiding a ticket from the whole brand is not an edit |
 | `GET /tickets/:ticketId/activity` | `ticket:read` | The newest 100 activity entries, oldest first. It does not page yet |
 
 ### Listing
@@ -373,7 +507,6 @@ with `seq > last_seq + 1`, or that reconnects, calls this.
 | M1-13 | Identity rules: verified matches, automatic merge, participants (contact + CCs) |
 | M1-06 | `tags`, `ticket_tags` and custom field definitions — the `tagId` filter starts working |
 | M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
-| M1-08 | The transition table of §2.2 behind `applyStatusChange`, `auto_await_on_agent_reply`, the reopen policy and `parent_id` linking |
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
 | M1-10 | `attachments`, keyed to `ticket_messages.id`, and presigned URLs issued after authorization on the parent ticket |
 | M1-11 | Spam semantics on the seeded Spam status, and the sender block list |

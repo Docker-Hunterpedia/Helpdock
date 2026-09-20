@@ -28,6 +28,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'contact:write': true,
     'brand:read': true,
     'brand:manage': true,
+    'ticketing:manage': true,
     'staff:read': true,
     'staff:manage': true,
     'settings:read': true,
@@ -42,6 +43,9 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'contact:write': true,
     'brand:read': true,
     'brand:manage': false,
+    // M1-08. DOMAIN-RULES §2.3 makes the reopen policy "editable by Team
+    // Leaders and Admins", and §1.2 lists it among what a Team Leader manages.
+    'ticketing:manage': true,
     'staff:read': true,
     'staff:manage': true,
     'settings:read': true,
@@ -56,6 +60,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'contact:write': true,
     'brand:read': true,
     'brand:manage': false,
+    'ticketing:manage': false,
     'staff:read': true,
     'staff:manage': false,
     'settings:read': false,
@@ -70,6 +75,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'contact:write': false,
     'brand:read': true,
     'brand:manage': false,
+    'ticketing:manage': false,
     'staff:read': true,
     'staff:manage': false,
     'settings:read': false,

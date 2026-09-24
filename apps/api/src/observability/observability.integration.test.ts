@@ -273,8 +273,9 @@ describe.skipIf(!hasDocker)('observability', () => {
         ownedTables: 0,
       });
 
-      // ARCHITECTURE §13 names eleven queues; the card shows the first five.
-      expect(status.queues.total).toBe(11);
+      // ARCHITECTURE §13 names twelve queues (M1-07 added `assignment`); the card
+      // shows the first five.
+      expect(status.queues.total).toBe(12);
       expect(status.queues.queues).toHaveLength(5);
       expect(status.queues.queues[0]).toMatchObject({ name: 'inbound', waiting: 0 });
 
@@ -402,7 +403,7 @@ describe.skipIf(!hasDocker)('observability', () => {
 
       expect(response.statusCode).toBe(200);
       const page = response.json<SystemQueuePage>();
-      expect(page).toMatchObject({ page: 2, pageSize: 4, total: 11 });
+      expect(page).toMatchObject({ page: 2, pageSize: 4, total: 12 });
       expect(page.queues).toHaveLength(4);
     });
 

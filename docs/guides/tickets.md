@@ -8,8 +8,8 @@ what, and the endpoints a client calls. Specified by
 [§7](../planning/DOMAIN-RULES.md#7-realtime-delivery-contract). Implemented by
 M1-02 (tickets), M1-03 (messages) and M1-08 (the state machine).
 
-There is no ticket screen yet. The admin UI is M1-15; this describes the api it
-will be built on.
+The admin screen built on it is the [ticket workspace](#the-admin-workspace)
+(M1-15, first part).
 
 ## The model
 
@@ -608,6 +608,142 @@ GET /api/brands/:brandId/tickets/:ticketId/messages?after=12&limit=25
 up rather than guessing from a short page. A client that receives a socket frame
 with `seq > last_seq + 1`, or that reconnects, calls this.
 
+## The admin workspace
+
+`apps/admin/src/screens/tickets/` is the `Admin · ticket view` artboard: the
+list, the thread and the details panel, on one route. The boundary it reads
+through is `apps/admin/src/tickets/` — `TicketsApi`, an http adapter and a
+fixture — the same shape the contact screens use.
+
+It covers what the api can answer today. Views (M1-05), tags and custom-field
+editing (M1-06), the state machine's transitions (M1-08), merge and split
+(M1-09) and attachments (M1-10) add to it rather than change it; what each one
+needs is at the end of this section.
+
+### One screen, one route
+
+`/tickets` is the list with nothing open and `/tickets/<id>` is that ticket
+beside it, and **both are one `<Route>`** — `/tickets/*`, with the id read from
+the path. Two routes rendering the same component would unmount and remount it
+every time a ticket was opened or closed, throwing away the composer's draft
+and whichever sends were still in flight.
+
+**The URL is the state**, as it is on the contact screens: the view, the search
+term and every filter live in the query string, so a filtered queue is a link
+an agent can send a colleague and the back button steps through what they
+looked at rather than out of the screen.
+
+| Parameter | |
+|---|---|
+| `view` | `all`, `myOpen`, `unassigned`, `overdue` or `escalated`. Absent means `myOpen`. |
+| `q` | Free text, debounced 250 ms, passed to the api's own search |
+| `status`, `priority`, `assignee`, `department` | Repeatable, one per chip in the filter popover |
+
+### The four views
+
+Three of them are filters `GET /tickets` already understands, so the server
+narrows them: `myOpen` is `assigneeId=<me>` plus the three live system states,
+`unassigned` is `assigneeId=unassigned`, `escalated` is
+`systemState=escalated`. **`overdue` is not** — the list has no filter on
+`first_response_due_at` or `resolution_due_at` — so it asks for everything
+still open and decides in the browser: a clock that has run out, or
+`sla_breached`, on a ticket that is neither closed nor in a status that pauses
+the clock. M1-05 replaces all four with saved views; that predicate is the one
+thing it has to move to the server.
+
+The counts beside them are what one page of each view holds, not a `COUNT(*)`:
+the list is keyset paged and the api offers no total, so a brand with more than
+a page reads `25+`. That is the honest answer and means the same thing.
+
+### Sending, sent, not sent
+
+The composer implements [§7](../planning/DOMAIN-RULES.md#7-realtime-delivery-contract)
+exactly. A send draws its bubble at once with a client-generated `clientId`; the
+bubble says **sending** until the response carries a `seq`, and **not sent,
+retry** when ten seconds pass without one. Retrying posts the *same* `clientId`,
+which the api de-duplicates on `(conversation_id, client_id)`, so retrying a
+request that actually succeeded returns the original message rather than
+posting a second one.
+
+"Then set status" is applied **after** the send, never with it: a status moved
+by a reply that never left would be a lie about what happened.
+
+### Realtime
+
+The workspace joins `ticket:<id>` while a ticket is open and
+`department:<id>` for every department on the list. No frame is ever applied to
+the cache — sockets are notifications and REST is the truth — so
+`ticket:changed` re-reads the ticket and `ticket:message` reads
+`?after=<the highest seq held>`. A reconnection does exactly the same thing,
+which is why a missed frame and a dropped connection have one recovery between
+them.
+
+### The collision indicator
+
+"Somebody else has this ticket open" is derived from a new
+`ticket:viewing` event rather than from room membership, because a Socket.IO
+room is not a membership list: a replica can enumerate the sockets it is
+holding and no more, and the answer has to be true across every replica. So
+each client says so every 30 s, the gateway authorises the announcement exactly
+as it authorises the join and relays it to the rest of the room, and every
+client drops a name nobody has repeated for 90 s. Nothing is stored, and
+"closed the tab", "lost the network" and "went to lunch with it open" are one
+answer. M1-09 owns the rest of §2.4; if it grows a server-side register, this
+is what it replaces.
+
+### Attachments
+
+Attach is real from M1-10. A file goes up as soon as it is chosen: the brand's
+content policy is checked in the browser first, so a file the brand would
+refuse costs no bytes, and the api applies the same rules to the presign
+request and again to the stored object — a client's opinion is not an
+authorisation.
+
+**A message may be sent while the pipeline is still working.** `upload`
+resolves at `processing`, the ids travel with the send as `attachmentIds`, and
+the api links them in the message's own transaction; it refuses the *whole*
+send if any one of them cannot be linked, so a failure is a message that was
+not sent rather than one that quietly lost a file. A retry carries the same ids
+for the same reason it carries the same `clientId`.
+
+A chip has three states, because the pipeline has three answers: working on it,
+done, and refused. A refusal is drawn rather than hidden — the file is not
+coming, and a chip that quietly disappeared would leave somebody believing they
+had sent it. No thumbnails: a render URL is presigned, lives five minutes and
+has to be asked for per attachment, so a thread of them would be a burst of
+requests for pictures nobody has opened.
+
+### Keyboard
+
+`j` and `k` move through the list and open what they land on, `r` puts the
+caret in the composer, `n` does the same in note mode, and `Esc` closes a
+drawer or a dialog. A single letter is only a shortcut while nobody is writing:
+anything typed into a field is left alone, as is anything carrying a modifier.
+
+### What the screen cannot do yet, and why
+
+| Drawn | State | Owner |
+|---|---|---|
+| Canned response, Macro | disabled, with the reason | M3 |
+| Translate | disabled, with the reason | M7 |
+| Tags | not drawn at all until a ticket has any | M1-06 |
+| Custom fields | read-only | M1-06 |
+| Linked tickets | read-only, from `parent_id` / `merged_into_id` / `split_from_id` | M1-08, M1-09 |
+| The AI bubble's confidence | not drawn: `ai_meta` is deliberately not on the wire | M7 |
+| The assignee picker | the people it can name, and the current assignee as a shortened id when it cannot | M1-07 |
+
+That last one is worth a sentence. `GET /brands/:id/staff` declares
+`staff:manage`, which an Agent does not hold — so the one screen that most
+needs a list of colleagues is the one least able to read it. The read is
+allowed to fail and the picker degrades to the viewer plus whoever it could
+name. **M1-07 should expose a read of assignable agents that `ticket:write`
+reaches.**
+
+The rows also name their contact from the first page of `GET /contacts`, which
+is a page and not a map: a ticket whose contact is further down is drawn
+without a name rather than with a wrong one. Embedding the contact summary in
+the ticket list row would close that, and is a change to M1-02's response.
+
 ## What later milestones add
 
 | Milestone | Adds |
@@ -617,7 +753,7 @@ with `seq > last_seq + 1`, or that reconnects, calls this.
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Spam semantics on the seeded Spam status, and the sender block list |
-| M1-15 | The admin UI, from the `Admin · ticket view` artboard — including the tag picker and the custom field editors in the details panel |
+| M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
 | M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |
 | M3-02 | The SLA engine, filling `first_response_due_at`, `resolution_due_at` and `sla_breached` |

@@ -30,6 +30,13 @@ import { createRealtimeClient } from './select-client.js';
 
 export interface Realtime {
   readonly connection: RealtimeConnection;
+  /**
+   * The client itself, for the screens that hold a room of their own. The
+   * ticket workspace is the only one today: it joins `ticket:<id>` while a
+   * ticket is open and `department:<id>` while a queue is, and no provider can
+   * know which those are.
+   */
+  readonly client: RealtimeClient;
   /** This person's own presence in the current brand. */
   readonly status: PresenceStatus;
   setStatus(status: SettablePresenceStatus): void;
@@ -149,13 +156,14 @@ export function RealtimeProvider({ children, client, idleMs }: RealtimeProviderP
   const value = useMemo<Realtime>(
     () => ({
       connection,
+      client: realtimeClient,
       status,
       setStatus,
       // The same object for every brand but this one, so a consumer that puts
       // the result in a dependency list is not re-run on every render.
       presenceIn: (asked) => (asked === brandId ? presence : EMPTY_PRESENCE),
     }),
-    [connection, presence, status, setStatus, brandId],
+    [connection, realtimeClient, presence, status, setStatus, brandId],
   );
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;

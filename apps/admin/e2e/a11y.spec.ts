@@ -12,8 +12,10 @@ import {
   openContacts,
   openSecurity,
   openStaff,
+  openTicket,
   openTicketing,
   openTicketingTab,
+  openTickets,
   signIn,
   submitPassword,
 } from './flows.js';
@@ -336,6 +338,25 @@ test.describe('accessibility', () => {
     expect(await violations(page)).toEqual([]);
 
     await page.getByRole('button', { name: t('me:twoFactor.disable'), exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the ticket workspace has no violations, list, ticket or dialog', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+    expect(await violations(page)).toEqual([]);
+
+    await openTicket(page, locale);
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: t('tickets:newTicket.action') }).click();
     await page.getByRole('dialog').waitFor();
 
     expect(await violations(page)).toEqual([]);

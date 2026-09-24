@@ -1,12 +1,18 @@
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import { MockAttachmentUploader } from '../media/mock-uploader.js';
+import type { AttachmentUploader } from '../media/upload.js';
+import { HttpAttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { HttpTicketingApi } from '../ticketing/http-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
+import type { TicketsApi } from '../tickets/api.js';
+import { HttpTicketsApi } from '../tickets/http-api.js';
+import { MockTicketsApi } from '../tickets/mock-api.js';
 import type { AuthApi } from './api.js';
 import { HttpAuthApi } from './http-api.js';
 import { HttpTransport } from './http-transport.js';
@@ -21,6 +27,9 @@ export interface AdminApis {
   readonly staff: StaffApi;
   readonly contacts: ContactsApi;
   readonly ticketing: TicketingApi;
+  readonly tickets: TicketsApi;
+  /** M1-10's client half; the composer and the thread are its only callers. */
+  readonly uploader: AttachmentUploader;
 }
 
 /**
@@ -41,8 +50,8 @@ export function resolveAuthApiAdapter(
  * Every adapter at once, sharing what they have to share: the http three share
  * one {@link HttpTransport}, so there is one access token and one refresh; the
  * mock auth and staff pair share one fixture, so an invitation sent on the
- * staff screen is the one the accept screen reads. The contacts fixture stands
- * alone: nothing in auth reads a contact.
+ * staff screen is the one the accept screen reads. The contacts and ticket
+ * fixtures stand alone: nothing in auth reads either.
  */
 export function createApis(
   adapter: AuthApiAdapter = resolveAuthApiAdapter(
@@ -58,15 +67,22 @@ export function createApis(
       staff: new HttpStaffApi(transport),
       contacts: new HttpContactsApi(transport),
       ticketing: new HttpTicketingApi(transport),
+      tickets: new HttpTicketsApi(transport),
+      uploader: new HttpAttachmentUploader(transport),
     };
   }
 
   const staff = new MockStaffApi();
+  // The ticket fixture reads the uploader's rows, so a file attached in the
+  // composer is the file the thread draws.
+  const uploads = new MockAttachmentUploader();
 
   return {
     auth: new MockAuthApi(staff),
     staff,
     contacts: new MockContactsApi(),
     ticketing: new MockTicketingApi(),
+    tickets: new MockTicketsApi(uploads),
+    uploader: uploads,
   };
 }

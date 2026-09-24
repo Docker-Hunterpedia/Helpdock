@@ -56,7 +56,7 @@ describe('Totp', () => {
     await user.type(screen.getByLabelText('Authentication code'), MOCK_TOTP_CODE);
     await user.click(verify());
 
-    expect(await screen.findByRole('heading', { name: 'Tickets' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'My open' })).toBeInTheDocument();
   });
 
   it('counts the attempts down and then locks', async () => {
@@ -102,6 +102,6 @@ describe('Totp', () => {
     await user.type(screen.getByLabelText('Recovery code'), MOCK_RECOVERY_CODE);
     await user.click(verify());
 
-    expect(await screen.findByRole('heading', { name: 'Tickets' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'My open' })).toBeInTheDocument();
   });
 });

@@ -16,8 +16,14 @@ const TOP_BAR_HEIGHT = 56;
 /**
  * The admin chrome: sidebar plus content area, both on `bg.canvas`. Everything
  * below it is a page rendered into the `Outlet`.
+ *
+ * `flush` is for the ticket workspace and nothing else. Every other page is a
+ * document in a padded column that grows as long as it needs to; the workspace
+ * is three columns that each scroll on their own inside one viewport-high
+ * frame (DESIGN §6.5), and 32 px of page padding around that would be a gutter
+ * down the middle of a list.
  */
-export function AppShell(): ReactNode {
+export function AppShell({ flush = false }: { readonly flush?: boolean } = {}): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const session = useSession();
@@ -28,7 +34,12 @@ export function AppShell(): ReactNode {
   const content = (
     <Box
       component="main"
-      sx={{ flex: 1, minWidth: 0, padding: 8, backgroundColor: tokens['bg.canvas'] }}
+      sx={{
+        flex: 1,
+        minWidth: 0,
+        backgroundColor: tokens['bg.canvas'],
+        ...(flush ? { display: 'flex', minHeight: 0, overflow: 'hidden' } : { padding: 8 }),
+      }}
     >
       <Outlet />
     </Box>
@@ -36,7 +47,13 @@ export function AppShell(): ReactNode {
 
   if (wide) {
     return (
-      <Box sx={{ display: 'flex', minHeight: '100dvh', backgroundColor: tokens['bg.canvas'] }}>
+      <Box
+        sx={{
+          display: 'flex',
+          backgroundColor: tokens['bg.canvas'],
+          ...(flush ? { height: '100dvh', overflow: 'hidden' } : { minHeight: '100dvh' }),
+        }}
+      >
         <Box sx={{ position: 'sticky', insetBlockStart: 0, height: '100dvh' }}>
           <Sidebar />
         </Box>
@@ -46,7 +63,14 @@ export function AppShell(): ReactNode {
   }
 
   return (
-    <Box sx={{ minHeight: '100dvh', backgroundColor: tokens['bg.canvas'] }}>
+    <Box
+      sx={{
+        backgroundColor: tokens['bg.canvas'],
+        ...(flush
+          ? { height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }
+          : { minHeight: '100dvh' }),
+      }}
+    >
       <Box
         component="header"
         sx={{

@@ -170,7 +170,8 @@ A job that needs several brands enqueues one child job per brand.
 
 `src/worker/start-worker.ts` is what `APP_ROLE=worker` boots. It takes what
 `@helpdock/jobs` needs — a queue connection, the `outbox.event` consumer, the
-`media.process` consumer and the relay — through an interface, so a unit test
+`media.process` consumer, M1-07's `assignment.offline_unassign` consumer and the
+relay — through an interface, so a unit test
 proves the start and shutdown order without Redis. Adding a consumed event means
 calling `registerEventHandler` there, before the workers are created.
 
@@ -544,6 +545,35 @@ M1-10 added one thing to the message path: `POST …/messages` accepts
 enforces are the media pipeline's; what stays here is turning a refusal into a
 status code.
 
+## Assignment
+
+`src/assignment/` holds M1-07. What a brand configures is
+[the settings guide](../../docs/guides/ticketing-settings.md#assignment); what
+follows is for somebody reading the code.
+
+| File | |
+|---|---|
+| `rotation.ts` | Who may hold a ticket and who is picked next, as pure functions: `canWorkDepartment`, `isInRotation`, `mayAssignTo`, `pickAssignee`. The picker, the manual assignment and the rotation all call these, so none can offer somebody the others refuse. |
+| `auto-assign.ts` | The worker half: `autoAssign` takes the brand's rotation lock (`pg_advisory_xact_lock`), re-reads the ticket `FOR UPDATE`, picks, and writes the activity and `ticket.updated` rows. `unassignTicket` is the reverse. |
+| `assignment-events.ts` | The three outbox events and their handlers, and the delayed `assignment.offline_unassign` processor. Registered by `worker/start-worker.ts`. |
+| `ticket-assignment.ts` | What `TicketsService` asks: may this person hold this ticket, and does this department route by itself. Plain functions over the request's transaction. |
+| `staff-offline.hook.ts` | The `STAFF_OFFLINE_HOOK` implementation `RealtimeModule` provides: one outbox row, in a system transaction for the brand. |
+| `presence-adapters.ts` | M0-13's `PresenceStore` as the two questions the worker asks, and the Redis key that says which departure is the latest. |
+| `assignment.service.ts`, `.controller.ts` | The Assignment tab (`ticketing:manage`) and the picker's read (`ticket:write`). |
+
+Two things are easy to get wrong here:
+
+- **Never assign from a request.** A new or moved ticket writes
+  `assignment.requested`; the pick happens in the worker after the commit, with
+  the receipt of the job in the same transaction as the assignment. Staff
+  lifecycle changes do the same through `staff/lifecycle-hooks.ts`, whose events
+  now carry the request's `tx`.
+- **The lock is per brand, not per agent.** Taking one lock per candidate in
+  whatever order a pick visits them is how two transactions deadlock; an
+  assignment is one short transaction, so a brand-wide queue costs milliseconds.
+  `assignment.integration.test.ts` proves that six concurrent picks never put a
+  second ticket on an agent with a cap of one.
+
 ## Attachments
 
 `src/media/` holds M1-10: presign, confirm, download, delete, and the
@@ -666,9 +696,6 @@ only when a test passes it as an extra controller.
 
 ## Known gaps
 
-- **`on_unassign` is not implemented.** Deactivating somebody, or narrowing what
-  they may see, leaves their tickets assigned to them. `staff/lifecycle-hooks.ts`
-  names the calls M1 fills in.
 - **Own-account actions write no `audit_log` row.** `audit_log` is keyed on
   `brand_id` and a password change belongs to a person; the reasoning is at the
   top of `staff/account.service.ts` and in the guide. They are logged instead.

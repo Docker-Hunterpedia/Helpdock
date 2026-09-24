@@ -266,6 +266,7 @@ packages/ai
 | `notify` | `notify.inapp`, `notify.email`, `notify.push` | |
 | `webhooks` | `webhook.deliver` | HMAC, retry, log |
 | `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |
+| `assignment` | `assignment.offline_unassign` (delayed) | M1-07's auto-unassign timer; a no-op if the agent came back or left again later |
 | `maintenance` | `cleanup.tokens`, `maintenance.retention`, `stats.rollup`, `sla.rebuild` (on boot) | cron |
 
 Bull Board (auth-protected) mounted in admin System page for queue inspection.

@@ -555,8 +555,15 @@ failed write can still tell the two apart.
 `teamId` is refused with 400 until M1-01 creates `teams`: `tickets.team_id` has
 no foreign key yet, so any uuid would be stored permanently. An `assigneeId` must belong to somebody who holds a role in the
 brand — `tickets.assignee_id` references the *global* `users` table, so the
-foreign key alone would accept a stranger. Which *department* an assignee must
-be in is M1-07's question.
+foreign key alone would accept a stranger (400). M1-07 adds the department:
+the assignee must be able to work the department the ticket is in — or is
+moving to — and not be a Viewer or deactivated (`not-eligible`, 409), and only
+an Admin assigns a ticket to an Admin (`assignee-above-actor`, 403). The load
+cap is not checked: a person may give an agent at cap another ticket. A move
+into a department the current assignee cannot work clears the assignee, and a
+ticket that is created or moved **unassigned** into a department that routes by
+itself is handed to the rotation through the outbox — see
+[Assignment](ticketing-settings.md#assignment).
 
 ### Replying
 
@@ -730,14 +737,14 @@ anything typed into a field is left alone, as is anything carrying a modifier.
 | Custom fields | read-only | M1-06 |
 | Linked tickets | read-only, from `parent_id` / `merged_into_id` / `split_from_id` | M1-08, M1-09 |
 | The AI bubble's confidence | not drawn: `ai_meta` is deliberately not on the wire | M7 |
-| The assignee picker | the people it can name, and the current assignee as a shortened id when it cannot | M1-07 |
-
-That last one is worth a sentence. `GET /brands/:id/staff` declares
-`staff:manage`, which an Agent does not hold — so the one screen that most
-needs a list of colleagues is the one least able to read it. The read is
-allowed to fail and the picker degrades to the viewer plus whoever it could
-name. **M1-07 should expose a read of assignable agents that `ticket:write`
-reaches.**
+The **assignee picker** (M1-07, `AdminTicketDialogs` panel 3) reads
+`GET /brands/:id/assignment/:departmentId/assignable`, which `ticket:write`
+reaches, rather than the staff roster, which is `staff:manage` and which an
+Agent does not hold. It lists everybody who can work the ticket's department —
+minus Admins, for anybody who is not one — with a presence dot and their open
+tickets against the department's cap ("8/8 at cap" in danger, "offline" instead
+of a count). The button names the current assignee even when they are outside
+the list, from the staff read when it has them and as a shortened id when not.
 
 The rows also name their contact from the first page of `GET /contacts`, which
 is a page and not a map: a ticket whose contact is further down is drawn
@@ -749,7 +756,6 @@ the ticket list row would close that, and is a change to M1-02's response.
 | Milestone | Adds |
 |---|---|
 | M1-13 | Identity rules: verified matches, automatic merge, participants (contact + CCs) |
-| M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Spam semantics on the seeded Spam status, and the sender block list |

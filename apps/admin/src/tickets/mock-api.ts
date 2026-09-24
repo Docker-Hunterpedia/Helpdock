@@ -4,17 +4,21 @@ import type {
   Ticket,
   TicketActivityEntry,
   TicketActivityList,
+  TicketCc,
+  TicketCcRequest,
   TicketCreateRequest,
   TicketDetail,
   TicketList,
   TicketMessage,
   TicketMessagePage,
+  TicketParticipantList,
   TicketPriority,
   TicketStatus,
   TicketStatusList,
   TicketUpdateRequest,
 } from '@helpdock/schemas';
-import { TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
+import { normaliseEmail, TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
+import { ContactError } from '../contacts/api.js';
 import {
   MOCK_CONTACT_ACCOUNT,
   MOCK_CONTACT_ARABIC,
@@ -424,6 +428,21 @@ export class MockTicketsApi implements TicketsApi {
   #activity: TicketActivityEntry[];
   #sequence = 0;
   readonly #uploads: MockAttachmentUploader | undefined;
+  /** M1-13: the CCs per ticket. The refund ticket copies in finance, as the artboard does. */
+  #ccs = new Map<string, TicketCc[]>([
+    [
+      MOCK_TICKET_REFUND,
+      [
+        {
+          id: '0192c3f0-1a2b-7c3d-8e4f-0000000cc001',
+          contactId: '0192c3f0-1a2b-7c3d-8e4f-0000000cc0c1',
+          name: 'finance@acme.de',
+          address: 'finance@acme.de',
+          source: 'agent',
+        },
+      ],
+    ],
+  ]);
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
@@ -687,6 +706,60 @@ export class MockTicketsApi implements TicketsApi {
     );
   }
 
+  async participants(_brandId: string, ticketId: string): Promise<TicketParticipantList> {
+    const ticket = this.#require(ticketId);
+    const name = ticket.contactId === null ? undefined : MOCK_CONTACT_NAMES[ticket.contactId];
+
+    return {
+      contact: ticket.contactId === null ? null : { id: ticket.contactId, name: name ?? 'Contact' },
+      ccs: [...(this.#ccs.get(ticketId) ?? [])],
+      staff: [],
+    };
+  }
+
+  /** Normalised and refused exactly as the api does, so the card's error path is real. */
+  async addCc(
+    brandId: string,
+    ticketId: string,
+    request: TicketCcRequest,
+  ): Promise<TicketParticipantList> {
+    this.#require(ticketId);
+    const result = normaliseEmail(request.email);
+    if (!result.ok) {
+      throw new ContactError('identity-invalid', result.problem);
+    }
+
+    const ccs = this.#ccs.get(ticketId) ?? [];
+    if (!ccs.some((cc) => cc.address === result.value)) {
+      this.#ccs.set(ticketId, [
+        ...ccs,
+        {
+          id: this.#nextId('c'),
+          contactId: this.#nextId('d'),
+          name: result.value,
+          address: result.value,
+          source: 'agent',
+        },
+      ]);
+    }
+
+    return this.participants(brandId, ticketId);
+  }
+
+  async removeCc(
+    brandId: string,
+    ticketId: string,
+    participantId: string,
+  ): Promise<TicketParticipantList> {
+    this.#require(ticketId);
+    this.#ccs.set(
+      ticketId,
+      (this.#ccs.get(ticketId) ?? []).filter((cc) => cc.id !== participantId),
+    );
+
+    return this.participants(brandId, ticketId);
+  }
+
   #defaultStatus(): TicketStatus {
     const fallback = this.#statuses[0];
     /* c8 ignore next 3 -- the seed always has six. */
@@ -716,6 +789,15 @@ export class MockTicketsApi implements TicketsApi {
 }
 
 const isoNow = (): string => new Date().toISOString();
+
+/** The contacts fixture's names, so a participants card reads like the contact screen. */
+const MOCK_CONTACT_NAMES: Readonly<Record<string, string>> = {
+  [MOCK_CONTACT_MONA]: 'Mona Khalil',
+  [MOCK_CONTACT_GMAIL]: 'M. Khalil',
+  [MOCK_CONTACT_ARABIC]: 'سارة الحسن',
+  [MOCK_CONTACT_ACCOUNT]: 'Jonas Weber',
+  [MOCK_CONTACT_VISITOR]: 'Visitor 7f3a…c2',
+};
 
 /**
  * The text of a body, the way `body_text` is the text of `body_html`.

@@ -7,11 +7,15 @@ import type {
   AccountUpdateRequest,
   ContactCreateRequest,
   ContactDetail,
+  ContactDuplicateReason,
   ContactDuplicateSuggestion,
   ContactIdentity,
   ContactIdentityInput,
   ContactIdentityKind,
   ContactList,
+  ContactMergePreview,
+  ContactMergeRequest,
+  ContactMergeSummary,
   ContactNote,
   ContactNoteRequest,
   ContactSearchQuery,
@@ -67,9 +71,34 @@ interface MockContact {
   notes: ContactNote[];
   stats: ContactStats;
   anonymised: boolean;
+  /** M1-13: set while this contact is merged into another. */
+  mergedIntoId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/** A merge the fixture can take back, holding exactly what it moved. */
+interface MockMerge {
+  readonly summary: ContactMergeSummary;
+  readonly survivorId: string;
+  readonly mergedId: string;
+  readonly identityIds: readonly string[];
+  readonly noteIds: readonly string[];
+  readonly stats: ContactStats;
+  readonly suggestion: MockDuplicate | undefined;
+  undone: boolean;
+}
+
+interface MockDuplicate {
+  id: string;
+  contactId: string;
+  otherContactId: string;
+  reason: ContactDuplicateReason;
+  createdAt: string;
+}
+
+/** The merge undo window of DOMAIN-RULES §4.4. */
+const MERGE_UNDO_MS = 24 * 60 * 60 * 1000;
 
 const stats = (overrides: Partial<ContactStats> = {}): ContactStats => ({
   openTickets: 0,
@@ -218,13 +247,7 @@ const seedContacts = (): MockContact[] => [
   },
 ];
 
-const seedDuplicates = (): {
-  id: string;
-  contactId: string;
-  otherContactId: string;
-  reason: ContactIdentityKind;
-  createdAt: string;
-}[] => [
+const seedDuplicates = (): MockDuplicate[] => [
   {
     id: MOCK_DUPLICATE,
     contactId: MOCK_CONTACT_GMAIL,
@@ -238,11 +261,12 @@ export class MockContactsApi implements ContactsApi {
   #accounts = seedAccounts();
   #contacts = seedContacts();
   #duplicates = seedDuplicates();
+  #merges: MockMerge[] = [];
   #sequence = 0;
 
   async listContacts(_brandId: string, query: ContactSearchQuery = {}): Promise<ContactList> {
     const term = query.search?.trim().toLowerCase() ?? '';
-    const matches = this.#contacts.filter((contact) => {
+    const matches = this.#live().filter((contact) => {
       const searched =
         term === '' ||
         contact.name.toLowerCase().includes(term) ||
@@ -266,7 +290,7 @@ export class MockContactsApi implements ContactsApi {
       contacts: page.map((contact) => this.#summary(contact)),
       total: matches.length,
       nextCursor: start + limit < matches.length ? String(start + limit) : null,
-      duplicateCount: this.#duplicates.length,
+      duplicateCount: this.#duplicates.filter((row) => this.#isLivePair(row)).length,
     };
   }
 
@@ -422,6 +446,113 @@ export class MockContactsApi implements ContactsApi {
     return this.#detail(contact);
   }
 
+  async mergePreview(
+    _brandId: string,
+    contactId: string,
+    otherContactId: string,
+  ): Promise<ContactMergePreview> {
+    const contact = this.#writable(contactId);
+    const other = this.#writable(otherContactId);
+    if (contact.id === other.id) {
+      throw new ContactError('merge-self');
+    }
+
+    const side = (row: MockContact) => ({
+      id: row.id,
+      name: row.name,
+      accountName: this.#accounts.find((account) => account.id === row.accountId)?.name ?? null,
+      ticketCount: row.stats.totalTickets,
+    });
+
+    return {
+      contact: side(contact),
+      other: side(other),
+      identities: [contact, other].flatMap((row) =>
+        row.identities.map((entry) => ({ ...entry, contactId: row.id })),
+      ),
+    };
+  }
+
+  async mergeContacts(
+    _brandId: string,
+    survivorId: string,
+    request: ContactMergeRequest,
+  ): Promise<ContactDetail> {
+    if (survivorId === request.mergedContactId) {
+      throw new ContactError('merge-self');
+    }
+    const survivor = this.#writable(survivorId);
+    const merged = this.#writable(request.mergedContactId);
+    const suggestion = this.#duplicates.find(
+      (row) =>
+        (row.contactId === survivor.id && row.otherContactId === merged.id) ||
+        (row.contactId === merged.id && row.otherContactId === survivor.id),
+    );
+    const now = new Date();
+
+    this.#merges = [
+      {
+        summary: {
+          id: this.#nextId('b'),
+          mergedContact: { id: merged.id, name: merged.name },
+          actorName: 'Lina Haddad',
+          createdAt: now.toISOString(),
+          undoUntil: new Date(now.getTime() + MERGE_UNDO_MS).toISOString(),
+        },
+        survivorId: survivor.id,
+        mergedId: merged.id,
+        identityIds: merged.identities.map((row) => row.id),
+        noteIds: merged.notes.map((row) => row.id),
+        stats: survivor.stats,
+        suggestion,
+        undone: false,
+      },
+      ...this.#merges,
+    ];
+
+    // Verification is carried as it is: a merge is a judgement, not proof.
+    survivor.identities = [...survivor.identities, ...merged.identities];
+    survivor.notes = [...merged.notes, ...survivor.notes];
+    survivor.stats = {
+      ...survivor.stats,
+      openTickets: survivor.stats.openTickets + merged.stats.openTickets,
+      totalTickets: survivor.stats.totalTickets + merged.stats.totalTickets,
+    };
+    merged.identities = [];
+    merged.notes = [];
+    merged.mergedIntoId = survivor.id;
+    this.#duplicates = this.#duplicates.filter((row) => row !== suggestion);
+
+    return this.#detail(survivor);
+  }
+
+  async undoMerge(_brandId: string, survivorId: string, mergeId: string): Promise<ContactDetail> {
+    const merge = this.#merges.find(
+      (row) => row.summary.id === mergeId && row.survivorId === survivorId,
+    );
+    if (merge === undefined) {
+      throw new Error(`No merge ${mergeId} into ${survivorId}`);
+    }
+    if (merge.undone) {
+      throw new ContactError('merge-expired');
+    }
+
+    const survivor = this.#require(merge.survivorId);
+    const merged = this.#require(merge.mergedId);
+    merged.identities = survivor.identities.filter((row) => merge.identityIds.includes(row.id));
+    merged.notes = survivor.notes.filter((row) => merge.noteIds.includes(row.id));
+    survivor.identities = survivor.identities.filter((row) => !merge.identityIds.includes(row.id));
+    survivor.notes = survivor.notes.filter((row) => !merge.noteIds.includes(row.id));
+    survivor.stats = merge.stats;
+    merged.mergedIntoId = null;
+    if (merge.suggestion !== undefined) {
+      this.#duplicates = [merge.suggestion, ...this.#duplicates];
+    }
+    merge.undone = true;
+
+    return this.#detail(survivor);
+  }
+
   // ------------------------------------------------------------------
 
   async listAccounts(_brandId: string, query: AccountSearchQuery = {}): Promise<AccountList> {
@@ -554,6 +685,9 @@ export class MockContactsApi implements ContactsApi {
     if (contact.anonymised) {
       throw new ContactError('anonymised');
     }
+    if ((contact.mergedIntoId ?? null) !== null) {
+      throw new ContactError('merged');
+    }
 
     return contact;
   }
@@ -592,12 +726,28 @@ export class MockContactsApi implements ContactsApi {
       identities: contact.identities,
       notes: contact.notes,
       duplicates: this.#duplicatesOf(contact),
+      mergedIntoId: contact.mergedIntoId ?? null,
+      merges: this.#merges
+        .filter((row) => row.survivorId === contact.id && !row.undone)
+        .map((row) => row.summary),
     };
+  }
+
+  /** Everybody not merged into somebody else. */
+  #live(): MockContact[] {
+    return this.#contacts.filter((contact) => (contact.mergedIntoId ?? null) === null);
+  }
+
+  #isLivePair(row: MockDuplicate): boolean {
+    const live = new Set(this.#live().map((contact) => contact.id));
+
+    return live.has(row.contactId) && live.has(row.otherContactId);
   }
 
   #duplicatesOf(contact: MockContact): ContactDuplicateSuggestion[] {
     return this.#duplicates
       .filter((row) => row.contactId === contact.id || row.otherContactId === contact.id)
+      .filter((row) => this.#isLivePair(row))
       .map((row) => {
         const otherId = row.contactId === contact.id ? row.otherContactId : row.contactId;
         const other = this.#contacts.find((candidate) => candidate.id === otherId);

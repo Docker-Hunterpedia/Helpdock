@@ -170,3 +170,36 @@ describe('the fixtures these tests are built on', () => {
     expect(Date.parse(testTicket().updatedAt)).toBeLessThan(NOW);
   });
 });
+
+describe('HttpTicketsApi participants (M1-13)', () => {
+  const list = {
+    contact: { id: TICKET, name: 'Mona Khalil' },
+    ccs: [
+      {
+        id: '0192c3f0-1a2b-7c3d-8e4f-0000000cc001',
+        contactId: '0192c3f0-1a2b-7c3d-8e4f-0000000cc0c1',
+        name: 'finance@acme.de',
+        address: 'finance@acme.de',
+        source: 'agent',
+      },
+    ],
+    staff: [],
+  };
+
+  it('reads, adds and removes a CC on the participants path', async () => {
+    fetchMock.mockResolvedValue(json(list));
+
+    await expect(api.participants(BRAND, TICKET)).resolves.toEqual(list);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/participants`);
+
+    fetchMock.mockResolvedValue(json(list));
+    await api.addCc(BRAND, TICKET, { email: 'finance@acme.de' });
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ email: 'finance@acme.de' });
+
+    fetchMock.mockResolvedValue(json(list));
+    await api.removeCc(BRAND, TICKET, 'p/1');
+    expect(lastInit().method).toBe('DELETE');
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/participants/p%2F1`);
+  });
+});

@@ -126,18 +126,46 @@
   },
   "identities": {
     "title": "المُعرِّفات",
-    "duplicate": "تكرار محتمل: {{name}} ({{identifier}}).",
-    "duplicateSameAccount": "الشركة نفسها.",
-    "duplicateReason": {
-      "email": "عنوان البريد نفسه.",
-      "phone": "رقم الهاتف نفسه.",
-      "telegram": "محادثة تيليجرام نفسها.",
-      "visitor": "مُعرِّف الزائر نفسه.",
-      "external": "رقم العميل نفسه."
-    },
-    "merge": "دمج",
-    "mergeUnavailable": "الدمج يصل مع M1-13",
     "notTheSame": "ليسا الشخص نفسه"
+  },
+  "duplicates": {
+    "title": "تكرارات محتملة",
+    "one": "تكرار محتمل: {{name}}",
+    "reason": {
+      "email": "بريد كُتب في نموذج",
+      "phone": "الهاتف نفسه",
+      "telegram": "محادثة تيليجرام نفسها",
+      "visitor": "مُعرِّف الزائر نفسه",
+      "external": "رقم العميل نفسه",
+      "similar_name": "اسم مشابه"
+    },
+    "sameAccount": "الشركة نفسها",
+    "unverified": "غير موثّق",
+    "merge": "دمج…",
+    "mergeWith": "دمج مع {{name}}",
+    "notTheSameWith": "{{name}} ليس الشخص نفسه"
+  },
+  "merge": {
+    "title": "دمج جهتي الاتصال",
+    "subtitle": "يبدو أن {{name}} هو الشخص نفسه: {{reason}}.",
+    "subtitleManual": "اختر من تُبقي اسمه وتفاصيله.",
+    "keep": "أبقِ اسم وتفاصيل",
+    "tickets_zero": "لا تذاكر",
+    "tickets_one": "تذكرة واحدة",
+    "tickets_two": "تذكرتان",
+    "tickets_few": "{{count}} تذاكر",
+    "tickets_many": "{{count}} تذكرة",
+    "tickets_other": "{{count}} تذكرة",
+    "identities": "المُعرِّفات بعد الدمج",
+    "note": "تنتقل تذاكر الجهتين إلى {{name}}، ولا تُدمج التذاكر نفسها. يمكنك التراجع خلال 24 ساعة.",
+    "submit": "دمج جهتي الاتصال",
+    "loading": "جارٍ قراءة الجهتين…",
+    "toast": "دُمج {{merged}} في {{survivor}}.",
+    "undo": "تراجع",
+    "banner": "دمج {{actor}} جهة {{merged}} في هذه الجهة · {{time}}",
+    "bannerNoActor": "دُمجت جهة {{merged}} في هذه الجهة · {{time}}",
+    "bannerUndo": "تراجع · حتى {{time}}",
+    "undone": "أُلغي الدمج. عادت {{name}} جهة اتصال مستقلة."
   },
   "details": {
     "title": "التفاصيل",
@@ -200,7 +228,11 @@
     "anonymiseForbidden": "المحو للمشرف في هذه العلامة وحده.",
     "alreadyAnonymised": "مُحيت هذه الجهة ولم يعد بالإمكان تعديلها.",
     "domainTaken": "شركة أخرى في هذه العلامة تطالب بهذا النطاق.",
-    "failed": "لم ينجح ذلك. حاول مرة أخرى."
+    "failed": "لم ينجح ذلك. حاول مرة أخرى.",
+    "merged": "دُمجت هذه الجهة في جهة أخرى. افتح تلك بدلًا منها.",
+    "mergeSelf": "لا يمكن دمج جهة اتصال في نفسها.",
+    "mergeExpired": "لم يعد بالإمكان التراجع عن هذا الدمج.",
+    "mergeBlocked": "تغيّرت الجهتان منذ الدمج، فلا يمكن التراجع عنه."
   },
   "problem": {
     "empty": "أدخل قيمة.",

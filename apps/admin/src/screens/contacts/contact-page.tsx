@@ -1,4 +1,9 @@
-import type { ContactDetail, ContactIdentityInput } from '@helpdock/schemas';
+import type {
+  ContactDetail,
+  ContactDuplicateSuggestion,
+  ContactIdentityInput,
+  ContactMergeSummary,
+} from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -7,21 +12,24 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, Trash2, TriangleAlert } from 'lucide-react';
+import { Lock, Trash2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
-import { accountRoute, ROUTES } from '../../app/route-paths.js';
+import { accountRoute, contactRoute, ROUTES } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
 import { ConfirmDialog } from '../../ui/confirm-dialog.tsx';
+import { useToast } from '../../ui/toasts.tsx';
 import { ContactDialog, IdentityDialog } from './contact-dialogs.tsx';
+import { DuplicateSuggestions } from './duplicate-suggestions.tsx';
 import { csatLabel, DASH, durationLabel, identityLabel } from './format.js';
 import { ContactAvatar, IdentityLine } from './identity-pieces.tsx';
+import { MergeBanners } from './merge-banner.tsx';
+import { MergeContactsDialog } from './merge-contacts-dialog.tsx';
 import { useContactAction } from './use-contact-action.js';
 
 /**
@@ -34,10 +42,10 @@ import { useContactAction } from './use-contact-action.js';
  * caption under the heading and the inline row in the list, and it is the only
  * thing this screen says about those tickets.
  *
- * **Merge is drawn but disabled.** The duplicate suggestion is M1-04's; acting
- * on it, with its 24-hour undo, is M1-13. A button that is there and says why
- * it cannot be used yet is more honest than a row that quietly offers only
- * half the decision.
+ * **Merging is M1-13's.** A duplicate suggestion opens the merge dialog; the
+ * toast that confirms a merge carries an Undo, and the banner on the surviving
+ * contact keeps one for the 24 hours DOMAIN-RULES §4.4 allows. A contact that
+ * was merged away sends the viewer on to the one it was merged into.
  */
 export function ContactPage(): ReactNode {
   const t = useT();
@@ -54,6 +62,9 @@ export function ContactPage(): ReactNode {
   const [addingIdentity, setAddingIdentity] = useState(false);
   const [erasing, setErasing] = useState(false);
   const [note, setNote] = useState('');
+  const [merging, setMerging] = useState<ContactDuplicateSuggestion | null>(null);
+  const toast = useToast();
+  const navigate = useNavigate();
 
   const contact = useQuery({
     queryKey: ['contact', brand.id, contactId],
@@ -109,6 +120,48 @@ export function ContactPage(): ReactNode {
     refresh,
   );
 
+  const undoMerge = useContactAction(
+    (merge: { readonly survivorId: string; readonly summary: ContactMergeSummary }) =>
+      api.undoMerge(brand.id, merge.survivorId, merge.summary.id),
+    ({ summary }) => t('contacts:merge.undone', { name: summary.mergedContact.name }),
+    refresh,
+  );
+
+  const merge = useContactAction(
+    (choice: { survivorId: string; mergedId: string; suggestionId: string | undefined }) =>
+      api.mergeContacts(brand.id, choice.survivorId, {
+        mergedContactId: choice.mergedId,
+        ...(choice.suggestionId === undefined ? {} : { suggestionId: choice.suggestionId }),
+      }),
+    () => '',
+    async (survivor: ContactDetail, choice) => {
+      setMerging(null);
+      await refresh();
+      const summary = survivor.merges.find((row) => row.mergedContact.id === choice.mergedId);
+      if (survivor.id !== contactId) {
+        await navigate(contactRoute(survivor.id));
+      }
+      toast({
+        tone: 'success',
+        message: t('contacts:merge.toast', {
+          merged: summary?.mergedContact.name ?? '',
+          survivor: survivor.name,
+        }),
+        ...(summary === undefined
+          ? {}
+          : {
+              action: {
+                label: t('contacts:merge.undo'),
+                onClick: () => {
+                  undoMerge.mutate({ survivorId: survivor.id, summary });
+                },
+              },
+            }),
+      });
+    },
+    { silent: true },
+  );
+
   const anonymise = useContactAction(
     () => api.anonymise(brand.id, contactId),
     (_input, result: ContactDetail) => t('contacts:toast.anonymised', { name: result.name }),
@@ -118,6 +171,9 @@ export function ContactPage(): ReactNode {
   const detail = contact.data;
   if (detail === undefined) {
     return null;
+  }
+  if (detail.mergedIntoId !== null) {
+    return <Navigate to={contactRoute(detail.mergedIntoId)} replace />;
   }
 
   const hiddenCount = timeline.data?.hiddenCount ?? 0;
@@ -199,6 +255,15 @@ export function ContactPage(): ReactNode {
             </Button>
           </Box>
         </Box>
+
+        <MergeBanners
+          merges={detail.merges}
+          busy={undoMerge.isPending}
+          now={Date.now()}
+          onUndo={(summary) => {
+            undoMerge.mutate({ survivorId: detail.id, summary });
+          }}
+        />
 
         {detail.anonymised ? (
           <Typography
@@ -401,69 +466,35 @@ export function ContactPage(): ReactNode {
               {t('contacts:identity.add')}
             </Button>
 
-            {detail.duplicates.map((duplicate) => (
-              <Box
-                key={duplicate.id}
-                sx={{
-                  display: 'grid',
-                  gap: 2,
-                  padding: 3,
-                  borderRadius: '6px',
-                  border: `1px solid ${tokens['status.warning']}`,
-                  backgroundColor: tokens['status.warning.tint'],
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: 'inline-flex',
-                    gap: 1,
-                    alignItems: 'flex-start',
-                    color: tokens['status.warning.text'],
-                  }}
-                >
-                  <TriangleAlert size={14} aria-hidden="true" />
-                  <span>
-                    {t('contacts:identities.duplicate', {
-                      name: duplicate.other.name,
-                      identifier: identityLabel(duplicate.other.primaryIdentity),
-                    })}{' '}
-                    {t(`contacts:identities.duplicateReason.${duplicate.reason}`)}
-                    {duplicate.sameAccount
-                      ? ` ${t('contacts:identities.duplicateSameAccount')}`
-                      : ''}
-                  </span>
+            {detail.duplicates.length === 1 ? (
+              <Box>
+                <Typography variant="caption" sx={{ color: tokens['status.warning.text'] }}>
+                  {t('contacts:duplicates.one', { name: detail.duplicates[0]?.other.name ?? '' })}
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Tooltip title={t('contacts:identities.mergeUnavailable')}>
-                    {/* A disabled button fires no pointer events, so the tooltip
-                        needs an element that does; the span is that element, and
-                        the reason lives on the button's own label so it is not
-                        carried by a hover alone (DESIGN §6.4). */}
-                    <span>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        disabled
-                        aria-label={`${t('contacts:identities.merge')} — ${t('contacts:identities.mergeUnavailable')}`}
-                      >
-                        {t('contacts:identities.merge')}
-                      </Button>
-                    </span>
-                  </Tooltip>
-                  <Button
-                    size="small"
-                    variant="text"
-                    onClick={() => {
-                      dismissDuplicate.mutate(duplicate.id);
-                    }}
-                  >
-                    {t('contacts:identities.notTheSame')}
-                  </Button>
-                </Box>
+                <DuplicateSuggestions
+                  duplicates={detail.duplicates}
+                  disabled={detail.anonymised}
+                  onMerge={setMerging}
+                  onDismiss={(duplicate) => {
+                    dismissDuplicate.mutate(duplicate.id);
+                  }}
+                />
               </Box>
-            ))}
+            ) : null}
           </Card>
+
+          {detail.duplicates.length > 1 ? (
+            <Card title={t('contacts:duplicates.title')}>
+              <DuplicateSuggestions
+                duplicates={detail.duplicates}
+                disabled={detail.anonymised}
+                onMerge={setMerging}
+                onDismiss={(duplicate) => {
+                  dismissDuplicate.mutate(duplicate.id);
+                }}
+              />
+            </Card>
+          ) : null}
 
           <Card title={t('contacts:details.title')}>
             <Detail label={t('contacts:details.account')}>
@@ -536,6 +567,24 @@ export function ContactPage(): ReactNode {
         onSubmit={(value) => {
           setAddingIdentity(false);
           addIdentity.mutate(value);
+        }}
+      />
+
+      <MergeContactsDialog
+        open={merging !== null}
+        contactId={detail.id}
+        otherContactId={merging?.other.id ?? detail.id}
+        reason={merging === null ? null : t(`contacts:duplicates.reason.${merging.reason}`)}
+        busy={merge.isPending}
+        onClose={() => {
+          setMerging(null);
+        }}
+        onMerge={({ survivor, merged }) => {
+          merge.mutate({
+            survivorId: survivor.id,
+            mergedId: merged.id,
+            suggestionId: merging?.id,
+          });
         }}
       />
 

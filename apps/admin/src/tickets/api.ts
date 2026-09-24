@@ -2,12 +2,14 @@ import type {
   MessageCreateRequest,
   Ticket,
   TicketActivityList,
+  TicketCcRequest,
   TicketChannel,
   TicketCreateRequest,
   TicketDetail,
   TicketList,
   TicketMessage,
   TicketMessagePage,
+  TicketParticipantList,
   TicketPriority,
   TicketSort,
   TicketSortDirection,
@@ -45,6 +47,19 @@ export interface TicketsApi {
   create(brandId: string, request: TicketCreateRequest): Promise<TicketDetail>;
   update(brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket>;
   reply(brandId: string, ticketId: string, request: MessageCreateRequest): Promise<TicketMessage>;
+
+  /** M1-13: the contact, the CCs and the staff of a ticket (DOMAIN-RULES §2.5). */
+  participants(brandId: string, ticketId: string): Promise<TicketParticipantList>;
+  addCc(
+    brandId: string,
+    ticketId: string,
+    request: TicketCcRequest,
+  ): Promise<TicketParticipantList>;
+  removeCc(
+    brandId: string,
+    ticketId: string,
+    participantId: string,
+  ): Promise<TicketParticipantList>;
 }
 
 /**

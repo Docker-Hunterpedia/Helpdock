@@ -28,6 +28,7 @@ const MIGRATION_TAGS = [
   '0013_attachments',
   '0014_tags_custom_fields_and_templates',
   '0015_assignment',
+  '0016_merge_and_split',
   '0017_spam_and_block_list',
   '0018_time_tracking_and_csat',
   '0019_contact_identity_and_participants',

@@ -46,8 +46,10 @@ export class TicketLifecycleHooks {
    * A ticket reached a closed state (§2.2, §3.1). **M3-02** stops the
    * resolution clock here and records whether it was met.
    *
-   * It fires for every close, including spam and merge, because a clock that
-   * keeps running on a ticket nobody will touch again is a clock that breaches.
+   * It fires for every close, including spam, because a clock that keeps
+   * running on a ticket nobody will touch again is a clock that breaches. A
+   * merge fires {@link onMerged} instead (M1-09), because §2.4 stops those
+   * clocks without them being met.
    * What §2.4 excludes from *reports* is a separate question, and
    * `excluded_from_reports` on the status is what answers it.
    */
@@ -75,6 +77,34 @@ export class TicketLifecycleHooks {
    * preserving the original values for reporting.
    */
   async onReopened(_tx: DbTransaction, _event: LifecycleHookEvent): Promise<void> {
+    await Promise.resolve();
+  }
+
+  /**
+   * M1-09. A ticket was merged into another (§2.4): "secondary's clocks stop
+   * and are excluded from compliance reports". **M3-02** stops both clocks here
+   * without recording them as met or breached. `event.ticket.mergedAt` is the
+   * moment they stopped, and `merged_into_id` with the Merged status's
+   * `excluded_from_reports` is what keeps the ticket out of compliance.
+   *
+   * A merge does not fire {@link onResolved}: the ticket was not resolved, it
+   * was folded into another one, and a resolution clock "met" by a merge would
+   * flatter every report that counted it.
+   */
+  async onMerged(_tx: DbTransaction, _event: LifecycleHookEvent): Promise<void> {
+    await Promise.resolve();
+  }
+
+  /**
+   * M1-09. A merge was undone inside its 24 hours (§2.4): "clocks resume with
+   * time paused during the merge excluded". `mergedMs` is how long this merge
+   * lasted; `event.ticket.mergedMs` is the running total, which **M3-02** adds
+   * to the clocks' paused time.
+   */
+  async onUnmerged(
+    _tx: DbTransaction,
+    _event: LifecycleHookEvent & { readonly mergedMs: number },
+  ): Promise<void> {
     await Promise.resolve();
   }
 }

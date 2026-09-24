@@ -1,4 +1,4 @@
-import { ticketStatuses, tickets, ticketTags } from '@helpdock/db';
+import { contacts, ticketStatuses, tickets, ticketTags } from '@helpdock/db';
 import type { TicketListQuery, TicketSort, TicketSortDirection } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
@@ -85,8 +85,49 @@ const tagFilter = (tagIds: readonly string[]): SQL => {
  * words inside the subject, which is the question being asked. The query goes
  * on the left; the operator is not symmetric.
  */
-const searchFilter = (term: string): SQL =>
-  sql`(${tickets.search} @@ websearch_to_tsquery('english', ${term}) OR ${term} <% ${tickets.subject})`;
+const searchFilter = (term: string): SQL => {
+  const clauses = [
+    sql`${tickets.search} @@ websearch_to_tsquery('english', ${term})`,
+    sql`${term} <% ${tickets.subject}`,
+    // M1-09: the merge dialog searches "by reference, subject or contact". The
+    // contact half reads `contacts`, which is brand-scoped, so it can only
+    // narrow what the reader already sees.
+    sql`${tickets.contactId} IN (SELECT ${contacts.id} FROM ${contacts} WHERE ${contacts.name} ILIKE ${`%${escapeLike(term)}%`})`,
+  ];
+
+  const number = referenceNumber(term);
+  if (number !== null) {
+    clauses.push(sql`${tickets.number} = ${number}`);
+  }
+
+  return sql`(${sql.join(clauses, sql` OR `)})`;
+};
+
+/**
+ * The number in a ticket reference as an agent types one — `HD-1042`,
+ * `hd-1042`, `#1042` or `1042` — or `null` when the term is not one. The
+ * prefix is not compared: a brand has one sequence, so the number alone is the
+ * ticket, and a prefix that was renamed since is still the same ticket.
+ */
+// A string rather than a regular-expression literal: `pnpm check:routes` scans
+// this file with the compiler's scanner, which reads a bare `/` as division.
+// biome-ignore lint/complexity/useRegexLiterals: a literal stalls that scanner, as above.
+const REFERENCE = new RegExp('^(?:[A-Za-z][A-Za-z0-9]{0,9}-|#)?(\\d{1,15})$');
+
+export const referenceNumber = (term: string): number | null => {
+  const match = REFERENCE.exec(term.trim());
+  if (match?.[1] === undefined) {
+    return null;
+  }
+
+  const value = Number(match[1]);
+
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+};
+
+/** `%` and `_` are wildcards to ILIKE; a name that contains one means the character. */
+const escapeLike = (term: string): string =>
+  term.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
 
 /**
  * The keyset predicate: "strictly after the cursor row in this ordering". A row

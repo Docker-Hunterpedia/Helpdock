@@ -87,6 +87,34 @@ export class TicketParticipantsService {
     return this.#add(context, ticket, { contactId, address, source });
   }
 
+  /**
+   * The inverse of a merge's `addCcParticipant`: takes off the CC that merge
+   * added, and nothing else. A contact an agent copied in by hand stays, and so
+   * does one that another ticket still merged into this one brings.
+   *
+   * Returns false when nothing changed.
+   */
+  async removeMergeCc(
+    context: ParticipantContext,
+    ticketId: string,
+    contactId: string,
+    { unmergedTicketId }: { readonly unmergedTicketId: string },
+  ): Promise<boolean> {
+    const { tx } = context;
+    const ticket = await this.#require(tx, ticketId);
+    if (await this.#repository.stillMergedFrom(tx, ticket.id, contactId, unmergedTicketId)) {
+      return false;
+    }
+    const removed = await this.#repository.deleteMergeCc(tx, ticket.id, contactId);
+    if (removed === undefined) {
+      return false;
+    }
+
+    await this.#changed(context, ticket, { from: { ccContactId: removed.contactId } });
+
+    return true;
+  }
+
   async removeCc(
     context: ParticipantContext,
     ticketId: string,

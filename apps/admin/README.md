@@ -426,6 +426,13 @@ Five decisions are worth knowing before changing it:
   draws a chip that settles on its own. The picker checks the brand's content
   policy first as a courtesy; the api checks it twice more.
 
+M1-09 added the ⋯ menu (`ticket-actions-menu.tsx`), which draws the entries it
+is handed so M1-11 and M1-12 add theirs without editing it; the merge and split
+dialogs; the merged block a primary's thread draws in place of the merge's
+announcement (`merged-block.tsx`); and "is replying" on the collision pill,
+announced the moment the composer fills. All of it is built from the
+`AdminTicketDialogs` artboard, panels 1, 2, 4 and 7.
+
 The header's ⋯ menu (`Admin · ticket dialogs`, panel 2) is
 `ticket-actions-menu.tsx`, which draws an **array of items** each deliverable
 contributes. M1-11's — "Mark as spam", or "Not spam" on a spam ticket — comes

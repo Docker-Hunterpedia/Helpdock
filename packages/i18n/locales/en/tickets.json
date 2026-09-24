@@ -46,8 +46,9 @@
     "viewingMany": "{{name}} and {{others}} others are viewing",
     "details": "Details",
     "closeDetails": "Close the details",
-    "menu": "Ticket actions",
-    "logTime": "Log time…"
+    "logTime": "Log time…",
+    "replyingOne": "{{name}} is replying",
+    "replyingMany": "{{name}} is replying · {{others}} more viewing"
   },
   "sla": {
     "label": "Service level",
@@ -230,7 +231,9 @@
     "timeLogged": "Time logged",
     "timeDeleted": "Time entry deleted",
     "timeFailed": "The time could not be saved.",
-    "timeTrackingOff": "Time tracking is off for this brand."
+    "timeTrackingOff": "Time tracking is off for this brand.",
+    "merged": "Merged into {{reference}}",
+    "unmerged": "{{reference}} unmerged"
   },
   "keyboard": {
     "label": "Keyboard shortcuts",
@@ -248,7 +251,11 @@
   },
   "actions": {
     "markSpam": "Mark as spam",
-    "notSpam": "Not spam"
+    "notSpam": "Not spam",
+    "label": "Ticket actions",
+    "merge": "Merge into another ticket…",
+    "split": "Split messages…",
+    "closeDialog": "Close"
   },
   "spam": {
     "title": "Mark {{ticket}} as spam?",
@@ -295,5 +302,60 @@
     "copyLink": "Copy survey link",
     "copied": "Survey link copied",
     "copyFailed": "The link could not be copied."
+  },
+  "merge": {
+    "title": "Merge tickets",
+    "description": "The ticket you pick stays open; this one closes into it.",
+    "searchLabel": "Merge {{reference}} into",
+    "searchHint": "Search this brand by reference, subject or contact.",
+    "candidates": "Tickets to merge into",
+    "noMatches": "No ticket matches that search.",
+    "closedSuffix": "{{department}} · closed",
+    "consequencesTitle": "What happens to {{reference}}",
+    "closes": "It closes as Merged, with no CSAT, and its SLA clocks stop.",
+    "messages": "Its messages stay where they are and show inline, read-only, in {{primary}}.",
+    "tags": "Tags are combined.",
+    "tagsAndCc": "Tags are combined. {{name}} is added to {{primary}} as a CC.",
+    "undo": "You can unmerge for 24 hours.",
+    "submit": "Merge into {{reference}}",
+    "submitNone": "Merge",
+    "pickOne": "Pick the ticket to merge into."
+  },
+  "split": {
+    "title": "Split into a new ticket",
+    "description": "Same contact. Pick the messages that belong to a separate problem.",
+    "messages": "Messages to copy · selected: {{count}}",
+    "attachmentLine": "{{name}} · {{size}}",
+    "subject": "Subject",
+    "department": "Department",
+    "priority": "Priority",
+    "note": "Messages are copied, not moved. The new ticket gets a fresh number and fresh SLA clocks.",
+    "submit": "Create ticket",
+    "pickOne": "Tick at least one message.",
+    "subjectRequired": "A subject is required."
+  },
+  "merged": {
+    "intoThis": "{{reference}} was merged into this ticket · {{time}}",
+    "intoThisBy": "{{reference}} was merged into this ticket by {{name}} · {{time}}",
+    "intoOther": "{{reference}} was merged into {{primary}} · {{time}}",
+    "intoOtherBy": "{{reference}} was merged into {{primary}} by {{name}} · {{time}}",
+    "thisInto": "Merged into {{reference}} · {{time}}",
+    "thisIntoBy": "Merged into {{reference}} by {{name}} · {{time}}",
+    "unmerge": "Unmerge · {{hours}} h left",
+    "from": "From {{reference}} · read only",
+    "more": "Open {{reference}} to read the rest",
+    "open": "Open {{reference}}"
+  },
+  "systemBy": "by {{name}} · {{time}}",
+  "lifecycle": {
+    "ticket-merged": "This ticket was merged into another one. Work on that one instead.",
+    "ticket-deleted": "This ticket was deleted.",
+    "ticket-not-closed": "This ticket is not closed, so there is nothing to reopen.",
+    "merge-into-self": "A ticket cannot be merged into itself.",
+    "merge-into-merged": "That ticket was itself merged. Merge into the ticket it went to.",
+    "ticket-not-merged": "This ticket is not merged any more.",
+    "merge-window-closed": "A merge can be undone for 24 hours, and those have passed.",
+    "attachments-in-flight": "A file on those messages is still being processed. Try again in a moment.",
+    "ticket-not-spam": "This ticket is not marked as spam."
   }
 }

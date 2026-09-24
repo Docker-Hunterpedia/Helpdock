@@ -21,13 +21,13 @@ describe('TicketActionsMenu', () => {
     const { user } = renderApp(
       <TicketActionsMenu
         items={[
-          { key: 'merge', label: 'Merge', icon: GitMerge, onSelect: vi.fn() },
+          { id: 'merge', label: 'Merge', icon: GitMerge, onSelect: vi.fn() },
           {
-            key: 'spam',
+            id: 'spam',
             label: 'Mark as spam',
             icon: ShieldAlert,
             tone: 'danger',
-            separatorBefore: true,
+            dividerBefore: true,
             onSelect,
           },
         ]}
@@ -51,10 +51,10 @@ describe('TicketActionsMenu', () => {
       <TicketActionsMenu
         items={[
           {
-            key: 'spam',
+            id: 'spam',
             label: 'Mark as spam',
             icon: ShieldAlert,
-            separatorBefore: true,
+            dividerBefore: true,
             onSelect: vi.fn(),
           },
         ]}

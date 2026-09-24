@@ -101,7 +101,7 @@ test.describe('marking a ticket as spam', () => {
     await openTicket(page, locale);
 
     await page.getByRole('button', { name: t('tickets:header.more') }).click();
-    await expect(page.getByRole('menu', { name: t('tickets:header.menu') })).toBeVisible();
+    await expect(page.getByRole('menu', { name: t('tickets:actions.label') })).toBeVisible();
     expect(await violations(page)).toEqual([]);
     await page.getByRole('menuitem', { name: t('tickets:actions.markSpam') }).click();
 

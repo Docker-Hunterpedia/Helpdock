@@ -4,11 +4,13 @@ import type {
   IdentityProblem,
   StaffRefusal,
   TicketingRefusal,
+  TicketLifecycleRefusal,
 } from '@helpdock/schemas';
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
 import { ContactError } from '../contacts/api.js';
 import { StaffError } from '../staff/api.js';
 import { TicketingError } from '../ticketing/api.js';
+import { TicketLifecycleError } from '../tickets/api.js';
 import { AuthError } from './api.js';
 
 /**
@@ -160,11 +162,12 @@ export class HttpTransport {
  */
 const toError = async (
   response: Response,
-): Promise<AuthError | ContactError | StaffError | TicketingError> => {
+): Promise<AuthError | ContactError | StaffError | TicketingError | TicketLifecycleError> => {
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
   let contact: { reason: ContactRefusal; problem?: IdentityProblem | undefined } | undefined;
   let ticketing: TicketingRefusal | undefined;
+  let lifecycle: TicketLifecycleRefusal | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -172,6 +175,7 @@ const toError = async (
     staff = body.staff?.reason;
     contact = body.contact;
     ticketing = body.ticketing?.reason;
+    lifecycle = body.lifecycle?.reason;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -187,6 +191,10 @@ const toError = async (
 
   if (ticketing !== undefined) {
     return new TicketingError(ticketing);
+  }
+
+  if (lifecycle !== undefined) {
+    return new TicketLifecycleError(lifecycle);
   }
 
   if (auth === undefined) {

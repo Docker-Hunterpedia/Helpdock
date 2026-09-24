@@ -2,6 +2,7 @@ import type {
   AssignableAgentList,
   Attachment,
   MarkSpamRequest,
+  MergedTicket,
   MessageCreateRequest,
   Ticket,
   TicketActivityEntry,
@@ -11,12 +12,16 @@ import type {
   TicketCreateRequest,
   TicketCsat,
   TicketDetail,
+  TicketLink,
   TicketList,
+  TicketMergeRequest,
+  TicketMergeResult,
   TicketMessage,
   TicketMessagePage,
   TicketParticipantList,
   TicketPriority,
   TicketSpamSender,
+  TicketSplitRequest,
   TicketStatus,
   TicketStatusList,
   TicketUpdateRequest,
@@ -24,7 +29,7 @@ import type {
   TimeEntryCreateRequest,
   TimeEntryList,
 } from '@helpdock/schemas';
-import { normaliseEmail, TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
+import { normaliseEmail, TICKET_PAGE_SIZE_DEFAULT, UNMERGE_WINDOW_MS } from '@helpdock/schemas';
 import { ContactError } from '../contacts/api.js';
 import {
   MOCK_CONTACT_ACCOUNT,
@@ -39,7 +44,7 @@ import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
 import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
-import type { TicketQuery, TicketsApi } from './api.js';
+import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
 
 /**
  * The fixture the ticket workspace runs against until an install is in front of
@@ -128,6 +133,14 @@ function status(
     color,
     ...overrides,
   };
+}
+
+/** What the api keeps on a merged ticket so it can be undone (M1-09). */
+interface MergeRecord {
+  readonly mergedAt: string;
+  readonly mergedById: string;
+  readonly previousStatus: TicketStatus;
+  readonly systemMessageId: string;
 }
 
 interface Seed {
@@ -494,6 +507,8 @@ export class MockTicketsApi implements TicketsApi {
   #timeEntries: TimeEntry[] = [];
   /** M1-12: the survey of each ticket's latest close. */
   readonly #csat = new Map<string, TicketCsat>();
+  /** Keyed by the secondary's id; present while it is merged. */
+  readonly #merges = new Map<string, MergeRecord>();
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
@@ -553,6 +568,7 @@ export class MockTicketsApi implements TicketsApi {
       messages: this.#page(ticketId, 0),
       activity: this.#activityOf(ticketId),
       csat: this.#csat.get(ticketId) ?? null,
+      ...this.#mergeView(ticket),
     });
   }
 
@@ -639,6 +655,14 @@ export class MockTicketsApi implements TicketsApi {
 
   async update(_brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket> {
     const ticket = this.#require(ticketId);
+    // A merged ticket's state belongs to its primary (DOMAIN-RULES §2.4), and
+    // so does its department; the api refuses both with the same reason.
+    if (
+      ticket.mergedIntoId !== null &&
+      (request.statusId !== undefined || request.departmentId !== undefined)
+    ) {
+      throw new TicketLifecycleError('ticket-merged');
+    }
     const status =
       request.statusId === undefined
         ? ticket.status
@@ -793,6 +817,256 @@ export class MockTicketsApi implements TicketsApi {
       entries,
       totalSeconds: entries.reduce((sum, entry) => sum + entry.seconds, 0),
     };
+  }
+
+  // ------------------------------------------------------- M1-09 merge, split
+
+  /** The rules of `apps/api/src/tickets/merge/merge-rules.ts`, on the fixture's rows. */
+  async merge(
+    _brandId: string,
+    ticketId: string,
+    { primaryTicketId }: TicketMergeRequest,
+  ): Promise<TicketMergeResult> {
+    const secondary = this.#require(ticketId);
+    const primary = this.#require(primaryTicketId);
+
+    if (secondary.id === primary.id) {
+      throw new TicketLifecycleError('merge-into-self');
+    }
+    if (secondary.mergedIntoId !== null) {
+      throw new TicketLifecycleError('ticket-merged');
+    }
+    if (primary.mergedIntoId !== null) {
+      throw new TicketLifecycleError('merge-into-merged');
+    }
+
+    const now = isoNow();
+    const announcement = this.#system(
+      primary,
+      `${reference(secondary)} was merged into this ticket`,
+    );
+    this.#merges.set(secondary.id, {
+      mergedAt: now,
+      mergedById: MOCK_SELF_ID,
+      previousStatus: secondary.status,
+      systemMessageId: announcement.id,
+    });
+
+    const merged = this.#put({
+      ...secondary,
+      status: this.#statusOf(MOCK_STATUS_MERGED),
+      mergedIntoId: primary.id,
+      departmentId: primary.departmentId,
+      closedAt: secondary.closedAt ?? now,
+      updatedAt: now,
+    });
+    const tags = [...(primary.tags ?? [])];
+    for (const tag of secondary.tags ?? []) {
+      if (!tags.some((held) => held.id === tag.id)) {
+        tags.push(tag);
+      }
+    }
+    const receiving = this.#put({ ...primary, tags, updatedAt: now });
+    this.#log(secondary.id, 'ticket.merged', { ticketId: secondary.id }, { ticketId: primary.id });
+    this.#log(primary.id, 'ticket.merged', { ticketId: secondary.id }, { ticketId: primary.id });
+
+    return Promise.resolve({ primary: receiving, secondary: merged });
+  }
+
+  async unmerge(_brandId: string, ticketId: string): Promise<TicketMergeResult> {
+    const secondary = this.#require(ticketId);
+    const record = this.#merges.get(ticketId);
+    if (secondary.mergedIntoId === null || record === undefined) {
+      throw new TicketLifecycleError('ticket-not-merged');
+    }
+    if (Date.now() - Date.parse(record.mergedAt) >= UNMERGE_WINDOW_MS) {
+      throw new TicketLifecycleError('merge-window-closed');
+    }
+
+    const primary = this.#require(secondary.mergedIntoId);
+    this.#merges.delete(ticketId);
+    this.#system(primary, `${reference(secondary)} was unmerged from this ticket`);
+
+    const restored = this.#put({
+      ...secondary,
+      status: record.previousStatus,
+      mergedIntoId: null,
+      closedAt: record.previousStatus.systemState === 'closed' ? secondary.closedAt : null,
+      updatedAt: isoNow(),
+    });
+    this.#log(ticketId, 'ticket.unmerged', { ticketId }, { ticketId: primary.id });
+    this.#log(primary.id, 'ticket.unmerged', { ticketId }, { ticketId: primary.id });
+
+    return Promise.resolve({ primary: this.#require(primary.id), secondary: restored });
+  }
+
+  async split(
+    brandId: string,
+    ticketId: string,
+    request: TicketSplitRequest,
+  ): Promise<TicketDetail> {
+    const original = this.#require(ticketId);
+    const chosen = this.#messages
+      .filter((message) => message.ticketId === ticketId && request.messageIds.includes(message.id))
+      .sort((left, right) => left.seq - right.seq);
+    if (chosen.length !== new Set(request.messageIds).size) {
+      throw new Error('no such message on this ticket');
+    }
+
+    const now = isoNow();
+    const created = this.#put({
+      ...original,
+      id: this.#nextId('1'),
+      number: Math.max(...this.#tickets.map((ticket) => ticket.number)) + 1,
+      subject: request.subject,
+      departmentId: request.departmentId,
+      priority: request.priority ?? original.priority,
+      status: this.#defaultStatus(),
+      assigneeId: null,
+      mergedIntoId: null,
+      splitFromId: original.id,
+      closedAt: null,
+      tags: [],
+      custom: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    this.#messages = [
+      ...this.#messages,
+      ...chosen.map((message, index) => ({
+        ...message,
+        id: this.#nextId('7'),
+        ticketId: created.id,
+        seq: index + 1,
+        clientId: null,
+        attachments: message.attachments
+          .filter((attachment) => attachment.status === 'ready')
+          .map((attachment) => ({ ...attachment, id: this.#nextId('9'), ticketId: created.id })),
+      })),
+    ];
+    this.#system(created, `Split from ${reference(original)}`);
+    this.#system(original, `Messages split to ${reference(created)}`);
+    this.#log(original.id, 'ticket.split', { ticketId: original.id }, { ticketId: created.id });
+    this.#log(created.id, 'ticket.split', { ticketId: original.id }, { ticketId: created.id });
+
+    return this.ticket(brandId, created.id);
+  }
+
+  /** The merge half of a ticket read, as `apps/api/src/tickets/merge/merge-view.ts` builds it. */
+  #mergeView(ticket: Ticket): Pick<TicketDetail, 'merged' | 'mergedInto' | 'related'> {
+    const merged: MergedTicket[] = [];
+    let frontier = [ticket.id];
+    while (frontier.length > 0) {
+      const level = this.#tickets.filter(
+        (row) => row.mergedIntoId !== null && frontier.includes(row.mergedIntoId),
+      );
+      for (const row of level) {
+        const record = this.#merges.get(row.id);
+        /* c8 ignore next 3 -- every merged row was merged through `merge`. */
+        if (record === undefined) {
+          continue;
+        }
+        merged.push({
+          ...linkOf(row),
+          ...this.#facts(record),
+          mergedIntoId: row.mergedIntoId ?? ticket.id,
+          systemMessageId: row.mergedIntoId === ticket.id ? record.systemMessageId : null,
+          messages: this.#page(row.id, 0).messages,
+          hasMoreMessages: false,
+        });
+      }
+      frontier = level.map((row) => row.id);
+    }
+
+    const record = this.#merges.get(ticket.id);
+    const primary =
+      ticket.mergedIntoId === null
+        ? undefined
+        : this.#tickets.find((row) => row.id === ticket.mergedIntoId);
+
+    return {
+      merged,
+      mergedInto:
+        primary === undefined || record === undefined
+          ? null
+          : { ...linkOf(primary), ...this.#facts(record) },
+      related: this.#tickets
+        .filter((row) => row.splitFromId === ticket.id || row.id === ticket.splitFromId)
+        .map(linkOf),
+    };
+  }
+
+  #facts(record: MergeRecord) {
+    const until = Date.parse(record.mergedAt) + UNMERGE_WINDOW_MS;
+
+    return {
+      mergedAt: record.mergedAt,
+      mergedById: record.mergedById,
+      unmergeableUntil: until > Date.now() ? new Date(until).toISOString() : null,
+    };
+  }
+
+  /** A system row in a thread, the way the api writes "Continued in" and its kin. */
+  #system(ticket: Ticket, text: string): TicketMessage {
+    const message: TicketMessage = {
+      id: this.#nextId('7'),
+      ticketId: ticket.id,
+      seq: this.#nextSeq(ticket.id),
+      clientId: null,
+      kind: 'system',
+      authorType: 'system',
+      authorId: MOCK_SELF_ID,
+      bodyHtml: `<p>${text}</p>`,
+      bodyText: text,
+      attachments: [],
+      channel: ticket.channel,
+      createdAt: isoNow(),
+    };
+    this.#messages = [...this.#messages, message];
+
+    return message;
+  }
+
+  #log(
+    ticketId: string,
+    action: string,
+    from: Record<string, unknown>,
+    to: Record<string, unknown>,
+  ): void {
+    this.#activity = [
+      ...this.#activity,
+      {
+        id: this.#nextId('8'),
+        ticketId,
+        actorType: 'staff',
+        actorId: MOCK_SELF_ID,
+        action,
+        from,
+        to,
+        via: 'ui',
+        createdAt: isoNow(),
+      },
+    ];
+  }
+
+  /** Writes a row over the one with its id, or adds it. */
+  #put(ticket: Ticket): Ticket {
+    this.#tickets = this.#tickets.some((row) => row.id === ticket.id)
+      ? this.#tickets.map((row) => (row.id === ticket.id ? ticket : row))
+      : [ticket, ...this.#tickets];
+
+    return ticket;
+  }
+
+  #statusOf(statusId: string): TicketStatus {
+    const found = this.#statuses.find((candidate) => candidate.id === statusId);
+    /* c8 ignore next 3 -- the ids are the ones seeded. */
+    if (found === undefined) {
+      throw new Error(`no seeded status ${statusId}`);
+    }
+
+    return found;
   }
 
   // ------------------------------------------------------------------
@@ -998,6 +1272,15 @@ const pendingSurvey = (): TicketCsat => ({
   link: new URL(`/csat/${MOCK_CSAT_TOKENS.open}`, window.location.origin).toString(),
   expiresAt: new Date(Date.now() + 30 * DAY).toISOString(),
   ratedAt: null,
+});
+
+const reference = (ticket: Ticket): string => `${ticket.prefix}-${ticket.number}`;
+
+const linkOf = (ticket: Ticket): TicketLink => ({
+  id: ticket.id,
+  number: ticket.number,
+  prefix: ticket.prefix,
+  subject: ticket.subject,
 });
 
 /**

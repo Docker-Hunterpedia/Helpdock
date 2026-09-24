@@ -1,12 +1,21 @@
-import type { TicketActivityEntry, TicketMessage } from '@helpdock/schemas';
-import { Box } from '@mui/material';
+import type {
+  MergedTicket,
+  TicketActivityEntry,
+  TicketLink,
+  TicketMessage,
+} from '@helpdock/schemas';
+import { Box, Link as MuiLink } from '@mui/material';
 import { type ReactNode, useEffect, useRef } from 'react';
+import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
+import { ticketRoute } from '../../app/route-paths.js';
+import { linkReferences } from '../../tickets/merge.js';
 import type { PendingMessage } from '../../tickets/pending.js';
 import type { ThreadItem } from '../../tickets/thread.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
-import { messageTime } from './format.js';
+import { messageTime, ticketReference } from './format.js';
+import { MergedBlock } from './merged-block.tsx';
 import {
   type BubbleKind,
   MESSAGE_MAX_WIDTH,
@@ -34,6 +43,8 @@ export type Translate = (key: string, options?: Record<string, unknown>) => stri
 export interface ThreadNames {
   /** The person's own display name, or null when it is somebody unknown. */
   nameFor(authorType: string, authorId: string | null): string | null;
+  /** A staff member's name, and only a staff member's (M1-09's "by Lina"). */
+  staffName(userId: string | null): string | null;
   /** The address or handle under a contact's name, when there is one. */
   addressFor(authorId: string | null): string | null;
 }
@@ -43,16 +54,33 @@ const BUBBLE_KIND: Record<string, BubbleKind> = {
   ai: 'ai',
 };
 
+/**
+ * M1-09: what the thread needs to draw merged tickets and to link the tickets
+ * a system message names. Optional, so a thread with no merge in it is drawn
+ * exactly as before.
+ */
+export interface ThreadMerges {
+  readonly ticketId: string;
+  /** Every ticket merged into this one, for a chain's "into HD-1038". */
+  readonly merged: readonly MergedTicket[];
+  /** The tickets a system message may name and this reader can open. */
+  readonly links: readonly TicketLink[];
+  readonly busy: boolean;
+  onUnmerge(ticketId: string): void;
+}
+
 export function Thread({
   items,
   names,
   now,
+  merges,
   onRetry,
   onDiscard,
 }: {
   readonly items: readonly ThreadItem[];
   readonly names: ThreadNames;
   readonly now: number;
+  readonly merges?: ThreadMerges;
   onRetry(pending: PendingMessage): void;
   onDiscard(pending: PendingMessage): void;
 }): ReactNode {
@@ -88,12 +116,28 @@ export function Thread({
       >
         {items.map((item) => (
           <Box component="li" key={item.id} sx={{ display: 'flex', flexDirection: 'column' }}>
-            {item.kind === 'event' ? (
+            {item.kind === 'merged' ? (
+              <MergedBlock
+                merged={item.merged}
+                intoReference={intoReferenceOf(item.merged, merges)}
+                names={names}
+                now={now}
+                busy={merges?.busy ?? false}
+                onUnmerge={(ticketId) => {
+                  merges?.onUnmerge(ticketId);
+                }}
+              />
+            ) : item.kind === 'event' ? (
               <SystemEvent>{describeEvent(item.entry, names, translate, locale, now)}</SystemEvent>
             ) : item.kind === 'message' ? (
               item.message.kind === 'system' ? (
                 <SystemEvent>
-                  {`${item.message.bodyText} · ${messageTime(item.message.createdAt, locale, now)}`}
+                  <SystemText
+                    message={item.message}
+                    links={merges?.links ?? []}
+                    names={names}
+                    now={now}
+                  />
                 </SystemEvent>
               ) : (
                 <MessageBubble
@@ -145,6 +189,59 @@ export function Thread({
     </>
   );
 }
+
+/**
+ * A system message, with the tickets it names linked and — when a person made
+ * it — who, which is the artboard's "Messages split to HD-1043 by Lina · 14:12".
+ * The api writes a system row's `author_id` as the actor's; a name is shown
+ * only when that is somebody in the staff directory.
+ */
+function SystemText({
+  message,
+  links,
+  names,
+  now,
+}: {
+  readonly message: TicketMessage;
+  readonly links: readonly TicketLink[];
+  readonly names: ThreadNames;
+  readonly now: number;
+}): ReactNode {
+  const t = useT();
+  const { locale } = usePreferences();
+  const segments = linkReferences(message.bodyText, links).map((segment, index) =>
+    segment.kind === 'text' ? (
+      // Segments of one sentence never reorder, so the index is their identity.
+      // biome-ignore lint/suspicious/noArrayIndexKey: see above.
+      <span key={index}>{segment.text}</span>
+    ) : (
+      // biome-ignore lint/suspicious/noArrayIndexKey: see above.
+      <MuiLink key={index} component={Link} to={ticketRoute(segment.ticketId)}>
+        <bdi>{segment.text}</bdi>
+      </MuiLink>
+    ),
+  );
+  const by = names.staffName(message.authorId);
+  const time = messageTime(message.createdAt, locale, now);
+
+  return (
+    <>
+      {segments}
+      {by === null ? ` · ${time}` : ` ${t('tickets:systemBy', { name: by, time })}`}
+    </>
+  );
+}
+
+/** The ticket a chained merge went into, or `null` when it went into this one. */
+const intoReferenceOf = (merged: MergedTicket, merges: ThreadMerges | undefined): string | null => {
+  if (merges === undefined || merged.mergedIntoId === merges.ticketId) {
+    return null;
+  }
+
+  const into = merges.merged.find((ticket) => ticket.id === merged.mergedIntoId);
+
+  return into === undefined ? null : ticketReference(into);
+};
 
 /**
  * One cast, in one place. `useT()` is typed against the catalog's literal keys,

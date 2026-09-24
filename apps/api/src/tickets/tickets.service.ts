@@ -57,6 +57,8 @@ import {
   type LifecycleContext,
   type TicketLifecycleService,
 } from './lifecycle/lifecycle.service.js';
+import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
+import { readMergeView } from './merge/merge-view.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
@@ -226,6 +228,9 @@ export class TicketsService {
       }),
       activity: await this.#activityOf(tx, ticketId),
       csat: await this.#csat.forTicket(tx, found.ticket.brandId, ticketId),
+      // M1-09: what was merged into this ticket, where it was merged to, and
+      // what a split joined to it (DOMAIN-RULES §2.4).
+      ...(await readMergeView(tx, found.ticket, new Date(), this.#attachments)),
     };
   }
 
@@ -380,6 +385,13 @@ export class TicketsService {
     const context: LifecycleContext = { tx, brandId, actor, now };
 
     const { values, from, to } = plainChanges(ticket, input);
+
+    // M1-09: a merged ticket stays in its primary's department, which is what
+    // lets everyone who reads the primary read its messages (§2.4). Moving it
+    // alone would break that; unmerging it is how it leaves.
+    if (ticket.mergedIntoId !== null && values.departmentId !== undefined) {
+      throw new TicketLifecycleFailure('ticket-merged');
+    }
 
     // ---- M1-06 -------------------------------------------------------------
     // A patch over the stored object, validated against the brand's ticket

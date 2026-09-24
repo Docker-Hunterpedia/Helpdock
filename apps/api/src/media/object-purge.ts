@@ -1,4 +1,5 @@
 import type { DbTransaction } from '@helpdock/db';
+import { attachments as attachmentRows } from '@helpdock/db';
 import {
   enqueueOutbox,
   type OutboxEventContext,
@@ -6,8 +7,9 @@ import {
   registerEventHandler,
 } from '@helpdock/jobs';
 import { attachmentVariantNameSchema } from '@helpdock/schemas';
+import { and, inArray, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { attachmentKey } from './keys.js';
+import { objectKeyBeside } from './keys.js';
 import type { ObjectStorage } from './storage.js';
 
 /**
@@ -52,31 +54,71 @@ export interface PurgeableAttachment {
  * `variants` lists, because a row caught mid-processing may already have
  * written an object its column does not name yet — and deleting a key that is
  * not there is a success.
+ *
+ * Built beside `s3_key` rather than from the row's ids, because a split's copy
+ * (M1-09) owns no folder of its own: it points at the original's objects.
  */
 export const attachmentObjectKeys = (attachment: PurgeableAttachment): string[] => {
-  const parts = {
-    brandId: attachment.brandId,
-    ticketId: attachment.ticketId,
-    attachmentId: attachment.id,
-  };
   const variants = attachmentVariantNameSchema.options.map((variant) =>
-    attachmentKey(parts, variant),
+    objectKeyBeside(attachment.s3Key, variant),
   );
 
   return [...new Set([attachment.s3Key, ...variants])];
 };
 
 /**
+ * The uploads among these rows that some row *not* being removed still names.
+ *
+ * A split (M1-09) copies an attachment as a second row on the same object, so
+ * the bytes belong to every row that names them. Purging one ticket, or
+ * erasing one contact's files, must leave an object alone while any other row
+ * — the copy on the new ticket, or the original the copy came from — can still
+ * be downloaded. The last row to go takes the objects with it.
+ */
+const stillNamedElsewhere = async (
+  tx: DbTransaction,
+  removing: readonly PurgeableAttachment[],
+): Promise<ReadonlySet<string>> => {
+  const rows = await tx
+    .select({ s3Key: attachmentRows.s3Key })
+    .from(attachmentRows)
+    .where(
+      and(
+        inArray(
+          attachmentRows.s3Key,
+          removing.map((row) => row.s3Key),
+        ),
+        notInArray(
+          attachmentRows.id,
+          removing.map((row) => row.id),
+        ),
+      ),
+    );
+
+  return new Set(rows.map((row) => row.s3Key));
+};
+
+/**
  * Writes the outbox rows that will delete these attachments' objects, through
  * the caller's transaction, and returns how many keys were queued. Nothing is
- * written for an empty list.
+ * written for an empty list, and nothing for an object another row still
+ * names (see {@link stillNamedElsewhere}).
+ *
+ * Called **before** the rows are deleted, in the same transaction, so the
+ * rows being removed are told apart from the rest by id.
  */
 export const enqueueObjectPurge = async (
   tx: DbTransaction,
   brandId: string,
   attachments: readonly PurgeableAttachment[],
 ): Promise<number> => {
-  const keys = attachments.flatMap(attachmentObjectKeys);
+  if (attachments.length === 0) {
+    return 0;
+  }
+  const shared = await stillNamedElsewhere(tx, attachments);
+  const keys = attachments
+    .filter((attachment) => !shared.has(attachment.s3Key))
+    .flatMap(attachmentObjectKeys);
 
   for (let start = 0; start < keys.length; start += OBJECT_PURGE_CHUNK) {
     await enqueueOutbox(tx, {

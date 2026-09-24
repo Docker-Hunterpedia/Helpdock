@@ -5,6 +5,7 @@ import type {
   TicketChanged,
   TicketMessageEvent,
   TicketViewing,
+  TicketViewingActivity,
 } from '@helpdock/schemas';
 import { parseRoom } from '@helpdock/schemas';
 import { MOCK_USER } from '../auth/mock-api.js';
@@ -44,6 +45,8 @@ export class MockRealtimeClient implements RealtimeClient {
   #brandId: string | null = null;
   /** Every ticket this client has said it is looking at, in order. */
   readonly announced: string[] = [];
+  /** What each of those announcements said this browser was doing (M1-09). */
+  readonly announcedActivity: TicketViewingActivity[] = [];
 
   constructor(userId: string = MOCK_USER.id) {
     this.#userId = userId;
@@ -110,11 +113,15 @@ export class MockRealtimeClient implements RealtimeClient {
    * screenshots. A real gateway relays other people's announcements; this one
    * has no other people, so it invents exactly one.
    */
-  announceViewing(ticketId: string): void {
+  announceViewing(ticketId: string, activity: TicketViewingActivity = 'viewing'): void {
     this.announced.push(ticketId);
+    this.announcedActivity.push(activity);
+    // The colleague is looking, never typing: what this browser is doing is
+    // this browser's, and the fixture has nobody else to be replying.
     this.#listeners.ticketViewing({
       brandId: this.#brandId ?? MOCK_BRAND_ID,
       ticketId,
+      activity: 'viewing',
       userId: MOCK_COLLEAGUE_ID,
     });
   }

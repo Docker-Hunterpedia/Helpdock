@@ -1,4 +1,4 @@
-import type { TicketActivityEntry, TicketMessage } from '@helpdock/schemas';
+import type { MergedTicket, TicketActivityEntry, TicketMessage } from '@helpdock/schemas';
 import type { PendingMessage } from './pending.js';
 
 /**
@@ -14,6 +14,11 @@ import type { PendingMessage } from './pending.js';
  *
  * Ordering is by time, and a pending send sorts last within its own instant so
  * that what somebody just typed sits at the bottom where they left it.
+ *
+ * **A merged ticket is one item** (M1-09): the banner, the divider and its
+ * messages, read-only. It takes the place of the system message that announced
+ * the merge, so the thread says it once, where it happened; a ticket merged
+ * further down a chain has no announcement here and sits at its merge time.
  */
 
 const THREAD_EVENT_ACTIONS: readonly string[] = ['ticket.updated', 'ticket.status.changed'];
@@ -36,25 +41,50 @@ export type ThreadItem =
       readonly id: string;
       readonly at: string;
       readonly entry: TicketActivityEntry;
+    }
+  | {
+      readonly kind: 'merged';
+      readonly id: string;
+      readonly at: string;
+      readonly merged: MergedTicket;
     };
 
 /** Sorts last within one instant, so an optimistic bubble stays at the end. */
-const RANK: Record<ThreadItem['kind'], number> = { event: 0, message: 1, pending: 2 };
+const RANK: Record<ThreadItem['kind'], number> = { event: 0, message: 1, merged: 1, pending: 2 };
 
 export const buildThread = (
   messages: readonly TicketMessage[],
   activity: readonly TicketActivityEntry[],
   pending: readonly PendingMessage[],
+  merged: readonly MergedTicket[] = [],
 ): readonly ThreadItem[] => {
+  // Only announcements this client holds: one on a page not yet read would
+  // otherwise take its merged block off the screen with it.
+  const held = new Set(messages.map((message) => message.id));
+  const announcedBy = new Map(
+    merged
+      .filter((ticket) => ticket.systemMessageId !== null && held.has(ticket.systemMessageId))
+      .map((ticket) => [ticket.systemMessageId, ticket]),
+  );
+
   const items: ThreadItem[] = [
-    ...messages.map(
-      (message): ThreadItem => ({
-        kind: 'message',
-        id: message.id,
-        at: message.createdAt,
-        message,
-      }),
-    ),
+    ...messages.map((message): ThreadItem => {
+      const block = announcedBy.get(message.id);
+
+      return block === undefined
+        ? { kind: 'message', id: message.id, at: message.createdAt, message }
+        : { kind: 'merged', id: block.id, at: message.createdAt, merged: block };
+    }),
+    ...merged
+      .filter((ticket) => !announcedBy.has(ticket.systemMessageId))
+      .map(
+        (ticket): ThreadItem => ({
+          kind: 'merged',
+          id: ticket.id,
+          at: ticket.mergedAt,
+          merged: ticket,
+        }),
+      ),
     ...activity
       .filter((entry) => THREAD_EVENT_ACTIONS.includes(entry.action))
       .map((entry): ThreadItem => ({ kind: 'event', id: entry.id, at: entry.createdAt, entry })),

@@ -13,6 +13,7 @@ export * from './health.js';
 export * from './identity-rules.js';
 export * from './install.js';
 export * from './media.js';
+export * from './merge.js';
 export * from './participants.js';
 export * from './principal.js';
 export * from './realtime.js';

@@ -66,3 +66,21 @@ export const attachmentPrefix = ({ brandId, ticketId, attachmentId }: Attachment
  */
 export const attachmentKey = (parts: AttachmentKeyParts, variant: DownloadVariant): string =>
   `${attachmentPrefix(parts)}${variant}`;
+
+/**
+ * The key of one variant of the object an attachment row names, found from the
+ * row's own `s3_key` rather than from its ids.
+ *
+ * The two differ for a split's copy (M1-09): the copy is a row of its own on
+ * the new ticket, pointing at the **original's** objects, so its ids build a
+ * folder nothing was ever written to. Every read and every purge of the bytes
+ * goes through the stored key for that reason.
+ */
+export const objectKeyBeside = (s3Key: string, variant: DownloadVariant): string => {
+  const folder = s3Key.slice(0, s3Key.lastIndexOf('/') + 1);
+  if (folder === '' || s3Key.slice(folder.length) !== ORIGINAL_VARIANT) {
+    throw new TypeError('An attachment key must end in its original variant');
+  }
+
+  return `${folder}${variant}`;
+};

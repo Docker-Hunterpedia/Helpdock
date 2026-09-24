@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpTransport } from '../auth/http-transport.js';
+import { TicketLifecycleError } from './api.js';
 import { NOW, testMessage, testStatus, testTicket } from './fixtures.js';
 import { HttpTicketsApi, listQueryString } from './http-api.js';
 
@@ -154,6 +155,76 @@ describe('HttpTicketsApi', () => {
     fetchMock.mockResolvedValue(json({ tickets: [{ id: 'not-a-uuid' }], nextCursor: null }));
 
     await expect(api.list(BRAND)).rejects.toThrow();
+  });
+
+  it('merges this ticket into the one named, and parses both halves (M1-09)', async () => {
+    const primaryTicketId = '0192c3f0-1a2b-7c3d-8e4f-000000001035';
+    fetchMock.mockResolvedValue(
+      json({
+        primary: testTicket({ id: primaryTicketId }),
+        secondary: testTicket({ mergedIntoId: primaryTicketId }),
+      }),
+    );
+
+    const result = await api.merge(BRAND, TICKET, { primaryTicketId });
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/merge`);
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ primaryTicketId });
+    expect(result.secondary.mergedIntoId).toBe(primaryTicketId);
+  });
+
+  it('unmerges with an empty post', async () => {
+    fetchMock.mockResolvedValue(json({ primary: testTicket(), secondary: testTicket() }));
+
+    await api.unmerge(BRAND, TICKET);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/unmerge`);
+    expect(lastInit().method).toBe('POST');
+  });
+
+  it('splits and answers with the new ticket', async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          ticket: testTicket({ number: 1043, splitFromId: TICKET }),
+          messages: { messages: [], nextAfter: null },
+          activity: [],
+          related: [{ id: TICKET, number: 1042, prefix: 'HD', subject: 'Refund' }],
+        },
+        201,
+      ),
+    );
+
+    const created = await api.split(BRAND, TICKET, {
+      messageIds: [TICKET],
+      subject: 'VAT',
+      departmentId: BRAND,
+    });
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/split`);
+    expect(created.ticket.splitFromId).toBe(TICKET);
+    expect(created.related?.[0]?.number).toBe(1042);
+  });
+
+  it('turns a refusal the rules make into a reason the screen can read', async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          error: {
+            code: 'conflict',
+            message: 'no',
+            requestId: 'r',
+            lifecycle: { reason: 'merge-window-closed' },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(api.unmerge(BRAND, TICKET)).rejects.toEqual(
+      new TicketLifecycleError('merge-window-closed'),
+    );
   });
 
   it('escapes the ids it puts in a path', async () => {

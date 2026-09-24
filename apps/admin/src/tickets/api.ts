@@ -8,7 +8,10 @@ import type {
   TicketChannel,
   TicketCreateRequest,
   TicketDetail,
+  TicketLifecycleRefusal,
   TicketList,
+  TicketMergeRequest,
+  TicketMergeResult,
   TicketMessage,
   TicketMessagePage,
   TicketParticipantList,
@@ -16,6 +19,7 @@ import type {
   TicketSort,
   TicketSortDirection,
   TicketSpamSender,
+  TicketSplitRequest,
   TicketStatusList,
   TicketSystemState,
   TicketUpdateRequest,
@@ -31,14 +35,14 @@ import type {
  * The shape mirrors `ContactsApi`: one interface, two adapters, DTOs that are
  * the very schemas `apps/api` declares its responses with.
  *
- * **There is no `TicketError`,** unlike staff and contacts, and that is the
- * point rather than an omission. The refusals those two have are rules a person
- * can act on — "that address is taken", "that is the last identifier". A ticket
- * has one refusal, and DOMAIN-RULES §1.2 requires it to be unreadable: a ticket
- * in another department answers 404 by id, by cursor and by activity alike, and
- * "not found" must not be distinguishable from "not yours". So every failure
- * crosses as whatever the transport threw and every screen draws the same
- * sentence.
+ * **"Not found" has no error of its own,** unlike the refusals of staff and
+ * contacts, and that is the point rather than an omission. DOMAIN-RULES §1.2
+ * requires it to be unreadable: a ticket in another department answers 404 by
+ * id, by cursor and by activity alike, and "not found" must not be
+ * distinguishable from "not yours". So it crosses as whatever the transport
+ * threw and every screen draws the same sentence. The one exception is a rule
+ * a person can act on — a merged ticket, a closed unmerge window — which is
+ * {@link TicketLifecycleError} below.
  */
 export interface TicketsApi {
   /** The brand's statuses: the picker's options and what a badge is drawn from. */
@@ -89,7 +93,34 @@ export interface TicketsApi {
     request: TimeEntryCreateRequest,
   ): Promise<TimeEntryList>;
   deleteTimeEntry(brandId: string, ticketId: string, entryId: string): Promise<TimeEntryList>;
+
+  /** M1-09. Closes `ticketId` into `request.primaryTicketId` (DOMAIN-RULES §2.4). */
+  merge(brandId: string, ticketId: string, request: TicketMergeRequest): Promise<TicketMergeResult>;
+  /** M1-09. Undoes the merge of `ticketId`, inside its 24 hours. */
+  unmerge(brandId: string, ticketId: string): Promise<TicketMergeResult>;
+  /** M1-09. Copies messages of `ticketId` onto a new ticket, and answers with it. */
+  split(brandId: string, ticketId: string, request: TicketSplitRequest): Promise<TicketDetail>;
 }
+
+/**
+ * A transition DOMAIN-RULES §2.2 or §2.4 has no row for (M1-08, M1-09): the
+ * ticket is merged, the merge window has closed, the primary was itself
+ * merged. Unlike "not found", these are rules a person can act on, so the
+ * `reason` picks a translated sentence — the same arrangement `TicketingError`
+ * has for the settings screens.
+ */
+export class TicketLifecycleError extends Error {
+  readonly reason: TicketLifecycleRefusal;
+
+  constructor(reason: TicketLifecycleRefusal) {
+    super(`ticket: ${reason}`);
+    this.name = 'TicketLifecycleError';
+    this.reason = reason;
+  }
+}
+
+export const isTicketLifecycleError = (error: unknown): error is TicketLifecycleError =>
+  error instanceof TicketLifecycleError;
 
 /**
  * What a list asks for. It is the request side of `ticketListQuerySchema` with

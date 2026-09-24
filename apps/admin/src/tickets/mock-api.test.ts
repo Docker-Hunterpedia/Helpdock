@@ -1,10 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { UNMERGE_WINDOW_MS } from '@helpdock/schemas';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MOCK_CONTACT_MONA } from '../contacts/mock-api.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
+import { TicketLifecycleError } from './api.js';
 import {
   MOCK_STATUS_AWAITING,
   MOCK_STATUS_CLOSED,
+  MOCK_STATUS_MERGED,
+  MOCK_TICKET_CLOSED,
   MOCK_TICKET_REFUND,
+  MOCK_TICKET_SIGN_IN,
   MOCK_TICKET_VAT,
   MockTicketsApi,
 } from './mock-api.js';
@@ -222,5 +227,97 @@ describe('MockTicketsApi', () => {
     expect(note).toMatchObject({ kind: 'note', channel: 'manual' });
     const { activity } = await api.activity(BRAND, MOCK_TICKET_REFUND);
     expect(activity.at(-1)?.action).toBe('ticket.note_added');
+  });
+});
+
+describe('MockTicketsApi, merge and split (M1-09)', () => {
+  let api: MockTicketsApi;
+
+  beforeEach(() => {
+    api = new MockTicketsApi();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('closes the secondary as Merged and shows it inline in the primary', async () => {
+    const result = await api.merge(BRAND, MOCK_TICKET_REFUND, { primaryTicketId: MOCK_TICKET_VAT });
+
+    expect(result.secondary.status.id).toBe(MOCK_STATUS_MERGED);
+    expect(result.secondary.mergedIntoId).toBe(MOCK_TICKET_VAT);
+    expect(result.secondary.departmentId).toBe(result.primary.departmentId);
+
+    const primary = await api.ticket(BRAND, MOCK_TICKET_VAT);
+    const block = primary.merged?.[0];
+    expect(block?.id).toBe(MOCK_TICKET_REFUND);
+    expect(primary.messages.messages.map((message) => message.id)).toContain(
+      block?.systemMessageId,
+    );
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).mergedInto?.id).toBe(MOCK_TICKET_VAT);
+  });
+
+  it('refuses what the api refuses, with the same reasons', async () => {
+    await expect(
+      api.merge(BRAND, MOCK_TICKET_VAT, { primaryTicketId: MOCK_TICKET_VAT }),
+    ).rejects.toEqual(new TicketLifecycleError('merge-into-self'));
+
+    await api.merge(BRAND, MOCK_TICKET_REFUND, { primaryTicketId: MOCK_TICKET_VAT });
+
+    await expect(
+      api.merge(BRAND, MOCK_TICKET_REFUND, { primaryTicketId: MOCK_TICKET_CLOSED }),
+    ).rejects.toEqual(new TicketLifecycleError('ticket-merged'));
+    await expect(
+      api.merge(BRAND, MOCK_TICKET_SIGN_IN, { primaryTicketId: MOCK_TICKET_REFUND }),
+    ).rejects.toEqual(new TicketLifecycleError('merge-into-merged'));
+    await expect(api.unmerge(BRAND, MOCK_TICKET_VAT)).rejects.toEqual(
+      new TicketLifecycleError('ticket-not-merged'),
+    );
+  });
+
+  it('restores the previous status on unmerge, and refuses one after 24 hours', async () => {
+    const before = await api.ticket(BRAND, MOCK_TICKET_REFUND);
+    await api.merge(BRAND, MOCK_TICKET_REFUND, { primaryTicketId: MOCK_TICKET_VAT });
+
+    const undone = await api.unmerge(BRAND, MOCK_TICKET_REFUND);
+    expect(undone.secondary.status.id).toBe(before.ticket.status.id);
+    expect((await api.ticket(BRAND, MOCK_TICKET_VAT)).merged).toEqual([]);
+
+    await api.merge(BRAND, MOCK_TICKET_REFUND, { primaryTicketId: MOCK_TICKET_VAT });
+    vi.useFakeTimers({ now: Date.now() + UNMERGE_WINDOW_MS });
+    expect((await api.ticket(BRAND, MOCK_TICKET_VAT)).merged?.[0]?.unmergeableUntil).toBeNull();
+    await expect(api.unmerge(BRAND, MOCK_TICKET_REFUND)).rejects.toEqual(
+      new TicketLifecycleError('merge-window-closed'),
+    );
+  });
+
+  it('copies the chosen messages onto a new ticket and links the two', async () => {
+    const [first] = (await api.ticket(BRAND, MOCK_TICKET_REFUND)).messages.messages;
+
+    const created = await api.split(BRAND, MOCK_TICKET_REFUND, {
+      messageIds: [first?.id ?? ''],
+      subject: 'The return label',
+      departmentId: BILLING?.id ?? '',
+    });
+
+    expect(created.ticket).toMatchObject({
+      number: 1043,
+      splitFromId: MOCK_TICKET_REFUND,
+      departmentId: BILLING?.id,
+    });
+    expect(created.messages.messages[0]?.bodyText).toBe(first?.bodyText);
+    expect(created.messages.messages[0]?.attachments).toHaveLength(1);
+    expect(created.related?.map((link) => link.id)).toEqual([MOCK_TICKET_REFUND]);
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).related?.[0]?.id).toBe(created.ticket.id);
+  });
+
+  it('refuses a message that is not on the ticket', async () => {
+    await expect(
+      api.split(BRAND, MOCK_TICKET_REFUND, {
+        messageIds: [MOCK_TICKET_VAT],
+        subject: 'Nope',
+        departmentId: SUPPORT?.id ?? '',
+      }),
+    ).rejects.toThrow();
   });
 });

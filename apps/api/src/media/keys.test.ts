@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attachmentKey, attachmentPrefix } from './keys.js';
+import { attachmentKey, attachmentPrefix, objectKeyBeside } from './keys.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
 const TICKET = '01937f5e-7e53-7000-8000-00000000000b';
@@ -45,5 +45,19 @@ describe('attachmentKey', () => {
     }
     expect(() => attachmentPrefix({ ...parts, brandId: '..' })).toThrow(TypeError);
     expect(() => attachmentPrefix({ ...parts, attachmentId: '..' })).toThrow(TypeError);
+  });
+});
+
+describe('objectKeyBeside', () => {
+  it('names a variant in the folder of the stored upload, whatever row points at it', () => {
+    const stored = attachmentKey(parts, 'original');
+
+    expect(objectKeyBeside(stored, 'thumb320')).toBe(attachmentKey(parts, 'thumb320'));
+  });
+
+  it('refuses a key that is not an upload, rather than guessing a folder', () => {
+    for (const bad of ['original', `${attachmentPrefix(parts)}webp`, '']) {
+      expect(() => objectKeyBeside(bad, 'webp'), bad).toThrow(TypeError);
+    }
   });
 });

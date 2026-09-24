@@ -1,6 +1,10 @@
 {
   "system": {
     "continuedFrom": "متابعة لـ {{ticket}}",
-    "continuedIn": "تكملة في {{ticket}}"
+    "continuedIn": "تكملة في {{ticket}}",
+    "mergedFrom": "دُمجت {{ticket}} في هذه التذكرة",
+    "unmerged": "أُلغي دمج {{ticket}} من هذه التذكرة",
+    "splitTo": "نُقلت نسخة من الرسائل إلى {{ticket}}",
+    "splitFrom": "مفصولة من {{ticket}}"
   }
 }

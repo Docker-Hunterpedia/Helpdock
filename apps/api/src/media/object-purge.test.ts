@@ -34,6 +34,17 @@ const context = (keys: readonly string[], brandId = BRAND) => ({
 });
 
 describe('attachmentObjectKeys', () => {
+  it('names the objects beside the stored key, so a split copy purges the original’s', () => {
+    // A copy is a row of its own on another ticket, pointing at the same upload.
+    const copy = {
+      ...attachment(),
+      id: '01937f5e-7e53-7000-8000-0000000000cf',
+      ticketId: '01937f5e-7e53-7000-8000-0000000000bf',
+    };
+
+    expect(attachmentObjectKeys(copy)).toEqual(attachmentObjectKeys(attachment()));
+  });
+
   it('names the upload and every variant the pipeline can write, once each', () => {
     const keys = attachmentObjectKeys(attachment());
     const prefix = `brands/${BRAND}/tickets/${TICKET}/${ATTACHMENT}/`;
@@ -66,6 +77,17 @@ describe('enqueueObjectPurge', () => {
 
     expect(written).toHaveLength(Math.ceil((40 * 6) / OBJECT_PURGE_CHUNK));
     expect(written.flatMap((row) => row.payload.keys as string[])).toHaveLength(240);
+  });
+
+  it('leaves an object alone while a row outside the purge still names it (M1-09 split)', async () => {
+    const written: OutboxRow[] = [];
+    const kept = attachment();
+    const gone = attachment('01937f5e-7e53-7000-8000-0000000000cd');
+
+    const queued = await enqueueObjectPurge(fakeTx(written, [kept.s3Key]), BRAND, [kept, gone]);
+
+    expect(queued).toBe(6);
+    expect(written[0]?.payload.keys).toEqual(attachmentObjectKeys(gone));
   });
 
   it('writes nothing when nothing had attachments', async () => {

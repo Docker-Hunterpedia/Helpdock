@@ -6,6 +6,7 @@ import type {
   TicketChanged,
   TicketMessageEvent,
   TicketViewing,
+  TicketViewingActivity,
 } from '@helpdock/schemas';
 
 /**
@@ -51,8 +52,11 @@ export interface RealtimeClient {
    * open beside the department queue it came from is exactly that.
    */
   joinRoom(room: string): () => void;
-  /** Says "I have this ticket open" to the rest of `ticket:<ticketId>`. */
-  announceViewing(ticketId: string): void;
+  /**
+   * Says "I have this ticket open" to the rest of `ticket:<ticketId>`, and —
+   * M1-09 — whether the composer has something in it (`replying`).
+   */
+  announceViewing(ticketId: string, activity?: TicketViewingActivity): void;
   subscribe(listener: RealtimeListener): () => void;
 }
 

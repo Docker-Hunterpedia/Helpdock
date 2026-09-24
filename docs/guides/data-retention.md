@@ -40,7 +40,7 @@ forever, or a table that does not exist yet.
   is set the first time a ticket enters a closed state and cleared on reopen.
   Merged tickets are closed tickets.
 - A **spam ticket** is one in the brand's Spam status, found by
-  `ticket_statuses.is_spam` rather than by name, because a brand may rename it.
+  `ticket_statuses.is_spam` (generated from `system_key = 'spam'`) rather than by name, because a brand may rename it.
   Spam is never purged by the closed-ticket window, only by its own.
 
 ## The nightly run

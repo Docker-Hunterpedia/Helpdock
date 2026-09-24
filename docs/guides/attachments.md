@@ -336,6 +336,14 @@ retention](data-retention.md) describes the nightly run.
 Not swept yet: composer uploads that were never sent (`message_id` still null)
 stay until their ticket is purged.
 
+**A split shares objects** (M1-09). Copying a message onto a new ticket copies
+its `ready` attachment *rows*, which point at the original's `s3_key` and carry
+`copied_from_attachment_id`; the bytes are not duplicated. So `s3_key` is unique
+among originals only, and an object may be named by rows on two tickets under
+two prefixes. The retention pass must delete an object only once no row names
+its key any more — deleting by the ticket's prefix alone would take the split
+ticket's attachments with the original's.
+
 ## Limits and budgets
 
 | Thing | Value | Why |

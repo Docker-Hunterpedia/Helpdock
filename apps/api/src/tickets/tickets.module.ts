@@ -3,6 +3,9 @@ import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { CsatService } from '../csat/csat.service.js';
 import { CsatLifecycleHooks } from '../csat/csat-hooks.js';
 import { MediaRepository } from '../media/media.repository.js';
+import { ParticipantsMergeHook } from '../participants/merge-participants.hook.js';
+import { ParticipantsRepository } from '../participants/participants.repository.js';
+import { TicketParticipantsService } from '../participants/ticket-participants.service.js';
 import { BlockListService } from '../ticketing/block-list.service.js';
 import { TagsService } from '../ticketing/tags.service.js';
 import { TemplatesService } from '../ticketing/templates.service.js';
@@ -11,6 +14,10 @@ import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from './lifecycle/lifecycle.service.js';
 import { TicketingSettingsController } from './lifecycle/ticketing-settings.controller.js';
 import { TicketingSettingsService } from './lifecycle/ticketing-settings.service.js';
+import { MergeController } from './merge/merge.controller.js';
+import { MergeRepository } from './merge/merge.repository.js';
+import { MergeService } from './merge/merge.service.js';
+import { MergeParticipantsHook } from './merge/participants.hook.js';
 import { TicketSpamController } from './ticket-spam.controller.js';
 import { TicketSpamService } from './ticket-spam.service.js';
 import { TicketsController } from './tickets.controller.js';
@@ -60,6 +67,7 @@ export class TicketsModule {
         TicketingSettingsController,
         TicketSpamController,
         TimeEntriesController,
+        MergeController,
       ],
       providers: [
         TicketRepository,
@@ -128,6 +136,19 @@ export class TicketsModule {
         },
         // M1-07, for the same reason: stateless, every method takes the tx.
         { provide: AssignmentRepository, useFactory: () => new AssignmentRepository() },
+        // M1-09. `MergeParticipantsHook` is the seam M1-13 fills: a provider,
+        // for the reason `TicketLifecycleHooks` is one. This is M1-13's line:
+        // the secondary's contact becomes a CC of the primary. Built here
+        // rather than imported from `ParticipantsModule`, because the service
+        // and its repository are stateless — every method takes the tx — as
+        // `MediaRepository` above is.
+        MergeRepository,
+        {
+          provide: MergeParticipantsHook,
+          useFactory: (): MergeParticipantsHook =>
+            new ParticipantsMergeHook(new TicketParticipantsService(new ParticipantsRepository())),
+        },
+        MergeService,
       ],
     };
   }

@@ -17,6 +17,17 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
+/**
+ * A Latin reference inside a sentence, between the Unicode isolates, so an
+ * Arabic sentence keeps `HD-1042` whole and in order — the job `<bdi>` does in
+ * markup, for a string that is interpolated into a translation (DESIGN §7).
+ */
+/** U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL ISOLATE, by code point: both are invisible. */
+const ISOLATE_START = String.fromCodePoint(0x2068);
+const ISOLATE_END = String.fromCodePoint(0x2069);
+
+export const isolate = (text: string): string => `${ISOLATE_START}${text}${ISOLATE_END}`;
+
 /** What a person reads: `HD-1042`. The prefix is copied onto the row, not joined. */
 export const ticketReference = (ticket: Pick<Ticket, 'prefix' | 'number'>): string =>
   `${ticket.prefix}-${ticket.number}`;

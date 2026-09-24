@@ -44,7 +44,15 @@ export type TicketActivityAction =
   | 'ticket.marked_spam'
   | 'ticket.unmarked_spam'
   /** M1-13. A CC copied in or taken off; `from`/`to` name the contact id, never an address. */
-  | 'ticket.participants.changed';
+  | 'ticket.participants.changed'
+  /**
+   * M1-09 (§2.4). Each is written on both tickets, as `ticket.continued` is:
+   * `from.ticketId` is the secondary or the original, `to.ticketId` the
+   * primary or the new ticket.
+   */
+  | 'ticket.merged'
+  | 'ticket.unmerged'
+  | 'ticket.split';
 
 /**
  * The actor behind a change, in the three words the activity log records.

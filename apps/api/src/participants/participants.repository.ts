@@ -8,7 +8,7 @@ import {
   users,
 } from '@helpdock/db';
 import type { TicketCc, TicketParticipantSource } from '@helpdock/schemas';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 /**
@@ -151,6 +151,55 @@ export class ParticipantsRepository {
       .returning();
 
     return inserted[0];
+  }
+
+  /**
+   * The CC a ticket merge added for this contact, if it is still there. A CC an
+   * agent added by hand is `source = 'agent'` and never matches, so undoing a
+   * merge cannot take off somebody a person chose to copy in.
+   */
+  async deleteMergeCc(
+    tx: DbTransaction,
+    ticketId: string,
+    contactId: string,
+  ): Promise<TicketParticipantRow | undefined> {
+    const deleted = await tx
+      .delete(ticketParticipants)
+      .where(
+        and(
+          eq(ticketParticipants.ticketId, ticketId),
+          eq(ticketParticipants.contactId, contactId),
+          eq(ticketParticipants.source, 'merge'),
+        ),
+      )
+      .returning();
+
+    return deleted[0];
+  }
+
+  /**
+   * Whether another ticket merged into `primaryId` still brings this contact —
+   * in which case unmerging one of them leaves the CC where it is.
+   */
+  async stillMergedFrom(
+    tx: DbTransaction,
+    primaryId: string,
+    contactId: string,
+    exceptTicketId: string,
+  ): Promise<boolean> {
+    const rows = await tx
+      .select({ id: tickets.id })
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.mergedIntoId, primaryId),
+          eq(tickets.contactId, contactId),
+          ne(tickets.id, exceptTicketId),
+        ),
+      )
+      .limit(1);
+
+    return rows.length > 0;
   }
 
   async delete(

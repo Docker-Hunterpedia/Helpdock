@@ -24,7 +24,7 @@ import { getTx } from '../context/request-context.js';
 import { enqueueAttachmentUploaded } from './attachment-events.js';
 import { readVariants, toAttachment } from './attachment-view.js';
 import { checkUpload, PolicyRefusal, readContentPolicy } from './content-policy.js';
-import { attachmentKey, ORIGINAL_VARIANT } from './keys.js';
+import { attachmentKey, ORIGINAL_VARIANT, objectKeyBeside } from './keys.js';
 import { MediaRepository } from './media.repository.js';
 import type { ObjectStorage } from './storage.js';
 import { OBJECT_STORAGE } from './tokens.js';
@@ -193,7 +193,7 @@ export class MediaService {
    * all: a client polling a `processing` row reads the status and waits.
    */
   async download(
-    brandId: string,
+    _brandId: string,
     ticketId: string,
     attachmentId: string,
     query: AttachmentDownloadQuery,
@@ -215,7 +215,9 @@ export class MediaService {
     }
 
     const download = await this.#storage.presignDownload({
-      key: attachmentKey({ brandId, ticketId, attachmentId }, variant),
+      // From the stored key, not the ids: a split's copy shares the original's
+      // objects (M1-09), and its own ids name an empty folder.
+      key: objectKeyBeside(row.s3Key, variant),
       contentType: stored.mime,
       fileName: downloadName(row.originalName, variant),
       // Only what this install encoded is ever inline (REQUIREMENTS §5.1).

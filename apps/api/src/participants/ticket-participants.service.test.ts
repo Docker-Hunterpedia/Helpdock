@@ -26,6 +26,8 @@ const STAFF = '01937f5e-7e53-7000-8000-000000000001';
 let ticket: ParticipantTicket | undefined;
 let ccs: TicketCc[];
 let writes: { table: string; row: Record<string, unknown> }[];
+/** Whether another ticket merged into this one still brings the contact. */
+let stillMerged: boolean;
 
 const repository = {
   ticket: async () => ticket,
@@ -43,6 +45,12 @@ const repository = {
     const row = { id: `p-${ccs.length}`, name: 'Someone', ...values };
     ccs.push(row);
     return row as unknown as TicketParticipant;
+  },
+  stillMergedFrom: async () => stillMerged,
+  deleteMergeCc: async (_tx: DbTransaction, _ticketId: string, contactId: string) => {
+    const found = ccs.find((cc) => cc.contactId === contactId && cc.source === 'merge');
+    ccs = ccs.filter((cc) => cc !== found);
+    return found as unknown as TicketParticipant | undefined;
   },
   delete: async (_tx: DbTransaction, _ticketId: string, participantId: string) => {
     const found = ccs.find((cc) => cc.id === participantId);
@@ -79,6 +87,7 @@ beforeEach(() => {
   ticket = { id: TICKET, departmentId: DEPARTMENT, contactId: OWN_CONTACT, assigneeId: null };
   ccs = [];
   writes = [];
+  stillMerged = false;
 });
 
 describe('addCcParticipant', () => {
@@ -128,6 +137,44 @@ describe('removeCc', () => {
     await expect(service.removeCc(context, TICKET, 'missing')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+});
+
+describe('removeMergeCc (M1-09 unmerge)', () => {
+  const SECONDARY = '01937f5e-7e53-7000-8000-0000000000f2';
+
+  it('takes off the CC the merge added, with an activity row', async () => {
+    await service.addCcParticipant(context, TICKET, OTHER);
+    writes = [];
+
+    expect(
+      await service.removeMergeCc(context, TICKET, OTHER, { unmergedTicketId: SECONDARY }),
+    ).toBe(true);
+
+    expect(ccs).toEqual([]);
+    expect(writes.find((write) => write.table === 'ticket_activity')?.row).toMatchObject({
+      from: { ccContactId: OTHER },
+    });
+  });
+
+  it('leaves a CC an agent added by hand', async () => {
+    ccs = [{ id: 'p-0', contactId: OTHER, name: 'Finance', address: null, source: 'agent' }];
+
+    expect(
+      await service.removeMergeCc(context, TICKET, OTHER, { unmergedTicketId: SECONDARY }),
+    ).toBe(false);
+    expect(ccs).toHaveLength(1);
+    expect(writes).toEqual([]);
+  });
+
+  it('leaves the CC while another merged ticket still brings the contact', async () => {
+    await service.addCcParticipant(context, TICKET, OTHER);
+    stillMerged = true;
+
+    expect(
+      await service.removeMergeCc(context, TICKET, OTHER, { unmergedTicketId: SECONDARY }),
+    ).toBe(false);
+    expect(ccs).toHaveLength(1);
   });
 });
 

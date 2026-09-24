@@ -494,6 +494,61 @@ describe.skipIf(!hasDocker)('data retention', () => {
       expect(storage.removed).toEqual(expect.arrayContaining([...expired.keys]));
     });
 
+    it('keeps a split copy’s bytes until the last row naming them is purged (M1-09)', async () => {
+      await setClosedWindow(brandA.id, 30);
+      const original = await seedTicket(brandA, {
+        status: 'closed',
+        closedDaysAgo: 40,
+        withAttachment: true,
+      });
+      const splitOff = await seedTicket(brandA, { status: 'open' });
+      // What a split writes: a second row on the new ticket, same object.
+      await withSystem(db(), brandA.id, async (tx) => {
+        const [source] = await tx
+          .select()
+          .from(attachments)
+          .where(eq(attachments.ticketId, original.id));
+        if (source === undefined) {
+          throw new Error('the original attachment was not seeded');
+        }
+        await tx.insert(attachments).values({
+          brandId: brandA.id,
+          ticketId: splitOff.id,
+          departmentId: brandA.departmentId,
+          messageId: splitOff.messageId,
+          uploaderType: source.uploaderType,
+          uploaderId: source.uploaderId,
+          s3Key: source.s3Key,
+          originalName: source.originalName,
+          mime: source.mime,
+          size: source.size,
+          kind: source.kind,
+          status: 'ready',
+          copiedFromAttachmentId: source.id,
+        });
+      });
+
+      await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-split-1' });
+      storage.removed.length = 0;
+      await drainObjectPurges(brandA.id);
+
+      // The original's ticket is gone; the copy still downloads those bytes.
+      expect(await ticketIdsOf(brandA.id)).toEqual([splitOff.id]);
+      expect(storage.removed).toEqual([]);
+
+      // Once the copy's ticket closes and expires too, the objects go with it.
+      await withSystem(db(), brandA.id, (tx) =>
+        tx
+          .update(tickets)
+          .set({ statusId: brandA.closedStatusId, closedAt: daysAgo(40) })
+          .where(eq(tickets.id, splitOff.id)),
+      );
+      await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-split-2' });
+      await drainObjectPurges(brandA.id);
+
+      expect(storage.removed).toEqual(expect.arrayContaining([...original.keys]));
+    });
+
     it('keeps every closed ticket while the brand says "never"', async () => {
       const old = await seedTicket(brandA, { status: 'closed', closedDaysAgo: 4_000 });
 

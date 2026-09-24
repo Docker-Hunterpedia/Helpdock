@@ -18,15 +18,45 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-04 | Contacts and accounts | #48 | in review (#64) |
 | M1-05 | Views | #49 | planned |
 | M1-06 | Tags, custom fields (text, number, date, select | #50 | in review (#72) |
-| M1-07 | Assignment | #51 | done in branch, awaiting PR |
+| M1-07 | Assignment | #51 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-08 | Ticket state machine | #52 | in review (#69) |
-| M1-09 | Merge and split with the exact semantics in D §2.4 | #53 | planned |
+| M1-09 | Merge and split with the exact semantics in D §2.4 | #53 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-10 | Media pipeline | #54 | in review (#71) |
-| M1-11 | Spam | #55 | done in branch, awaiting PR |
-| M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | done in branch, awaiting PR |
-| M1-13 | Contact identity rules | #57 | done in branch, awaiting PR |
-| M1-14 | Data retention settings per brand and nightly | #58 | done in branch, awaiting PR |
-| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#70) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name: done in branch, awaiting PR |
+| M1-11 | Spam | #55 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
+| M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
+| M1-13 | Contact identity rules | #57 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
+| M1-14 | Data retention settings per brand and nightly | #58 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
+| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#70) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name: integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
+
+## M1-09 notes
+
+Merge, unmerge and split per DOMAIN-RULES §2.4, and "is replying" on the
+collision indicator. Built from `AdminTicketDialogs` panels 1, 2, 4 and 7;
+behaviour and endpoints are in [the ticket guide](../guides/tickets.md#merge-and-split).
+
+- **Migration `0016_merge_and_split`**: `tickets.merged_at`, `merged_by_id`,
+  `pre_merge_status_id`, `pre_merge_department_id`, `merge_message_id`,
+  `merged_ms`; `ticket_messages.copied_from_message_id`;
+  `attachments.copied_from_attachment_id`, with `s3_key` unique among originals
+  only; `ticket_statuses.system_key` (seeded, backfilled); and the
+  `tickets_merged_follow_primary` trigger. No new tenant table, so the RLS
+  negative suite gains no table; the merge integration suite adds the
+  cross-brand and cross-department refusals.
+- **A merge moves the secondary into the primary's department**, and the
+  trigger keeps it there, so access to its messages and attachments follows the
+  primary under the ordinary policy. Unmerge moves it back.
+- **Seams**: `MergeParticipantsHook` — filled at integration by M1-13's
+  `ParticipantsMergeHook`: the secondary's contact becomes a `merge` CC of the
+  primary and an unmerge takes that CC off again (never one an agent added);
+  `onMerged` / `onUnmerged` in `lifecycle/hooks.ts` (M3-02 stops and
+  resumes clocks; `merged_ms` is the time to leave out), and the ⋯ menu's
+  `actions` array (M1-11 Mark as spam, M1-12 Log time).
+- **For M1-14** (done at integration): a split's attachment copies share their
+  original's object, so a purge queues an object only when no other row names
+  its key, and downloads and purges build variant keys beside `s3_key` rather
+  than from the row's ids.
+- **For M1-11** (done at integration): Spam is found by `system_key = 'spam'`
+  the same way Merged is; `is_spam` is generated from it.
 
 ## Exit criteria
 Copied from the PRD, ticked as they are met.
@@ -39,8 +69,9 @@ Copied from the PRD, ticked as they are met.
 ## M1-11 Spam
 
 - **Schema** (migration `0017_spam_and_block_list`): `ticket_statuses.is_spam`,
-  one per brand by a partial unique index, set on the seeded Spam row and
-  backfilled on existing brands; `blocked_senders` (brand-scoped tenant table,
+  since integration a **generated** column, `coalesce(system_key = 'spam',
+  false)` — M1-09's `system_key` is the one answer to "which row is Spam?" and
+  its partial unique index keeps it to one per brand; `blocked_senders` (brand-scoped tenant table,
   unique on `(brand_id, kind, value)`, `dropped_count`, `last_dropped_at`),
   added to `TENANT_TABLES` and the RLS negative suite.
 - **Lifecycle**: `TicketLifecycleService.markSpam` / `unmarkSpam` on the §2.2
@@ -140,12 +171,36 @@ guide](../guides/data-retention.md) is the reference.
 ## M1-12 notes
 
 - **Schema** (`0018_time_tracking_and_csat`): `ticket_time_entries` and `csat_responses`, both department-scoped, on the shared `helpdock_ticket_child_department` trigger and in `helpdock_ticket_department_moved`; both in `TENANT_TABLES` and the RLS negative suite. Brand settings gain `csatEnabled` (on), `timeTrackingEnabled` (off), `timerStartsWithComposer` (off). No new environment keys: the link key is derived from `APP_MASTER_KEY`.
-- **Survey creation** goes through the outbox: `onClosedForCsat` (the M1-08 hook, now `CsatLifecycleHooks`) writes `csat.requested` when the brand has CSAT on; the worker creates one row per `(ticket, closed_at)` and skips a close undone before it ran. Spam and merge are excluded by the lifecycle through `excluded_from_reports` and `merged_into_id`; **seam for M1-11**: if `isSpam` differs from `excluded_from_reports`, swap it into `lifecycle.service.ts#onClosed` and `csat-events.ts`.
+- **Survey creation** goes through the outbox: `onClosedForCsat` (the M1-08 hook, now `CsatLifecycleHooks`) writes `csat.requested` when the brand has CSAT on; the worker creates one row per `(ticket, closed_at)` and skips a close undone before it ran. Spam and merge are excluded by the lifecycle and the survey job through `isSpamStatus` (M1-11's `is_spam`) and `merged_into_id` — swapped in at integration.
 - **The per-reply timer** rides on `POST …/messages` as `timeSpentSeconds`, written in the reply's transaction; dropped (not refused) while tracking is off.
 - **The rating page is hosted in the admin bundle** at `/csat/<token>`, outside the admin app, because `apps/helpcenter` is a one-line stub and its SSR host is M5's: [ADR 0010](../decisions/0010-csat-page-in-the-admin-bundle.md).
 - **Delivery is M8-06**; until then the details panel shows the survey's state and a Copy survey link button.
-- **Seam for M1-09**: the header ⋯ menu is `ticket-actions-menu.tsx`, an items array; merge, split and spam add their items to `headerActions` in `ticket-view.tsx`.
+- **The header ⋯ menu** is one items array (`ticket-actions-menu.tsx`, M1-09's `TicketAction`): Merge, Split, Log time, then Mark as spam behind a divider.
 - **Artboard gaps**: the Satisfaction card in the details panel has no artboard (built after the SLA card); the Feedback tab's "Preview" link and the rating page's "Browse the help center" link and "closed by <agent>" are not built (no survey to preview, no help center yet, and DOMAIN-RULES §4.6 keeps the agent's name off the link).
+
+## Integration (2026-09-24)
+
+M1-07, 09, 11, 12, 13, 14 and the M1-15 data side were built in parallel and
+merged onto `claude/hopeful-hawking-onzqjf`. What the merges had to decide:
+
+- **Migrations** run in number order, 0015 → 0021, with snapshot `prevId`s
+  chained in that order; the last snapshot (0021) is regenerated from the full
+  schema, so `drizzle-kit generate` finds nothing to do. Intermediate snapshots
+  describe only their own branch's schema.
+- **`helpdock_ticket_department_moved`** is last replaced by 0019, which carries
+  every child table: messages, activity, attachments, tags, participants, time
+  entries and CSAT responses. M1-09's follow-the-primary trigger is separate.
+- **Backfills under FORCE RLS**: 0016 and 0017 lift the force for their
+  `UPDATE`s, as 0020 did, so existing brands are backfilled when the migration
+  role is not a superuser.
+- **Spam** is `system_key = 'spam'`; `is_spam` is generated from it (0017) and
+  0020 no longer adds its own. CSAT, the lifecycle and retention read it
+  through `isSpamStatus` / `is_spam`; `excluded_from_reports` stays the wider
+  "leave it out of a count".
+- **One ⋯ menu** in the ticket header, in the artboard's order.
+- **Split copies and retention**: see the M1-09 notes.
+- **Screenshot baseline**: `ticket-view` (en) differs from its baseline by 4 %
+  after the merges; CI's screenshots workflow regenerates it.
 
 ## Pull requests
 - this PR: milestone doc

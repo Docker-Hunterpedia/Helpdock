@@ -9,7 +9,7 @@ import { refusalCopy } from '../../ticketing/refusal-copy.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { MarkSpamDialog } from './mark-spam-dialog.tsx';
-import type { TicketMenuItem } from './ticket-actions-menu.tsx';
+import type { TicketAction } from './ticket-actions-menu.tsx';
 
 /**
  * M1-11's share of the ticket workspace: the menu item and the dialog behind
@@ -24,7 +24,7 @@ import type { TicketMenuItem } from './ticket-actions-menu.tsx';
 export function useSpamActions(
   brandId: string,
   ticket: Ticket | undefined,
-): { readonly items: readonly TicketMenuItem[]; readonly dialog: ReactNode } {
+): { readonly items: readonly TicketAction[]; readonly dialog: ReactNode } {
   const t = useT();
   const api = useTicketsApi();
   const queryClient = useQueryClient();
@@ -81,13 +81,13 @@ export function useSpamActions(
     return { items: [], dialog: null };
   }
 
-  const items: TicketMenuItem[] = ticket.status.isSpam
+  const items: TicketAction[] = ticket.status.isSpam
     ? [
         {
-          key: 'not-spam',
+          id: 'not-spam',
           label: t('tickets:actions.notSpam'),
           icon: ShieldCheck,
-          separatorBefore: true,
+          dividerBefore: true,
           onSelect: () => {
             unmark.mutate();
           },
@@ -95,11 +95,11 @@ export function useSpamActions(
       ]
     : [
         {
-          key: 'mark-spam',
+          id: 'mark-spam',
           label: t('tickets:actions.markSpam'),
           icon: ShieldAlert,
           tone: 'danger',
-          separatorBefore: true,
+          dividerBefore: true,
           onSelect: () => {
             setOpen(true);
           },

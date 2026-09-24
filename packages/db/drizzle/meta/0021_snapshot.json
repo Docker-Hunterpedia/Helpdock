@@ -344,6 +344,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "copied_from_attachment_id": {
+          "name": "copied_from_attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "original_name": {
           "name": "original_name",
           "type": "text",
@@ -464,6 +470,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "attachments_s3_key_original_key": {
+          "name": "attachments_s3_key_original_key",
+          "columns": [
+            {
+              "expression": "s3_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"attachments\".\"copied_from_attachment_id\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -505,13 +527,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "attachments_s3_key_unique": {
-          "name": "attachments_s3_key_unique",
-          "nullsNotDistinct": false,
-          "columns": ["s3_key"]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2907,6 +2923,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "copied_from_message_id": {
+          "name": "copied_from_message_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "ai_meta": {
           "name": "ai_meta",
           "type": "jsonb",
@@ -3041,6 +3063,15 @@
           "columnsFrom": ["department_id"],
           "columnsTo": ["id"],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ticket_messages_copied_from_message_id_ticket_messages_id_fk": {
+          "name": "ticket_messages_copied_from_message_id_ticket_messages_id_fk",
+          "tableFrom": "ticket_messages",
+          "tableTo": "ticket_messages",
+          "columnsFrom": ["copied_from_message_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -3284,12 +3315,21 @@
           "notNull": true,
           "default": false
         },
+        "system_key": {
+          "name": "system_key",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_spam": {
           "name": "is_spam",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "generated": {
+            "as": "coalesce(system_key = 'spam', false)",
+            "type": "stored"
+          }
         },
         "sort_order": {
           "name": "sort_order",
@@ -3321,18 +3361,24 @@
         }
       },
       "indexes": {
-        "ticket_statuses_brand_spam_key": {
-          "name": "ticket_statuses_brand_spam_key",
+        "ticket_statuses_brand_system_key": {
+          "name": "ticket_statuses_brand_system_key",
           "columns": [
             {
               "expression": "brand_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "system_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": true,
-          "where": "\"ticket_statuses\".\"is_spam\"",
+          "where": "\"ticket_statuses\".\"system_key\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3753,6 +3799,43 @@
           "primaryKey": false,
           "notNull": false
         },
+        "merged_at": {
+          "name": "merged_at",
+          "type": "timestamp (3) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "merged_by_id": {
+          "name": "merged_by_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pre_merge_status_id": {
+          "name": "pre_merge_status_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pre_merge_department_id": {
+          "name": "pre_merge_department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "merge_message_id": {
+          "name": "merge_message_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "merged_ms": {
+          "name": "merged_ms",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "first_response_due_at": {
           "name": "first_response_due_at",
           "type": "timestamp with time zone",
@@ -3938,6 +4021,38 @@
           "method": "btree",
           "with": {}
         },
+        "tickets_merged_into_idx": {
+          "name": "tickets_merged_into_idx",
+          "columns": [
+            {
+              "expression": "merged_into_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tickets\".\"merged_into_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tickets_split_from_idx": {
+          "name": "tickets_split_from_idx",
+          "columns": [
+            {
+              "expression": "split_from_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tickets\".\"split_from_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "tickets_search_idx": {
           "name": "tickets_search_idx",
           "columns": [
@@ -4023,6 +4138,33 @@
           "tableFrom": "tickets",
           "tableTo": "tickets",
           "columnsFrom": ["split_from_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_merged_by_id_users_id_fk": {
+          "name": "tickets_merged_by_id_users_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "users",
+          "columnsFrom": ["merged_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_pre_merge_status_id_ticket_statuses_id_fk": {
+          "name": "tickets_pre_merge_status_id_ticket_statuses_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "ticket_statuses",
+          "columnsFrom": ["pre_merge_status_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_pre_merge_department_id_departments_id_fk": {
+          "name": "tickets_pre_merge_department_id_departments_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "departments",
+          "columnsFrom": ["pre_merge_department_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"

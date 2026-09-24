@@ -7,11 +7,13 @@ import { decodeTicketCursor, encodeTicketCursor, type TicketCursor } from './cur
 /**
  * The ticket list's `WHERE` and `ORDER BY`, built from the parsed query.
  *
- * Nothing here narrows by brand or by department. That is row-level security's
- * job and it is not repeated: a filter that also enforced isolation would be a
- * second place for isolation to be wrong, and the one that is easiest to forget
- * (DOMAIN-RULES §1.3). What this file decides is only what the *reader asked
- * for* within what they may already see.
+ * Nothing here *isolates* by brand or by department. That is row-level
+ * security's job and it is not repeated: a filter that also enforced isolation
+ * would be a second place for isolation to be wrong, and the one that is
+ * easiest to forget (DOMAIN-RULES §1.3). What this file decides is only what
+ * the *reader asked for* within what they may already see — plus the one
+ * `brand_id = …` that {@link ticketFilters} explains, which is there for the
+ * planner and would change nothing about which rows come back if removed.
  *
  * Every value reaches SQL as a bound parameter. The search term in particular
  * goes to `websearch_to_tsquery`, which parses a user's words and never raises
@@ -105,21 +107,33 @@ const keysetFilter = (cursor: TicketCursor): SQL => {
 };
 
 export interface TicketFilterInput extends Pick<TicketListQuery, 'sort' | 'direction'> {
+  /** The brand in the path, which the guard has already matched to the transaction. */
+  readonly brandId: string;
   readonly filters: Omit<TicketListQuery, 'sort' | 'direction' | 'cursor' | 'limit'>;
   readonly cursor: string | undefined;
 }
 
 /** Every condition of one list read, or `undefined` when the reader asked for none. */
 export const ticketFilters = ({
+  brandId,
   filters,
   sort,
   direction,
   cursor,
 }: TicketFilterInput): SQL | undefined => {
-  // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views". It is
-  // first and unconditional rather than a filter the caller may ask for,
-  // because "all views" includes the ones added after this line was written.
-  const clauses: (SQL | undefined)[] = [isNull(tickets.deletedAt)];
+  const clauses: (SQL | undefined)[] = [
+    // Not isolation — the policy's `brand_id = ANY(app.brand_ids)` already
+    // decides that, and this cannot widen it. It is what lets the planner read
+    // `tickets_brand_updated_idx` *in order* and stop after one page: against
+    // an array it cannot know that one brand is involved, so it has to fetch
+    // every visible ticket and sort them, which at 50k tickets is the whole
+    // latency budget (M1-15, docs/guides/tickets.md "Performance").
+    eq(tickets.brandId, brandId),
+    // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views". It
+    // is unconditional rather than a filter the caller may ask for, because
+    // "all views" includes the ones added after this line was written.
+    isNull(tickets.deletedAt),
+  ];
 
   if (filters.statusId !== undefined && filters.statusId.length > 0) {
     clauses.push(inArray(tickets.statusId, [...filters.statusId]));
@@ -154,9 +168,7 @@ export const ticketFilters = ({
     clauses.push(keysetFilter(decodeTicketCursor(cursor, { sort, direction })));
   }
 
-  const present = clauses.filter((clause): clause is SQL => clause !== undefined);
-  /* c8 ignore next -- the soft-delete clause above is unconditional, so this is never empty. */
-  return present.length === 0 ? undefined : and(...present);
+  return and(...clauses.filter((clause): clause is SQL => clause !== undefined));
 };
 
 /**

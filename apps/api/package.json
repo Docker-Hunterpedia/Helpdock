@@ -20,7 +20,8 @@
     "lint": "biome check .",
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/api",
     "seed:dev": "node dist/seed/seed-dev.js",
-    "test:coverage": "vitest run --config vitest.coverage.config.ts"
+    "test:coverage": "vitest run --config vitest.coverage.config.ts",
+    "perf:tickets": "vitest run --config vitest.perf.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0",

@@ -282,7 +282,6 @@ export function TicketsPage(): ReactNode {
     <TicketList
       heading={t(view === null ? 'tickets:views.all' : `tickets:views.${view.key}`)}
       tickets={tickets}
-      contactNames={directory.contactNames}
       selectedId={ticketId}
       now={now}
       search={search}

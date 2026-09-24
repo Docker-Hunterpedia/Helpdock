@@ -18,8 +18,10 @@ const STATUS = '01937f5e-7e53-7000-8000-000000000021';
 const DEPARTMENT = '01937f5e-7e53-7000-8000-000000000011';
 const AGENT = '01937f5e-7e53-7000-8000-000000000001';
 const TICKET = '01937f5e-7e53-7000-8000-0000000000a1';
+const BRAND = '01937f5e-7e53-7000-8000-0000000000c1';
 
 const query = (filters: Partial<TicketListQuery> = {}) => ({
+  brandId: BRAND,
   filters: filters as TicketFilters,
   sort: filters.sort ?? ('updatedAt' as const),
   direction: filters.direction ?? ('desc' as const),
@@ -29,12 +31,16 @@ const query = (filters: Partial<TicketListQuery> = {}) => ({
 type TicketFilters = Omit<TicketListQuery, 'sort' | 'direction' | 'cursor' | 'limit'>;
 
 describe('ticketFilters', () => {
-  it('asks only that the ticket is not deleted when nothing was asked for', () => {
-    // Isolation is the policies' job, so "no filters" adds no brand or
-    // department predicate — the transaction already narrows the rows. The one
-    // clause that is always there is DOMAIN-RULES §2.2's "hidden from all
-    // views", which is not a filter a caller may turn off.
-    expect(render(ticketFilters(query()))?.sql).toBe('"tickets"."deleted_at" is null');
+  it('asks only for the brand and a live ticket when nothing was asked for', () => {
+    // Isolation is the policies' job, so "no filters" adds no department
+    // predicate. The brand equality is not isolation either — the policy
+    // already decides the brand — it is what lets the planner read
+    // `tickets_brand_updated_idx` in order (M1-15). The soft-delete clause is
+    // DOMAIN-RULES §2.2's "hidden from all views", which no caller may turn off.
+    const sql = render(ticketFilters(query()));
+
+    expect(sql?.sql).toBe('("tickets"."brand_id" = $1 and "tickets"."deleted_at" is null)');
+    expect(sql?.params).toEqual([BRAND]);
   });
 
   it('keeps the soft-delete clause alongside whatever was asked for', () => {
@@ -54,7 +60,7 @@ describe('ticketFilters', () => {
     const sql = render(ticketFilters(query({ systemState: ['open', 'escalated'] })));
 
     expect(sql?.sql).toContain('"ticket_statuses"."system_state" in');
-    expect(sql?.params).toEqual(['open', 'escalated']);
+    expect(sql?.params).toEqual([BRAND, 'open', 'escalated']);
   });
 
   it('turns the unassigned chip into IS NULL beside the named people', () => {
@@ -70,7 +76,7 @@ describe('ticketFilters', () => {
     const sql = render(ticketFilters(query({ assigneeId: ['unassigned'] })));
 
     expect(sql?.sql).toContain('is null');
-    expect(sql?.params).toEqual([]);
+    expect(sql?.params).toEqual([BRAND]);
   });
 
   describe('tags (M1-06)', () => {
@@ -83,19 +89,19 @@ describe('ticketFilters', () => {
       // All-of: two chips in a filter are how somebody narrows a queue.
       expect(sql?.sql).toContain('count(DISTINCT');
       expect(sql?.sql).toContain('HAVING');
-      expect(sql?.params).toEqual([REFUND, VIP, 2]);
+      expect(sql?.params).toEqual([BRAND, REFUND, VIP, 2]);
     });
 
     it('reads tagIds as the same filter, so naming both is naming their union', () => {
       const sql = render(ticketFilters(query({ tagId: [REFUND], tagIds: [VIP] })));
 
-      expect(sql?.params).toEqual([REFUND, VIP, 2]);
+      expect(sql?.params).toEqual([BRAND, REFUND, VIP, 2]);
     });
 
     it('counts a repeated id once, so a duplicate cannot make the filter impossible', () => {
       const sql = render(ticketFilters(query({ tagId: [REFUND], tagIds: [REFUND] })));
 
-      expect(sql?.params).toEqual([REFUND, 1]);
+      expect(sql?.params).toEqual([BRAND, REFUND, 1]);
     });
 
     it('binds the ids rather than pasting them', () => {
@@ -105,9 +111,9 @@ describe('ticketFilters', () => {
     });
 
     it('adds nothing when the list is empty', () => {
-      // Only M1-08's soft-delete clause is left, which is the "no filters" shape.
+      // Only the brand and M1-08's soft-delete clause are left: the "no filters" shape.
       expect(render(ticketFilters(query({ tagId: [] })))?.sql).toBe(
-        '"tickets"."deleted_at" is null',
+        render(ticketFilters(query()))?.sql,
       );
     });
   });
@@ -129,7 +135,7 @@ describe('ticketFilters', () => {
     expect(sql?.sql).toContain('websearch_to_tsquery');
     // `<%`, not `%`: the query is one word against a whole subject line.
     expect(sql?.sql).toContain('<%');
-    expect(sql?.params).toEqual(['refund', 'refund']);
+    expect(sql?.params).toEqual([BRAND, 'refund', 'refund']);
   });
 
   it('never pastes a search term into the statement, however hostile', () => {
@@ -139,7 +145,7 @@ describe('ticketFilters', () => {
     const sql = render(ticketFilters(query({ q: hostile })));
 
     expect(sql?.sql).not.toContain('drop table');
-    expect(sql?.params).toEqual([hostile, hostile]);
+    expect(sql?.params).toEqual([BRAND, hostile, hostile]);
   });
 
   it('turns a cursor into a row comparison in the sort direction', () => {
@@ -152,7 +158,7 @@ describe('ticketFilters', () => {
     const sql = render(ticketFilters({ ...query(), cursor }));
 
     expect(sql?.sql).toContain('<');
-    expect(sql?.params).toEqual(['2026-09-19T10:00:00.000Z', TICKET]);
+    expect(sql?.params).toEqual([BRAND, '2026-09-19T10:00:00.000Z', TICKET]);
   });
 
   it('compares the other way for an ascending sort', () => {
@@ -163,11 +169,17 @@ describe('ticketFilters', () => {
       id: TICKET,
     });
     const sql = render(
-      ticketFilters({ filters: {} as TicketFilters, sort: 'number', direction: 'asc', cursor }),
+      ticketFilters({
+        brandId: BRAND,
+        filters: {} as TicketFilters,
+        sort: 'number',
+        direction: 'asc',
+        cursor,
+      }),
     );
 
     expect(sql?.sql).toContain('>');
-    expect(sql?.params).toEqual([7, TICKET]);
+    expect(sql?.params).toEqual([BRAND, 7, TICKET]);
   });
 
   it('refuses a cursor from another ordering rather than returning the wrong page', () => {

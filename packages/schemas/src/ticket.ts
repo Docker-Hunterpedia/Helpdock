@@ -177,6 +177,17 @@ export const TICKET_SUBJECT_MAX = 500;
 export const MESSAGE_BODY_MAX = 200_000;
 
 /**
+ * The least of a contact a ticket row needs: who to name. Not the contact's
+ * identities — an address on every row of a list is fifty addresses nobody
+ * asked to see — and not its stats, which are the contact screen's.
+ */
+export const ticketContactSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+});
+export type TicketContact = z.infer<typeof ticketContactSchema>;
+
+/**
  * One ticket. `number` and `prefix` travel together because `HD-1042` is what a
  * person reads and neither half means anything alone.
  *
@@ -216,6 +227,16 @@ export const ticketSchema = z.object({
    * about tags yet draws nothing rather than crashing on `undefined`.
    */
   tags: z.array(tagSchema).optional(),
+  /**
+   * Who the ticket is about, by name (M1-15), for the reason the status is
+   * embedded: a list row names its contact, and a row that had to page through
+   * the contact list to find the name would draw most rows without one.
+   *
+   * The list and the ticket read fill it; the writes leave it off. It is also
+   * left off for a caller without `contact:read` — an api key scoped to tickets
+   * alone — who still has `contactId`. `null` means the ticket names nobody.
+   */
+  contact: ticketContactSchema.nullable().optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

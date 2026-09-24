@@ -76,13 +76,16 @@ export function createApis(
   // The ticket fixture reads the uploader's rows, so a file attached in the
   // composer is the file the thread draws.
   const uploads = new MockAttachmentUploader();
+  // And the contact fixture, so a ticket filed against a contact created in
+  // this session names them the way the api would.
+  const contacts = new MockContactsApi();
 
   return {
     auth: new MockAuthApi(staff),
     staff,
-    contacts: new MockContactsApi(),
+    contacts,
     ticketing: new MockTicketingApi(),
-    tickets: new MockTicketsApi(uploads),
+    tickets: new MockTicketsApi(uploads, Date.now(), (id) => contacts.nameOf(id)),
     uploader: uploads,
   };
 }

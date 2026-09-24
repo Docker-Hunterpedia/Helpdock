@@ -52,7 +52,13 @@ import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from '
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
 import { cursorAfter, sortValueOf } from './ticket-query.js';
-import { toTicket, toTicketActivity, toTicketMessage, toTicketStatus } from './ticket-view.js';
+import {
+  ticketContactOf,
+  toTicket,
+  toTicketActivity,
+  toTicketMessage,
+  toTicketStatus,
+} from './ticket-view.js';
 import type { TicketRepository } from './tickets.repository.js';
 
 /**
@@ -125,21 +131,43 @@ export class TicketsService {
     return { statuses: rows.map(toTicketStatus) };
   }
 
-  async list(query: TicketListQuery): Promise<TicketList> {
+  /**
+   * One page of the list. `withContacts` is whether the caller holds
+   * `contact:read`: every staff role does, but an api key is scoped
+   * permission by permission (M8-01), and one that may read tickets and not
+   * contacts gets rows without the name rather than a name it was not given.
+   */
+  async list(
+    brandId: string,
+    query: TicketListQuery,
+    { withContacts }: { readonly withContacts: boolean },
+  ): Promise<TicketList> {
     const tx = getTx();
-    const rows = await this.#read(() => this.#tickets.listTickets(tx, query));
+    const rows = await this.#read(() => this.#tickets.listTickets(tx, brandId, query));
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
     // M1-06: one read of `ticket_tags` for the whole page rather than one per
-    // row, which is how a list of fifty becomes fifty-one round trips.
+    // row, which is how a list of fifty becomes fifty-one round trips. M1-15
+    // does the same for the contact's name.
     const tags = await tagsOfTickets(
       tx,
       page.map(({ ticket }) => ticket.id),
     );
+    const contactNames = withContacts
+      ? await this.#tickets.contactNames(
+          tx,
+          page.flatMap(({ ticket }) => (ticket.contactId === null ? [] : [ticket.contactId])),
+        )
+      : undefined;
 
     return {
       tickets: page.map(({ ticket, status }) =>
-        toTicket(ticket, status, tags.get(ticket.id) ?? []),
+        toTicket(
+          ticket,
+          status,
+          tags.get(ticket.id) ?? [],
+          contactNames === undefined ? undefined : ticketContactOf(ticket.contactId, contactNames),
+        ),
       ),
       nextCursor:
         rows.length > query.limit && last !== undefined
@@ -152,12 +180,23 @@ export class TicketsService {
     };
   }
 
-  async find(ticketId: string): Promise<TicketDetail> {
+  /** The ticket and the start of its thread. `withContacts` is as for {@link list}. */
+  async find(
+    ticketId: string,
+    { withContacts }: { readonly withContacts: boolean },
+  ): Promise<TicketDetail> {
     const tx = getTx();
     const found = await this.#require(tx, ticketId);
+    const { contactId } = found.ticket;
+    const contact = withContacts
+      ? ticketContactOf(
+          contactId,
+          await this.#tickets.contactNames(tx, contactId === null ? [] : [contactId]),
+        )
+      : undefined;
 
     return {
-      ticket: toTicket(found.ticket, found.status, await tagsOfTicket(tx, ticketId)),
+      ticket: toTicket(found.ticket, found.status, await tagsOfTicket(tx, ticketId), contact),
       // `#messagePage` rather than `messages`, which would re-run the ticket
       // read this method has already done.
       messages: await this.#messagePage(tx, ticketId, {

@@ -135,11 +135,33 @@ describe('the indexes and constraints', () => {
 
     expect(names).toEqual(
       expect.arrayContaining([
+        'tickets_brand_updated_idx',
         'tickets_brand_department_status_updated_idx',
-        'tickets_brand_assignee_idx',
+        'tickets_brand_assignee_updated_idx',
         'tickets_search_idx',
       ]),
     );
+  });
+
+  it('ends every ordered list index in the keyset, so a page is read in index order', () => {
+    // The list pages by `(updated_at, id)` (apps/api/src/tickets/cursor.ts). An
+    // index that stopped at `updated_at` would still need a sort for the
+    // tiebreaker, and one that put anything after them could not be read in
+    // keyset order at all.
+    const btrees = configOf('tickets').indexes.filter((entry) =>
+      [
+        'tickets_brand_updated_idx',
+        'tickets_brand_assignee_updated_idx',
+        'tickets_brand_department_status_updated_idx',
+      ].includes(entry.config.name ?? ''),
+    );
+
+    for (const entry of btrees) {
+      const columns = entry.config.columns.map((column) => ('name' in column ? column.name : ''));
+      expect(columns[0]).toBe('brand_id');
+      expect(columns.slice(-2)).toEqual(['updated_at', 'id']);
+    }
+    expect(btrees).toHaveLength(3);
   });
 
   it('derives the search vector rather than letting a writer forget it', () => {

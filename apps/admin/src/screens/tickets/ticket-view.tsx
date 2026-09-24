@@ -222,23 +222,29 @@ export function TicketView({
         if (authorId === null) {
           return null;
         }
+        // The customer side of a thread is the ticket's own contact: the
+        // embedded name first, which arrives with the ticket, then the full
+        // read, which also knows the address.
         if (authorType === 'contact') {
-          return directory.contactNames.get(authorId) ?? null;
+          if (authorId === contact.data?.id) {
+            return contact.data.name;
+          }
+          return authorId === detail.data?.ticket.contact?.id
+            ? detail.data.ticket.contact.name
+            : null;
         }
         if (authorId === viewer.id) {
           return viewer.name;
         }
 
-        return (
-          directory.staff.find((member) => member.userId === authorId)?.name ??
-          directory.contactNames.get(authorId) ??
-          null
-        );
+        return directory.staff.find((member) => member.userId === authorId)?.name ?? null;
       },
       addressFor: (authorId) =>
-        authorId === null ? null : (directory.contactAddresses.get(authorId) ?? null),
+        authorId !== null && authorId === contact.data?.id
+          ? (contact.data.primaryIdentity?.value ?? null)
+          : null,
     }),
-    [directory, viewer],
+    [directory, viewer, contact.data, detail.data],
   );
 
   const viewerNames = viewerIds.map(

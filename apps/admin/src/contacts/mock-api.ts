@@ -234,11 +234,28 @@ const seedDuplicates = (): {
   },
 ];
 
+/**
+ * The seeded contacts' names, for a fixture that has no `MockContactsApi` of
+ * its own to ask: the ticket fixture embeds a ticket's contact the way the api
+ * does (M1-15), and a test that builds one without the other still gets names.
+ */
+const SEED_CONTACT_NAMES: ReadonlyMap<string, string> = new Map(
+  seedContacts().map((contact) => [contact.id, contact.name]),
+);
+
+export const seedContactName = (contactId: string): string | undefined =>
+  SEED_CONTACT_NAMES.get(contactId);
+
 export class MockContactsApi implements ContactsApi {
   #accounts = seedAccounts();
   #contacts = seedContacts();
   #duplicates = seedDuplicates();
   #sequence = 0;
+
+  /** The name the api would embed in a ticket naming this contact, including one created here. */
+  nameOf(contactId: string): string | undefined {
+    return this.#contacts.find((row) => row.id === contactId)?.name;
+  }
 
   async listContacts(_brandId: string, query: ContactSearchQuery = {}): Promise<ContactList> {
     const term = query.search?.trim().toLowerCase() ?? '';

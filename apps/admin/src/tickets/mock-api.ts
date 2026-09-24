@@ -21,6 +21,7 @@ import {
   MOCK_CONTACT_GMAIL,
   MOCK_CONTACT_MONA,
   MOCK_CONTACT_VISITOR,
+  seedContactName,
 } from '../contacts/mock-api.js';
 import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
@@ -424,14 +425,20 @@ export class MockTicketsApi implements TicketsApi {
   #activity: TicketActivityEntry[];
   #sequence = 0;
   readonly #uploads: MockAttachmentUploader | undefined;
+  readonly #contactName: (contactId: string) => string | undefined;
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
    * composer is the file the thread then draws — the same arrangement
    * `MockAuthApi` and `MockStaffApi` have, and for the same reason.
    */
-  constructor(uploads?: MockAttachmentUploader, now: number = Date.now()) {
+  constructor(
+    uploads?: MockAttachmentUploader,
+    now: number = Date.now(),
+    contactName: (contactId: string) => string | undefined = seedContactName,
+  ) {
     this.#uploads = uploads;
+    this.#contactName = contactName;
     const seeded = seed(this.#statuses, now);
     this.#tickets = seeded.tickets;
     this.#messages = seeded.messages;
@@ -454,7 +461,7 @@ export class MockTicketsApi implements TicketsApi {
     const nextIndex = from + page.length;
 
     return Promise.resolve({
-      tickets: page,
+      tickets: page.map((ticket) => this.#withContact(ticket)),
       nextCursor: nextIndex < matches.length ? encodeCursor(nextIndex) : null,
     });
   }
@@ -463,7 +470,7 @@ export class MockTicketsApi implements TicketsApi {
     const ticket = this.#require(ticketId);
 
     return Promise.resolve({
-      ticket,
+      ticket: this.#withContact(ticket),
       messages: this.#page(ticketId, 0),
       activity: this.#activityOf(ticketId),
     });
@@ -695,6 +702,21 @@ export class MockTicketsApi implements TicketsApi {
     }
 
     return this.#statuses.find((candidate) => candidate.isDefault) ?? fallback;
+  }
+
+  /**
+   * The contact's name, embedded the way the list and the read embed it
+   * (M1-15): null for a ticket that names nobody, or one the contact fixture
+   * does not know, which is what row-level security makes of a stranger.
+   */
+  #withContact(ticket: Ticket): Ticket {
+    const name = ticket.contactId === null ? undefined : this.#contactName(ticket.contactId);
+
+    return {
+      ...ticket,
+      contact:
+        ticket.contactId === null || name === undefined ? null : { id: ticket.contactId, name },
+    };
   }
 
   #require(ticketId: string): Ticket {

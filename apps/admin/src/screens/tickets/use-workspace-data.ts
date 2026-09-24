@@ -49,7 +49,8 @@ export function useWorkspaceData(brandId: string): WorkspaceData {
   /**
    * `GET /staff` declares `staff:manage`, which an Agent does not hold, so this
    * read is allowed to fail: `directory.ts` names who it can and shortens the
-   * rest. M1-07 is where a read of assignable agents belongs.
+   * rest. The assignee picker does not depend on it; it reads M1-07's
+   * `assignable`, which `ticket:write` reaches (`ticket-view.tsx`).
    */
   const staff = useQuery({
     queryKey: ['staff', brandId, ''],

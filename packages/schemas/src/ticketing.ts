@@ -15,8 +15,9 @@ import { brandRoleSchema } from './principal.js';
  *
  * A department is the unit a Team Leader leads, an Agent belongs to, and a
  * ticket is filed under (DOMAIN-RULES §1.2). A team is a subdivision of one
- * department used for assignment and for "assign to my team"; M1-07 is what
- * routes to it, M3 is what gives a department business hours.
+ * department used for "assign to my team"; M1-07's rotation is per
+ * department, M3's rules are what route to a team, and M3 is what gives a
+ * department business hours.
  *
  * `departmentSchema` lives here rather than in `staff.ts` because departments
  * are a ticketing concept the staff screens borrow, not the other way round.

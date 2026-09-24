@@ -197,7 +197,7 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
 | Drawer | 420 px from the inline-end side (so it opens from the left in RTL). Used for ticket quick view, rule editor test-run, knowledge source logs. |
 | Menu | elevation 2, 6 px padding, 32 px items radius sm, hover `bg.muted`, danger items in danger text, 1 px dividers. |
 | Tooltip | `bg.inverse`, caption text, radius sm, 200 ms delay. Never the only carrier of an icon's meaning. |
-| Toast | `bg.inverse`, 13 px, icon in teal300 or status hue, optional inline action (Undo), auto-dismiss 6 s, pauses on hover, stacked bottom-inline-end. |
+| Toast | `bg.inverse`, 13 px, icon in teal300 or status hue, optional inline action (Undo) in `text.inverse`, underlined; auto-dismiss 6 s, or 10 s when it carries an action; pauses on hover, stacked bottom-inline-end. |
 | Banner | full width, status tint + border, icon, text, dismiss. Used for budget alerts, reindexing, environment-locked settings. |
 
 ### 6.5 Navigation and layout (admin)
@@ -292,3 +292,4 @@ Every PR that touches UI ticks these in the description:
 | 2026-09-19 | 1.2. Added the §5 rule for OAuth provider marks after building the admin shell: Lucide v1 has no brand icons, so the two are inlined rather than adding a second icon set. |
 | 2026-09-19 | 1.3. Added StepProgress to §6.2 for the first-run wizard (`Admin/Wizard`), and PasswordStrengthBar for the bar M0-06 built and the wizard reuses. A step that is merely later uses `text.secondary`, not `text.disabled`: the latter is 2.3:1 on the canvas, which §10 does not allow for a label anyone is meant to read. |
 | 2026-09-20 | 1.4. Named the eight tag tints in §6.2 (M1-06). The four neutral ones are steps of the warm ramp rather than new values, so a brand's `surfaceTone` moves them and dark mode needs no second table; each tag also gets a 1 px border, because `sand` on a white card is otherwise invisible. |
+| 2026-09-24 | 1.5. A Toast that carries an action (the Undo after a contact merge, M1-13) stays 10 s rather than 6, as the `After a merge` artboard says, and draws the action in `text.inverse`, underlined: there is no teal token that holds its contrast on `bg.inverse` in both themes. |

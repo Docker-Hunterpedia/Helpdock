@@ -310,9 +310,20 @@ this app.
 **`findOrCreateContactByIdentity` is the seam.** Every channel — M2 email, M4
 widget, M6 Telegram — turns "a message arrived from X" into a contact through
 that one function, inside its own transaction. It is where DOMAIN-RULES §4.4
-lives: a verified identifier matches an existing contact, an unverified one that
-somebody else holds starts a new contact and records a duplicate suggestion
-instead.
+lives: the caller names the identifier's `source` and the §4.4 table decides
+whether it is verified; a match joins an existing contact only when both sides
+are verified, and anything else starts a new contact and records a duplicate
+suggestion instead (M1-13).
+
+**Merging lives in `contact-merge.service.ts` (M1-13).** A merge moves a
+contact's tickets across every department through
+`helpdock_contact_reassign_tickets`, the one path that lifts the department
+predicate for a write; it touches `tickets.contact_id` and nothing else, and
+the ids it moved stay on the `contact_merges` row for the undo.
+
+**Participants live in `src/participants/` (M1-13).** `ParticipantsModule`
+exports `TicketParticipantsService`, whose `addCcParticipant` is how another
+module — M1-09's ticket merge, M2's inbound `Cc:` — copies a contact in.
 
 **Normalisation lives in `packages/schemas`, not here.** `contact_identities` is
 unique on the spelled value, and the admin, the api and the widget all have to

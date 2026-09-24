@@ -326,18 +326,15 @@ the api expects; it runs once and exits.
 Attachments follow their ticket
 ([DOMAIN-RULES §11](../planning/DOMAIN-RULES.md#11-data-lifecycle)).
 
-**What exists today** is the database half: `attachments.ticket_id` cascades, so
-deleting a ticket deletes its attachment rows, and `brand_id` cascades the same
-way for a brand. The key layout is what makes the object half one list and one
-delete loop — `brands/<brandId>/tickets/<ticketId>/…`, so a brand's objects and
-a ticket's objects are each a single prefix.
+Deleting a ticket deletes its attachment rows (`attachments.ticket_id`
+cascades), and `brand_id` cascades the same way for a brand. The objects follow
+through the outbox: the retention purge and a contact's erasure read the keys
+before the rows go and write a `media.objects.purge` row in the same
+transaction, and the worker deletes each object afterwards. [Data
+retention](data-retention.md) describes the nightly run.
 
-**What does not exist yet** is the pass that runs either of them. `maintenance.retention`
-is defined in `@helpdock/jobs` and purges the outbox and receipts only; nothing
-deletes S3 objects on a schedule, and nothing sweeps the `pending` rows left by
-a composer that uploaded and never sent. Both land with the retention
-deliverable, M1-14. Until then an install's bucket keeps the objects of deleted
-tickets, which an operator can remove by prefix by hand.
+Not swept yet: composer uploads that were never sent (`message_id` still null)
+stay until their ticket is purged.
 
 ## Limits and budgets
 

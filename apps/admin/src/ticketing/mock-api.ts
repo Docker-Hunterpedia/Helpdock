@@ -24,6 +24,8 @@ import type {
   EligibleMember,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  RetentionOverview,
+  RetentionUpdateRequest,
   SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
@@ -395,10 +397,40 @@ const newId = (kind: string): string => {
   return `0192c3f0-1a2b-7c3d-8e4f-${kind}${String(nextId).padStart(10, '0')}`.slice(0, 36);
 };
 
+/**
+ * The Data retention card as the artboard draws it: closed tickets kept 730
+ * days, and a last run at 03:00 that removed 74 rows. The preview counts are
+ * fixed numbers; the real ones are `COUNT(*)`s the api runs.
+ */
+const seedRetention = (): RetentionOverview => ({
+  settings: {
+    closedTickets: { kind: 'days', days: 730 },
+    spamTicketDays: 30,
+    aiCallDays: 90,
+    searchLogDays: 180,
+    auditLogDays: 730,
+    visitorSessionDays: 30,
+  },
+  preview: {
+    closedTickets: 12,
+    spamTickets: 62,
+    aiCalls: null,
+    searchLog: null,
+    auditLog: 0,
+    visitorSessions: null,
+  },
+  lastRun: {
+    at: '2026-09-24T03:00:00.000Z',
+    counts: { closedTickets: 12, spamTickets: 62, auditLog: 0, outbox: 0 },
+    total: 74,
+  },
+});
+
 export class MockTicketingApi implements TicketingApi {
   #departments = seedDepartments();
   #teams: Team[] = [];
   #brand = seedBrand();
+  #retention = seedRetention();
   #statuses = seedStatuses();
   #tags = seedTags();
   #fields = seedFields();
@@ -627,6 +659,29 @@ export class MockTicketingApi implements TicketingApi {
     this.#blockList.offerBlockSender = this.#brand.settings.offerBlockSender;
 
     return this.#brand;
+  }
+
+  // ------------------------------------------------------------------ M1-14
+
+  async retention(_brandId: string): Promise<RetentionOverview> {
+    return this.#retention;
+  }
+
+  async updateRetention(
+    _brandId: string,
+    request: RetentionUpdateRequest,
+  ): Promise<RetentionOverview> {
+    const closedCount = seedRetention().preview.closedTickets;
+    this.#retention = {
+      ...this.#retention,
+      settings: request,
+      preview: {
+        ...this.#retention.preview,
+        closedTickets: request.closedTickets.kind === 'never' ? null : closedCount,
+      },
+    };
+
+    return this.#retention;
   }
 
   // ------------------------------------------------------------------ M1-08

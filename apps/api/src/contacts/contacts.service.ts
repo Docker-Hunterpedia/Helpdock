@@ -36,7 +36,12 @@ import {
   requireNormalised,
   suggestSimilarNames,
 } from './identity.js';
-import type { ContactTimelineProvider, TicketStatsProvider } from './providers.js';
+import {
+  type ContactErasureProvider,
+  type ContactTimelineProvider,
+  NoContactErasureProvider,
+  type TicketStatsProvider,
+} from './providers.js';
 
 /**
  * Contacts and accounts for one brand (M1-04).
@@ -71,6 +76,8 @@ export interface ContactsServiceOptions {
   readonly settings: Settings;
   readonly stats: TicketStatsProvider;
   readonly timeline: ContactTimelineProvider;
+  /** What an erasure removes from tickets. Defaults to nothing, for a brand with none. */
+  readonly erasure?: ContactErasureProvider;
 }
 
 export class ContactsService {
@@ -79,11 +86,20 @@ export class ContactsService {
   readonly #settings: Settings;
   readonly #stats: TicketStatsProvider;
   readonly #timeline: ContactTimelineProvider;
+  readonly #erasure: ContactErasureProvider;
 
-  constructor({ repository, merges, settings, stats, timeline }: ContactsServiceOptions) {
+  constructor({
+    repository,
+    merges,
+    settings,
+    stats,
+    timeline,
+    erasure = new NoContactErasureProvider(),
+  }: ContactsServiceOptions) {
     this.#repository = repository;
     this.#merges = merges;
     this.#settings = settings;
+    this.#erasure = erasure;
     this.#stats = stats;
     this.#timeline = timeline;
   }
@@ -381,6 +397,11 @@ export class ContactsService {
       throw new ContactFailure('anonymised');
     }
 
+    // The files they sent and the channel ids of what they wrote (M1-14). Ticket
+    // bodies stay: §11 keeps them "unless the brand's ticket retention says
+    // otherwise", and that is the nightly purge's decision, not this one's.
+    const traces = await this.#erasure.eraseTraces(tx, brandId, contactId);
+
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
@@ -394,6 +415,8 @@ export class ContactsService {
           hadAccount: contact.accountId !== null,
           hadExternalId: contact.externalId !== null,
         }),
+        attachmentCount: traces.attachments,
+        messageCount: traces.messages,
       },
     });
 

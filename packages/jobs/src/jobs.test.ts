@@ -4,12 +4,13 @@ import {
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   maintenanceRetentionJob,
+  maintenanceRetentionScheduleJob,
   mediaProcessJob,
   OUTBOX_RELAY_INTERVAL_MS,
   outboxEventJob,
   outboxRelayJob,
   parseJobPayload,
-  RETENTION_DAYS,
+  retentionJobId,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
 import { PayloadValidationError } from './validation.js';
@@ -45,8 +46,9 @@ describe('the job registry', () => {
     expect(outboxRelayJob.schedule).toEqual({ everyMs: OUTBOX_RELAY_INTERVAL_MS });
   });
 
-  it('runs retention nightly', () => {
-    expect(maintenanceRetentionJob.schedule).toEqual({ cron: '0 3 * * *' });
+  it('ticks retention nightly, and leaves the per-brand job to that tick', () => {
+    expect(maintenanceRetentionScheduleJob.schedule).toEqual({ cron: '0 3 * * *' });
+    expect(maintenanceRetentionJob.schedule).toBeUndefined();
   });
 });
 
@@ -78,17 +80,24 @@ describe('outbox.event payloads', () => {
 });
 
 describe('maintenance.retention payloads', () => {
-  it('defaults to the seven days of DOMAIN-RULES §11', () => {
-    expect(parseJobPayload(maintenanceRetentionJob, { brandId })).toEqual({
+  it('names a brand and the night it runs for', () => {
+    expect(parseJobPayload(maintenanceRetentionJob, { brandId, runDate: '2026-09-24' })).toEqual({
       brandId,
-      olderThanDays: RETENTION_DAYS,
+      runDate: '2026-09-24',
     });
   });
 
-  it('refuses a retention window of less than a day', () => {
-    expect(() => parseJobPayload(maintenanceRetentionJob, { brandId, olderThanDays: 0 })).toThrow(
-      PayloadValidationError,
-    );
+  it('refuses a run date that is not a calendar date', () => {
+    expect(() =>
+      parseJobPayload(maintenanceRetentionJob, { brandId, runDate: '2026-09-24T03:00:00Z' }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('gives one brand one job id per night, so a double tick adds nothing', () => {
+    const tonight = retentionJobId({ brandId, runDate: '2026-09-24' });
+
+    expect(tonight).toBe(retentionJobId({ brandId, runDate: '2026-09-24' }));
+    expect(tonight).not.toBe(retentionJobId({ brandId, runDate: '2026-09-25' }));
   });
 });
 
@@ -107,7 +116,7 @@ describe('idempotencyKeyFor', () => {
 
   it('falls back to the job name and id when the definition has no natural key', () => {
     expect(
-      idempotencyKeyFor(maintenanceRetentionJob, { brandId, olderThanDays: 7 }, 'job-42'),
+      idempotencyKeyFor(maintenanceRetentionJob, { brandId, runDate: '2026-09-24' }, 'job-42'),
     ).toBe('maintenance.retention:job-42');
   });
 

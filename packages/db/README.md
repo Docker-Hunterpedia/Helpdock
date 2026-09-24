@@ -57,7 +57,8 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `audit_log` | tenant | Who did what. `actor_id` is text: a system actor is a job id. |
 | `outbox` | tenant | The transactional outbox of DOMAIN-RULES §6. Partial index on the unpublished backlog. |
 | `job_receipts` | global | Idempotency keys for consumers with no natural key. |
-| `ticket_statuses` | tenant | A brand's own statuses, each mapped to one of the four system states of DOMAIN-RULES §2.1. Brand-scoped and **not** department-scoped: an Agent has to read the name of the status a ticket in their own department is in. Unique on `(brand_id, name)`. |
+| `retention_settings` | tenant | One row per brand with its DOMAIN-RULES §11 windows, and the last nightly run's counts (M1-14). No row means the defaults. A table rather than a key in `brands.settings`, which the brand `PATCH` sends whole and could reset by omission. |
+| `ticket_statuses` | tenant | A brand's own statuses, each mapped to one of the four system states of DOMAIN-RULES §2.1. Brand-scoped and **not** department-scoped: an Agent has to read the name of the status a ticket in their own department is in. Unique on `(brand_id, name)`. `is_spam` marks the seeded Spam row (M1-14), which carries the same other flags as Merged. |
 | `tickets` | tenant, **department** | The ticket. `department_id` is not null — a ticket with no department would be invisible to everyone. `search` is a generated tsvector. |
 | `ticket_messages` | tenant, **department** | The thread. `seq` is monotonic per ticket; `(ticket_id, client_id)` dedupes a retried send; `(brand_id, channel, external_message_id)` dedupes an inbound redelivery. |
 | `ticket_activity` | tenant, **department** | Who changed what, and how. Part of the ticket rather than the brand's administrative trail, which stays `audit_log`. |
@@ -269,5 +270,6 @@ it idempotent.
   does not fall back to the install-wide value for a key a brand has not
   overridden; that resolution rule belongs to the milestone that puts per-brand
   settings in admin.
-- Nothing drops a brand's ticket sequence yet. Brand deletion and retention are
-  DOMAIN-RULES §11, and arrive with the maintenance jobs.
+- Nothing drops a brand's ticket sequence yet. Brand deletion is DOMAIN-RULES
+  §11 and is its own deliverable; retention (M1-14) purges rows, never a
+  sequence.

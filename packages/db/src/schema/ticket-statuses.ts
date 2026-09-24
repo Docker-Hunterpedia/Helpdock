@@ -68,6 +68,10 @@ export const ticketStatuses = pgTable(
      * flag too, and the name cannot say it because a brand may rename Spam.
      * Everything that treats spam differently — no auto-responder, no CSAT, no
      * round-robin count, no report — reads this through `isSpamStatus`.
+     *
+     * M1-14 reads it too: DOMAIN-RULES §11 purges spam after 30 days and a
+     * merged ticket with the closed tickets, so retention cannot key off the
+     * shared `excluded_from_reports` either.
      */
     isSpam: boolean('is_spam').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),

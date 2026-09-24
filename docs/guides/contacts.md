@@ -189,8 +189,21 @@ cannot be erased (`merged`); undo the merge first.
   else's screen a link to a person who has been erased.
 - The audit row records counts and kinds — how many identifiers, which kinds,
   how many notes — and **no value of any kind**.
+- The **files they sent** are deleted: every attachment they uploaded and every
+  attachment on a message they wrote. The rows go in the erasure's transaction;
+  the objects are queued through the outbox and deleted by the worker (M1-14).
+- The **channel ids** of the messages they wrote (`external_message_id`) are
+  cleared. The messages themselves stay, still attributed to the erased contact,
+  and the bodies are kept under the brand's
+  [retention](data-retention.md).
+- The audit row also carries `attachmentCount` and `messageCount`.
 - An erased contact is immutable afterwards: every write answers
-  `anonymised` (409).
+  `anonymised` (409). `contacts.anonymised_at` is the marker: anything that
+  matches contacts — duplicate suggestions, the merge of M1-13 — skips a row
+  where it is set.
+
+The screen asks for the person's name to be typed before the Anonymise button
+wakes up, and only an Admin is offered the button at all.
 
 There is no undo.
 

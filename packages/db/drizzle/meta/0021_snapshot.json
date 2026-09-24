@@ -1,6 +1,6 @@
 {
   "id": "2e9628d8-bec3-4a2d-abcb-cb5b1feaf265",
-  "prevId": "9d09319f-9fee-4d33-9699-e77063dd39c4",
+  "prevId": "aca7437d-abbc-40f9-b7f5-c4e7616617d3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1876,6 +1876,127 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.retention_settings": {
+      "name": "retention_settings",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "closed_ticket_days": {
+          "name": "closed_ticket_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spam_ticket_days": {
+          "name": "spam_ticket_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
+        "ai_call_days": {
+          "name": "ai_call_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 90
+        },
+        "search_log_days": {
+          "name": "search_log_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 180
+        },
+        "audit_log_days": {
+          "name": "audit_log_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 730
+        },
+        "visitor_session_days": {
+          "name": "visitor_session_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_run_at": {
+          "name": "last_run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_run_counts": {
+          "name": "last_run_counts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "retention_settings_brand_id_brands_id_fk": {
+          "name": "retention_settings_brand_id_brands_id_fk",
+          "tableFrom": "retention_settings",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "retention_settings_closed_ticket_days_check": {
+          "name": "retention_settings_closed_ticket_days_check",
+          "value": "\"retention_settings\".\"closed_ticket_days\" IS NULL OR \"retention_settings\".\"closed_ticket_days\" >= 1"
+        },
+        "retention_settings_spam_ticket_days_check": {
+          "name": "retention_settings_spam_ticket_days_check",
+          "value": "\"retention_settings\".\"spam_ticket_days\" >= 1"
+        },
+        "retention_settings_ai_call_days_check": {
+          "name": "retention_settings_ai_call_days_check",
+          "value": "\"retention_settings\".\"ai_call_days\" >= 1"
+        },
+        "retention_settings_search_log_days_check": {
+          "name": "retention_settings_search_log_days_check",
+          "value": "\"retention_settings\".\"search_log_days\" >= 1"
+        },
+        "retention_settings_audit_log_days_check": {
+          "name": "retention_settings_audit_log_days_check",
+          "value": "\"retention_settings\".\"audit_log_days\" >= 90"
+        },
+        "retention_settings_visitor_session_days_check": {
+          "name": "retention_settings_visitor_session_days_check",
+          "value": "\"retention_settings\".\"visitor_session_days\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.settings": {
       "name": "settings",
       "schema": "",
@@ -3452,6 +3573,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tickets_brand_closed_at_idx": {
+          "name": "tickets_brand_closed_at_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "closed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tickets\".\"closed_at\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

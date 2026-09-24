@@ -15,6 +15,7 @@ export * from './media.js';
 export * from './participants.js';
 export * from './principal.js';
 export * from './realtime.js';
+export * from './retention.js';
 export * from './spam.js';
 export * from './staff.js';
 export * from './system.js';

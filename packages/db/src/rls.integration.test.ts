@@ -24,6 +24,7 @@ import {
   customFieldDefs,
   departments,
   outbox,
+  retentionSettings,
   settings,
   tags,
   teamMembers,
@@ -214,6 +215,11 @@ const fixtures = [
     name: 'outbox',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(outbox).values({ brandId, event: 'test.seeded', payload: { seeded: true } }),
+  },
+  {
+    name: 'retention_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(retentionSettings).values({ brandId, closedTicketDays: 365 }),
   },
   {
     name: 'ticket_statuses',

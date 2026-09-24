@@ -10,9 +10,10 @@ import { parsePayload } from './validation.js';
  * in and on the way out and the two can never disagree (AGENTS.md, validation at
  * every boundary).
  *
- * M0 defines three: the relay itself, the fan-out job it publishes, and the
+ * M0 defined three: the relay itself, the fan-out job it publishes, and the
  * nightly retention job of DOMAIN-RULES §11. Later milestones add the rest of
- * ARCHITECTURE §13 beside them.
+ * ARCHITECTURE §13 beside them: M1-10 the media pipeline, M1-14 the nightly
+ * tick that fans retention out per brand.
  */
 
 /** How a repeatable job recurs. BullMQ turns either form into a job scheduler. */
@@ -139,23 +140,62 @@ export const outboxEventJob = defineJob({
 
 export const maintenanceRetentionPayloadSchema = z.object({
   brandId: z.uuid(),
-  olderThanDays: z.int().min(1).max(3_650).default(RETENTION_DAYS),
+  /**
+   * The night this run belongs to, as `YYYY-MM-DD` in UTC. The job id is built
+   * from it ({@link retentionJobId}), so a scheduler tick that fires twice in
+   * one night adds one job per brand, not two.
+   */
+  runDate: z.iso.date(),
 });
 
 export type MaintenanceRetentionPayload = z.infer<typeof maintenanceRetentionPayloadSchema>;
 
 /**
- * Nightly retention for one brand (DOMAIN-RULES §11). M0-14 defines the job and
- * ships the purges it will call ({@link ../retention.js}); the fan-out that
- * enqueues one job per brand, and the audit-log counts, belong to the retention
- * deliverable in M9.
+ * Nightly retention for **one** brand (DOMAIN-RULES §11, M1-14). It carries no
+ * schedule of its own: {@link maintenanceRetentionScheduleJob} adds one per
+ * brand, because a job that needs several brands enqueues one child job per
+ * brand rather than widening its tenant context (DOMAIN-RULES §1.4).
+ *
+ * The consumer is `apps/api/src/retention/retention.job.ts`. It runs each batch
+ * in a transaction of its own instead of one receipt-claiming transaction, so a
+ * brand with a million expired rows never holds a lock for the whole purge.
+ * That is also why it needs no receipt: every purge is "delete what is older
+ * than the cutoff", and a retry of a half-finished run simply finds fewer rows.
  */
 export const maintenanceRetentionJob = defineJob({
   name: 'maintenance.retention',
   queue: QUEUE_NAMES.maintenance,
   schema: maintenanceRetentionPayloadSchema,
-  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: false },
-  schedule: { cron: '0 3 * * *' },
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 7 * 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+});
+
+/**
+ * The BullMQ job id of one brand's run on one night; see
+ * {@link maintenanceRetentionPayloadSchema}. Dots, not colons: BullMQ refuses a
+ * custom id with a colon in it, because it uses them to separate key segments.
+ */
+export const retentionJobId = ({ brandId, runDate }: MaintenanceRetentionPayload): string =>
+  `maintenance.retention.${brandId}.${runDate}`;
+
+/** 03:00 UTC every night. */
+export const RETENTION_CRON = '0 3 * * *';
+
+/**
+ * The nightly tick (M1-14): adds one {@link maintenanceRetentionJob} per active
+ * brand, then purges `job_receipts`, which is global and so belongs to no
+ * brand's run.
+ */
+export const maintenanceRetentionScheduleJob = defineJob({
+  name: 'maintenance.retention.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: RETENTION_CRON },
 });
 
 export const mediaProcessPayloadSchema = z.object({
@@ -238,6 +278,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,
   [maintenanceRetentionJob.name]: maintenanceRetentionJob,
+  [maintenanceRetentionScheduleJob.name]: maintenanceRetentionScheduleJob,
   [mediaProcessJob.name]: mediaProcessJob,
   [assignmentOfflineUnassignJob.name]: assignmentOfflineUnassignJob,
 } as const);

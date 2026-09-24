@@ -1,6 +1,7 @@
 import type { StaffRole } from '@helpdock/schemas';
 import {
   BookOpen,
+  Building2,
   ChartColumn,
   type LucideIcon,
   Server,
@@ -14,6 +15,7 @@ import { ROUTES } from '../app/route-paths.js';
 
 /** Also the key the api uses for that item's count and the page's copy. */
 export type NavKey =
+  | 'brand'
   | 'tickets'
   | 'contacts'
   | 'helpCenter'
@@ -76,6 +78,9 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   helpCenter: item('helpCenter', ROUTES.helpCenter, BookOpen, { placeholder: true }),
   reports: item('reports', ROUTES.reports, ChartColumn, { placeholder: true }),
   settings: item('settings', ROUTES.settings, Settings, { placeholder: true }),
+  // The brand's own settings. Admin only: DOMAIN-RULES §1.2 keeps brand-wide
+  // configuration, and §11 the retention windows, with the Admin.
+  brand: item('brand', ROUTES.brand, Building2, { roles: ['admin'] }),
   // How this brand's tickets are shaped and routed (M1-01). Offered to the two
   // roles that may change any of it: an Admin everywhere, a Team Leader in the
   // departments they lead (DOMAIN-RULES §1.2).
@@ -99,6 +104,7 @@ export const PRIMARY_NAV: readonly NavItem[] = [
 ];
 
 export const ADMIN_NAV: readonly NavItem[] = [
+  NAV_BY_KEY.brand,
   NAV_BY_KEY.settings,
   NAV_BY_KEY.ticketing,
   NAV_BY_KEY.staff,

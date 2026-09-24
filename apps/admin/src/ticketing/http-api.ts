@@ -23,6 +23,8 @@ import type {
   DepartmentUpdateRequest,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  RetentionOverview,
+  RetentionUpdateRequest,
   SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
@@ -56,6 +58,7 @@ import {
   departmentSummaryListSchema,
   departmentSummarySchema,
   eligibleMemberListSchema,
+  retentionOverviewSchema,
   tagListSchema,
   tagSummarySchema,
   tagUsageSchema,
@@ -200,6 +203,23 @@ export class HttpTicketingApi implements TicketingApi {
 
   async updateBrand(brandId: string, request: BrandUpdateRequest): Promise<Brand> {
     return brandSchema.parse(await this.#transport.request('PATCH', this.#brand(brandId), request));
+  }
+
+  // ------------------------------------------------------------------ M1-14
+
+  async retention(brandId: string): Promise<RetentionOverview> {
+    return retentionOverviewSchema.parse(
+      await this.#transport.request('GET', `${this.#brand(brandId)}/retention`),
+    );
+  }
+
+  async updateRetention(
+    brandId: string,
+    request: RetentionUpdateRequest,
+  ): Promise<RetentionOverview> {
+    return retentionOverviewSchema.parse(
+      await this.#transport.request('PUT', `${this.#brand(brandId)}/retention`, request),
+    );
   }
 
   // ------------------------------------------------------------------ M1-08

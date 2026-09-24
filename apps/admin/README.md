@@ -320,6 +320,22 @@ belong on **Admin → Settings** as a "Brand" tab, and that page is still the
 milestone placeholder with no artboard. The guide says so
 ([ticketing settings](../../docs/guides/ticketing-settings.md#brand-settings)).
 
+### The screen M1-14 added
+
+| Route | Artboard | |
+|---|---|---|
+| `/admin/brand` | `AdminBrandDanger` | Redirects to the only built tab. The **Brand** item in the sidebar's Admin group is drawn for an Admin alone. |
+| `/admin/brand/danger` | `AdminBrandDanger` | The Data retention card: the windows, the "next purge" count per row and the last run. The artboard's General, Domains and Theme tabs and its "Delete this brand" section have no deliverable yet and are not drawn. |
+
+The form's rules — which day counts are valid, what a draft sends, whether it is
+dirty — are `src/screens/admin/brand/retention-form.ts`, tested without a DOM.
+The two calls live on `TicketingApi` (`retention`, `updateRetention`) beside
+the brand's other configuration.
+
+The contact page's **Anonymise** dialog (`AdminContactDialogs`, panel 3) asks
+for the contact's name before its danger button wakes up, and the button that
+opens it is drawn for an Admin alone (`src/screens/contacts/anonymise-dialog.tsx`).
+
 ### The screens M1-06 added
 
 | Route | Artboard | |

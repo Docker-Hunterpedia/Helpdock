@@ -29,6 +29,8 @@ import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { ParticipantsModule } from './participants/participants.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
+import { DbContactErasureProvider } from './retention/contact-erasure.js';
+import { RetentionModule } from './retention/retention.module.js';
 import { DomainCheckController } from './routes/domain-check.controller.js';
 import { DomainCheckService } from './routes/domain-check.service.js';
 import { HealthController } from './routes/health.controller.js';
@@ -119,6 +121,8 @@ export class AppModule implements NestModule {
         ContactsModule.forRoot({
           ticketStats: new DbTicketStatsProvider(),
           timeline: new DbContactTimelineProvider(),
+          // M1-14: an erasure also removes the files the person sent.
+          erasure: new DbContactErasureProvider(),
         }),
         ticketing,
         TicketsModule.forRoot({ ticketing }),
@@ -132,6 +136,8 @@ export class AppModule implements NestModule {
           env: options.env,
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
         }),
+        // M1-14: the Data retention form. The purge itself runs in the worker.
+        RetentionModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

@@ -193,7 +193,7 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
 
 | Component | Anatomy |
 |---|---|
-| Dialog | elevation 3, radius lg, 16–24 px padding, h3 title, body 13–14 in `text.secondary`, actions end-aligned: ghost Cancel then primary (or solid danger for destructive). Max width 480 (confirm) or 720 (forms). Focus trapped, `Esc` closes unless destructive-in-progress. |
+| Dialog | elevation 3, radius lg, 16–24 px padding, h3 title, body 13–14 in `text.secondary`, actions end-aligned: ghost Cancel then primary (or solid danger for destructive). Max width 480 (confirm) or 720 (forms). Focus trapped, `Esc` closes unless destructive-in-progress. An irreversible action on a named thing (erasing a contact) asks for the name to be typed and keeps the danger button disabled until it matches exactly. |
 | Drawer | 420 px from the inline-end side (so it opens from the left in RTL). Used for ticket quick view, rule editor test-run, knowledge source logs. |
 | Menu | elevation 2, 6 px padding, 32 px items radius sm, hover `bg.muted`, danger items in danger text, 1 px dividers. |
 | Tooltip | `bg.inverse`, caption text, radius sm, 200 ms delay. Never the only carrier of an icon's meaning. |

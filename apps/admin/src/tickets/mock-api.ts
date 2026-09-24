@@ -482,17 +482,23 @@ export class MockTicketsApi implements TicketsApi {
   }
 
   async create(_brandId: string, request: TicketCreateRequest): Promise<TicketDetail> {
+    // The api fills these from a template (M1-06); the workspace's dialog always
+    // sends all three, so the fixture does not model templates.
+    const { subject, bodyHtml, departmentId } = request;
+    if (subject === undefined || bodyHtml === undefined || departmentId === undefined) {
+      throw new Error('The fixture needs a subject, a body and a department.');
+    }
     const now = new Date().toISOString();
     const number = Math.max(...this.#tickets.map((ticket) => ticket.number)) + 1;
     const ticket: Ticket = {
       id: this.#nextId('1'),
       number,
       prefix: 'HD',
-      subject: request.subject,
+      subject,
       status: this.#defaultStatus(),
       priority: request.priority ?? 'medium',
       channel: request.channel ?? 'manual',
-      departmentId: request.departmentId,
+      departmentId,
       teamId: null,
       assigneeId: request.assigneeId ?? null,
       contactId: request.contactId ?? null,
@@ -519,8 +525,8 @@ export class MockTicketsApi implements TicketsApi {
         kind: 'public',
         authorType: 'staff',
         authorId: MOCK_SELF_ID,
-        bodyHtml: request.bodyHtml,
-        bodyText: textOf(request.bodyHtml),
+        bodyHtml,
+        bodyText: textOf(bodyHtml),
         attachments: [],
         channel: ticket.channel,
         createdAt: now,

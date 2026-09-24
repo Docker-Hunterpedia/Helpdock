@@ -5,7 +5,7 @@ import type {
 } from '@helpdock/db';
 import { withWidenedDepartments } from '@helpdock/db';
 import { createI18n, type Locale } from '@helpdock/i18n';
-import type { BrandSettings } from '@helpdock/schemas';
+import { type BrandSettings, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
@@ -193,8 +193,8 @@ export class TicketLifecycleService {
    * resolution clock left running on a ticket nobody will touch again is a
    * clock that breaches. `onClosedForCsat` is the one §2.2 qualifies — "if
    * enabled, not spam, not merged" — and both exclusions are read off data
-   * rather than off a name: `merged_into_id` on the ticket, and
-   * `excluded_from_reports` on the status a brand may have renamed.
+   * rather than off a name: `merged_into_id` on the ticket, and M1-11's
+   * `is_spam` on the status a brand may have renamed (`isSpamStatus`).
    */
   async onClosed(
     context: LifecycleContext,
@@ -205,7 +205,7 @@ export class TicketLifecycleService {
 
     await this.#hooks.onResolved(context.tx, event);
 
-    if (ticket.mergedIntoId === null && !status.excludedFromReports) {
+    if (ticket.mergedIntoId === null && !isSpamStatus(status)) {
       await this.#hooks.onClosedForCsat(context.tx, event);
     }
   }

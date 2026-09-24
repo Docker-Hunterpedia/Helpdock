@@ -226,6 +226,9 @@ describe('the brand', () => {
         reopenPolicy: { kind: 'never' },
         contentPolicy: DEFAULT_CONTENT_POLICY,
         offerBlockSender: true,
+        csatEnabled: true,
+        timeTrackingEnabled: false,
+        timerStartsWithComposer: false,
       },
     });
 

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { decodeMasterKey, type Env } from '@helpdock/config';
+import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
   brands,
@@ -45,6 +45,9 @@ import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { CsatRepository } from '../csat/csat.repository.js';
+import { registerCsatEventHandlers } from '../csat/csat-events.js';
+import { CsatTokens } from '../csat/tokens.js';
 import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
@@ -288,6 +291,11 @@ describe.skipIf(!hasDocker)('tickets', () => {
     // start-up, publishing on a connection of its own exactly as it would.
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    // M1-12: a close writes `csat.requested` too, and the worker handles it.
+    registerCsatEventHandlers({
+      repository: new CsatRepository(),
+      tokens: new CsatTokens(createKeyring(envFor())),
+    });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
     await seed(runtime.db);

@@ -14,6 +14,8 @@ import type {
   TicketSpamSender,
   TicketStatusList,
   TicketUpdateRequest,
+  TimeEntryCreateRequest,
+  TimeEntryList,
 } from '@helpdock/schemas';
 import {
   assignableAgentListSchema,
@@ -26,6 +28,7 @@ import {
   ticketSchema,
   ticketSpamSenderSchema,
   ticketStatusListSchema,
+  timeEntryListSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
 import type { TicketQuery, TicketsApi } from './api.js';
@@ -149,6 +152,26 @@ export class HttpTicketsApi implements TicketsApi {
     );
   }
 
+  async timeEntries(brandId: string, ticketId: string): Promise<TimeEntryList> {
+    return timeEntryListSchema.parse(
+      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/time-entries`),
+    );
+  }
+
+  async logTime(
+    brandId: string,
+    ticketId: string,
+    request: TimeEntryCreateRequest,
+  ): Promise<TimeEntryList> {
+    return timeEntryListSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `${this.#ticket(brandId, ticketId)}/time-entries`,
+        request,
+      ),
+    );
+  }
+
   async removeCc(
     brandId: string,
     ticketId: string,
@@ -158,6 +181,19 @@ export class HttpTicketsApi implements TicketsApi {
       await this.#transport.request(
         'DELETE',
         `${this.#ticket(brandId, ticketId)}/participants/${encodeURIComponent(participantId)}`,
+      ),
+    );
+  }
+
+  async deleteTimeEntry(
+    brandId: string,
+    ticketId: string,
+    entryId: string,
+  ): Promise<TimeEntryList> {
+    return timeEntryListSchema.parse(
+      await this.#transport.request(
+        'DELETE',
+        `${this.#ticket(brandId, ticketId)}/time-entries/${encodeURIComponent(entryId)}`,
       ),
     );
   }

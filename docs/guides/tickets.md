@@ -388,14 +388,16 @@ retried send never creates a second continuation (§7).
 
 ### The hooks later milestones fill
 
-`apps/api/src/tickets/lifecycle/hooks.ts` names three moments and does nothing
-at any of them. They are a provider, so M3-02 and M1-12 replace one line of
-`TicketsModule` rather than editing the service that calls them.
+`apps/api/src/tickets/lifecycle/hooks.ts` names three moments. They are a
+provider, so M3-02 and M1-12 replace one line of `TicketsModule` rather than
+editing the service that calls them. M1-12's line is in: `CsatLifecycleHooks`
+(`apps/api/src/csat/csat-hooks.ts`) fills `onClosedForCsat` and inherits the
+other two, which M3-02 fills.
 
 | Hook | Fires when | Filled by |
 |---|---|---|
 | `onResolved` | A ticket reaches a closed state, **including** spam and merge — a clock left running on a ticket nobody will touch again is a clock that breaches | M3-02 |
-| `onClosedForCsat` | The same, **unless** the ticket is merged or the status is `excluded_from_reports` | M1-12 |
+| `onClosedForCsat` | The same, **unless** the ticket is merged or the status is Spam (`is_spam`) | M1-12: writes `csat.requested` to the outbox when the brand has CSAT on |
 | `onReopened` | A closed ticket comes back, by policy or by an agent (§3.5) | M3-02 |
 
 Every hook runs inside the caller's transaction, after the ticket row has moved
@@ -527,6 +529,17 @@ which departments it reaches is the policies'.
 | `GET /tickets/:ticketId/participants` | `ticket:read` | The contact, the CCs and the staff (M1-13) |
 | `POST /tickets/:ticketId/participants` | `ticket:write` | Copies an address in as a CC (M1-13) |
 | `DELETE /tickets/:ticketId/participants/:participantId` | `ticket:write` | Takes a CC off (M1-13) |
+| `GET /tickets/:ticketId/time-entries` | `ticket:read` | The ticket's time, newest first, with the total (M1-12) |
+| `POST /tickets/:ticketId/time-entries` | `ticket:write` | A manual entry: `{ seconds, note? }`. 409 `time-tracking-off` while the brand has it off |
+| `DELETE /tickets/:ticketId/time-entries/:entryId` | `ticket:write` | Your own entry; anybody's with `ticketing:manage` (Team Leader, Admin), otherwise 403 |
+
+Two routes live outside the brand, because the person calling them has no
+session — see [satisfaction surveys](#satisfaction-surveys):
+
+| Route | Declares | Answers |
+|---|---|---|
+| `GET /api/public/csat/:token` | `@Public()` | The rating page's state: `open` with the brand, reference and subject; or `used` / `expired` with the brand alone |
+| `POST /api/public/csat/:token` | `@Public()` | `{ rating: 1–5, comment? }`. Answers `rated` once, then `used`; `expired` after 30 days |
 
 ### Listing
 
@@ -1073,6 +1086,97 @@ sorted every visible ticket (27 ms of database time on its own, before load),
 and a first full-scale run on the same shared machine put the default list's
 p50 at 114 ms against 20 ms after the change.
 
+## Time tracking
+
+M1-12, and optional per brand (REQUIREMENTS §4.1): **Ticketing › Feedback ›
+Track time on tickets**, off by default.
+
+`ticket_time_entries` holds one row per entry: who, how long in whole seconds
+(1 to 24 h 59 m, the Log time dialog's bounds), an optional staff-only note,
+and the reply it was logged with when it came from the per-reply timer. It is a
+child of the ticket and **department-scoped** like the thread: the shared
+triggers copy the ticket's department on insert and move it with the ticket, so
+an agent who cannot read a ticket cannot read or log its time, and the RLS
+negative suite covers the table.
+
+There are three ways time gets logged:
+
+| From | How | Row |
+|---|---|---|
+| The Log time dialog (header ⋯ → "Log time…", or "Add time manually") | `POST …/time-entries` | `message_id` null, with the note |
+| The Time card's timer, **Log** | `POST …/time-entries` with what the timer counted | `message_id` null |
+| The per-reply timer | `timeSpentSeconds` on `POST …/messages`, written in the **same transaction** as the reply | `message_id` = the reply |
+
+The timer lives in the browser (`apps/admin/src/screens/tickets/use-ticket-timer.ts`):
+nothing reaches the server until a reply is sent or Log is pressed, so an
+abandoned timer costs nothing. With **Start the timer when an agent opens the
+composer** on, it starts when the caret enters the reply box; sending a reply
+or a note stops it and sends its time with the message. A timer left running
+for longer than one entry allows is capped rather than refused, because the
+reply must not fail over it. A reply's timer is dropped, never refused, while
+the brand has tracking off.
+
+Anybody who can write to the ticket may log time; an entry is deleted by
+whoever logged it, or by a Team Leader or an Admin. A Viewer reads the card and
+has none of its controls. Entries are not realtime yet: another agent's Time
+card updates on its next read.
+
+## Satisfaction surveys
+
+M1-12 (REQUIREMENTS §4.1, DOMAIN-RULES §2.2 and §4.6). **Ticketing › Feedback ›
+Ask for a rating when a ticket closes**, on by default.
+
+**One survey per close.** A close that is not spam or a merge (read off the
+status's `is_spam` through `isSpamStatus` and the ticket's `merged_into_id`,
+never off a name) runs `onClosedForCsat`, which — when the brand has CSAT on — writes
+`csat.requested { ticketId, closedAt }` to the outbox in the closing
+transaction. The worker's handler (`apps/api/src/csat/csat-events.ts`) re-reads
+the ticket and creates the row in `csat_responses` only if that close still
+stands: a ticket reopened, merged, marked as spam or deleted before the job ran
+gets none. `(ticket_id, closed_at)` is unique, so a redelivered job is a no-op,
+and a ticket reopened and closed again gets a second survey. `csat_responses`
+is department-scoped like the other children of a ticket.
+
+**The link.** `APP_URL/csat/<token>`. The token is `<ids>.<mac>`: the brand and
+survey ids, and an HMAC-SHA256 over them under a key derived from
+`APP_MASTER_KEY` with HKDF (`apps/api/src/csat/tokens.ts`). Only a SHA-256 of it
+is stored. It is:
+
+- **signed** — an altered or guessed token is refused before any query runs;
+- **bound to one ticket** — it names one survey, and the survey one ticket;
+- **single-use** — the rating is written by an `UPDATE … WHERE rated_at IS NULL
+  AND expires_at > now()`, so two submissions cannot both win; the second
+  answers `used`;
+- **expiring** — 30 days after the survey is created, it answers `expired`.
+
+A token signed under `APP_MASTER_KEY_PREVIOUS` still verifies, so a key
+rotation does not strand the surveys already out; a key older than that does
+not.
+
+**The public routes are an explicit system path.** The token names the brand, so
+the api opens a transaction scoped to exactly that brand as the system principal
+`csat:<surveyId>`, reads one survey and its ticket's reference and subject, and
+writes an `audit_log` row (`csat.viewed`, `csat.rated`) for every use of a valid
+link. Both routes share a per-address budget of 30 requests in 15 minutes
+(`CSAT_PUBLIC_RULE`), and both collapse the token to `:token` before the request
+line is logged. A spent link answers with the brand alone — never the subject.
+
+**The agent's view.** `GET /tickets/:ticketId` carries `csat` for the latest
+close: `pending` (created, not delivered), `sent` (a channel delivered it —
+M8-06), `rated` (with the rating and comment) or `expired`, and the link while
+it can still be used. The details panel draws it on a Satisfaction card with
+**Copy survey link**, because channels do not deliver it yet.
+
+**The contact card.** A contact's `stats.csat` is the share of their answered
+surveys rated 4 or 5, as a percentage, over the tickets the viewer can see; null
+when they have answered none.
+
+**The rating page** is served by the admin bundle at `/csat/<token>` but
+mounted without any of the staff app (ADR
+[0010](../decisions/0010-csat-page-in-the-admin-bundle.md)). Its language is
+`?lang=` when it names `en` or `ar`, otherwise the brand's default; it is themed
+with the brand accent when the brand has one (none do until M5/M6's themes).
+
 ## What later milestones add
 
 | Milestone | Adds |
@@ -1081,6 +1185,8 @@ p50 at 114 ms against 20 ms after the change.
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Shipped in branch. `is_spam` on the Spam status, `POST`/`DELETE …/spam`, `ticket.spam`, the sender block list and its inbound gate ([Spam](#spam)) |
+| M1-12 | Shipped. Time tracking and satisfaction surveys ([above](#time-tracking)) |
+| M8-06 | Delivering the survey link with the closing message on email, widget and Telegram; sets `csat_responses.sent_at` |
 | M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
 | M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |

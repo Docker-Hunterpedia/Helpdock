@@ -132,6 +132,16 @@ BEGIN
   SET department_id = NEW.department_id
   WHERE ticket_id = NEW.id;
 
+  -- M1-12's children (migration 0018 added them to this function first; this
+  -- migration runs after it, so the replacement has to carry them too).
+  UPDATE public.ticket_time_entries
+  SET department_id = NEW.department_id
+  WHERE ticket_id = NEW.id;
+
+  UPDATE public.csat_responses
+  SET department_id = NEW.department_id
+  WHERE ticket_id = NEW.id;
+
   RETURN NULL;
 END;
 $$;--> statement-breakpoint

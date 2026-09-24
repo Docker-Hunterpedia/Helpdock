@@ -22,6 +22,7 @@ import type {
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
+  FeedbackSettingsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -272,6 +273,17 @@ export class HttpTicketingApi implements TicketingApi {
         `${this.#brand(brandId)}/ticketing/reply-behaviour`,
         request,
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------- M1-12
+
+  async updateFeedback(
+    brandId: string,
+    request: FeedbackSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    return brandSettingsSchema.parse(
+      await this.#transport.request('PATCH', `${this.#brand(brandId)}/ticketing/feedback`, request),
     );
   }
 

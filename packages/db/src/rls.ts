@@ -93,6 +93,10 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // its department like `ticket_tags`.
   { name: 'contact_merges', departmentScoped: false },
   { name: 'ticket_participants', departmentScoped: true },
+  // M1-12. Both hang off a ticket and carry its department by the same
+  // triggers; DOMAIN-RULES §1.3 names `csat_responses` among the six.
+  { name: 'ticket_time_entries', departmentScoped: true },
+  { name: 'csat_responses', departmentScoped: true },
 ];
 
 /**

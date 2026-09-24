@@ -4,11 +4,10 @@ How a brand's tickets are shaped and routed: departments, the teams inside
 them, and the brand-level behaviour that later deliverables read. The screen is
 **Admin → Ticketing**, and this guide follows its tab row.
 
-Six tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
-Seven tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
-**Custom fields** and **Templates** (M1-06), **Assignment** (M1-07) and **Spam**
-(M1-11). The other two exist so the row is whole and each says which
-deliverable fills it: Priorities with M1-02, Views with M1-05.
+Eight tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
+**Custom fields** and **Templates** (M1-06), **Assignment** (M1-07), **Spam**
+(M1-11) and **Feedback** (M1-12). The other two exist so the row is whole and
+each says which deliverable fills it: Priorities with M1-02, Views with M1-05.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -223,6 +222,29 @@ Both are stored in `brands.settings`, and this route **merges** rather than
 replacing — a key a later milestone adds is not reset by a screen that predates
 it. `PATCH /api/brands/:brandId` still writes the object whole, because the
 screen there holds the whole object.
+
+## Feedback
+
+The last tab of `Admin/Ticketing` (`AdminTicketingFeedback`, M1-12): customer
+ratings and agent time for the brand. One form and one save, because the three
+settings are one decision about how the desk works. Like the reply behaviour, it
+is `ticketing:manage` — a Team Leader shapes how their desk works — and the route
+merges into `brands.settings` rather than replacing it.
+
+| Setting | Default | What it does |
+|---|---|---|
+| Ask for a rating when a ticket closes (`csatEnabled`) | on | Every close that is not spam or a merge gets a survey (DOMAIN-RULES §2.2). The setting is read in the closing transaction, so a survey follows the setting at the moment of the close. See [satisfaction surveys](tickets.md#satisfaction-surveys) |
+| Track time on tickets (`timeTrackingEnabled`) | off | The Time card, the Log time dialog and the "Log time…" menu item. While it is off, a manual entry is refused and a reply's timer is dropped. See [time tracking](tickets.md#time-tracking) |
+| Start the timer when an agent opens the composer (`timerStartsWithComposer`) | off | The timer starts when the caret enters the reply box and is logged with the reply. Disabled on the screen while time tracking is off |
+
+The aside says how the link reaches a customer: with the closing message on the
+ticket's channel, once those channels exist (M8-06). Until then the agent copies
+it from the ticket.
+
+The artboard's "Open the rating page as a customer sees it" preview link is not
+drawn: there is no survey to open until a ticket closes, and a preview needs a
+page of its own.
+
 ## Tags
 
 A tag is a label an agent puts on a ticket to find it again. The list is the
@@ -623,6 +645,7 @@ there as well as in the brand it creates.
 | `PATCH …/ticket-statuses/:statusId` | `@Requires('ticketing:manage')` | Name, Arabic name, colour, and — on a custom row — state, flags and default. |
 | `DELETE …/ticket-statuses/:statusId` | `@Requires('ticketing:manage')` | Custom rows only. Moves their tickets to the default open status. |
 | `PATCH …/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of §2.3. Team Leaders included. |
+| `PATCH …/ticketing/feedback` | `@Requires('ticketing:manage')` | CSAT, time tracking and the composer timer (M1-12). Team Leaders included. |
 | `PATCH /api/brands/:brandId` | `@Requires('brand:manage')` | Name, default locale, time zone, settings. Never the prefix. |
 | `POST /api/install/brands` | `@Requires('install:admin')` | An additional brand. Audited. |
 | `GET /api/brands/:brandId/tags` | `@Requires('ticket:read')` | The brand's tags with their ticket counts. |
@@ -672,6 +695,7 @@ the translated copy:
 | `sender-is-own` | 409 | The brand sends from that address or domain. Also answered by "Mark as spam" with `blockSender`, which then rolls back. |
 | `sender-already-blocked` | 409 | That sender is on the list already. |
 | `assignee-above-actor` | 403 | Only an Admin assigns a ticket to an Admin (M1-07). |
+| `time-tracking-off` | 409 | A time entry was logged while the brand has time tracking off (M1-12). |
 
 A department of another brand is invisible to the request's transaction, so it
 answers **404**, not 403: "there is no such id" and "it is not yours" are the

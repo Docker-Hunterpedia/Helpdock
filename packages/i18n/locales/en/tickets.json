@@ -46,7 +46,8 @@
     "viewingMany": "{{name}} and {{others}} others are viewing",
     "details": "Details",
     "closeDetails": "Close the details",
-    "menu": "Ticket actions"
+    "menu": "Ticket actions",
+    "logTime": "Log time…"
   },
   "sla": {
     "label": "Service level",
@@ -225,7 +226,11 @@
     "sendFailed": "Not sent. Try again.",
     "markedSpam": "Marked as spam",
     "markedSpamBlocked": "Marked as spam and blocked {{sender}}",
-    "notSpam": "Moved back to open"
+    "notSpam": "Moved back to open",
+    "timeLogged": "Time logged",
+    "timeDeleted": "Time entry deleted",
+    "timeFailed": "The time could not be saved.",
+    "timeTrackingOff": "Time tracking is off for this brand."
   },
   "keyboard": {
     "label": "Keyboard shortcuts",
@@ -251,5 +256,44 @@
     "block": "Block",
     "blockHint": "Their next messages are dropped. Undo from Ticketing › Spam.",
     "submit": "Mark as spam"
+  },
+  "time": {
+    "heading": "Time",
+    "total": "{{duration}} total",
+    "timerRunning": "Timer running, {{duration}}",
+    "timerPaused": "Timer paused, {{duration}}",
+    "start": "Start timer",
+    "pause": "Pause timer",
+    "log": "Log",
+    "withReply": "with reply",
+    "manual": "manual",
+    "delete": "Delete entry",
+    "addManually": "Add time manually",
+    "empty": "No time logged yet.",
+    "loadFailed": "Time could not be loaded."
+  },
+  "logTime": {
+    "title": "Log time",
+    "caption": "On {{reference}}, as {{name}}.",
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "note": "Note",
+    "noteHint": "Optional. Staff only.",
+    "cancel": "Cancel",
+    "close": "Close",
+    "submit": "Log {{duration}}",
+    "submitEmpty": "Log time",
+    "invalid": "Minutes 0–59, hours 0–24. The total must be above zero."
+  },
+  "csat": {
+    "heading": "Satisfaction",
+    "pending": "Survey not sent yet",
+    "sent": "Survey sent",
+    "rated": "Rated {{rating}} of 5",
+    "expired": "Survey expired",
+    "shareHint": "Channels do not deliver the link yet. Share it with the customer.",
+    "copyLink": "Copy survey link",
+    "copied": "Survey link copied",
+    "copyFailed": "The link could not be copied."
   }
 }

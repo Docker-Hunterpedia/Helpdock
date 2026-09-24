@@ -38,6 +38,8 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'sender-already-blocked': HttpStatus.CONFLICT,
   // M1-07. A ceiling on who the actor may act on, which is a permission answer.
   'assignee-above-actor': HttpStatus.FORBIDDEN,
+  // M1-12. The brand's setting refuses, not the actor's role.
+  'time-tracking-off': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -57,6 +59,7 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
   'sender-is-own': 'This brand sends from that address or domain, so it cannot block it',
   'sender-already-blocked': 'That sender is already on the block list',
   'assignee-above-actor': 'Only an Admin may route work to an Admin',
+  'time-tracking-off': 'This brand has time tracking turned off',
 };
 
 export class TicketingFailure extends HttpException {

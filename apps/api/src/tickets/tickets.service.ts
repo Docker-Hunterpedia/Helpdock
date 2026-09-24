@@ -39,6 +39,7 @@ import {
 import type { Principal } from '../auth/principal.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { getTx } from '../context/request-context.js';
+import type { CsatService } from '../csat/csat.service.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
@@ -68,6 +69,7 @@ import {
   toTicketStatus,
 } from './ticket-view.js';
 import type { TicketRepository } from './tickets.repository.js';
+import type { TimeEntriesService } from './time/time-entries.service.js';
 
 /**
  * M1-02 and M1-03: the ticket, its thread and its activity log.
@@ -116,6 +118,9 @@ export class TicketsService {
   readonly #tags: TagsService;
   /** M1-07: who may hold a ticket, and whether a department hands them out itself. */
   readonly #assignment: AssignmentRepository;
+  /** M1-12: the survey summary on a ticket read, and the per-reply timer. */
+  readonly #csat: CsatService;
+  readonly #timeEntries: TimeEntriesService;
 
   constructor(
     tickets: TicketRepository,
@@ -125,6 +130,8 @@ export class TicketsService {
     templates: TemplatesService,
     tags: TagsService,
     assignment: AssignmentRepository,
+    csat: CsatService,
+    timeEntries: TimeEntriesService,
   ) {
     this.#tickets = tickets;
     this.#lifecycle = lifecycle;
@@ -133,6 +140,8 @@ export class TicketsService {
     this.#templates = templates;
     this.#tags = tags;
     this.#assignment = assignment;
+    this.#csat = csat;
+    this.#timeEntries = timeEntries;
   }
 
   // -------------------------------------------------------------------- reads
@@ -216,6 +225,7 @@ export class TicketsService {
         limit: TICKET_PAGE_SIZE_DEFAULT,
       }),
       activity: await this.#activityOf(tx, ticketId),
+      csat: await this.#csat.forTicket(tx, found.ticket.brandId, ticketId),
     };
   }
 
@@ -614,6 +624,19 @@ export class TicketsService {
       messageId: message.id,
       attachmentIds: input.attachmentIds ?? [],
     });
+
+    // M1-12. The per-reply timer, in the transaction that wrote the reply so
+    // the two commit or roll back together.
+    if (input.timeSpentSeconds !== undefined) {
+      await this.#timeEntries.logWithReply(tx, {
+        brandId,
+        principal,
+        ticketId: target.id,
+        departmentId: target.departmentId,
+        messageId: message.id,
+        seconds: input.timeSpentSeconds,
+      });
+    }
 
     const action = input.kind === 'note' ? 'ticket.note_added' : 'ticket.replied';
 

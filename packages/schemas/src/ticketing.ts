@@ -242,6 +242,8 @@ export const ticketingRefusalSchema = z.enum([
    * ceiling on who a Team Leader may act on, applied to assignment.
    */
   'assignee-above-actor',
+  /** The brand has time tracking off, so no entry may be logged (409, M1-12). */
+  'time-tracking-off',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

@@ -62,6 +62,8 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `tickets` | tenant, **department** | The ticket. `department_id` is not null — a ticket with no department would be invisible to everyone. `search` is a generated tsvector. |
 | `ticket_messages` | tenant, **department** | The thread. `seq` is monotonic per ticket; `(ticket_id, client_id)` dedupes a retried send; `(brand_id, channel, external_message_id)` dedupes an inbound redelivery. |
 | `ticket_activity` | tenant, **department** | Who changed what, and how. Part of the ticket rather than the brand's administrative trail, which stays `audit_log`. |
+| `ticket_time_entries` | tenant, **department** | Time spent on a ticket (M1-12): seconds, an optional note, and the reply it came with. `user_id` restricts deletion, so logged time outlives nothing it should. |
+| `csat_responses` | tenant, **department** | One satisfaction survey per close (M1-12), unique on `(ticket_id, closed_at)`, with the answer on the same row. Stores a hash of the link's token, never the token. |
 
 Ids are **UUIDv7**, generated in `src/uuid.ts`: a 48-bit millisecond timestamp,
 a 12-bit counter and 62 bits of randomness (RFC 9562). Node's

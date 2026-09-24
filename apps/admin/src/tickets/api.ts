@@ -19,6 +19,8 @@ import type {
   TicketStatusList,
   TicketSystemState,
   TicketUpdateRequest,
+  TimeEntryCreateRequest,
+  TimeEntryList,
 } from '@helpdock/schemas';
 
 /**
@@ -78,6 +80,15 @@ export interface TicketsApi {
     ticketId: string,
     participantId: string,
   ): Promise<TicketParticipantList>;
+
+  /** M1-12's Time card. Every write answers with the whole list and its total. */
+  timeEntries(brandId: string, ticketId: string): Promise<TimeEntryList>;
+  logTime(
+    brandId: string,
+    ticketId: string,
+    request: TimeEntryCreateRequest,
+  ): Promise<TimeEntryList>;
+  deleteTimeEntry(brandId: string, ticketId: string, entryId: string): Promise<TimeEntryList>;
 }
 
 /**

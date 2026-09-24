@@ -83,6 +83,20 @@ export const brandSettingsSchema = z.object({
    * blocking too eagerly turns it off on Ticketing › Spam.
    */
   offerBlockSender: z.boolean().default(true),
+  /**
+   * Ask for a rating when a ticket closes (REQUIREMENTS §4.1, M1-12). On by
+   * default: DOMAIN-RULES §2.2 schedules a survey on every close that is not
+   * spam or a merge, and the toggle is how a brand opts out.
+   */
+  csatEnabled: z.boolean().default(true),
+  /**
+   * The Time card and the Log time dialog (M1-12). Off by default, because it
+   * is optional in REQUIREMENTS §4.1 and a desk that does not bill by the hour
+   * should not see a timer it never asked for.
+   */
+  timeTrackingEnabled: z.boolean().default(false),
+  /** Start the per-reply timer when an agent opens the composer. Meaningless while tracking is off. */
+  timerStartsWithComposer: z.boolean().default(false),
 });
 export type BrandSettings = z.infer<typeof brandSettingsSchema>;
 
@@ -111,6 +125,24 @@ export const replyBehaviourUpdateRequestSchema = z
     'Send at least one field to change',
   );
 export type ReplyBehaviourUpdateRequest = z.infer<typeof replyBehaviourUpdateRequestSchema>;
+
+/**
+ * The Feedback tab of `Admin/Ticketing` (M1-12): the three toggles of
+ * `AdminTicketingFeedback`, and no others. A route of its own for the reason
+ * {@link replyBehaviourUpdateRequestSchema} gives: a Team Leader may change
+ * these, and the whole-brand `PATCH` is Admin-only.
+ */
+export const feedbackSettingsUpdateRequestSchema = z
+  .object({
+    csatEnabled: z.boolean().optional(),
+    timeTrackingEnabled: z.boolean().optional(),
+    timerStartsWithComposer: z.boolean().optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    'Send at least one field to change',
+  );
+export type FeedbackSettingsUpdateRequest = z.infer<typeof feedbackSettingsUpdateRequestSchema>;
 
 /**
  * The stored value, made safe to serve. A column that predates a key, or one an

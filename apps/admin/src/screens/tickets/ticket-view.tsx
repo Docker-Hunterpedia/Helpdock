@@ -8,7 +8,7 @@ import type {
 import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { Box, Button, Drawer } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { TicketIcon } from 'lucide-react';
+import { Clock, TicketIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useReducer, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
@@ -16,6 +16,7 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import {
   useAttachmentUploader,
   useContactsApi,
+  useSession,
   useTicketingApi,
   useTicketsApi,
 } from '../../auth/session.tsx';
@@ -28,13 +29,20 @@ import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../ticke
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
+import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
 import { assigneeName } from './directory.js';
-import { paragraph } from './format.js';
+import { paragraph, ticketReference } from './format.js';
+import { LogTimeDialog } from './log-time-dialog.tsx';
 import { Thread, type ThreadNames } from './thread.tsx';
+import type { TicketMenuItem } from './ticket-actions-menu.tsx';
 import { TicketHeader } from './ticket-header.tsx';
+import { TimeCard } from './time-card.tsx';
+import { loggableSeconds } from './time-format.js';
 import { useSpamActions } from './use-spam-actions.tsx';
 import { useTicketRoom } from './use-ticket-realtime.js';
+import { useTicketTimer } from './use-ticket-timer.js';
+import { useTimeEntries } from './use-time-entries.js';
 import type { WorkspaceData } from './use-workspace-data.js';
 
 /**
@@ -116,6 +124,16 @@ export function TicketView({
   });
   const policy = brand.data?.settings.contentPolicy ?? DEFAULT_CONTENT_POLICY;
 
+  // M1-12. The Time card, its timer and "Log time…" exist only while the
+  // brand tracks time; a Viewer reads the card and cannot write to it.
+  const { role } = useSession().user;
+  const tracking = brand.data?.settings.timeTrackingEnabled === true;
+  const timerWithComposer = brand.data?.settings.timerStartsWithComposer === true;
+  const canWrite = role !== 'viewer';
+  const timer = useTicketTimer(ticketId);
+  const time = useTimeEntries(brandId, ticketId, tracking);
+  const [logOpen, setLogOpen] = useState(false);
+
   const contactId = detail.data?.ticket.contactId ?? null;
 
   const contact = useQuery({
@@ -175,6 +193,9 @@ export function TicketView({
         ...(message.attachmentIds.length === 0
           ? {}
           : { attachmentIds: [...message.attachmentIds] }),
+        ...(message.timeSpentSeconds === undefined
+          ? {}
+          : { timeSpentSeconds: message.timeSpentSeconds }),
       }),
     onSuccess: async (saved, message) => {
       dispatch({ type: 'acknowledged', clientId: message.clientId });
@@ -203,6 +224,9 @@ export function TicketView({
 
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      if (message.timeSpentSeconds !== undefined) {
+        await time.refresh();
+      }
     },
     onError: (_error, message) => {
       dispatch({ type: 'failed', clientId: message.clientId });
@@ -302,6 +326,81 @@ export function TicketView({
     (department) => department.id === ticket.departmentId,
   )?.name;
 
+  const copyLink = async (link: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast({ tone: 'success', message: t('tickets:csat.copied') });
+    } catch {
+      toast({ tone: 'danger', message: t('tickets:csat.copyFailed') });
+    }
+  };
+
+  // Paused while the request is out, and reset only once it is logged: a
+  // failed log keeps what the timer counted.
+  const logTimer = (): void => {
+    const seconds = loggableSeconds(timer.seconds);
+    if (seconds === null) {
+      return;
+    }
+
+    timer.pause();
+    time.log.mutate(
+      { seconds },
+      {
+        onSuccess: () => {
+          timer.take();
+        },
+      },
+    );
+  };
+
+  const csat = detail.data?.csat ?? null;
+  const cards = (
+    <>
+      {tracking ? (
+        <TimeCard
+          entries={time.entries.data}
+          failed={time.entries.isError}
+          timer={timer}
+          viewerId={viewer.id}
+          canWrite={canWrite}
+          canDeleteAny={role === 'admin' || role === 'teamLeader'}
+          busy={time.log.isPending || time.remove.isPending}
+          now={now}
+          onLogTimer={logTimer}
+          onAddManually={() => {
+            setLogOpen(true);
+          }}
+          onDelete={(entry) => {
+            time.remove.mutate(entry.id);
+          }}
+        />
+      ) : null}
+      {csat === null ? null : (
+        <CsatCard
+          csat={csat}
+          onCopy={(link) => {
+            void copyLink(link);
+          }}
+        />
+      )}
+    </>
+  );
+
+  const headerActions: readonly TicketMenuItem[] =
+    tracking && canWrite
+      ? [
+          {
+            key: 'log-time',
+            label: t('tickets:header.logTime'),
+            icon: Clock,
+            onSelect: () => {
+              setLogOpen(true);
+            },
+          },
+        ]
+      : [];
+
   const details = (
     <DetailsPanel
       ticket={ticket}
@@ -317,6 +416,7 @@ export function TicketView({
       }}
       now={now}
       busy={update.isPending}
+      cards={cards}
       onChange={(patch) => {
         update.mutate(patchOf(patch));
       }}
@@ -329,12 +429,16 @@ export function TicketView({
       return;
     }
 
+    // The timer stops with the send and its time goes with the reply (M1-12).
+    const spent = tracking ? loggableSeconds(timer.take()) : null;
+
     const message: PendingMessage = {
       clientId: crypto.randomUUID(),
       kind: mode === 'note' ? 'note' : 'public',
       bodyHtml: paragraph(text),
       bodyText: text,
       attachmentIds: attachments.map((attachment) => attachment.id),
+      ...(spent === null ? {} : { timeSpentSeconds: spent }),
       createdAt: new Date().toISOString(),
       sentAt: Date.now(),
       state: 'sending',
@@ -389,7 +493,9 @@ export function TicketView({
           viewers={viewerNames}
           now={now}
           showDetailsButton={detailsInDrawer}
-          actions={spam.items}
+          // One menu (the artboard's panel 2): Log time, then Mark as spam
+          // behind its separator.
+          actions={[...headerActions, ...spam.items]}
           onShowDetails={() => {
             onDetailsOpenChange(true);
           }}
@@ -446,11 +552,33 @@ export function TicketView({
               setAttachments((held) => held.filter((row) => row.id !== attachmentId));
             }}
             onSend={queueSend}
+            onBodyFocus={() => {
+              if (tracking && timerWithComposer && canWrite && !timer.running) {
+                timer.start();
+              }
+            }}
           />
         </Box>
       </Box>
 
       {spam.dialog}
+
+      <LogTimeDialog
+        open={logOpen}
+        reference={ticketReference(ticket)}
+        viewerName={viewer.name}
+        busy={time.log.isPending}
+        onClose={() => {
+          setLogOpen(false);
+        }}
+        onSubmit={(request) => {
+          time.log.mutate(request, {
+            onSuccess: () => {
+              setLogOpen(false);
+            },
+          });
+        }}
+      />
 
       {detailsInDrawer ? (
         <Drawer

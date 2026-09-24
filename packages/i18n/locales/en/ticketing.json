@@ -11,7 +11,8 @@
     "templates": "Templates",
     "views": "Views",
     "assignment": "Assignment",
-    "spam": "Spam"
+    "spam": "Spam",
+    "feedback": "Feedback"
   },
   "soon": {
     "heading": "Not built yet",
@@ -134,7 +135,9 @@
     "senderAlreadyBlocked": "That sender is already on the block list.",
     "assignmentSaved": "{{name}} saved",
     "agentUpdated": "{{name}} updated",
-    "assigneeAboveActor": "Only an Admin can route work to an Admin."
+    "assigneeAboveActor": "Only an Admin can route work to an Admin.",
+    "feedbackSaved": "Feedback settings saved",
+    "timeTrackingOff": "Time tracking is off for this brand."
   },
   "statuses": {
     "add": "Add status",
@@ -556,5 +559,22 @@
       }
     },
     "note": "An agent at their cap is skipped, never queued. Tickets over the cap from a manual assignment are allowed and shown in danger in the agent's count."
+  },
+  "feedback": {
+    "heading": "Feedback and time",
+    "caption": "Customer ratings and agent time for this brand.",
+    "form": "Feedback and time settings",
+    "csatHeading": "Customer satisfaction",
+    "csatEnabled": "Ask for a rating when a ticket closes",
+    "csatHint": "One link per ticket, 1 to 5 and a comment. It works once and expires after 30 days. Never sent for spam or merged tickets.",
+    "timeHeading": "Time tracking",
+    "timeEnabled": "Track time on tickets",
+    "timeHint": "Agents see a Time card on each ticket with a timer and manual entries.",
+    "timerWithComposer": "Start the timer when an agent opens the composer",
+    "timerHint": "Stopped and logged against the reply when it is sent.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "deliveryHeading": "Delivery",
+    "deliveryBody": "The link goes out with the closing message on the ticket's channel. Email, widget and Telegram delivery arrive with those channels; until then the link is shown on the ticket for the agent to share."
   }
 }

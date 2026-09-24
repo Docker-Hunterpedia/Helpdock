@@ -107,6 +107,9 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
   // reads it; it is here because the whole object is what the column holds.
   contentPolicy: DEFAULT_CONTENT_POLICY,
   offerBlockSender: true,
+  csatEnabled: true,
+  timeTrackingEnabled: false,
+  timerStartsWithComposer: false,
 });
 
 const harness = (options: {

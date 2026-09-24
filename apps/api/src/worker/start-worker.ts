@@ -1,4 +1,4 @@
-import type { Env } from '@helpdock/config';
+import { createKeyring, type Env } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
@@ -24,6 +24,9 @@ import {
   registerAssignmentEventHandlers,
 } from '../assignment/assignment-events.js';
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
+import { CsatRepository } from '../csat/csat.repository.js';
+import { registerCsatEventHandlers } from '../csat/csat-events.js';
+import { CsatTokens } from '../csat/tokens.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
@@ -101,6 +104,10 @@ export type WorkerEnv = Pick<
   | 'FFPROBE_PATH'
   | 'CLAMAV_HOST'
   | 'CLAMAV_PORT'
+  // M1-12: the survey job signs the rating link, so it holds the key the api
+  // verifies it with.
+  | 'APP_MASTER_KEY'
+  | 'APP_MASTER_KEY_PREVIOUS'
 >;
 
 /**
@@ -146,6 +153,10 @@ export const workerDependencies: WorkerDependencies = {
     registerTicketEventHandlers(broadcast);
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
     registerObjectPurgeHandler(storageFor(env));
+    registerCsatEventHandlers({
+      repository: new CsatRepository(),
+      tokens: new CsatTokens(createKeyring(env)),
+    });
 
     // `attachment.uploaded` ends in a job on the `media` queue, so its handler
     // needs a producer. It is the one outbox handler that adds a job, and it

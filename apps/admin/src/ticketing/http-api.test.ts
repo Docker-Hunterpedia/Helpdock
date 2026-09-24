@@ -549,3 +549,23 @@ describe('assignment (M1-07)', () => {
     expect(isTicketingError(error) && error.reason).toBe('out-of-scope');
   });
 });
+
+describe('the Feedback tab (M1-12)', () => {
+  it('patches the three toggles and parses the settings back', async () => {
+    fetchMock.mockResolvedValue(json({ timeTrackingEnabled: true }));
+
+    const settings = await api.updateFeedback(BRAND, { timeTrackingEnabled: true });
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/ticketing/feedback`);
+    expect(lastCall().init.method).toBe('PATCH');
+    expect(settings).toMatchObject({ timeTrackingEnabled: true, csatEnabled: true });
+  });
+
+  it('turns a refusal into its reason', async () => {
+    fetchMock.mockResolvedValue(ticketingFailure('time-tracking-off'));
+
+    await expect(api.updateFeedback(BRAND, { csatEnabled: false })).rejects.toMatchObject({
+      reason: 'time-tracking-off',
+    });
+  });
+});

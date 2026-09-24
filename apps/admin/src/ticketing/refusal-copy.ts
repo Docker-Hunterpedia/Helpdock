@@ -29,6 +29,7 @@ export const REFUSAL_COPY = {
   'sender-is-own': 'ticketing:toast.senderIsOwn',
   'sender-already-blocked': 'ticketing:toast.senderAlreadyBlocked',
   'assignee-above-actor': 'ticketing:toast.assigneeAboveActor',
+  'time-tracking-off': 'ticketing:toast.timeTrackingOff',
 } as const satisfies Record<TicketingRefusal, string>;
 
 /** The catalog key for one refusal, keeping the literal type `useT()` needs. */

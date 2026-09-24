@@ -31,4 +31,6 @@ export const ticketKeys = {
   /** M1-07: the assignee picker's options for one department. */
   assignable: (brandId: string, departmentId: string) =>
     ['tickets', brandId, 'assignable', departmentId] as const,
+  /** M1-12's Time card. Under the brand prefix, so a brand switch cannot show it. */
+  time: (brandId: string, ticketId: string) => ['tickets', brandId, 'time', ticketId] as const,
 } as const;

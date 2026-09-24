@@ -9,6 +9,7 @@ import type {
   TicketCc,
   TicketCcRequest,
   TicketCreateRequest,
+  TicketCsat,
   TicketDetail,
   TicketList,
   TicketMessage,
@@ -19,6 +20,9 @@ import type {
   TicketStatus,
   TicketStatusList,
   TicketUpdateRequest,
+  TimeEntry,
+  TimeEntryCreateRequest,
+  TimeEntryList,
 } from '@helpdock/schemas';
 import { normaliseEmail, TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
 import { ContactError } from '../contacts/api.js';
@@ -30,6 +34,7 @@ import {
   MOCK_CONTACT_VISITOR,
   seedContactName,
 } from '../contacts/mock-api.js';
+import { MOCK_CSAT_TOKENS } from '../csat/mock-api.js';
 import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
 import { mockAssignable } from '../ticketing/mock-assignment.js';
@@ -485,6 +490,10 @@ export class MockTicketsApi implements TicketsApi {
     ],
   ]);
   readonly #contactName: (contactId: string) => string | undefined;
+  /** M1-12. Newest first, as the api answers. */
+  #timeEntries: TimeEntry[] = [];
+  /** M1-12: the survey of each ticket's latest close. */
+  readonly #csat = new Map<string, TicketCsat>();
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
@@ -504,6 +513,15 @@ export class MockTicketsApi implements TicketsApi {
     this.#tickets = seeded.tickets;
     this.#messages = seeded.messages;
     this.#activity = seeded.activity;
+    // The closed ticket on the artboard was rated; the others have not closed.
+    this.#csat.set(MOCK_TICKET_CLOSED, {
+      state: 'rated',
+      rating: 4,
+      comment: 'Sorted quickly, thank you.',
+      link: null,
+      expiresAt: new Date(now + 24 * DAY).toISOString(),
+      ratedAt: new Date(now - 5 * DAY).toISOString(),
+    });
   }
 
   async statuses(_brandId: string): Promise<TicketStatusList> {
@@ -534,6 +552,7 @@ export class MockTicketsApi implements TicketsApi {
       ticket: this.#withContact(ticket),
       messages: this.#page(ticketId, 0),
       activity: this.#activityOf(ticketId),
+      csat: this.#csat.get(ticketId) ?? null,
     });
   }
 
@@ -637,6 +656,11 @@ export class MockTicketsApi implements TicketsApi {
     };
 
     this.#tickets = this.#tickets.map((row) => (row.id === ticketId ? updated : row));
+    // DOMAIN-RULES §2.2: a close that is not spam or a merge is asked about.
+    // The api does it in a job; the fixture does it at once.
+    if (ticket.closedAt === null && updated.closedAt !== null && !status.excludedFromReports) {
+      this.#csat.set(ticketId, pendingSurvey());
+    }
     this.#activity = [
       ...this.#activity,
       {
@@ -691,6 +715,9 @@ export class MockTicketsApi implements TicketsApi {
     };
 
     this.#messages = [...this.#messages, message];
+    if (request.timeSpentSeconds !== undefined) {
+      this.#addTime(ticketId, request.timeSpentSeconds, null, message.id);
+    }
     this.#activity = [
       ...this.#activity,
       {
@@ -712,6 +739,60 @@ export class MockTicketsApi implements TicketsApi {
     );
 
     return Promise.resolve(message);
+  }
+
+  // ---------------------------------------------------------------- M1-12
+
+  async timeEntries(_brandId: string, ticketId: string): Promise<TimeEntryList> {
+    this.#require(ticketId);
+
+    return Promise.resolve(this.#timeOf(ticketId));
+  }
+
+  async logTime(
+    _brandId: string,
+    ticketId: string,
+    request: TimeEntryCreateRequest,
+  ): Promise<TimeEntryList> {
+    this.#require(ticketId);
+    this.#addTime(ticketId, request.seconds, request.note || null, null);
+
+    return Promise.resolve(this.#timeOf(ticketId));
+  }
+
+  async deleteTimeEntry(
+    _brandId: string,
+    ticketId: string,
+    entryId: string,
+  ): Promise<TimeEntryList> {
+    this.#timeEntries = this.#timeEntries.filter((entry) => entry.id !== entryId);
+
+    return Promise.resolve(this.#timeOf(ticketId));
+  }
+
+  #addTime(ticketId: string, seconds: number, note: string | null, messageId: string | null): void {
+    this.#timeEntries = [
+      {
+        id: this.#nextId('9'),
+        ticketId,
+        userId: MOCK_SELF_ID,
+        userName: 'Lina Haddad',
+        seconds,
+        note,
+        messageId,
+        createdAt: isoNow(),
+      },
+      ...this.#timeEntries,
+    ];
+  }
+
+  #timeOf(ticketId: string): TimeEntryList {
+    const entries = this.#timeEntries.filter((entry) => entry.ticketId === ticketId);
+
+    return {
+      entries,
+      totalSeconds: entries.reduce((sum, entry) => sum + entry.seconds, 0),
+    };
   }
 
   // ------------------------------------------------------------------
@@ -904,6 +985,20 @@ const MOCK_CONTACT_NAMES: Readonly<Record<string, string>> = {
   [MOCK_CONTACT_ACCOUNT]: 'Jonas Weber',
   [MOCK_CONTACT_VISITOR]: 'Visitor 7f3a…c2',
 };
+
+/**
+ * A survey as the api creates it on close: pending, with the link the agent
+ * shares. It points at the rating page's own fixture, so following it in the
+ * mock app lands on a survey that works.
+ */
+const pendingSurvey = (): TicketCsat => ({
+  state: 'pending',
+  rating: null,
+  comment: null,
+  link: new URL(`/csat/${MOCK_CSAT_TOKENS.open}`, window.location.origin).toString(),
+  expiresAt: new Date(Date.now() + 30 * DAY).toISOString(),
+  ratedAt: null,
+});
 
 /**
  * The text of a body, the way `body_text` is the text of `body_html`.

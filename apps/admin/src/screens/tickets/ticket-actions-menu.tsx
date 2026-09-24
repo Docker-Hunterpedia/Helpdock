@@ -1,6 +1,6 @@
 import { Divider, IconButton, ListItemIcon, Menu, MenuItem } from '@mui/material';
 import { type LucideIcon, MoreHorizontal } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 
@@ -40,6 +40,7 @@ export function TicketActionsMenu({
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
+  const menuId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
   return (
@@ -48,6 +49,7 @@ export function TicketActionsMenu({
         size="small"
         aria-label={t('tickets:header.more')}
         aria-haspopup="menu"
+        aria-controls={anchor === null ? undefined : menuId}
         aria-expanded={anchor !== null}
         disabled={items.length === 0}
         onClick={(event) => {
@@ -58,6 +60,7 @@ export function TicketActionsMenu({
       </IconButton>
 
       <Menu
+        id={menuId}
         anchorEl={anchor}
         open={anchor !== null}
         onClose={() => {

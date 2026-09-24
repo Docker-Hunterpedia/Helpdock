@@ -174,6 +174,14 @@ A job that needs several brands enqueues one child job per brand.
 proves the start and shutdown order without Redis. Adding a consumed event means
 calling `registerEventHandler` there, before the workers are created.
 
+The `maintenance` worker (M1-14) consumes the nightly retention tick and the
+per-brand runs it adds, one at a time; `createMaintenanceWorker` upserts the
+03:00 UTC job scheduler on every boot, so a Redis that lost it gets it back.
+Each run is a string of short `withSystemJob` transactions rather than one
+receipt-claiming transaction, which is why it does not go through
+`createWorker`: see `src/retention/retention.job.ts` and [the data retention
+guide](../../docs/guides/data-retention.md#the-nightly-run).
+
 The media worker runs at concurrency 1. sharp and ffmpeg are CPU-bound, and four
 conversions at once on a small VPS starve everything else on it; more replicas
 is how this scales, not more concurrency.
@@ -440,6 +448,7 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/tickets/*` | `ticket:read` / `ticket:write`, and `brand:manage` for the soft delete | Tickets, their threads, their activity and their tags. [The ticket guide](../../docs/guides/tickets.md#endpoints) lists them. |
 | `/api/brands/:brandId/ticket-statuses/*` | `@Requires('ticketing:manage')` | The Statuses tab: create, edit, reorder, delete, and the count a delete confirmation prints. [The guide](../../docs/guides/ticketing-settings.md#statuses). |
 | `PATCH /api/brands/:brandId/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of DOMAIN-RULES §2.3 a Team Leader may change. |
+| `GET`/`PUT /api/brands/:brandId/retention` | `@Requires('brand:manage')` | The brand's data retention windows, the "next purge" counts and the last run. [The data retention guide](../../docs/guides/data-retention.md#api). |
 | `/api/brands/:brandId/{tags,custom-fields,ticket-templates}*` | `ticket:read` or `ticket:write` to read, `ticketing:manage` to change | The brand's tags, custom field definitions and ticket templates. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
@@ -575,6 +584,19 @@ Four things are easy to get wrong here and are written down where they happen:
 - **`media.process` holds its transaction for the length of the conversion**,
   because `createWorker` claims the receipt before the handler runs. Every step
   has a deadline for that reason, and `MEDIA_BUDGET_MS` is their sum.
+
+## Retention
+
+`src/retention/` holds M1-14. What the windows are and what the purge does is
+[the data retention guide](../../docs/guides/data-retention.md).
+
+| File | |
+|---|---|
+| `retention-rules.ts` | Row ↔ settings, and the cutoff per category. Pure; the arithmetic of DOMAIN-RULES §11. |
+| `retention.repository.ts` | Every statement: the settings row, the "next purge" counts and the batches. The counts and the deletes share one `WHERE` per category, so the number on the form is the number that goes. |
+| `retention.job.ts` | The nightly tick and one brand's run. |
+| `contact-erasure.ts` | `DbContactErasureProvider`: what an erasure removes from tickets, behind the `ContactErasureProvider` seam of `contacts/providers.ts`. |
+| `../media/object-purge.ts` | The `media.objects.purge` outbox event that deletes a purged attachment's objects after the rows are gone. |
 
 ## Observability
 

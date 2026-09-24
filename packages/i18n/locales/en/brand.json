@@ -1,0 +1,55 @@
+{
+  "title": "Brand",
+  "subtitle": "{{brand}} · identity, locale and domains for this brand only",
+  "tabList": "Brand sections",
+  "tabs": {
+    "danger": "Danger zone"
+  },
+  "retention": {
+    "heading": "Data retention",
+    "lead": "Runs nightly. Purges are permanent and logged in the audit log with counts only.",
+    "columns": {
+      "data": "Data",
+      "keep": "Keep for",
+      "next": "Next purge"
+    },
+    "rows": {
+      "closedTickets": "Closed tickets and their messages",
+      "closedTicketsHint": "Attachments, AI logs and CSAT follow the ticket.",
+      "spamTickets": "Spam tickets",
+      "aiCalls": "AI call logs",
+      "aiCallsHint": "Prompt and response bodies are removed; counts and cost stay for reports.",
+      "searchLog": "Help center search log",
+      "auditLog": "Audit log",
+      "auditLogHint": "Minimum 90 days.",
+      "visitorSessions": "Anonymous visitor sessions",
+      "visitorSessionsHint": "Visitors with no conversation."
+    },
+    "closedMode": {
+      "label": "Closed tickets retention",
+      "never": "Forever",
+      "days": "Days after close…"
+    },
+    "daysLabel": "{{row}} retention days",
+    "days": "days",
+    "daysInactive": "days inactive",
+    "rowCount_one": "{{count}} row",
+    "rowCount_other": "{{count}} rows",
+    "nothingToCount": "Not counted yet",
+    "lastRun_one": "Last run {{time}} · {{count}} row purged",
+    "lastRun_other": "Last run {{time}} · {{count}} rows purged",
+    "neverRun": "Not run yet",
+    "discard": "Discard",
+    "save": "Save changes",
+    "saved": "Data retention saved.",
+    "failed": "The retention settings could not be saved. Try again.",
+    "loadFailed": "The retention settings could not be loaded.",
+    "errors": {
+      "days": "Enter a whole number of days from {{min}} to {{max}}."
+    }
+  },
+  "erasure": {
+    "heading": "Erasing one person",
+    "body": "Contact erasure lives on the contact page (Anonymise). It is immediate and not subject to these windows."
+  }
+}

@@ -64,6 +64,7 @@ describe('AppShell', () => {
       'Unassigned2',
       'Overdue3',
       'Escalated1',
+      'Brand',
       'Settings',
       'Ticketing',
       'Staff and roles',

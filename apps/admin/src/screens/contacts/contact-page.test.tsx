@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
 import type { ContactsApi } from '../../contacts/api.js';
 import {
@@ -187,14 +187,40 @@ describe('erasure', () => {
   it('asks first, then replaces the person with hashes and locks the screen', async () => {
     const { user } = await renderContact();
 
-    await user.click(await screen.findByRole('button', { name: 'Erase contact' }));
-    expect(await screen.findByRole('dialog')).toHaveTextContent('cannot be undone');
-    await user.click(screen.getByRole('button', { name: 'Erase contact', hidden: false }));
+    await user.click(await screen.findByRole('button', { name: 'Anonymise' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('cannot be undone');
+    const submit = within(dialog).getByRole('button', { name: 'Anonymise' });
+    // Nothing happens until the person's name is typed exactly (M1-14).
+    expect(submit).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Type Mona Khalil to confirm'), 'Mona Khali');
+    expect(submit).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Type Mona Khalil to confirm'), 'l');
+    await user.click(submit);
 
     expect(await screen.findByText('Erased contact erased.')).toBeInTheDocument();
     expect(
       await screen.findByText('This contact has been erased and can no longer be changed.'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('who may erase', () => {
+  it('offers the action to an Admin alone, as DOMAIN-RULES §1.2 does', async () => {
+    const { auth, staff, contacts } = await signedInMockApis();
+    const session = await auth.me();
+    vi.spyOn(auth, 'me').mockResolvedValue(
+      session === null ? null : { ...session, user: { ...session.user, role: 'teamLeader' } },
+    );
+    renderApp(<AppRoutes />, {
+      authApi: auth,
+      staffApi: staff,
+      contactsApi: contacts,
+      initialEntries: [`/contacts/${MOCK_CONTACT_MONA}`],
+    });
+
+    await screen.findByRole('heading', { name: 'Mona Khalil', level: 1 });
+    expect(screen.queryByRole('button', { name: 'Anonymise' })).toBeNull();
   });
 });
 

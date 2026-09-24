@@ -1,11 +1,4 @@
-import {
-  auditLog,
-  brands,
-  type Db,
-  type DbTransaction,
-  systemContext,
-  withTenant,
-} from '@helpdock/db';
+import { auditLog, brands, type Db, type DbTransaction } from '@helpdock/db';
 import {
   drainInBatches,
   type JobLogger,
@@ -23,6 +16,7 @@ import { type RetentionCounts, retentionTotal } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { ne } from 'drizzle-orm';
 import { enqueueObjectPurge } from '../media/object-purge.js';
+import { withSystemJob } from '../tenant/system-job.js';
 import { RetentionRepository, type TicketPurgeKind } from './retention.repository.js';
 import { retentionCutoffs, runDateOf, settingsFromRow } from './retention-rules.js';
 
@@ -71,29 +65,16 @@ export const runBrandRetention = async ({
   batchSize = RETENTION_BATCH_SIZE,
   repository = new RetentionRepository(),
 }: BrandRetentionOptions): Promise<RetentionCounts> => {
-  const context = systemContext(brandId, jobId);
-  const inBrand = <T>(fn: (tx: DbTransaction) => Promise<T>): Promise<T> =>
-    withTenant(db, context, fn);
-
+  const inBrand: InBrand = (fn) => withSystemJob(db, brandId, jobId, fn);
   const settings = settingsFromRow(await inBrand((tx) => repository.find(tx, brandId)));
   const cutoffs = retentionCutoffs(settings, now);
-
-  const ticketBatch = (kind: TicketPurgeKind, cutoff: Date) => () =>
-    inBrand(async (tx) => {
-      const ids = await repository.ticketBatch(tx, brandId, kind, cutoff, batchSize);
-      // Read before the delete: the cascade takes the rows that name the keys.
-      await enqueueObjectPurge(tx, brandId, await repository.attachmentsOfTickets(tx, ids));
-      return repository.deleteTickets(tx, ids);
-    });
+  const purge = { inBrand, repository, brandId, batchSize };
 
   const counts: RetentionCounts = {};
   if (cutoffs.closedTickets !== null) {
-    counts.closedTickets = await drainInBatches(
-      ticketBatch('closed', cutoffs.closedTickets),
-      batchSize,
-    );
+    counts.closedTickets = await purgeTickets(purge, 'closed', cutoffs.closedTickets);
   }
-  counts.spamTickets = await drainInBatches(ticketBatch('spam', cutoffs.spamTickets), batchSize);
+  counts.spamTickets = await purgeTickets(purge, 'spam', cutoffs.spamTickets);
   counts.auditLog = await drainInBatches(
     () => inBrand((tx) => repository.purgeAuditBatch(tx, brandId, cutoffs.auditLog, batchSize)),
     batchSize,
@@ -103,21 +84,63 @@ export const runBrandRetention = async ({
     batchSize,
   );
 
-  await inBrand(async (tx) => {
-    // Counts only, never an id or a value (§11: "logs counts to the audit log").
-    await tx.insert(auditLog).values({
-      brandId,
-      actorType: 'system',
-      actorId: jobId,
-      action: 'retention.purged',
-      targetType: 'brand',
-      targetId: brandId,
-      meta: { counts, total: retentionTotal(counts) },
-    });
-    await repository.recordRun(tx, brandId, now, counts);
-  });
+  await inBrand((tx) => recordRun(tx, { repository, brandId, jobId, now, counts }));
 
   return counts;
+};
+
+type InBrand = <T>(fn: (tx: DbTransaction) => Promise<T>) => Promise<T>;
+
+interface PurgeScope {
+  readonly inBrand: InBrand;
+  readonly repository: RetentionRepository;
+  readonly brandId: string;
+  readonly batchSize: number;
+}
+
+/**
+ * Expired tickets, one batch per transaction. The attachment keys are read
+ * before the delete, because the cascade takes the rows that name them, and are
+ * queued in the same transaction (`media/object-purge.ts`).
+ */
+const purgeTickets = (
+  { inBrand, repository, brandId, batchSize }: PurgeScope,
+  kind: TicketPurgeKind,
+  cutoff: Date,
+): Promise<number> =>
+  drainInBatches(
+    () =>
+      inBrand(async (tx) => {
+        const ids = await repository.ticketBatch(tx, brandId, { kind, cutoff, limit: batchSize });
+        await enqueueObjectPurge(tx, brandId, await repository.attachmentsOfTickets(tx, ids));
+        return repository.deleteTickets(tx, ids);
+      }),
+    batchSize,
+  );
+
+interface RunRecord {
+  readonly repository: RetentionRepository;
+  readonly brandId: string;
+  readonly jobId: string;
+  readonly now: Date;
+  readonly counts: RetentionCounts;
+}
+
+/** Counts only, never an id or a value (§11: "logs counts to the audit log"). */
+const recordRun = async (
+  tx: DbTransaction,
+  { repository, brandId, jobId, now, counts }: RunRecord,
+): Promise<void> => {
+  await tx.insert(auditLog).values({
+    brandId,
+    actorType: 'system',
+    actorId: jobId,
+    action: 'retention.purged',
+    targetType: 'brand',
+    targetId: brandId,
+    meta: { counts, total: retentionTotal(counts) },
+  });
+  await repository.recordRun(tx, brandId, now, counts);
 };
 
 /** What the tick needs to add one brand's job. BullMQ in production, a recorder in a test. */
@@ -154,9 +177,12 @@ export const scheduleRetention = async ({
 }: ScheduleRetentionOptions): Promise<ScheduleResult> => {
   const runDate = runDateOf(now);
   // A deleted brand has nothing left to purge; brand deletion is its own path.
-  const rows = await db.select({ id: brands.id }).from(brands).where(ne(brands.status, 'deleted'));
+  const liveBrands = await db
+    .select({ id: brands.id })
+    .from(brands)
+    .where(ne(brands.status, 'deleted'));
 
-  for (const { id: brandId } of rows) {
+  for (const { id: brandId } of liveBrands) {
     const payload = { brandId, runDate };
     await queue.add(payload, retentionJobId(payload));
   }
@@ -166,7 +192,7 @@ export const scheduleRetention = async ({
     batchSize,
   );
 
-  return { brands: rows.length, receipts };
+  return { brands: liveBrands.length, receipts };
 };
 
 export interface MaintenanceProcessorOptions {

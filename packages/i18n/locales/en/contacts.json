@@ -151,15 +151,17 @@
     "accountEditSubmit": "Save changes"
   },
   "confirm": {
-    "anonymiseTitle": "Erase {{name}}?",
-    "anonymiseBody": "Their name, addresses, phone numbers and ids are replaced with hashes and their notes are deleted. Tickets stay. This cannot be undone.",
-    "anonymiseSubmit": "Erase contact",
+    "anonymiseTitle": "Anonymise {{name}}?",
+    "anonymiseLead": "For a privacy request. Recorded in the audit log without the erased values.",
+    "anonymiseBody": "Name, email addresses, phone, Telegram and visitor ids are replaced with hashes, and the files {{name}} sent are deleted. Ticket text stays, under the brand's retention. This cannot be undone.",
+    "anonymiseTypeName": "Type {{name}} to confirm",
+    "anonymiseSubmit": "Anonymise",
     "removeIdentityTitle": "Remove this identifier?",
     "removeIdentityBody": "Messages that arrive from it will start a new contact instead.",
     "removeIdentitySubmit": "Remove"
   },
   "actions": {
-    "anonymise": "Erase contact"
+    "anonymise": "Anonymise"
   },
   "toast": {
     "created": "{{name}} added.",

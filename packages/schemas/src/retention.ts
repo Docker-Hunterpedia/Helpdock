@@ -13,8 +13,6 @@ import { z } from 'zod';
 export const RETENTION_MAX_DAYS = 3_650;
 /** §11: "Audit log — 2 years, minimum 90 days". */
 export const AUDIT_LOG_MIN_DAYS = 90;
-/** §11: "Outbox, job receipts — 7 days after publish/complete". Fixed, not a brand setting. */
-export const OUTBOX_RETENTION_DAYS = 7;
 
 const days = (min = 1) => z.int().min(min).max(RETENTION_MAX_DAYS);
 

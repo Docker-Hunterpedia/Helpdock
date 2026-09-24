@@ -10,7 +10,8 @@
     "ticketing": "Ticketing",
     "settings": "Settings",
     "staff": "Staff and roles",
-    "system": "System"
+    "system": "System",
+    "brand": "Brand"
   },
   "brandSwitcher": {
     "caption": "Brand · switch",
@@ -46,7 +47,8 @@
       "settings": "Install-wide · applies to every brand.",
       "staff": "Who can work in this brand, and what they are allowed to do.",
       "system": "Version, migrations, queues and storage for this install.",
-      "ticketing": "Departments, statuses, priorities and routing for this brand."
+      "ticketing": "Departments, statuses, priorities and routing for this brand.",
+      "brand": "Identity, locale, domains and data retention for this brand."
     },
     "empty": {
       "heading": "Nothing here yet",
@@ -58,7 +60,8 @@
         "settings": "Install settings arrive with the rest of milestone M0.",
         "staff": "Staff and roles arrive with the rest of milestone M0.",
         "system": "The system page arrives with milestone M8.",
-        "ticketing": "Ticketing settings arrive with milestone M1."
+        "ticketing": "Ticketing settings arrive with milestone M1.",
+        "brand": "Brand settings arrive with milestone M1."
       }
     }
   }

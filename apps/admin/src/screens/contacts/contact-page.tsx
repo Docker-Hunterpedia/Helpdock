@@ -18,7 +18,7 @@ import { useT } from '../../app/i18n.js';
 import { accountRoute, ROUTES } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
-import { ConfirmDialog } from '../../ui/confirm-dialog.tsx';
+import { AnonymiseDialog } from './anonymise-dialog.tsx';
 import { ContactDialog, IdentityDialog } from './contact-dialogs.tsx';
 import { csatLabel, DASH, durationLabel, identityLabel } from './format.js';
 import { ContactAvatar, IdentityLine } from './identity-pieces.tsx';
@@ -186,17 +186,21 @@ export function ContactPage(): ReactNode {
             >
               {t('contacts:detail.edit')}
             </Button>
-            <Button
-              variant="outlined"
-              color="error"
-              disabled={detail.anonymised}
-              startIcon={<Trash2 size={16} aria-hidden="true" />}
-              onClick={() => {
-                setErasing(true);
-              }}
-            >
-              {t('contacts:actions.anonymise')}
-            </Button>
+            {/* Chrome, not a permission: erasing is Admin only (DOMAIN-RULES
+                §1.2) and the api refuses anybody else whatever is drawn. */}
+            {session.user.role === 'admin' ? (
+              <Button
+                variant="outlined"
+                color="error"
+                disabled={detail.anonymised}
+                startIcon={<Trash2 size={16} aria-hidden="true" />}
+                onClick={() => {
+                  setErasing(true);
+                }}
+              >
+                {t('contacts:actions.anonymise')}
+              </Button>
+            ) : null}
           </Box>
         </Box>
 
@@ -539,13 +543,10 @@ export function ContactPage(): ReactNode {
         }}
       />
 
-      <ConfirmDialog
+      <AnonymiseDialog
         open={erasing}
-        destructive
+        name={detail.name}
         busy={anonymise.isPending}
-        title={t('contacts:confirm.anonymiseTitle', { name: detail.name })}
-        body={t('contacts:confirm.anonymiseBody')}
-        confirmLabel={t('contacts:confirm.anonymiseSubmit')}
         onClose={() => {
           setErasing(false);
         }}

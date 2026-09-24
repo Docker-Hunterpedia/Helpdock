@@ -14,6 +14,8 @@ import type {
   DepartmentUpdateRequest,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  RetentionOverview,
+  RetentionUpdateRequest,
   TagCreateRequest,
   TagList,
   TagSummary,
@@ -81,6 +83,16 @@ export interface TicketingApi {
   /** The brand's own fields. The Settings screen edits these; M1-01 ships the call. */
   brand(brandId: string): Promise<Brand>;
   updateBrand(brandId: string, request: BrandUpdateRequest): Promise<Brand>;
+
+  // ---------------------------------------------------------------- M1-14
+
+  /**
+   * The Data retention card of `Admin/Brand · Danger zone`: the windows, what
+   * the next run would purge, and what the last one did. Admin only.
+   */
+  retention(brandId: string): Promise<RetentionOverview>;
+  /** The whole form; the api refuses a partial one. */
+  updateRetention(brandId: string, request: RetentionUpdateRequest): Promise<RetentionOverview>;
 
   // ---------------------------------------------------------------- M1-08
 

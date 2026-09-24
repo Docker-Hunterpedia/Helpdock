@@ -137,9 +137,7 @@ export class RetentionRepository {
   async ticketBatch(
     tx: DbTransaction,
     brandId: string,
-    kind: TicketPurgeKind,
-    cutoff: Date,
-    limit: number,
+    { kind, cutoff, limit }: { kind: TicketPurgeKind; cutoff: Date; limit: number },
   ): Promise<string[]> {
     const rows = await tx
       .select({ id: tickets.id })

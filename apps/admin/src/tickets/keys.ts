@@ -26,4 +26,9 @@ export const ticketKeys = {
   /** Every sidebar count, for the invalidation a created ticket needs. */
   counts: (brandId: string) => ['tickets', brandId, 'count'] as const,
   detail: (brandId: string, ticketId: string) => ['tickets', brandId, 'detail', ticketId] as const,
+  /** M1-07: every department's picker options, for the invalidation an assignment needs. */
+  assignables: (brandId: string) => ['tickets', brandId, 'assignable'] as const,
+  /** M1-07: the assignee picker's options for one department. */
+  assignable: (brandId: string, departmentId: string) =>
+    ['tickets', brandId, 'assignable', departmentId] as const,
 } as const;

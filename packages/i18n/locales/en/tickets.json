@@ -152,7 +152,18 @@
     "linked": "Linked tickets",
     "noLinked": "None",
     "created": "Created",
-    "channel": "Channel"
+    "channel": "Channel",
+    "picker": {
+      "open": "Assignee: {{name}}",
+      "search": "Find an agent",
+      "list": "Assignee",
+      "footer": "Agents in {{department}}. Presence dot, then open tickets against their cap.",
+      "load": "{{open}}/{{cap}}",
+      "atCap": "{{open}}/{{cap}} at cap",
+      "offline": "offline",
+      "noMatch": "No agent matches",
+      "unavailable": "Could not load who can take this ticket."
+    }
   },
   "filters": {
     "title": "Filter tickets",

@@ -6,6 +6,7 @@ import { ticketingRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
+import { AssignmentTab } from './assignment-tab.tsx';
 import { CustomFieldsTab } from './custom-fields-tab.tsx';
 import { DepartmentsTab } from './departments-tab.tsx';
 import { NotBuiltYetTab } from './not-built-yet-tab.tsx';
@@ -16,8 +17,8 @@ import { TemplatesTab } from './templates-tab.tsx';
 
 /**
  * `Admin/Ticketing`: the page header, the tab row, and whichever tab the url
- * names. Four of the eight are built — Departments (M1-01), Statuses (M1-08),
- * and Tags, Custom fields and Templates (M1-06); the rest are the routed
+ * names. Six of the eight are built — Departments (M1-01), Statuses (M1-08),
+ * Tags, Custom fields and Templates (M1-06) and Assignment (M1-07); the rest are the routed
  * placeholders their deliverables replace, which is why the row is whole from
  * the start.
  *
@@ -84,6 +85,8 @@ function TabBody({ tab }: { readonly tab: TicketingTab }): ReactNode {
       return <CustomFieldsTab />;
     case 'templates':
       return <TemplatesTab />;
+    case 'assignment':
+      return <AssignmentTab />;
     default:
       return <NotBuiltYetTab tab={tab} />;
   }

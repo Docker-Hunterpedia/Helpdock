@@ -235,3 +235,50 @@ describe('the brand', () => {
     });
   });
 });
+
+describe('assignment (M1-07)', () => {
+  it('lists every department with its settings and rotation counts', async () => {
+    const { departments } = await new MockTicketingApi().assignment(BRAND);
+
+    expect(departments.map((row) => row.mode)).toEqual(['round_robin', 'skill_based', 'manual']);
+    expect(departments[0]).toMatchObject({ loadCap: 8, agentsInRotation: 3, agentsOnline: 1 });
+  });
+
+  it('keeps what is saved, and leaves alone what the request did not name', async () => {
+    const api = new MockTicketingApi();
+    const saved = await api.updateAssignment(BRAND, firstDepartmentId(), { loadCap: null });
+
+    expect(saved).toMatchObject({ loadCap: null, mode: 'round_robin' });
+  });
+
+  it('lists who can work a department, and changes rotation and skills', async () => {
+    const api = new MockTicketingApi();
+    const { agents } = await api.assignmentAgents(BRAND, firstDepartmentId());
+    const sami = agents.find((agent) => agent.name === 'Sami Aziz');
+    expect(sami?.inRotation).toBe(true);
+
+    const updated = await api.updateAssignmentAgent(
+      BRAND,
+      firstDepartmentId(),
+      sami?.userId ?? '',
+      {
+        inRotation: false,
+        skillTagIds: ['0192c3f0-1a2b-7c3d-8e4f-000000000102'],
+      },
+    );
+    expect(updated).toMatchObject({ inRotation: false, skills: [{ name: 'VIP' }] });
+  });
+
+  it('refuses somebody who cannot work the department', async () => {
+    expect(
+      await refusalOf(
+        new MockTicketingApi().updateAssignmentAgent(
+          BRAND,
+          MOCK_DEPARTMENTS[2]?.id ?? '',
+          '0192c3f0-1a2b-7c3d-8e4f-00000000000c',
+          { inRotation: true },
+        ),
+      ),
+    ).toBe('not-eligible');
+  });
+});

@@ -1,4 +1,5 @@
 import type {
+  AssignableAgentList,
   MessageCreateRequest,
   Ticket,
   TicketActivityList,
@@ -11,6 +12,7 @@ import type {
   TicketUpdateRequest,
 } from '@helpdock/schemas';
 import {
+  assignableAgentListSchema,
   ticketActivityListSchema,
   ticketDetailSchema,
   ticketListSchema,
@@ -91,6 +93,15 @@ export class HttpTicketsApi implements TicketsApi {
   ): Promise<TicketMessage> {
     return ticketMessageSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/messages`, request),
+    );
+  }
+
+  async assignable(brandId: string, departmentId: string): Promise<AssignableAgentList> {
+    return assignableAgentListSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#brand(brandId)}/assignment/${encodeURIComponent(departmentId)}/assignable`,
+      ),
     );
   }
 

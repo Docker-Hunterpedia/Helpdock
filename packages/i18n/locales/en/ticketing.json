@@ -124,7 +124,10 @@
     "templateUpdated": "{{name}} saved",
     "templateDeleted": "{{name}} deleted",
     "fieldInUse": "Rows already carry values for this field, so its type cannot change.",
-    "optionInUse": "Rows still carry one of the options you removed."
+    "optionInUse": "Rows still carry one of the options you removed.",
+    "assignmentSaved": "{{name}} saved",
+    "agentUpdated": "{{name}} updated",
+    "assigneeAboveActor": "Only an Admin can route work to an Admin."
   },
   "statuses": {
     "add": "Add status",
@@ -409,5 +412,78 @@
         "submit": "Delete template"
       }
     }
+  },
+  "assignment": {
+    "heading": "Assignment",
+    "caption": "How new tickets find an agent, per department.",
+    "empty": {
+      "heading": "No departments to route",
+      "body": "Departments you lead appear here once they exist."
+    },
+    "table": {
+      "caption": "How each department of {{brand}} assigns tickets",
+      "department": "Department",
+      "mode": "Mode",
+      "loadCap": "Load cap",
+      "autoUnassign": "Auto-unassign",
+      "agentsOnline": "Agents online",
+      "edit": "Edit {{name}}",
+      "noCap": "—",
+      "off": "off",
+      "minutes": "{{minutes}} min",
+      "online": "{{online}} / {{total}}"
+    },
+    "modes": {
+      "manual": "Manual",
+      "round_robin": "Round-robin",
+      "skill_based": "Skill-based"
+    },
+    "modeHints": {
+      "manual": "New tickets stay unassigned.",
+      "round_robin": "Online agents in rotation, under their cap.",
+      "skill_based": "Round-robin among agents whose skills match a ticket tag; everyone if none match."
+    },
+    "agents": {
+      "heading": "Agents in {{department}}",
+      "caption": "Skills match ticket tags. The next ticket goes to the eligible agent who waited longest.",
+      "tableCaption": "Agents who can work {{department}}",
+      "name": "Agent",
+      "presence": "Presence",
+      "load": "Open tickets",
+      "skills": "Skills",
+      "rotation": "Rotation",
+      "empty": "Nobody can work this department yet. Give an agent the department on the Staff screen.",
+      "loadOf": "{{open}} / {{cap}}",
+      "atCap": "{{open}} / {{cap}} · at cap",
+      "addSkill": "skill",
+      "addSkillFor": "Add skill for {{name}}",
+      "removeSkill": "Remove {{skill}} from {{name}}",
+      "noTagsLeft": "Every tag is already a skill",
+      "inRotation": "In rotation",
+      "inRotationFor": "{{name}} in rotation"
+    },
+    "editor": {
+      "heading": "Assignment · {{department}}",
+      "mode": "Mode",
+      "loadCap": "Load cap per agent",
+      "loadCapHint": "Open and escalated tickets. Empty means no cap.",
+      "loadCapInvalid": "Enter a whole number from 1 to 500, or leave it empty.",
+      "autoUnassign": "Unassign when the agent is offline for",
+      "minutes": "Minutes offline",
+      "minutesSuffix": "minutes, not while the department is closed",
+      "minutesInvalid": "Enter a whole number of minutes from 1 to 1440.",
+      "onUnassign": "When an agent loses access",
+      "onUnassignHint": "Applies to role changes and deactivation.",
+      "onUnassignOptions": {
+        "round_robin": "Round-robin the tickets",
+        "leave_unassigned": "Leave them unassigned"
+      },
+      "save": "Save",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a department to change how it assigns tickets."
+      }
+    },
+    "note": "An agent at their cap is skipped, never queued. Tickets over the cap from a manual assignment are allowed and shown in danger in the agent's count."
   }
 }

@@ -1,4 +1,5 @@
 import type {
+  AssignableAgent,
   ContactDetail,
   Department,
   Ticket,
@@ -15,6 +16,7 @@ import { usePreferences } from '../../app/providers.tsx';
 import { contactRoute, ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { initialsOf } from '../contacts/format.js';
+import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
 import { elapsedFraction, messageTime, statusName } from './format.js';
 
@@ -23,9 +25,11 @@ import { elapsedFraction, messageTime, statusName } from './format.js';
  * fields, the SLA card on `bg.canvas` with its 4 px bar, custom fields and
  * linked tickets.
  *
- * Four of the fields are **selects rather than labels**, because they are what
+ * Four of the fields are **controls rather than labels**, because they are what
  * an agent changes while reading — assignee, department, status and priority
- * all go through the one `PATCH` M1-02 gave us. Two are read-only and will
+ * all go through the one `PATCH` M1-02 gave us. The assignee is M1-07's picker
+ * (`assignee-picker.tsx`) rather than a select, because choosing somebody means
+ * seeing who is around and how loaded they are. Two are read-only and will
  * stay that way until their own deliverable: custom fields are M1-06's, and
  * linked tickets are M1-08's `parent_id` and M1-09's merge and split.
  *
@@ -43,7 +47,13 @@ export interface DetailsPanelProps {
   readonly hiddenTicketCount: number;
   readonly statuses: readonly TicketStatus[];
   readonly departments: readonly Department[];
-  readonly staff: readonly { readonly userId: string; readonly name: string }[];
+  /** M1-07: who can work the ticket's department, and the name the button shows. */
+  readonly assignee: {
+    readonly name: string | null;
+    readonly agents: readonly AssignableAgent[];
+    readonly loadCap: number | null;
+    readonly unavailable: boolean;
+  };
   readonly now: number;
   readonly busy: boolean;
   onChange(patch: {
@@ -60,7 +70,7 @@ export function DetailsPanel({
   hiddenTicketCount,
   statuses,
   departments,
-  staff,
+  assignee,
   now,
   busy,
   onChange,
@@ -164,24 +174,22 @@ export function DetailsPanel({
         )}
       </Box>
 
-      <TextField
+      <AssigneePicker
         id={assigneeId}
-        select
-        size="small"
-        disabled={busy}
         label={t('tickets:details.assignee')}
-        value={ticket.assigneeId ?? ''}
-        onChange={(event) => {
-          onChange({ assigneeId: event.target.value === '' ? null : event.target.value });
+        assigneeId={ticket.assigneeId}
+        assigneeName={assignee.name}
+        agents={assignee.agents}
+        loadCap={assignee.loadCap}
+        departmentName={
+          departments.find((department) => department.id === ticket.departmentId)?.name ?? ''
+        }
+        unavailable={assignee.unavailable}
+        busy={busy}
+        onChange={(next) => {
+          onChange({ assigneeId: next });
         }}
-      >
-        <MenuItem value="">{t('tickets:details.unassigned')}</MenuItem>
-        {staff.map((member) => (
-          <MenuItem key={member.userId} value={member.userId}>
-            {member.name}
-          </MenuItem>
-        ))}
-      </TextField>
+      />
 
       <TextField
         id={departmentId}

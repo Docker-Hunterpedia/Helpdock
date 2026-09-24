@@ -1,4 +1,7 @@
 import type {
+  AssignmentAgent,
+  AssignmentAgentList,
+  AssignmentAgentUpdateRequest,
   Brand,
   BrandSettings,
   BrandUpdateRequest,
@@ -8,6 +11,9 @@ import type {
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
+  DepartmentAssignment,
+  DepartmentAssignmentList,
+  DepartmentAssignmentUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
@@ -145,6 +151,24 @@ export interface TicketingApi {
   deleteTicketTemplate(brandId: string, templateId: string): Promise<void>;
   /** The template with its placeholders filled, rendered by the api. */
   previewTicketTemplate(brandId: string, templateId: string): Promise<TicketTemplatePreview>;
+
+  // ---------------------------------------------------------------- M1-07
+
+  /** Every department the viewer leads, with how it assigns tickets. */
+  assignment(brandId: string): Promise<DepartmentAssignmentList>;
+  updateAssignment(
+    brandId: string,
+    departmentId: string,
+    request: DepartmentAssignmentUpdateRequest,
+  ): Promise<DepartmentAssignment>;
+  /** Who can work the department: rotation, skills, presence and load. */
+  assignmentAgents(brandId: string, departmentId: string): Promise<AssignmentAgentList>;
+  updateAssignmentAgent(
+    brandId: string,
+    departmentId: string,
+    userId: string,
+    request: AssignmentAgentUpdateRequest,
+  ): Promise<AssignmentAgent>;
 }
 
 /**

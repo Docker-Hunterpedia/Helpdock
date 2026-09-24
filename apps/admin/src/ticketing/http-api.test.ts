@@ -417,3 +417,71 @@ describe('ticket templates', () => {
     expect(lastCall().url).toContain('/preview');
   });
 });
+
+describe('assignment (M1-07)', () => {
+  const setting = {
+    departmentId: DEPARTMENT,
+    name: 'Billing',
+    nameAr: null,
+    mode: 'round_robin',
+    loadCap: 8,
+    autoUnassignOffline: true,
+    autoUnassignAfterMinutes: 15,
+    onUnassign: 'leave_unassigned',
+    agentsOnline: 1,
+    agentsInRotation: 2,
+  };
+  const agent = {
+    userId: USER,
+    name: 'Omar Nasser',
+    role: 'agent',
+    presence: 'online',
+    openCount: 3,
+    inRotation: true,
+    skills: [],
+    editable: true,
+  };
+
+  it('reads every department the viewer leads', async () => {
+    fetchMock.mockResolvedValue(json({ departments: [setting] }));
+
+    const list = await api.assignment(BRAND);
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/assignment`);
+    expect(list.departments[0]?.mode).toBe('round_robin');
+  });
+
+  it('patches one department', async () => {
+    fetchMock.mockResolvedValue(json({ ...setting, loadCap: null }));
+
+    const saved = await api.updateAssignment(BRAND, DEPARTMENT, { loadCap: null });
+
+    const { url, init } = lastCall();
+    expect(init.method).toBe('PATCH');
+    expect(url).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}`);
+    expect(JSON.parse(String(init.body))).toEqual({ loadCap: null });
+    expect(saved.loadCap).toBeNull();
+  });
+
+  it('reads and patches the agents of one department', async () => {
+    fetchMock.mockResolvedValue(json({ departmentId: DEPARTMENT, loadCap: 8, agents: [agent] }));
+    const list = await api.assignmentAgents(BRAND, DEPARTMENT);
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}/agents`);
+    expect(list.agents[0]?.name).toBe('Omar Nasser');
+
+    fetchMock.mockResolvedValue(json({ ...agent, inRotation: false }));
+    const updated = await api.updateAssignmentAgent(BRAND, DEPARTMENT, USER, { inRotation: false });
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}/agents/${USER}`);
+    expect(updated.inRotation).toBe(false);
+  });
+
+  it('turns the ceiling refusal into a code', async () => {
+    fetchMock.mockResolvedValue(ticketingFailure('out-of-scope', 403));
+
+    const error = await api
+      .updateAssignment(BRAND, DEPARTMENT, { mode: 'manual' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(isTicketingError(error) && error.reason).toBe('out-of-scope');
+  });
+});

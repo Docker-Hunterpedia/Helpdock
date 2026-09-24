@@ -1,4 +1,5 @@
 import type {
+  AssignableAgentList,
   MessageCreateRequest,
   Ticket,
   TicketActivityList,
@@ -45,6 +46,12 @@ export interface TicketsApi {
   create(brandId: string, request: TicketCreateRequest): Promise<TicketDetail>;
   update(brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket>;
   reply(brandId: string, ticketId: string, request: MessageCreateRequest): Promise<TicketMessage>;
+
+  /**
+   * M1-07: who the assignee picker may offer for a ticket in this department —
+   * names, presence and load, and nothing an Agent's permission does not cover.
+   */
+  assignable(brandId: string, departmentId: string): Promise<AssignableAgentList>;
 }
 
 /**

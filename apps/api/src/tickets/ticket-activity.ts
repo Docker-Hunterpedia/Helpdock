@@ -39,7 +39,15 @@ export type TicketActivityAction =
   | 'ticket.deleted'
   | 'ticket.escalated'
   /** M1-06. Its own verb rather than `ticket.updated`, because the thread draws chips. */
-  | 'ticket.tags.changed';
+  | 'ticket.tags.changed'
+  /**
+   * M1-09 (§2.4). Each is written on both tickets, as `ticket.continued` is:
+   * `from.ticketId` is the secondary or the original, `to.ticketId` the
+   * primary or the new ticket.
+   */
+  | 'ticket.merged'
+  | 'ticket.unmerged'
+  | 'ticket.split';
 
 /**
  * The actor behind a change, in the three words the activity log records.

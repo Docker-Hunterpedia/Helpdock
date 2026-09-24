@@ -287,7 +287,7 @@ change to one without the other fails.
 | `closed` | Customer reply | The reopen policy, below |
 | `closed` | Agent reopens | Default open status, `closed_at` cleared, `onReopened` |
 | any | Marked spam | Spam. M1-11 owns what else that means |
-| any | Merged | Merged. M1-09 owns the rest |
+| any | Merged | Merged, with `merged_into_id` — see [Merge and split](#merge-and-split) |
 | any | Soft-deleted by Admin | Hidden from every view; purged by retention (§11) |
 
 Two facts are checked **before** the table and refuse every event, because they
@@ -304,7 +304,9 @@ whether `closed_at` moves and which hook fires.
 
 ### Which status plays which part
 
-Never by name — a brand may rename any of them (`packages/db/src/ticket-statuses.ts`):
+Never by name — a brand may rename any of them (`packages/db/src/ticket-statuses.ts`).
+A flag where one says what the row is; `system_key` (M1-09) where the flags
+cannot tell two rows apart, which is Spam and Merged:
 
 | Part | Found by |
 |---|---|
@@ -312,6 +314,7 @@ Never by name — a brand may rename any of them (`packages/db/src/ticket-status
 | Awaiting customer | `awaiting_customer`, seeded rows first |
 | No CSAT, out of reports | `excluded_from_reports` |
 | The secondary of a merge | `merged_into_id` on the *ticket* |
+| The status a merge closes into | `system_key = 'merged'` (seeded, backfilled by migration `0016`) |
 
 ### The reopen policy
 
@@ -348,15 +351,17 @@ retried send never creates a second continuation (§7).
 
 ### The hooks later milestones fill
 
-`apps/api/src/tickets/lifecycle/hooks.ts` names three moments and does nothing
+`apps/api/src/tickets/lifecycle/hooks.ts` names five moments and does nothing
 at any of them. They are a provider, so M3-02 and M1-12 replace one line of
 `TicketsModule` rather than editing the service that calls them.
 
 | Hook | Fires when | Filled by |
 |---|---|---|
-| `onResolved` | A ticket reaches a closed state, **including** spam and merge — a clock left running on a ticket nobody will touch again is a clock that breaches | M3-02 |
+| `onResolved` | A ticket reaches a closed state, **including** spam — a clock left running on a ticket nobody will touch again is a clock that breaches. Not on a merge, which fires `onMerged` | M3-02 |
 | `onClosedForCsat` | The same, **unless** the ticket is merged or the status is `excluded_from_reports` | M1-12 |
 | `onReopened` | A closed ticket comes back, by policy or by an agent (§3.5) | M3-02 |
+| `onMerged` | A ticket was merged into another (§2.4): stop both clocks without recording them as met, and keep the ticket out of compliance | M3-02 |
+| `onUnmerged` | A merge was undone; `mergedMs` is how long it lasted, to leave out of the clocks | M3-02 |
 
 Every hook runs inside the caller's transaction, after the ticket row has moved
 and before the outbox row is written, so whatever it writes commits with the
@@ -375,6 +380,121 @@ own URL, the thread, the activity — and all of them answer **404**, the same
 answer a ticket in another department gives. A 410 would confirm it had existed.
 The department-delete guard still counts it, which is what stops a department
 being removed out from under a ticket that could be restored.
+
+## Merge and split
+
+[DOMAIN-RULES §2.4](../planning/DOMAIN-RULES.md#24-merge-and-split), built by
+M1-09 in `apps/api/src/tickets/merge/`. The rules are pure functions in
+`merge-rules.ts`; `merge.service.ts` writes the rows. All three routes are
+`ticket:write`, and every path names the ticket the agent has open.
+
+| Route | Answers |
+|---|---|
+| `POST /tickets/:ticketId/merge` `{ "primaryTicketId": "…" }` | `{ primary, secondary }` — `:ticketId` is the **secondary**, which closes |
+| `POST /tickets/:ticketId/unmerge` | `{ primary, secondary }` — inside 24 hours of the merge |
+| `POST /tickets/:ticketId/split` `{ messageIds, subject, departmentId, priority? }` | **201** and the new ticket's detail |
+
+A ticket the actor cannot read — the primary in another department, or in
+another brand — answers **404**, exactly like one that does not exist
+(§1.2). A rule that refuses answers **409** with `error.lifecycle.reason`:
+
+| Reason | When |
+|---|---|
+| `merge-into-self` | The primary is the secondary |
+| `ticket-merged` | The secondary is already merged — unmerge is the only way back. Also a split of a merged ticket, and a `PATCH` that would move a merged ticket's department |
+| `merge-into-merged` | The primary is itself merged; merge into the ticket it went to. This is also what makes a cycle impossible |
+| `ticket-not-merged` | Unmerging a ticket that is not merged |
+| `merge-window-closed` | Unmerging 24 hours or more after the merge |
+| `attachments-in-flight` | A message to split has an attachment the pipeline has not finished with |
+
+### Merge
+
+In one transaction:
+
+1. both tickets are locked, in id order, so two merges of the same pair queue
+   rather than deadlock;
+2. the primary gets a `system` message "HD-1042 was merged into this ticket",
+   in its contact's language, as §2.3's "Continued in" is;
+3. the secondary moves to the **Merged** status with `merged_into_id`,
+   `merged_at`, `merged_by_id`, `closed_at` (kept if it was already closed) and
+   what an unmerge needs: `pre_merge_status_id`, `pre_merge_department_id` and
+   `merge_message_id`;
+4. the secondary **moves into the primary's department**;
+5. the primary's tags become the union of both (`ticket.tags.changed`);
+6. `onMerged` fires, and `MergeParticipantsHook.onContactMerged` when the two
+   contacts differ;
+7. `ticket.merged` is written to both activity logs, and `ticket.updated` to
+   the outbox for both, which is `ticket:changed` in both rooms.
+
+**Messages are not moved.** `GET /tickets/:primaryId` answers with `merged`:
+every ticket merged into it — a chain is flattened, and `mergedIntoId` says
+which ticket each went into — with the oldest 100 of its messages, read-only,
+each keeping its own `ticketId`. The secondary's read answers with `mergedInto`.
+Both carry `unmergeableUntil`, null once the 24 hours have passed.
+
+**Access follows the primary** because of step 4. §2.4 allows a merge across
+departments; the secondary's thread, activity, tags and attachments follow it
+through `helpdock_ticket_department_moved`, and the `tickets_merged_follow_primary`
+trigger (migration `0016`) keeps every merged ticket in its primary's department
+when the primary moves later, down a chain. So whoever may read the primary may
+read the messages shown inline in it and open their attachments — at
+`/tickets/:secondaryId/attachments/:id`, under the ordinary department policy,
+with no second authorisation path — and nobody else may. A merged ticket's
+department cannot be changed on its own: `PATCH` refuses it with
+`ticket-merged`.
+
+**Clocks.** A merge stops the secondary's clocks and keeps it out of
+compliance: the Merged status is `excluded_from_reports` and the ticket has
+`merged_into_id`. It does not fire `onResolved` — the ticket was folded into
+another, not resolved. The primary's clocks are untouched.
+
+**The contact.** §2.4 makes the secondary's contact a CC of the primary when
+the two differ. Participants are M1-13's (§2.5), so the merge calls
+`MergeParticipantsHook.onContactMerged` — a provider in `TicketsModule` that
+does nothing today and that M1-13 replaces.
+
+### Unmerge
+
+Inside 24 hours of `merged_at`, and refused at exactly 24 hours. The secondary
+goes back to the status it was in (or the default open status if that one has
+been deleted since), gets `closed_at` back only if that status is a closed one,
+and returns to the department it was merged from — which, when that department
+is outside the actor's scope, is the escalation §1.2 already allows, made in the
+same widened window `PATCH` uses. `merged_ms` accumulates how long the merge
+lasted and `onUnmerged` passes it on, which is how "clocks resume with the time
+paused during the merge excluded" reaches M3-02. The primary gets "HD-1042 was
+unmerged from this ticket" and keeps the tags the merge gave it: §2.4 does not
+say they go, and nothing records which ones it would not otherwise have by now.
+
+### Split
+
+The named messages are **copied** onto a new ticket: `split_from_id`, the same
+contact and channel, the department and subject the agent chose, the priority
+chosen or the original's, a fresh number, and the default open status. Each copy
+has `copied_from_message_id`, keeps its original `created_at`, and takes the new
+ticket's own `seq` from 1; a `system` message "Split from HD-1042" follows them,
+and the original gets "Messages split to HD-1043". The new ticket is announced
+with `ticket.created`, which is where M3-02's fresh clocks start; the original's
+are not touched.
+
+The department is one the actor may file a ticket in, as for creation — a
+split is filing a ticket, not escalating one. An id that is not a message of the
+ticket answers 404; a `system` message answers 400.
+
+**Attachments are copied as rows, not bytes.** A copy of a `ready` attachment
+points at the **same object** with the new ticket's `ticket_id`, `message_id`
+and — through the trigger — `department_id`, which is what authorises a
+download through it; `copied_from_attachment_id` names the original.
+`attachments.s3_key` is therefore unique among originals only
+(`attachments_s3_key_original_key`). Rejected and infected rows are not copied,
+and a message whose attachment is still `pending` or `processing` is refused
+with `attachments-in-flight`, because its copy would never hear from the
+worker. **M1-14's retention must not delete an object while any row still names
+its key.**
+
+Both tickets' reads carry `related`: the ticket this one was split from and the
+tickets split from it, so the thread can link the references its system
+messages name.
 
 ## Side effects and realtime
 
@@ -428,6 +548,9 @@ which departments it reaches is the policies'.
 | `GET /tickets/:ticketId/activity` | `ticket:read` | The newest 100 activity entries, oldest first. It does not page yet |
 | `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
 | `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
+| `POST /tickets/:ticketId/merge` | `ticket:write` | Closes it into another ticket (M1-09, [below](#merge-and-split)) |
+| `POST /tickets/:ticketId/unmerge` | `ticket:write` | Undoes a merge inside 24 hours (M1-09) |
+| `POST /tickets/:ticketId/split` | `ticket:write` | Copies messages onto a new ticket (M1-09) |
 
 ### Listing
 
@@ -440,7 +563,7 @@ GET /api/brands/:brandId/tickets
   &channel=email              repeatable: email | chat | telegram | form | api | manual
   &assigneeId=<uuid>          repeatable; the value `unassigned` is a chip of its own
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
-  &q=printer                  free text over the subject
+  &q=printer                  the subject, the contact's name, or a reference
   &sort=updatedAt             updatedAt | createdAt | number | priority
   &direction=desc             asc | desc
   &limit=25                   1–100
@@ -486,6 +609,11 @@ the generated `tickets.search` column — which understands quoted phrases and
 operator against the subject, through `tickets_subject_trgm_idx`. Full text will
 not match `renewa` against "renewal"; the trigram half will. Both bind the term
 as a parameter.
+
+From M1-09 the same `q` also matches the **contact's name** (`ILIKE`, with `%`
+and `_` escaped, through `contacts`, which is brand-scoped) and a **reference**:
+`HD-1042`, `#1042` or `1042` match ticket number 1042 whatever the prefix,
+because a brand has one sequence. The merge dialog's search is this list read.
 
 `tagId` has **all-of** semantics (M1-06): a ticket matches when it carries every
 tag named, not any of them. Two chips in a filter are how somebody narrows a
@@ -688,8 +816,28 @@ each client says so every 30 s, the gateway authorises the announcement exactly
 as it authorises the join and relays it to the rest of the room, and every
 client drops a name nobody has repeated for 90 s. Nothing is stored, and
 "closed the tab", "lost the network" and "went to lunch with it open" are one
-answer. M1-09 owns the rest of §2.4; if it grows a server-side register, this
-is what it replaces.
+answer.
+
+M1-09 added `activity`: `replying` while the composer holds something unsent,
+`viewing` otherwise. A change is announced at once rather than at the next
+interval, the pill says "Mona is replying" and puts whoever is replying first,
+and the same authorisation covers both words. It stays stateless on purpose: "is
+replying" is not a lock, so a browser that crashes mid-reply cannot leave a
+ticket claimed.
+
+### Merge and split in the workspace
+
+The ⋯ menu in the header (`ticket-actions-menu.tsx`) draws the entries it is
+handed, in order; M1-09 passes Merge and Split, and M1-12's Log time and
+M1-11's Mark as spam are added to the same array. A merged ticket offers
+neither. The merge dialog searches with the list read and never offers the
+ticket itself or a merged one; the split dialog lists the ticket's own
+messages, oldest first. After either, the workspace opens the ticket the work
+continues on. On the primary, each merged ticket is drawn where its
+announcement was: a banner with Unmerge while its 24 hours last, a divider, and
+its messages read-only on `bg.canvas`, each marked with its origin. The
+secondary shows the banner the other way round above the thread, and no
+composer. Built from `AdminTicketDialogs` panels 1, 2, 4 and 7.
 
 ### Attachments
 
@@ -750,7 +898,7 @@ the ticket list row would close that, and is a change to M1-02's response.
 |---|---|
 | M1-13 | Identity rules: verified matches, automatic merge, participants (contact + CCs) |
 | M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
-| M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
+| M1-09 | Shipped in branch. Merge, unmerge and split ([above](#merge-and-split)), and "is replying" on the collision indicator. Leaves `MergeParticipantsHook` for M1-13 and `onMerged` / `onUnmerged` for M3-02 |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Spam semantics on the seeded Spam status, and the sender block list |
 | M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |

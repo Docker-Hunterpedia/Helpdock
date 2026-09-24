@@ -3,7 +3,13 @@ import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 import { encodeTicketCursor } from './cursor.js';
-import { cursorAfter, sortValueOf, ticketFilters, ticketOrder } from './ticket-query.js';
+import {
+  cursorAfter,
+  referenceNumber,
+  sortValueOf,
+  ticketFilters,
+  ticketOrder,
+} from './ticket-query.js';
 
 /**
  * The filters are assertions about *SQL*, so the SQL is what is asserted on:
@@ -129,7 +135,27 @@ describe('ticketFilters', () => {
     expect(sql?.sql).toContain('websearch_to_tsquery');
     // `<%`, not `%`: the query is one word against a whole subject line.
     expect(sql?.sql).toContain('<%');
-    expect(sql?.params).toEqual(['refund', 'refund']);
+    expect(sql?.params).toEqual(['refund', 'refund', '%refund%']);
+  });
+
+  it('also matches the contact by name, with the wildcards of a name escaped (M1-09)', () => {
+    const sql = render(ticketFilters(query({ q: '50%_off' })));
+
+    expect(sql?.sql).toContain('ILIKE');
+    expect(sql?.params).toContain('%50\\%\\_off%');
+  });
+
+  it('matches a reference by its number, whatever prefix it is typed with (M1-09)', () => {
+    const sql = render(ticketFilters(query({ q: 'HD-1042' })));
+
+    expect(sql?.sql).toContain('"tickets"."number" = ');
+    expect(sql?.params).toContain(1042);
+  });
+
+  it('does not treat a word as a reference', () => {
+    const sql = render(ticketFilters(query({ q: 'refund' })));
+
+    expect(sql?.sql).not.toContain('"tickets"."number" = ');
   });
 
   it('never pastes a search term into the statement, however hostile', () => {
@@ -139,7 +165,7 @@ describe('ticketFilters', () => {
     const sql = render(ticketFilters(query({ q: hostile })));
 
     expect(sql?.sql).not.toContain('drop table');
-    expect(sql?.params).toEqual([hostile, hostile]);
+    expect(sql?.params).toEqual([hostile, hostile, `%${hostile}%`]);
   });
 
   it('turns a cursor into a row comparison in the sort direction', () => {
@@ -223,4 +249,23 @@ describe('the next cursor', () => {
       id: TICKET,
     });
   });
+});
+
+describe('referenceNumber', () => {
+  it.each([
+    ['HD-1042', 1042],
+    ['hd-1042', 1042],
+    ['#1042', 1042],
+    ['1042', 1042],
+    [' ACME2-7 ', 7],
+  ])('reads %s as ticket %d', (term, expected) => {
+    expect(referenceNumber(term)).toBe(expected);
+  });
+
+  it.each(['refund', 'HD-', 'HD 1042', '0', '1042abc', '99999999999999999'])(
+    'reads %s as no reference',
+    (term) => {
+      expect(referenceNumber(term)).toBeNull();
+    },
+  );
 });

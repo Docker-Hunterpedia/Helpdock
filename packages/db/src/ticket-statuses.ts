@@ -9,10 +9,12 @@ import { ticketStatuses } from './schema/ticket-statuses.js';
  * ship with every brand — Awaiting customer and Spam — and one more, Merged,
  * is what §2.4 closes the secondary of a merge into.
  *
- * `key` is not a column. It is how *code* names the row it needs: the reopen
- * path wants the default open status, merge wants Merged, spam wants Spam. The
- * columns those paths actually read are `is_default`, `system_state` and the
- * flags, so a brand renaming "Open" to "New" changes a label and nothing else.
+ * `key` is how *code* names the row it needs: the reopen path wants the
+ * default open status, merge wants Merged, spam wants Spam. It is stored as
+ * `system_key` (M1-09), because Spam and Merged carry identical state and
+ * flags and a flag alone cannot tell them apart. Paths that *can* find their
+ * row by a flag — `is_default`, `awaiting_customer` — still do, so a brand
+ * renaming "Open" to "New" changes a label and nothing else.
  *
  * `excluded_from_reports` is the fourth such flag, added by M1-08: §2.1 words
  * Spam as "closed, excluded from reports" and §2.4 says the same of Merged, and
@@ -116,10 +118,11 @@ export const seedBrandStatuses = async (tx: DbTransaction, brandId: string): Pro
   await tx
     .insert(ticketStatuses)
     .values(
-      BUILT_IN_TICKET_STATUSES.map(({ key: _key, ...status }) => ({
+      BUILT_IN_TICKET_STATUSES.map(({ key, ...status }) => ({
         ...status,
         brandId,
         isSystem: true,
+        systemKey: key,
       })),
     )
     .onConflictDoNothing({ target: [ticketStatuses.brandId, ticketStatuses.name] });

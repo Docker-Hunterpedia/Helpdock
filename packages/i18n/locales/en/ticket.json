@@ -1,6 +1,10 @@
 {
   "system": {
     "continuedFrom": "Continued from {{ticket}}",
-    "continuedIn": "Continued in {{ticket}}"
+    "continuedIn": "Continued in {{ticket}}",
+    "mergedFrom": "{{ticket}} was merged into this ticket",
+    "unmerged": "{{ticket}} was unmerged from this ticket",
+    "splitTo": "Messages split to {{ticket}}",
+    "splitFrom": "Split from {{ticket}}"
   }
 }

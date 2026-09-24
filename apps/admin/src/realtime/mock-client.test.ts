@@ -86,3 +86,17 @@ describe('createRealtimeClient', () => {
     expect(createRealtimeClient(new MockAuthApi())).toBeInstanceOf(MockRealtimeClient);
   });
 });
+
+describe('MockRealtimeClient, collision (M1-09)', () => {
+  it('records what each announcement said, and has its colleague only ever viewing', () => {
+    const client = new MockRealtimeClient();
+    const heard: string[] = [];
+    client.subscribe({ ticketViewing: (viewing) => heard.push(viewing.activity) });
+    client.start(BRAND);
+
+    client.announceViewing('0192c3f0-1a2b-7c3d-8e4f-000000001042', 'replying');
+
+    expect(client.announcedActivity).toEqual(['replying']);
+    expect(heard).toEqual(['viewing']);
+  });
+});

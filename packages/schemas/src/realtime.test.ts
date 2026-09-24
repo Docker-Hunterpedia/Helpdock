@@ -99,11 +99,30 @@ describe('the message schemas', () => {
     // The collision indicator says who, never what: the announcement is
     // relayed to everybody in the room, and a subject in it would be a subject
     // sent to a room whose members re-read the ticket over REST anyway.
-    expect(Object.keys(ticketViewingSchema.shape)).toEqual(['brandId', 'ticketId', 'userId']);
+    expect(Object.keys(ticketViewingSchema.shape)).toEqual([
+      'brandId',
+      'ticketId',
+      'activity',
+      'userId',
+    ]);
     expect(ticketViewingRequestSchema.safeParse({ brandId: BRAND, ticketId: BRAND }).success).toBe(
       true,
     );
     expect(ticketViewingRequestSchema.safeParse({ ticketId: BRAND }).success).toBe(false);
+  });
+
+  it('reads an announcement without an activity as viewing, and refuses an unknown one (M1-09)', () => {
+    expect(ticketViewingRequestSchema.parse({ brandId: BRAND, ticketId: BRAND }).activity).toBe(
+      'viewing',
+    );
+    expect(
+      ticketViewingRequestSchema.parse({ brandId: BRAND, ticketId: BRAND, activity: 'replying' })
+        .activity,
+    ).toBe('replying');
+    expect(
+      ticketViewingRequestSchema.safeParse({ brandId: BRAND, ticketId: BRAND, activity: 'typing' })
+        .success,
+    ).toBe(false);
   });
 
   it('carries no message body on a ticket event, so a note cannot leak over a socket', () => {

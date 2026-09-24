@@ -200,6 +200,10 @@ export const attachmentChangedSchema = z.object({
 });
 export type AttachmentChanged = z.infer<typeof attachmentChangedSchema>;
 
+/** What somebody with a ticket open is doing with it (M1-09). */
+export const ticketViewingActivitySchema = z.enum(['viewing', 'replying']);
+export type TicketViewingActivity = z.infer<typeof ticketViewingActivitySchema>;
+
 /**
  * What a client sends when it has a ticket open, repeated while it stays open.
  *
@@ -213,6 +217,13 @@ export type AttachmentChanged = z.infer<typeof attachmentChangedSchema>;
 export const ticketViewingRequestSchema = z.object({
   brandId: z.uuid(),
   ticketId: z.uuid(),
+  /**
+   * M1-09: `replying` while the sender has something in the composer, so the
+   * pill can say "Mona is replying" rather than only "Mona is viewing" — the
+   * collision worth warning about is two people answering the same customer.
+   * Defaults to `viewing`, so a client that predates it still parses.
+   */
+  activity: ticketViewingActivitySchema.default('viewing'),
 });
 export type TicketViewingRequest = z.infer<typeof ticketViewingRequestSchema>;
 

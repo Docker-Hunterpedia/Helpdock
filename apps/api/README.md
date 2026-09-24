@@ -477,8 +477,9 @@ handler rate-limits per source address.
 
 ## Tickets
 
-`src/tickets/` holds M1-02, M1-03 and M1-08: the ticket, its thread, its
-activity log and the state machine of DOMAIN-RULES §2. What the model is and what the endpoints answer is [the ticket
+`src/tickets/` holds M1-02, M1-03, M1-08 and M1-09: the ticket, its thread,
+its activity log, the state machine of DOMAIN-RULES §2 and merge and split
+(§2.4). What the model is and what the endpoints answer is [the ticket
 guide](../../docs/guides/tickets.md); what follows is for somebody reading the
 code.
 
@@ -490,13 +491,17 @@ code.
 | `status-change.ts` | Where a status change lands: the transition table is consulted, a status that is not this brand's is refused, and `closed_at` is kept in step with the system state. It answers *whether* the move closed or reopened the ticket; what that costs is the service's. |
 | `lifecycle/transitions.ts` | DOMAIN-RULES §2.2 as one constant. `transitions.test.ts` holds a second copy typed out from the document and asserts the two agree cell by cell. |
 | `lifecycle/reopen-policy.ts` | §2.3, as a pure function of a policy, a `closed_at` and a `now`. The boundary — "less than N days" — is named in the test in both directions. |
-| `lifecycle/hooks.ts` | The three moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`. A provider, so they replace one line of `TicketsModule`. |
+| `lifecycle/hooks.ts` | The moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`, and M1-09's `onMerged` and `onUnmerged`. A provider, so they replace one line of `TicketsModule`. |
 | `lifecycle/lifecycle.service.ts` | The transitions carried out: the reply paths, the reopen, the continuation ticket and its two system messages, the soft delete. |
 | `lifecycle/status-rules.ts` | What may be done to a status row, as pure functions — the same shape `brands/department-scope.ts` uses, and for the same reason. |
 | `lifecycle/ticketing-settings.*` | The Statuses tab and the Reply behaviour card over HTTP, under the new `ticketing:manage`. |
 | `ticket-activity.ts` | The activity row, written in the caller's transaction. |
 | `ticket-events.ts` | The four outbox events and the handler the worker registers for them. |
 | `ticket-view.ts` | Rows to the wire shapes, in one place, so a column added to a table does not quietly become a field in a response. |
+| `merge/merge-rules.ts` | §2.4 as pure functions: which merges and unmerges are refused and why, the 24-hour window, `closed_at` across a merge and back, which messages a split may copy. |
+| `merge/merge.service.ts` | Merge, unmerge and split carried out, each in the request's transaction with activity and outbox rows on both tickets. A merge moves the secondary into the primary's department, which is what makes "access follows the primary" true. |
+| `merge/merge-view.ts` | What a ticket read adds: the tickets merged into it with their messages, where it was merged to, and what a split joined to it. A plain function, so `TicketsService.find` calls it without depending on the merge service. |
+| `merge/participants.hook.ts` | `MergeParticipantsHook`: where the secondary's contact becomes a CC of the primary. Does nothing until M1-13 replaces the provider. |
 
 Four things are easy to get wrong here and are written down where they happen:
 

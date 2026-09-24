@@ -95,6 +95,41 @@ export const tickets = pgTable(
     splitFromId: uuid('split_from_id').references((): AnyPgColumn => tickets.id, {
       onDelete: 'set null',
     }),
+    /**
+     * M1-09. When this ticket was merged into `merged_into_id`, and so when its
+     * SLA clocks stopped (DOMAIN-RULES §2.4). It is also what the 24-hour
+     * unmerge window is measured from. Null whenever the ticket is not merged.
+     */
+    mergedAt: timestamp('merged_at', { withTimezone: true, precision: 3 }),
+    /** Who merged it, for the "merged by Lina" banner. Null for a non-staff actor. */
+    mergedById: uuid('merged_by_id').references(() => users.id, { onDelete: 'set null' }),
+    /**
+     * The status and the department the secondary was in before the merge,
+     * which is what an unmerge restores (§2.4). The department is kept because
+     * a merge moves the secondary into the primary's department: that is what
+     * makes "access follows the primary" true of its messages and attachments
+     * without a second authorisation path.
+     */
+    preMergeStatusId: uuid('pre_merge_status_id').references(() => ticketStatuses.id, {
+      onDelete: 'set null',
+    }),
+    preMergeDepartmentId: uuid('pre_merge_department_id').references(() => departments.id, {
+      onDelete: 'set null',
+    }),
+    /**
+     * The system message on the primary that announced the merge, so the
+     * primary's thread can draw the merged block in its place. No foreign key:
+     * `ticket_messages` already references `tickets`, and a key back would make
+     * the two tables impossible to purge in either order (DOMAIN-RULES §11).
+     */
+    mergeMessageId: uuid('merge_message_id'),
+    /**
+     * Every millisecond this ticket has spent merged and then been unmerged.
+     * "Clocks resume with the time paused during the merge excluded" (§2.4):
+     * M3-02's clocks add it to their paused total, and reports read it for the
+     * same reason.
+     */
+    mergedMs: bigint('merged_ms', { mode: 'number' }).notNull().default(0),
     /** Filled by the SLA engine in M3-02; the column is here so it need not backfill. */
     firstResponseDueAt: timestamp('first_response_due_at', { withTimezone: true }),
     resolutionDueAt: timestamp('resolution_due_at', { withTimezone: true }),
@@ -157,6 +192,14 @@ export const tickets = pgTable(
       table.updatedAt,
     ),
     index('tickets_brand_assignee_idx').on(table.brandId, table.assigneeId),
+    // M1-09: "which tickets are merged into this one", read on every open of a
+    // primary, and "which were split from it".
+    index('tickets_merged_into_idx')
+      .on(table.mergedIntoId)
+      .where(sql`${table.mergedIntoId} is not null`),
+    index('tickets_split_from_idx')
+      .on(table.splitFromId)
+      .where(sql`${table.splitFromId} is not null`),
     index('tickets_search_idx').using('gin', table.search),
   ],
 );

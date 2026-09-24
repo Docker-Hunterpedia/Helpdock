@@ -1,12 +1,13 @@
-import type { TicketDetail } from '@helpdock/schemas';
+import type { TicketDetail, TicketViewingActivity } from '@helpdock/schemas';
 import { departmentRoom, TICKET_VIEWING_INTERVAL_MS, ticketRoom } from '@helpdock/schemas';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTicketsApi } from '../../auth/session.tsx';
 import { useRealtime } from '../../realtime/realtime-provider.tsx';
 import {
   forgetStale,
   noteViewing,
+  type Viewer,
   type ViewerSightings,
   viewersOf,
 } from '../../tickets/collision.js';
@@ -30,11 +31,17 @@ export function useTicketRoom(
   ticketId: string | null,
   /** Excluded from the result: the same person signed in twice is not a collision. */
   selfId: string,
-): { readonly viewerIds: readonly string[] } {
+  /** M1-09: `replying` while this browser's composer has something in it. */
+  viewingActivity: TicketViewingActivity = 'viewing',
+): { readonly viewers: readonly Viewer[] } {
   const { client } = useRealtime();
   const api = useTicketsApi();
   const queryClient = useQueryClient();
   const [sightings, setSightings] = useState<ViewerSightings>({});
+  // Read by the interval below, so a change of activity does not tear the room
+  // down and join it again; the effect after this one says it at once instead.
+  const activityRef = useRef(viewingActivity);
+  activityRef.current = viewingActivity;
 
   useEffect(() => {
     if (ticketId === null) {
@@ -66,6 +73,9 @@ export function useTicketRoom(
           nextAfter: page.nextAfter,
         },
         activity: activity.activity,
+        // M1-09: the merge read comes with the ticket, and a catch-up that
+        // dropped it would take the merged block off the screen until a reload.
+        ...mergeViewOf(ticket),
       });
     };
 
@@ -89,7 +99,9 @@ export function useTicketRoom(
       },
       ticketViewing: (viewing) => {
         if (viewing.ticketId === ticketId) {
-          setSightings((current) => noteViewing(current, viewing.userId, Date.now()));
+          setSightings((current) =>
+            noteViewing(current, viewing.userId, viewing.activity, Date.now()),
+          );
         }
       },
     });
@@ -97,9 +109,9 @@ export function useTicketRoom(
     // Say so at once and then keep saying so: the announcement is what the
     // other browsers in the room derive the collision pill from, and a name
     // nobody repeats is dropped after `TICKET_VIEWING_TTL_MS`.
-    client.announceViewing(ticketId);
+    client.announceViewing(ticketId, activityRef.current);
     const announce = setInterval(() => {
-      client.announceViewing(ticketId);
+      client.announceViewing(ticketId, activityRef.current);
       setSightings((current) => forgetStale(current, Date.now()));
     }, TICKET_VIEWING_INTERVAL_MS);
 
@@ -110,8 +122,26 @@ export function useTicketRoom(
     };
   }, [client, api, queryClient, brandId, ticketId]);
 
-  return { viewerIds: viewersOf(sightings, selfId, Date.now()) };
+  // The composer filling or emptying is said at once rather than at the next
+  // interval: "is replying" thirty seconds late is a warning after the fact.
+  const announced = useRef(viewingActivity);
+  useEffect(() => {
+    if (ticketId === null || announced.current === viewingActivity) {
+      return;
+    }
+    announced.current = viewingActivity;
+    client.announceViewing(ticketId, viewingActivity);
+  }, [client, ticketId, viewingActivity]);
+
+  return { viewers: viewersOf(sightings, selfId, Date.now()) };
 }
+
+/** The merge half of a ticket read, carried over by a catch-up. */
+const mergeViewOf = (read: TicketDetail): Partial<TicketDetail> => ({
+  ...(read.merged === undefined ? {} : { merged: read.merged }),
+  ...(read.mergedInto === undefined ? {} : { mergedInto: read.mergedInto }),
+  ...(read.related === undefined ? {} : { related: read.related }),
+});
 
 /**
  * The queue's half: a department room per department on screen, so a ticket

@@ -7,6 +7,10 @@ import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from './lifecycle/lifecycle.service.js';
 import { TicketingSettingsController } from './lifecycle/ticketing-settings.controller.js';
 import { TicketingSettingsService } from './lifecycle/ticketing-settings.service.js';
+import { MergeController } from './merge/merge.controller.js';
+import { MergeRepository } from './merge/merge.repository.js';
+import { MergeService } from './merge/merge.service.js';
+import { MergeParticipantsHook } from './merge/participants.hook.js';
 import { TicketsController } from './tickets.controller.js';
 import { TicketRepository } from './tickets.repository.js';
 import { TicketsService } from './tickets.service.js';
@@ -44,7 +48,7 @@ export class TicketsModule {
     return {
       module: TicketsModule,
       imports: [ticketing],
-      controllers: [TicketsController, TicketingSettingsController],
+      controllers: [TicketsController, TicketingSettingsController, MergeController],
       providers: [
         TicketRepository,
         {
@@ -80,6 +84,12 @@ export class TicketsModule {
         // dynamic module for one stateless class would tie the two modules'
         // construction together.
         MediaRepository,
+        // M1-09. `MergeParticipantsHook` is the seam M1-13 fills: a provider,
+        // for the reason `TicketLifecycleHooks` is one, so participants replace
+        // one line here rather than editing the merge.
+        MergeRepository,
+        MergeParticipantsHook,
+        MergeService,
       ],
     };
   }

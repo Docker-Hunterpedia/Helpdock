@@ -5,8 +5,11 @@ import type {
   TicketCreateRequest,
   TicketDetail,
   TicketList,
+  TicketMergeRequest,
+  TicketMergeResult,
   TicketMessage,
   TicketMessagePage,
+  TicketSplitRequest,
   TicketStatusList,
   TicketUpdateRequest,
 } from '@helpdock/schemas';
@@ -14,6 +17,7 @@ import {
   ticketActivityListSchema,
   ticketDetailSchema,
   ticketListSchema,
+  ticketMergeResultSchema,
   ticketMessagePageSchema,
   ticketMessageSchema,
   ticketSchema,
@@ -91,6 +95,32 @@ export class HttpTicketsApi implements TicketsApi {
   ): Promise<TicketMessage> {
     return ticketMessageSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/messages`, request),
+    );
+  }
+
+  async merge(
+    brandId: string,
+    ticketId: string,
+    request: TicketMergeRequest,
+  ): Promise<TicketMergeResult> {
+    return ticketMergeResultSchema.parse(
+      await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/merge`, request),
+    );
+  }
+
+  async unmerge(brandId: string, ticketId: string): Promise<TicketMergeResult> {
+    return ticketMergeResultSchema.parse(
+      await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/unmerge`),
+    );
+  }
+
+  async split(
+    brandId: string,
+    ticketId: string,
+    request: TicketSplitRequest,
+  ): Promise<TicketDetail> {
+    return ticketDetailSchema.parse(
+      await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/split`, request),
     );
   }
 

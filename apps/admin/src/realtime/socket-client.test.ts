@@ -472,7 +472,7 @@ describe('SocketRealtimeClient', () => {
 
       expect(sockets[0]?.acked.at(-1)).toEqual({
         event: REALTIME_EVENTS.ticketViewing,
-        payload: { brandId: BRAND, ticketId: TICKET },
+        payload: { brandId: BRAND, ticketId: TICKET, activity: 'viewing' },
       });
 
       client.stop();
@@ -481,6 +481,17 @@ describe('SocketRealtimeClient', () => {
       expect(
         sockets[0]?.acked.filter((call) => call.event === REALTIME_EVENTS.ticketViewing),
       ).toHaveLength(1);
+    });
+
+    it('says it is replying when asked to (M1-09)', async () => {
+      const client = await connected();
+      client.announceViewing(TICKET, 'replying');
+      await settle();
+
+      expect(sockets[0]?.acked.at(-1)).toEqual({
+        event: REALTIME_EVENTS.ticketViewing,
+        payload: { brandId: BRAND, ticketId: TICKET, activity: 'replying' },
+      });
     });
 
     it('hands the three ticket events to its listeners, parsed', async () => {

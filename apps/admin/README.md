@@ -379,6 +379,13 @@ Five decisions are worth knowing before changing it:
   draws a chip that settles on its own. The picker checks the brand's content
   policy first as a courtesy; the api checks it twice more.
 
+M1-09 added the ⋯ menu (`ticket-actions-menu.tsx`), which draws the entries it
+is handed so M1-11 and M1-12 add theirs without editing it; the merge and split
+dialogs; the merged block a primary's thread draws in place of the merge's
+announcement (`merged-block.tsx`); and "is replying" on the collision pill,
+announced the moment the composer fills. All of it is built from the
+`AdminTicketDialogs` artboard, panels 1, 2, 4 and 7.
+
 What the screen leaves disabled and which milestone turns it on is in
 [the ticket guide](../../docs/guides/tickets.md#the-admin-workspace), along
 with the two reads it wants that the api does not offer yet.

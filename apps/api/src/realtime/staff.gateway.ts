@@ -251,7 +251,10 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 
   /**
    * "Somebody else has this ticket open", which is the collision indicator of
-   * DESIGN §6.5 and all M1-15 needs of DOMAIN-RULES §2.4 (M1-09 owns the rest).
+   * DESIGN §6.5. M1-15 built it; M1-09 added `activity`, so the pill can tell
+   * "is viewing" from "is replying" — somebody with the composer open. Both go
+   * through the one authorisation below, so a person who may not read the
+   * ticket can announce neither.
    *
    * A room is not a membership list. `socketsJoin` can tell this replica who is
    * in `ticket:<id>` *here*, and the answer has to be true across every
@@ -271,7 +274,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     @ConnectedSocket() socket: StaffSocket,
     @MessageBody() body: unknown,
   ): Promise<TicketViewingAck> {
-    const { brandId, ticketId } = parseMessage(ticketViewingRequestSchema, body);
+    const { brandId, ticketId, activity } = parseMessage(ticketViewingRequestSchema, body);
     await this.#requireLiveSession(socket);
 
     const room = ticketRoom(ticketId);
@@ -290,6 +293,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
       this.#publisher.envelope(REALTIME_EVENTS.ticketViewing, {
         brandId,
         ticketId,
+        activity,
         userId: userIdOf(socket.data),
       }),
     );

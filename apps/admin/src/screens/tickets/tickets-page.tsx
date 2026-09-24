@@ -374,6 +374,9 @@ export function TicketsPage(): ReactNode {
             onGoToList={() => {
               void navigate({ pathname: ROUTES.tickets, search: linkSearch });
             }}
+            onOpenTicket={(next) => {
+              void navigate({ pathname: ticketRoute(next), search: linkSearch });
+            }}
           />
         )}
       </Box>

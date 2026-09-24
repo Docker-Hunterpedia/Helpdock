@@ -92,16 +92,14 @@ export class TicketParticipantsService {
     ticketId: string,
     participantId: string,
   ): Promise<TicketParticipantList> {
-    const { tx, brandId, principal } = context;
+    const { tx } = context;
     const ticket = await this.#require(tx, ticketId);
     const removed = await this.#repository.delete(tx, ticketId, participantId);
     if (removed === undefined) {
       throw new NotFoundException('No such participant on this ticket');
     }
 
-    await this.#changed(tx, brandId, principal, ticket, {
-      from: { ccContactId: removed.contactId },
-    });
+    await this.#changed(context, ticket, { from: { ccContactId: removed.contactId } });
 
     return this.#list(tx, ticket);
   }
@@ -109,7 +107,7 @@ export class TicketParticipantsService {
   // ------------------------------------------------------------------
 
   async #add(
-    { tx, brandId, principal }: ParticipantContext,
+    context: ParticipantContext,
     ticket: ParticipantTicket,
     {
       contactId,
@@ -127,6 +125,7 @@ export class TicketParticipantsService {
       return false;
     }
 
+    const { tx, brandId, principal } = context;
     const inserted = await this.#repository.insert(tx, {
       brandId,
       ticket,
@@ -139,15 +138,13 @@ export class TicketParticipantsService {
       return false;
     }
 
-    await this.#changed(tx, brandId, principal, ticket, { to: { ccContactId: contactId } });
+    await this.#changed(context, ticket, { to: { ccContactId: contactId } });
 
     return true;
   }
 
   async #changed(
-    tx: DbTransaction,
-    brandId: string,
-    principal: Principal,
+    { tx, brandId, principal }: ParticipantContext,
     ticket: ParticipantTicket,
     change: { readonly from?: Record<string, unknown>; readonly to?: Record<string, unknown> },
   ): Promise<void> {

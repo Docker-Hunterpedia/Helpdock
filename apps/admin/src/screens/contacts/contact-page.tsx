@@ -14,7 +14,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Lock, Trash2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
@@ -30,7 +30,7 @@ import { csatLabel, DASH, durationLabel, identityLabel } from './format.js';
 import { ContactAvatar, IdentityLine } from './identity-pieces.tsx';
 import { MergeBanners } from './merge-banner.tsx';
 import { MergeContactsDialog } from './merge-contacts-dialog.tsx';
-import { useContactAction } from './use-contact-action.js';
+import { useContactAction, useContactErrorMessage } from './use-contact-action.js';
 
 /**
  * `Admin/Contact`: one person, everything known about them, and the history the
@@ -127,14 +127,22 @@ export function ContactPage(): ReactNode {
     refresh,
   );
 
-  const merge = useContactAction(
-    (choice: { survivorId: string; mergedId: string; suggestionId: string | undefined }) =>
+  // Not `useContactAction`: its toast is a sentence, and this one carries the Undo.
+  const describeFailure = useContactErrorMessage();
+  const merge = useMutation({
+    mutationFn: (choice: {
+      survivorId: string;
+      mergedId: string;
+      suggestionId: string | undefined;
+    }) =>
       api.mergeContacts(brand.id, choice.survivorId, {
         mergedContactId: choice.mergedId,
         ...(choice.suggestionId === undefined ? {} : { suggestionId: choice.suggestionId }),
       }),
-    () => '',
-    async (survivor: ContactDetail, choice) => {
+    onError: (error: unknown) => {
+      toast({ tone: 'danger', message: describeFailure(error) });
+    },
+    onSuccess: async (survivor: ContactDetail, choice) => {
       setMerging(null);
       await refresh();
       const summary = survivor.merges.find((row) => row.mergedContact.id === choice.mergedId);
@@ -159,8 +167,7 @@ export function ContactPage(): ReactNode {
             }),
       });
     },
-    { silent: true },
-  );
+  });
 
   const anonymise = useContactAction(
     () => api.anonymise(brand.id, contactId),

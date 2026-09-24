@@ -32,7 +32,7 @@ const TOAST_KEY: Readonly<Record<ContactRefusal, string>> = {
 };
 
 /** The sentence for a failure, whatever kind it is. */
-function useContactErrorMessage(): (error: unknown) => string {
+export function useContactErrorMessage(): (error: unknown) => string {
   const t = useT();
 
   return (error: unknown): string => {
@@ -54,8 +54,6 @@ export function useContactAction<TInput, TResult>(
   run: (input: TInput) => Promise<TResult>,
   message: (input: TInput, result: TResult) => string,
   after?: (result: TResult, input: TInput) => void | Promise<void>,
-  /** `silent` when `after` raises a toast of its own, as the merge's with its Undo does. */
-  { silent = false }: { readonly silent?: boolean } = {},
 ) {
   const toast = useToast();
   const describe = useContactErrorMessage();
@@ -64,9 +62,7 @@ export function useContactAction<TInput, TResult>(
     mutationFn: run,
     onSuccess: async (result: TResult, input: TInput) => {
       await after?.(result, input);
-      if (!silent) {
-        toast({ tone: 'success', message: message(input, result) });
-      }
+      toast({ tone: 'success', message: message(input, result) });
     },
     onError: (error: unknown) => {
       toast({ tone: 'danger', message: describe(error) });

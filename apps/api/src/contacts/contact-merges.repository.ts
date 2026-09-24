@@ -28,7 +28,7 @@ import { alias } from 'drizzle-orm/pg-core';
  */
 
 /** "Twenty-four hours" of DOMAIN-RULES §4.4. */
-export const MERGE_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MERGE_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const mergedContact = alias(contacts, 'merged_contact');
 

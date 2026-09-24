@@ -130,7 +130,7 @@ export const findByIdentity = async (
  * second opinion, and an agent's "Not the same" is an answer for the pair — not
  * an invitation to ask again the other way round.
  */
-export const suggestDuplicate = async (
+const suggestDuplicate = async (
   tx: DbTransaction,
   {
     brandId,
@@ -186,7 +186,7 @@ export const suggestDuplicate = async (
  * person: "Mona K." against "Mona Khalil" scores 0.46 and "M. Khalil" 0.61,
  * while two colleagues who share only a first name stay well below it.
  */
-export const SIMILAR_NAME_THRESHOLD = 0.4;
+const SIMILAR_NAME_THRESHOLD = 0.4;
 
 /** At most this many name suggestions for one contact, so a large account is not a flood. */
 const SIMILAR_NAME_LIMIT = 5;
@@ -329,7 +329,7 @@ export const findOrCreateByAddress = async (
 
 // --------------------------------------------------------------------------
 
-export const contactById = async (
+const contactById = async (
   tx: DbTransaction,
   brandId: string,
   contactId: string,

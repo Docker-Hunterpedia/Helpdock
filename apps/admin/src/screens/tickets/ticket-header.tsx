@@ -1,11 +1,12 @@
 import type { Ticket } from '@helpdock/schemas';
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
-import { Eye, MoreHorizontal, PanelRightOpen } from 'lucide-react';
+import { Eye, PanelRightOpen } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { ChannelLabel, PriorityBadge, SlaTimer, StatusBadge } from './badges.tsx';
 import { ticketReference } from './format.js';
+import { TicketActionsMenu, type TicketMenuItem } from './ticket-actions-menu.tsx';
 
 /**
  * The header of the ticket column: the mono reference and the subject, then
@@ -22,6 +23,7 @@ export function TicketHeader({
   viewers,
   now,
   showDetailsButton,
+  actions = [],
   onShowDetails,
 }: {
   readonly ticket: Ticket;
@@ -30,6 +32,8 @@ export function TicketHeader({
   readonly viewers: readonly string[];
   readonly now: number;
   readonly showDetailsButton: boolean;
+  /** What the ⋯ menu offers; each deliverable contributes its own items. */
+  readonly actions?: readonly TicketMenuItem[];
   onShowDetails(): void;
 }): ReactNode {
   const t = useT();
@@ -69,9 +73,7 @@ export function TicketHeader({
           </Box>
         </Tooltip>
 
-        <IconButton size="small" aria-label={t('tickets:header.more')} disabled>
-          <MoreHorizontal size={16} aria-hidden="true" />
-        </IconButton>
+        <TicketActionsMenu items={actions} />
 
         {showDetailsButton ? (
           <IconButton size="small" aria-label={t('tickets:header.details')} onClick={onShowDetails}>

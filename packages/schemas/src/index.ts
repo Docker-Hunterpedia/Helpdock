@@ -11,6 +11,7 @@ export * from './install.js';
 export * from './media.js';
 export * from './principal.js';
 export * from './realtime.js';
+export * from './spam.js';
 export * from './staff.js';
 export * from './system.js';
 export * from './tags.js';

@@ -202,3 +202,16 @@ export const customFieldTypeEnum = pgEnum('custom_field_type', [
   'multi_select',
   'checkbox',
 ]);
+
+/**
+ * What a block-list row matches (M1-11). Three are contact identifier kinds,
+ * stored as `contact_identities` stores them, so an inbound message is matched
+ * on the value its channel already normalised; `domain` matches every address
+ * at that domain or below it.
+ */
+export const blockedSenderKindEnum = pgEnum('blocked_sender_kind', [
+  'email',
+  'domain',
+  'phone',
+  'telegram',
+]);

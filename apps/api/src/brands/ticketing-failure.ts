@@ -31,6 +31,11 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'default-must-be-open': HttpStatus.CONFLICT,
   'field-in-use': HttpStatus.CONFLICT,
   'option-in-use': HttpStatus.CONFLICT,
+  // M1-11. A value that is not an address, a domain, a phone number or a chat
+  // id is the caller's to fix; the other two are the block list's shape.
+  'sender-invalid': HttpStatus.BAD_REQUEST,
+  'sender-is-own': HttpStatus.CONFLICT,
+  'sender-already-blocked': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -46,6 +51,9 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
     'The default status is where a new or reopened ticket lands, so it has to be open',
   'field-in-use': 'Rows already carry values for this field, so its type cannot change',
   'option-in-use': 'Rows still carry that option; send force to clear them with it',
+  'sender-invalid': 'That is not a valid address, domain, phone number or Telegram chat id',
+  'sender-is-own': 'This brand sends from that address or domain, so it cannot block it',
+  'sender-already-blocked': 'That sender is already on the block list',
 };
 
 export class TicketingFailure extends HttpException {

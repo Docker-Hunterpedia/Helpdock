@@ -1,5 +1,10 @@
 import {
+  blockedSenderCreateRequestSchema,
+  blockedSenderListSchema,
+  blockedSenderParamSchema,
+  blockedSenderSchema,
   brandIdParamSchema,
+  brandSettingsSchema,
   customFieldCreateRequestSchema,
   customFieldDefListSchema,
   customFieldDefSchema,
@@ -8,6 +13,8 @@ import {
   customFieldReorderRequestSchema,
   customFieldUpdateRequestSchema,
   customFieldUsageSchema,
+  markSpamRequestSchema,
+  spamSettingsUpdateRequestSchema,
   tagCreateRequestSchema,
   tagListSchema,
   tagParamSchema,
@@ -16,6 +23,8 @@ import {
   tagUpdateRequestSchema,
   tagUsageSchema,
   ticketParamSchema,
+  ticketSchema,
+  ticketSpamSenderSchema,
   ticketTagListSchema,
   ticketTagsRequestSchema,
   ticketTemplateCreateRequestSchema,
@@ -77,3 +86,16 @@ export class TicketTemplateCreateRequestDto extends createZodDto(
 export class TicketTemplateUpdateRequestDto extends createZodDto(
   ticketTemplateUpdateRequestSchema,
 ) {}
+
+// -------------------------------------------------------------------- spam
+
+export class BlockedSenderDto extends createZodDto(blockedSenderSchema) {}
+export class BlockedSenderListDto extends createZodDto(blockedSenderListSchema) {}
+export class BlockedSenderParamDto extends createZodDto(blockedSenderParamSchema) {}
+export class BlockedSenderCreateRequestDto extends createZodDto(blockedSenderCreateRequestSchema) {}
+export class SpamSettingsUpdateRequestDto extends createZodDto(spamSettingsUpdateRequestSchema) {}
+export class SpamSettingsDto extends createZodDto(brandSettingsSchema) {}
+export class MarkSpamRequestDto extends createZodDto(markSpamRequestSchema) {}
+export class TicketSpamSenderDto extends createZodDto(ticketSpamSenderSchema) {}
+export class SpamTicketDto extends createZodDto(ticketSchema) {}
+export class SpamTicketParamDto extends createZodDto(ticketParamSchema) {}

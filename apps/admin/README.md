@@ -321,6 +321,7 @@ milestone placeholder with no artboard. The guide says so
 | `/admin/ticketing/tags` | `Admin/Ticketing` | The list — chip, name, Arabic name, ticket count — and the side editor with the eight-swatch colour picker. |
 | `/admin/ticketing/custom-fields` | `Admin/Ticketing` | One table per target (Ticket, Contact, Account), because the three are separate lists with separate orders, and one shared side editor. |
 | `/admin/ticketing/templates` | `Admin/Ticketing` | The list — name, department, priority, usage — and the side editor with the api-rendered preview. |
+| `/admin/ticketing/spam` | `Admin/Ticketing › Spam` | M1-11. The block list with its dropped counter and search, the "Spam status" card with `offerBlockSender`, and the "Block a sender" card whose refusals are drawn beside the field. |
 
 Three things in these tabs are worth knowing before changing them.
 
@@ -378,6 +379,13 @@ Five decisions are worth knowing before changing it:
   `processing`, so the composer sends the ids with the message and the thread
   draws a chip that settles on its own. The picker checks the brand's content
   policy first as a courtesy; the api checks it twice more.
+
+The header's ⋯ menu (`Admin · ticket dialogs`, panel 2) is
+`ticket-actions-menu.tsx`, which draws an **array of items** each deliverable
+contributes. M1-11's — "Mark as spam", or "Not spam" on a spam ticket — comes
+from `use-spam-actions.tsx`, together with the panel 5 dialog. The mock
+`MockTicketingApi` and `MockTicketsApi` share one `MockBlockList`, as the api's
+two sides share one table, so a sender blocked from a ticket is on the Spam tab.
 
 What the screen leaves disabled and which milestone turns it on is in
 [the ticket guide](../../docs/guides/tickets.md#the-admin-workspace), along

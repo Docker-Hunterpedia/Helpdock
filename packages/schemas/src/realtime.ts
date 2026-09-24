@@ -159,7 +159,15 @@ export const ticketChangedSchema = z.object({
    * but a queue that hides closed tickets, and M1-12's survey, both need to
    * know *which* change happened without diffing two reads (DOMAIN-RULES §2.2).
    */
-  event: z.enum(['ticket.created', 'ticket.updated', 'ticket.closed', 'ticket.reopened']),
+  event: z.enum([
+    'ticket.created',
+    'ticket.updated',
+    'ticket.closed',
+    'ticket.reopened',
+    // M1-11. Its own name rather than `ticket.closed`, so nothing that acts on
+    // a close — a survey, an auto-responder — can mistake spam for one.
+    'ticket.spam',
+  ]),
 });
 export type TicketChanged = z.infer<typeof ticketChangedSchema>;
 

@@ -9,6 +9,7 @@ import { PageHeader } from '../../../shell/page-header.tsx';
 import { CustomFieldsTab } from './custom-fields-tab.tsx';
 import { DepartmentsTab } from './departments-tab.tsx';
 import { NotBuiltYetTab } from './not-built-yet-tab.tsx';
+import { SpamTab } from './spam-tab.tsx';
 import { StatusesTab } from './statuses-tab.tsx';
 import { DEFAULT_TICKETING_TAB, TICKETING_TABS, type TicketingTab, tabForSegment } from './tabs.js';
 import { TagsTab } from './tags-tab.tsx';
@@ -84,6 +85,8 @@ function TabBody({ tab }: { readonly tab: TicketingTab }): ReactNode {
       return <CustomFieldsTab />;
     case 'templates':
       return <TemplatesTab />;
+    case 'spam':
+      return <SpamTab />;
     default:
       return <NotBuiltYetTab tab={tab} />;
   }

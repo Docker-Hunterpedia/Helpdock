@@ -16,6 +16,7 @@ export const TICKETING_TABS = [
   { key: 'templates', segment: 'templates', milestone: 'M1-06' },
   { key: 'views', segment: 'views', milestone: 'M1-05' },
   { key: 'assignment', segment: 'assignment', milestone: 'M1-07' },
+  { key: 'spam', segment: 'spam', milestone: 'M1-11' },
 ] as const;
 
 export type TicketingTab = (typeof TICKETING_TABS)[number];

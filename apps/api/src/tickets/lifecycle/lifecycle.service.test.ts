@@ -44,6 +44,7 @@ const status = (
     isDefault: systemState === 'open',
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 0,
     color: 'info',
     createdAt: NOW,
@@ -58,7 +59,11 @@ const AWAITING = status('awaiting', 'on_hold', {
   isDefault: false,
 });
 const CLOSED = status('closed', 'closed', { isDefault: false });
-const SPAM = status('spam', 'closed', { isDefault: false, excludedFromReports: true });
+const SPAM = status('spam', 'closed', {
+  isDefault: false,
+  excludedFromReports: true,
+  isSpam: true,
+});
 
 const ticket = (overrides: Partial<TicketRow> = {}): TicketRow =>
   ({
@@ -101,6 +106,7 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
   // M1-10 nested the brand's content policy in `settings`. The lifecycle never
   // reads it; it is here because the whole object is what the column holds.
   contentPolicy: DEFAULT_CONTENT_POLICY,
+  offerBlockSender: true,
 });
 
 const harness = (options: {
@@ -127,6 +133,7 @@ const harness = (options: {
   const lifecycleRepo = {
     defaultOpenStatus: vi.fn(async () => statuses.find((row) => row.isDefault)),
     awaitingCustomerStatus: vi.fn(async () => statuses.find((row) => row.awaitingCustomer)),
+    spamStatus: vi.fn(async () => statuses.find((row) => row.isSpam)),
     brandSettings: vi.fn(
       async () => options.settings ?? settingsOf({ kind: 'within_days', days: 7 }),
     ),
@@ -384,5 +391,103 @@ describe('soft deletion (§2.2 row 9)', () => {
     await expect(
       service.softDelete(context, ticket({ deletedAt: NOW }), OPEN),
     ).rejects.toBeInstanceOf(TicketLifecycleFailure);
+  });
+});
+
+describe('marking as spam (§2.2 row 7, M1-11)', () => {
+  const events = (recorder: Recorder): unknown[] =>
+    recorder.inserts
+      .filter((row) => row.table === 'outbox')
+      .map((row) => (row.values as { event: string }).event);
+
+  const actions = (recorder: Recorder): unknown[] =>
+    recorder.inserts
+      .filter((row) => row.table === 'ticket_activity')
+      .map((row) => (row.values as { action: string }).action);
+
+  it('closes an open ticket into Spam, stops the clock and schedules no survey', async () => {
+    const { service, context, updates, recorder, hooks } = harness({});
+
+    const result = await service.markSpam(context, ticket(), OPEN);
+
+    expect(result).toMatchObject({ changed: true, status: SPAM });
+    expect(updates[0]?.values).toEqual({ statusId: SPAM.id, closedAt: NOW });
+    expect(actions(recorder)).toEqual(['ticket.status.changed', 'ticket.marked_spam']);
+    expect(hooks.onResolved).toHaveBeenCalledTimes(1);
+    expect(hooks.onClosedForCsat).not.toHaveBeenCalled();
+    // Never `ticket.closed`, which a survey or an auto-responder would act on.
+    expect(events(recorder)).toEqual(['ticket.spam']);
+  });
+
+  it('keeps closed_at on a ticket that was already closed, and fires no close hook', async () => {
+    const closedAt = new Date('2026-09-01T00:00:00.000Z');
+    const { service, context, updates, hooks } = harness({});
+
+    await service.markSpam(context, ticket({ statusId: CLOSED.id, closedAt }), CLOSED);
+
+    expect(updates[0]?.values).toEqual({ statusId: SPAM.id, closedAt });
+    expect(hooks.onResolved).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing for a ticket that is already spam', async () => {
+    const { service, context, recorder } = harness({});
+
+    const result = await service.markSpam(context, ticket({ statusId: SPAM.id }), SPAM);
+
+    expect(result.changed).toBe(false);
+    expect(recorder.inserts).toEqual([]);
+  });
+
+  it('refuses a merged ticket, whose state belongs to the primary', async () => {
+    const { service, context } = harness({});
+
+    await expect(
+      service.markSpam(context, ticket({ mergedIntoId: 'primary' }), OPEN),
+    ).rejects.toMatchObject({ reason: 'ticket-merged' });
+  });
+
+  it('answers 409 for a brand that has no Spam status', async () => {
+    const { service, context } = harness({ statuses: [OPEN, CLOSED] });
+
+    await expect(service.markSpam(context, ticket(), OPEN)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+});
+
+describe('"Not spam" (M1-11)', () => {
+  it('reopens the ticket to the default open status and restarts the clocks', async () => {
+    const { service, context, updates, hooks, recorder } = harness({});
+
+    const landed = await service.unmarkSpam(
+      context,
+      ticket({ statusId: SPAM.id, closedAt: NOW }),
+      SPAM,
+    );
+
+    expect(landed.status).toBe(OPEN);
+    expect(updates[0]?.values).toEqual({ statusId: OPEN.id, closedAt: null });
+    expect(hooks.onReopened).toHaveBeenCalledTimes(1);
+    expect(
+      recorder.inserts
+        .filter((row) => row.table === 'ticket_activity')
+        .map((row) => (row.values as { action: string }).action),
+    ).toContain('ticket.unmarked_spam');
+  });
+
+  it('refuses a ticket that is closed but not spam', async () => {
+    const { service, context } = harness({});
+
+    await expect(
+      service.unmarkSpam(context, ticket({ statusId: CLOSED.id, closedAt: NOW }), CLOSED),
+    ).rejects.toMatchObject({ reason: 'ticket-not-spam' });
+  });
+
+  it('refuses a ticket that is not closed at all, before asking about spam', async () => {
+    const { service, context } = harness({});
+
+    await expect(service.unmarkSpam(context, ticket(), OPEN)).rejects.toMatchObject({
+      reason: 'ticket-not-closed',
+    });
   });
 });

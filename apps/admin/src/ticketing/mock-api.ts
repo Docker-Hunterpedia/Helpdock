@@ -1,4 +1,7 @@
 import type {
+  BlockedSender,
+  BlockedSenderCreateRequest,
+  BlockedSenderList,
   Brand,
   BrandSettings,
   BrandUpdateRequest,
@@ -15,6 +18,7 @@ import type {
   EligibleMember,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
   TagSummary,
@@ -37,6 +41,7 @@ import { defaultBrandSettings, isChoiceField } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type TicketingApi, TicketingError } from './api.js';
+import { MockBlockList } from './mock-block-list.js';
 
 /**
  * The fixture the Ticketing settings run against until an install is in front
@@ -117,6 +122,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: true,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 0,
     color: 'info',
   },
@@ -130,6 +136,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 1,
     color: 'warning',
   },
@@ -143,6 +150,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 2,
     color: 'escalated',
   },
@@ -156,6 +164,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 3,
     color: 'success',
   },
@@ -169,6 +178,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: true,
+    isSpam: true,
     sortOrder: 4,
     color: 'danger',
   },
@@ -182,6 +192,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: true,
+    isSpam: false,
     sortOrder: 5,
     color: 'success',
   },
@@ -195,6 +206,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: false,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 6,
     color: 'warning',
   },
@@ -376,6 +388,8 @@ export class MockTicketingApi implements TicketingApi {
   #tags = seedTags();
   #fields = seedFields();
   #templates = seedTemplates();
+  /** M1-11. Shared with `MockTicketsApi` when `createApis` builds the pair. */
+  readonly #blockList: MockBlockList;
   /**
    * How many tickets sit in each status, so the delete confirmation has a
    * number to print. The real count comes from a `COUNT(*)` the api runs.
@@ -383,6 +397,10 @@ export class MockTicketingApi implements TicketingApi {
   #ticketsByStatus: Record<string, number> = {
     '0192c3f0-1a2b-7c3d-8e4f-0000000000e7': 12,
   };
+
+  constructor(blockList: MockBlockList = new MockBlockList()) {
+    this.#blockList = blockList;
+  }
 
   async departments(_brandId: string): Promise<DepartmentSummaryList> {
     return { departments: this.#sorted().map((row) => this.#withCounts(row)) };
@@ -585,6 +603,7 @@ export class MockTicketingApi implements TicketingApi {
       ...(request.timezone === undefined ? {} : { timezone: request.timezone }),
       ...(request.settings === undefined ? {} : { settings: request.settings }),
     };
+    this.#blockList.offerBlockSender = this.#brand.settings.offerBlockSender;
 
     return this.#brand;
   }
@@ -608,6 +627,7 @@ export class MockTicketingApi implements TicketingApi {
       isDefault: false,
       isSystem: false,
       excludedFromReports: false,
+      isSpam: false,
       sortOrder: this.#statuses.length,
       color: request.color,
     };
@@ -969,6 +989,33 @@ export class MockTicketingApi implements TicketingApi {
       bodyText: body.text,
       unknownPlaceholders: [...new Set([...subject.unknown, ...body.unknown])],
     };
+  }
+
+  // ---------------------------------------------------------------- M1-11
+
+  async blockedSenders(_brandId: string): Promise<BlockedSenderList> {
+    return { senders: this.#blockList.list() };
+  }
+
+  async blockSender(_brandId: string, request: BlockedSenderCreateRequest): Promise<BlockedSender> {
+    return this.#blockList.block(request, { idempotent: false });
+  }
+
+  async unblockSender(_brandId: string, blockedSenderId: string): Promise<void> {
+    this.#blockList.unblock(blockedSenderId);
+  }
+
+  async updateSpamSettings(
+    _brandId: string,
+    request: SpamSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    this.#blockList.offerBlockSender = request.offerBlockSender;
+    this.#brand = {
+      ...this.#brand,
+      settings: { ...this.#brand.settings, offerBlockSender: request.offerBlockSender },
+    };
+
+    return this.#brand.settings;
   }
 
   // ------------------------------------------------------------------

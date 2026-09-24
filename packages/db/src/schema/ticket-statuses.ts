@@ -1,4 +1,14 @@
-import { boolean, integer, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  integer,
+  pgTable,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { statusColorEnum, ticketSystemStateEnum } from './enums.js';
@@ -50,6 +60,16 @@ export const ticketStatuses = pgTable(
      * `awaiting_customer` are already written with.
      */
     excludedFromReports: boolean('excluded_from_reports').notNull().default(false),
+    /**
+     * The row "Mark as spam" moves a ticket to (DOMAIN-RULES §2.2, M1-11). One
+     * per brand, set on the seeded Spam row and nowhere else.
+     *
+     * `excluded_from_reports` alone cannot say it, because Merged carries that
+     * flag too, and the name cannot say it because a brand may rename Spam.
+     * Everything that treats spam differently — no auto-responder, no CSAT, no
+     * round-robin count, no report — reads this through `isSpamStatus`.
+     */
+    isSpam: boolean('is_spam').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     color: statusColorEnum('color').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -60,7 +80,11 @@ export const ticketStatuses = pgTable(
   },
   // Two statuses of one brand with the same name would be indistinguishable in
   // the status picker, which is the only place anybody chooses one.
-  (table) => [unique('ticket_statuses_brand_name_key').on(table.brandId, table.name)],
+  (table) => [
+    unique('ticket_statuses_brand_name_key').on(table.brandId, table.name),
+    // "Which row is Spam?" has to have one answer per brand.
+    uniqueIndex('ticket_statuses_brand_spam_key').on(table.brandId).where(sql`${table.isSpam}`),
+  ],
 );
 
 export type TicketStatus = typeof ticketStatuses.$inferSelect;

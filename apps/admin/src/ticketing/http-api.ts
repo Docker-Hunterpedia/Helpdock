@@ -1,4 +1,7 @@
 import type {
+  BlockedSender,
+  BlockedSenderCreateRequest,
+  BlockedSenderList,
   Brand,
   BrandSettings,
   BrandUpdateRequest,
@@ -14,6 +17,7 @@ import type {
   DepartmentUpdateRequest,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
   TagSummary,
@@ -32,6 +36,8 @@ import type {
   TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
 import {
+  blockedSenderListSchema,
+  blockedSenderSchema,
   brandSchema,
   brandSettingsSchema,
   customFieldDefListSchema,
@@ -358,7 +364,45 @@ export class HttpTicketingApi implements TicketingApi {
     );
   }
 
+  // ---------------------------------------------------------------- M1-11
+
+  async blockedSenders(brandId: string): Promise<BlockedSenderList> {
+    return blockedSenderListSchema.parse(
+      await this.#transport.request('GET', this.#blockedSenders(brandId)),
+    );
+  }
+
+  async blockSender(brandId: string, request: BlockedSenderCreateRequest): Promise<BlockedSender> {
+    return blockedSenderSchema.parse(
+      await this.#transport.request('POST', this.#blockedSenders(brandId), request),
+    );
+  }
+
+  async unblockSender(brandId: string, blockedSenderId: string): Promise<void> {
+    await this.#transport.request(
+      'DELETE',
+      `${this.#blockedSenders(brandId)}/${encodeURIComponent(blockedSenderId)}`,
+    );
+  }
+
+  async updateSpamSettings(
+    brandId: string,
+    request: SpamSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    return brandSettingsSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#brand(brandId)}/ticketing/spam-settings`,
+        request,
+      ),
+    );
+  }
+
   // ------------------------------------------------------------------
+
+  #blockedSenders(brandId: string): string {
+    return `${this.#brand(brandId)}/blocked-senders`;
+  }
 
   #statuses(brandId: string): string {
     return `${this.#brand(brandId)}/ticket-statuses`;

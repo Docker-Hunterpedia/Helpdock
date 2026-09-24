@@ -54,6 +54,7 @@ describe('@helpdock/db', () => {
       'accounts.ts',
       'attachments.ts',
       'audit-log.ts',
+      'blocked-senders.ts',
       'brand-domains.ts',
       'brands.ts',
       'contact-duplicate-suggestions.ts',

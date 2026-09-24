@@ -1,4 +1,5 @@
 import type {
+  MarkSpamRequest,
   MessageCreateRequest,
   Ticket,
   TicketActivityList,
@@ -7,6 +8,7 @@ import type {
   TicketList,
   TicketMessage,
   TicketMessagePage,
+  TicketSpamSender,
   TicketStatusList,
   TicketUpdateRequest,
 } from '@helpdock/schemas';
@@ -17,6 +19,7 @@ import {
   ticketMessagePageSchema,
   ticketMessageSchema,
   ticketSchema,
+  ticketSpamSenderSchema,
   ticketStatusListSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
@@ -91,6 +94,24 @@ export class HttpTicketsApi implements TicketsApi {
   ): Promise<TicketMessage> {
     return ticketMessageSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/messages`, request),
+    );
+  }
+
+  async spamSender(brandId: string, ticketId: string): Promise<TicketSpamSender> {
+    return ticketSpamSenderSchema.parse(
+      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/spam-sender`),
+    );
+  }
+
+  async markSpam(brandId: string, ticketId: string, request: MarkSpamRequest): Promise<Ticket> {
+    return ticketSchema.parse(
+      await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/spam`, request),
+    );
+  }
+
+  async unmarkSpam(brandId: string, ticketId: string): Promise<Ticket> {
+    return ticketSchema.parse(
+      await this.#transport.request('DELETE', `${this.#ticket(brandId, ticketId)}/spam`),
     );
   }
 

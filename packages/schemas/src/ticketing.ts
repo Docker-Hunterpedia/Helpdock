@@ -230,6 +230,12 @@ export const ticketingRefusalSchema = z.enum([
   'field-in-use',
   /** Rows still carry that option; send `force` to clear them with it (409). */
   'option-in-use',
+  /** Not a valid address, domain, phone number or Telegram chat id (400, M1-11). */
+  'sender-invalid',
+  /** The brand sends from that address or domain, so it cannot block it (409, M1-11). */
+  'sender-is-own',
+  /** That sender is already on the block list (409, M1-11). */
+  'sender-already-blocked',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

@@ -412,7 +412,7 @@ export class TicketsService {
       await this.#auditEscalation(context, ticket, escalation);
     }
 
-    await enqueueTicketEvent(tx, brandId, ticketEventFor(statusResult), {
+    await enqueueTicketEvent(tx, brandId, ticketEventFor(statusResult, nextStatus), {
       ticketId,
       departmentId: updated.departmentId,
       // On a move, whoever is watching the queue the ticket has just left is in
@@ -987,9 +987,18 @@ export class TicketsService {
  * Which outbox event a status change is. `ticket.closed` and `ticket.reopened`
  * carry the same payload as `ticket.updated` and reach the same rooms; naming
  * them is what lets M1-12's survey and M3's clocks consume one event instead of
- * diffing two reads of the ticket (DOMAIN-RULES §2.2).
+ * diffing two reads of the ticket (DOMAIN-RULES §2.2). A move into Spam is
+ * `ticket.spam` whichever state it came from.
  */
-const ticketEventFor = (result: StatusChangeResult | undefined): TicketEvent => {
+const ticketEventFor = (
+  result: StatusChangeResult | undefined,
+  next: TicketStatusRow,
+): TicketEvent => {
+  // M1-11. An agent may pick Spam from the status picker as well as from "Mark
+  // as spam", and either way the queue must not hear a close.
+  if (result?.changed === true && next.isSpam) {
+    return TICKET_EVENTS.spam;
+  }
   if (result?.closing === true) {
     return TICKET_EVENTS.closed;
   }

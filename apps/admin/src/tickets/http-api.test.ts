@@ -165,6 +165,44 @@ describe('HttpTicketsApi', () => {
   });
 });
 
+describe('spam (M1-11)', () => {
+  it('reads what the dialog will offer', async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        sender: { kind: 'email', value: 'spam@promo-deals.biz' },
+        offered: true,
+        blockable: true,
+        blocked: false,
+      }),
+    );
+
+    const answer = await api.spamSender(BRAND, TICKET);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/spam-sender`);
+    expect(answer.sender?.value).toBe('spam@promo-deals.biz');
+  });
+
+  it('marks as spam with the checkbox’s answer, and reads the ticket back', async () => {
+    fetchMock.mockResolvedValue(json(testTicket({ status: testStatus({ isSpam: true }) }), 201));
+
+    const ticket = await api.markSpam(BRAND, TICKET, { blockSender: true });
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/spam`);
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ blockSender: true });
+    expect(ticket.status.isSpam).toBe(true);
+  });
+
+  it('takes it back out with a DELETE', async () => {
+    fetchMock.mockResolvedValue(json(testTicket()));
+
+    await api.unmarkSpam(BRAND, TICKET);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/spam`);
+    expect(lastInit().method).toBe('DELETE');
+  });
+});
+
 describe('the fixtures these tests are built on', () => {
   it('anchor every date to one instant, so nothing depends on the clock', () => {
     expect(Date.parse(testTicket().updatedAt)).toBeLessThan(NOW);

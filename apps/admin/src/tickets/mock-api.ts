@@ -1,5 +1,6 @@
 import type {
   Attachment,
+  MarkSpamRequest,
   MessageCreateRequest,
   Ticket,
   TicketActivityEntry,
@@ -10,6 +11,7 @@ import type {
   TicketMessage,
   TicketMessagePage,
   TicketPriority,
+  TicketSpamSender,
   TicketStatus,
   TicketStatusList,
   TicketUpdateRequest,
@@ -24,6 +26,7 @@ import {
 } from '../contacts/mock-api.js';
 import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
+import { MockBlockList } from '../ticketing/mock-block-list.js';
 import type { TicketQuery, TicketsApi } from './api.js';
 
 /**
@@ -83,6 +86,7 @@ const seedStatuses = (): TicketStatus[] => [
   status(MOCK_STATUS_CLOSED, 'Closed', 'مغلقة', 'closed', 'success', { sortOrder: 4 }),
   status(MOCK_STATUS_SPAM, 'Spam', 'مزعجة', 'closed', 'danger', {
     excludedFromReports: true,
+    isSpam: true,
     sortOrder: 5,
   }),
   status(MOCK_STATUS_MERGED, 'Merged', 'مدمجة', 'closed', 'info', { sortOrder: 6 }),
@@ -105,8 +109,9 @@ function status(
     awaitingCustomer: false,
     isDefault: false,
     isSystem: true,
-    // M1-11 reads it on Spam; the seed sets it there and nowhere else.
+    // Spam and Merged set it; the seed sets `isSpam` on Spam alone.
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 0,
     color,
     ...overrides,
@@ -417,6 +422,37 @@ const decodeCursor = (cursor: string | undefined): number => {
   return cursor?.startsWith('c:') === true && Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
 };
 
+/**
+ * Who each fixture contact is to "Block sender" (M1-11): the identifiers
+ * `MockContactsApi` gives them, in the order the api prefers them for a
+ * channel (`apps/api/src/tickets/spam-sender.ts`).
+ */
+const MOCK_SENDERS: Readonly<
+  Record<string, Partial<Record<'email' | 'phone' | 'telegram', string>>>
+> = {
+  [MOCK_CONTACT_MONA]: { email: 'mona@example.com', phone: '+49301234567' },
+  [MOCK_CONTACT_GMAIL]: { email: 'mona.k@gmail.com' },
+  [MOCK_CONTACT_ARABIC]: { phone: '+963931234567', telegram: '884413201' },
+  [MOCK_CONTACT_ACCOUNT]: { email: 'jonas@acme.example' },
+};
+
+const senderOf = (ticket: Ticket): TicketSpamSender['sender'] => {
+  const held = ticket.contactId === null ? undefined : MOCK_SENDERS[ticket.contactId];
+  const order =
+    ticket.channel === 'telegram'
+      ? (['telegram', 'email', 'phone'] as const)
+      : (['email', 'phone', 'telegram'] as const);
+
+  for (const kind of order) {
+    const value = held?.[kind];
+    if (value !== undefined) {
+      return { kind, value };
+    }
+  }
+
+  return null;
+};
+
 export class MockTicketsApi implements TicketsApi {
   readonly #statuses = seedStatuses();
   #tickets: Ticket[];
@@ -424,14 +460,21 @@ export class MockTicketsApi implements TicketsApi {
   #activity: TicketActivityEntry[];
   #sequence = 0;
   readonly #uploads: MockAttachmentUploader | undefined;
+  /** M1-11. Shared with `MockTicketingApi`, so a block from a ticket is on the Spam tab. */
+  readonly #blockList: MockBlockList;
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
    * composer is the file the thread then draws — the same arrangement
    * `MockAuthApi` and `MockStaffApi` have, and for the same reason.
    */
-  constructor(uploads?: MockAttachmentUploader, now: number = Date.now()) {
+  constructor(
+    uploads?: MockAttachmentUploader,
+    now: number = Date.now(),
+    blockList: MockBlockList = new MockBlockList(),
+  ) {
     this.#uploads = uploads;
+    this.#blockList = blockList;
     const seeded = seed(this.#statuses, now);
     this.#tickets = seeded.tickets;
     this.#messages = seeded.messages;
@@ -647,6 +690,44 @@ export class MockTicketsApi implements TicketsApi {
   }
 
   // ------------------------------------------------------------------
+
+  // ---------------------------------------------------------------- M1-11
+
+  async spamSender(_brandId: string, ticketId: string): Promise<TicketSpamSender> {
+    const sender = senderOf(this.#require(ticketId));
+
+    return {
+      sender,
+      offered: this.#blockList.offerBlockSender,
+      blockable: sender !== null && !this.#blockList.isOwn(sender),
+      blocked: sender !== null && this.#blockList.isListed(sender),
+    };
+  }
+
+  async markSpam(brandId: string, ticketId: string, request: MarkSpamRequest): Promise<Ticket> {
+    const ticket = this.#require(ticketId);
+    const sender = senderOf(ticket);
+
+    // Before the status moves, so a refused block leaves the ticket as it was —
+    // the api's one transaction, in fixture form.
+    if (request.blockSender) {
+      if (sender === null || !this.#blockList.offerBlockSender) {
+        throw new Error('this ticket offers no sender to block');
+      }
+      this.#blockList.block(sender, { idempotent: true, sourceTicketId: ticketId });
+    }
+
+    return this.update(brandId, ticketId, { statusId: MOCK_STATUS_SPAM });
+  }
+
+  async unmarkSpam(brandId: string, ticketId: string): Promise<Ticket> {
+    // The api's `ticket-not-spam`, which the workspace draws as any failure.
+    if (!this.#require(ticketId).status.isSpam) {
+      throw new Error(`not marked as spam: ${ticketId}`);
+    }
+
+    return this.update(brandId, ticketId, { statusId: this.#defaultStatus().id });
+  }
 
   #page(ticketId: string, after: number): TicketMessagePage {
     const all = this.#messages

@@ -19,6 +19,9 @@ import { ticketStatuses } from './schema/ticket-statuses.js';
  * §2.2 makes it the reason a close schedules no CSAT. Without it, "is this the
  * Spam status?" could only be answered by the row's name, which a brand may
  * change.
+ *
+ * `is_spam` is M1-11's, for the reason the column gives: Merged is excluded
+ * from reports too, so that flag cannot tell the two apart.
  */
 export const BUILT_IN_TICKET_STATUSES = [
   {
@@ -29,6 +32,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: true,
+    isSpam: false,
     excludedFromReports: false,
     sortOrder: 10,
     color: 'info',
@@ -41,6 +45,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: true,
     awaitingCustomer: true,
     isDefault: false,
+    isSpam: false,
     excludedFromReports: false,
     sortOrder: 20,
     color: 'warning',
@@ -53,6 +58,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    isSpam: false,
     excludedFromReports: false,
     sortOrder: 30,
     color: 'escalated',
@@ -65,6 +71,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    isSpam: false,
     excludedFromReports: false,
     sortOrder: 40,
     color: 'success',
@@ -77,6 +84,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    isSpam: true,
     excludedFromReports: true,
     sortOrder: 50,
     color: 'danger',
@@ -89,6 +97,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     pausesSla: false,
     awaitingCustomer: false,
     isDefault: false,
+    isSpam: false,
     excludedFromReports: true,
     sortOrder: 60,
     color: 'success',

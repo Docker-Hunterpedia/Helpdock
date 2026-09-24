@@ -17,6 +17,7 @@ const settings = {
   // M1-10 nested the brand's content policy in here rather than adding a column
   // of its own; it fills itself in the same way every other key does.
   contentPolicy: DEFAULT_CONTENT_POLICY,
+  offerBlockSender: true,
 };
 
 const row = {
@@ -54,6 +55,8 @@ describe('brandSettingsSchema', () => {
       autoAwaitOnAgentReply: true,
       reopenPolicy: { kind: 'within_days', days: 7 },
       contentPolicy: DEFAULT_CONTENT_POLICY,
+      // M1-11: the "Mark as spam" dialog offers "Block sender" unless told not to.
+      offerBlockSender: true,
     });
   });
 
@@ -100,6 +103,7 @@ describe('parseBrandSettings', () => {
       autoAwaitOnAgentReply: false,
       reopenPolicy: { kind: 'never' },
       contentPolicy: DEFAULT_CONTENT_POLICY,
+      offerBlockSender: true,
     });
   });
 

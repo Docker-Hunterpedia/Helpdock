@@ -1,4 +1,5 @@
 import type {
+  MarkSpamRequest,
   MessageCreateRequest,
   Ticket,
   TicketActivityList,
@@ -11,6 +12,7 @@ import type {
   TicketPriority,
   TicketSort,
   TicketSortDirection,
+  TicketSpamSender,
   TicketStatusList,
   TicketSystemState,
   TicketUpdateRequest,
@@ -45,6 +47,15 @@ export interface TicketsApi {
   create(brandId: string, request: TicketCreateRequest): Promise<TicketDetail>;
   update(brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket>;
   reply(brandId: string, ticketId: string, request: MessageCreateRequest): Promise<TicketMessage>;
+
+  // ---------------------------------------------------------------- M1-11
+
+  /** What the "Mark as spam" dialog reads before it opens. */
+  spamSender(brandId: string, ticketId: string): Promise<TicketSpamSender>;
+  /** Moves the ticket to Spam and, when asked, blocks its sender in the same transaction. */
+  markSpam(brandId: string, ticketId: string, request: MarkSpamRequest): Promise<Ticket>;
+  /** "Not spam": back to the brand's default open status. */
+  unmarkSpam(brandId: string, ticketId: string): Promise<Ticket>;
 }
 
 /**

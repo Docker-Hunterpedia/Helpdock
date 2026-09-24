@@ -1,5 +1,6 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import { MediaRepository } from '../media/media.repository.js';
+import { BlockListService } from '../ticketing/block-list.service.js';
 import { TagsService } from '../ticketing/tags.service.js';
 import { TemplatesService } from '../ticketing/templates.service.js';
 import { TicketLifecycleHooks } from './lifecycle/hooks.js';
@@ -7,6 +8,8 @@ import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from './lifecycle/lifecycle.service.js';
 import { TicketingSettingsController } from './lifecycle/ticketing-settings.controller.js';
 import { TicketingSettingsService } from './lifecycle/ticketing-settings.service.js';
+import { TicketSpamController } from './ticket-spam.controller.js';
+import { TicketSpamService } from './ticket-spam.service.js';
 import { TicketsController } from './tickets.controller.js';
 import { TicketRepository } from './tickets.repository.js';
 import { TicketsService } from './tickets.service.js';
@@ -44,7 +47,7 @@ export class TicketsModule {
     return {
       module: TicketsModule,
       imports: [ticketing],
-      controllers: [TicketsController, TicketingSettingsController],
+      controllers: [TicketsController, TicketingSettingsController, TicketSpamController],
       providers: [
         TicketRepository,
         {
@@ -80,6 +83,16 @@ export class TicketsModule {
         // dynamic module for one stateless class would tie the two modules'
         // construction together.
         MediaRepository,
+        // M1-11. The block list is `TicketingModule`'s and exported from it.
+        {
+          provide: TicketSpamService,
+          inject: [TicketRepository, TicketLifecycleService, BlockListService],
+          useFactory: (
+            tickets: TicketRepository,
+            lifecycle: TicketLifecycleService,
+            blockList: BlockListService,
+          ): TicketSpamService => new TicketSpamService(tickets, lifecycle, blockList),
+        },
       ],
     };
   }

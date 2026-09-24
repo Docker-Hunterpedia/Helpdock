@@ -1,7 +1,8 @@
 import { auditLog, type DbTransaction } from '@helpdock/db';
 
 /**
- * Who changed a brand's tags, custom fields or templates, and to what.
+ * Who changed a brand's tags, custom fields, templates or block list, and to
+ * what.
  *
  * Its own verbs rather than an extension of `brands/audit.ts`, because the two
  * describe different things and the union in each file is what stops a typo
@@ -27,9 +28,18 @@ export type TicketingAuditAction =
   | 'custom_field.reordered'
   | 'ticket_template.created'
   | 'ticket_template.updated'
-  | 'ticket_template.deleted';
+  | 'ticket_template.deleted'
+  // M1-11
+  | 'blocked_sender.created'
+  | 'blocked_sender.deleted'
+  | 'brand.spam_settings.updated';
 
-export type TicketingAuditTarget = 'tag' | 'custom_field' | 'ticket_template' | 'brand';
+export type TicketingAuditTarget =
+  | 'tag'
+  | 'custom_field'
+  | 'ticket_template'
+  | 'blocked_sender'
+  | 'brand';
 
 export interface TicketingAuditEntry {
   readonly brandId: string;

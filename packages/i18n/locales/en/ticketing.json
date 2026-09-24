@@ -10,7 +10,8 @@
     "customFields": "Custom fields",
     "templates": "Templates",
     "views": "Views",
-    "assignment": "Assignment"
+    "assignment": "Assignment",
+    "spam": "Spam"
   },
   "soon": {
     "heading": "Not built yet",
@@ -124,7 +125,13 @@
     "templateUpdated": "{{name}} saved",
     "templateDeleted": "{{name}} deleted",
     "fieldInUse": "Rows already carry values for this field, so its type cannot change.",
-    "optionInUse": "Rows still carry one of the options you removed."
+    "optionInUse": "Rows still carry one of the options you removed.",
+    "senderBlocked": "Blocked {{value}}",
+    "senderUnblocked": "Unblocked {{value}}",
+    "spamSettingsSaved": "Spam settings saved",
+    "senderInvalid": "That is not a valid sender of this kind.",
+    "senderIsOwn": "A domain your brand sends from cannot be blocked.",
+    "senderAlreadyBlocked": "That sender is already on the block list."
   },
   "statuses": {
     "add": "Add status",
@@ -407,6 +414,70 @@
         "title": "Delete {{name}}?",
         "body": "Tickets already filed from it are untouched. Nothing else changes.",
         "submit": "Delete template"
+      }
+    }
+  },
+  "spam": {
+    "blockList": {
+      "heading": "Block list",
+      "caption": "Senders whose messages never become tickets in this brand.",
+      "add": "Block a sender",
+      "search": "Search the block list",
+      "searchPlaceholder": "Search senders",
+      "table": {
+        "caption": "Blocked senders of {{brand}}",
+        "sender": "Sender",
+        "kind": "Kind",
+        "addedBy": "Added by",
+        "added": "Added",
+        "dropped": "Dropped",
+        "unblock": "Unblock {{value}}",
+        "formerStaff": "Former staff"
+      },
+      "empty": {
+        "heading": "Nobody is blocked",
+        "body": "Block a sender here, or tick \"Block sender\" when you mark a ticket as spam."
+      },
+      "noMatch": {
+        "heading": "No sender matches",
+        "body": "Try part of the address, the domain or the number."
+      }
+    },
+    "kinds": {
+      "email": "Address",
+      "domain": "Domain",
+      "phone": "Phone",
+      "telegram": "Telegram"
+    },
+    "form": {
+      "heading": "Block a sender",
+      "kind": "Kind",
+      "value": "Sender",
+      "kinds": {
+        "email": "Email address",
+        "domain": "Email domain",
+        "phone": "Phone",
+        "telegram": "Telegram"
+      },
+      "hints": {
+        "email": "The whole address, such as spam@promo-deals.biz.",
+        "domain": "Blocks every address at this domain and below it.",
+        "phone": "In international form, such as +963 931 234 567.",
+        "telegram": "The chat id the bot reports, digits only."
+      },
+      "submit": "Block"
+    },
+    "status": {
+      "heading": "Spam status",
+      "body": "A ticket marked as spam is closed, sends no auto-reply and no CSAT, and is left out of reports. Purged after the brand's spam retention.",
+      "offer": "Offer \"Block sender\" when marking as spam",
+      "offerHint": "Later messages from a blocked sender are dropped before a ticket is created, and counted here."
+    },
+    "confirm": {
+      "unblock": {
+        "title": "Unblock {{value}}?",
+        "body": "Their next messages become tickets again.",
+        "submit": "Unblock"
       }
     }
   }

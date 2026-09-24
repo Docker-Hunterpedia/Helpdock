@@ -21,6 +21,7 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketLifecycleRefusal, string>> = {
   'ticket-merged': 'This ticket was merged into another one; act on that one instead',
   'ticket-deleted': 'This ticket is deleted',
   'ticket-not-closed': 'This ticket is not closed, so there is nothing to reopen',
+  'ticket-not-spam': 'This ticket is not marked as spam',
 };
 
 export class TicketLifecycleFailure extends HttpException {

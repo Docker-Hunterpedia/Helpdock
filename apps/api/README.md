@@ -441,6 +441,8 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/ticket-statuses/*` | `@Requires('ticketing:manage')` | The Statuses tab: create, edit, reorder, delete, and the count a delete confirmation prints. [The guide](../../docs/guides/ticketing-settings.md#statuses). |
 | `PATCH /api/brands/:brandId/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of DOMAIN-RULES §2.3 a Team Leader may change. |
 | `/api/brands/:brandId/{tags,custom-fields,ticket-templates}*` | `ticket:read` or `ticket:write` to read, `ticketing:manage` to change | The brand's tags, custom field definitions and ticket templates. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
+| `/api/brands/:brandId/blocked-senders*`, `PATCH …/ticketing/spam-settings` | `@Requires('ticketing:manage')` | M1-11's Spam tab: the sender block list and `offerBlockSender`. [The settings guide](../../docs/guides/ticketing-settings.md#spam). |
+| `/api/brands/:brandId/tickets/:ticketId/{spam,spam-sender}` | `ticket:write` to mark or unmark, `ticket:read` for what the dialog offers | "Mark as spam" and "Not spam". [The ticket guide](../../docs/guides/tickets.md#spam). |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
@@ -495,7 +497,8 @@ code.
 | `lifecycle/status-rules.ts` | What may be done to a status row, as pure functions — the same shape `brands/department-scope.ts` uses, and for the same reason. |
 | `lifecycle/ticketing-settings.*` | The Statuses tab and the Reply behaviour card over HTTP, under the new `ticketing:manage`. |
 | `ticket-activity.ts` | The activity row, written in the caller's transaction. |
-| `ticket-events.ts` | The four outbox events and the handler the worker registers for them. |
+| `ticket-events.ts` | The ticket outbox events — `ticket.spam` among them, never heard as a close — and the handler the worker registers for them. |
+| `ticket-spam.*`, `spam-sender.ts` | M1-11: "Mark as spam" and "Not spam" over HTTP, putting the lifecycle's `markSpam` and the block list in one transaction; `spam-sender.ts` picks which of a contact's identifiers the ticket's channel makes the sender. |
 | `ticket-view.ts` | Rows to the wire shapes, in one place, so a column added to a table does not quietly become a field in a response. |
 
 Four things are easy to get wrong here and are written down where they happen:
@@ -526,6 +529,8 @@ follows is for somebody reading the code.
 | `ticket-tags.ts` | Reading and replacing a ticket's chips. Plain functions over the caller's transaction, as `tickets/ticket-activity.ts` is, so the ticket service uses them without depending on this module. `tagsOfTickets` reads a whole page in one query. |
 | `custom-fields.repository.ts` | The only jsonb work in the app: counting rows that carry a value or an option, and clearing an option from them under `force`. |
 | `audit.ts` | Definition changes go to `audit_log`; putting a tag on a ticket goes to `ticket_activity`, because that one is part of the ticket and is purged with it. |
+| `block-list.*`, `block-rules.ts` | M1-11's sender block list. The rules — what counts as the brand's own sender, which rows a sender matches, which match is charged — are pure functions in `block-rules.ts`. |
+| `sender-gate.ts` | `isSenderBlocked`, the inbound gate M2, M4 and M6 call before they create a contact or a ticket. It counts the drop in the caller's transaction. |
 
 Three things are easy to get wrong here:
 

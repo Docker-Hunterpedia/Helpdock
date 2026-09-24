@@ -225,6 +225,7 @@ describe('the brand', () => {
         autoAwaitOnAgentReply: false,
         reopenPolicy: { kind: 'never' },
         contentPolicy: DEFAULT_CONTENT_POLICY,
+        offerBlockSender: true,
       },
     });
 

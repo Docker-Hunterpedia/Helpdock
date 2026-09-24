@@ -39,7 +39,10 @@ export type TicketActivityAction =
   | 'ticket.deleted'
   | 'ticket.escalated'
   /** M1-06. Its own verb rather than `ticket.updated`, because the thread draws chips. */
-  | 'ticket.tags.changed';
+  | 'ticket.tags.changed'
+  /** M1-11. Beside `ticket.status.changed`, as `ticket.closed` is, so the log says why. */
+  | 'ticket.marked_spam'
+  | 'ticket.unmarked_spam';
 
 /**
  * The actor behind a change, in the three words the activity log records.

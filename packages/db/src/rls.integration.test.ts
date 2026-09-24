@@ -11,6 +11,7 @@ import {
   accounts,
   attachments,
   auditLog,
+  blockedSenders,
   brandDomains,
   brands,
   contactDuplicateSuggestions,
@@ -249,6 +250,13 @@ const fixtures = [
         subject: 'Refund for {{contact.name}}',
         bodyText: 'We have started your refund.',
       }),
+  },
+  {
+    name: 'blocked_senders',
+    insert: (tx: DbTransaction, brandId: string) =>
+      // The same sender in both brands: a block is the brand's own decision
+      // and says nothing about the brand next door.
+      tx.insert(blockedSenders).values({ brandId, kind: 'domain', value: 'promo-deals.biz' }),
   },
   {
     name: 'tickets',

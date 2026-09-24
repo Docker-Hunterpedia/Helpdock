@@ -77,6 +77,12 @@ export const brandSettingsSchema = z.object({
    * {@link ./media.js contentPolicySchema}.
    */
   contentPolicy: contentPolicySchema.default(contentPolicySchema.parse({})),
+  /**
+   * Whether the "Mark as spam" dialog offers "Block sender" (M1-11). On by
+   * default: the artboard draws it ticked, and a brand that finds agents
+   * blocking too eagerly turns it off on Ticketing › Spam.
+   */
+  offerBlockSender: z.boolean().default(true),
 });
 export type BrandSettings = z.infer<typeof brandSettingsSchema>;
 

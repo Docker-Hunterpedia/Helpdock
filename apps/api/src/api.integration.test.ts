@@ -526,6 +526,7 @@ describe.skipIf(!hasDocker)('the api', () => {
           autoAwaitOnAgentReply: true,
           reopenPolicy: { kind: 'within_days', days: 7 },
           contentPolicy: DEFAULT_CONTENT_POLICY,
+          offerBlockSender: true,
         },
       });
     });

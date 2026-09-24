@@ -45,7 +45,8 @@
     "viewingOne": "{{name}} is viewing",
     "viewingMany": "{{name}} and {{others}} others are viewing",
     "details": "Details",
-    "closeDetails": "Close the details"
+    "closeDetails": "Close the details",
+    "menu": "Ticket actions"
   },
   "sla": {
     "label": "Service level",
@@ -197,7 +198,10 @@
     "noted": "Note added",
     "updated": "Ticket updated",
     "failed": "That did not work. Try again.",
-    "sendFailed": "Not sent. Try again."
+    "sendFailed": "Not sent. Try again.",
+    "markedSpam": "Marked as spam",
+    "markedSpamBlocked": "Marked as spam and blocked {{sender}}",
+    "notSpam": "Moved back to open"
   },
   "keyboard": {
     "label": "Keyboard shortcuts",
@@ -212,5 +216,16 @@
     "mime_not_allowed": "This brand does not accept that file type.",
     "upload_failed": "That file did not upload. Try again.",
     "cancelled": "That upload was cancelled."
+  },
+  "actions": {
+    "markSpam": "Mark as spam",
+    "notSpam": "Not spam"
+  },
+  "spam": {
+    "title": "Mark {{ticket}} as spam?",
+    "body": "The ticket closes with the Spam status. No auto-reply and no CSAT are sent, and it is left out of reports.",
+    "block": "Block",
+    "blockHint": "Their next messages are dropped. Undo from Ticketing › Spam.",
+    "submit": "Mark as spam"
   }
 }

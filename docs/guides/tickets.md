@@ -286,7 +286,7 @@ change to one without the other fails.
 | open-like | Agent closes | `closed_at` set, `onResolved`, and `onClosedForCsat` unless excluded |
 | `closed` | Customer reply | The reopen policy, below |
 | `closed` | Agent reopens | Default open status, `closed_at` cleared, `onReopened` |
-| any | Marked spam | Spam. M1-11 owns what else that means |
+| any | Marked spam | Spam: `closed_at` kept or set, `onResolved`, **no** `onClosedForCsat`, `ticket.spam` rather than `ticket.closed`; see [Spam](#spam) |
 | any | Merged | Merged. M1-09 owns the rest |
 | any | Soft-deleted by Admin | Hidden from every view; purged by retention (§11) |
 
@@ -294,8 +294,9 @@ Two facts are checked **before** the table and refuse every event, because they
 answer all of them the same way: a ticket with `merged_into_id` belongs to the
 one it was merged into (§2.4), and a soft-deleted ticket is not acted on at all.
 Both answer **409** with `error.lifecycle.reason` — `ticket-merged`,
-`ticket-deleted`, or `ticket-not-closed` for a reopen of something that was
-never closed — so the screen picks a sentence rather than printing the api's.
+`ticket-deleted`, `ticket-not-closed` for a reopen of something that was
+never closed, or `ticket-not-spam` for "Not spam" on a ticket that is not — so
+the screen picks a sentence rather than printing the api's.
 
 An agent "closing" a ticket *is* an agent setting a status whose system state is
 `closed`: there is one control on the screen and it is a status picker. Which of
@@ -310,7 +311,8 @@ Never by name — a brand may rename any of them (`packages/db/src/ticket-status
 |---|---|
 | Where a new or reopened ticket lands | `is_default` |
 | Awaiting customer | `awaiting_customer`, seeded rows first |
-| No CSAT, out of reports | `excluded_from_reports` |
+| No CSAT, out of reports | `excluded_from_reports` (Spam and Merged) |
+| Spam | `is_spam`, one row per brand (M1-11) |
 | The secondary of a merge | `merged_into_id` on the *ticket* |
 
 ### The reopen policy
@@ -376,16 +378,69 @@ answer a ticket in another department gives. A 410 would confirm it had existed.
 The department-delete guard still counts it, which is what stops a department
 being removed out from under a ticket that could be restored.
 
+### Spam
+
+[DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions): "Marked spam —
+Spam status; no auto-responder, no CSAT, sender added to block list if the agent
+ticks 'block sender', excluded from reports and round-robin counts." M1-11.
+
+**Marking** is `POST /tickets/:ticketId/spam` with `{ "blockSender": true|false }`.
+The ticket moves to the brand's Spam status — the row with `is_spam`, never
+found by name — and in the same transaction:
+
+- `ticket.status.changed` and `ticket.marked_spam` go to the activity log;
+- a ticket that was open-like gets `closed_at` and fires `onResolved`, so M3's
+  clock stops; one that was already closed keeps its `closed_at`;
+- `onClosedForCsat` does **not** fire, because Spam is `excluded_from_reports`;
+- the outbox gets **`ticket.spam`**, not `ticket.closed`, so nothing that acts
+  on a close — a survey, an auto-responder — can mistake spam for one;
+- with `blockSender`, the ticket's sender goes on the block list
+  ([ticketing settings](ticketing-settings.md#spam)). Which identifier is the
+  sender follows the channel: a Telegram ticket blocks the chat, anything else
+  the contact's address, then phone, then chat. A visitor id or an external id
+  is never blocked. The brand's own address or domain is refused
+  (`sender-is-own`) and the whole request rolls back with it.
+
+Picking Spam from the status picker is the same move without the block, and it
+sends `ticket.spam` too. `GET /tickets/:ticketId/spam-sender` is what the dialog
+reads first: the sender, whether the brand offers the checkbox
+(`offerBlockSender`), whether it may be blocked, and whether it already is.
+
+**"Not spam"** is `DELETE /tickets/:ticketId/spam`. It is an agent reopen: the
+default open status, `closed_at` cleared, `onReopened`, `ticket.reopened` — a
+ticket wrongly marked as spam is a ticket somebody is still waiting on. On a
+ticket that is not spam it answers 409 `ticket-not-spam` (or `ticket-not-closed`
+when it is not closed at all). A block made with it stays; undoing that is the
+Spam tab's.
+
+**What being spam means to everybody else** is one predicate, read off the
+status and never off its name, exported from `@helpdock/schemas`:
+
+| Consumer | Asks | And then |
+|---|---|---|
+| Auto-responders (M2) | `isSpamStatus(status)` | send nothing |
+| CSAT (M1-12) | nothing: the lifecycle already withholds `onClosedForCsat` | — |
+| Round-robin and load caps (M1-07) | `countsInReports(status)` | a spam or merged ticket counts against nobody |
+| Reports (M3) | `countsInReports(status)`, or `ticket_statuses.excluded_from_reports = false` in SQL | left out |
+| Retention (M1-14) | `ticket_statuses.is_spam` | purged after the brand's spam retention (§11, 30 days by default) |
+
+The default views already leave spam out: every one of them asks only for
+open-like system states, and Spam is `closed`. "All tickets" shows it, with its
+danger badge, because that view is the desk's whole history. M1 has no report
+or count query yet, so there is nothing else to exclude it from today.
+
 ## Side effects and realtime
 
 Every mutation writes its outbox row in the same transaction as the change
-([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)). Six
+([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)). Seven
 events: `ticket.created`, `ticket.updated`, `ticket.replied`,
-`ticket.note_added`, and — from M1-08 — `ticket.closed` and `ticket.reopened`.
+`ticket.note_added`, from M1-08 `ticket.closed` and `ticket.reopened`, and from
+M1-11 `ticket.spam`.
 
-The last two carry the same payload as `ticket.updated` and reach the same
+The last three carry the same payload as `ticket.updated` and reach the same
 rooms. What they add is a name, so M1-12's survey and M3's clocks can consume
-one event instead of diffing two reads of the ticket.
+one event instead of diffing two reads of the ticket — and so a move into Spam
+is never heard as a close.
 
 ```
 request  →  tickets + ticket_activity + outbox   (one transaction)
@@ -428,6 +483,9 @@ which departments it reaches is the policies'.
 | `GET /tickets/:ticketId/activity` | `ticket:read` | The newest 100 activity entries, oldest first. It does not page yet |
 | `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
 | `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
+| `GET /tickets/:ticketId/spam-sender` | `ticket:read` | Who "Block sender" would block, and whether the dialog offers it (M1-11) |
+| `POST /tickets/:ticketId/spam` | `ticket:write` | Marks it as spam, and blocks the sender when `blockSender` is true (M1-11) |
+| `DELETE /tickets/:ticketId/spam` | `ticket:write` | "Not spam": back to the default open status (M1-11) |
 
 ### Listing
 
@@ -720,6 +778,17 @@ caret in the composer, `n` does the same in note mode, and `Esc` closes a
 drawer or a dialog. A single letter is only a shortcut while nobody is writing:
 anything typed into a field is left alone, as is anything carrying a modifier.
 
+### The ⋯ menu
+
+The button beside Macro in the header opens the ticket's actions menu
+(`Admin · ticket dialogs`, panel 2). Its items are an array each deliverable
+contributes to — `ticket-actions-menu.tsx` draws whatever it is handed — so
+merge and split (M1-09) and log time (M1-12) add entries rather than markup.
+M1-11's is the last: **Mark as spam**, in danger text behind a separator, which
+opens the confirmation of panel 5 with a ticked "Block <sender>" card when the
+api says the sender may be blocked; or **Not spam** on a ticket already in
+Spam, which reopens it at once. A merged secondary offers neither.
+
 ### What the screen cannot do yet, and why
 
 | Drawn | State | Owner |
@@ -752,7 +821,7 @@ the ticket list row would close that, and is a change to M1-02's response.
 | M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
-| M1-11 | Spam semantics on the seeded Spam status, and the sender block list |
+| M1-11 | Shipped in branch. `is_spam` on the Spam status, `POST`/`DELETE …/spam`, `ticket.spam`, the sender block list and its inbound gate ([Spam](#spam)) |
 | M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
 | M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |

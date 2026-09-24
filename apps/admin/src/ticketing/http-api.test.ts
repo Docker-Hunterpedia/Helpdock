@@ -417,3 +417,67 @@ describe('ticket templates', () => {
     expect(lastCall().url).toContain('/preview');
   });
 });
+
+describe('the block list (M1-11)', () => {
+  const BLOCKED = '0192c3f0-1a2b-7c3d-8e4f-0000000bb001';
+  const row = {
+    id: BLOCKED,
+    kind: 'domain',
+    value: 'promo-deals.biz',
+    createdByName: 'Lina',
+    sourceTicketId: null,
+    droppedCount: 112,
+    lastDroppedAt: null,
+    createdAt: '2026-09-12T09:00:00.000Z',
+  };
+
+  it('reads the list', async () => {
+    fetchMock.mockResolvedValue(json({ senders: [row] }));
+
+    const { senders } = await api.blockedSenders(BRAND);
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/blocked-senders`);
+    expect(senders[0]?.droppedCount).toBe(112);
+  });
+
+  it('blocks a sender with the kind and the value as typed', async () => {
+    fetchMock.mockResolvedValue(json(row, 201));
+
+    await api.blockSender(BRAND, { kind: 'domain', value: '@Promo-Deals.biz' });
+
+    expect(lastCall().init.method).toBe('POST');
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({
+      kind: 'domain',
+      value: '@Promo-Deals.biz',
+    });
+  });
+
+  it('turns the brand’s own domain into the refusal the card draws', async () => {
+    fetchMock.mockResolvedValue(ticketingFailure('sender-is-own'));
+
+    const error = await api
+      .blockSender(BRAND, { kind: 'domain', value: 'helpdock.com' })
+      .catch((caught: unknown) => caught);
+
+    expect(isTicketingError(error) && error.reason).toBe('sender-is-own');
+  });
+
+  it('unblocks by id', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await api.unblockSender(BRAND, BLOCKED);
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/blocked-senders/${BLOCKED}`);
+    expect(lastCall().init.method).toBe('DELETE');
+  });
+
+  it('saves the Spam tab’s setting on its own narrow route', async () => {
+    fetchMock.mockResolvedValue(json({ offerBlockSender: false }));
+
+    const settings = await api.updateSpamSettings(BRAND, { offerBlockSender: false });
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/ticketing/spam-settings`);
+    expect(lastCall().init.method).toBe('PATCH');
+    expect(settings.offerBlockSender).toBe(false);
+  });
+});

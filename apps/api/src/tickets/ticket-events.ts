@@ -52,16 +52,23 @@ export const TICKET_EVENTS = {
    */
   closed: 'ticket.closed',
   reopened: 'ticket.reopened',
+  /**
+   * M1-11. Not `ticket.closed`, although the ticket is closed by it: whatever
+   * subscribes to a close — a survey, an auto-responder — must not be able to
+   * mistake spam for one (DOMAIN-RULES §2.2).
+   */
+  spam: 'ticket.spam',
 } as const;
 
 export type TicketEvent = (typeof TICKET_EVENTS)[keyof typeof TICKET_EVENTS];
 
-/** The four that describe the ticket rather than a message in its thread. */
+/** The events that describe the ticket rather than a message in its thread. */
 const TICKET_CHANGE_EVENTS = new Set<string>([
   TICKET_EVENTS.created,
   TICKET_EVENTS.updated,
   TICKET_EVENTS.closed,
   TICKET_EVENTS.reopened,
+  TICKET_EVENTS.spam,
 ]);
 
 /**
@@ -125,8 +132,8 @@ export const roomsFor = (payload: TicketEventPayload): readonly string[] => {
 };
 
 /**
- * The handler registered for all four ticket events. It is one function rather
- * than four because the difference between them is the payload shape, and the
+ * The handler registered for every ticket event. It is one function rather
+ * than one each because the difference between them is the payload shape, and the
  * schemas already say what that is.
  */
 export const createTicketEventHandler =

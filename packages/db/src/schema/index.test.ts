@@ -27,6 +27,7 @@ describe('the schema', () => {
       'accounts',
       'attachments',
       'audit_log',
+      'blocked_senders',
       'brand_domains',
       'brands',
       'contact_duplicate_suggestions',

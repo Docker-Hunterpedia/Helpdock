@@ -1,4 +1,7 @@
 import type {
+  BlockedSender,
+  BlockedSenderCreateRequest,
+  BlockedSenderList,
   Brand,
   BrandSettings,
   BrandUpdateRequest,
@@ -14,6 +17,7 @@ import type {
   DepartmentUpdateRequest,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
   TagSummary,
@@ -145,6 +149,15 @@ export interface TicketingApi {
   deleteTicketTemplate(brandId: string, templateId: string): Promise<void>;
   /** The template with its placeholders filled, rendered by the api. */
   previewTicketTemplate(brandId: string, templateId: string): Promise<TicketTemplatePreview>;
+
+  // ---------------------------------------------------------------- M1-11
+
+  /** The brand's sender block list, newest first, with each row's dropped count. */
+  blockedSenders(brandId: string): Promise<BlockedSenderList>;
+  blockSender(brandId: string, request: BlockedSenderCreateRequest): Promise<BlockedSender>;
+  unblockSender(brandId: string, blockedSenderId: string): Promise<void>;
+  /** The Spam tab's one setting: whether "Mark as spam" offers "Block sender". */
+  updateSpamSettings(brandId: string, request: SpamSettingsUpdateRequest): Promise<BrandSettings>;
 }
 
 /**

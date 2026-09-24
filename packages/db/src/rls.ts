@@ -65,6 +65,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // is filed — not who may read it. The picker on the create screen shows every
   // template the brand has.
   { name: 'ticket_templates', departmentScoped: false },
+  // M1-11. A sender is blocked from the brand, not from a queue: the inbound
+  // gate runs before a ticket, and so before a department, exists.
+  { name: 'blocked_senders', departmentScoped: false },
   { name: 'tickets', departmentScoped: true },
   { name: 'ticket_messages', departmentScoped: true },
   { name: 'ticket_activity', departmentScoped: true },

@@ -31,6 +31,7 @@ import { assignableStaff } from './directory.js';
 import { paragraph } from './format.js';
 import { Thread, type ThreadNames } from './thread.tsx';
 import { TicketHeader } from './ticket-header.tsx';
+import { useSpamActions } from './use-spam-actions.tsx';
 import { useTicketRoom } from './use-ticket-realtime.js';
 import type { WorkspaceData } from './use-workspace-data.js';
 
@@ -96,6 +97,9 @@ export function TicketView({
   });
 
   const { viewerIds } = useTicketRoom(brandId, ticketId, viewer.id);
+
+  // M1-11: "Mark as spam" / "Not spam" in the header menu, and its dialog.
+  const spam = useSpamActions(brandId, detail.data?.ticket);
 
   /**
    * The brand's content policy, for the picker's courtesy check. It is the
@@ -355,6 +359,7 @@ export function TicketView({
           viewers={viewerNames}
           now={now}
           showDetailsButton={detailsInDrawer}
+          actions={spam.items}
           onShowDetails={() => {
             onDetailsOpenChange(true);
           }}
@@ -414,6 +419,8 @@ export function TicketView({
           />
         </Box>
       </Box>
+
+      {spam.dialog}
 
       {detailsInDrawer ? (
         <Drawer

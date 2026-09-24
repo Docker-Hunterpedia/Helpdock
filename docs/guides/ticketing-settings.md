@@ -4,10 +4,10 @@ How a brand's tickets are shaped and routed: departments, the teams inside
 them, and the brand-level behaviour that later deliverables read. The screen is
 **Admin → Ticketing**, and this guide follows its tab row.
 
-Five tabs are built: **Departments** (M1-01), **Statuses** (M1-08) and **Tags**,
-**Custom fields** and **Templates** (M1-06). The other three exist so the row is
-whole and each says which deliverable fills it: Priorities with M1-02, Views
-with M1-05, Assignment with M1-07.
+Six tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
+**Custom fields** and **Templates** (M1-06), and **Spam** (M1-11). The other
+three exist so the row is whole and each says which deliverable fills it:
+Priorities with M1-02, Views with M1-05, Assignment with M1-07.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -26,6 +26,8 @@ version:
 | Read the tags, custom fields and templates | yes | yes | yes |
 | Add, edit, reorder or delete tags, custom fields and templates | yes | yes | no |
 | Put tags on a ticket | yes | yes | Agent yes, Viewer no |
+| Read, add or remove blocked senders; change the Spam setting | yes | yes | no |
+| Mark a ticket as spam, and block its sender from the dialog | yes | yes | Agent yes, Viewer no |
 
 "Which departments a brand has" is the brand's shape, so it stays with the
 Admin. "What is inside one" is the Team Leader's, which is what §1.2 means by
@@ -375,6 +377,76 @@ admin never fills placeholders itself, because the renderer is what decides
 which names a placeholder may reach and a second implementation would be a
 second answer to that.
 
+## Spam
+
+The **Spam** tab (M1-11, the `Admin/Ticketing › Spam` artboard) is the brand's
+sender block list and the one setting that goes with it. What marking a ticket
+as spam does to the ticket is in [Tickets › Spam](tickets.md#spam).
+
+### The block list
+
+"Senders whose messages never become tickets in this brand." One row per
+sender, newest first, with who added it, when, and **Dropped** — how many
+inbound messages it has stopped. The counter is the only thing a match writes,
+so it is how an Admin tells a block that is doing something from a stale one.
+The search box matches any part of the value.
+
+| Kind | Stored as | Matches |
+|---|---|---|
+| Email address | lower-cased, as `contact_identities` stores it | that address |
+| Email domain | lower-cased punycode, no leading `@` or trailing dot | every address at that domain **or below it**: blocking `promo-deals.biz` also drops `news.promo-deals.biz` |
+| Phone | E.164 by [ADR 0008](../decisions/0008-phone-normalisation.md): `+` and digits; a national number takes the install's `contacts.defaultCallingCode` | that number |
+| Telegram | the chat id the Bot API gives, digits only | that chat |
+
+Every value goes through the same `@helpdock/schemas` normaliser a contact
+identifier does, so a spelling the list stores is the spelling a channel
+compares. An address blocked **and** its domain blocked is one drop, charged to
+the address — the most specific row.
+
+**"Block a sender"** opens the card in the end column. Three refusals are drawn
+under the field, where they are fixed, rather than as a toast:
+
+| Refusal | When |
+|---|---|
+| `sender-invalid` | The value is not an address, a domain, a phone number or a chat id |
+| `sender-is-own` | "A domain your brand sends from cannot be blocked": the install's `smtp.from` address or its domain, a hostname in `brand_domains`, a parent of either, or anything below either |
+| `sender-already-blocked` | The row exists already |
+
+**Unblock** is the bin on each row, behind a confirmation. The counter is
+written to the audit row, because afterwards it is the only record of what the
+block had been doing. The audit log names the kind, never the value: an address
+is personal data and the audit log outlives the block.
+
+> **What a brand "sends from" today** is the install-wide `smtp.from` and the
+> brand's `brand_domains` hostnames. Per-brand mailboxes arrive with M2-08; the
+> check reads them from then on. `smtp.from` is read install-wide until
+> per-brand settings resolve, as `contacts.defaultCallingCode` already is.
+
+### The Spam status card
+
+"A ticket marked as spam is closed, sends no auto-reply and no CSAT, and is left
+out of reports." Its one control is **Offer "Block sender" when marking as
+spam** (`offerBlockSender`, on by default), saved as soon as it is toggled
+through `PATCH …/ticketing/spam-settings`. With it off, the "Mark as spam"
+dialog has no checkbox and a request that asks to block anyway is refused.
+
+### The inbound gate
+
+The list does nothing until a channel asks it. `isSenderBlocked(tx, brandId,
+{ kind, value })` in `apps/api/src/ticketing/sender-gate.ts` is what every
+channel that turns a customer's message into a ticket calls **before** it
+creates the contact or the ticket — M2's email poller and inbound-parse
+endpoint, M4's widget and web form, M6's Telegram bot. It normalises the value,
+finds the most specific matching row in one statement, increments its counter in
+the caller's transaction (so a drop that rolls back is not counted), and answers
+`{ blocked: true, blockedSenderId }` or `{ blocked: false }`. A value that does
+not normalise is answered "not blocked"; the channel's own contact path refuses
+it next.
+
+A staff member filing a ticket by hand is never gated: the block list is about
+who may reach the desk, not about whom the desk may write down. M1 has no
+customer-facing path that creates a ticket, so nothing calls the gate yet.
+
 ## Brand settings
 
 Each brand carries a small JSON object of ticketing behaviour. M1-01 stores and
@@ -384,6 +456,7 @@ serves it; the deliverables below act on it.
 |---|---|---|---|
 | `autoAwaitOnAgentReply` | `true` | Move a ticket to "Awaiting customer" when an agent sends a public reply (DOMAIN-RULES §2.1). | M1-08 ✓ |
 | `reopenPolicy` | `{ "kind": "within_days", "days": 7 }` | What a customer reply to a closed ticket does: `within_days` (1–365), `always`, or `never` (DOMAIN-RULES §2.3). | M1-08 ✓ |
+| `offerBlockSender` | `true` | Whether the "Mark as spam" dialog offers "Block sender". | M1-11 ✓ |
 
 Every key has a default, so a brand created before a key existed reads as the
 current shape rather than failing. A column somebody edited by hand into
@@ -468,6 +541,10 @@ there as well as in the brand it creates.
 | `GET /api/brands/:brandId/ticket-templates` | `@Requires('ticket:write')` | The picker's list. |
 | `GET …/ticket-templates/:templateId/preview` | `@Requires('ticket:write')` | The template rendered, with `?contactId=` optional. |
 | `POST/PATCH/DELETE …/ticket-templates[/:templateId]` | `@Requires('ticketing:manage')` | A Team Leader only inside the departments they lead. |
+| `GET /api/brands/:brandId/blocked-senders` | `@Requires('ticketing:manage')` | The block list with its counters. |
+| `POST /api/brands/:brandId/blocked-senders` | `@Requires('ticketing:manage')` | Blocks `{ kind, value }`; the value is normalised. |
+| `DELETE /api/brands/:brandId/blocked-senders/:blockedSenderId` | `@Requires('ticketing:manage')` | Unblocks. |
+| `PATCH …/ticketing/spam-settings` | `@Requires('ticketing:manage')` | `{ offerBlockSender }`. Team Leaders included. |
 
 ### Refusals
 
@@ -487,6 +564,9 @@ the translated copy:
 | `default-must-be-open` | 409 | The default is where a new or reopened ticket lands, so it has to be open-like. |
 | `field-in-use` | 409 | Rows already carry values for this custom field, so its type cannot change. |
 | `option-in-use` | 409 | Rows still carry an option the request removes. Send it again with `force` to clear them. |
+| `sender-invalid` | 400 | Not a valid sender of the kind named. |
+| `sender-is-own` | 409 | The brand sends from that address or domain. Also answered by "Mark as spam" with `blockSender`, which then rolls back. |
+| `sender-already-blocked` | 409 | That sender is on the list already. |
 
 A department of another brand is invisible to the request's transaction, so it
 answers **404**, not 403: "there is no such id" and "it is not yours" are the
@@ -495,19 +575,20 @@ same answer. The same holds for a tag, a custom field and a template — and, fo
 
 ## Data model
 
-Eight tenant tables, all under a `FORCE`d row-level security policy on
+Nine tenant tables, all under a `FORCE`d row-level security policy on
 `brand_id` (DOMAIN-RULES §1.3):
 
 | Table | Columns that matter | Notes |
 |---|---|---|
 | `departments` | `name`, `name_ar`, `default_team_id`, `sort_order` | Unique on `(brand_id, name)`. `default_team_id` is `ON DELETE SET NULL`. |
-| `ticket_statuses` | `system_state`, `pauses_sla`, `awaiting_customer`, `is_default`, `is_system`, `excluded_from_reports`, `sort_order`, `color` | Unique on `(brand_id, name)`. Brand-scoped, never department-scoped: an Agent reads the name of the status their own ticket is in. |
+| `ticket_statuses` | `system_state`, `pauses_sla`, `awaiting_customer`, `is_default`, `is_system`, `excluded_from_reports`, `is_spam`, `sort_order`, `color` | Unique on `(brand_id, name)`, and on `brand_id` where `is_spam` — one Spam per brand. Brand-scoped, never department-scoped: an Agent reads the name of the status their own ticket is in. |
 | `teams` | `department_id`, `name`, `sort_order` | Unique on `(department_id, name)`. Cascades from its department. |
 | `team_members` | `team_id`, `user_id` | Unique on `(team_id, user_id)`. Cascades from its team and from the account. |
 | `tags` | `name`, `name_ar`, `color`, `sort_order` | Unique on `(brand_id, lower(name))`, so two spellings of one label cannot both exist. |
 | `ticket_tags` | `ticket_id`, `tag_id`, `department_id` | Primary key is the pair, so "add this tag" is idempotent in the database. **Department-scoped.** |
 | `custom_field_defs` | `target`, `key`, `label`, `type`, `options`, `required`, `agent_visible` | Unique on `(brand_id, target, key)`. |
 | `ticket_templates` | `name`, `department_id`, `priority`, `subject`, `body_text`, `default_tag_ids`, `custom_defaults`, `usage_count` | Unique on `(brand_id, lower(name))`. `department_id` is `ON DELETE SET NULL`. |
+| `blocked_senders` | `kind`, `value`, `created_by`, `source_ticket_id`, `dropped_count`, `last_dropped_at` | Unique on `(brand_id, kind, value)`. `created_by` is `ON DELETE SET NULL`; `source_ticket_id` has no foreign key, because spam tickets are purged and the block outlives them. Brand-scoped, never department-scoped. |
 
 Neither `teams` nor `team_members` is department-scoped in the row-level
 security sense: §1.3 lists the six ticket-scoped tables and neither is one. A

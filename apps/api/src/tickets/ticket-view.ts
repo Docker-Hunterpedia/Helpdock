@@ -44,6 +44,7 @@ export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
   isDefault: row.isDefault,
   isSystem: row.isSystem,
   excludedFromReports: row.excludedFromReports,
+  isSpam: row.isSpam,
   sortOrder: row.sortOrder,
   color: row.color,
 });

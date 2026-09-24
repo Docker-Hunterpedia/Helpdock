@@ -10,6 +10,7 @@ import { MockStaffApi } from '../staff/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { HttpTicketingApi } from '../ticketing/http-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
+import { MockBlockList } from '../ticketing/mock-block-list.js';
 import type { TicketsApi } from '../tickets/api.js';
 import { HttpTicketsApi } from '../tickets/http-api.js';
 import { MockTicketsApi } from '../tickets/mock-api.js';
@@ -76,13 +77,16 @@ export function createApis(
   // The ticket fixture reads the uploader's rows, so a file attached in the
   // composer is the file the thread draws.
   const uploads = new MockAttachmentUploader();
+  const blockList = new MockBlockList();
 
   return {
     auth: new MockAuthApi(staff),
     staff,
     contacts: new MockContactsApi(),
-    ticketing: new MockTicketingApi(),
-    tickets: new MockTicketsApi(uploads),
+    // One block list for both, so a sender blocked from a ticket is on the
+    // Spam tab (M1-11).
+    ticketing: new MockTicketingApi(blockList),
+    tickets: new MockTicketsApi(uploads, Date.now(), blockList),
     uploader: uploads,
   };
 }

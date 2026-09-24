@@ -61,6 +61,12 @@ export const ticketStatusSchema = z.object({
    * not a resolution: no CSAT is scheduled, and reports leave the ticket out.
    */
   excludedFromReports: z.boolean(),
+  /**
+   * The status "Mark as spam" moves a ticket to (M1-11). One per brand.
+   * Merged is excluded from reports too, so this is the only way to tell
+   * "spam" from "closed and not counted"; see `isSpamStatus`.
+   */
+  isSpam: z.boolean(),
   sortOrder: z.int(),
   color: statusColorSchema,
 });
@@ -164,6 +170,8 @@ export const ticketLifecycleRefusalSchema = z.enum([
   'ticket-deleted',
   /** Reopening something that was never closed. */
   'ticket-not-closed',
+  /** "Not spam" on a ticket that is not in the Spam status (M1-11). */
+  'ticket-not-spam',
 ]);
 export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema>;
 

@@ -20,6 +20,8 @@ export type ContactAuditAction =
   | 'contact.note.added'
   | 'contact.duplicate.dismissed'
   | 'contact.anonymised'
+  | 'contact.merged'
+  | 'contact.merge.undone'
   | 'account.created'
   | 'account.updated';
 

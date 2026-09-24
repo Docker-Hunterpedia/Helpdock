@@ -39,7 +39,9 @@ export type TicketActivityAction =
   | 'ticket.deleted'
   | 'ticket.escalated'
   /** M1-06. Its own verb rather than `ticket.updated`, because the thread draws chips. */
-  | 'ticket.tags.changed';
+  | 'ticket.tags.changed'
+  /** M1-13. A CC copied in or taken off; `from`/`to` name the contact id, never an address. */
+  | 'ticket.participants.changed';
 
 /**
  * The actor behind a change, in the three words the activity log records.

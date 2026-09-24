@@ -25,6 +25,7 @@ import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values
 import { ERASED_CONTACT_NAME, erasedIdentityValue, erasureSummary } from './anonymise.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
+import type { ContactMergesRepository } from './contact-merges.repository.js';
 import { byContact, duplicateView, identityView, noteView, summaryView } from './contact-view.js';
 import type { ContactsRepository } from './contacts.repository.js';
 import {
@@ -33,6 +34,7 @@ import {
   insertContact,
   insertIdentity,
   requireNormalised,
+  suggestSimilarNames,
 } from './identity.js';
 import type { ContactTimelineProvider, TicketStatsProvider } from './providers.js';
 
@@ -64,6 +66,8 @@ export interface ContactContext {
 
 export interface ContactsServiceOptions {
   readonly repository: ContactsRepository;
+  /** M1-13: the merges into a contact that can still be undone, for its detail. */
+  readonly merges: ContactMergesRepository;
   readonly settings: Settings;
   readonly stats: TicketStatsProvider;
   readonly timeline: ContactTimelineProvider;
@@ -71,12 +75,14 @@ export interface ContactsServiceOptions {
 
 export class ContactsService {
   readonly #repository: ContactsRepository;
+  readonly #merges: ContactMergesRepository;
   readonly #settings: Settings;
   readonly #stats: TicketStatsProvider;
   readonly #timeline: ContactTimelineProvider;
 
-  constructor({ repository, settings, stats, timeline }: ContactsServiceOptions) {
+  constructor({ repository, merges, settings, stats, timeline }: ContactsServiceOptions) {
     this.#repository = repository;
+    this.#merges = merges;
     this.#settings = settings;
     this.#stats = stats;
     this.#timeline = timeline;
@@ -123,6 +129,8 @@ export class ContactsService {
       identities: identities.map(identityView),
       notes: await this.#notes(tx, contactId),
       duplicates: await this.#duplicates(tx, contact),
+      mergedIntoId: contact.mergedIntoId,
+      merges: await this.#merges.activeInto(tx, contactId),
     };
   }
 
@@ -163,6 +171,7 @@ export class ContactsService {
       // contact with it.
       await this.#attach(context, contact, claim);
     }
+    await suggestSimilarNames(tx, brandId, contact);
 
     await writeContactAudit(tx, {
       brandId,
@@ -208,7 +217,10 @@ export class ContactsService {
       ...(custom === undefined ? {} : { custom }),
     };
 
-    await this.#repository.updateContact(tx, contactId, changes);
+    const updated = await this.#repository.updateContact(tx, contactId, changes);
+    if (updated !== undefined && request.accountId !== undefined) {
+      await suggestSimilarNames(tx, brandId, updated);
+    }
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
@@ -455,9 +467,17 @@ export class ContactsService {
     return contact;
   }
 
+  /**
+   * An erased contact is immutable, and so — from M1-13 — is one merged into
+   * another: its identifiers, notes and tickets now live on the survivor, and
+   * an edit here would land on a row nobody can find.
+   */
   #refuseIfErased(contact: ContactRow): void {
     if (contact.anonymisedAt !== null) {
       throw new ContactFailure('anonymised');
+    }
+    if (contact.mergedIntoId !== null) {
+      throw new ContactFailure('merged');
     }
   }
 

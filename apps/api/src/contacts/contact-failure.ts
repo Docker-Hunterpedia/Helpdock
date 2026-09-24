@@ -20,6 +20,10 @@ const STATUS_BY_REASON: Readonly<Record<ContactRefusal, number>> = {
   'anonymise-forbidden': HttpStatus.FORBIDDEN,
   anonymised: HttpStatus.CONFLICT,
   'domain-taken': HttpStatus.CONFLICT,
+  merged: HttpStatus.CONFLICT,
+  'merge-self': HttpStatus.BAD_REQUEST,
+  'merge-expired': HttpStatus.CONFLICT,
+  'merge-blocked': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<ContactRefusal, string>> = {
@@ -29,6 +33,10 @@ const MESSAGE_BY_REASON: Readonly<Record<ContactRefusal, string>> = {
   'anonymise-forbidden': 'Only an administrator of this brand may erase a contact',
   anonymised: 'This contact has been erased and can no longer be changed',
   'domain-taken': 'Another account of this brand already claims that domain',
+  merged: 'This contact was merged into another; change that one instead',
+  'merge-self': 'A contact cannot be merged into itself',
+  'merge-expired': 'This merge can no longer be undone',
+  'merge-blocked': 'The contacts have changed since this merge, so it cannot be undone',
 };
 
 export class ContactFailure extends HttpException {

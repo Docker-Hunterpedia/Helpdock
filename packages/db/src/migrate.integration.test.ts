@@ -27,6 +27,7 @@ const MIGRATION_TAGS = [
   '0012_tickets_soft_delete_and_status_reporting',
   '0013_attachments',
   '0014_tags_custom_fields_and_templates',
+  '0019_contact_identity_and_participants',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

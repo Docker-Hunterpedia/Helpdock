@@ -77,6 +77,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // tables; `department_id` is denormalised from the parent by the same trigger
   // `ticket_messages` uses.
   { name: 'ticket_tags', departmentScoped: true },
+  // M1-13. A merge record is about two contacts, and contacts are brand-scoped
+  // (DOMAIN-RULES §1.2); a ticket's CCs are a child of the ticket and follow
+  // its department like `ticket_tags`.
+  { name: 'contact_merges', departmentScoped: false },
+  { name: 'ticket_participants', departmentScoped: true },
 ];
 
 /**

@@ -60,12 +60,8 @@
           "name": "accounts_brand_id_brands_id_fk",
           "tableFrom": "accounts",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -75,10 +71,7 @@
         "accounts_brand_domain_key": {
           "name": "accounts_brand_domain_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "brand_id",
-            "domain"
-          ]
+          "columns": ["brand_id", "domain"]
         }
       },
       "policies": {},
@@ -265,12 +258,8 @@
           "name": "attachments_brand_id_brands_id_fk",
           "tableFrom": "attachments",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -278,12 +267,8 @@
           "name": "attachments_ticket_id_tickets_id_fk",
           "tableFrom": "attachments",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -291,12 +276,8 @@
           "name": "attachments_department_id_departments_id_fk",
           "tableFrom": "attachments",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -304,12 +285,8 @@
           "name": "attachments_message_id_ticket_messages_id_fk",
           "tableFrom": "attachments",
           "tableTo": "ticket_messages",
-          "columnsFrom": [
-            "message_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["message_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -319,9 +296,7 @@
         "attachments_s3_key_unique": {
           "name": "attachments_s3_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "s3_key"
-          ]
+          "columns": ["s3_key"]
         }
       },
       "policies": {},
@@ -475,12 +450,8 @@
           "name": "brand_domains_brand_id_brands_id_fk",
           "tableFrom": "brand_domains",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -490,9 +461,7 @@
         "brand_domains_domain_unique": {
           "name": "brand_domains_domain_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "domain"
-          ]
+          "columns": ["domain"]
         }
       },
       "policies": {},
@@ -579,9 +548,7 @@
         "brands_prefix_unique": {
           "name": "brands_prefix_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "prefix"
-          ]
+          "columns": ["prefix"]
         }
       },
       "policies": {},
@@ -645,12 +612,8 @@
           "name": "contact_duplicate_suggestions_brand_id_brands_id_fk",
           "tableFrom": "contact_duplicate_suggestions",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -658,12 +621,8 @@
           "name": "contact_duplicate_suggestions_contact_id_contacts_id_fk",
           "tableFrom": "contact_duplicate_suggestions",
           "tableTo": "contacts",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -671,12 +630,8 @@
           "name": "contact_duplicate_suggestions_other_contact_id_contacts_id_fk",
           "tableFrom": "contact_duplicate_suggestions",
           "tableTo": "contacts",
-          "columnsFrom": [
-            "other_contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["other_contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -686,11 +641,7 @@
         "contact_duplicate_suggestions_pair_key": {
           "name": "contact_duplicate_suggestions_pair_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "brand_id",
-            "contact_id",
-            "other_contact_id"
-          ]
+          "columns": ["brand_id", "contact_id", "other_contact_id"]
         }
       },
       "policies": {},
@@ -781,12 +732,8 @@
           "name": "contact_identities_brand_id_brands_id_fk",
           "tableFrom": "contact_identities",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -794,12 +741,8 @@
           "name": "contact_identities_contact_id_contacts_id_fk",
           "tableFrom": "contact_identities",
           "tableTo": "contacts",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -809,11 +752,7 @@
         "contact_identities_brand_kind_value_key": {
           "name": "contact_identities_brand_kind_value_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "brand_id",
-            "kind",
-            "value"
-          ]
+          "columns": ["brand_id", "kind", "value"]
         }
       },
       "policies": {},
@@ -890,12 +829,8 @@
           "name": "contact_notes_brand_id_brands_id_fk",
           "tableFrom": "contact_notes",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -903,12 +838,8 @@
           "name": "contact_notes_contact_id_contacts_id_fk",
           "tableFrom": "contact_notes",
           "tableTo": "contacts",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1050,12 +981,8 @@
           "name": "contacts_brand_id_brands_id_fk",
           "tableFrom": "contacts",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1063,12 +990,8 @@
           "name": "contacts_account_id_accounts_id_fk",
           "tableFrom": "contacts",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1221,12 +1144,8 @@
           "name": "csat_responses_brand_id_brands_id_fk",
           "tableFrom": "csat_responses",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1234,12 +1153,8 @@
           "name": "csat_responses_ticket_id_tickets_id_fk",
           "tableFrom": "csat_responses",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1247,12 +1162,8 @@
           "name": "csat_responses_department_id_departments_id_fk",
           "tableFrom": "csat_responses",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1365,12 +1276,8 @@
           "name": "custom_field_defs_brand_id_brands_id_fk",
           "tableFrom": "custom_field_defs",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1380,11 +1287,7 @@
         "custom_field_defs_brand_target_key": {
           "name": "custom_field_defs_brand_target_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "brand_id",
-            "target",
-            "key"
-          ]
+          "columns": ["brand_id", "target", "key"]
         }
       },
       "policies": {},
@@ -1453,12 +1356,8 @@
           "name": "departments_brand_id_brands_id_fk",
           "tableFrom": "departments",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1466,12 +1365,8 @@
           "name": "departments_default_team_id_teams_id_fk",
           "tableFrom": "departments",
           "tableTo": "teams",
-          "columnsFrom": [
-            "default_team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["default_team_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1481,10 +1376,7 @@
         "departments_brand_name_key": {
           "name": "departments_brand_name_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "brand_id",
-            "name"
-          ]
+          "columns": ["brand_id", "name"]
         }
       },
       "policies": {},
@@ -1582,12 +1474,8 @@
           "name": "outbox_brand_id_brands_id_fk",
           "tableFrom": "outbox",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1639,10 +1527,7 @@
       "compositePrimaryKeys": {
         "settings_key_brand_id_pk": {
           "name": "settings_key_brand_id_pk",
-          "columns": [
-            "key",
-            "brand_id"
-          ]
+          "columns": ["key", "brand_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1750,12 +1635,8 @@
           "name": "tags_brand_id_brands_id_fk",
           "tableFrom": "tags",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1851,12 +1732,8 @@
           "name": "ticket_tags_ticket_id_tickets_id_fk",
           "tableFrom": "ticket_tags",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1864,12 +1741,8 @@
           "name": "ticket_tags_tag_id_tags_id_fk",
           "tableFrom": "ticket_tags",
           "tableTo": "tags",
-          "columnsFrom": [
-            "tag_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1877,12 +1750,8 @@
           "name": "ticket_tags_brand_id_brands_id_fk",
           "tableFrom": "ticket_tags",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1890,12 +1759,8 @@
           "name": "ticket_tags_department_id_departments_id_fk",
           "tableFrom": "ticket_tags",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1903,10 +1768,7 @@
       "compositePrimaryKeys": {
         "ticket_tags_pkey": {
           "name": "ticket_tags_pkey",
-          "columns": [
-            "ticket_id",
-            "tag_id"
-          ]
+          "columns": ["ticket_id", "tag_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1978,12 +1840,8 @@
           "name": "team_members_brand_id_brands_id_fk",
           "tableFrom": "team_members",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1991,12 +1849,8 @@
           "name": "team_members_team_id_teams_id_fk",
           "tableFrom": "team_members",
           "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["team_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2004,12 +1858,8 @@
           "name": "team_members_user_id_users_id_fk",
           "tableFrom": "team_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2019,10 +1869,7 @@
         "team_members_team_user_key": {
           "name": "team_members_team_user_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "team_id",
-            "user_id"
-          ]
+          "columns": ["team_id", "user_id"]
         }
       },
       "policies": {},
@@ -2107,12 +1954,8 @@
           "name": "teams_brand_id_brands_id_fk",
           "tableFrom": "teams",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2120,12 +1963,8 @@
           "name": "teams_department_id_departments_id_fk",
           "tableFrom": "teams",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2135,10 +1974,7 @@
         "teams_department_name_key": {
           "name": "teams_department_name_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "department_id",
-            "name"
-          ]
+          "columns": ["department_id", "name"]
         }
       },
       "policies": {},
@@ -2268,12 +2104,8 @@
           "name": "ticket_activity_brand_id_brands_id_fk",
           "tableFrom": "ticket_activity",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2281,12 +2113,8 @@
           "name": "ticket_activity_ticket_id_tickets_id_fk",
           "tableFrom": "ticket_activity",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2294,12 +2122,8 @@
           "name": "ticket_activity_department_id_departments_id_fk",
           "tableFrom": "ticket_activity",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2508,12 +2332,8 @@
           "name": "ticket_messages_brand_id_brands_id_fk",
           "tableFrom": "ticket_messages",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2521,12 +2341,8 @@
           "name": "ticket_messages_ticket_id_tickets_id_fk",
           "tableFrom": "ticket_messages",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2534,12 +2350,8 @@
           "name": "ticket_messages_department_id_departments_id_fk",
           "tableFrom": "ticket_messages",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2655,12 +2467,8 @@
           "name": "ticket_statuses_brand_id_brands_id_fk",
           "tableFrom": "ticket_statuses",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2670,10 +2478,7 @@
         "ticket_statuses_brand_name_key": {
           "name": "ticket_statuses_brand_name_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "brand_id",
-            "name"
-          ]
+          "columns": ["brand_id", "name"]
         }
       },
       "policies": {},
@@ -2792,12 +2597,8 @@
           "name": "ticket_templates_brand_id_brands_id_fk",
           "tableFrom": "ticket_templates",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2805,12 +2606,8 @@
           "name": "ticket_templates_department_id_departments_id_fk",
           "tableFrom": "ticket_templates",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2930,12 +2727,8 @@
           "name": "ticket_time_entries_brand_id_brands_id_fk",
           "tableFrom": "ticket_time_entries",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2943,12 +2736,8 @@
           "name": "ticket_time_entries_ticket_id_tickets_id_fk",
           "tableFrom": "ticket_time_entries",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2956,12 +2745,8 @@
           "name": "ticket_time_entries_department_id_departments_id_fk",
           "tableFrom": "ticket_time_entries",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2969,12 +2754,8 @@
           "name": "ticket_time_entries_user_id_users_id_fk",
           "tableFrom": "ticket_time_entries",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2982,12 +2763,8 @@
           "name": "ticket_time_entries_message_id_ticket_messages_id_fk",
           "tableFrom": "ticket_time_entries",
           "tableTo": "ticket_messages",
-          "columnsFrom": [
-            "message_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["message_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3239,12 +3016,8 @@
           "name": "tickets_brand_id_brands_id_fk",
           "tableFrom": "tickets",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3252,12 +3025,8 @@
           "name": "tickets_department_id_departments_id_fk",
           "tableFrom": "tickets",
           "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3265,12 +3034,8 @@
           "name": "tickets_status_id_ticket_statuses_id_fk",
           "tableFrom": "tickets",
           "tableTo": "ticket_statuses",
-          "columnsFrom": [
-            "status_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["status_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3278,12 +3043,8 @@
           "name": "tickets_assignee_id_users_id_fk",
           "tableFrom": "tickets",
           "tableTo": "users",
-          "columnsFrom": [
-            "assignee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assignee_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -3291,12 +3052,8 @@
           "name": "tickets_contact_id_contacts_id_fk",
           "tableFrom": "tickets",
           "tableTo": "contacts",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -3304,12 +3061,8 @@
           "name": "tickets_parent_id_tickets_id_fk",
           "tableFrom": "tickets",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -3317,12 +3070,8 @@
           "name": "tickets_merged_into_id_tickets_id_fk",
           "tableFrom": "tickets",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "merged_into_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["merged_into_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -3330,12 +3079,8 @@
           "name": "tickets_split_from_id_tickets_id_fk",
           "tableFrom": "tickets",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "split_from_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["split_from_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3345,10 +3090,7 @@
         "tickets_brand_number_key": {
           "name": "tickets_brand_number_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "brand_id",
-            "number"
-          ]
+          "columns": ["brand_id", "number"]
         }
       },
       "policies": {},
@@ -3404,12 +3146,8 @@
           "name": "user_brand_roles_user_id_users_id_fk",
           "tableFrom": "user_brand_roles",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3417,12 +3155,8 @@
           "name": "user_brand_roles_brand_id_brands_id_fk",
           "tableFrom": "user_brand_roles",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3432,10 +3166,7 @@
         "user_brand_roles_user_brand_key": {
           "name": "user_brand_roles_user_brand_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id",
-            "brand_id"
-          ]
+          "columns": ["user_id", "brand_id"]
         }
       },
       "policies": {},
@@ -3563,33 +3294,17 @@
     "public.activity_via": {
       "name": "activity_via",
       "schema": "public",
-      "values": [
-        "ui",
-        "rule",
-        "api",
-        "ai",
-        "system"
-      ]
+      "values": ["ui", "rule", "api", "ai", "system"]
     },
     "public.actor_type": {
       "name": "actor_type",
       "schema": "public",
-      "values": [
-        "staff",
-        "visitor",
-        "apikey",
-        "system"
-      ]
+      "values": ["staff", "visitor", "apikey", "system"]
     },
     "public.attachment_kind": {
       "name": "attachment_kind",
       "schema": "public",
-      "values": [
-        "image",
-        "video",
-        "audio",
-        "file"
-      ]
+      "values": ["image", "video", "audio", "file"]
     },
     "public.attachment_reject_reason": {
       "name": "attachment_reject_reason",
@@ -3610,194 +3325,97 @@
     "public.attachment_scan_status": {
       "name": "attachment_scan_status",
       "schema": "public",
-      "values": [
-        "skipped",
-        "clean",
-        "infected",
-        "error"
-      ]
+      "values": ["skipped", "clean", "infected", "error"]
     },
     "public.attachment_status": {
       "name": "attachment_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "processing",
-        "ready",
-        "rejected",
-        "infected"
-      ]
+      "values": ["pending", "processing", "ready", "rejected", "infected"]
     },
     "public.attachment_uploader_type": {
       "name": "attachment_uploader_type",
       "schema": "public",
-      "values": [
-        "staff",
-        "contact",
-        "system"
-      ]
+      "values": ["staff", "contact", "system"]
     },
     "public.brand_domain_kind": {
       "name": "brand_domain_kind",
       "schema": "public",
-      "values": [
-        "helpcenter",
-        "widget_origin"
-      ]
+      "values": ["helpcenter", "widget_origin"]
     },
     "public.brand_role": {
       "name": "brand_role",
       "schema": "public",
-      "values": [
-        "admin",
-        "team_leader",
-        "agent",
-        "viewer"
-      ]
+      "values": ["admin", "team_leader", "agent", "viewer"]
     },
     "public.brand_status": {
       "name": "brand_status",
       "schema": "public",
-      "values": [
-        "active",
-        "deleting",
-        "deleted"
-      ]
+      "values": ["active", "deleting", "deleted"]
     },
     "public.contact_duplicate_status": {
       "name": "contact_duplicate_status",
       "schema": "public",
-      "values": [
-        "open",
-        "dismissed",
-        "merged"
-      ]
+      "values": ["open", "dismissed", "merged"]
     },
     "public.contact_identity_kind": {
       "name": "contact_identity_kind",
       "schema": "public",
-      "values": [
-        "email",
-        "phone",
-        "telegram",
-        "visitor",
-        "external"
-      ]
+      "values": ["email", "phone", "telegram", "visitor", "external"]
     },
     "public.custom_field_target": {
       "name": "custom_field_target",
       "schema": "public",
-      "values": [
-        "ticket",
-        "contact",
-        "account"
-      ]
+      "values": ["ticket", "contact", "account"]
     },
     "public.custom_field_type": {
       "name": "custom_field_type",
       "schema": "public",
-      "values": [
-        "text",
-        "number",
-        "date",
-        "select",
-        "multi_select",
-        "checkbox"
-      ]
+      "values": ["text", "number", "date", "select", "multi_select", "checkbox"]
     },
     "public.locale": {
       "name": "locale",
       "schema": "public",
-      "values": [
-        "en",
-        "ar"
-      ]
+      "values": ["en", "ar"]
     },
     "public.message_author_type": {
       "name": "message_author_type",
       "schema": "public",
-      "values": [
-        "staff",
-        "contact",
-        "system",
-        "ai"
-      ]
+      "values": ["staff", "contact", "system", "ai"]
     },
     "public.status_color": {
       "name": "status_color",
       "schema": "public",
-      "values": [
-        "success",
-        "warning",
-        "danger",
-        "info",
-        "escalated"
-      ]
+      "values": ["success", "warning", "danger", "info", "escalated"]
     },
     "public.tag_color": {
       "name": "tag_color",
       "schema": "public",
-      "values": [
-        "info",
-        "success",
-        "warning",
-        "escalated",
-        "sand",
-        "stone",
-        "clay",
-        "bark"
-      ]
+      "values": ["info", "success", "warning", "escalated", "sand", "stone", "clay", "bark"]
     },
     "public.ticket_channel": {
       "name": "ticket_channel",
       "schema": "public",
-      "values": [
-        "email",
-        "chat",
-        "telegram",
-        "form",
-        "api",
-        "manual"
-      ]
+      "values": ["email", "chat", "telegram", "form", "api", "manual"]
     },
     "public.ticket_message_kind": {
       "name": "ticket_message_kind",
       "schema": "public",
-      "values": [
-        "public",
-        "note",
-        "system",
-        "ai"
-      ]
+      "values": ["public", "note", "system", "ai"]
     },
     "public.ticket_priority": {
       "name": "ticket_priority",
       "schema": "public",
-      "values": [
-        "low",
-        "medium",
-        "high",
-        "urgent"
-      ]
+      "values": ["low", "medium", "high", "urgent"]
     },
     "public.ticket_system_state": {
       "name": "ticket_system_state",
       "schema": "public",
-      "values": [
-        "open",
-        "on_hold",
-        "escalated",
-        "closed"
-      ]
+      "values": ["open", "on_hold", "escalated", "closed"]
     },
     "public.user_status": {
       "name": "user_status",
       "schema": "public",
-      "values": [
-        "invited",
-        "active",
-        "deactivated"
-      ]
+      "values": ["invited", "active", "deactivated"]
     }
   },
   "schemas": {},

@@ -90,7 +90,8 @@ export class TimeEntriesService {
       departmentId,
       userId,
       seconds: request.seconds,
-      note: request.note ?? null,
+      // A blank note is no note.
+      note: request.note || null,
       messageId: null,
     });
 

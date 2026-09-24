@@ -42,12 +42,8 @@ export type TimeEntryList = z.infer<typeof timeEntryListSchema>;
 
 export const timeEntryCreateRequestSchema = z.object({
   seconds: timeEntrySecondsSchema,
-  note: z
-    .string()
-    .trim()
-    .max(TIME_ENTRY_NOTE_MAX)
-    .optional()
-    .transform((value) => (value === '' ? undefined : value)),
+  /** Trimmed; a blank note is stored as none. */
+  note: z.string().trim().max(TIME_ENTRY_NOTE_MAX).optional(),
 });
 export type TimeEntryCreateRequest = z.infer<typeof timeEntryCreateRequestSchema>;
 

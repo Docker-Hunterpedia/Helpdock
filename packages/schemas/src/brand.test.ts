@@ -5,6 +5,7 @@ import {
   brandSettingsSchema,
   brandUpdateRequestSchema,
   defaultBrandSettings,
+  feedbackSettingsUpdateRequestSchema,
   parseBrandSettings,
 } from './brand.js';
 import { DEFAULT_CONTENT_POLICY } from './media.js';
@@ -17,6 +18,9 @@ const settings = {
   // M1-10 nested the brand's content policy in here rather than adding a column
   // of its own; it fills itself in the same way every other key does.
   contentPolicy: DEFAULT_CONTENT_POLICY,
+  csatEnabled: true,
+  timeTrackingEnabled: false,
+  timerStartsWithComposer: false,
 };
 
 const row = {
@@ -54,6 +58,11 @@ describe('brandSettingsSchema', () => {
       autoAwaitOnAgentReply: true,
       reopenPolicy: { kind: 'within_days', days: 7 },
       contentPolicy: DEFAULT_CONTENT_POLICY,
+      // M1-12: CSAT on, as DOMAIN-RULES §2.2 schedules it; time tracking off,
+      // as REQUIREMENTS §4.1 makes it optional.
+      csatEnabled: true,
+      timeTrackingEnabled: false,
+      timerStartsWithComposer: false,
     });
   });
 
@@ -100,6 +109,9 @@ describe('parseBrandSettings', () => {
       autoAwaitOnAgentReply: false,
       reopenPolicy: { kind: 'never' },
       contentPolicy: DEFAULT_CONTENT_POLICY,
+      csatEnabled: true,
+      timeTrackingEnabled: false,
+      timerStartsWithComposer: false,
     });
   });
 
@@ -135,5 +147,26 @@ describe('brandUpdateRequestSchema', () => {
 
   it('trims a name so two brands cannot differ by a space', () => {
     expect(brandUpdateRequestSchema.parse({ name: '  Acme  ' }).name).toBe('Acme');
+  });
+});
+
+describe('feedbackSettingsUpdateRequestSchema', () => {
+  it('takes any of the three toggles on their own', () => {
+    expect(feedbackSettingsUpdateRequestSchema.parse({ csatEnabled: false })).toEqual({
+      csatEnabled: false,
+    });
+  });
+
+  it('refuses an empty change, so a retry cannot look like a success', () => {
+    expect(feedbackSettingsUpdateRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('drops a key it does not own, so the reply behaviour cannot ride along', () => {
+    expect(
+      feedbackSettingsUpdateRequestSchema.parse({
+        timeTrackingEnabled: true,
+        autoAwaitOnAgentReply: false,
+      }),
+    ).toEqual({ timeTrackingEnabled: true });
   });
 });

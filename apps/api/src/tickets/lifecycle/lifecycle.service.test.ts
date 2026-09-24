@@ -101,6 +101,9 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
   // M1-10 nested the brand's content policy in `settings`. The lifecycle never
   // reads it; it is here because the whole object is what the column holds.
   contentPolicy: DEFAULT_CONTENT_POLICY,
+  csatEnabled: true,
+  timeTrackingEnabled: false,
+  timerStartsWithComposer: false,
 });
 
 const harness = (options: {

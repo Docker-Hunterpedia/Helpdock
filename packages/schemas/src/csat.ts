@@ -99,11 +99,7 @@ export type CsatSurveyView = z.infer<typeof csatSurveyViewSchema>;
 
 export const csatSubmitRequestSchema = z.object({
   rating: csatRatingSchema,
-  comment: z
-    .string()
-    .trim()
-    .max(CSAT_COMMENT_MAX)
-    .optional()
-    .transform((value) => (value === '' ? undefined : value)),
+  /** Trimmed; a blank comment is stored as none. */
+  comment: z.string().trim().max(CSAT_COMMENT_MAX).optional(),
 });
 export type CsatSubmitRequest = z.infer<typeof csatSubmitRequestSchema>;

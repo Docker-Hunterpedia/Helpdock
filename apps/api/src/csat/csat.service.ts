@@ -115,7 +115,8 @@ export class CsatService {
     return this.#inBrand(token, subject, async (tx, found, brand) => {
       const rated = await this.#options.repository.rate(tx, subject.surveyId, {
         rating: request.rating,
-        comment: request.comment ?? null,
+        // A blank comment is no comment.
+        comment: request.comment || null,
         at: this.#now(),
       });
 

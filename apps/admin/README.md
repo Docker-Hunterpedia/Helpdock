@@ -229,9 +229,14 @@ scanner reads it.
   drives the caption under the heading and the lock row in the list, and it is
   the only thing the screen says about those tickets.
 
-Merge is drawn on the duplicate row and disabled, with the reason on the
-button's own label rather than in a tooltip alone: acting on a suggestion is
-M1-13.
+M1-13 adds merging, from panels 1, 2 and 4 of `Admin/Contact dialogs`: the
+duplicate rows (`duplicate-suggestions.tsx`), the merge dialog
+(`merge-contacts-dialog.tsx`), and the banner on the surviving contact
+(`merge-banner.tsx`). The toast that confirms a merge carries an Undo and stays
+10 seconds; the banner keeps the Undo for 24 hours. Opening a contact that was
+merged away goes on to the survivor. The Participants card of the ticket
+details panel (`screens/tickets/participants-card.tsx`) is panel 8 of
+`Admin/Ticket dialogs`.
 
 ### Attachments (M1-10)
 

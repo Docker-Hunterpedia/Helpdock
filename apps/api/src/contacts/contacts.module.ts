@@ -3,6 +3,9 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import { SETTINGS } from '../runtime/tokens.js';
 import { AccountsController } from './accounts.controller.js';
 import { AccountsService } from './accounts.service.js';
+import { ContactMergeService } from './contact-merge.service.js';
+import { ContactMergesController } from './contact-merges.controller.js';
+import { ContactMergesRepository } from './contact-merges.repository.js';
 import { ContactsController } from './contacts.controller.js';
 import { ContactsRepository } from './contacts.repository.js';
 import { ContactsService } from './contacts.service.js';
@@ -16,7 +19,8 @@ import {
 } from './providers.js';
 
 /**
- * M1-04: contacts, accounts, identifiers, notes and duplicate suggestions.
+ * M1-04: contacts, accounts, identifiers, notes and duplicate suggestions; M1-13
+ * adds merging two contacts and its undo.
  *
  * One module for two controllers that share one repository, so `app.module.ts`
  * gains one import and the rules about who a person is live in one folder.
@@ -39,7 +43,7 @@ export class ContactsModule {
   static forRoot({ ticketStats, timeline }: ContactsModuleOptions = {}): DynamicModule {
     return {
       module: ContactsModule,
-      controllers: [ContactsController, AccountsController],
+      controllers: [ContactsController, AccountsController, ContactMergesController],
       providers: [
         {
           provide: ContactsRepository,
@@ -51,15 +55,37 @@ export class ContactsModule {
           useValue: timeline ?? new NoContactTimelineProvider(),
         },
         {
+          provide: ContactMergesRepository,
+          useFactory: (): ContactMergesRepository => new ContactMergesRepository(),
+        },
+        {
           provide: ContactsService,
-          inject: [ContactsRepository, SETTINGS, TICKET_STATS_PROVIDER, CONTACT_TIMELINE_PROVIDER],
+          inject: [
+            ContactsRepository,
+            ContactMergesRepository,
+            SETTINGS,
+            TICKET_STATS_PROVIDER,
+            CONTACT_TIMELINE_PROVIDER,
+          ],
           useFactory: (
             repository: ContactsRepository,
+            merges: ContactMergesRepository,
             settings: Settings,
             stats: TicketStatsProvider,
             contactTimeline: ContactTimelineProvider,
           ): ContactsService =>
-            new ContactsService({ repository, settings, stats, timeline: contactTimeline }),
+            new ContactsService({ repository, merges, settings, stats, timeline: contactTimeline }),
+        },
+        // M1-13. The survivor's detail is what a merge answers with, so the
+        // merge service borrows `detail` rather than drawing a contact twice.
+        {
+          provide: ContactMergeService,
+          inject: [ContactMergesRepository, ContactsRepository, ContactsService],
+          useFactory: (
+            merges: ContactMergesRepository,
+            contacts: ContactsRepository,
+            detail: ContactsService,
+          ): ContactMergeService => new ContactMergeService({ merges, contacts, detail }),
         },
         {
           provide: AccountsService,

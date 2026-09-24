@@ -189,18 +189,15 @@ test.describe('one contact', () => {
     await expect(page.getByText('Asia/Damascus')).toBeVisible();
   });
 
-  test('offers merge as disabled with the reason, and dismisses the duplicate', async ({
-    page,
-    appLocale: locale,
-  }) => {
+  test('dismisses the duplicate for good', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);
     await openContact(page, locale, 'Mona Khalil');
 
     const card = page.getByRole('region', { name: t('contacts:identities.title') });
-    await expect(card.getByRole('button', { name: /M1-13/ })).toBeDisabled();
-
-    await card.getByRole('button', { name: t('contacts:identities.notTheSame') }).click();
+    await card
+      .getByRole('button', { name: t('contacts:duplicates.notTheSameWith', { name: 'M. Khalil' }) })
+      .click();
 
     await expect(page.getByText(t('contacts:toast.duplicateDismissed'))).toBeVisible();
     await expect(card.getByText(/M\. Khalil/)).toHaveCount(0);

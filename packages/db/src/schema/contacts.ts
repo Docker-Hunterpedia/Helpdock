@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  type AnyPgColumn,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { accounts } from './accounts.js';
 import { brands } from './brands.js';
@@ -56,6 +65,16 @@ export const contacts = pgTable(
       .$onUpdate(() => new Date()),
     /** Set by the erasure of DOMAIN-RULES §11. The row stays; the person goes. */
     anonymisedAt: timestamp('anonymised_at', { withTimezone: true }),
+    /**
+     * Set when an agent merged this contact into another (M1-13). The row stays
+     * for the 24 hours the merge can be undone, and afterwards as the target of
+     * old message author ids; lists and lookups skip it, and nothing may be
+     * written to it.
+     */
+    mergedIntoId: uuid('merged_into_id').references((): AnyPgColumn => contacts.id, {
+      onDelete: 'set null',
+    }),
+    mergedAt: timestamp('merged_at', { withTimezone: true }),
   },
   (table) => [
     // The list is "this brand's people, most recently touched first", and the

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type Db, type DbHandle, type DbTransaction } from './client.js';
 import { runMigrations } from './migrate.js';
@@ -18,6 +18,7 @@ import {
   brands,
   contactDuplicateSuggestions,
   contactIdentities,
+  contactMerges,
   contactNotes,
   contacts,
   customFieldDefs,
@@ -29,6 +30,7 @@ import {
   teams,
   ticketActivity,
   ticketMessages,
+  ticketParticipants,
   ticketStatuses,
   tickets,
   ticketTags,
@@ -365,6 +367,31 @@ const fixtures = [
         departmentId: departmentId[brandId] ?? '',
       }),
   },
+  {
+    name: 'contact_merges',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(contactMerges).values({
+        brandId,
+        survivorId: contactId(brandId),
+        mergedId: otherContactId(brandId),
+        actorId: userId,
+        undoUntil: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }),
+  },
+  {
+    name: 'ticket_participants',
+    // The fifth child of a ticket (M1-13), refused by the same trigger.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketParticipants).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        contactId: otherContactId(brandId),
+        departmentId: departmentId[brandId] ?? '',
+        address: 'finance@example.com',
+        source: 'agent',
+      }),
+  },
 ] as const;
 
 const brandIdsIn = async (tx: DbTransaction, table: string): Promise<string[]> => {
@@ -572,6 +599,29 @@ describe.skipIf(!hasDocker)('row-level security', () => {
     );
 
     expect(setting?.value ?? '').toBe('');
+  });
+
+  it('does not let the contact merge function reach another brand', async () => {
+    // `helpdock_contact_reassign_tickets` lifts the department predicate for
+    // one call (M1-13) and must leave the brand predicate standing: named
+    // from brand A's transaction, brand B's ticket does not move.
+    await withSystem(db, brandB, (tx) =>
+      tx
+        .update(tickets)
+        .set({ contactId: contactId(brandB) })
+        .where(eq(tickets.id, ticketId[brandB] ?? '')),
+    );
+
+    const moved = await withSystem(db, brandA, async (tx) => {
+      const [row] = await tx.execute<{ moved: string[] }>(
+        sql`SELECT helpdock_contact_reassign_tickets(
+              ${brandB}::uuid, ${contactId(brandB)}::uuid, ${otherContactId(brandB)}::uuid
+            ) AS moved`,
+      );
+      return row?.moved ?? [];
+    });
+
+    expect(moved).toEqual([]);
   });
 
   it('does not let the runtime role turn row security off', async () => {

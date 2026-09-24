@@ -9,6 +9,8 @@ import type {
   ContactDetail,
   ContactIdentityInput,
   ContactList,
+  ContactMergePreview,
+  ContactMergeRequest,
   ContactNoteRequest,
   ContactRefusal,
   ContactSearchQuery,
@@ -50,6 +52,20 @@ export interface ContactsApi {
     suggestionId: string,
   ): Promise<ContactDetail>;
   anonymise(brandId: string, contactId: string): Promise<ContactDetail>;
+
+  /** M1-13: both sides of a merge and the identifiers the survivor will hold. */
+  mergePreview(
+    brandId: string,
+    contactId: string,
+    otherContactId: string,
+  ): Promise<ContactMergePreview>;
+  /** Folds `request.mergedContactId` into `survivorId`; answers the survivor. */
+  mergeContacts(
+    brandId: string,
+    survivorId: string,
+    request: ContactMergeRequest,
+  ): Promise<ContactDetail>;
+  undoMerge(brandId: string, survivorId: string, mergeId: string): Promise<ContactDetail>;
 
   listAccounts(brandId: string, query?: AccountSearchQuery): Promise<AccountList>;
   account(brandId: string, accountId: string): Promise<AccountDetail>;

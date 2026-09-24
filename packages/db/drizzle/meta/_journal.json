@@ -106,6 +106,13 @@
       "when": 1790277268936,
       "tag": "0017_spam_and_block_list",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790277271431,
+      "tag": "0019_contact_identity_and_participants",
+      "breakpoints": true
     }
   ]
 }

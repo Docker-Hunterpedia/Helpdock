@@ -31,6 +31,32 @@ export const contactIdentityKindEnum = pgEnum('contact_identity_kind', [
   'external',
 ]);
 
+/**
+ * Why two contacts were suggested as one person (M1-13). The five identifier
+ * kinds are "they share this identifier, and one side of the match is not
+ * verified" (DOMAIN-RULES §4.4); `similar_name` is "filed under the same
+ * account, with names that read alike", which no identifier proves either way.
+ */
+export const contactDuplicateReasonEnum = pgEnum('contact_duplicate_reason', [
+  'email',
+  'phone',
+  'telegram',
+  'visitor',
+  'external',
+  'similar_name',
+]);
+
+/**
+ * How a CC came to be on a ticket (DOMAIN-RULES §2.5): an agent added it, it
+ * was on the `Cc:` line of an inbound email (M2), or a ticket merge brought
+ * the secondary's contact along (M1-09, DOMAIN-RULES §2.4).
+ */
+export const ticketParticipantSourceEnum = pgEnum('ticket_participant_source', [
+  'agent',
+  'email',
+  'merge',
+]);
+
 /** What became of a possible-duplicate suggestion (DOMAIN-RULES §4.4). */
 export const contactDuplicateStatusEnum = pgEnum('contact_duplicate_status', [
   'open',

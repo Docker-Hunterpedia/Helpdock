@@ -42,7 +42,9 @@ export type TicketActivityAction =
   | 'ticket.tags.changed'
   /** M1-11. Beside `ticket.status.changed`, as `ticket.closed` is, so the log says why. */
   | 'ticket.marked_spam'
-  | 'ticket.unmarked_spam';
+  | 'ticket.unmarked_spam'
+  /** M1-13. A CC copied in or taken off; `from`/`to` name the contact id, never an address. */
+  | 'ticket.participants.changed';
 
 /**
  * The actor behind a change, in the three words the activity log records.

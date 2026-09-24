@@ -4,12 +4,14 @@ import type {
   MessageCreateRequest,
   Ticket,
   TicketActivityList,
+  TicketCcRequest,
   TicketChannel,
   TicketCreateRequest,
   TicketDetail,
   TicketList,
   TicketMessage,
   TicketMessagePage,
+  TicketParticipantList,
   TicketPriority,
   TicketSort,
   TicketSortDirection,
@@ -63,6 +65,19 @@ export interface TicketsApi {
    * names, presence and load, and nothing an Agent's permission does not cover.
    */
   assignable(brandId: string, departmentId: string): Promise<AssignableAgentList>;
+
+  /** M1-13: the contact, the CCs and the staff of a ticket (DOMAIN-RULES §2.5). */
+  participants(brandId: string, ticketId: string): Promise<TicketParticipantList>;
+  addCc(
+    brandId: string,
+    ticketId: string,
+    request: TicketCcRequest,
+  ): Promise<TicketParticipantList>;
+  removeCc(
+    brandId: string,
+    ticketId: string,
+    participantId: string,
+  ): Promise<TicketParticipantList>;
 }
 
 /**

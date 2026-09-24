@@ -17,6 +17,7 @@ The admin screen built on it is the [ticket workspace](#the-admin-workspace)
 tickets ──< ticket_messages          one thread per ticket, ordered by `seq`
         ──< ticket_activity          who changed what, and how
         ──< ticket_tags ──> tags     the chips, the brand's own list
+        ──< ticket_participants      the CCs (M1-13)
         ──> ticket_statuses          the brand's own list, mapped to four system states
 ```
 
@@ -27,6 +28,7 @@ tickets ──< ticket_messages          one thread per ticket, ordered by `seq`
 | `ticket_messages` | brand **and department** | `department_id` is denormalised from the ticket by trigger. |
 | `ticket_activity` | brand **and department** | The same, and for the same reason. |
 | `ticket_tags` | brand **and department** | The same again (M1-06). The primary key is `(ticket_id, tag_id)`, so adding a tag twice is one row. |
+| `ticket_participants` | brand **and department** | The CCs (M1-13). Unique on `(ticket_id, contact_id)`, so copying somebody in twice is one row. |
 | `tags`, `custom_field_defs`, `ticket_templates` | brand | Configuration, not tickets: the same list in every department. [Ticketing settings](ticketing-settings.md) covers them. |
 
 ### Department scope
@@ -167,6 +169,42 @@ An id that is not this brand's answers **404**. A ticket in another department
 answers 404 too, from the policy: the `ticket_tags_department` trigger looks the
 parent up under the caller's own row-level security, finds nothing, and the
 insert never happens — the same shape `ticket_messages` and `attachments` use.
+
+## Participants (M1-13)
+
+A ticket's participants are its **contact**, its **CCs** and its **staff**
+(DOMAIN-RULES §2.5). They decide who may thread into the ticket by email (§4.3)
+and who receives public replies — both M2's to act on. Only the CCs are stored:
+the contact is `tickets.contact_id`, and the staff are the assignee and every
+staff member who wrote on the ticket.
+
+A CC is a **contact** with the normalised address it was added under. Typing an
+address links the contact that already holds it, or creates one holding it
+unverified (`email.cc`): copying somebody in grants that contact nothing, so
+there is no history to protect and no reason for a second contact. The address
+stays on the row, so a later merge of the CC's contact never changes who may
+thread in; the list shows the surviving contact's name.
+
+```http
+GET    /api/brands/:brandId/tickets/:ticketId/participants
+POST   /api/brands/:brandId/tickets/:ticketId/participants     { "email": "finance@acme.de" }
+DELETE /api/brands/:brandId/tickets/:ticketId/participants/:participantId
+```
+
+All three answer `{ contact, ccs, staff }`. Adding is idempotent, and copying in
+the ticket's own contact changes nothing. An address that is not one answers
+400 with `contact.reason = identity-invalid` and a `problem`. Each change writes
+`ticket.participants.changed` to the activity log — naming the contact id,
+never the address — bumps `updated_at` and enqueues `ticket.updated`.
+
+`ticket_participants` is department-scoped like every child of a ticket: its
+`department_id` is filled by the shared trigger, follows the ticket through a
+department move, and a ticket in another department answers 404.
+
+Another module copies a contact in by id through
+`TicketParticipantsService.addCcParticipant(context, ticketId, contactId)`,
+exported by `ParticipantsModule`. M1-09's ticket merge uses it to add the
+secondary's contact as a CC (§2.4); M2 will use it for an inbound `Cc:` line.
 
 ### Custom values
 
@@ -486,6 +524,9 @@ which departments it reaches is the policies'.
 | `GET /tickets/:ticketId/spam-sender` | `ticket:read` | Who "Block sender" would block, and whether the dialog offers it (M1-11) |
 | `POST /tickets/:ticketId/spam` | `ticket:write` | Marks it as spam, and blocks the sender when `blockSender` is true (M1-11) |
 | `DELETE /tickets/:ticketId/spam` | `ticket:write` | "Not spam": back to the default open status (M1-11) |
+| `GET /tickets/:ticketId/participants` | `ticket:read` | The contact, the CCs and the staff (M1-13) |
+| `POST /tickets/:ticketId/participants` | `ticket:write` | Copies an address in as a CC (M1-13) |
+| `DELETE /tickets/:ticketId/participants/:participantId` | `ticket:write` | Takes a CC off (M1-13) |
 
 ### Listing
 
@@ -824,7 +865,7 @@ the ticket list row would close that, and is a change to M1-02's response.
 
 | Milestone | Adds |
 |---|---|
-| M1-13 | Identity rules: verified matches, automatic merge, participants (contact + CCs) |
+| M1-13 | Shipped. Identity rules, contact merge with undo ([guide](contacts.md#identity-rules-and-merging-m1-13)), and the [participants](#participants-m1-13) card in the details panel |
 | M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Shipped in branch. `is_spam` on the Spam status, `POST`/`DELETE …/spam`, `ticket.spam`, the sender block list and its inbound gate ([Spam](#spam)) |

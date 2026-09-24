@@ -16,7 +16,7 @@ import { identityLabel, initialsOf } from './format.js';
  */
 
 /** DESIGN §5: one icon per channel, from the set the whole product uses. */
-const CHANNEL_ICONS = {
+export const CHANNEL_ICONS = {
   email: Mail,
   phone: Phone,
   telegram: Send,

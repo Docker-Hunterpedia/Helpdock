@@ -118,22 +118,22 @@ describe('the timeline', () => {
 });
 
 describe('the identities card', () => {
-  it('offers a duplicate suggestion with merge disabled and a reason', async () => {
+  it('offers a duplicate suggestion with the reason it was raised', async () => {
     await renderContact();
     const card = await screen.findByRole('region', { name: 'Identities' });
 
-    expect(within(card).getByText(/Possible duplicate: M\. Khalil/)).toBeInTheDocument();
-    expect(within(card).getByRole('button', { name: /Merge/ })).toBeDisabled();
-    expect(within(card).getByRole('button', { name: /Merge/ })).toHaveAccessibleName(
-      /Merge arrives with M1-13/,
-    );
+    expect(within(card).getByText('Possible duplicate: M. Khalil')).toBeInTheDocument();
+    expect(within(card).getByText('email typed in a form')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Merge with M. Khalil' })).toBeEnabled();
   });
 
   it('dismisses a suggestion and stops showing it', async () => {
     const { user } = await renderContact();
     const card = await screen.findByRole('region', { name: 'Identities' });
 
-    await user.click(within(card).getByRole('button', { name: 'Not the same' }));
+    await user.click(
+      within(card).getByRole('button', { name: 'M. Khalil is not the same person' }),
+    );
 
     expect(await screen.findByText('Marked as a different person.')).toBeInTheDocument();
     await waitFor(() => {

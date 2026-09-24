@@ -4,11 +4,13 @@ import type {
   MessageCreateRequest,
   Ticket,
   TicketActivityList,
+  TicketCcRequest,
   TicketCreateRequest,
   TicketDetail,
   TicketList,
   TicketMessage,
   TicketMessagePage,
+  TicketParticipantList,
   TicketSpamSender,
   TicketStatusList,
   TicketUpdateRequest,
@@ -20,6 +22,7 @@ import {
   ticketListSchema,
   ticketMessagePageSchema,
   ticketMessageSchema,
+  ticketParticipantListSchema,
   ticketSchema,
   ticketSpamSenderSchema,
   ticketStatusListSchema,
@@ -122,6 +125,39 @@ export class HttpTicketsApi implements TicketsApi {
       await this.#transport.request(
         'GET',
         `${this.#brand(brandId)}/assignment/${encodeURIComponent(departmentId)}/assignable`,
+      ),
+    );
+  }
+
+  async participants(brandId: string, ticketId: string): Promise<TicketParticipantList> {
+    return ticketParticipantListSchema.parse(
+      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/participants`),
+    );
+  }
+
+  async addCc(
+    brandId: string,
+    ticketId: string,
+    request: TicketCcRequest,
+  ): Promise<TicketParticipantList> {
+    return ticketParticipantListSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `${this.#ticket(brandId, ticketId)}/participants`,
+        request,
+      ),
+    );
+  }
+
+  async removeCc(
+    brandId: string,
+    ticketId: string,
+    participantId: string,
+  ): Promise<TicketParticipantList> {
+    return ticketParticipantListSchema.parse(
+      await this.#transport.request(
+        'DELETE',
+        `${this.#ticket(brandId, ticketId)}/participants/${encodeURIComponent(participantId)}`,
       ),
     );
   }

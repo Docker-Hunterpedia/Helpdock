@@ -166,6 +166,19 @@
       "unavailable": "Could not load who can take this ticket."
     }
   },
+  "participants": {
+    "title": "Participants",
+    "contact": "contact",
+    "cc": "CC",
+    "remove": "Remove {{address}}",
+    "addLabel": "Add a CC",
+    "addPlaceholder": "Add a CC address",
+    "add": "Add",
+    "hint": "CCs receive public replies and may reply by email.",
+    "added": "{{address}} added as a CC.",
+    "removed": "{{address}} removed.",
+    "failed": "That did not work. Try again."
+  },
   "filters": {
     "title": "Filter tickets",
     "open": "Filter",

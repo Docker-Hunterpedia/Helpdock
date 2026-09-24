@@ -19,6 +19,7 @@ import { initialsOf } from '../contacts/format.js';
 import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
 import { elapsedFraction, messageTime, statusName } from './format.js';
+import { ParticipantsCard } from './participants-card.tsx';
 
 /**
  * DESIGN §6.3 DetailsPanel: 300 px on `bg.surface`, a contact card, labelled
@@ -173,6 +174,9 @@ export function DetailsPanel({
           </Box>
         )}
       </Box>
+
+      {/* M1-13: the contact, the CCs and a field to copy somebody in. */}
+      <ParticipantsCard ticketId={ticket.id} />
 
       <AssigneePicker
         id={assigneeId}

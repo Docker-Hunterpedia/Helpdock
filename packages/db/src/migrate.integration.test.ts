@@ -29,6 +29,7 @@ const MIGRATION_TAGS = [
   '0014_tags_custom_fields_and_templates',
   '0015_assignment',
   '0017_spam_and_block_list',
+  '0019_contact_identity_and_participants',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

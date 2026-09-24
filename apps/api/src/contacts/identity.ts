@@ -4,9 +4,17 @@ import type {
   DbTransaction,
 } from '@helpdock/db';
 import { contactDuplicateSuggestions, contactIdentities, contacts } from '@helpdock/db';
-import type { ContactIdentityKind } from '@helpdock/schemas';
-import { normaliseIdentity, VERIFIABLE_IDENTITY_KINDS } from '@helpdock/schemas';
-import { and, eq } from 'drizzle-orm';
+import type {
+  ContactDuplicateReason,
+  ContactIdentityKind,
+  IdentitySource,
+} from '@helpdock/schemas';
+import {
+  isVerifiedIdentity,
+  normaliseIdentity,
+  VERIFIABLE_IDENTITY_KINDS,
+} from '@helpdock/schemas';
+import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { ContactFailure } from './contact-failure.js';
 
 /**
@@ -15,34 +23,36 @@ import { ContactFailure } from './contact-failure.js';
  * the admin form in this milestone.
  *
  * It is one function because DOMAIN-RULES §4.4 is one rule, and a rule
- * implemented three times is three rules:
+ * implemented three times is three rules. **Auto-merge happens only when both
+ * sides of the match are verified** (M1-13):
  *
- * | The identifier is | What happens |
- * |---|---|
- * | verified, and another contact holds it | that contact is returned |
- * | verified, and nobody holds it | a new contact, with the identifier verified |
- * | unverified, and another contact holds it | **a new contact**, plus a duplicate suggestion |
- * | unverified, and nobody holds it | a new contact, with the identifier unverified |
+ * | The claim is | Another contact holds it | What happens |
+ * |---|---|---|
+ * | verified | verified | that contact is returned (the auto-merge) |
+ * | verified | unverified | **a new contact takes the identifier**, plus a duplicate suggestion |
+ * | unverified | either | **a new contact**, plus a duplicate suggestion |
+ * | either | nobody | a new contact holding the identifier |
  *
- * The third row is the one that matters. "An identifier someone types is a
+ * The middle rows are the ones that matter. "An identifier someone types is a
  * hint, not proof" (DOMAIN-RULES §4): matching on it would let anybody who
- * knows an address walk into that person's history by typing it into a pre-chat
- * form. So the hint becomes a suggestion an agent judges, and M1-13 is what
- * acts on it.
+ * knows an address walk into that person's history by typing it into a
+ * pre-chat form, and it would equally let a typed address pull a real inbound
+ * email into the typist's contact. So a hint on either side becomes a
+ * suggestion an agent judges. When the claim *is* proof and the holder's is
+ * only a hint, the identifier moves to the contact that can prove it — the
+ * unique index allows one holder, and it should be the one with the proof.
  *
- * A phone number is never verified in v1 — Helpdock sends no SMS, so nothing
- * can prove one — and asking for `verified: true` on one is a programming error
- * rather than a request that is refused, because no caller has the standing to
- * claim it.
+ * Whether a claim is verified is not the caller's to say: it names its
+ * `source`, and `isVerifiedIdentity` answers from DOMAIN-RULES §4.4's table
+ * (`identity-rules.ts` in `@helpdock/schemas`).
  */
 
 export interface IdentityClaim {
   readonly kind: ContactIdentityKind;
   /** As it arrived. Normalised here, once, before anything is looked up. */
   readonly value: string;
-  readonly verified: boolean;
-  /** What established it: `email.inbound`, `widget.form`, `agent`, `import`. */
-  readonly source: string;
+  /** Where it came from, which decides whether it is verified. */
+  readonly source: IdentitySource;
 }
 
 export interface FindOrCreateOptions {
@@ -56,13 +66,14 @@ export interface FindOrCreateOptions {
 export interface FindOrCreateResult {
   readonly contact: ContactRow;
   /**
-   * Null in exactly one case: the value was unverified and another contact
-   * already holds it, so the unique index keeps it off this one and
+   * Null in exactly one case: the claim was unverified and another contact
+   * already holds the value, so the unique index keeps it off this one and
    * `duplicateOf` says who has it.
    */
   readonly identity: ContactIdentityRow | null;
   /** False when an existing contact was matched on a verified identifier. */
   readonly created: boolean;
+  /** The contact the new one was suggested as a duplicate of, if any. */
   readonly duplicateOf: string | null;
 }
 
@@ -114,10 +125,10 @@ export const findByIdentity = async (
 };
 
 /**
- * Records "these two might be the same person", once per pair. A second form
- * submission from the same typed address is not a second opinion, so the insert
- * is a no-op when the pair is already there — including when an agent has
- * dismissed it, which is an answer and not an invitation to ask again.
+ * Records "these two might be the same person", once per pair **in either
+ * direction**. A second form submission from the same typed address is not a
+ * second opinion, and an agent's "Not the same" is an answer for the pair — not
+ * an invitation to ask again the other way round.
  */
 const suggestDuplicate = async (
   tx: DbTransaction,
@@ -130,10 +141,31 @@ const suggestDuplicate = async (
     readonly brandId: string;
     readonly contactId: string;
     readonly otherContactId: string;
-    readonly reason: ContactIdentityKind;
+    readonly reason: ContactDuplicateReason;
   },
 ): Promise<void> => {
   if (contactId === otherContactId) {
+    return;
+  }
+
+  const existing = await tx
+    .select({ id: contactDuplicateSuggestions.id })
+    .from(contactDuplicateSuggestions)
+    .where(
+      or(
+        and(
+          eq(contactDuplicateSuggestions.contactId, contactId),
+          eq(contactDuplicateSuggestions.otherContactId, otherContactId),
+        ),
+        and(
+          eq(contactDuplicateSuggestions.contactId, otherContactId),
+          eq(contactDuplicateSuggestions.otherContactId, contactId),
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
     return;
   }
 
@@ -150,6 +182,58 @@ const suggestDuplicate = async (
 };
 
 /**
+ * pg_trgm's `similarity` from which two names under one account read as one
+ * person: "Mona K." against "Mona Khalil" scores 0.46 and "M. Khalil" 0.61,
+ * while two colleagues who share only a first name stay well below it.
+ */
+const SIMILAR_NAME_THRESHOLD = 0.4;
+
+/** At most this many name suggestions for one contact, so a large account is not a flood. */
+const SIMILAR_NAME_LIMIT = 5;
+
+/**
+ * "Same account, similar name" (M1-13): the one duplicate reason no identifier
+ * carries. Run whenever a contact lands under an account — created by a channel
+ * or by an agent, or moved there — because that is the moment two records of
+ * one person become comparable.
+ *
+ * Merged and erased contacts are never candidates: the first is already
+ * somebody else, and the second is nobody.
+ */
+export const suggestSimilarNames = async (
+  tx: DbTransaction,
+  brandId: string,
+  contact: Pick<ContactRow, 'id' | 'name' | 'accountId'>,
+): Promise<void> => {
+  if (contact.accountId === null) {
+    return;
+  }
+
+  const candidates = await tx
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.accountId, contact.accountId),
+        ne(contacts.id, contact.id),
+        isNull(contacts.mergedIntoId),
+        isNull(contacts.anonymisedAt),
+        sql`similarity(lower(${contacts.name}), lower(${contact.name})) >= ${SIMILAR_NAME_THRESHOLD}`,
+      ),
+    )
+    .limit(SIMILAR_NAME_LIMIT);
+
+  for (const candidate of candidates) {
+    await suggestDuplicate(tx, {
+      brandId,
+      contactId: contact.id,
+      otherContactId: candidate.id,
+      reason: 'similar_name',
+    });
+  }
+};
+
+/**
  * The seam. Runs inside the caller's transaction, so the contact, its
  * identifier and any duplicate suggestion commit together with whatever domain
  * change asked for them — a ticket, a conversation, an inbound message.
@@ -160,50 +244,87 @@ export const findOrCreateContactByIdentity = async (
   claim: IdentityClaim,
   options: FindOrCreateOptions = {},
 ): Promise<FindOrCreateResult> => {
-  assertVerifiable(claim.kind, claim.verified);
-
+  const verified = isVerifiedIdentity(claim.kind, claim.source);
   const value = requireNormalised(claim.kind, claim.value, options.defaultCallingCode);
   const existing = await findByIdentity(tx, brandId, claim.kind, value);
 
-  if (existing !== undefined && claim.verified) {
+  if (existing !== undefined && verified && existing.verified) {
     return {
       contact: await contactById(tx, brandId, existing.contactId),
-      identity: existing.verified ? existing : await markVerified(tx, existing.id, claim.source),
+      identity: existing,
       created: false,
       duplicateOf: null,
     };
   }
 
+  const name = options.name?.trim();
   const contact = await insertContact(tx, {
     brandId,
-    name:
-      options.name?.trim() === undefined || options.name.trim() === ''
-        ? value
-        : options.name.trim(),
+    name: name === undefined || name === '' ? value : name,
     accountId: options.accountId ?? null,
   });
+  await suggestSimilarNames(tx, brandId, contact);
 
-  if (existing !== undefined) {
-    await suggestDuplicate(tx, {
+  if (existing === undefined) {
+    const identity = await insertIdentity(tx, {
       brandId,
       contactId: contact.id,
-      otherContactId: existing.contactId,
-      reason: claim.kind,
+      kind: claim.kind,
+      value,
+      verified,
+      source: claim.source,
     });
 
-    return { contact, identity: null, created: true, duplicateOf: existing.contactId };
+    return { contact, identity, created: true, duplicateOf: null };
   }
 
-  const identity = await insertIdentity(tx, {
+  await suggestDuplicate(tx, {
     brandId,
     contactId: contact.id,
-    kind: claim.kind,
-    value,
-    verified: claim.verified,
-    source: claim.source,
+    otherContactId: existing.contactId,
+    reason: claim.kind,
   });
 
-  return { contact, identity, created: true, duplicateOf: null };
+  return {
+    contact,
+    identity: verified ? await takeVerified(tx, existing.id, contact.id, claim.source) : null,
+    created: true,
+    duplicateOf: existing.contactId,
+  };
+};
+
+/**
+ * The contact an address belongs to, or a new one holding it, and the address
+ * as normalised — for a CC
+ * (DOMAIN-RULES §2.5), where the address is somebody to copy in and never a
+ * claim about who is asking. Unlike the seam above it matches an unverified
+ * holder too: copying an address in grants its contact nothing, so there is no
+ * history to protect, and a second contact per CC would be a duplicate made on
+ * purpose.
+ */
+export const findOrCreateByAddress = async (
+  tx: DbTransaction,
+  brandId: string,
+  address: string,
+  source: IdentitySource,
+): Promise<{ readonly contact: ContactRow; readonly address: string }> => {
+  const value = requireNormalised('email', address);
+  const existing = await findByIdentity(tx, brandId, 'email', value);
+  if (existing !== undefined) {
+    return { contact: await contactById(tx, brandId, existing.contactId), address: value };
+  }
+
+  const contact = await insertContact(tx, { brandId, name: value });
+  await insertIdentity(tx, {
+    brandId,
+    contactId: contact.id,
+    kind: 'email',
+    value,
+    verified: isVerifiedIdentity('email', source),
+    source,
+  });
+
+  return { contact, address: value };
 };
 
 // --------------------------------------------------------------------------
@@ -286,17 +407,19 @@ export const insertIdentity = async (
 };
 
 /**
- * An identifier that was unverified on this contact and has now been proven —
- * an address somebody typed, that an email later arrived from.
+ * An identifier another contact held unverified, now proven by the claim that
+ * created `contactId`: it moves to the contact with the proof and is marked
+ * verified there. The previous holder is left a duplicate suggestion instead.
  */
-const markVerified = async (
+const takeVerified = async (
   tx: DbTransaction,
   identityId: string,
+  contactId: string,
   source: string,
 ): Promise<ContactIdentityRow> => {
   const updated = await tx
     .update(contactIdentities)
-    .set({ verified: true, verifiedAt: new Date(), source })
+    .set({ contactId, verified: true, verifiedAt: new Date(), source })
     .where(eq(contactIdentities.id, identityId))
     .returning();
 

@@ -283,6 +283,28 @@ test.describe('accessibility', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('the merge dialog and the banner it leaves have no violations', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openContact(page, locale, 'Mona Khalil');
+    await page
+      .getByRole('button', { name: t('contacts:duplicates.mergeWith', { name: 'M. Khalil' }) })
+      .click();
+    const dialog = page.getByRole('dialog', { name: t('contacts:merge.title') });
+    await dialog.getByText(t('contacts:merge.keep')).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await dialog.getByRole('button', { name: t('contacts:merge.submit') }).click();
+    await page
+      .getByRole('button', { name: t('contacts:merge.bannerUndo', { time: '' }).trim() })
+      .waitFor();
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('the create form has no violations', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
 

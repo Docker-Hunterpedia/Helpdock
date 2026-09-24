@@ -27,6 +27,7 @@ import { MediaModule } from './media/media.module.js';
 import type { ObjectStorage } from './media/storage.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
+import { ParticipantsModule } from './participants/participants.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
 import { DomainCheckController } from './routes/domain-check.controller.js';
 import { DomainCheckService } from './routes/domain-check.service.js';
@@ -123,6 +124,8 @@ export class AppModule implements NestModule {
         TicketsModule.forRoot({ ticketing }),
         // M1-07's tab and picker. The rotation itself runs in the worker.
         AssignmentModule.forRoot({ ticketing }),
+        // M1-13: a ticket's CCs. Its service is exported for M1-09's merge.
+        ParticipantsModule.forRoot(),
         // M1-10. `forRoot` builds the S3 client from the bootstrap keys unless
         // a caller hands it a bucket double, which is what the suites do.
         MediaModule.forRoot({

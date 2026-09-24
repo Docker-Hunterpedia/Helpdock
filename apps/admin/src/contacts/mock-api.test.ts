@@ -211,4 +211,50 @@ describe('MockContactsApi', () => {
     const second = await api.listContacts(MOCK_BRAND, { limit: 2, cursor: '2' });
     expect(second.contacts).toHaveLength(2);
   });
+
+  it('merges a pair, carries verification as it was, and undoes exactly that', async () => {
+    const api = new MockContactsApi();
+
+    const survivor = await api.mergeContacts(MOCK_BRAND, MOCK_CONTACT_MONA, {
+      mergedContactId: MOCK_CONTACT_GMAIL,
+    });
+
+    expect(survivor.identities.find((row) => row.value === 'mona.k@gmail.com')?.verified).toBe(
+      false,
+    );
+    expect(survivor.duplicates).toEqual([]);
+    expect(survivor.merges).toHaveLength(1);
+    await expect(api.listContacts(MOCK_BRAND)).resolves.toMatchObject({ total: 4 });
+    expect((await api.contact(MOCK_BRAND, MOCK_CONTACT_GMAIL)).mergedIntoId).toBe(
+      MOCK_CONTACT_MONA,
+    );
+    const edit = await api
+      .updateContact(MOCK_BRAND, MOCK_CONTACT_GMAIL, { name: 'Edited' })
+      .catch((error: unknown) => error);
+    expect(reasonOf(edit)).toBe('merged');
+
+    const mergeId = survivor.merges[0]?.id ?? '';
+    const restored = await api.undoMerge(MOCK_BRAND, MOCK_CONTACT_MONA, mergeId);
+
+    expect(restored.merges).toEqual([]);
+    expect(restored.duplicates.map((row) => row.id)).toEqual([MOCK_DUPLICATE]);
+    const again = await api
+      .undoMerge(MOCK_BRAND, MOCK_CONTACT_MONA, mergeId)
+      .catch((error: unknown) => error);
+    expect(reasonOf(again)).toBe('merge-expired');
+  });
+
+  it('refuses a contact merged into itself', async () => {
+    const api = new MockContactsApi();
+
+    const merge = await api
+      .mergeContacts(MOCK_BRAND, MOCK_CONTACT_MONA, { mergedContactId: MOCK_CONTACT_MONA })
+      .catch((error: unknown) => error);
+    const preview = await api
+      .mergePreview(MOCK_BRAND, MOCK_CONTACT_MONA, MOCK_CONTACT_MONA)
+      .catch((error: unknown) => error);
+
+    expect(reasonOf(merge)).toBe('merge-self');
+    expect(reasonOf(preview)).toBe('merge-self');
+  });
 });

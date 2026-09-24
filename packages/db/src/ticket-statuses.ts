@@ -19,6 +19,9 @@ import { ticketStatuses } from './schema/ticket-statuses.js';
  * §2.2 makes it the reason a close schedules no CSAT. Without it, "is this the
  * Spam status?" could only be answered by the row's name, which a brand may
  * change.
+ *
+ * `is_spam` is the fifth, added by M1-14: Merged carries the same flags as
+ * Spam, and DOMAIN-RULES §11 purges spam on a clock of its own.
  */
 export const BUILT_IN_TICKET_STATUSES = [
   {
@@ -30,6 +33,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     awaitingCustomer: false,
     isDefault: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 10,
     color: 'info',
   },
@@ -42,6 +46,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     awaitingCustomer: true,
     isDefault: false,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 20,
     color: 'warning',
   },
@@ -54,6 +59,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     awaitingCustomer: false,
     isDefault: false,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 30,
     color: 'escalated',
   },
@@ -66,6 +72,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     awaitingCustomer: false,
     isDefault: false,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 40,
     color: 'success',
   },
@@ -78,6 +85,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     awaitingCustomer: false,
     isDefault: false,
     excludedFromReports: true,
+    isSpam: true,
     sortOrder: 50,
     color: 'danger',
   },
@@ -90,6 +98,7 @@ export const BUILT_IN_TICKET_STATUSES = [
     awaitingCustomer: false,
     isDefault: false,
     excludedFromReports: true,
+    isSpam: false,
     sortOrder: 60,
     color: 'success',
   },

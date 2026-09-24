@@ -12,6 +12,7 @@ export * from './departments.js';
 export * from './enums.js';
 export * from './job-receipts.js';
 export * from './outbox.js';
+export * from './retention-settings.js';
 export * from './settings.js';
 export * from './tags.js';
 export * from './team-members.js';

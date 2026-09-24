@@ -157,6 +157,12 @@ export const tickets = pgTable(
       table.updatedAt,
     ),
     index('tickets_brand_assignee_idx').on(table.brandId, table.assigneeId),
+    // The nightly retention pass's read (M1-14, DOMAIN-RULES §11): "closed more
+    // than N days ago", oldest first, in bounded batches. Partial, because an
+    // open ticket is never a candidate and most of a busy brand's rows are open.
+    index('tickets_brand_closed_at_idx')
+      .on(table.brandId, table.closedAt)
+      .where(sql`${table.closedAt} is not null`),
     index('tickets_search_idx').using('gin', table.search),
   ],
 );

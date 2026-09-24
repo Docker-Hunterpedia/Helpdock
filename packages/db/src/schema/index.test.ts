@@ -37,6 +37,7 @@ describe('the schema', () => {
       'departments',
       'job_receipts',
       'outbox',
+      'retention_settings',
       'settings',
       'tags',
       'team_members',
@@ -81,10 +82,10 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but three has a uuid primary key; `settings` is keyed by
-    // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key, and
-    // `ticket_tags` by the pair it joins.
-    expect(generated).toHaveLength(byName.size - 3);
+    // Every table but four has a uuid primary key; `settings` is keyed by
+    // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
+    // `ticket_tags` by the pair it joins, and `retention_settings` by its brand.
+    expect(generated).toHaveLength(byName.size - 4);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }
@@ -116,6 +117,20 @@ describe('the indexes and constraints', () => {
     const unique = configOf('departments').uniqueConstraints[0];
 
     expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'name']);
+  });
+
+  it('bounds the audit log window below by the 90 days DOMAIN-RULES §11 promises', () => {
+    const names = configOf('retention_settings').checks.map((entry) => entry.name);
+
+    expect(names).toContain('retention_settings_audit_log_days_check');
+  });
+
+  it('indexes closed tickets by brand for the retention pass', () => {
+    const index = configOf('tickets').indexes.find(
+      (entry) => entry.config.name === 'tickets_brand_closed_at_idx',
+    );
+
+    expect(index?.config.where).toBeDefined();
   });
 
   it('keeps a status name unique inside its brand, so the picker has no twins', () => {

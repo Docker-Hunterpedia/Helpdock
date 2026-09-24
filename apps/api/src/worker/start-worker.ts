@@ -5,21 +5,26 @@ import {
   createQueueConnection,
   createWorker,
   type JobLogger,
+  maintenanceRetentionJob,
+  maintenanceRetentionScheduleJob,
   mediaProcessJob,
   type OutboxRelay,
   outboxEventJob,
   QUEUE_NAMES,
+  RETENTION_CRON,
   type RelayStatusStore,
   startOutboxRelay,
 } from '@helpdock/jobs';
-import { Queue } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
+import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
+import { createMaintenanceProcessor } from '../retention/retention.job.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 
 /**
@@ -27,8 +32,8 @@ import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
  * `packages/jobs/README.md` specifies.
  *
  * 1. Handlers are registered before the worker starts. `settings.changed` ships
- *    registered by `@helpdock/jobs` itself; M1's four ticket events are
- *    registered here. A milestone that consumes a new event does the same,
+ *    registered by `@helpdock/jobs` itself; M1's ticket, attachment and
+ *    object-purge events are registered here. A milestone that consumes a new event does the same,
  *    before the worker is created, because a job that arrives before its handler
  *    fails as an unknown event and burns attempts.
  * 2. The `outbox.event` consumer, which claims a receipt before the handler runs.
@@ -56,6 +61,12 @@ export interface WorkerDependencies {
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   /** M1-10's `media.process` consumer: sharp, ffmpeg and the optional scanner. */
   createMediaWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
+  /**
+   * M1-14's `maintenance` consumer and the nightly retention schedule. The
+   * schedule is upserted on every boot, so a Redis that lost it gets it back
+   * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
+   */
+  createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -88,6 +99,9 @@ export type WorkerEnv = Pick<
  * skipped`, and a host that is set and unreachable is a rejection rather than a
  * silent pass (`scanner.ts`).
  */
+const storageFor = (env: WorkerEnv): S3ObjectStorage =>
+  new S3ObjectStorage(createS3Client(env), env.S3_BUCKET);
+
 const scannerFor = (env: WorkerEnv): FileScanner | undefined =>
   env.CLAMAV_HOST === undefined
     ? undefined
@@ -102,9 +116,11 @@ export const workerDependencies: WorkerDependencies = {
   // The broadcast publishes on the same connection: a ticket event ends in a
   // socket frame, and only an `APP_ROLE=api` replica holds sockets
   // (`realtime/broadcast.ts`).
-  registerHandlers: ({ redis }) => {
+  registerHandlers: ({ redis, env }) => {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
+    // M1-14: deletes the objects of attachments a purge or an erasure removed.
+    registerObjectPurgeHandler(storageFor(env));
 
     // `attachment.uploaded` ends in a job on the `media` queue, so its handler
     // needs a producer. It is the one outbox handler that adds a job, and it
@@ -131,7 +147,7 @@ export const workerDependencies: WorkerDependencies = {
     createWorker(
       mediaProcessJob,
       createMediaProcessor({
-        storage: new S3ObjectStorage(createS3Client(env), env.S3_BUCKET),
+        storage: storageFor(env),
         tools: createMediaTools({ ffmpeg: env.FFMPEG_PATH, ffprobe: env.FFPROBE_PATH }),
         scanner: scannerFor(env),
       }),
@@ -145,6 +161,50 @@ export const workerDependencies: WorkerDependencies = {
         concurrency: 1,
       },
     ),
+  createMaintenanceWorker: ({ redis, db, log }) => {
+    const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
+    const scheduled = maintenance.upsertJobScheduler(
+      maintenanceRetentionScheduleJob.name,
+      { pattern: RETENTION_CRON, tz: 'UTC' },
+      {
+        name: maintenanceRetentionScheduleJob.name,
+        data: {},
+        opts: maintenanceRetentionScheduleJob.options,
+      },
+    );
+    scheduled.catch((error: unknown) =>
+      log.error({ err: error }, 'could not register the nightly retention schedule'),
+    );
+
+    const worker = new Worker(
+      QUEUE_NAMES.maintenance,
+      createMaintenanceProcessor({
+        db,
+        log,
+        queue: {
+          add: async (payload, jobId) => {
+            await maintenance.add(maintenanceRetentionJob.name, payload, {
+              ...maintenanceRetentionJob.options,
+              jobId,
+            });
+          },
+        },
+      }),
+      // One brand at a time: retention is background housekeeping, and two
+      // brands purging at once would only compete for the same disk.
+      { connection: redis, concurrency: 1 },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'maintenance job failed'),
+    );
+
+    return {
+      close: async () => {
+        await worker.close();
+        await maintenance.close();
+      },
+    };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -167,6 +227,7 @@ export const startWorker = ({
   const producers = deps.registerHandlers({ redis: connection, env });
   const worker = deps.createEventWorker({ redis: connection, db, log });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
+  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -188,6 +249,7 @@ export const startWorker = ({
     // media worker first would leave a job queued with nothing draining it,
     // which is harmless but slower to notice than the other order's bug.
     await media.close();
+    await maintenance.close();
     await producers.close();
     await connection.quit();
   };

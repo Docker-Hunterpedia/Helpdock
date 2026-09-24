@@ -83,5 +83,33 @@ export class NoContactTimelineProvider implements ContactTimelineProvider {
   }
 }
 
+/**
+ * What an erasure removes outside the contact's own rows (DOMAIN-RULES §11,
+ * M1-14): "deletes attachments they sent, rewrites message author fields". It
+ * is a seam for the same reason as the two above — those rows are the ticket
+ * schema's, and the contacts service does not learn it.
+ *
+ * It runs in the erasure's own transaction, so the traces go with the hashes
+ * or not at all.
+ */
+export interface ContactErasureResult {
+  /** Attachment rows deleted; their objects are queued for deletion with them. */
+  readonly attachments: number;
+  /** Messages the contact wrote whose channel-level author trace was cleared. */
+  readonly messages: number;
+}
+
+export interface ContactErasureProvider {
+  eraseTraces(tx: DbTransaction, brandId: string, contactId: string): Promise<ContactErasureResult>;
+}
+
+/** Nothing outside the contact's own rows: a brand with no tickets has no traces. */
+export class NoContactErasureProvider implements ContactErasureProvider {
+  eraseTraces(): Promise<ContactErasureResult> {
+    return Promise.resolve({ attachments: 0, messages: 0 });
+  }
+}
+
 export const TICKET_STATS_PROVIDER = Symbol('helpdock.ticket-stats-provider');
+export const CONTACT_ERASURE_PROVIDER = Symbol('helpdock.contact-erasure-provider');
 export const CONTACT_TIMELINE_PROVIDER = Symbol('helpdock.contact-timeline-provider');

@@ -50,6 +50,14 @@ export const ticketStatuses = pgTable(
      * `awaiting_customer` are already written with.
      */
     excludedFromReports: boolean('excluded_from_reports').notNull().default(false),
+    /**
+     * The seeded Spam row, and only it (M1-14). `excluded_from_reports` cannot
+     * answer "is this Spam?" on its own, because Merged carries the same flag,
+     * and DOMAIN-RULES §11 purges the two on different clocks: spam after 30
+     * days, a merged ticket with the closed tickets. A brand may rename Spam,
+     * so a flag rather than a name, for the reason given above.
+     */
+    isSpam: boolean('is_spam').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     color: statusColorEnum('color').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -51,6 +51,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'settings', departmentScoped: false },
   { name: 'audit_log', departmentScoped: false },
   { name: 'outbox', departmentScoped: false },
+  // A brand's retention windows (M1-14): configuration, read by the Admin's
+  // form and by the brand's own nightly job, never by a department.
+  { name: 'retention_settings', departmentScoped: false },
   // A brand's status list is not a ticket: an Agent has to read the name of the
   // status a ticket in their own department is in, and the list is the same
   // list for every department.

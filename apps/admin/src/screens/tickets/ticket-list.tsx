@@ -24,7 +24,6 @@ export const TICKET_LIST_WIDTH = 360;
 export function TicketList({
   heading,
   tickets,
-  contactNames,
   selectedId,
   now,
   search,
@@ -46,7 +45,6 @@ export function TicketList({
 }: {
   readonly heading: string;
   readonly tickets: readonly Ticket[];
-  readonly contactNames: ReadonlyMap<string, string>;
   readonly selectedId: string | null;
   readonly now: number;
   /** The term the list was read with, which decides which empty state shows. */
@@ -166,9 +164,6 @@ export function TicketList({
                 <TicketRow
                   key={ticket.id}
                   ticket={ticket}
-                  contactName={
-                    ticket.contactId === null ? null : (contactNames.get(ticket.contactId) ?? null)
-                  }
                   selected={ticket.id === selectedId}
                   now={now}
                   search={linkSearch}

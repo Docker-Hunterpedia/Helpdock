@@ -1,24 +1,18 @@
-import type { ContactSummary, StaffMember } from '@helpdock/schemas';
+import type { StaffMember } from '@helpdock/schemas';
 
 /**
- * Who the ids on a ticket belong to.
+ * Who the staff ids on a ticket belong to.
  *
- * A ticket carries `assigneeId` and `contactId` and no names, so a screen has
- * to resolve them. Two things make that awkward, and both are recorded here
- * rather than in a component:
+ * A ticket carries `assigneeId` and no name, so a screen has to resolve it,
+ * and **`GET /brands/:id/staff` declares `staff:manage`**, which an Agent does
+ * not hold. The assignee picker therefore reads M1-07's
+ * `GET /brands/:id/assignment/:departmentId/assignable` (`ticket:write`)
+ * instead; the staff read is still what names the people on list rows, and for
+ * an Agent it may come back empty.
  *
- * 1. **`GET /brands/:id/staff` declares `staff:manage`**, which an Agent does
- *    not hold. The assignee picker therefore reads M1-07's
- *    `GET /brands/:id/assignment/:departmentId/assignable` (`ticket:write`)
- *    instead; the staff read is still what names the people on list rows, and
- *    for an Agent it may come back empty.
- * 2. **Contacts are a page, not a map.** The contact list answers the first
- *    page for the brand, so a row whose contact is further down is left without
- *    a name rather than given a wrong one. The real fix is the ticket list
- *    embedding its contact, which is a change to M1-02's response.
- *
- * Both gaps are visible rather than papered over: an unresolved id is drawn as
- * a shortened id, never as "Unknown" and never as somebody else.
+ * The gap is visible rather than papered over: an unresolved id is drawn as a
+ * shortened id, never as "Unknown" and never as somebody else. Contacts no
+ * longer pass through here: the ticket embeds its contact's name (M1-15).
  */
 
 /** `0192c3f0…c1`: enough to tell two ids apart, short enough for a row. */
@@ -56,15 +50,3 @@ export const assigneeName = (
     shortId(assigneeId)
   );
 };
-
-export const contactNamesOf = (contacts: readonly ContactSummary[]): ReadonlyMap<string, string> =>
-  new Map(contacts.map((contact) => [contact.id, contact.name]));
-
-export const contactAddressesOf = (
-  contacts: readonly ContactSummary[],
-): ReadonlyMap<string, string> =>
-  new Map(
-    contacts
-      .filter((contact) => contact.primaryIdentity !== null)
-      .map((contact) => [contact.id, contact.primaryIdentity?.value ?? '']),
-  );

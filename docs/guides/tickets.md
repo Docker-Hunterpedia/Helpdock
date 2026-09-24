@@ -559,6 +559,8 @@ GET /api/brands/:brandId/tickets
       "channel": "manual",
       "departmentId": "0199f4b2-…",
       "assigneeId": null,
+      "contactId": "0199f4b2-…",
+      "contact": { "id": "0199f4b2-…", "name": "Nadia Karim" },
       "slaBreached": false,
       "closedAt": null,
       "updatedAt": "2026-09-19T12:00:00.000Z"
@@ -567,6 +569,15 @@ GET /api/brands/:brandId/tickets
   "nextCursor": "eyJzIjoidXBkYXRlZEF0Iiw…"
 }
 ```
+
+**Each row names its contact** (M1-15): `contact` is `{ id, name }`, read for
+the whole page in one primary-key lookup, or `null` when the ticket names
+nobody. It is the name and nothing else, because an address on every row of a
+list is fifty addresses nobody asked to see. `GET /tickets/:ticketId` embeds the
+same thing. The field is **left off** for a caller without `contact:read`
+(every staff role holds it; an api key scoped to tickets alone would not), who
+still has `contactId`, and the write routes leave it off too. Absent means "not
+said", which a client must not read as "nobody".
 
 **Paging is keyset, not offset.** `OFFSET 10000` makes Postgres walk ten
 thousand rows it throws away, and it *skips* rows: a ticket updated between page
@@ -582,9 +593,12 @@ is refused with 400 rather than reinterpreted.
 **Search** is full text *and* trigram. `q` goes to `websearch_to_tsquery` against
 the generated `tickets.search` column — which understands quoted phrases and
 `-excluded`, and never raises on nonsense — *or* to the `<%` word-similarity
-operator against the subject, through `tickets_subject_trgm_idx`. Full text will
-not match `renewa` against "renewal"; the trigram half will. Both bind the term
-as a parameter.
+operator against the subject. Full text will not match `renewa` against
+"renewal"; the trigram half will. Both bind the term as a parameter. Under
+row-level security neither half can use its GIN index, so a search reads the
+brand's tickets newest first until it has a page; see
+[Search under row-level security](#search-under-row-level-security) for why, and
+for what that costs.
 
 `tagId` has **all-of** semantics (M1-06): a ticket matches when it carries every
 tag named, not any of them. Two chips in a filter are how somebody narrows a
@@ -856,10 +870,208 @@ tickets against the department's cap ("8/8 at cap" in danger, "offline" instead
 of a count). The button names the current assignee even when they are outside
 the list, from the staff read when it has them and as a shortened id when not.
 
-The rows also name their contact from the first page of `GET /contacts`, which
-is a page and not a map: a ticket whose contact is further down is drawn
-without a name rather than with a wrong one. Embedding the contact summary in
-the ticket list row would close that, and is a change to M1-02's response.
+The rows name their contact from the ticket itself: the list embeds
+`contact: { id, name }` ([Listing](#listing)), so a row no longer depends on its
+contact being on the first page of `GET /contacts`, and the workspace no longer
+reads that page at all. The open ticket reads its one contact in full, for the
+details card and the thread's address line.
+
+## Performance
+
+The M1 exit criterion is "ticket list of 50k seeded tickets loads under 150 ms
+p95 under the D §14 conditions" ([DOMAIN-RULES §14](../planning/DOMAIN-RULES.md#14-performance-test-conditions),
+REQUIREMENTS §5.2). What makes that true, how it is measured, and what it
+measured last.
+
+### The index set
+
+Every list is ordered by the keyset `(updated_at, id)`, so every index a list
+reads *in order* ends in exactly those two columns
+(`0021_ticket_list_indexes.sql`):
+
+| Index | Serves |
+|---|---|
+| `tickets_brand_updated_idx (brand_id, updated_at, id)` | The default list; every view that filters rather than narrows (the live states, Escalated, Unassigned); search; page 2 onwards |
+| `tickets_brand_assignee_updated_idx (brand_id, assignee_id, updated_at, id)` | "My open": one person's tickets, already in list order. Replaces the PRD's `(brand_id, assignee_id)`, which is its prefix |
+| `tickets_brand_department_status_updated_idx (brand_id, department_id, status_id, updated_at, id)` | The filter popover's department and status chips. `id` was added so one department in one status is in keyset order too |
+| `tickets_brand_number_key (brand_id, number)` | `sort=number` |
+| `ticket_tags_brand_tag_idx (brand_id, tag_id)` | The all-of tag filter, one scan however many tags are named (M1-06) |
+| `tickets_search_idx` (tsvector GIN), `tickets_subject_trgm_idx` (trigram GIN) | Not the list, today: see [Search under row-level security](#search-under-row-level-security) |
+
+`sort=createdAt` and `sort=priority` have no index of their own. The workspace
+never asks for them, and at 50k tickets they are a top-N sort of the visible
+rows, which is what the default list was before its index (27 ms of database
+time); an index per sort key would be paid on every write for a
+sort nobody uses yet.
+
+### The brand equality
+
+The list's `WHERE` carries `tickets.brand_id = <the brand in the path>`
+(`ticket-query.ts`). It is **not isolation**: the policy's
+`brand_id = ANY(app.brand_ids)` already decides that, and the equality cannot
+widen it. It is for the planner. Against an array it cannot know that one brand
+is involved, so it cannot read `(brand_id, updated_at, id)` in order, and it
+fetched every visible ticket and sorted them. With the equality, a page is a
+backward index scan that stops after `limit + 1` rows. The key lines, before
+and after, as the runtime role under an Admin's context at 50k tickets:
+
+```text
+-- before: every visible ticket, then a sort
+Sort  Sort Key: tickets.updated_at DESC, tickets.id DESC  Sort Method: top-N heapsort
+  ->  Parallel Bitmap Heap Scan on tickets  (rows=16591 loops=3)
+        ->  Bitmap Index Scan on tickets_brand_assignee_idx  (rows=50000)
+Execution Time: 27.248 ms
+
+-- after: one page, in index order
+Limit
+  ->  Index Scan Backward using tickets_brand_updated_idx on tickets  (rows=26 loops=1)
+        Index Cond: ((brand_id = ANY (…app.brand_ids…)) AND (brand_id = '…'::uuid))
+Execution Time: 0.210 ms
+```
+
+Every list query of the benchmark, as Admin and as Agent (key lines; every run
+prints the full plans):
+
+| Query | Admin | Agent (2 of 5 departments) |
+|---|---|---|
+| All tickets | `Index Scan Backward using tickets_brand_updated_idx`, 26 rows read, 0.21 ms | same index, 129 read (103 removed by the department policy), 0.33 ms |
+| My open | `Index Scan Backward using tickets_brand_assignee_updated_idx`, 0.05 ms | same index, 3.9 ms |
+| Unassigned (live states) | `tickets_brand_updated_idx`, 750 read, 2.7 ms | same, 1.6 ms |
+| Live states (Overdue) | `tickets_brand_updated_idx`, 413 read, 0.85 ms | same, 1.9 ms |
+| Escalated | `tickets_brand_updated_idx`, 1 350 read, 3.1 ms | same, 6.0 ms |
+| Search `refund` | `tickets_brand_updated_idx`, 370 read, 2.0 ms | same, 6.5 ms |
+| Search `renewa` (half-typed) | `tickets_brand_updated_idx`, 237 read, 1.3 ms | same, 4.1 ms |
+| Search matching nothing | `tickets_brand_updated_idx`, **50 000 read, 257 ms** | same, 124 ms |
+| Two tags, all-of | `Bitmap Index Scan on ticket_tags_brand_tag_idx`, then `Index Scan using tickets_pkey`, 22.6 ms | same, 15.5 ms |
+| Page 2 | `Index Scan Backward using tickets_brand_updated_idx`, `Index Cond: … ROW(updated_at, id) < ROW(…)`, 0.15 ms | same, 0.42 ms |
+
+"Unassigned" reads the brand-wide index rather than the assignee one: `IS NULL`
+is an index condition but not an equality, so Postgres cannot treat the
+assignee index as ordered past it, and walking the newest tickets is cheaper
+than sorting all 4 800 unassigned ones.
+
+### Search under row-level security
+
+Postgres will not use a condition as an index condition ahead of a row-level
+security policy unless the condition's operator is `LEAKPROOF`: a function that
+is not could raise an error that reveals a row the policy was about to hide.
+`@@` (`ts_match_vq`) and `<%` (`word_similarity_op`) are not leakproof (nor is
+`=` on an enum, which is why the priority and channel filters are filters too),
+so under `FORCE ROW LEVEL SECURITY` the list evaluates a search on each visible
+ticket, newest first, until it has a page. A term that matches often costs a
+few milliseconds. **A term that matches nothing reads every visible ticket**,
+and the trigram half is what makes that expensive: evaluated row by row, `<%`
+costs about 5 µs a subject against about 0.25 µs for the full-text half, so
+257 ms for an Admin at 50k tickets.
+
+That case is outside the gate, and it is reported separately rather than
+hidden (below). Closing it takes one of two things: wrapper functions marked
+`LEAKPROOF`, which needs a superuser and a security argument per function, or a
+search table keyed by token and compared with a leakproof `=`. Either is an
+architecture decision for an ADR, not an index. The two GIN indexes stay: the
+PRD names the tsvector one, and both serve a path that runs as the owner, or
+the list once either decision lands.
+
+### How it is measured
+
+```bash
+pnpm --filter @helpdock/api build
+pnpm --filter @helpdock/api perf:tickets
+```
+
+`apps/api/src/testing/perf/`, run by `apps/api/vitest.perf.config.ts`:
+
+1. **Dataset** (`dataset.ts`): five brands. The measured one has 50 000
+   tickets, about 200 000 messages and 20 000 contacts, the other four 10 000
+   tickets each. The rows are written by `INSERT … SELECT generate_series(…)` as
+   the runtime role inside each brand's system transaction, so every one passes
+   the same policies and department triggers as the api's own writes, and each
+   ticket is numbered from the brand's own sequence. The shape is a desk two
+   years in: 70 % Closed, 3 % Spam, 2 % Merged, and the live queues (Open 14 %,
+   Awaiting customer 8 %, Escalated 3 %) recent; five departments at
+   45/20/15/12/8 %; twenty assignees, a quarter of the live queue unassigned;
+   0–3 tags per ticket on a power law; 0.5 % soft-deleted. Every random choice
+   is seeded, so a run is repeatable. Articles and knowledge chunks have no
+   tables until M5.
+2. **Stack**: `pgvector/pgvector:pg17` and `redis:7-alpine` in containers, and
+   **two api replicas** started from `dist/` as separate processes with
+   `NODE_ENV=production`.
+3. **Load** (`load.ts`): 50 concurrent staff sessions, closed loop, each
+   waiting 1 s between a response and its next request, spread over the two
+   replicas. Each session cycles through every scenario, once as an Admin and
+   once as an Agent confined to the two smallest departments (20 % of the
+   tickets): All tickets, My open, Unassigned, the live states of Overdue,
+   Escalated, search `refund`, search `renewa`, two tags, page 2, and opening a
+   ticket. Two minutes of warm-up, ten measured, p50/p95/p99 by nearest rank.
+4. **Worst case, alone**: a search nothing matches, one session, twenty
+   seconds, after the load. Reported, not gated.
+5. **Plans**: `EXPLAIN (ANALYZE, BUFFERS)` of every list query, built by the
+   repository's own `listTicketsStatement`, run as the runtime role inside the
+   tenant context the request would carry.
+
+| Variable | Default | |
+|---|---|---|
+| `PERF_CONCURRENCY` | 50 | staff sessions |
+| `PERF_THINK_MS` | 1000 | pause between one session's requests |
+| `PERF_WARMUP_S` / `PERF_DURATION_S` | 120 / 600 | |
+| `PERF_REPLICAS` | 2 | api processes |
+| `PERF_P95_MS` | 150 | the gate |
+| `PERF_SCALE` | 1 | multiplies the dataset; `0.1` for a smoke run |
+| `PERF_REPORT` | none | also write the results and plans as JSON |
+
+**What differs from §14**, so the numbers are read for what they are: the host
+is whatever runs the command, not a dedicated 2 vCPU / 4 GB machine; the load
+generator shares it; there is no worker and no widget traffic (the widget is
+M4); and there are no articles or chunks. On a shared or busy machine the tail
+measures the machine, so run it on an idle one.
+
+### What it measured last (2026-09-24)
+
+**The gate has not yet been demonstrated on a §14 host.** The only machine
+available was a 4-vCPU container shared with six other build-and-test jobs,
+with a load average of **27–64 on 4 cores** throughout the run: the tail below
+measures that queue far more than the api. Tick the exit criterion only after a
+run on an idle 2 vCPU / 4 GB machine.
+
+The full §14 run (50 sessions, 1 s think time, 2 min warm-up, 10 min measured,
+two replicas; 37 req/s; no errors):
+
+| Scenario | Admin p50 / p95 ms | Agent p50 / p95 ms |
+|---|---|---|
+| All tickets | 124 / 1 096 | 124 / 1 081 |
+| My open | 71 / 825 | 158 / 1 203 |
+| Unassigned | 139 / 1 023 | 166 / 1 206 |
+| Live states (Overdue) | 131 / 1 147 | 165 / 1 308 |
+| Escalated | 152 / 1 277 | 245 / 1 528 |
+| Search `refund` | 158 / 1 299 | 244 / 1 623 |
+| Search `renewa` | 163 / 1 232 | 208 / 1 429 |
+| Two tags, all-of | 331 / 2 026 | 345 / 2 138 |
+| Page 2 | 126 / 1 075 | 132 / 1 078 |
+| Open a ticket | 140 / 1 324 | 157 / 1 397 |
+
+The same stack at a moment the machine was quieter (load average about 6),
+two sessions with no think time, 40 s measured, which is the api's own cost per
+request with little queueing in front of it:
+
+| Scenario | Admin p50 / p95 ms | Agent p50 / p95 ms |
+|---|---|---|
+| All tickets | 11 / 23 | 12 / 22 |
+| My open | 7 / 14 | 12 / 27 |
+| Unassigned | 12 / 25 | 14 / 25 |
+| Live states (Overdue) | 12 / 22 | 14 / 27 |
+| Escalated | 14 / 26 | 19 / 33 |
+| Search `refund` | 14 / 28 | 20 / 34 |
+| Search `renewa` | 14 / 24 | 17 / 30 |
+| Two tags, all-of | 26 / 46 | 32 / 52 |
+| Page 2 | 12 / 23 | 12 / 23 |
+| Open a ticket | 14 / 25 | 13 / 25 |
+| Search matching nothing (alone, not gated) | 243 / 271 | 138 / 163 |
+
+Before the index set and the brand equality, the same quieter-machine
+comparison could not be made, but the plans could: the default list read and
+sorted every visible ticket (27 ms of database time on its own, before load),
+and a first full-scale run on the same shared machine put the default list's
+p50 at 114 ms against 20 ms after the change.
 
 ## What later milestones add
 

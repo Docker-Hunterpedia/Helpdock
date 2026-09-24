@@ -814,6 +814,41 @@ describe.skipIf(!hasDocker)('tickets', () => {
   // ------------------------------------------------------------------- list
 
   describe('the list', () => {
+    it('names each row’s contact, and says null for a ticket that names nobody (M1-15)', async () => {
+      const contact = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Idris Vantorre' },
+      );
+      const named = await createTicket(sam, {
+        subject: 'Vantorre parcel',
+        contactId: contact.body.id,
+      });
+      const anonymous = await createTicket(sam, { subject: 'Vantorre walk-in' });
+
+      const { body } = await call<TicketList>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets?q=vantorre&limit=100`,
+        sam,
+      );
+      const byId = new Map(body.tickets.map((row) => [row.id, row]));
+
+      expect(byId.get(named.ticket.id)?.contact).toEqual({
+        id: contact.body.id,
+        name: 'Idris Vantorre',
+      });
+      expect(byId.get(anonymous.ticket.id)?.contact).toBeNull();
+
+      // The ticket read names the same person, so the view and its row agree.
+      const read = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${named.ticket.id}`,
+        sam,
+      );
+      expect(read.body.ticket.contact).toEqual({ id: contact.body.id, name: 'Idris Vantorre' });
+    });
+
     it('finds both tickets whose subject matches the search', async () => {
       const jammed = await createTicket(sam, { subject: 'Kymera printer jammed again' });
       const silent = await createTicket(sam, { subject: 'Kymera printer will not print' });

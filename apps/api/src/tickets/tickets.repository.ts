@@ -1,5 +1,6 @@
 import {
   brands,
+  contacts,
   currentDepartmentScope,
   type DbTransaction,
   departments,
@@ -17,7 +18,7 @@ import {
   tickets,
 } from '@helpdock/db';
 import type { TicketListQuery } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
 
 /**
@@ -102,19 +103,57 @@ export class TicketRepository {
    * a next page exists without a second `COUNT(*)`, which at 50k tickets would
    * cost more than the page itself (REQUIREMENTS §5.2).
    */
-  async listTickets(tx: DbTransaction, query: TicketListQuery): Promise<TicketWithStatus[]> {
-    const { sort, direction, cursor, limit, ...filters } = query;
-    const where = ticketFilters({ filters, sort, direction, cursor });
+  async listTickets(
+    tx: DbTransaction,
+    brandId: string,
+    query: TicketListQuery,
+  ): Promise<TicketWithStatus[]> {
+    const rows = await this.listTicketsStatement(tx, brandId, query);
 
-    const rows = await tx
+    return rows.map(withStatus);
+  }
+
+  /**
+   * The statement {@link listTickets} runs, unexecuted, so the performance
+   * harness can `EXPLAIN` exactly what the api sends rather than a copy of it
+   * that drifts (`src/testing/perf`).
+   */
+  listTicketsStatement(tx: DbTransaction, brandId: string, query: TicketListQuery) {
+    const { sort, direction, cursor, limit, ...filters } = query;
+    const where = ticketFilters({ brandId, filters, sort, direction, cursor });
+
+    return tx
       .select()
       .from(tickets)
       .innerJoin(ticketStatuses, statusJoin)
       .where(where)
       .orderBy(...ticketOrder(sort, direction))
       .limit(limit + 1);
+  }
 
-    return rows.map(withStatus);
+  /**
+   * The name of each contact a page of tickets names, keyed by id: one primary
+   * key lookup for the whole page, which is what lets a list row say who wrote
+   * in without the screen paging through the contact list (M1-15).
+   *
+   * `contacts` is brand-scoped and never department-scoped (DOMAIN-RULES
+   * §1.2), so the policy answers "in this brand" and an id from another brand
+   * is simply absent.
+   */
+  async contactNames(
+    tx: DbTransaction,
+    contactIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    if (contactIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await tx
+      .select({ id: contacts.id, name: contacts.name })
+      .from(contacts)
+      .where(inArray(contacts.id, [...new Set(contactIds)]));
+
+    return new Map(rows.map((row) => [row.id, row.name]));
   }
 
   /** The prefix printed in front of every number. `brands` has no policy; see above. */

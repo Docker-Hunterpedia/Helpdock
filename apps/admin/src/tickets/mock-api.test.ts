@@ -26,6 +26,28 @@ describe('MockTicketsApi', () => {
     api = new MockTicketsApi();
   });
 
+  it('names each row’s contact the way the api embeds it (M1-15)', async () => {
+    const { tickets } = await api.list(BRAND, { limit: 100 });
+
+    const withContact = tickets.find((ticket) => ticket.contactId === MOCK_CONTACT_MONA);
+    expect(withContact?.contact).toEqual({ id: MOCK_CONTACT_MONA, name: 'Mona Khalil' });
+    expect(
+      tickets
+        .filter((ticket) => ticket.contactId === null)
+        .every((ticket) => ticket.contact === null),
+    ).toBe(true);
+  });
+
+  it('asks the contact fixture it was given, so a contact made this session is named', async () => {
+    const named = new MockTicketsApi(undefined, Date.now(), undefined, (id) =>
+      id === MOCK_CONTACT_MONA ? 'Mona K.' : undefined,
+    );
+
+    // The refund ticket is Mona's.
+    const { ticket } = await named.ticket(BRAND, MOCK_TICKET_REFUND);
+    expect(ticket.contact).toEqual({ id: MOCK_CONTACT_MONA, name: 'Mona K.' });
+  });
+
   it('seeds the six statuses every brand is created with', async () => {
     const { statuses } = await api.statuses(BRAND);
 

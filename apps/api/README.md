@@ -697,6 +697,26 @@ ports over one Redis, which is the only way to prove that a room spans them and
 that a sign-out on one closes a socket on the other. Both skip themselves, and
 say so, when Docker is not running.
 
+### The ticket list's performance gate
+
+```bash
+pnpm --filter @helpdock/api build           # the replicas run from dist/
+pnpm --filter @helpdock/api perf:tickets    # about fifteen minutes
+```
+
+The M1 exit criterion — the ticket list under 150 ms p95 at 50k tickets, under
+the conditions of [DOMAIN-RULES §14](../../docs/planning/DOMAIN-RULES.md#14-performance-test-conditions).
+It seeds the §14 dataset into a fresh Postgres, starts two api replicas as
+separate processes, drives the list and the ticket read over HTTP as an Admin
+and as a department-restricted Agent, prints p50/p95/p99 per scenario and the
+`EXPLAIN (ANALYZE, BUFFERS)` of every list query, and fails when a list
+scenario's p95 is over the gate. It lives in `src/testing/perf/` with its own
+`vitest.perf.config.ts`, so neither `pnpm test` nor `pnpm test:integration`
+runs it, and it is not in CI: fifteen minutes on a shared runner would measure
+the runner. `PERF_SCALE=0.1 PERF_WARMUP_S=5 PERF_DURATION_S=20` is a
+one-minute smoke run; the other knobs, the method and the last measured numbers
+are in [the tickets guide](../../docs/guides/tickets.md#performance).
+
 `src/observability/observability.integration.test.ts` boots the same stack again
 to prove `/metrics` is served and guarded and that the System page's read
 reports a live install.

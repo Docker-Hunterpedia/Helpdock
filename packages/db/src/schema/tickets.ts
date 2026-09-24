@@ -147,16 +147,30 @@ export const tickets = pgTable(
     // Numbers are per brand, and the unique index is also what catches a
     // duplicate if two requests ever read the same value from the sequence.
     unique('tickets_brand_number_key').on(table.brandId, table.number),
-    // The ticket list's index set (PRD M1-15, REQUIREMENTS §5.2). The leading
-    // columns are what every list filters on and the trailing one is what it
-    // sorts by, so the common view is an index scan rather than a sort.
+    // The ticket list's index set (PRD M1-15, REQUIREMENTS §5.2). Which query
+    // each one serves, and the plan that proves it, is in docs/guides/tickets.md
+    // under "Performance".
+    //
+    // The list's own ordering: `(updated_at, id)` is the keyset, so with the
+    // brand fixed the default list — and every view that filters rather than
+    // narrows — is an index scan that stops after one page.
+    index('tickets_brand_updated_idx').on(table.brandId, table.updatedAt, table.id),
+    // "My open": one person's tickets, already in list order.
+    index('tickets_brand_assignee_updated_idx').on(
+      table.brandId,
+      table.assigneeId,
+      table.updatedAt,
+      table.id,
+    ),
+    // The department and status filters of the filter popover. `id` last, so
+    // one department in one status is also already in keyset order.
     index('tickets_brand_department_status_updated_idx').on(
       table.brandId,
       table.departmentId,
       table.statusId,
       table.updatedAt,
+      table.id,
     ),
-    index('tickets_brand_assignee_idx').on(table.brandId, table.assigneeId),
     index('tickets_search_idx').using('gin', table.search),
   ],
 );

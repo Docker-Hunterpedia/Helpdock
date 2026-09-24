@@ -78,15 +78,18 @@ export function createApis(
   // composer is the file the thread draws.
   const uploads = new MockAttachmentUploader();
   const blockList = new MockBlockList();
+  // And the contact fixture, so a ticket filed against a contact created in
+  // this session names them the way the api would.
+  const contacts = new MockContactsApi();
 
   return {
     auth: new MockAuthApi(staff),
     staff,
-    contacts: new MockContactsApi(),
+    contacts,
     // One block list for both, so a sender blocked from a ticket is on the
     // Spam tab (M1-11).
     ticketing: new MockTicketingApi(blockList),
-    tickets: new MockTicketsApi(uploads, Date.now(), blockList),
+    tickets: new MockTicketsApi(uploads, Date.now(), blockList, (id) => contacts.nameOf(id)),
     uploader: uploads,
   };
 }

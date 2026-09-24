@@ -9,6 +9,8 @@ import type {
   TicketMessagePage,
   TicketStatusList,
   TicketUpdateRequest,
+  TimeEntryCreateRequest,
+  TimeEntryList,
 } from '@helpdock/schemas';
 import {
   ticketActivityListSchema,
@@ -18,6 +20,7 @@ import {
   ticketMessageSchema,
   ticketSchema,
   ticketStatusListSchema,
+  timeEntryListSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
 import type { TicketQuery, TicketsApi } from './api.js';
@@ -91,6 +94,39 @@ export class HttpTicketsApi implements TicketsApi {
   ): Promise<TicketMessage> {
     return ticketMessageSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/messages`, request),
+    );
+  }
+
+  async timeEntries(brandId: string, ticketId: string): Promise<TimeEntryList> {
+    return timeEntryListSchema.parse(
+      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/time-entries`),
+    );
+  }
+
+  async logTime(
+    brandId: string,
+    ticketId: string,
+    request: TimeEntryCreateRequest,
+  ): Promise<TimeEntryList> {
+    return timeEntryListSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `${this.#ticket(brandId, ticketId)}/time-entries`,
+        request,
+      ),
+    );
+  }
+
+  async deleteTimeEntry(
+    brandId: string,
+    ticketId: string,
+    entryId: string,
+  ): Promise<TimeEntryList> {
+    return timeEntryListSchema.parse(
+      await this.#transport.request(
+        'DELETE',
+        `${this.#ticket(brandId, ticketId)}/time-entries/${encodeURIComponent(entryId)}`,
+      ),
     );
   }
 

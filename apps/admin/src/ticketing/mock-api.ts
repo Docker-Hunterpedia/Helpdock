@@ -14,6 +14,7 @@ import type {
   DepartmentUpdateRequest,
   EligibleMember,
   EligibleMemberList,
+  FeedbackSettingsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   TagCreateRequest,
   TagList,
@@ -713,6 +714,20 @@ export class MockTicketingApi implements TicketingApi {
         ...(request.reopenPolicy === undefined ? {} : { reopenPolicy: request.reopenPolicy }),
       },
     };
+
+    return this.#brand.settings;
+  }
+
+  // ---------------------------------------------------------------- M1-12
+
+  async updateFeedback(
+    _brandId: string,
+    request: FeedbackSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    const changes = Object.fromEntries(
+      Object.entries(request).filter(([, value]) => value !== undefined),
+    );
+    this.#brand = { ...this.#brand, settings: { ...this.#brand.settings, ...changes } };
 
     return this.#brand.settings;
   }

@@ -8,6 +8,7 @@ import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { CustomFieldsTab } from './custom-fields-tab.tsx';
 import { DepartmentsTab } from './departments-tab.tsx';
+import { FeedbackTab } from './feedback-tab.tsx';
 import { NotBuiltYetTab } from './not-built-yet-tab.tsx';
 import { StatusesTab } from './statuses-tab.tsx';
 import { DEFAULT_TICKETING_TAB, TICKETING_TABS, type TicketingTab, tabForSegment } from './tabs.js';
@@ -84,6 +85,8 @@ function TabBody({ tab }: { readonly tab: TicketingTab }): ReactNode {
       return <CustomFieldsTab />;
     case 'templates':
       return <TemplatesTab />;
+    case 'feedback':
+      return <FeedbackTab />;
     default:
       return <NotBuiltYetTab tab={tab} />;
   }

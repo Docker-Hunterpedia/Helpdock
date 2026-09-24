@@ -13,6 +13,7 @@ import type {
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
+  FeedbackSettingsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   TagCreateRequest,
   TagList,
@@ -106,6 +107,11 @@ export interface TicketingApi {
     brandId: string,
     request: ReplyBehaviourUpdateRequest,
   ): Promise<BrandSettings>;
+
+  // ---------------------------------------------------------------- M1-12
+
+  /** The Feedback tab's three toggles: CSAT, time tracking, the composer timer. */
+  updateFeedback(brandId: string, request: FeedbackSettingsUpdateRequest): Promise<BrandSettings>;
   // ---------------------------------------------------------------- M1-06
 
   tags(brandId: string): Promise<TagList>;

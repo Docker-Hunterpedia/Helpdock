@@ -46,6 +46,12 @@ export interface DetailsPanelProps {
   readonly staff: readonly { readonly userId: string; readonly name: string }[];
   readonly now: number;
   readonly busy: boolean;
+  /**
+   * The cards later deliverables add under the SLA card — M1-12's Time and
+   * Satisfaction — composed by the ticket view so this panel does not have to
+   * know what they read.
+   */
+  readonly cards?: ReactNode;
   onChange(patch: {
     statusId?: string;
     priority?: TicketPriority;
@@ -63,6 +69,7 @@ export function DetailsPanel({
   staff,
   now,
   busy,
+  cards,
   onChange,
 }: DetailsPanelProps): ReactNode {
   const t = useT();
@@ -238,6 +245,8 @@ export function DetailsPanel({
       </TextField>
 
       <SlaCard ticket={ticket} now={now} />
+
+      {cards}
 
       <Box component="section">
         <Typography variant="caption" component="h2" sx={{ color: 'text.secondary' }}>

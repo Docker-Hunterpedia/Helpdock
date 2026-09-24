@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  csatTokenFromPath,
   DEFAULT_SIGNED_IN_ROUTE,
   safeReturnTo,
   ticketIdFromPath,
@@ -42,5 +43,15 @@ describe('ticketIdFromPath', () => {
 
   it('ignores anything past the id rather than reading it as one', () => {
     expect(ticketIdFromPath('/tickets/0192c3f0/whatever')).toBe('0192c3f0');
+  });
+});
+
+describe('csatTokenFromPath', () => {
+  it('reads the token of a rating link', () => {
+    expect(csatTokenFromPath('/csat/AAA.bbb')).toBe('AAA.bbb');
+  });
+
+  it.each(['/csat/', '/csat', '/tickets/csat/AAA', '/'])('is null for %s', (path) => {
+    expect(csatTokenFromPath(path)).toBeNull();
   });
 });

@@ -1,0 +1,25 @@
+{
+  "title": "Rate your support",
+  "heading": "How was our help with your request?",
+  "ratingLegend": "Your rating",
+  "ratings": {
+    "1": "Very bad",
+    "2": "Bad",
+    "3": "Okay",
+    "4": "Good",
+    "5": "Excellent"
+  },
+  "comment": "Anything we should know?",
+  "optional": "(optional)",
+  "commentPlaceholder": "What went well, or what we could do better",
+  "submit": "Send rating",
+  "chooseRating": "Choose a rating from 1 to 5.",
+  "footnote": "This link works once and expires in 30 days. Your rating is shared with the team that handled your request.",
+  "thanks": "Thanks, your rating was sent.",
+  "ratedHeading": "You rated this request {{rating}} · {{label}}",
+  "ratedBody": "If anything is still unresolved, reply to the last message from {{brand}} and we will reopen it.",
+  "spent": "This rating link has expired or was already used.",
+  "unavailable": "This page could not be loaded. Try again in a few minutes.",
+  "failed": "Your rating could not be sent. Try again.",
+  "loading": "Loading"
+}

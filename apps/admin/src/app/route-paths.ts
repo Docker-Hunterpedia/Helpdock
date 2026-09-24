@@ -48,6 +48,11 @@ export const ROUTES = {
   systemQueues: '/admin/system/queues',
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
+  /**
+   * The public rating page (M1-12). Not a route of the admin router: `main.tsx`
+   * mounts the page on its own for this prefix, without the staff providers.
+   */
+  csat: '/csat/',
 } as const;
 
 export const ticketRoute = (ticketId: string): string => `/tickets/${encodeURIComponent(ticketId)}`;
@@ -77,6 +82,17 @@ export const accountRoute = (accountId: string): string =>
 
 /** The invite link the api emails, with the token in it. */
 export const inviteRoute = (token: string): string => `/invite/${encodeURIComponent(token)}`;
+
+/** The rating link's token, when the path is the rating page; otherwise null. */
+export function csatTokenFromPath(pathname: string): string | null {
+  if (!pathname.startsWith(ROUTES.csat)) {
+    return null;
+  }
+
+  const [token = ''] = pathname.slice(ROUTES.csat.length).split('/');
+
+  return token === '' ? null : decodeURIComponent(token);
+}
 
 /** One tab of the Ticketing settings, by its url segment. */
 export const ticketingRoute = (tab: string): string => `${ROUTES.ticketing}/${tab}`;

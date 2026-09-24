@@ -165,6 +165,50 @@ describe('HttpTicketsApi', () => {
   });
 });
 
+describe('the Time card (M1-12)', () => {
+  const ENTRY = '0192c3f0-1a2b-7c3d-8e4f-0000000000e1';
+  const list = {
+    entries: [
+      {
+        id: ENTRY,
+        ticketId: TICKET,
+        userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000a',
+        userName: 'Lina Haddad',
+        seconds: 1800,
+        note: null,
+        messageId: null,
+        createdAt: new Date(NOW).toISOString(),
+      },
+    ],
+    totalSeconds: 1800,
+  };
+
+  it('reads a ticket’s entries', async () => {
+    fetchMock.mockResolvedValue(json(list));
+
+    await expect(api.timeEntries(BRAND, TICKET)).resolves.toEqual(list);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/time-entries`);
+  });
+
+  it('posts a manual entry', async () => {
+    fetchMock.mockResolvedValue(json(list));
+
+    await api.logTime(BRAND, TICKET, { seconds: 1800, note: 'Called' });
+
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ seconds: 1800, note: 'Called' });
+  });
+
+  it('deletes one entry by id', async () => {
+    fetchMock.mockResolvedValue(json({ entries: [], totalSeconds: 0 }));
+
+    await api.deleteTimeEntry(BRAND, TICKET, ENTRY);
+
+    expect(lastInit().method).toBe('DELETE');
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/time-entries/${ENTRY}`);
+  });
+});
+
 describe('the fixtures these tests are built on', () => {
   it('anchor every date to one instant, so nothing depends on the clock', () => {
     expect(Date.parse(testTicket().updatedAt)).toBeLessThan(NOW);

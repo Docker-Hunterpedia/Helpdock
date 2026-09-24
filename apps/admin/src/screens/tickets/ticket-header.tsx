@@ -1,11 +1,12 @@
 import type { Ticket } from '@helpdock/schemas';
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
-import { Eye, MoreHorizontal, PanelRightOpen } from 'lucide-react';
+import { Eye, PanelRightOpen } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { ChannelLabel, PriorityBadge, SlaTimer, StatusBadge } from './badges.tsx';
 import { ticketReference } from './format.js';
+import { TicketActionsMenu, type TicketHeaderAction } from './ticket-actions-menu.tsx';
 
 /**
  * The header of the ticket column: the mono reference and the subject, then
@@ -23,6 +24,7 @@ export function TicketHeader({
   now,
   showDetailsButton,
   onShowDetails,
+  actions = [],
 }: {
   readonly ticket: Ticket;
   readonly departmentName: string | undefined;
@@ -31,6 +33,8 @@ export function TicketHeader({
   readonly now: number;
   readonly showDetailsButton: boolean;
   onShowDetails(): void;
+  /** The ⋯ menu's items, which each deliverable contributes (`ticket-actions-menu.tsx`). */
+  readonly actions?: readonly TicketHeaderAction[];
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -69,9 +73,7 @@ export function TicketHeader({
           </Box>
         </Tooltip>
 
-        <IconButton size="small" aria-label={t('tickets:header.more')} disabled>
-          <MoreHorizontal size={16} aria-hidden="true" />
-        </IconButton>
+        <TicketActionsMenu actions={actions} />
 
         {showDetailsButton ? (
           <IconButton size="small" aria-label={t('tickets:header.details')} onClick={onShowDetails}>

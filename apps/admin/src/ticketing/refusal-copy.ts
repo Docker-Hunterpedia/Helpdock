@@ -25,6 +25,7 @@ export const REFUSAL_COPY = {
   'status-is-default': 'ticketing:toast.statusIsDefault',
   'status-state-fixed': 'ticketing:toast.statusStateFixed',
   'default-must-be-open': 'ticketing:toast.defaultMustBeOpen',
+  'time-tracking-off': 'ticketing:toast.timeTrackingOff',
 } as const satisfies Record<TicketingRefusal, string>;
 
 /** The catalog key for one refusal, keeping the literal type `useT()` needs. */

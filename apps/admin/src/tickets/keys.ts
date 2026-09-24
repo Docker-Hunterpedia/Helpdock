@@ -26,4 +26,6 @@ export const ticketKeys = {
   /** Every sidebar count, for the invalidation a created ticket needs. */
   counts: (brandId: string) => ['tickets', brandId, 'count'] as const,
   detail: (brandId: string, ticketId: string) => ['tickets', brandId, 'detail', ticketId] as const,
+  /** M1-12's Time card. Under the brand prefix, so a brand switch cannot show it. */
+  time: (brandId: string, ticketId: string) => ['tickets', brandId, 'time', ticketId] as const,
 } as const;

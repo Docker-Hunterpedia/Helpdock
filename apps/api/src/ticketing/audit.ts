@@ -27,9 +27,17 @@ export type TicketingAuditAction =
   | 'custom_field.reordered'
   | 'ticket_template.created'
   | 'ticket_template.updated'
-  | 'ticket_template.deleted';
+  | 'ticket_template.deleted'
+  /** M1-07: a department's assignment settings, and one agent's place in its rotation. */
+  | 'assignment.updated'
+  | 'assignment.agent.updated';
 
-export type TicketingAuditTarget = 'tag' | 'custom_field' | 'ticket_template' | 'brand';
+export type TicketingAuditTarget =
+  | 'tag'
+  | 'custom_field'
+  | 'ticket_template'
+  | 'brand'
+  | 'department';
 
 export interface TicketingAuditEntry {
   readonly brandId: string;

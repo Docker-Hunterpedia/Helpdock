@@ -9,6 +9,8 @@ import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
   accounts,
+  assignmentAgents,
+  assignmentSkills,
   attachments,
   auditLog,
   brandDomains,
@@ -248,6 +250,26 @@ const fixtures = [
         name: 'Refund request',
         subject: 'Refund for {{contact.name}}',
         bodyText: 'We have started your refund.',
+      }),
+  },
+  {
+    name: 'assignment_agents',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(assignmentAgents).values({
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        inRotation: true,
+      }),
+  },
+  {
+    name: 'assignment_skills',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(assignmentSkills).values({
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        tagId: tagId[brandId] ?? '',
       }),
   },
   {

@@ -1,5 +1,6 @@
 export const PACKAGE_NAME = '@helpdock/schemas' as const;
 
+export * from './assignment.js';
 export * from './auth.js';
 export * from './brand.js';
 export * from './contact.js';

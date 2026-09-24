@@ -230,6 +230,11 @@ export const ticketingRefusalSchema = z.enum([
   'field-in-use',
   /** Rows still carry that option; send `force` to clear them with it (409). */
   'option-in-use',
+  /**
+   * Only an Admin routes work to an Admin (403, M1-07): DOMAIN-RULES §1.2's
+   * ceiling on who a Team Leader may act on, applied to assignment.
+   */
+  'assignee-above-actor',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

@@ -31,6 +31,8 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'default-must-be-open': HttpStatus.CONFLICT,
   'field-in-use': HttpStatus.CONFLICT,
   'option-in-use': HttpStatus.CONFLICT,
+  // M1-07. A ceiling on who the actor may act on, which is a permission answer.
+  'assignee-above-actor': HttpStatus.FORBIDDEN,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -46,6 +48,7 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
     'The default status is where a new or reopened ticket lands, so it has to be open',
   'field-in-use': 'Rows already carry values for this field, so its type cannot change',
   'option-in-use': 'Rows still carry that option; send force to clear them with it',
+  'assignee-above-actor': 'Only an Admin may route work to an Admin',
 };
 
 export class TicketingFailure extends HttpException {

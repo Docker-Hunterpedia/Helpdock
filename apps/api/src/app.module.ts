@@ -10,6 +10,7 @@ import {
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
+import { AssignmentModule } from './assignment/assignment.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
@@ -120,6 +121,8 @@ export class AppModule implements NestModule {
         }),
         ticketing,
         TicketsModule.forRoot({ ticketing }),
+        // M1-07's tab and picker. The rotation itself runs in the worker.
+        AssignmentModule.forRoot({ ticketing }),
         // M1-10. `forRoot` builds the S3 client from the bootstrap keys unless
         // a caller hands it a bucket double, which is what the suites do.
         MediaModule.forRoot({

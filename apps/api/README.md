@@ -490,13 +490,14 @@ code.
 | `status-change.ts` | Where a status change lands: the transition table is consulted, a status that is not this brand's is refused, and `closed_at` is kept in step with the system state. It answers *whether* the move closed or reopened the ticket; what that costs is the service's. |
 | `lifecycle/transitions.ts` | DOMAIN-RULES §2.2 as one constant. `transitions.test.ts` holds a second copy typed out from the document and asserts the two agree cell by cell. |
 | `lifecycle/reopen-policy.ts` | §2.3, as a pure function of a policy, a `closed_at` and a `now`. The boundary — "less than N days" — is named in the test in both directions. |
-| `lifecycle/hooks.ts` | The three moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`. A provider, so they replace one line of `TicketsModule`. |
+| `lifecycle/hooks.ts` | The three moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`. A provider, so they replace one line of `TicketsModule` — M1-12's line provides `csat/csat-hooks.ts` in its place. |
 | `lifecycle/lifecycle.service.ts` | The transitions carried out: the reply paths, the reopen, the continuation ticket and its two system messages, the soft delete. |
 | `lifecycle/status-rules.ts` | What may be done to a status row, as pure functions — the same shape `brands/department-scope.ts` uses, and for the same reason. |
 | `lifecycle/ticketing-settings.*` | The Statuses tab and the Reply behaviour card over HTTP, under the new `ticketing:manage`. |
 | `ticket-activity.ts` | The activity row, written in the caller's transaction. |
 | `ticket-events.ts` | The four outbox events and the handler the worker registers for them. |
 | `ticket-view.ts` | Rows to the wire shapes, in one place, so a column added to a table does not quietly become a field in a response. |
+| `time/` | M1-12's time entries: the Time card's routes, and `logWithReply`, which `addMessage` calls in the reply's own transaction when a message carries `timeSpentSeconds`. |
 
 Four things are easy to get wrong here and are written down where they happen:
 
@@ -512,6 +513,24 @@ Four things are easy to get wrong here and are written down where they happen:
 - **The `tagId` filter has all-of semantics** (M1-06). Two chips narrow a queue;
   "any" would widen it, which is the reading that is wrong in the direction that
   shows rows the reader asked to exclude.
+
+## Satisfaction surveys
+
+`src/csat/` holds M1-12's survey. The model, the token and the routes are in
+[the ticket guide](../../docs/guides/tickets.md#satisfaction-surveys); the code
+is laid out like this:
+
+| File | |
+|---|---|
+| `csat-hooks.ts` | `onClosedForCsat`, filled: reads the brand's `csatEnabled` in the closing transaction and writes `csat.requested` to the outbox. |
+| `csat-events.ts` | The event and the worker's handler, which creates the survey once per close and skips a close that no longer stands. Registered in `worker/start-worker.ts`. |
+| `tokens.ts` | The link's `<ids>.<mac>` token: HMAC-SHA256 under an HKDF key from `APP_MASTER_KEY`, verified under the previous key too. |
+| `csat.service.ts` | The agent's summary on a ticket read, and the two public routes' system path: rate limit, verify, one brand's transaction as `csat:<surveyId>`, hash check, audit row. |
+| `csat.controller.ts` | `GET` and `POST /api/public/csat/:token`, both `@Public()`. |
+
+`CsatModule.forRoot()` is built once and imported twice, by `AppModule` for the
+controller and by `TicketsModule` for the summary, for the reason
+`TicketingModule` is.
 
 ## Tags, custom fields and templates
 

@@ -350,6 +350,30 @@ An option removal the api refuses with `option-in-use` becomes a **question**
 rather than a toast: the dialog explains that saving clears the option from the
 rows that carry it, and answering it sends the same request again with `force`.
 
+### The screens M1-12 added
+
+| Route | Artboard | |
+|---|---|---|
+| `/admin/ticketing/feedback` | `AdminTicketingFeedback` | CSAT on or off, time tracking on or off, and whether the timer starts with the composer. One form, one save. |
+| `/tickets/:id` | `AdminTicketDialogs` panels 2, 6, 8 | The Time card in the details panel, the Log time dialog, and "Log time…" in the header's ⋯ menu — all drawn only while the brand tracks time. A Satisfaction card shows the survey's state and copies its link. |
+| `/csat/:token` | `CsatEN`, `CsatAR` | The public rating page. |
+
+**The rating page is not part of the admin app.** `main.tsx` mounts
+`screens/csat/csat-app.tsx` in its place for `/csat/…`, with its own language,
+direction, theme and a `fetch` that sends no credentials; none of the staff
+providers exist on that page (ADR
+[0010](../../docs/decisions/0010-csat-page-in-the-admin-bundle.md)). It is here
+only until the help center exists. The adapter is chosen by the same
+`VITE_AUTH_API` rule (`csat/select-api.ts`), and `MockCsatApi` answers three
+tokens — open, used and expired — exported as `MOCK_CSAT_TOKENS`.
+
+**The header's ⋯ menu takes its items as data** (`ticket-actions-menu.tsx`), so
+each deliverable adds its own without editing another's; with none it is the
+disabled button it was before.
+
+**The Satisfaction card has no artboard.** It follows the SLA card beside it and
+is flagged for the canvas.
+
 ### The ticket workspace
 
 `src/screens/tickets/` is M1-15's first part, built from the

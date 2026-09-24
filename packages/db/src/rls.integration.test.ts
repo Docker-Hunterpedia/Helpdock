@@ -17,6 +17,7 @@ import {
   contactIdentities,
   contactNotes,
   contacts,
+  csatResponses,
   customFieldDefs,
   departments,
   outbox,
@@ -30,6 +31,7 @@ import {
   tickets,
   ticketTags,
   ticketTemplates,
+  ticketTimeEntries,
   userBrandRoles,
   users,
 } from './schema/index.js';
@@ -333,6 +335,34 @@ const fixtures = [
         ticketId: ticketId[brandId] ?? '',
         tagId: tagId[brandId] ?? '',
         departmentId: departmentId[brandId] ?? '',
+      }),
+  },
+  {
+    name: 'ticket_time_entries',
+    // M1-12's two children of a ticket, refused by the same trigger for the
+    // same reason as the four above.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketTimeEntries).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        seconds: 1800,
+      }),
+  },
+  {
+    name: 'csat_responses',
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(csatResponses).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        closedAt: new Date(),
+        // Unique across the install, so each brand's fixture needs its own.
+        tokenHash: `seeded-${brandId}-${String(nextNumber())}`,
+        expiresAt: new Date(Date.now() + 86_400_000),
       }),
   },
 ] as const;

@@ -31,6 +31,7 @@ import {
 } from '@nestjs/common';
 import type { Principal } from '../auth/principal.js';
 import { getTx } from '../context/request-context.js';
+import type { CsatService } from '../csat/csat.service.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
@@ -54,6 +55,7 @@ import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-ev
 import { cursorAfter, sortValueOf } from './ticket-query.js';
 import { toTicket, toTicketActivity, toTicketMessage, toTicketStatus } from './ticket-view.js';
 import type { TicketRepository } from './tickets.repository.js';
+import type { TimeEntriesService } from './time/time-entries.service.js';
 
 /**
  * M1-02 and M1-03: the ticket, its thread and its activity log.
@@ -100,6 +102,9 @@ export class TicketsService {
   /** M1-06: applies a template on creation, and answers "is this a real tag?". */
   readonly #templates: TemplatesService;
   readonly #tags: TagsService;
+  /** M1-12: the survey summary on a ticket read, and the per-reply timer. */
+  readonly #csat: CsatService;
+  readonly #timeEntries: TimeEntriesService;
 
   constructor(
     tickets: TicketRepository,
@@ -108,6 +113,8 @@ export class TicketsService {
     attachments: MediaRepository,
     templates: TemplatesService,
     tags: TagsService,
+    csat: CsatService,
+    timeEntries: TimeEntriesService,
   ) {
     this.#tickets = tickets;
     this.#lifecycle = lifecycle;
@@ -115,6 +122,8 @@ export class TicketsService {
     this.#attachments = attachments;
     this.#templates = templates;
     this.#tags = tags;
+    this.#csat = csat;
+    this.#timeEntries = timeEntries;
   }
 
   // -------------------------------------------------------------------- reads
@@ -165,6 +174,7 @@ export class TicketsService {
         limit: TICKET_PAGE_SIZE_DEFAULT,
       }),
       activity: await this.#activityOf(tx, ticketId),
+      csat: await this.#csat.forTicket(tx, found.ticket.brandId, ticketId),
     };
   }
 
@@ -526,6 +536,19 @@ export class TicketsService {
       messageId: message.id,
       attachmentIds: input.attachmentIds ?? [],
     });
+
+    // M1-12. The per-reply timer, in the transaction that wrote the reply so
+    // the two commit or roll back together.
+    if (input.timeSpentSeconds !== undefined) {
+      await this.#timeEntries.logWithReply(tx, {
+        brandId,
+        principal,
+        ticketId: target.id,
+        departmentId: target.departmentId,
+        messageId: message.id,
+        seconds: input.timeSpentSeconds,
+      });
+    }
 
     const action = input.kind === 'note' ? 'ticket.note_added' : 'ticket.replied';
 

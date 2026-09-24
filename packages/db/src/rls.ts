@@ -77,6 +77,10 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // tables; `department_id` is denormalised from the parent by the same trigger
   // `ticket_messages` uses.
   { name: 'ticket_tags', departmentScoped: true },
+  // M1-12. Both hang off a ticket and carry its department by the same
+  // triggers; DOMAIN-RULES §1.3 names `csat_responses` among the six.
+  { name: 'ticket_time_entries', departmentScoped: true },
+  { name: 'csat_responses', departmentScoped: true },
 ];
 
 /**

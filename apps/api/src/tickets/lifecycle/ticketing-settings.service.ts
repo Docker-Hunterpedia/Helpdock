@@ -1,6 +1,7 @@
 import type { DbTransaction, TicketStatus as TicketStatusRow } from '@helpdock/db';
 import type {
   Brand,
+  FeedbackSettingsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   TicketingRefusal,
   TicketStatus,
@@ -236,30 +237,45 @@ export class TicketingSettingsService {
     context: TicketingSettingsContext,
     request: ReplyBehaviourUpdateRequest,
   ): Promise<Brand['settings']> {
+    return this.#mergeSettings(context, 'brand.reply_behaviour.updated', request);
+  }
+
+  // ----------------------------------------------------------------- feedback
+
+  /**
+   * The three toggles of the Feedback tab (M1-12), merged into the stored
+   * object the way {@link updateReplyBehaviour} merges its two.
+   */
+  async updateFeedback(
+    context: TicketingSettingsContext,
+    request: FeedbackSettingsUpdateRequest,
+  ): Promise<Brand['settings']> {
+    return this.#mergeSettings(context, 'brand.feedback.updated', request);
+  }
+
+  // ---------------------------------------------------------------- internals
+
+  async #mergeSettings(
+    context: TicketingSettingsContext,
+    action: string,
+    changes: Record<string, unknown>,
+  ): Promise<Brand['settings']> {
     const current = await this.#lifecycle.brandSettings(context.tx, context.brandId);
     /* c8 ignore next 3 -- the permission guard resolved this brand from a role in it. */
     if (current === undefined) {
       throw new NotFoundException('No such brand');
     }
 
-    const settings = parseBrandSettings({
-      ...current,
-      ...(request.autoAwaitOnAgentReply === undefined
-        ? {}
-        : { autoAwaitOnAgentReply: request.autoAwaitOnAgentReply }),
-      ...(request.reopenPolicy === undefined ? {} : { reopenPolicy: request.reopenPolicy }),
-    });
+    const defined = Object.fromEntries(
+      Object.entries(changes).filter(([, value]) => value !== undefined),
+    );
+    const settings = parseBrandSettings({ ...current, ...defined });
 
     await this.#lifecycle.updateBrandSettings(context.tx, context.brandId, settings);
-
-    await this.#audit(context, 'brand.reply_behaviour.updated', context.brandId, {
-      changed: Object.keys(request),
-    });
+    await this.#audit(context, action, context.brandId, { changed: Object.keys(defined) });
 
     return settings;
   }
-
-  // ---------------------------------------------------------------- internals
 
   async #require(tx: DbTransaction, statusId: string): Promise<TicketStatusRow> {
     const status = await this.#lifecycle.findStatus(tx, statusId);

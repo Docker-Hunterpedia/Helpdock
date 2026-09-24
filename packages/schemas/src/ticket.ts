@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { ticketCsatSchema } from './csat.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
 import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
+import { timeEntrySecondsSchema } from './time-entries.js';
 
 /**
  * The wire contract for tickets and their threads (M1-02, M1-03), shared by the
@@ -288,6 +290,12 @@ export const ticketDetailSchema = z.object({
   ticket: ticketSchema,
   messages: ticketMessagePageSchema,
   activity: z.array(ticketActivityEntrySchema),
+  /**
+   * The survey for the ticket's latest close (M1-12), or null when there is
+   * none — never closed, closed as spam or a merge, or closed while the brand
+   * had CSAT off. Optional for the reason `ticket.tags` is.
+   */
+  csat: ticketCsatSchema.nullable().optional(),
 });
 export type TicketDetail = z.infer<typeof ticketDetailSchema>;
 
@@ -492,6 +500,13 @@ export const messageCreateRequestSchema = z.object({
    * is per brand and a schema is not.
    */
   attachmentIds: z.array(z.uuid()).max(ATTACHMENTS_PER_MESSAGE_CEILING).optional(),
+  /**
+   * The per-reply timer (M1-12): time spent on this reply, logged as a time
+   * entry in the same transaction as the message. Ignored when the brand has
+   * time tracking off — the reply is what the agent meant to send, and it is
+   * not refused over the timer that ran beside it.
+   */
+  timeSpentSeconds: timeEntrySecondsSchema.optional(),
 });
 export type MessageCreateRequest = z.infer<typeof messageCreateRequestSchema>;
 

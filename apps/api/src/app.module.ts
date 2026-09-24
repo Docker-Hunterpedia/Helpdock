@@ -19,6 +19,7 @@ import { ContactsModule } from './contacts/contacts.module.js';
 import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
 import { RequestContextMiddleware } from './context/request-context.middleware.js';
+import { CsatModule } from './csat/csat.module.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
@@ -98,6 +99,9 @@ export class AppModule implements NestModule {
     // so M1-06's controllers are registered once and `TicketsService` is handed
     // the very services the settings screens write through.
     const ticketing = TicketingModule.forRoot();
+    // M1-12, the same pattern: the public rating routes here, the summary on a
+    // ticket read in `TicketsModule`.
+    const csat = CsatModule.forRoot();
 
     return {
       module: AppModule,
@@ -119,7 +123,8 @@ export class AppModule implements NestModule {
           timeline: new DbContactTimelineProvider(),
         }),
         ticketing,
-        TicketsModule.forRoot({ ticketing }),
+        csat,
+        TicketsModule.forRoot({ ticketing, csat }),
         // M1-10. `forRoot` builds the S3 client from the bootstrap keys unless
         // a caller hands it a bucket double, which is what the suites do.
         MediaModule.forRoot({

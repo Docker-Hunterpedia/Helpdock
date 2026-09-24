@@ -230,6 +230,8 @@ export const ticketingRefusalSchema = z.enum([
   'field-in-use',
   /** Rows still carry that option; send `force` to clear them with it (409). */
   'option-in-use',
+  /** The brand has time tracking off, so no entry may be logged (409, M1-12). */
+  'time-tracking-off',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

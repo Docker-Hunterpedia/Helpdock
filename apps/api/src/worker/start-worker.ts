@@ -1,4 +1,4 @@
-import type { Env } from '@helpdock/config';
+import { createKeyring, type Env } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import {
   createOutboxEventHandler,
@@ -14,6 +14,9 @@ import {
 } from '@helpdock/jobs';
 import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { CsatRepository } from '../csat/csat.repository.js';
+import { registerCsatEventHandlers } from '../csat/csat-events.js';
+import { CsatTokens } from '../csat/tokens.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
@@ -80,6 +83,10 @@ export type WorkerEnv = Pick<
   | 'FFPROBE_PATH'
   | 'CLAMAV_HOST'
   | 'CLAMAV_PORT'
+  // M1-12: the survey job signs the rating link, so it holds the key the api
+  // verifies it with.
+  | 'APP_MASTER_KEY'
+  | 'APP_MASTER_KEY_PREVIOUS'
 >;
 
 /**
@@ -102,9 +109,13 @@ export const workerDependencies: WorkerDependencies = {
   // The broadcast publishes on the same connection: a ticket event ends in a
   // socket frame, and only an `APP_ROLE=api` replica holds sockets
   // (`realtime/broadcast.ts`).
-  registerHandlers: ({ redis }) => {
+  registerHandlers: ({ redis, env }) => {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
+    registerCsatEventHandlers({
+      repository: new CsatRepository(),
+      tokens: new CsatTokens(createKeyring(env)),
+    });
 
     // `attachment.uploaded` ends in a job on the `media` queue, so its handler
     // needs a producer. It is the one outbox handler that adds a job, and it

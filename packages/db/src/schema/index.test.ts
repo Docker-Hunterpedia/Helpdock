@@ -33,6 +33,7 @@ describe('the schema', () => {
       'contact_identities',
       'contact_notes',
       'contacts',
+      'csat_responses',
       'custom_field_defs',
       'departments',
       'job_receipts',
@@ -46,6 +47,7 @@ describe('the schema', () => {
       'ticket_statuses',
       'ticket_tags',
       'ticket_templates',
+      'ticket_time_entries',
       'tickets',
       'user_brand_roles',
       'users',
@@ -252,5 +254,30 @@ describe('the indexes and constraints', () => {
     const prefix = configOf('brands').columns.find((column) => column.name === 'prefix');
 
     expect(prefix?.isUnique).toBe(true);
+  });
+
+  it('keeps one survey per close of a ticket, so a redelivered job cannot add a second', () => {
+    const index = configOf('csat_responses').indexes.find(
+      (entry) => entry.config.name === 'csat_responses_ticket_close_key',
+    );
+
+    expect(index?.config.unique).toBe(true);
+    expect(index?.config.columns.map((column) => ('name' in column ? column.name : ''))).toEqual([
+      'ticket_id',
+      'closed_at',
+    ]);
+  });
+
+  it('stores a hash of the survey link, never the link', () => {
+    expect(columnsOf('csat_responses')).toContain('token_hash');
+    expect(columnsOf('csat_responses')).not.toContain('token');
+  });
+
+  it('keeps time that was logged when the reply it came with is gone', () => {
+    const foreignKey = configOf('ticket_time_entries').foreignKeys.find((entry) =>
+      entry.reference().columns.some((column) => column.name === 'message_id'),
+    );
+
+    expect(foreignKey?.onDelete).toBe('set null');
   });
 });

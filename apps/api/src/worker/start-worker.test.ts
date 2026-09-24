@@ -16,6 +16,7 @@ const env: WorkerEnv = {
   FFMPEG_PATH: 'ffmpeg',
   FFPROBE_PATH: 'ffprobe',
   CLAMAV_PORT: 3310,
+  APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
 };
 
 const db = {} as Db;

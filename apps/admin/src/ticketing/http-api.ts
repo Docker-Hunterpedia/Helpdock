@@ -1,4 +1,7 @@
 import type {
+  AssignmentAgent,
+  AssignmentAgentList,
+  AssignmentAgentUpdateRequest,
   BlockedSender,
   BlockedSenderCreateRequest,
   BlockedSenderList,
@@ -11,6 +14,9 @@ import type {
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
+  DepartmentAssignment,
+  DepartmentAssignmentList,
+  DepartmentAssignmentUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
@@ -36,6 +42,8 @@ import type {
   TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
 import {
+  assignmentAgentListSchema,
+  assignmentAgentSchema,
   blockedSenderListSchema,
   blockedSenderSchema,
   brandSchema,
@@ -43,6 +51,8 @@ import {
   customFieldDefListSchema,
   customFieldDefSchema,
   customFieldUsageSchema,
+  departmentAssignmentListSchema,
+  departmentAssignmentSchema,
   departmentSummaryListSchema,
   departmentSummarySchema,
   eligibleMemberListSchema,
@@ -434,6 +444,56 @@ export class HttpTicketingApi implements TicketingApi {
 
   #tag(brandId: string, tagId: string): string {
     return `${this.#tags(brandId)}/${encodeURIComponent(tagId)}`;
+  }
+
+  // ---------------------------------------------------------------- M1-07
+
+  async assignment(brandId: string): Promise<DepartmentAssignmentList> {
+    return departmentAssignmentListSchema.parse(
+      await this.#transport.request('GET', this.#assignment(brandId)),
+    );
+  }
+
+  async updateAssignment(
+    brandId: string,
+    departmentId: string,
+    request: DepartmentAssignmentUpdateRequest,
+  ): Promise<DepartmentAssignment> {
+    return departmentAssignmentSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#assignment(brandId)}/${encodeURIComponent(departmentId)}`,
+        request,
+      ),
+    );
+  }
+
+  async assignmentAgents(brandId: string, departmentId: string): Promise<AssignmentAgentList> {
+    return assignmentAgentListSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#assignment(brandId)}/${encodeURIComponent(departmentId)}/agents`,
+      ),
+    );
+  }
+
+  async updateAssignmentAgent(
+    brandId: string,
+    departmentId: string,
+    userId: string,
+    request: AssignmentAgentUpdateRequest,
+  ): Promise<AssignmentAgent> {
+    return assignmentAgentSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#assignment(brandId)}/${encodeURIComponent(departmentId)}/agents/${encodeURIComponent(userId)}`,
+        request,
+      ),
+    );
+  }
+
+  #assignment(brandId: string): string {
+    return `${this.#brand(brandId)}/assignment`;
   }
 
   #fields(brandId: string): string {

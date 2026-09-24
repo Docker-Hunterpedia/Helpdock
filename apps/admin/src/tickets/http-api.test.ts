@@ -203,6 +203,31 @@ describe('spam (M1-11)', () => {
   });
 });
 
+describe('HttpTicketsApi.assignable (M1-07)', () => {
+  it('reads who the picker may offer for a department', async () => {
+    const DEPARTMENT = '0192c3f0-1a2b-7c3d-8e4f-0000000000d1';
+    fetchMock.mockResolvedValue(
+      json({
+        departmentId: DEPARTMENT,
+        loadCap: 8,
+        agents: [
+          {
+            userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000b',
+            name: 'Omar Nasser',
+            presence: 'online',
+            openCount: 8,
+          },
+        ],
+      }),
+    );
+
+    const list = await api.assignable(BRAND, DEPARTMENT);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}/assignable`);
+    expect(list.agents[0]?.openCount).toBe(8);
+  });
+});
+
 describe('the fixtures these tests are built on', () => {
   it('anchor every date to one instant, so nothing depends on the clock', () => {
     expect(Date.parse(testTicket().updatedAt)).toBeLessThan(NOW);

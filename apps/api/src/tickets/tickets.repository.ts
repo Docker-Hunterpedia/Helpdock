@@ -15,7 +15,6 @@ import {
   ticketMessages,
   ticketStatuses,
   tickets,
-  userBrandRoles,
 } from '@helpdock/db';
 import type { TicketListQuery } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm';
@@ -167,21 +166,6 @@ export class TicketRepository {
       .select({ id: departments.id })
       .from(departments)
       .where(eq(departments.id, departmentId))
-      .limit(1);
-
-    return rows.length > 0;
-  }
-
-  /**
-   * Whether that person holds a role in this brand. `user_brand_roles` is
-   * brand-scoped, so the policy answers "in this brand" and the `WHERE`
-   * answers "this person".
-   */
-  async isBrandMember(tx: DbTransaction, userId: string): Promise<boolean> {
-    const rows = await tx
-      .select({ userId: userBrandRoles.userId })
-      .from(userBrandRoles)
-      .where(eq(userBrandRoles.userId, userId))
       .limit(1);
 
     return rows.length > 0;

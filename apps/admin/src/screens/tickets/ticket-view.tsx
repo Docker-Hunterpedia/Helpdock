@@ -21,13 +21,15 @@ import {
 } from '../../auth/session.tsx';
 import { isUploadError, wouldAccept } from '../../media/upload.js';
 import { EmptyState } from '../../shell/empty-state.tsx';
+import { isTicketingError } from '../../ticketing/api.js';
+import { refusalCopy } from '../../ticketing/refusal-copy.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
-import { assignableStaff } from './directory.js';
+import { assigneeName } from './directory.js';
 import { paragraph } from './format.js';
 import { Thread, type ThreadNames } from './thread.tsx';
 import { TicketHeader } from './ticket-header.tsx';
@@ -213,11 +215,28 @@ export function TicketView({
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      // A new assignee moves two people's counts in the picker.
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.assignables(brandId) });
       toast({ tone: 'success', message: t('tickets:toast.updated') });
     },
-    onError: () => {
-      toast({ tone: 'danger', message: t('tickets:toast.failed') });
+    onError: (error) => {
+      // M1-07's refusals — somebody who cannot work the department, or an
+      // Admin chosen by somebody who is not one — say which rule it was.
+      toast({
+        tone: 'danger',
+        message: isTicketingError(error) ? t(refusalCopy(error.reason)) : t('tickets:toast.failed'),
+      });
     },
+  });
+
+  /** M1-07: the picker's options for the department the ticket is in now. */
+  const departmentId = detail.data?.ticket.departmentId;
+  const assignable = useQuery({
+    queryKey: ticketKeys.assignable(brandId, departmentId ?? ''),
+    queryFn: () => api.assignable(brandId, departmentId ?? ''),
+    enabled: departmentId !== undefined,
+    staleTime: 30_000,
+    retry: false,
   });
 
   const names = useMemo<ThreadNames>(
@@ -272,7 +291,7 @@ export function TicketView({
   }
 
   const items = buildThread(messages, detail.data?.activity ?? [], pending);
-  const staffOptions = assignableStaff(directory.staff, viewer, ticket.assigneeId);
+  const agents = assignable.data?.agents ?? [];
   const departmentName = directory.departments.find(
     (department) => department.id === ticket.departmentId,
   )?.name;
@@ -284,7 +303,12 @@ export function TicketView({
       hiddenTicketCount={timeline.data?.hiddenCount ?? 0}
       statuses={directory.statuses}
       departments={directory.departments}
-      staff={staffOptions}
+      assignee={{
+        name: assigneeName(ticket.assigneeId, { agents, staff: directory.staff, viewer }),
+        agents,
+        loadCap: assignable.data?.loadCap ?? null,
+        unavailable: assignable.isError,
+      }}
       now={now}
       busy={update.isPending}
       onChange={(patch) => {

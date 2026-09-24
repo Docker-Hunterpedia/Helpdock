@@ -68,6 +68,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // M1-11. A sender is blocked from the brand, not from a queue: the inbound
   // gate runs before a ticket, and so before a department, exists.
   { name: 'blocked_senders', departmentScoped: false },
+  // M1-07. A department's rotation and its agents' skills are configuration,
+  // like `teams`: which department a Team Leader may edit is a service rule
+  // (`brands/department-scope.ts`), not a ticket's department scope.
+  { name: 'assignment_agents', departmentScoped: false },
+  { name: 'assignment_skills', departmentScoped: false },
   { name: 'tickets', departmentScoped: true },
   { name: 'ticket_messages', departmentScoped: true },
   { name: 'ticket_activity', departmentScoped: true },

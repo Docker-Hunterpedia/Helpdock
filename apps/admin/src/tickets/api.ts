@@ -1,4 +1,5 @@
 import type {
+  AssignableAgentList,
   MarkSpamRequest,
   MessageCreateRequest,
   Ticket,
@@ -56,6 +57,12 @@ export interface TicketsApi {
   markSpam(brandId: string, ticketId: string, request: MarkSpamRequest): Promise<Ticket>;
   /** "Not spam": back to the brand's default open status. */
   unmarkSpam(brandId: string, ticketId: string): Promise<Ticket>;
+
+  /**
+   * M1-07: who the assignee picker may offer for a ticket in this department —
+   * names, presence and load, and nothing an Agent's permission does not cover.
+   */
+  assignable(brandId: string, departmentId: string): Promise<AssignableAgentList>;
 }
 
 /**

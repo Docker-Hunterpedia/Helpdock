@@ -1,4 +1,5 @@
 export * from './accounts.js';
+export * from './assignment.js';
 export * from './attachments.js';
 export * from './audit-log.js';
 export * from './blocked-senders.js';

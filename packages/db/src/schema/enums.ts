@@ -215,3 +215,20 @@ export const blockedSenderKindEnum = pgEnum('blocked_sender_kind', [
   'phone',
   'telegram',
 ]);
+
+/**
+ * How a department hands new tickets out (M1-07, REQUIREMENTS §4.1). `manual`
+ * leaves them unassigned; the other two run the rotation of
+ * `apps/api/src/assignment/rotation.ts`.
+ */
+export const assignmentModeEnum = pgEnum('assignment_mode', [
+  'manual',
+  'round_robin',
+  'skill_based',
+]);
+
+/**
+ * What happens to a ticket whose assignee can no longer work it — deactivated,
+ * removed from the brand, or moved out of its department (DOMAIN-RULES §12).
+ */
+export const onUnassignEnum = pgEnum('on_unassign', ['round_robin', 'leave_unassigned']);

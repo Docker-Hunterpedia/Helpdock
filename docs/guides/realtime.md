@@ -238,9 +238,13 @@ conclusion costs nothing.
 ### The hook M1 needs
 
 `StaffOfflineHook.onStaffOffline(userId, brandId, since)` fires when the last of
-someone's sockets in a brand goes. It does nothing today. M1-07 provides its own
-implementation under the `STAFF_OFFLINE_HOOK` token and gets the
-fifteen-minute auto-unassign of DOMAIN-RULES §12 without the gateway changing.
+someone's sockets in a brand goes. M1-07's `OutboxStaffOfflineHook`
+(`apps/api/src/assignment/staff-offline.hook.ts`) is what `RealtimeModule`
+provides under the `STAFF_OFFLINE_HOOK` token: it writes an
+`assignment.staff_offline` outbox row when any department of the brand
+auto-unassigns, and the worker starts the department's timer
+([Assignment](ticketing-settings.md#the-offline-timer)). The gateway did not
+change.
 
 ## Revocation
 
@@ -287,7 +291,6 @@ of meaning (DESIGN §10).
 
 | Milestone | Adds |
 |---|---|
-| M1-07 | The auto-unassign timer behind `STAFF_OFFLINE_HOOK`. |
 | M1-09 | The rest of DOMAIN-RULES §2.4. M1-15 built the collision indicator on `ticket:viewing`; a server-side register of who holds what would replace it. |
 | M3-07 | In-app notifications, as new server events through `RealtimePublisher`. |
 | M4-03 | The widget handshake's origin allow-list and its per-visitor and per-IP throttles. |

@@ -118,7 +118,7 @@ misconfigured — it is a backstop, not a reason to skip the exclusion.
 |---|---|---|---|
 | `http_request_duration_seconds` | histogram | `route`, `method`, `status` | `route` is the Fastify route *template* (`/api/brands/:brandId`), never a URL, so one route is one series whatever ids are in it. A request that matched no route is labelled `__unmatched__`. |
 | `http_requests_total` | counter | `route`, `method`, `status` | Recorded from a Fastify `onResponse` hook, so 401s, 403s and 404s are counted too. |
-| `queue_jobs` | gauge | `queue`, `state` | All eleven queues, sampled every 15 s with BullMQ's `getJobCounts`. States: `waiting`, `active`, `failed`, `delayed`, `completed`. |
+| `queue_jobs` | gauge | `queue`, `state` | All twelve queues, sampled every 15 s with BullMQ's `getJobCounts`. States: `waiting`, `active`, `failed`, `delayed`, `completed`. |
 | `outbox_unpublished_rows` | gauge | — | The backlog, as the relay last reported it. `0` when no relay is reporting, which is why the next row exists. |
 | `outbox_relay_up` | gauge | — | `1` when a relay reported a cycle in the last minute, `0` otherwise — a heartbeat older than that is aged out here exactly as it is on the System page, so an alert and the screen agree. A backlog of `0` means "nothing to publish" only when this is `1`. |
 | `outbox_relay_cycle_seconds` | histogram | — | One observation per *reported* cycle. The relay cycles far more often than the api samples, so this is a sample of cycles, not all of them. |

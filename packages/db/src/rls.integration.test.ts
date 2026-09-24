@@ -9,6 +9,8 @@ import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
   accounts,
+  assignmentAgents,
+  assignmentSkills,
   attachments,
   auditLog,
   blockedSenders,
@@ -257,6 +259,26 @@ const fixtures = [
       // The same sender in both brands: a block is the brand's own decision
       // and says nothing about the brand next door.
       tx.insert(blockedSenders).values({ brandId, kind: 'domain', value: 'promo-deals.biz' }),
+  },
+  {
+    name: 'assignment_agents',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(assignmentAgents).values({
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        inRotation: true,
+      }),
+  },
+  {
+    name: 'assignment_skills',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(assignmentSkills).values({
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        tagId: tagId[brandId] ?? '',
+      }),
   },
   {
     name: 'tickets',

@@ -24,6 +24,8 @@ export const QUEUE_NAMES = {
   webhooks: 'webhooks',
   /** `outbox.relay` and the `outbox.event` fan-out it publishes (DOMAIN-RULES §6). */
   outbox: 'outbox',
+  /** `assignment.offline_unassign` (M1-07). Delayed jobs. */
+  assignment: 'assignment',
   /** `cleanup.tokens`, `maintenance.retention`, `stats.rollup`, `sla.rebuild`. */
   maintenance: 'maintenance',
 } as const;

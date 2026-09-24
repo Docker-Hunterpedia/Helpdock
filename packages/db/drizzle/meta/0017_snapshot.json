@@ -1,6 +1,6 @@
 {
   "id": "a22a0003-b20d-4f6b-b185-1b4bd2120f51",
-  "prevId": "84f8dadd-6bb0-4b8d-8d10-8287618d4105",
+  "prevId": "8990dc86-ee8e-409b-b2f9-eacf8b62d1a1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -74,6 +74,219 @@
           "columns": ["brand_id", "domain"]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.assignment_agents": {
+      "name": "assignment_agents",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "in_rotation": {
+          "name": "in_rotation",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_assigned_at": {
+          "name": "last_assigned_at",
+          "type": "timestamp (3) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "assignment_agents_brand_user_idx": {
+          "name": "assignment_agents_brand_user_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "assignment_agents_brand_id_brands_id_fk": {
+          "name": "assignment_agents_brand_id_brands_id_fk",
+          "tableFrom": "assignment_agents",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "assignment_agents_department_id_departments_id_fk": {
+          "name": "assignment_agents_department_id_departments_id_fk",
+          "tableFrom": "assignment_agents",
+          "tableTo": "departments",
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "assignment_agents_user_id_users_id_fk": {
+          "name": "assignment_agents_user_id_users_id_fk",
+          "tableFrom": "assignment_agents",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "assignment_agents_pkey": {
+          "name": "assignment_agents_pkey",
+          "columns": ["department_id", "user_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.assignment_skills": {
+      "name": "assignment_skills",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "assignment_skills_brand_tag_idx": {
+          "name": "assignment_skills_brand_tag_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tag_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "assignment_skills_brand_id_brands_id_fk": {
+          "name": "assignment_skills_brand_id_brands_id_fk",
+          "tableFrom": "assignment_skills",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "assignment_skills_department_id_departments_id_fk": {
+          "name": "assignment_skills_department_id_departments_id_fk",
+          "tableFrom": "assignment_skills",
+          "tableTo": "departments",
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "assignment_skills_user_id_users_id_fk": {
+          "name": "assignment_skills_user_id_users_id_fk",
+          "tableFrom": "assignment_skills",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "assignment_skills_tag_id_tags_id_fk": {
+          "name": "assignment_skills_tag_id_tags_id_fk",
+          "tableFrom": "assignment_skills",
+          "tableTo": "tags",
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "assignment_skills_pkey": {
+          "name": "assignment_skills_pkey",
+          "columns": ["department_id", "user_id", "tag_id"]
+        }
+      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1253,6 +1466,42 @@
           "notNull": true,
           "default": 0
         },
+        "assignment_mode": {
+          "name": "assignment_mode",
+          "type": "assignment_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "load_cap": {
+          "name": "load_cap",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_unassign_offline": {
+          "name": "auto_unassign_offline",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "auto_unassign_after_minutes": {
+          "name": "auto_unassign_after_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 15
+        },
+        "on_unassign": {
+          "name": "on_unassign",
+          "type": "on_unassign",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'leave_unassigned'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1298,7 +1547,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "departments_load_cap_positive": {
+          "name": "departments_load_cap_positive",
+          "value": "\"departments\".\"load_cap\" IS NULL OR \"departments\".\"load_cap\" > 0"
+        },
+        "departments_auto_unassign_minutes_range": {
+          "name": "departments_auto_unassign_minutes_range",
+          "value": "\"departments\".\"auto_unassign_after_minutes\" BETWEEN 1 AND 1440"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.job_receipts": {
@@ -3081,6 +3339,11 @@
       "schema": "public",
       "values": ["staff", "visitor", "apikey", "system"]
     },
+    "public.assignment_mode": {
+      "name": "assignment_mode",
+      "schema": "public",
+      "values": ["manual", "round_robin", "skill_based"]
+    },
     "public.attachment_kind": {
       "name": "attachment_kind",
       "schema": "public",
@@ -3166,6 +3429,11 @@
       "name": "message_author_type",
       "schema": "public",
       "values": ["staff", "contact", "system", "ai"]
+    },
+    "public.on_unassign": {
+      "name": "on_unassign",
+      "schema": "public",
+      "values": ["round_robin", "leave_unassigned"]
     },
     "public.status_color": {
       "name": "status_color",

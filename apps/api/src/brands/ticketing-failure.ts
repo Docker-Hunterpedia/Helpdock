@@ -36,6 +36,8 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'sender-invalid': HttpStatus.BAD_REQUEST,
   'sender-is-own': HttpStatus.CONFLICT,
   'sender-already-blocked': HttpStatus.CONFLICT,
+  // M1-07. A ceiling on who the actor may act on, which is a permission answer.
+  'assignee-above-actor': HttpStatus.FORBIDDEN,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -54,6 +56,7 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
   'sender-invalid': 'That is not a valid address, domain, phone number or Telegram chat id',
   'sender-is-own': 'This brand sends from that address or domain, so it cannot block it',
   'sender-already-blocked': 'That sender is already on the block list',
+  'assignee-above-actor': 'Only an Admin may route work to an Admin',
 };
 
 export class TicketingFailure extends HttpException {

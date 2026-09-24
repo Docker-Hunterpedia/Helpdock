@@ -247,6 +247,7 @@ export class StaffService {
     });
     await this.#revokeAndNotify(context, userId, 'role-change');
     await this.#parts.hooks.onStaffScopeChanged({
+      tx: context.tx,
       brandId: context.brandId,
       userId,
       actorId: context.actor.userId,
@@ -295,7 +296,12 @@ export class StaffService {
 
     await this.#parts.staff.setDeactivated(context.tx, userId, !active);
 
-    const event = { brandId: context.brandId, userId, actorId: context.actor.userId };
+    const event = {
+      tx: context.tx,
+      brandId: context.brandId,
+      userId,
+      actorId: context.actor.userId,
+    };
     if (active) {
       await this.#parts.hooks.onStaffReactivated(event);
     } else {
@@ -332,6 +338,14 @@ export class StaffService {
     await this.#parts.staff.deleteMembership(context.tx, row.membership.id);
     await this.#forgetInvite(context.brandId, userId);
     await this.#revokeAndNotify(context, userId, 'role-removed');
+    // "The same as deactivation scoped to that brand" (§12): with no
+    // membership left, every open ticket of theirs here is one they cannot work.
+    await this.#parts.hooks.onStaffScopeChanged({
+      tx: context.tx,
+      brandId: context.brandId,
+      userId,
+      actorId: context.actor.userId,
+    });
 
     await writeStaffAudit(context.tx, {
       brandId: context.brandId,

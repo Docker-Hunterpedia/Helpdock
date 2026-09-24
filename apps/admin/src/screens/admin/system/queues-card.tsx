@@ -30,7 +30,7 @@ import {
  * The status read carries only the first few queues, so that one request draws
  * the whole page. "All queues" therefore *fetches* the rest from
  * `GET /api/install/system/queues` rather than expanding what is already here:
- * expanding a list that holds five of eleven would move a label and nothing
+ * expanding a list that holds five of twelve would move a label and nothing
  * else.
  */
 

@@ -1,6 +1,7 @@
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import { OutboxStaffOfflineHook } from '../assignment/staff-offline.hook.js';
 import type { Logger } from '../logging/logger.js';
 import type { Metrics } from '../observability/metrics.js';
 import { METRICS } from '../observability/tokens.js';
@@ -16,7 +17,7 @@ import { RevocationSubscriber } from './revocation.subscriber.js';
 import { DbRoomScopeReader, type RoomScopeReader } from './room-reader.js';
 import { SocketRegistry } from './socket-registry.js';
 import { type SessionRevocations, StaffGateway } from './staff.gateway.js';
-import { NoopStaffOfflineHook, type StaffOfflineHook } from './staff-offline.hook.js';
+import type { StaffOfflineHook } from './staff-offline.hook.js';
 import {
   ROOM_SCOPE_READER,
   SESSION_REVOCATIONS,
@@ -38,7 +39,7 @@ export interface RealtimeModuleOptions {
   readonly revocations: SessionRevocations;
   /** Defaults to M0-10's `socket_connections`. The unit tests pass a readable one. */
   readonly connectionsGauge?: SocketConnectionsGauge;
-  /** M1-07 replaces this with the fifteen-minute auto-unassign timer. */
+  /** Defaults to M1-07's auto-unassign timer over `DB`. The unit tests pass a fake. */
   readonly staffOfflineHook?: StaffOfflineHook;
   /** Defaults to the real one over `DB`. The unit tests pass a fake. */
   readonly roomScopeReader?: RoomScopeReader;
@@ -72,10 +73,13 @@ export class RealtimeModule {
               useFactory: (metrics: Metrics) => metrics.socketConnections,
             }
           : { provide: SOCKET_CONNECTIONS_GAUGE, useValue: options.connectionsGauge },
-        {
-          provide: STAFF_OFFLINE_HOOK,
-          useValue: options.staffOfflineHook ?? new NoopStaffOfflineHook(),
-        },
+        options.staffOfflineHook === undefined
+          ? {
+              provide: STAFF_OFFLINE_HOOK,
+              inject: [DB],
+              useFactory: (db: Db): StaffOfflineHook => new OutboxStaffOfflineHook(db),
+            }
+          : { provide: STAFF_OFFLINE_HOOK, useValue: options.staffOfflineHook },
         options.roomScopeReader === undefined
           ? {
               provide: ROOM_SCOPE_READER,

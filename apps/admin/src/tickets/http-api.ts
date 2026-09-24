@@ -1,4 +1,5 @@
 import type {
+  AssignableAgentList,
   MarkSpamRequest,
   MessageCreateRequest,
   Ticket,
@@ -13,6 +14,7 @@ import type {
   TicketUpdateRequest,
 } from '@helpdock/schemas';
 import {
+  assignableAgentListSchema,
   ticketActivityListSchema,
   ticketDetailSchema,
   ticketListSchema,
@@ -112,6 +114,15 @@ export class HttpTicketsApi implements TicketsApi {
   async unmarkSpam(brandId: string, ticketId: string): Promise<Ticket> {
     return ticketSchema.parse(
       await this.#transport.request('DELETE', `${this.#ticket(brandId, ticketId)}/spam`),
+    );
+  }
+
+  async assignable(brandId: string, departmentId: string): Promise<AssignableAgentList> {
+    return assignableAgentListSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#brand(brandId)}/assignment/${encodeURIComponent(departmentId)}/assignable`,
+      ),
     );
   }
 

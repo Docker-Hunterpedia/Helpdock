@@ -300,7 +300,8 @@ Five things M1-15 should know:
 |---|---|---|
 | `/admin/ticketing` | `Admin/Ticketing` | The tab row of the whole of M1's settings, redirecting to the first tab. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
 | `/admin/ticketing/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
-| `/admin/ticketing/{statuses,priorities,views,assignment}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Statuses and Priorities with M1-02, Views with M1-05, Assignment with M1-07. Any other segment redirects to the first tab. |
+| `/admin/ticketing/{priorities,views}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Priorities with M1-02, Views with M1-05. Any other segment redirects to the first tab. |
+| `/admin/ticketing/assignment` | `Admin/Ticketing-Assignment` | M1-07. The departments with their mode, cap, timer and agents online; the selected department's agents with presence, load, skills and rotation; the side editor. The ticket workspace's assignee picker is `screens/tickets/assignee-picker.tsx` (`AdminTicketDialogs`, panel 3). |
 
 Reordering has three ways in and one path out. The drag handle is a real button
 — so it is reachable by Tab and answers `↑`/`↓` — and the row menu offers **Move

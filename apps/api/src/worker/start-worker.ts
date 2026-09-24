@@ -1,6 +1,7 @@
 import type { Env } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import {
+  assignmentOfflineUnassignJob,
   createOutboxEventHandler,
   createQueueConnection,
   createWorker,
@@ -14,12 +15,19 @@ import {
 } from '@helpdock/jobs';
 import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { AssignmentRepository } from '../assignment/assignment.repository.js';
+import {
+  createOfflineUnassignProcessor,
+  registerAssignmentEventHandlers,
+} from '../assignment/assignment-events.js';
+import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
+import { PresenceStore } from '../realtime/presence.store.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 
 /**
@@ -27,8 +35,8 @@ import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
  * `packages/jobs/README.md` specifies.
  *
  * 1. Handlers are registered before the worker starts. `settings.changed` ships
- *    registered by `@helpdock/jobs` itself; M1's four ticket events are
- *    registered here. A milestone that consumes a new event does the same,
+ *    registered by `@helpdock/jobs` itself; M1's ticket, attachment and
+ *    assignment events are registered here. A milestone that consumes a new event does the same,
  *    before the worker is created, because a job that arrives before its handler
  *    fails as an unknown event and burns attempts.
  * 2. The `outbox.event` consumer, which claims a receipt before the handler runs.
@@ -56,6 +64,8 @@ export interface WorkerDependencies {
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   /** M1-10's `media.process` consumer: sharp, ffmpeg and the optional scanner. */
   createMediaWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
+  /** M1-07's `assignment.offline_unassign` consumer: the auto-unassign timer firing. */
+  createAssignmentWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -97,6 +107,21 @@ const scannerFor = (env: WorkerEnv): FileScanner | undefined =>
         timeoutMs: TIMEOUTS_MS.scan,
       });
 
+/**
+ * What M1-07 reads besides the database: presence, which M0-13 keeps in the
+ * same Redis every api replica writes, and the latest departure per person.
+ */
+const assignmentReads = (redis: Redis) => {
+  const presence = new StorePresenceReader(new PresenceStore(redis));
+
+  return {
+    repository: new AssignmentRepository(),
+    presence,
+    lookup: presence,
+    offlineSince: new RedisOfflineSinceStore(redis),
+  };
+};
+
 export const workerDependencies: WorkerDependencies = {
   createConnection: (url) => createQueueConnection(url),
   // The broadcast publishes on the same connection: a ticket event ends in a
@@ -123,7 +148,28 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
 
-    return { close: () => media.close() };
+    // M1-07. `assignment.staff_offline` ends in a delayed job, for the same
+    // reason and under the same rule as the media one above.
+    const assignment = new Queue(QUEUE_NAMES.assignment, { connection: redis });
+    registerAssignmentEventHandlers({
+      ...assignmentReads(redis),
+      queue: {
+        add: async ({ jobId, delayMs, payload }) => {
+          await assignment.add(assignmentOfflineUnassignJob.name, payload, {
+            ...assignmentOfflineUnassignJob.options,
+            jobId,
+            delay: delayMs,
+          });
+        },
+      },
+    });
+
+    return {
+      close: async () => {
+        await media.close();
+        await assignment.close();
+      },
+    };
   },
   createEventWorker: ({ redis, db, log }) =>
     createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
@@ -144,6 +190,12 @@ export const workerDependencies: WorkerDependencies = {
         // it; more replicas is the way to scale this, not more concurrency.
         concurrency: 1,
       },
+    ),
+  createAssignmentWorker: ({ redis, db, log }) =>
+    createWorker(
+      assignmentOfflineUnassignJob,
+      createOfflineUnassignProcessor(assignmentReads(redis)),
+      { redis, db, log },
     ),
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
@@ -167,6 +219,7 @@ export const startWorker = ({
   const producers = deps.registerHandlers({ redis: connection, env });
   const worker = deps.createEventWorker({ redis: connection, db, log });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
+  const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -188,6 +241,7 @@ export const startWorker = ({
     // media worker first would leave a job queued with nothing draining it,
     // which is harmless but slower to notice than the other order's bug.
     await media.close();
+    await assignment.close();
     await producers.close();
     await connection.quit();
   };

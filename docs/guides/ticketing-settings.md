@@ -5,9 +5,10 @@ them, and the brand-level behaviour that later deliverables read. The screen is
 **Admin → Ticketing**, and this guide follows its tab row.
 
 Six tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
-**Custom fields** and **Templates** (M1-06), and **Spam** (M1-11). The other
-three exist so the row is whole and each says which deliverable fills it:
-Priorities with M1-02, Views with M1-05, Assignment with M1-07.
+Seven tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
+**Custom fields** and **Templates** (M1-06), **Assignment** (M1-07) and **Spam**
+(M1-11). The other two exist so the row is whole and each says which
+deliverable fills it: Priorities with M1-02, Views with M1-05.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -28,6 +29,9 @@ version:
 | Put tags on a ticket | yes | yes | Agent yes, Viewer no |
 | Read, add or remove blocked senders; change the Spam setting | yes | yes | no |
 | Mark a ticket as spam, and block its sender from the dialog | yes | yes | Agent yes, Viewer no |
+| Change a department's assignment settings | yes | in the departments they lead | no |
+| Put somebody in or out of rotation, change their skills | anybody | Agents only, in the departments they lead | no |
+| Assign a ticket by hand | to anybody who can work its department | the same, never to an Admin | Agent the same, never to an Admin; Viewer no |
 
 "Which departments a brand has" is the brand's shape, so it stays with the
 Admin. "What is inside one" is the Team Leader's, which is what §1.2 means by
@@ -72,7 +76,7 @@ Selecting a row fills the card in the side column:
 |---|---|
 | Name | Required, up to 120 characters, unique inside the brand whatever its case. |
 | Name (Arabic) | Optional. M1-01 prints it under the Latin name on the department list, in both locales. Customers see it once the help center and the widget render a department. |
-| Default team | One of *this* department's teams, or none. Where a ticket lands when no rule picks a team (M1-07 acts on it). Deleting that team leaves the department with no default rather than a dangling one. |
+| Default team | One of *this* department's teams, or none. Where a ticket lands when no rule picks a team; nothing routes by team yet (M1-07's rotation is per department, and team actions are M3's rules). Deleting that team leaves the department with no default rather than a dangling one. |
 
 ### Deleting one
 
@@ -114,8 +118,9 @@ department opens its teams under the list.
   `user_brand_roles`, so somebody whose membership was revoked stops appearing
   without the row having to be deleted. Giving the role back brings them back.
 
-Teams are stored and served now; **assignment to them is M1-07** (round-robin
-per department, skills, load cap), and **business hours per department are M3**.
+Teams are stored and served now. **Assignment** is per department — see
+[Assignment](#assignment) — and does not read teams; routing to a team is an
+action of M3's rules. **Business hours per department are M3.**
 
 ## Statuses
 
@@ -447,6 +452,100 @@ A staff member filing a ticket by hand is never gated: the block list is about
 who may reach the desk, not about whom the desk may write down. M1 has no
 customer-facing path that creates a ticket, so nothing calls the gate yet.
 
+## Assignment
+
+How a department hands its tickets to agents (M1-07, REQUIREMENTS §4.1,
+DOMAIN-RULES §12). The tab lists every department the viewer leads — an Admin
+sees them all — with its mode, load cap, auto-unassign timer and how many of its
+agents in rotation are online. The pencil on a row opens its settings in the
+side card; the first department is open on arrival. Under the list, **Agents in
+<department>** lists everybody who can work it.
+
+### The settings
+
+| Setting | Values | Meaning |
+|---|---|---|
+| Mode | **Manual** (default), **Round-robin**, **Skill-based** | Manual leaves new tickets unassigned. Round-robin gives each to the next eligible agent. Skill-based does the same among the eligible agents whose skills match one of the ticket's tags, and among all of them when none match. |
+| Load cap per agent | empty (no cap) or 1–500 | Open and escalated tickets an agent may hold **in this department** before the rotation skips them. On-hold, closed, spam and merged tickets do not count. |
+| Unassign when the agent is offline for | off (default), or 1–1440 minutes (default 15) | When the agent's last socket in the brand goes, their open tickets here are unassigned after this long unless they came back. |
+| When an agent loses access | **Leave them unassigned** (default) or **Round-robin the tickets** | What happens to a ticket whose assignee can no longer work it — deactivated, removed from the brand, or their departments narrowed. |
+
+### Who the rotation picks
+
+The next ticket goes to the **eligible** agent who has **waited longest** —
+the oldest "last picked here", with somebody never picked first and ties broken
+by id so every replica agrees. Eligible means all of:
+
+- their role in the brand reaches the department, they are not a Viewer, and
+  their account is not deactivated;
+- they are **in rotation** here. With no choice stored, Agents are in and Team
+  Leaders and Admins are out — an Admin reaches every department and should not
+  find tickets they never asked for. The checkbox on their row stores a choice;
+- they are **online**. Away is not online;
+- they are **under the cap**. An agent at their cap is skipped, never queued:
+  the ticket goes to the next eligible agent, or stays unassigned.
+
+Nobody eligible means the ticket stays unassigned; nothing retries it later.
+Spam, merged, closed and deleted tickets are never handed out, and neither is a
+ticket somebody assigned in the meantime.
+
+### When it runs
+
+The rotation runs in the worker, never in a request (DOMAIN-RULES §6). The
+request writes an `assignment.requested` outbox row in its own transaction:
+
+- when a ticket is **created unassigned** in a department whose mode is not
+  Manual;
+- when a ticket **moves** into such a department and arrives unassigned —
+  including when the move clears an assignee who cannot follow it;
+- when a ticket's assignee **loses access** and the department says **Round-robin
+  the tickets**; this runs even in a Manual department, in skill-based order if
+  its mode is Skill-based;
+- after the **offline timer** unassigns a ticket, in a department whose mode is
+  not Manual.
+
+Picks in one brand are serialised by a transaction-scoped advisory lock, so two
+tickets created at the same moment cannot both hand an agent at `cap − 1` a
+ticket. Every pick writes a `ticket.updated` activity row (actor `system`,
+`assignment`, with `assignedBy: round_robin | skill_based`) and a
+`ticket.updated` outbox row, so open screens hear about it.
+
+### The offline timer
+
+When presence (M0-13) sees somebody's last socket in a brand go, the api writes
+`assignment.staff_offline` if any department of the brand has the timer on. The
+worker then adds one delayed `assignment.offline_unassign` job per such
+department where they hold open tickets, due the department's minutes after
+they went. When it fires it does nothing if they are online or away again, if
+they left again later (the later timer is the one that counts), or if the
+department has turned the timer off since. Otherwise it unassigns their open
+tickets there and routes each again.
+
+DOMAIN-RULES §12 says the timer never fires "during business hours closed
+periods". Departments have no business hours until M3, so every period is open;
+M3 adds the check to the job and reschedules it to the next opening.
+
+### Agents in a department
+
+Each row shows presence, open tickets against the cap — in danger with "at
+cap" once they reach it, which a manual assignment may push past — their
+**skills** (tags; the dashed **+ skill** button adds one, the × on a chip
+removes it) and **In rotation**. Skills are per department, so a Team Leader
+edits the skills that matter where they lead. A Team Leader changes Agents'
+rows only; an Admin's or another Team Leader's row is shown with its controls
+disabled.
+
+### Assigning by hand
+
+The **Assignee** picker in a ticket's details panel lists everybody who can work
+the ticket's department, with their presence and open tickets against the cap.
+An agent at cap can still be picked. The api refuses somebody who cannot work
+the department the ticket is (or is moving) in with `not-eligible` (409), and a
+non-Admin assigning an Admin with `assignee-above-actor` (403) — DOMAIN-RULES
+§1.2's ceiling on who a Team Leader may act on. A move into a department the
+assignee cannot work clears the assignee rather than leaving the ticket with
+somebody who cannot open it. See [Tickets](tickets.md).
+
 ## Brand settings
 
 Each brand carries a small JSON object of ticketing behaviour. M1-01 stores and
@@ -545,6 +644,11 @@ there as well as in the brand it creates.
 | `POST /api/brands/:brandId/blocked-senders` | `@Requires('ticketing:manage')` | Blocks `{ kind, value }`; the value is normalised. |
 | `DELETE /api/brands/:brandId/blocked-senders/:blockedSenderId` | `@Requires('ticketing:manage')` | Unblocks. |
 | `PATCH …/ticketing/spam-settings` | `@Requires('ticketing:manage')` | `{ offerBlockSender }`. Team Leaders included. |
+| `GET /api/brands/:brandId/assignment` | `@Requires('ticketing:manage')` | Every department the actor leads, with its assignment settings and online/in-rotation counts. |
+| `PATCH /api/brands/:brandId/assignment/:departmentId` | `@Requires('ticketing:manage')` | Mode, load cap, auto-unassign and minutes, `onUnassign`. A Team Leader only inside the departments they lead. |
+| `GET …/assignment/:departmentId/agents` | `@Requires('ticketing:manage')` | Who can work the department: presence, open count, rotation, skills, and whether the actor may edit the row. |
+| `PATCH …/assignment/:departmentId/agents/:userId` | `@Requires('ticketing:manage')` | `inRotation` and/or the whole `skillTagIds` set. A Team Leader only for Agents. |
+| `GET …/assignment/:departmentId/assignable` | `@Requires('ticket:write')` | The assignee picker: id, name, presence and open count, plus the cap. 404 for a department outside the actor's scope. |
 
 ### Refusals
 
@@ -567,6 +671,7 @@ the translated copy:
 | `sender-invalid` | 400 | Not a valid sender of the kind named. |
 | `sender-is-own` | 409 | The brand sends from that address or domain. Also answered by "Mark as spam" with `blockSender`, which then rolls back. |
 | `sender-already-blocked` | 409 | That sender is on the list already. |
+| `assignee-above-actor` | 403 | Only an Admin assigns a ticket to an Admin (M1-07). |
 
 A department of another brand is invisible to the request's transaction, so it
 answers **404**, not 403: "there is no such id" and "it is not yours" are the
@@ -575,12 +680,14 @@ same answer. The same holds for a tag, a custom field and a template — and, fo
 
 ## Data model
 
-Nine tenant tables, all under a `FORCE`d row-level security policy on
+Eleven tenant tables, all under a `FORCE`d row-level security policy on
 `brand_id` (DOMAIN-RULES §1.3):
 
 | Table | Columns that matter | Notes |
 |---|---|---|
-| `departments` | `name`, `name_ar`, `default_team_id`, `sort_order` | Unique on `(brand_id, name)`. `default_team_id` is `ON DELETE SET NULL`. |
+| `departments` | `name`, `name_ar`, `default_team_id`, `sort_order`, `assignment_mode`, `load_cap`, `auto_unassign_offline`, `auto_unassign_after_minutes`, `on_unassign` | Unique on `(brand_id, name)`. `default_team_id` is `ON DELETE SET NULL`. `load_cap` is null or positive, the minutes 1–1440 (check constraints). |
+| `assignment_agents` | `department_id`, `user_id`, `in_rotation`, `last_assigned_at` | One person's place in one department's rotation. A row exists only once somebody stored a choice or the rotation picked them. |
+| `assignment_skills` | `department_id`, `user_id`, `tag_id` | An agent's skills in one department. Deleting the tag deletes the skill. |
 | `ticket_statuses` | `system_state`, `pauses_sla`, `awaiting_customer`, `is_default`, `is_system`, `excluded_from_reports`, `is_spam`, `sort_order`, `color` | Unique on `(brand_id, name)`, and on `brand_id` where `is_spam` — one Spam per brand. Brand-scoped, never department-scoped: an Agent reads the name of the status their own ticket is in. |
 | `teams` | `department_id`, `name`, `sort_order` | Unique on `(department_id, name)`. Cascades from its department. |
 | `team_members` | `team_id`, `user_id` | Unique on `(team_id, user_id)`. Cascades from its team and from the account. |

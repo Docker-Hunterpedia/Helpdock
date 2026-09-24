@@ -1,4 +1,7 @@
 import type {
+  AssignmentAgent,
+  AssignmentAgentList,
+  AssignmentAgentUpdateRequest,
   BlockedSender,
   BlockedSenderCreateRequest,
   BlockedSenderList,
@@ -11,6 +14,9 @@ import type {
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
+  DepartmentAssignment,
+  DepartmentAssignmentList,
+  DepartmentAssignmentUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
@@ -158,6 +164,24 @@ export interface TicketingApi {
   unblockSender(brandId: string, blockedSenderId: string): Promise<void>;
   /** The Spam tab's one setting: whether "Mark as spam" offers "Block sender". */
   updateSpamSettings(brandId: string, request: SpamSettingsUpdateRequest): Promise<BrandSettings>;
+
+  // ---------------------------------------------------------------- M1-07
+
+  /** Every department the viewer leads, with how it assigns tickets. */
+  assignment(brandId: string): Promise<DepartmentAssignmentList>;
+  updateAssignment(
+    brandId: string,
+    departmentId: string,
+    request: DepartmentAssignmentUpdateRequest,
+  ): Promise<DepartmentAssignment>;
+  /** Who can work the department: rotation, skills, presence and load. */
+  assignmentAgents(brandId: string, departmentId: string): Promise<AssignmentAgentList>;
+  updateAssignmentAgent(
+    brandId: string,
+    departmentId: string,
+    userId: string,
+    request: AssignmentAgentUpdateRequest,
+  ): Promise<AssignmentAgent>;
 }
 
 /**

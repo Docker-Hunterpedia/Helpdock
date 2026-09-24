@@ -77,6 +77,13 @@ M0 defines three jobs:
 | `outbox.event` | `outbox` | The fan-out job the relay publishes, one per outbox row. |
 | `maintenance.retention` | `maintenance` | Nightly purge for one brand (DOMAIN-RULES §11). Defined here; the per-brand fan-out lands with M9. |
 
+M1 adds:
+
+| Job | Queue | Notes |
+|---|---|---|
+| `media.process` | `media` | M1-10's sniff, re-encode and scan of one attachment. |
+| `assignment.offline_unassign` | `assignment` | M1-07's auto-unassign timer, added delayed by the `assignment.staff_offline` handler. Keyed by the departure (`userId`, `departmentId`, `since`), so coming back and leaving again is a new job. |
+
 ## Handling an event
 
 `outbox.event` carries `{ outboxId, brandId, event, payload }`, and the

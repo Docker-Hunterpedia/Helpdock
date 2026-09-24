@@ -62,6 +62,11 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('media.close') };
       },
+      createAssignmentWorker: ({ redis }) => {
+        calls.push('assignment.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('assignment.close') };
+      },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
@@ -74,7 +79,7 @@ const harness = (): Harness => {
 };
 
 describe('startWorker', () => {
-  it('registers the handlers and both consumers before the relay that feeds them', () => {
+  it('registers the handlers and every consumer before the relay that feeds them', () => {
     const { deps, calls } = harness();
 
     startWorker({ env, db, log: silentLogger, deps });
@@ -86,6 +91,7 @@ describe('startWorker', () => {
       'handlers.register',
       'worker.create',
       'media.create',
+      'assignment.create',
       'relay.start',
     ]);
   });
@@ -127,6 +133,7 @@ describe('startWorker', () => {
       'relay.stop',
       'worker.close',
       'media.close',
+      'assignment.close',
       'producers.close',
       'connection.quit',
     ]);
@@ -144,6 +151,7 @@ describe('startWorker', () => {
       'relay.stop',
       'worker.close',
       'media.close',
+      'assignment.close',
       'producers.close',
       'connection.quit',
     ]);

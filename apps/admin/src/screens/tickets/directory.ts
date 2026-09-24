@@ -8,11 +8,10 @@ import type { ContactSummary, StaffMember } from '@helpdock/schemas';
  * rather than in a component:
  *
  * 1. **`GET /brands/:id/staff` declares `staff:manage`**, which an Agent does
- *    not hold — so the one screen that most needs a list of colleagues is the
- *    one least able to read it. The picker degrades to the people it can name:
- *    nobody, the viewer themselves, and whoever the read did return for an
- *    Admin or Team Leader. M1-07 owns assignment and is where an
- *    "assignable agents" read belongs.
+ *    not hold. The assignee picker therefore reads M1-07's
+ *    `GET /brands/:id/assignment/:departmentId/assignable` (`ticket:write`)
+ *    instead; the staff read is still what names the people on list rows, and
+ *    for an Agent it may come back empty.
  * 2. **Contacts are a page, not a map.** The contact list answers the first
  *    page for the brand, so a row whose contact is further down is left without
  *    a name rather than given a wrong one. The real fix is the ticket list
@@ -30,29 +29,32 @@ export const shortId = (id: string): string => {
 };
 
 /**
- * The people the assignee picker offers: the viewer, then everybody the staff
- * read returned, then — when the ticket is assigned to somebody neither of
- * those name — that person as a shortened id, so the select can show what the
- * ticket actually says instead of silently reading as unassigned.
+ * The name the assignee picker's button shows. The picker's own read (M1-07's
+ * `assignable`) names everybody who can work the department; somebody outside
+ * it — assigned before a move, or before their scope narrowed — is named from
+ * the staff read if it has them, and otherwise drawn as a shortened id, so the
+ * button shows what the ticket actually says instead of reading as unassigned.
  */
-export const assignableStaff = (
-  members: readonly StaffMember[],
-  viewer: { readonly id: string; readonly name: string },
+export const assigneeName = (
   assigneeId: string | null,
-): readonly { readonly userId: string; readonly name: string }[] => {
-  const offered = members
-    .filter((member) => member.status === 'active')
-    .map((member) => ({ userId: member.userId, name: member.name }));
-
-  if (!offered.some((member) => member.userId === viewer.id)) {
-    offered.unshift({ userId: viewer.id, name: viewer.name });
+  sources: {
+    readonly agents: readonly { readonly userId: string; readonly name: string }[];
+    readonly staff: readonly StaffMember[];
+    readonly viewer: { readonly id: string; readonly name: string };
+  },
+): string | null => {
+  if (assigneeId === null) {
+    return null;
+  }
+  if (assigneeId === sources.viewer.id) {
+    return sources.viewer.name;
   }
 
-  if (assigneeId !== null && !offered.some((member) => member.userId === assigneeId)) {
-    offered.push({ userId: assigneeId, name: shortId(assigneeId) });
-  }
-
-  return offered;
+  return (
+    sources.agents.find((agent) => agent.userId === assigneeId)?.name ??
+    sources.staff.find((member) => member.userId === assigneeId)?.name ??
+    shortId(assigneeId)
+  );
 };
 
 export const contactNamesOf = (contacts: readonly ContactSummary[]): ReadonlyMap<string, string> =>

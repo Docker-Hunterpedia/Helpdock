@@ -18,7 +18,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-04 | Contacts and accounts | #48 | in review (#64) |
 | M1-05 | Views | #49 | planned |
 | M1-06 | Tags, custom fields (text, number, date, select | #50 | in review (#72) |
-| M1-07 | Assignment | #51 | planned |
+| M1-07 | Assignment | #51 | done in branch, awaiting PR |
 | M1-08 | Ticket state machine | #52 | in review (#69) |
 | M1-09 | Merge and split with the exact semantics in D §2.4 | #53 | planned |
 | M1-10 | Media pipeline | #54 | in review (#71) |
@@ -62,7 +62,24 @@ Copied from the PRD, ticked as they are met.
 
 ## Open questions
 - Should a Team Leader read only their own departments' rows of the staff list and contact timeline? (raised in M0-06; DOMAIN-RULES §1.2 does not narrow it)
-- `on_unassign` semantics on scope change: which tickets move when a role widens vs narrows (hook `onStaffScopeChanged` exists)
+- ~~`on_unassign` semantics on scope change~~ — answered by M1-07: after any role or department change, deactivation or removal, the tickets the person can no longer work are unassigned and each follows its department's `on_unassign`; a widened scope moves nothing. See the M1-07 notes.
+
+## M1-07 notes
+
+Assignment, in migration `0015_assignment` (departments gain `assignment_mode`, `load_cap`, `auto_unassign_offline`, `auto_unassign_after_minutes`, `on_unassign`; new tenant tables `assignment_agents` and `assignment_skills`, both in the RLS negative suite). Guide: [ticketing settings › Assignment](../guides/ticketing-settings.md#assignment).
+
+- **Rotation** (round-robin, skill-based) runs in the worker from `assignment.requested`, written in the same transaction as a ticket created or moved unassigned into a routing department. Eligible = can work the department, in rotation, online (not away), under the cap; longest waiting first. Skills match among the *eligible*; nobody skilled and eligible falls back to everyone eligible. A per-brand `pg_advisory_xact_lock` makes concurrent picks cap-safe (integration test fails without it).
+- **Manual assignment** is held to the ticket's (target) department and to DOMAIN-RULES §1.2's ceiling: only an Admin assigns to an Admin (`assignee-above-actor`, 403). The cap never refuses a person. A move the assignee cannot follow clears the assignee.
+- **Assignable read** for the picker: `GET /brands/:id/assignment/:departmentId/assignable` under `ticket:write` — id, name, presence, open count, cap.
+- **Auto-unassign on offline**: `STAFF_OFFLINE_HOOK` now writes `assignment.staff_offline`; the worker adds one delayed `assignment.offline_unassign` job (new `assignment` queue, ARCHITECTURE §13) per department that asks for it. Business hours are M3: the "never while closed" check is a seam in the job.
+- **`on_unassign`**: `StaffLifecycleHooks` now carry the request `tx` and write `assignment.access_changed`; `removeFromBrand` calls the hook too.
+
+Decisions a reviewer should confirm:
+1. The load cap counts open + escalated tickets **in that department**, not across the brand — so the picker (read by an Agent under department RLS) and the rotation agree.
+2. With no stored choice, **Agents are in rotation and Team Leaders/Admins are not**.
+3. Skills are **per agent per department**, so a Team Leader edits skills only where they lead.
+4. Nothing re-routes a ticket left unassigned because nobody was eligible (e.g. when an agent comes online); that would be a rule (M3).
+5. Teams play no part in the rotation; the department's default team is still unused (the `teamId` refusal in `tickets.service.ts` predates M1-01 and was left alone).
 
 ## Pull requests
 - this PR: milestone doc

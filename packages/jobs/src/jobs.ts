@@ -198,12 +198,48 @@ export const mediaProcessJob = defineJob({
   idempotencyKey: (payload) => `media.process:${payload.attachmentId}`,
 });
 
+export const assignmentOfflineUnassignPayloadSchema = z.object({
+  brandId: z.uuid(),
+  userId: z.uuid(),
+  departmentId: z.uuid(),
+  /** When presence noticed they went offline; the timer counts from here. */
+  since: z.iso.datetime(),
+});
+
+export type AssignmentOfflineUnassignPayload = z.infer<
+  typeof assignmentOfflineUnassignPayloadSchema
+>;
+
+/**
+ * M1-07's auto-unassign timer (DOMAIN-RULES §12): added with a delay of the
+ * department's minutes when somebody goes offline, and a no-op when it fires
+ * if they came back — or went offline again later, in which case the later
+ * job is the one that counts.
+ *
+ * Keyed by the departure, not the job id, so the same departure is acted on
+ * once however it is redelivered, and a second departure is a second key.
+ */
+export const assignmentOfflineUnassignJob = defineJob({
+  name: 'assignment.offline_unassign',
+  queue: QUEUE_NAMES.assignment,
+  schema: assignmentOfflineUnassignPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) =>
+    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,
   [maintenanceRetentionJob.name]: maintenanceRetentionJob,
   [mediaProcessJob.name]: mediaProcessJob,
+  [assignmentOfflineUnassignJob.name]: assignmentOfflineUnassignJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

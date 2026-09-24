@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assignmentOfflineUnassignJob,
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   maintenanceRetentionJob,
@@ -135,5 +136,39 @@ describe('media.process payloads', () => {
 
   it('runs on the media queue of ARCHITECTURE §13', () => {
     expect(mediaProcessJob.queue).toBe('media');
+  });
+});
+
+describe('assignment.offline_unassign', () => {
+  const payload = {
+    brandId,
+    userId: '01924f00-0000-7000-8000-0000000000a1',
+    departmentId: '01924f00-0000-7000-8000-0000000000d1',
+    since: '2026-09-24T10:00:00.000Z',
+  };
+
+  it('accepts one departure from one department', () => {
+    expect(parseJobPayload(assignmentOfflineUnassignJob, payload)).toEqual(payload);
+  });
+
+  it('refuses a departure with no time, since the timer counts from it', () => {
+    expect(() =>
+      parseJobPayload(assignmentOfflineUnassignJob, { ...payload, since: 'yesterday' }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('keys each departure separately, so coming back and leaving again starts a new timer', () => {
+    const later = { ...payload, since: '2026-09-24T10:30:00.000Z' };
+
+    expect(idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first')).toBe(
+      idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'second'),
+    );
+    expect(idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first')).not.toBe(
+      idempotencyKeyFor(assignmentOfflineUnassignJob, later, 'first'),
+    );
+  });
+
+  it('runs on a queue of its own', () => {
+    expect(assignmentOfflineUnassignJob.queue).toBe('assignment');
   });
 });

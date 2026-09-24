@@ -1,4 +1,5 @@
 import type {
+  AssignableAgentList,
   Attachment,
   MarkSpamRequest,
   MessageCreateRequest,
@@ -26,6 +27,7 @@ import {
 } from '../contacts/mock-api.js';
 import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
+import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import type { TicketQuery, TicketsApi } from './api.js';
 
@@ -727,6 +729,10 @@ export class MockTicketsApi implements TicketsApi {
     }
 
     return this.update(brandId, ticketId, { statusId: this.#defaultStatus().id });
+  }
+
+  async assignable(_brandId: string, departmentId: string): Promise<AssignableAgentList> {
+    return Promise.resolve(mockAssignable(departmentId));
   }
 
   #page(ticketId: string, after: number): TicketMessagePage {

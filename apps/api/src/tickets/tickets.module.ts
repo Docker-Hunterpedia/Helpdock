@@ -1,4 +1,5 @@
 import { type DynamicModule, Module } from '@nestjs/common';
+import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { MediaRepository } from '../media/media.repository.js';
 import { BlockListService } from '../ticketing/block-list.service.js';
 import { TagsService } from '../ticketing/tags.service.js';
@@ -59,6 +60,7 @@ export class TicketsModule {
             MediaRepository,
             TemplatesService,
             TagsService,
+            AssignmentRepository,
           ],
           useFactory: (
             tickets: TicketRepository,
@@ -67,8 +69,17 @@ export class TicketsModule {
             attachments: MediaRepository,
             templates: TemplatesService,
             tags: TagsService,
+            assignment: AssignmentRepository,
           ): TicketsService =>
-            new TicketsService(tickets, lifecycle, lifecycleReads, attachments, templates, tags),
+            new TicketsService(
+              tickets,
+              lifecycle,
+              lifecycleReads,
+              attachments,
+              templates,
+              tags,
+              assignment,
+            ),
         },
         // M1-08. `TicketLifecycleHooks` is a provider rather than a registry so
         // that M3-02's clocks and M1-12's survey replace one line here instead
@@ -93,6 +104,8 @@ export class TicketsModule {
             blockList: BlockListService,
           ): TicketSpamService => new TicketSpamService(tickets, lifecycle, blockList),
         },
+        // M1-07, for the same reason: stateless, every method takes the tx.
+        { provide: AssignmentRepository, useFactory: () => new AssignmentRepository() },
       ],
     };
   }

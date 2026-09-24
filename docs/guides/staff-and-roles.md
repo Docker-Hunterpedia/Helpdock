@@ -180,9 +180,9 @@ used, so it gets an invitation for this brand too.
 
 | Action | Effect |
 |---|---|
-| **Change role or departments** | Every refresh token family is revoked, so the next access token carries the new claims within the ten minutes DOMAIN-RULES §1.6 allows. `principal.revoked` is published, which M0-13's gateway turns into a socket disconnect. Tickets the person can no longer see are unassigned per the department's `on_unassign` setting — M1. |
-| **Deactivate** | Sessions and trusted devices revoked, socket disconnect announced, removed from presence and round-robin (M0-13 and M1), notifications stop. Open tickets are handled per `on_unassign` — M1. Reversible with **Reactivate**. |
-| **Remove from this brand** | The role in this brand goes and every session ends. Roles in other brands are untouched. |
+| **Change role or departments** | Every refresh token family is revoked, so the next access token carries the new claims within the ten minutes DOMAIN-RULES §1.6 allows. `principal.revoked` is published, which M0-13's gateway turns into a socket disconnect. An `assignment.access_changed` outbox row is written in the same transaction; the worker unassigns every open ticket the person can no longer work and applies each department's `on_unassign` (M1-07). A widened scope unassigns nothing. |
+| **Deactivate** | Sessions and trusted devices revoked, socket disconnect announced, removed from presence (M0-13); the rotation never picks a deactivated account (M1-07), and their open tickets in this brand are unassigned and handled per `on_unassign`. Notifications stop. Reversible with **Reactivate**. |
+| **Remove from this brand** | The role in this brand goes and every session ends; their open tickets here are unassigned per `on_unassign`, as for a deactivation. Roles in other brands are untouched. |
 | **Delete** | Install-admin only, and only after deactivation. See below. |
 
 **Deactivation is an account-level state**, as DOMAIN-RULES §12 defines it: a
@@ -327,14 +327,13 @@ Redis token expires.
 
 ## Known gaps
 
-- **A department has no business hours, SLA policy or `on_unassign` setting
-  yet.** M1-01 gives departments a screen, teams and an order; business hours are
-  M3, the SLA policy is M3, and `on_unassign` arrives with M1-07's assignment.
-- **`on_unassign` is not implemented.** Deactivating somebody or narrowing their
-  scope leaves their tickets assigned to them. The hooks the M1 work fills in are
-  named in `apps/api/src/staff/lifecycle-hooks.ts`.
-- **Presence and round-robin removal are M0-13 and M1.** The revocation that
-  announces them already publishes `principal.revoked`.
+- **A department has no business hours or SLA policy yet.** Business hours and
+  the SLA policy are M3. `on_unassign` is M1-07's
+  ([Assignment](ticketing-settings.md#assignment)).
+- **Deactivation unassigns in one brand.** The hook fires for the brand the
+  action was taken in; an account deactivated there keeps its tickets in other
+  brands assigned until somebody moves them, though the rotation never picks it
+  anywhere.
 - **API keys created by a deactivated person are not revoked.** API keys arrive
   with M8.
 - **A Team Leader reads the whole brand's roster**, not only their own

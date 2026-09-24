@@ -25,6 +25,8 @@ describe('the schema', () => {
   it('declares the tables shipped so far (ARCHITECTURE §5)', () => {
     expect([...byName.keys()].sort()).toEqual([
       'accounts',
+      'assignment_agents',
+      'assignment_skills',
       'attachments',
       'audit_log',
       'blocked_senders',
@@ -82,10 +84,11 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but three has a uuid primary key; `settings` is keyed by
+    // Every table but five has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key, and
-    // `ticket_tags` by the pair it joins.
-    expect(generated).toHaveLength(byName.size - 3);
+    // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
+    // they join.
+    expect(generated).toHaveLength(byName.size - 5);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

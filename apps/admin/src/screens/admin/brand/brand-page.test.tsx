@@ -18,7 +18,8 @@ const renderBrand = async (path = '/admin/brand') => {
     initialEntries: [path],
   });
 
-  await screen.findByRole('heading', { name: 'Data retention' });
+  // The first render pulls in the whole app; on a busy machine it takes more than a second.
+  await screen.findByRole('heading', { name: 'Data retention' }, { timeout: 10_000 });
 
   return rendered;
 };

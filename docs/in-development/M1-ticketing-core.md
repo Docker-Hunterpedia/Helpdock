@@ -12,16 +12,16 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 ## Deliverables
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M1-01 | Brands | #45 | in review (#66) |
-| M1-02 | Tickets | #46 | in review (#63) |
-| M1-03 | Messages | #47 | in review (#63) |
-| M1-04 | Contacts and accounts | #48 | in review (#64) |
+| M1-01 | Brands | #45 | done (#66) |
+| M1-02 | Tickets | #46 | done (#63) |
+| M1-03 | Messages | #47 | done (#63) |
+| M1-04 | Contacts and accounts | #48 | done (#64) |
 | M1-05 | Views | #49 | planned |
 | M1-06 | Tags, custom fields (text, number, date, select | #50 | in review (#72) |
 | M1-07 | Assignment | #51 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
-| M1-08 | Ticket state machine | #52 | in review (#69) |
+| M1-08 | Ticket state machine | #52 | done (#69) |
 | M1-09 | Merge and split with the exact semantics in D §2.4 | #53 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
-| M1-10 | Media pipeline | #54 | in review (#71) |
+| M1-10 | Media pipeline | #54 | done (#71) |
 | M1-11 | Spam | #55 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-13 | Contact identity rules | #57 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |

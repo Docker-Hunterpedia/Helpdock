@@ -33,7 +33,7 @@ import { CsatPage } from './csat-page.tsx';
  *   §8 allows; spacing, type and status hues are the system's.
  */
 
-type LoadState =
+export type LoadState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly view: CsatSurveyView }
   | { readonly kind: 'failed'; readonly problem: CsatLinkProblem };
@@ -137,5 +137,3 @@ export function CsatApp({
     </CacheProvider>
   );
 }
-
-export type { LoadState };

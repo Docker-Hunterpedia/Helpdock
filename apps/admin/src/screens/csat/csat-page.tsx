@@ -1,5 +1,5 @@
 import type { CsatSubmitRequest, CsatSurveyView } from '@helpdock/schemas';
-import { CSAT_COMMENT_MAX, CSAT_RATING_MAX, CSAT_RATING_MIN } from '@helpdock/schemas';
+import { CSAT_COMMENT_MAX } from '@helpdock/schemas';
 import type { SemanticTokens } from '@helpdock/ui';
 import { Box, Button, TextField, Typography } from '@mui/material';
 import { Check, Clock, TriangleAlert } from 'lucide-react';
@@ -25,12 +25,20 @@ import type { LoadState } from './csat-app.tsx';
  * not send an agent's name, and there is no help center to link to until M5.
  */
 
-const RATINGS = Array.from(
-  { length: CSAT_RATING_MAX - CSAT_RATING_MIN + 1 },
-  (_, index) => CSAT_RATING_MIN + index,
-);
+/** The five buttons, each with the catalog key of its word. */
+const RATING_LABELS = {
+  1: 'csat:ratings.1',
+  2: 'csat:ratings.2',
+  3: 'csat:ratings.3',
+  4: 'csat:ratings.4',
+  5: 'csat:ratings.5',
+} as const satisfies Record<number, string>;
 
-const ratingKey = (rating: number) => `csat:ratings.${String(rating) as '1'}` as const;
+type Rating = keyof typeof RATING_LABELS;
+
+const RATINGS: readonly Rating[] = [1, 2, 3, 4, 5];
+
+const ratingLabel = (rating: number) => RATING_LABELS[rating as Rating];
 
 export function CsatPage({
   tokens,
@@ -264,7 +272,7 @@ function RatingForm({
                   variant="caption"
                   sx={{ color: pressed ? 'text.primary' : 'text.secondary' }}
                 >
-                  {t(ratingKey(value))}
+                  {t(RATING_LABELS[value])}
                 </Typography>
               </Button>
             );
@@ -323,7 +331,7 @@ function Rated({
         {t('csat:thanks')}
       </Notice>
       <Typography variant="h2" component="h1">
-        {t('csat:ratedHeading', { rating, label: t(ratingKey(rating)) })}
+        {t('csat:ratedHeading', { rating, label: t(ratingLabel(rating)) })}
       </Typography>
       <Typography sx={{ fontSize: 16, lineHeight: '24px', color: 'text.secondary' }}>
         {t('csat:ratedBody', { brand: brandName })}

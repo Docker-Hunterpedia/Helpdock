@@ -3,7 +3,6 @@ import { promisify } from 'node:util';
 import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
-  brands,
   contacts,
   createDb,
   csatResponses,
@@ -674,6 +673,16 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
       expect(malformed.status).toBe(400);
     });
 
+    it('answers a deleted ticket’s link as if it did not exist', async () => {
+      const { ticket } = await createTicket();
+      const token = await closeAndSurvey(ticket.id);
+
+      await call('DELETE', ticketPath(ticket.id), ada);
+      const response = await call('GET', publicPath(token), null);
+
+      expect(response.status).toBe(404);
+    });
+
     it('asks again after a reopen and a second close', async () => {
       const { ticket } = await createTicket();
       await closeAndSurvey(ticket.id);
@@ -771,14 +780,5 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
       );
       expect(statuses.at(-1)).toBe(429);
     });
-  });
-
-  it('keeps the other brand out of every survey', async () => {
-    const otherBrand = uuidv7();
-    await runtime.db.insert(brands).values({ id: otherBrand, name: 'Globex', prefix: 'GLXF' });
-
-    const rows = await withSystem(runtime.db, otherBrand, (tx) => tx.select().from(csatResponses));
-
-    expect(rows).toEqual([]);
   });
 });

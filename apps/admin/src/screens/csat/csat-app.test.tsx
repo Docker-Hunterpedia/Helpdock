@@ -19,10 +19,10 @@ const renderPage = (token: string, options: { search?: string; api?: CsatApi } =
   return user;
 };
 
-const failing = (problem: 'rate-limited' | 'unavailable'): CsatApi => ({
-  survey: () => Promise.reject(new CsatLinkError(problem)),
-  rate: () => Promise.reject(new CsatLinkError(problem)),
-});
+const unavailable: CsatApi = {
+  survey: () => Promise.reject(new CsatLinkError('unavailable')),
+  rate: () => Promise.reject(new CsatLinkError('unavailable')),
+};
 
 describe('an open link', () => {
   it('asks about the ticket by reference and subject', async () => {
@@ -101,16 +101,13 @@ describe('a spent link', () => {
   });
 });
 
-it.each(['rate-limited', 'unavailable'] as const)(
-  'asks the customer to come back later when the api is %s',
-  async (problem) => {
-    renderPage(MOCK_CSAT_TOKENS.open, { api: failing(problem) });
+it('asks the customer to come back later when the api cannot answer', async () => {
+  renderPage(MOCK_CSAT_TOKENS.open, { api: unavailable });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'This page could not be loaded. Try again in a few minutes.',
-    );
-  },
-);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This page could not be loaded. Try again in a few minutes.',
+  );
+});
 
 describe('the page’s language', () => {
   it('follows ?lang=ar, right to left', async () => {

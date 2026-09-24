@@ -95,7 +95,9 @@ export class CsatRepository {
       })
       .from(csatResponses)
       .innerJoin(tickets, eq(tickets.id, csatResponses.ticketId))
-      .where(eq(csatResponses.id, surveyId))
+      // A ticket an Admin deleted is hidden from every view (DOMAIN-RULES §2.2),
+      // and its survey's link with it.
+      .where(and(eq(csatResponses.id, surveyId), isNull(tickets.deletedAt)))
       .limit(1);
 
     return row === undefined

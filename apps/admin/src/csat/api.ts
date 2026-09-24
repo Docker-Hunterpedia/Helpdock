@@ -13,9 +13,10 @@ export interface CsatApi {
 /**
  * Why a link could not be used at all. `not-found` covers a forged, mistyped
  * or foreign token, and the page draws it as a spent link: it says nothing
- * about whether a survey exists. The other two are "try again later".
+ * about whether a survey exists. `unavailable` — the api is down, or the
+ * address has used its budget — is "try again later".
  */
-export type CsatLinkProblem = 'not-found' | 'rate-limited' | 'unavailable';
+export type CsatLinkProblem = 'not-found' | 'unavailable';
 
 export class CsatLinkError extends Error {
   readonly problem: CsatLinkProblem;

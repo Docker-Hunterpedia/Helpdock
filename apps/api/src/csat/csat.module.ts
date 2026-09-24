@@ -10,9 +10,8 @@ import { CsatService } from './csat.service.js';
 import { CsatTokens } from './tokens.js';
 
 /**
- * M1-12's survey: the public rating routes, the service the ticket detail reads
- * the agent's summary from, and the lifecycle hook that schedules a survey on
- * close.
+ * M1-12's survey: the public rating routes, and the service the ticket detail
+ * reads the agent's summary from.
  *
  * Built once by `AppModule` and imported twice, by `AppModule` for the
  * controller and by `TicketsModule` for {@link CsatService}, for the reason

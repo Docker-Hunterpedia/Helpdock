@@ -47,7 +47,7 @@ describe('HttpCsatApi', () => {
   it.each([
     [404, 'not-found'],
     [400, 'not-found'],
-    [429, 'rate-limited'],
+    [429, 'unavailable'],
     [500, 'unavailable'],
   ])('answers %i as %s', async (status, problem) => {
     await expect(

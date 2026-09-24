@@ -9,13 +9,8 @@ import { type CsatApi, CsatLinkError, type CsatLinkProblem } from './api.js';
  * whoever used it last.
  */
 
-const problemFor = (status: number): CsatLinkProblem => {
-  if (status === 404 || status === 400) {
-    return 'not-found';
-  }
-
-  return status === 429 ? 'rate-limited' : 'unavailable';
-};
+const problemFor = (status: number): CsatLinkProblem =>
+  status === 404 || status === 400 ? 'not-found' : 'unavailable';
 
 export class HttpCsatApi implements CsatApi {
   readonly #baseUrl: string;

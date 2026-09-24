@@ -25,7 +25,7 @@ Serve the rating page from the admin bundle at `/csat/<token>`, and keep it **ou
 
 ## Consequences
 
-- One build, one static route and one Playwright suite, as today. The page is a lazy-free part of the admin bundle, which costs a customer the admin's JavaScript on one visit; acceptable for a page opened once per closed ticket, and gone when the page moves.
+- One build, one static route and one Playwright suite, as today. The page is not split out of the admin bundle, so a customer downloads the admin's JavaScript on one visit; acceptable for a page opened once per closed ticket, and gone when the page moves.
 - The link's host is the install's `APP_URL`, not the brand's help-center domain. Brands on one install share it until M5.
 - When M5 builds the help center, the page moves there: the components are self-contained (`apps/admin/src/screens/csat/`), the api routes do not change, and the link builder (`CsatService` in `apps/api/src/csat/csat.service.ts`) becomes a brand-domain lookup. This ADR should then be superseded.
 

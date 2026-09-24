@@ -21,7 +21,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import type { PurgeableAttachment } from '../media/object-purge.js';
-import type { rowValuesFrom } from './retention-rules.js';
+import type { RetentionWindowColumns } from './retention-rules.js';
 
 /**
  * Every statement M1-14 makes. Nothing here opens a transaction: the request's
@@ -82,7 +82,7 @@ export class RetentionRepository {
   async save(
     tx: DbTransaction,
     brandId: string,
-    values: ReturnType<typeof rowValuesFrom>,
+    values: RetentionWindowColumns,
     actorId: string,
   ): Promise<void> {
     const changes = { ...values, updatedBy: actorId, updatedAt: new Date() };

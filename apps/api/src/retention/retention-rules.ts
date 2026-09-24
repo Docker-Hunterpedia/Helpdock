@@ -1,4 +1,4 @@
-import type { NewRetentionSettingsRow, RetentionSettingsRow } from '@helpdock/db';
+import type { RetentionSettingsRow } from '@helpdock/db';
 import { RETENTION_DAYS, retentionCutoff } from '@helpdock/jobs';
 import {
   defaultRetentionSettings,
@@ -35,9 +35,18 @@ export const settingsFromRow = (row: RetentionSettingsRow | undefined): Retentio
   };
 };
 
-export const rowValuesFrom = (
-  settings: RetentionSettings,
-): Omit<NewRetentionSettingsRow, 'brandId'> => ({
+/** The columns the form writes. */
+export type RetentionWindowColumns = Pick<
+  RetentionSettingsRow,
+  | 'closedTicketDays'
+  | 'spamTicketDays'
+  | 'aiCallDays'
+  | 'searchLogDays'
+  | 'auditLogDays'
+  | 'visitorSessionDays'
+>;
+
+export const rowValuesFrom = (settings: RetentionSettings): RetentionWindowColumns => ({
   closedTicketDays: settings.closedTickets.kind === 'never' ? null : settings.closedTickets.days,
   spamTicketDays: settings.spamTicketDays,
   aiCallDays: settings.aiCallDays,

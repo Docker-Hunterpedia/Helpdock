@@ -2,6 +2,8 @@ import {
   type DbTransaction,
   type Department,
   departments,
+  renameDepartmentView,
+  seedBrandViews,
   type Team,
   teamMembers,
   teams,
@@ -131,6 +133,10 @@ export class DepartmentsRepository {
       throw new Error('The department could not be created');
     }
 
+    // M1-05: every department comes with its "All open" view, in the same
+    // transaction, so a department never exists without the queue that shows it.
+    await seedBrandViews(tx, values.brandId);
+
     return created;
   }
 
@@ -143,7 +149,21 @@ export class DepartmentsRepository {
       readonly defaultTeamId?: string | null | undefined;
     },
   ): Promise<void> {
+    const [previous] = await tx
+      .select({ name: departments.name, nameAr: departments.nameAr })
+      .from(departments)
+      .where(eq(departments.id, departmentId));
+
     await tx.update(departments).set(changes).where(eq(departments.id, departmentId));
+
+    // M1-05: the department's "All open" view follows a rename, unless the
+    // brand renamed the view itself.
+    if (previous !== undefined && (changes.name !== undefined || changes.nameAr !== undefined)) {
+      await renameDepartmentView(tx, departmentId, previous, {
+        name: changes.name ?? previous.name,
+        nameAr: changes.nameAr === undefined ? previous.nameAr : changes.nameAr,
+      });
+    }
   }
 
   async delete(tx: DbTransaction, departmentId: string): Promise<void> {

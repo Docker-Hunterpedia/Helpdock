@@ -97,7 +97,44 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // triggers; DOMAIN-RULES §1.3 names `csat_responses` among the six.
   { name: 'ticket_time_entries', departmentScoped: true },
   { name: 'csat_responses', departmentScoped: true },
+  // M1-05. A view grants nothing — it resolves to a list query that runs under
+  // the reader's own department policy — so which departments a shared view is
+  // shown in is a service rule. What the database does add is the owner rule
+  // below: a personal view is its owner's alone.
+  { name: 'views', departmentScoped: false },
 ];
+
+/**
+ * Tenant tables whose rows may belong to one person, with the column that says
+ * who. Each gets one more policy beside the four of {@link tenantPolicies}: a
+ * **restrictive** one, so it narrows what the brand policy allows rather than
+ * adding to it, under which a row with an owner is visible and writable only
+ * inside a transaction whose `app.principal_id` is that owner. A row whose
+ * owner is null — a shared view — is untouched by it.
+ *
+ * Nobody else reads a personal row, an Admin included: a saved filter is a
+ * person's working habit, and "Admin sees the whole brand" is about tickets.
+ * Deleting the owner still removes their rows, because a foreign key's cascade
+ * is not subject to row-level security.
+ */
+export const OWNER_SCOPED_TABLES: readonly { readonly name: string; readonly column: string }[] = [
+  { name: 'views', column: 'owner_id' },
+];
+
+/** The restrictive owner policy of {@link OWNER_SCOPED_TABLES}, as one statement. */
+export const ownerPolicy = (name: string, column: string): string => {
+  const table = assertIdentifier(name);
+  const owner = assertIdentifier(column);
+  const predicate = `${owner} IS NULL OR ${owner}::text = current_setting('${SESSION_SETTINGS.principalId}', true)`;
+
+  return `CREATE POLICY "${table}_owner_only" ON "${table}" AS RESTRICTIVE FOR ALL\n  USING (${predicate})\n  WITH CHECK (${predicate});`;
+};
+
+/** The owner-scoped tables whose policy `committedSql` does not contain. */
+export const missingOwnerPolicies = (committedSql: string): readonly string[] =>
+  OWNER_SCOPED_TABLES.filter(
+    ({ name, column }) => !committedSql.includes(ownerPolicy(name, column)),
+  ).map(({ name }) => name);
 
 /**
  * Tables that are deliberately not tenant-scoped, with the reason. A table is

@@ -1,6 +1,12 @@
 import { contacts, ticketStatuses, tickets, ticketTags } from '@helpdock/db';
-import type { TicketListQuery, TicketSort, TicketSortDirection } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt, inArray, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
+import {
+  TICKET_ASSIGNEE_ME,
+  TICKET_ASSIGNEE_UNASSIGNED,
+  type TicketListQuery,
+  type TicketSort,
+  type TicketSortDirection,
+} from '@helpdock/schemas';
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, type SQL, sql } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { decodeTicketCursor, encodeTicketCursor, type TicketCursor } from './cursor.js';
 
@@ -31,20 +37,52 @@ const SORT_COLUMNS: Record<TicketSort, { readonly column: PgColumn; readonly cas
 /**
  * `assigneeId` may name people *and* "nobody". The two cannot be one `IN` list,
  * so an `unassigned` chip becomes `assignee_id IS NULL` beside it.
+ *
+ * `me` is the reader (M1-05): a saved view says `me` so that one shared "My
+ * open" means each reader's own tickets. It becomes their id here, and that id
+ * is the principal's, never anything the request carried.
  */
-const assigneeFilter = (values: readonly (string | 'unassigned')[]): SQL | undefined => {
-  const ids = values.filter((value) => value !== 'unassigned');
+const assigneeFilter = (values: readonly string[], viewerId: string): SQL | undefined => {
+  const ids = [
+    ...new Set(
+      values
+        .filter((value) => value !== TICKET_ASSIGNEE_UNASSIGNED)
+        .map((value) => (value === TICKET_ASSIGNEE_ME ? viewerId : value)),
+    ),
+  ];
   const clauses: SQL[] = [];
 
   if (ids.length > 0) {
     clauses.push(inArray(tickets.assigneeId, ids));
   }
-  if (values.includes('unassigned')) {
+  if (values.includes(TICKET_ASSIGNEE_UNASSIGNED)) {
     clauses.push(isNull(tickets.assigneeId));
   }
 
   return clauses.length === 0 ? undefined : or(...clauses);
 };
+
+/**
+ * "Overdue" (M1-05): a clock that has run out on a ticket nobody has closed.
+ * A paused clock cannot have run out while paused (DOMAIN-RULES §3), so a
+ * ticket in a status that pauses the SLA — "Awaiting customer" — is waiting,
+ * not late. `now()` is the transaction's clock, the same one the SLA worker
+ * writes `sla_breached` against.
+ *
+ * It reads columns of `tickets` and of the status the list already joins, so
+ * it narrows the same index scan the other live-state views use rather than
+ * needing one of its own.
+ */
+const overdueFilter = (): SQL =>
+  and(
+    ne(ticketStatuses.systemState, 'closed'),
+    eq(ticketStatuses.pausesSla, false),
+    or(
+      eq(tickets.slaBreached, true),
+      lt(tickets.firstResponseDueAt, sql`now()`),
+      lt(tickets.resolutionDueAt, sql`now()`),
+    ),
+  ) as SQL;
 
 /**
  * Tags, with **all-of** semantics (M1-06): the ticket has to carry every tag
@@ -150,6 +188,8 @@ const keysetFilter = (cursor: TicketCursor): SQL => {
 export interface TicketFilterInput extends Pick<TicketListQuery, 'sort' | 'direction'> {
   /** The brand in the path, which the guard has already matched to the transaction. */
   readonly brandId: string;
+  /** Who is reading: what `assigneeId=me` means. The principal's id, never the request's. */
+  readonly viewerId: string;
   readonly filters: Omit<TicketListQuery, 'sort' | 'direction' | 'cursor' | 'limit'>;
   readonly cursor: string | undefined;
 }
@@ -157,6 +197,7 @@ export interface TicketFilterInput extends Pick<TicketListQuery, 'sort' | 'direc
 /** Every condition of one list read, or `undefined` when the reader asked for none. */
 export const ticketFilters = ({
   brandId,
+  viewerId,
   filters,
   sort,
   direction,
@@ -194,7 +235,10 @@ export const ticketFilters = ({
     clauses.push(inArray(tickets.channel, [...filters.channel]));
   }
   if (filters.assigneeId !== undefined && filters.assigneeId.length > 0) {
-    clauses.push(assigneeFilter(filters.assigneeId));
+    clauses.push(assigneeFilter(filters.assigneeId, viewerId));
+  }
+  if (filters.overdue === true) {
+    clauses.push(overdueFilter());
   }
   // One filter, two spellings: `tagId=a&tagId=b` and `tagIds=a&tagIds=b` are
   // the same question, so naming both is naming their union.

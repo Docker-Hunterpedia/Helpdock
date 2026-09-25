@@ -17,8 +17,8 @@ import {
   ticketStatuses,
   tickets,
 } from '@helpdock/db';
-import type { TicketListQuery } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import type { TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
 
 /**
@@ -34,6 +34,16 @@ import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
  * The only exception is `brands`, which is a global table with no policy, so
  * the read of a brand's prefix names its id explicitly.
  */
+
+/**
+ * Who a list is read for: the brand in the path, and the principal whose id
+ * `assigneeId=me` stands for. Isolation is still the policies' — neither value
+ * widens what the transaction may read.
+ */
+export interface TicketReader {
+  readonly brandId: string;
+  readonly viewerId: string;
+}
 
 export interface TicketWithStatus {
   readonly ticket: TicketRow;
@@ -105,10 +115,10 @@ export class TicketRepository {
    */
   async listTickets(
     tx: DbTransaction,
-    brandId: string,
+    reader: TicketReader,
     query: TicketListQuery,
   ): Promise<TicketWithStatus[]> {
-    const rows = await this.listTicketsStatement(tx, brandId, query);
+    const rows = await this.listTicketsStatement(tx, reader, query);
 
     return rows.map(withStatus);
   }
@@ -118,9 +128,9 @@ export class TicketRepository {
    * harness can `EXPLAIN` exactly what the api sends rather than a copy of it
    * that drifts (`src/testing/perf`).
    */
-  listTicketsStatement(tx: DbTransaction, brandId: string, query: TicketListQuery) {
+  listTicketsStatement(tx: DbTransaction, reader: TicketReader, query: TicketListQuery) {
     const { sort, direction, cursor, limit, ...filters } = query;
-    const where = ticketFilters({ brandId, filters, sort, direction, cursor });
+    const where = ticketFilters({ ...reader, filters, sort, direction, cursor });
 
     return tx
       .select()
@@ -129,6 +139,46 @@ export class TicketRepository {
       .where(where)
       .orderBy(...ticketOrder(sort, direction))
       .limit(limit + 1);
+  }
+
+  /**
+   * How many tickets the reader can see that match a view's filters, reading
+   * at most `cap + 1` of them (M1-05). The `LIMIT` sits inside the count, so
+   * the planner stops after `cap + 1` rows instead of counting a whole queue:
+   * a sidebar number past the cap reads "999+", and nobody works a queue by
+   * whether it holds a thousand or four.
+   *
+   * The `WHERE` is the list's own, so a count walks the same index the list
+   * does and can never disagree with it about which tickets match.
+   */
+  async countTickets(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: TicketViewFilters,
+    cap: number,
+  ): Promise<number> {
+    const rows = await this.countTicketsStatement(tx, reader, filters, cap);
+
+    return rows[0]?.count ?? 0;
+  }
+
+  /** The statement {@link countTickets} runs, unexecuted, for the performance harness. */
+  countTicketsStatement(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: TicketViewFilters,
+    cap: number,
+  ) {
+    const { sort, direction, ...rest } = filters;
+    const matching = tx
+      .select({ id: tickets.id })
+      .from(tickets)
+      .innerJoin(ticketStatuses, statusJoin)
+      .where(ticketFilters({ ...reader, filters: rest, sort, direction, cursor: undefined }))
+      .limit(cap + 1)
+      .as('matching');
+
+    return tx.select({ count: sql<number>`count(*)::int` }).from(matching);
   }
 
   /**

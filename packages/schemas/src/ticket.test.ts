@@ -41,6 +41,16 @@ describe('ticketListQuerySchema', () => {
     expect(ticketListQuerySchema.safeParse({ assigneeId: ['nobody'] }).success).toBe(false);
   });
 
+  it('accepts `me` as an assignee, for a view that means the reader (M1-05)', () => {
+    expect(ticketListQuerySchema.parse({ assigneeId: 'me' }).assigneeId).toEqual(['me']);
+  });
+
+  it('parses overdue from a query string and from a boolean alike', () => {
+    expect(ticketListQuerySchema.parse({ overdue: 'true' }).overdue).toBe(true);
+    expect(ticketListQuerySchema.parse({ overdue: true }).overdue).toBe(true);
+    expect(ticketListQuerySchema.safeParse({ overdue: 'soon' }).success).toBe(false);
+  });
+
   it('coerces the limit a query string carries as text', () => {
     expect(ticketListQuerySchema.parse({ limit: '50' }).limit).toBe(50);
   });

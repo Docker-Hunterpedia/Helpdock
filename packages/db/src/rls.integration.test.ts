@@ -40,6 +40,7 @@ import {
   ticketTimeEntries,
   userBrandRoles,
   users,
+  views,
 } from './schema/index.js';
 import { withSystem, withTenant } from './tenant.js';
 import { uuidv7 } from './uuid.js';
@@ -428,6 +429,13 @@ const fixtures = [
         expiresAt: new Date(Date.now() + 86_400_000),
       }),
   },
+  {
+    name: 'views',
+    // A shared view: the system principal the suite writes under owns nobody's
+    // personal views, and the owner rule has its own tests below.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(views).values({ brandId, name: 'VIP refunds', filters: { priority: ['urgent'] } }),
+  },
 ] as const;
 
 const brandIdsIn = async (tx: DbTransaction, table: string): Promise<string[]> => {
@@ -592,7 +600,8 @@ describe.skipIf(!hasDocker)('row-level security', () => {
 
     it('has one policy per command', async () => {
       const rows = await owner.db.execute<{ cmd: string }>(
-        sql`SELECT cmd FROM pg_policies WHERE tablename = ${name} ORDER BY cmd`,
+        sql`SELECT cmd FROM pg_policies
+            WHERE tablename = ${name} AND permissive = 'PERMISSIVE' ORDER BY cmd`,
       );
 
       expect([...rows].map((row) => row.cmd)).toEqual(['DELETE', 'INSERT', 'SELECT', 'UPDATE']);
@@ -658,6 +667,81 @@ describe.skipIf(!hasDocker)('row-level security', () => {
     });
 
     expect(moved).toEqual([]);
+  });
+
+  describe('a personal view (M1-05)', () => {
+    const colleagueId = uuidv7();
+    const personal = uuidv7();
+    const as = (principalId: string) =>
+      ({
+        brandIds: [brandA],
+        departmentIds: 'all',
+        principalType: 'staff',
+        principalId,
+      }) as const;
+    const idsIn = async (tx: DbTransaction): Promise<string[]> => {
+      const rows = await tx.select({ id: views.id }).from(views);
+      return rows.map((row) => row.id);
+    };
+
+    beforeAll(async () => {
+      await db
+        .insert(users)
+        .values({ id: colleagueId, email: 'colleague@example.com', name: 'Colleague' });
+      await withTenant(db, as(userId), (tx) =>
+        tx.insert(views).values({ id: personal, brandId: brandA, ownerId: userId, name: 'Mine' }),
+      );
+    });
+
+    it('is visible to its owner', async () => {
+      expect(await withTenant(db, as(userId), idsIn)).toContain(personal);
+    });
+
+    it('is invisible to a colleague with the whole brand, an Admin included', async () => {
+      expect(await withTenant(db, as(colleagueId), idsIn)).not.toContain(personal);
+      expect(await withSystem(db, brandA, idsIn)).not.toContain(personal);
+    });
+
+    it('cannot be renamed or deleted by a colleague', async () => {
+      const [updated, deleted] = await withTenant(db, as(colleagueId), async (tx) => [
+        (await tx.execute(sql`UPDATE views SET name = 'Taken' WHERE id = ${personal}::uuid`)).count,
+        (await tx.execute(sql`DELETE FROM views WHERE id = ${personal}::uuid`)).count,
+      ]);
+
+      expect([updated, deleted]).toEqual([0, 0]);
+    });
+
+    it('cannot be written for somebody else', async () => {
+      const rejection = await withTenant(db, as(colleagueId), (tx) =>
+        tx.insert(views).values({ brandId: brandA, ownerId: userId, name: 'Planted' }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+    });
+
+    it('cannot be taken over by moving it to another owner', async () => {
+      const rejection = await withTenant(db, as(userId), (tx) =>
+        tx.execute(
+          sql`UPDATE views SET owner_id = ${colleagueId}::uuid WHERE id = ${personal}::uuid`,
+        ),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+    });
+
+    it('is narrowed by a restrictive policy, not widened by a permissive one', async () => {
+      const rows = await owner.db.execute<{ permissive: string }>(
+        sql`SELECT permissive FROM pg_policies WHERE policyname = 'views_owner_only'`,
+      );
+
+      expect([...rows].map((row) => row.permissive)).toEqual(['RESTRICTIVE']);
+    });
   });
 
   it('does not let the runtime role turn row security off', async () => {

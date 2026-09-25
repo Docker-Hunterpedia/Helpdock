@@ -1,10 +1,14 @@
 import type { BrandSettings } from '@helpdock/schemas';
-import { Box, Button, Checkbox, FormControlLabel, Typography } from '@mui/material';
+import { Box, Button, Checkbox, FormControlLabel, Link, Typography } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Eye } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
+import { usePreferences } from '../../../app/providers.tsx';
+import { csatPreviewRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
+import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 
 /**
@@ -17,9 +21,8 @@ import { useTicketingAction, useTicketingReport } from './use-ticketing-action.j
  * meaningless. The composer toggle is indented under time tracking and
  * disabled while tracking is off, because a timer nobody sees cannot start.
  *
- * The artboard's "Preview" link is not drawn: there is no survey to open until
- * a ticket closes, and a preview needs a page of its own (see the milestone
- * doc).
+ * "Preview" (M1-15 part 2) opens the rating page over a sample in a new tab
+ * (`csat/preview-api.ts`): no token, no ticket, and nothing it sends is kept.
  */
 
 type FeedbackDraft = Pick<
@@ -41,6 +44,7 @@ export function FeedbackTab(): ReactNode {
   const queryClient = useQueryClient();
   const report = useTicketingReport();
   const brand = currentBrand(session);
+  const { locale } = usePreferences();
 
   const brandQuery = useQuery({
     queryKey: ['brand', brand.id],
@@ -136,6 +140,29 @@ export function FeedbackTab(): ReactNode {
                 set({ csatEnabled });
               }}
             />
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, paddingInlineStart: 7 }}>
+              <Typography variant="body2" component="h4" sx={{ fontWeight: 500 }}>
+                {t('ticketing:feedback.previewHeading')}
+              </Typography>
+              <Link
+                href={csatPreviewRoute(locale)}
+                target="_blank"
+                rel="noopener"
+                variant="body2"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Eye size={14} aria-hidden="true" />
+                {t('ticketing:feedback.previewLink')}
+                <Box component="span" sx={visuallyHidden}>
+                  {` ${t('ticketing:feedback.previewNewTab')}`}
+                </Box>
+              </Link>
+            </Box>
           </Box>
 
           <Box sx={{ padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>

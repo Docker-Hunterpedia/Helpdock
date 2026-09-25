@@ -187,7 +187,8 @@ describe('erasure', () => {
   it('asks first, then replaces the person with hashes and locks the screen', async () => {
     const { user } = await renderContact();
 
-    await user.click(await screen.findByRole('button', { name: 'Anonymise' }));
+    await user.click(await screen.findByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Anonymise' }));
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('cannot be undone');
     const submit = within(dialog).getByRole('button', { name: 'Anonymise' });
@@ -212,6 +213,26 @@ describe('who may erase', () => {
     vi.spyOn(auth, 'me').mockResolvedValue(
       session === null ? null : { ...session, user: { ...session.user, role: 'teamLeader' } },
     );
+    const { user } = renderApp(<AppRoutes />, {
+      authApi: auth,
+      staffApi: staff,
+      contactsApi: contacts,
+      initialEntries: [`/contacts/${MOCK_CONTACT_MONA}`],
+    });
+
+    await screen.findByRole('heading', { name: 'Mona Khalil', level: 1 });
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Merge with…' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Anonymise' })).toBeNull();
+  });
+
+  it('offers a Viewer nothing to do to a contact', async () => {
+    const { auth, staff, contacts } = await signedInMockApis();
+    const session = await auth.me();
+    vi.spyOn(auth, 'me').mockResolvedValue(
+      session === null ? null : { ...session, user: { ...session.user, role: 'viewer' } },
+    );
     renderApp(<AppRoutes />, {
       authApi: auth,
       staffApi: staff,
@@ -220,7 +241,7 @@ describe('who may erase', () => {
     });
 
     await screen.findByRole('heading', { name: 'Mona Khalil', level: 1 });
-    expect(screen.queryByRole('button', { name: 'Anonymise' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeDisabled();
   });
 });
 

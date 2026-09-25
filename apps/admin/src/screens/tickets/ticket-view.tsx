@@ -28,7 +28,7 @@ import { isTicketingError } from '../../ticketing/api.js';
 import { refusalCopy } from '../../ticketing/refusal-copy.js';
 import { isTicketLifecycleError } from '../../tickets/api.js';
 import { ticketKeys } from '../../tickets/keys.js';
-import { mergeCandidates } from '../../tickets/merge.js';
+import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { useToast } from '../../ui/toasts.tsx';
@@ -553,6 +553,7 @@ export function TicketView({
       hiddenTicketCount={timeline.data?.hiddenCount ?? 0}
       statuses={directory.statuses}
       departments={directory.departments}
+      related={detail.data?.related ?? []}
       assignee={{
         name: assigneeName(ticket.assigneeId, { agents, staff: directory.staff, viewer }),
         agents,
@@ -676,7 +677,7 @@ export function TicketView({
             merges={{
               ticketId,
               merged,
-              links: detail.data?.related ?? [],
+              links: visibleLinks(detail.data?.related ?? []),
               busy: unmerge.isPending,
               onUnmerge: (secondaryId) => {
                 unmerge.mutate(secondaryId);

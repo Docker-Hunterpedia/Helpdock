@@ -287,7 +287,9 @@ export class MockContactsApi implements ContactsApi {
       const searched =
         term === '' ||
         contact.name.toLowerCase().includes(term) ||
+        (contact.externalId?.toLowerCase().includes(term) ?? false) ||
         contact.identities.some((row) => row.value.toLowerCase().includes(term));
+      const mergeable = query.mergeable !== true || !contact.anonymised;
       const account = query.accountId === undefined || contact.accountId === query.accountId;
       const open = query.hasOpenTickets !== true || contact.stats.openTickets > 0;
       const duplicate =
@@ -296,7 +298,7 @@ export class MockContactsApi implements ContactsApi {
           (row) => row.contactId === contact.id || row.otherContactId === contact.id,
         );
 
-      return searched && account && open && duplicate;
+      return searched && account && open && duplicate && mergeable;
     });
 
     const limit = query.limit ?? CONTACT_PAGE_SIZE;

@@ -17,9 +17,16 @@ import {
   ticketStatuses,
   tickets,
 } from '@helpdock/db';
-import type { TicketListQuery } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
-import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
+import type { TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
+import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
+import { decodeTicketCursor } from './cursor.js';
+import {
+  fallsBackToFuzzy,
+  type SearchMode,
+  statusJoin,
+  ticketFilters,
+  ticketOrder,
+} from './ticket-query.js';
 
 /**
  * Every statement the ticket endpoints make, in one file.
@@ -35,9 +42,25 @@ import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
  * the read of a brand's prefix names its id explicitly.
  */
 
+/**
+ * Who a list is read for: the brand in the path, and the principal whose id
+ * `assigneeId=me` stands for. Isolation is still the policies' — neither value
+ * widens what the transaction may read.
+ */
+export interface TicketReader {
+  readonly brandId: string;
+  readonly viewerId: string;
+}
+
 export interface TicketWithStatus {
   readonly ticket: TicketRow;
   readonly status: TicketStatusRow;
+}
+
+/** A page of the list, and which half of the search read it. */
+export interface TicketListPage {
+  readonly rows: TicketWithStatus[];
+  readonly search: SearchMode;
 }
 
 const withStatus = (row: { tickets: TicketRow; ticket_statuses: TicketStatusRow }) => ({
@@ -102,25 +125,49 @@ export class TicketRepository {
    * One page of the list. `limit + 1` rows are read so the caller knows whether
    * a next page exists without a second `COUNT(*)`, which at 50k tickets would
    * cost more than the page itself (REQUIREMENTS §5.2).
+   *
+   * A search is read with its exact half first, and again with the fuzzy half
+   * only when {@link fallsBackToFuzzy} says so (ADR 0011); a later page of a
+   * search that fell back goes straight to the fuzzy half its cursor names.
    */
   async listTickets(
     tx: DbTransaction,
-    brandId: string,
+    reader: TicketReader,
     query: TicketListQuery,
-  ): Promise<TicketWithStatus[]> {
-    const rows = await this.listTicketsStatement(tx, brandId, query);
+  ): Promise<TicketListPage> {
+    const cursor = query.cursor === undefined ? undefined : decodeTicketCursor(query.cursor, query);
+    const read = async (search: SearchMode): Promise<TicketListPage> => ({
+      rows: (await this.listTicketsStatement(tx, reader, query, search)).map(withStatus),
+      search,
+    });
 
-    return rows.map(withStatus);
+    if (query.q !== undefined && cursor?.fuzzy === true) {
+      return read('fuzzy');
+    }
+    const exact = await read('exact');
+    const fallBack = fallsBackToFuzzy({
+      q: query.q,
+      cursor,
+      found: exact.rows.length,
+      limit: query.limit,
+    });
+
+    return fallBack ? read('fuzzy') : exact;
   }
 
   /**
-   * The statement {@link listTickets} runs, unexecuted, so the performance
-   * harness can `EXPLAIN` exactly what the api sends rather than a copy of it
-   * that drifts (`src/testing/perf`).
+   * The statement {@link listTickets} runs for one half of a search, unexecuted,
+   * so the performance harness can `EXPLAIN` exactly what the api sends rather
+   * than a copy of it that drifts (`src/testing/perf`).
    */
-  listTicketsStatement(tx: DbTransaction, brandId: string, query: TicketListQuery) {
+  listTicketsStatement(
+    tx: DbTransaction,
+    reader: TicketReader,
+    query: TicketListQuery,
+    search: SearchMode = 'exact',
+  ) {
     const { sort, direction, cursor, limit, ...filters } = query;
-    const where = ticketFilters({ brandId, filters, sort, direction, cursor });
+    const where = ticketFilters({ ...reader, filters, sort, direction, cursor, search });
 
     return tx
       .select()
@@ -129,6 +176,57 @@ export class TicketRepository {
       .where(where)
       .orderBy(...ticketOrder(sort, direction))
       .limit(limit + 1);
+  }
+
+  /**
+   * How many tickets the reader can see that match each of several views'
+   * filters, reading at most `cap + 1` for each (M1-05). The `LIMIT` sits
+   * inside every count, so the planner stops after `cap + 1` rows instead of
+   * counting a whole queue: a sidebar number past the cap reads "999+", and
+   * nobody works a queue by whether it holds a thousand or four.
+   *
+   * One statement with one scalar subquery per view: each keeps its own plan
+   * — the index its filters reach — and the sidebar costs one round trip
+   * rather than one per view. Each `WHERE` is the list's own, so a count can
+   * never disagree with the list about which tickets match.
+   */
+  async countTickets(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: readonly TicketViewFilters[],
+    cap: number,
+  ): Promise<number[]> {
+    if (filters.length === 0) {
+      return [];
+    }
+
+    const rows = await tx.execute<Record<string, number>>(
+      this.countTicketsStatement(tx, reader, filters, cap),
+    );
+    const row = [...rows][0] ?? {};
+
+    return filters.map((_filters, index) => Number(row[`c${index}`] ?? 0));
+  }
+
+  /** The statement {@link countTickets} runs, unexecuted, for the performance harness. */
+  countTicketsStatement(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: readonly TicketViewFilters[],
+    cap: number,
+  ): SQL {
+    const counts = filters.map(({ sort, direction, ...rest }, index) => {
+      const matching = tx
+        .select({ id: tickets.id })
+        .from(tickets)
+        .innerJoin(ticketStatuses, statusJoin)
+        .where(ticketFilters({ ...reader, filters: rest, sort, direction, cursor: undefined }))
+        .limit(cap + 1);
+
+      return sql`(SELECT count(*)::int FROM (${matching}) AS matching) AS ${sql.identifier(`c${index}`)}`;
+    });
+
+    return sql`SELECT ${sql.join(counts, sql`, `)}`;
   }
 
   /**

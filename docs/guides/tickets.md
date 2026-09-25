@@ -481,8 +481,9 @@ status and never off its name, exported from `@helpdock/schemas`:
 
 The default views already leave spam out: every one of them asks only for
 open-like system states, and Spam is `closed`. "All tickets" shows it, with its
-danger badge, because that view is the desk's whole history. M1 has no report
-or count query yet, so there is nothing else to exclude it from today.
+danger badge, because that view is the desk's whole history. The sidebar's
+counts are the views' own filters, so they leave it out too; M1 has no report
+to exclude it from yet.
 
 ## Merge and split
 
@@ -508,6 +509,7 @@ another brand — answers **404**, exactly like one that does not exist
 | `merge-into-merged` | The primary is itself merged; merge into the ticket it went to. This is also what makes a cycle impossible |
 | `ticket-not-merged` | Unmerging a ticket that is not merged |
 | `merge-window-closed` | Unmerging 24 hours or more after the merge |
+| `merge-primary-deleted` | Unmerging a ticket whose primary an Admin has since deleted |
 | `attachments-in-flight` | A message to split has an attachment the pipeline has not finished with |
 
 ### Merge
@@ -569,6 +571,33 @@ paused during the merge excluded" reaches M3-02. The primary gets "HD-1042 was
 unmerged from this ticket" and keeps the tags the merge gave it: §2.4 does not
 say they go, and nothing records which ones it would not otherwise have by now.
 
+**A deleted primary keeps the merge.** When an Admin has soft-deleted the
+primary, unmerge answers **409** `merge-primary-deleted` rather than 404, and
+the secondary stays merged: §2.2 hides a deleted ticket from every view, so
+nothing can be written to it, and a 404 would claim the secondary in the path
+does not exist. It leaks nothing. A secondary always sits in its primary's
+department, so whoever can read the secondary could read the primary, and the
+only way it is missing is the delete.
+
+### Linked tickets
+
+Every ticket read carries `related`, each ticket linked to this one with how:
+`parent` (the closed ticket this one continues, §2.3), `mergedInto` and
+`mergedFrom` (the two ends of a merge), `splitFrom` and `splitTo` (the two ends
+of a split), in that order. `apps/api/src/tickets/merge/related.ts` builds it
+from one query under the caller's scope.
+
+A visible entry has the id, reference, subject and status. A link the reader
+cannot open comes in two kinds (§1.2):
+
+- **One the read ticket names itself** (`parentId`, `mergedIntoId`,
+  `splitFromId`) is `{ "visible": false, "relation": "…" }` and nothing else. The
+  id is already on the ticket, so saying there is a ticket there adds nothing;
+  which ticket, and whether it sits in another department or was deleted, is
+  what stays unsaid.
+- **One that names the read ticket** (merged into it, split from it) is not
+  found by the scoped query, so it is left out.
+
 ### Split
 
 The named messages are **copied** onto a new ticket: `split_from_id`, the same
@@ -601,6 +630,66 @@ object alone while any row it is not removing still names the key
 Both tickets' reads carry `related`: the ticket this one was split from and the
 tickets split from it, so the thread can link the references its system
 messages name.
+
+## Views
+
+A view is **a list query with a name** (M1-05, REQUIREMENTS §4.1). Its
+`filters` are the `GET /tickets` query schema itself, less the cursor and the
+page size — one schema, not two — so anything the list accepts a view can save,
+and a view can never ask for something the list does not understand. Views are
+rows of the `views` table (migration `0022_views`), brand-scoped like every
+tenant table.
+
+**A view never widens access.** Resolving one produces list parameters, and
+those go through the same department-scoped read as a query typed by hand. A
+view shared with Billing shows a Support agent nothing they could not already
+see; its count is the list's own `WHERE`, run in the reader's transaction.
+
+### Who sees which
+
+| View | Sees it | Changes it |
+|---|---|---|
+| Personal | Its owner, and nobody else | Its owner |
+| Shared with the brand | Everybody in the brand | An Admin, or a Team Leader who reaches every department |
+| Shared with departments | Staff whose scope reaches one of them | An Admin, or a Team Leader who leads all of them |
+
+A personal view is guarded by the **database**, not by the service: a
+restrictive policy (`views_owner_only`) on top of the brand policy keeps a row
+with an `owner_id` its owner's, so another person's personal view is a row the
+request cannot read, and every route answers 404 for it — the same answer as
+for an id that does not exist. The RLS negative suite covers it. Sharing needs
+`ticketing:manage`, so an Agent or a Viewer keeps personal views only; a Team
+Leader restricted to some departments may share only with departments they
+lead, never with the whole brand. Every change to a shared view is audited
+(`view.created`, `view.updated`, `view.deleted`); a personal one is nobody
+else's business.
+
+### The built-in views
+
+Every brand is seeded with **My open** (`assigneeId=me`, the live states),
+**Unassigned** (`assigneeId=unassigned`, the live states), **Overdue**
+(`overdue=true`, the live states), **Escalated** (`systemState=escalated`), and
+one **All open · <department>** per department (that department, the live
+states), in both languages. The department ones follow the department: created
+with it, renamed with it unless the brand has renamed the view itself, and
+deleted with it.
+
+A built-in view may be **renamed, reordered and hidden** for the brand. It may
+not be deleted, refiltered or reshared: those answer 409 `view-is-built-in`,
+because REQUIREMENTS §4.1 promises every brand those queues. Only a shared view
+can be hidden; a person deletes their own.
+
+### Counts
+
+`GET /views/counts` answers one number per view the sidebar shows, in **one
+statement**: a scalar subquery per view, each the list's `WHERE` with a
+`LIMIT 1000` inside the count, so each walks the index its filters reach and
+stops. A number past 999 reads `999+` (`capped: true`); nobody triages a queue
+by whether it holds a thousand or four. Migration `0022` adds one index for it,
+`tickets_brand_status_updated_idx (brand_id, status_id, updated_at, id)`, which
+turns a view narrowed by state across departments — Escalated, Overdue's live
+states — into a range scan per status rather than a read of every ticket in the
+brand. The counts request is a scenario of the [performance gate](#performance).
 
 ## Side effects and realtime
 
@@ -677,6 +766,18 @@ session — see [satisfaction surveys](#satisfaction-surveys):
 | `POST /tickets/:ticketId/unmerge` | `ticket:write` | Undoes a merge inside 24 hours (M1-09) |
 | `POST /tickets/:ticketId/split` | `ticket:write` | Copies messages onto a new ticket (M1-09) |
 
+The saved views of [Views](#views) are under the same prefix, every one
+`ticket:read`; what a shared view needs on top is decided per view:
+
+| Route | Declares | Answers |
+|---|---|---|
+| `GET /views` | `ticket:read` | The views the reader may see: shared ones in the brand's order, then their own |
+| `GET /views/counts` | `ticket:read` | One capped count per view the sidebar shows |
+| `POST /views` | `ticket:read` | Saves a view: personal by default, shared with `ticketing:manage` |
+| `PATCH /views/:viewId` | `ticket:read` | Name, Arabic name, filters, visibility, `hidden` |
+| `DELETE /views/:viewId` | `ticket:read` | A view that is not built in |
+| `POST /views/reorder` | `ticket:read` | `{ viewIds }`: some shared views, or some of the reader's own, in a new order |
+
 ### Listing
 
 ```
@@ -686,9 +787,10 @@ GET /api/brands/:brandId/tickets
   &priority=urgent            repeatable: low | medium | high | urgent
   &departmentId=<uuid>        repeatable
   &channel=email              repeatable: email | chat | telegram | form | api | manual
-  &assigneeId=<uuid>          repeatable; the value `unassigned` is a chip of its own
+  &assigneeId=<uuid>          repeatable; `unassigned` and `me` are values of their own
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  the subject, the contact's name, or a reference
+  &overdue=true               only tickets whose SLA has run out (M1-05)
   &sort=updatedAt             updatedAt | createdAt | number | priority
   &direction=desc             asc | desc
   &limit=25                   1–100
@@ -739,15 +841,24 @@ nothing, because every row it can reach is a row the policies would have shown
 anyway. It is validated all the same, and a cursor issued under a different sort
 is refused with 400 rather than reinterpreted.
 
-**Search** is full text *and* trigram. `q` goes to `websearch_to_tsquery` against
-the generated `tickets.search` column — which understands quoted phrases and
-`-excluded`, and never raises on nonsense — *or* to the `<%` word-similarity
-operator against the subject. Full text will not match `renewa` against
-"renewal"; the trigram half will. Both bind the term as a parameter. Under
-row-level security neither half can use its GIN index, so a search reads the
-brand's tickets newest first until it has a page; see
-[Search under row-level security](#search-under-row-level-security) for why, and
-for what that costs.
+**Search** reads the words of each ticket's **subject and first message**
+(M1-15 part 2, [ADR 0011](../decisions/0011-ticket-search-token-table.md)).
+`q` is turned into lexemes by the same `english` text-search configuration
+`tickets.search` uses, so `refunds` finds "refund" and stop words such as `the`
+are dropped. A ticket matches when it carries **every** word, in any order. A
+word typed as `-word` rules out the tickets that carry it. Quotes are not a
+phrase operator (the words must all appear, anywhere), `or` is a stop word
+rather than an operator, and replies after the first message are not searched.
+
+When the exact words fill less than a page and the words are at least three
+characters long, the list **falls back** to a fuzzy reading: each word also
+matches a stored word that starts with the same three characters and is
+word-similar to it (`<%`, pg_trgm's 0.6 threshold). `renewa` finds "renewal";
+`rfund` does not find "refund", because the first three letters differ. The
+fallback is decided on the first page and the cursor carries it, so every page
+of one search is answered the same way. The term is always bound as a
+parameter. Why the search works this way, and what it costs, is under
+[Search under row-level security](#search-under-row-level-security).
 
 From M1-09 the same `q` also matches the **contact's name** (`ILIKE`, with `%`
 and `_` escaped, through `contacts`, which is brand-scoped) and a **reference**:
@@ -759,6 +870,16 @@ tag named, not any of them. Two chips in a filter are how somebody narrows a
 queue, and "any" would widen it — the reading that is wrong in the direction
 that shows rows the reader asked to exclude. `tagIds` is the same filter under
 another name, and naming both is naming their union.
+
+`assigneeId=me` is **whoever is asking**, resolved from the session (M1-05). A
+saved view says `me` rather than a person's id, so one shared "My open" means
+*mine* to everybody who opens it.
+
+`overdue=true` keeps the tickets whose clock has run out: not closed, not in a
+status that pauses the SLA ("Awaiting customer" is waiting, not late), and
+either `sla_breached` or past `first_response_due_at` or `resolution_due_at` by
+the transaction's `now()`. `false` is the same as leaving it off. It narrows the
+scan the other live-state filters use rather than needing an index of its own.
 
 ### Creating
 
@@ -889,7 +1010,7 @@ list, the thread and the details panel, on one route. The boundary it reads
 through is `apps/admin/src/tickets/` — `TicketsApi`, an http adapter and a
 fixture — the same shape the contact screens use.
 
-It covers what the api can answer today. Views (M1-05), tags and custom-field
+It covers what the api can answer today. Views (M1-05, [below](#views-in-the-workspace)), tags and custom-field
 editing (M1-06), the state machine's transitions (M1-08), merge and split
 (M1-09) and attachments (M1-10) add to it rather than change it; what each one
 needs is at the end of this section.
@@ -909,25 +1030,36 @@ looked at rather than out of the screen.
 
 | Parameter | |
 |---|---|
-| `view` | `all`, `myOpen`, `unassigned`, `overdue` or `escalated`. Absent means `myOpen`. |
-| `q` | Free text, debounced 250 ms, passed to the api's own search |
-| `status`, `priority`, `assignee`, `department` | Repeatable, one per chip in the filter popover |
+| `view` | A view's id, or `all` for the whole desk. Absent means the first view of the sidebar. |
+| `q` | Free text, debounced 250 ms, passed to the api's own search. A term typed into a view does not count as changing it |
+| `state`, `status`, `priority`, `assignee`, `department`, `tag`, `channel` | Repeatable, one per chip in the filter popover. `assignee=me` is whoever opens the link |
+| `overdue`, `sort`, `dir` | `overdue=1`; the order when it is not "last updated, newest first" |
+| `custom` | Present when the filters above *replace* the view's rather than being empty |
+| `intent` | `filters` or `save`: the sidebar asking the workspace to open the filters or the save dialog. Acted on once and dropped from the URL |
 
-### The four views
+### Views in the workspace
 
-Three of them are filters `GET /tickets` already understands, so the server
-narrows them: `myOpen` is `assigneeId=<me>` plus the three live system states,
-`unassigned` is `assigneeId=unassigned`, `escalated` is
-`systemState=escalated`. **`overdue` is not** — the list has no filter on
-`first_response_due_at` or `resolution_due_at` — so it asks for everything
-still open and decides in the browser: a clock that has run out, or
-`sla_breached`, on a ticket that is neither closed nor in a status that pauses
-the clock. M1-05 replaces all four with saved views; that predicate is the one
-thing it has to move to the server.
+The sidebar's **Views** group (`views-nav.tsx`, `Admin/View-Dialogs` panels 1–2)
+lists the brand's shared views in the order Ticketing › Views gives them, then
+the reader's own under **Mine**. The names and the counts are two reads, so the
+rows are usable before the numbers arrive; Overdue's number is in the danger
+hue while it is above zero. A ⋯ appears on hover and on focus for a view the
+reader may change: **Edit filters**, **Rename**, **Share with…** (a personal
+view, for Team Leaders and Admins) and **Delete**; a built-in view offers
+Rename alone. The **+** beside "Views" opens "Save as a view" on whatever the
+list shows.
 
-The counts beside them are what one page of each view holds, not a `COUNT(*)`:
-the list is keyset paged and the api offers no total, so a brand with more than
-a page reads `25+`. That is the honest answer and means the same thing.
+Changing a filter on a view writes the **whole** resulting filter set into the
+URL beside `view` and `custom=1`, so a changed view is still a link a colleague
+can open. When those filters differ from the saved ones, the list header grows
+the **Filters changed · Reset · Save as new · Save** bar (panel 4) and every
+filter that is on is a chip that removes itself. Reset drops the filter
+parameters; Save overwrites the view and is offered only where it can succeed —
+the reader's own view, or a shared one they manage, never a built-in one; Save
+as new opens **Save as a view** (panel 3): a name, "Only me" or (for Team
+Leaders and Admins) "Shared with departments", and the filters and sort in
+words. A view the reader cannot see — a link to somebody else's personal view —
+falls back to the whole desk, filtered by whatever the link carried.
 
 ### Sending, sent, not sent
 
@@ -985,6 +1117,16 @@ its messages read-only on `bg.canvas`, each marked with its origin. The
 secondary shows the banner the other way round above the thread, and no
 composer. Built from `AdminTicketDialogs` panels 1, 2, 4 and 7.
 
+A system line names who acted ("Messages split to HD-1043 by Lina · 14:12")
+only when that was a staff member. The row's `author_id` is whoever made the
+request, which can be an api key or a job, and the screen names it only when it
+finds that id in the staff directory.
+
+The details panel's **Linked tickets** (`linked-tickets.tsx`, panel 6 of
+`Admin · view dialogs`) draws `related`: a card per visible ticket with its
+reference, status, subject and relation, which opens it, and a locked line
+("A ticket you cannot open · Split from · hidden from you") for a hidden one.
+
 ### Attachments
 
 Attach is real from M1-10. A file goes up as soon as it is chosen: the brand's
@@ -1033,7 +1175,6 @@ Spam, which reopens it at once. A merged secondary offers neither.
 | Translate | disabled, with the reason | M7 |
 | Tags | not drawn at all until a ticket has any | M1-06 |
 | Custom fields | read-only | M1-06 |
-| Linked tickets | read-only, from `parent_id` / `merged_into_id` / `split_from_id` | M1-08, M1-09 |
 | The AI bubble's confidence | not drawn: `ai_meta` is deliberately not on the wire | M7 |
 The **assignee picker** (M1-07, `AdminTicketDialogs` panel 3) reads
 `GET /brands/:id/assignment/:departmentId/assignable`, which `ticket:write`
@@ -1068,9 +1209,12 @@ reads *in order* ends in exactly those two columns
 | `tickets_brand_updated_idx (brand_id, updated_at, id)` | The default list; every view that filters rather than narrows (the live states, Escalated, Unassigned); search; page 2 onwards |
 | `tickets_brand_assignee_updated_idx (brand_id, assignee_id, updated_at, id)` | "My open": one person's tickets, already in list order. Replaces the PRD's `(brand_id, assignee_id)`, which is its prefix |
 | `tickets_brand_department_status_updated_idx (brand_id, department_id, status_id, updated_at, id)` | The filter popover's department and status chips. `id` was added so one department in one status is in keyset order too |
+| `tickets_brand_status_updated_idx (brand_id, status_id, updated_at, id)` | A view narrowed by state across departments, and its sidebar count (M1-05, `0022_views.sql`) |
 | `tickets_brand_number_key (brand_id, number)` | `sort=number` |
 | `ticket_tags_brand_tag_idx (brand_id, tag_id)` | The all-of tag filter, one scan however many tags are named (M1-06) |
-| `tickets_search_idx` (tsvector GIN), `tickets_subject_trgm_idx` (trigram GIN) | Not the list, today: see [Search under row-level security](#search-under-row-level-security) |
+| `ticket_search_tokens_brand_token_idx (brand_id, token, ticket_id, department_id)` | Search: every word of `q` is an index lookup, and the fuzzy fallback a prefix range (M1-15 part 2) |
+| `tickets_brand_contact_idx (brand_id, contact_id)` | Search by the contact's name: the tickets of the contacts whose name matched (M1-15 part 2) |
+| `tickets_search_idx` (tsvector GIN), `tickets_subject_trgm_idx` (trigram GIN) | Not the list: see [Search under row-level security](#search-under-row-level-security) |
 
 `sort=createdAt` and `sort=priority` have no index of their own. The workspace
 never asks for them, and at 50k tickets they are a top-N sort of the visible
@@ -1113,9 +1257,9 @@ prints the full plans):
 | Unassigned (live states) | `tickets_brand_updated_idx`, 750 read, 2.7 ms | same, 1.6 ms |
 | Live states (Overdue) | `tickets_brand_updated_idx`, 413 read, 0.85 ms | same, 1.9 ms |
 | Escalated | `tickets_brand_updated_idx`, 1 350 read, 3.1 ms | same, 6.0 ms |
-| Search `refund` | `tickets_brand_updated_idx`, 370 read, 2.0 ms | same, 6.5 ms |
-| Search `renewa` (half-typed) | `tickets_brand_updated_idx`, 237 read, 1.3 ms | same, 4.1 ms |
-| Search matching nothing | `tickets_brand_updated_idx`, **50 000 read, 257 ms** | same, 124 ms |
+| Search `refund` | `Index Only Scan using ticket_search_tokens_brand_token_idx`, `Index Cond: … token = ANY('{refund}')`, 3 191 ids, then `tickets_pkey` and a top-N sort, 37 ms | same, 17 ms |
+| Search `renewa` (half-typed) | exact half: token index, 0 ids, 9.1 ms; fuzzy fallback: prefix range of the token index, 53 ms | 8.7 ms; 30 ms |
+| Search matching nothing | exact half: token index, **0 ids, 8.8 ms**; fuzzy fallback: prefix range, 0 candidates, 9.5 ms | 8.2 ms; 8.2 ms |
 | Two tags, all-of | `Bitmap Index Scan on ticket_tags_brand_tag_idx`, then `Index Scan using tickets_pkey`, 22.6 ms | same, 15.5 ms |
 | Page 2 | `Index Scan Backward using tickets_brand_updated_idx`, `Index Cond: … ROW(updated_at, id) < ROW(…)`, 0.15 ms | same, 0.42 ms |
 
@@ -1130,21 +1274,49 @@ Postgres will not use a condition as an index condition ahead of a row-level
 security policy unless the condition's operator is `LEAKPROOF`: a function that
 is not could raise an error that reveals a row the policy was about to hide.
 `@@` (`ts_match_vq`) and `<%` (`word_similarity_op`) are not leakproof (nor is
-`=` on an enum, which is why the priority and channel filters are filters too),
-so under `FORCE ROW LEVEL SECURITY` the list evaluates a search on each visible
-ticket, newest first, until it has a page. A term that matches often costs a
-few milliseconds. **A term that matches nothing reads every visible ticket**,
-and the trigram half is what makes that expensive: evaluated row by row, `<%`
-costs about 5 µs a subject against about 0.25 µs for the full-text half, so
-257 ms for an Admin at 50k tickets.
+`=` on an enum, which is why the priority and channel filters are filters too).
+Until M1-15 part 2 the list evaluated a search on each visible ticket, newest
+first, until it had a page, and **a term that matched nothing read every visible
+ticket**: 257 ms for an Admin at 50k tickets.
 
-That case is outside the gate, and it is reported separately rather than
-hidden (below). [ADR 0011](../decisions/0011-ticket-search-token-table.md)
-closes it with a token table compared by a leakproof `=`, under the same
-policies as every ticket child table, scheduled with M1-15 part 2. `LEAKPROOF`
-wrappers were rejected: the operators can raise, so the promise would be false.
+[ADR 0011](../decisions/0011-ticket-search-token-table.md) moved search onto
+`ticket_search_tokens`, one row per lexeme of a ticket's subject and first
+message, under the same `FORCE`d brand and department policies as every ticket
+child table. `=` and the range comparisons on `text` are leakproof, so the
+token lookup is an **index condition ahead of the policy**, and the policy's
+department check runs on the index entry (`department_id` is in the index, so
+no heap is read). The key lines, as the runtime role under an Admin's context at
+50k tickets, for a term nothing matches:
+
+```text
+-- exact half
+Index Only Scan using ticket_search_tokens_brand_token_idx on ticket_search_tokens tokens  (rows=0 loops=1)
+  Index Cond: ((brand_id = ANY (…app.brand_ids…)) AND (brand_id = '…'::uuid) AND (token = ANY ('{zebra}'::text[])))
+  Filter: (COALESCE(…app.all_departments…) OR (department_id = ANY (…app.department_ids…)))
+Execution Time: 8.798 ms
+
+-- fuzzy fallback: the words sharing the first three letters, then <%
+Index Only Scan using ticket_search_tokens_brand_token_idx on ticket_search_tokens near  (rows=0 loops=1)
+  Index Cond: ((brand_id = ANY (…)) AND (brand_id = '…'::uuid) AND (token >= "left"(wanted.lexeme, 3)) AND (token < ("left"(wanted.lexeme, 3) || '…'::text)))
+Execution Time: 9.487 ms
+```
+
+Most of those 9 ms is the contact-name half (`ILIKE` over the brand's 20 000
+contacts); the token lookups themselves take well under a millisecond. The
+fuzzy half's candidates are read in a `LATERAL` subquery kept apart with
+`OFFSET 0`: flattened, the planner read every token of the brand and applied the
+range as a join filter (151 ms). An integration test (`tickets.integration.test.ts`,
+"looks the … words up in the token index ahead of the policy") `EXPLAIN`s both
+halves as the runtime role and fails if the token condition leaves `Index Cond`.
+
+What it costs: a common word is no longer "stop after a page". Every ticket
+carrying `refund` (3 191 of 50 000) is found, joined and top-N sorted, so that
+search went from p95 47 ms to 86 ms under load. That is inside the gate and
+grows with how many tickets share a word, not with the brand's size.
+
 The two GIN indexes stay: the PRD names the tsvector one, and both serve paths
-that run as the owner.
+that run as the owner. `LEAKPROOF` wrappers were rejected: the operators can
+raise, so the promise would be false.
 
 ### How it is measured
 
@@ -1175,10 +1347,11 @@ pnpm --filter @helpdock/api perf:tickets
    replicas. Each session cycles through every scenario, once as an Admin and
    once as an Agent confined to the two smallest departments (20 % of the
    tickets): All tickets, My open, Unassigned, the live states of Overdue,
-   Escalated, search `refund`, search `renewa`, two tags, page 2, and opening a
-   ticket. Two minutes of warm-up, ten measured, p50/p95/p99 by nearest rank.
-4. **Worst case, alone**: a search nothing matches, one session, twenty
-   seconds, after the load. Reported, not gated.
+   Escalated, search `refund`, search `renewa`, a search nothing matches (`zebra`), two tags, page 2, opening a
+   ticket, and the sidebar's view counts (`GET /views/counts`, M1-05). Two minutes of warm-up, ten measured, p50/p95/p99 by nearest rank.
+4. **Zero-match search**: a search nothing matches is in the mix like every
+   other scenario, gated by its own budget, `PERF_NO_MATCH_P95_MS` (ADR 0011).
+   Until M1-15 part 2 it was measured alone and reported, not gated.
 5. **Plans**: `EXPLAIN (ANALYZE, BUFFERS)` of every list query, built by the
    repository's own `listTicketsStatement`, run as the runtime role inside the
    tenant context the request would carry.
@@ -1190,6 +1363,7 @@ pnpm --filter @helpdock/api perf:tickets
 | `PERF_WARMUP_S` / `PERF_DURATION_S` | 120 / 600 | |
 | `PERF_REPLICAS` | 2 | api processes |
 | `PERF_P95_MS` | 150 | the gate |
+| `PERF_NO_MATCH_P95_MS` | 150 | the zero-match search's own gate |
 | `PERF_SCALE` | 1 | multiplies the dataset; `0.1` for a smoke run |
 | `PERF_REPORT` | none | also write the results and plans as JSON |
 
@@ -1201,29 +1375,36 @@ measures the machine, so run it on an idle one.
 
 ### What it measured last (2026-09-25)
 
-**The gate passes.** The full §14 run on an idle machine, with the benchmark
-and both api replicas pinned to **2 cores** (`taskset -c 0,1`) to stand in for a
-2 vCPU host (the container has 15 GB of memory, not 4): 50 sessions, 1 s think
-time, 2 min warm-up, 10 min measured, two replicas; 48.9 req/s, overall p95
-41 ms, **no errors**. The slowest gated scenario is 53 ms against the 150 ms
-gate.
+**The gate passes, zero-match search and the sidebar's view counts included**
+(M1-15 part 2 after ADR 0011, integrated with M1-05 views). The full §14 run:
+50 sessions, 1 s think time, 2 min warm-up, 10 min measured, two replicas;
+48.5 req/s, overall p95 72 ms, **no errors**. The slowest gated scenario is
+115 ms against the 150 ms gate (`renewa` as an Admin, which runs both halves of
+the search). The load generator and the api replicas were **pinned to two
+cores** (`taskset -c 0,1`) and the machine was otherwise idle (load average
+below 1 at the start). The previous column is the pinned, idle run of the
+index set before the token table.
 
-| Scenario | Admin p50 / p95 / p99 ms | Agent p50 / p95 / p99 ms |
-|---|---|---|
-| All tickets | 13 / 32 / 62 | 13 / 32 / 52 |
-| My open | 8 / 21 / 42 | 13 / 28 / 45 |
-| Unassigned | 15 / 31 / 51 | 16 / 33 / 60 |
-| Live states (Overdue) | 14 / 29 / 53 | 16 / 34 / 57 |
-| Escalated | 16 / 36 / 57 | 21 / 39 / 59 |
-| Search `refund` | 26 / 47 / 72 | 30 / 51 / 71 |
-| Search `renewa` | 25 / 46 / 75 | 28 / 48 / 72 |
-| Two tags, all-of | 27 / 50 / 72 | 31 / 53 / 71 |
-| Page 2 | 13 / 28 / 47 | 13 / 29 / 46 |
-| Open a ticket | 19 / 46 / 78 | 20 / 41 / 69 |
-| Search matching nothing (alone, not gated) | 241 / 284 / 304 | 141 / 186 / 207 |
+| Scenario | Admin p50 / p95 / p99 ms | Agent p50 / p95 / p99 ms | Before, p95 Admin / Agent |
+|---|---|---|---|
+| All tickets | 13 / 29 / 48 | 14 / 30 / 52 | 32 / 32 |
+| My open | 8 / 21 / 37 | 14 / 29 / 47 | 21 / 28 |
+| Unassigned | 15 / 33 / 57 | 17 / 35 / 55 | 31 / 33 |
+| Live states (Overdue) | 15 / 33 / 57 | 16 / 37 / 62 | 29 / 34 |
+| Escalated | 17 / 35 / 61 | 22 / 41 / 61 | 36 / 39 |
+| Search `refund` | 55 / 86 / 108 | 36 / 64 / 88 | 47 / 51 |
+| Search `renewa` (fuzzy fallback) | 75 / 115 / 144 | 59 / 94 / 117 | 46 / 48 |
+| **Search matching nothing** | **32 / 56 / 81** | **32 / 56 / 80** | 284 / 186 (alone, not gated) |
+| Two tags, all-of | 28 / 53 / 75 | 33 / 62 / 84 | 50 / 53 |
+| Page 2 | 14 / 31 / 58 | 14 / 31 / 50 | 28 / 29 |
+| Open a ticket | 21 / 47 / 79 | 21 / 45 / 81 | 46 / 41 |
+| **View counts (sidebar)** | **30 / 57 / 77** | **45 / 72 / 101** | new in M1-05 |
 
-The zero-match search is what [ADR 0011](../decisions/0011-ticket-search-token-table.md)
-addresses.
+The zero-match search went from reading every visible ticket to two index
+probes: p95 284 ms measured alone to 56 ms inside the full load. A word many
+tickets share costs more than before, and a half-typed word pays for two
+statements (the exact half, then the fallback); both are explained under
+[Search under row-level security](#search-under-row-level-security).
 
 An earlier run (2026-09-24) on the same container while six other build jobs
 shared it (load average 27–64) put list p95 at 0.8–2.1 s: that measured the
@@ -1325,6 +1506,22 @@ mounted without any of the staff app (ADR
 [0010](../decisions/0010-csat-page-in-the-admin-bundle.md)). Its language is
 `?lang=` when it names `en` or `ar`, otherwise the brand's default; it is themed
 with the brand accent when the brand has one (none do until M5/M6's themes).
+
+**Who closed it.** An open link's `ticket.closedBy` is the first name of the
+staff member who closed the ticket ("closed by Lina"), and null otherwise. It is
+set only when that person is still active in the brand and wrote a public reply
+on the ticket, so the page names nobody the customer has not already heard
+from. That keeps it inside §4.6's "nothing beyond their purpose". An api key, a
+rule, or a staff member who never replied is not named. A spent link sends no
+name. "Browse the help center" waits for M5.
+
+**The preview.** Ticketing › Feedback › **Open the rating page as a customer
+sees it** opens `/csat/preview?lang=<admin's language>` in a new tab. That is
+the same page over a fixed sample (`apps/admin/src/csat/preview-api.ts`), under
+a line that says it is a preview. It makes no request: it holds no token, reads
+no ticket, and a rating sent from it is drawn as sent and stored nowhere.
+`preview` cannot collide with a real token, which is always two base64url
+halves joined by a dot.
 
 ## What later milestones add
 

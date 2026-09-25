@@ -16,6 +16,7 @@ import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import { statusName } from './format.js';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
@@ -304,13 +305,3 @@ function Unavailable({
     </Tooltip>
   );
 }
-
-/** Read by a screen reader, drawn for nobody. */
-const visuallyHidden = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  overflow: 'hidden',
-  clipPath: 'inset(50%)',
-  whiteSpace: 'nowrap',
-} as const;

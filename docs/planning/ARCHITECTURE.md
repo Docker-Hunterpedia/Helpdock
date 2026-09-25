@@ -153,7 +153,7 @@ ai_calls(brand_id, ticket_id, purpose, model, tokens_in, tokens_out, cost, sourc
 csat_responses, notifications, notification_prefs, audit_log, settings(key, value_encrypted, is_secret, updated_by)
 ```
 
-Search: `tickets.search` and `hc_article_versions.search` are generated tsvectors using `english` or `arabic` config by locale; trigram GIN on subjects/titles for fuzzy matching; semantic search via `knowledge_chunks`.
+Search: `tickets.search` and `hc_article_versions.search` are generated tsvectors using `english` or `arabic` config by locale; trigram GIN on subjects/titles for fuzzy matching; semantic search via `knowledge_chunks`. Under `FORCE`d row-level security Postgres cannot use those GIN indexes ahead of a policy (their operators are not `LEAKPROOF`), so the ticket list searches through `ticket_search_tokens`, one row per lexeme of a ticket's subject and first message, compared with a leakproof `=` ([ADR 0011](../decisions/0011-ticket-search-token-table.md)).
 
 ---
 

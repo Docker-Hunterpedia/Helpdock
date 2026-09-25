@@ -305,7 +305,8 @@ Five things M1-15 should know:
 |---|---|---|
 | `/admin/ticketing` | `Admin/Ticketing` | The tab row of the whole of M1's settings, redirecting to the first tab. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
 | `/admin/ticketing/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
-| `/admin/ticketing/{priorities,views}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Priorities with M1-02, Views with M1-05. Any other segment redirects to the first tab. |
+| `/admin/ticketing/priorities` | `Admin/Ticketing` | The routed placeholder that names the deliverable filling it, M1-02. Any other segment redirects to the first tab. |
+| `/admin/ticketing/views` | `Admin/Ticketing-Views` | M1-05. The brand's shared views in sidebar order — built-in ones marked — with what each shows, who sees it and its count; the side editor (`view-editor.tsx`, its selects in `view-draft.ts`). |
 | `/admin/ticketing/assignment` | `Admin/Ticketing-Assignment` | M1-07. The departments with their mode, cap, timer and agents online; the selected department's agents with presence, load, skills and rotation; the side editor. The ticket workspace's assignee picker is `screens/tickets/assignee-picker.tsx` (`AdminTicketDialogs`, panel 3). |
 
 Reordering has three ways in and one path out. The drag handle is a real button
@@ -389,6 +390,14 @@ providers exist on that page (ADR
 only until the help center exists. The adapter is chosen by the same
 `VITE_AUTH_API` rule (`csat/select-api.ts`), and `MockCsatApi` answers three
 tokens — open, used and expired — exported as `MOCK_CSAT_TOKENS`.
+`/csat/preview` is the Feedback tab's preview (M1-15 part 2). Whatever the
+adapter setting, it is answered by `csat/preview-api.ts` with a sample in the
+page's language, and it makes no request.
+
+**The contact header's ⋯ menu** (M1-15 part 2) uses the same component as the
+ticket header's (`ui/actions-menu.tsx`). It holds Merge with… (the picker is
+`Admin · view dialogs` panel 5) and Anonymise. The details panel's Linked
+tickets are panel 6 of the same file (`screens/tickets/linked-tickets.tsx`).
 
 **The header's ⋯ menu takes its items as data** (`ticket-actions-menu.tsx`), so
 each deliverable adds its own without editing another's; with none it is the
@@ -432,6 +441,15 @@ dialogs; the merged block a primary's thread draws in place of the merge's
 announcement (`merged-block.tsx`); and "is replying" on the collision pill,
 announced the moment the composer fills. All of it is built from the
 `AdminTicketDialogs` artboard, panels 1, 2, 4 and 7.
+
+M1-05 replaced the four hard-coded views with the api's saved views
+(`Admin/View-Dialogs`, panels 1–4): the sidebar group and its ⋯ menu
+(`views-nav.tsx`), the "Filters changed" bar and the filter chips
+(`ticket-list.tsx`), and the Save as a view, Rename and Share dialogs
+(`view-dialogs.tsx`). `tickets/views.ts` holds the rules of the URL — `?view=`
+plus the whole filter set with `custom=1` once it differs — and
+`use-view-actions.ts` the mutations every one of them shares. The fixture's
+views are `tickets/mock-views.ts`.
 
 The header's ⋯ menu (`Admin · ticket dialogs`, panel 2) is
 `ticket-actions-menu.tsx`, which draws an **array of items** each deliverable

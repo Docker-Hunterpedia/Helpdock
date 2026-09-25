@@ -21,6 +21,7 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { PageHeader } from '../../shell/page-header.tsx';
+import { useDebounced } from '../../ui/use-debounced.js';
 import { AccountDialog } from './contact-dialogs.tsx';
 import { AccountsTable, ContactsTable } from './contact-tables.tsx';
 import { pageRange } from './format.js';
@@ -355,21 +356,4 @@ export function ContactsPage(): ReactNode {
       />
     </>
   );
-}
-
-/** `value`, but only after it has stopped changing for `delay` milliseconds. */
-function useDebounced<T>(value: T, delay: number): T {
-  const [settled, setSettled] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSettled(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [value, delay]);
-
-  return settled;
 }

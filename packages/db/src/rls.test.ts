@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  missingOwnerPolicies,
   missingPolicyTables,
+  ownerPolicy,
   SESSION_SETTINGS,
   TENANT_TABLES,
   tenantPolicies,
@@ -79,6 +81,26 @@ describe('tenantPredicate', () => {
   });
 });
 
+describe('ownerPolicy', () => {
+  it('is restrictive, so it narrows the brand policy rather than adding to it', () => {
+    expect(ownerPolicy('views', 'owner_id')).toContain('AS RESTRICTIVE FOR ALL');
+  });
+
+  it('lets a shared row through and keeps a personal one for its owner', () => {
+    expect(ownerPolicy('views', 'owner_id')).toContain(
+      `owner_id IS NULL OR owner_id::text = current_setting('${SESSION_SETTINGS.principalId}', true)`,
+    );
+  });
+
+  it('checks the rows a write produces too', () => {
+    expect(ownerPolicy('views', 'owner_id')).toContain('WITH CHECK');
+  });
+
+  it('refuses a column that is not an identifier', () => {
+    expect(() => ownerPolicy('views', 'owner_id; drop')).toThrow(TypeError);
+  });
+});
+
 describe('the committed migrations', () => {
   const directory = new URL('../drizzle/', import.meta.url);
   const committed = readdirSync(directory)
@@ -91,6 +113,10 @@ describe('the committed migrations', () => {
     // Run `pnpm --filter @helpdock/db gen:rls` when this fails: it appends the
     // missing policies to the migration that creates the table.
     expect(missingPolicyTables(committed).map((table) => table.name)).toEqual([]);
+  });
+
+  it('puts every owner-scoped table under its owner policy', () => {
+    expect(missingOwnerPolicies(committed)).toEqual([]);
   });
 
   it.each(TENANT_TABLES)('creates $name before the policies that reference it', ({ name }) => {

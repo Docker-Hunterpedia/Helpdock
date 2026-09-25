@@ -221,7 +221,15 @@ export class MergeService {
       throw new TicketLifecycleFailure(refusal ?? 'ticket-not-merged');
     }
 
-    const primary = await this.#require(tx, ticket.mergedIntoId);
+    const primary = await this.#tickets.findTicket(tx, ticket.mergedIntoId);
+    if (primary === undefined) {
+      // A secondary always sits in its primary's department (the follow-the-
+      // primary trigger), so a reader of this one could read that one: the
+      // only way it is missing is an Admin's soft delete. Saying so is not a
+      // leak, and a 404 would claim the ticket in the path does not exist. A
+      // deleted ticket is not acted on (§2.2), so the merge stays.
+      throw new TicketLifecycleFailure('merge-primary-deleted');
+    }
     const restored = await this.#restoredStatus(tx, ticket.preMergeStatusId);
     const mergedMs = mergedDuration(ticket.mergedAt, context.now);
     const moved = await this.#restoreSecondary(context, { secondary, restored, mergedMs });

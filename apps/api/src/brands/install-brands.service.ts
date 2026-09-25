@@ -5,6 +5,7 @@ import {
   departments,
   INSTALL_SCOPE_BRAND_ID,
   isUuid,
+  seedBrandViews,
   userBrandRoles,
   uuidv7,
 } from '@helpdock/db';
@@ -87,6 +88,8 @@ export class InstallBrandsService {
       name: request.firstDepartmentName,
       sortOrder: 0,
     });
+    // M1-05: the default views, including the first department's "All open".
+    await seedBrandViews(tx, brandId);
 
     const meta = {
       prefix: request.prefix,

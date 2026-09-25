@@ -4,6 +4,7 @@ import type {
   MarkSpamRequest,
   MergedTicket,
   MessageCreateRequest,
+  RelatedTicket,
   Ticket,
   TicketActivityEntry,
   TicketActivityList,
@@ -20,11 +21,18 @@ import type {
   TicketMessagePage,
   TicketParticipantList,
   TicketPriority,
+  TicketRelation,
   TicketSpamSender,
   TicketSplitRequest,
   TicketStatus,
   TicketStatusList,
   TicketUpdateRequest,
+  TicketView,
+  TicketViewCountList,
+  TicketViewCreateInput,
+  TicketViewFilters,
+  TicketViewList,
+  TicketViewUpdateInput,
   TimeEntry,
   TimeEntryCreateRequest,
   TimeEntryList,
@@ -45,6 +53,7 @@ import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
 import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
+import { MockViews } from './mock-views.js';
 
 /**
  * The fixture the ticket workspace runs against until an install is in front of
@@ -77,6 +86,8 @@ export const MOCK_TICKET_ARABIC = '0192c3f0-1a2b-7c3d-8e4f-000000001039';
 export const MOCK_TICKET_VAT = '0192c3f0-1a2b-7c3d-8e4f-000000001035';
 export const MOCK_TICKET_CLOSED = '0192c3f0-1a2b-7c3d-8e4f-000000001030';
 export const MOCK_TICKET_TRANSCRIPT = '0192c3f0-1a2b-7c3d-8e4f-000000001028';
+/** Named by HD-1041 and held by nobody: a linked ticket the viewer cannot open. */
+const MOCK_TICKET_HIDDEN = '0192c3f0-1a2b-7c3d-8e4f-000000000999';
 
 export const MOCK_STATUS_OPEN = '0192c3f0-1a2b-7c3d-8e4f-000000000051';
 export const MOCK_STATUS_AWAITING = '0192c3f0-1a2b-7c3d-8e4f-000000000052';
@@ -206,6 +217,11 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       subject: 'Cannot sign in to the portal',
       priority: 'high',
       channel: 'chat',
+      // Linked tickets (M1-15 part 2): it continues HD-1030, and was split from
+      // a ticket the store does not hold, which the fixture reads as one in a
+      // department the viewer cannot see.
+      parentId: MOCK_TICKET_CLOSED,
+      splitFromId: MOCK_TICKET_HIDDEN,
       contactId: MOCK_CONTACT_GMAIL,
       firstResponseDueAt: at(3 * HOUR),
       resolutionDueAt: at(20 * HOUR),
@@ -509,6 +525,9 @@ export class MockTicketsApi implements TicketsApi {
   readonly #csat = new Map<string, TicketCsat>();
   /** Keyed by the secondary's id; present while it is merged. */
   readonly #merges = new Map<string, MergeRecord>();
+  /** M1-05. Counted against this fixture's own tickets, as the api counts its own. */
+  readonly #views = new MockViews((filters) => this.#matching(queryOfView(filters)).length);
+  readonly #now: number;
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
@@ -522,6 +541,7 @@ export class MockTicketsApi implements TicketsApi {
     contactName: (contactId: string) => string | undefined = seedContactName,
   ) {
     this.#uploads = uploads;
+    this.#now = now;
     this.#blockList = blockList;
     this.#contactName = contactName;
     const seeded = seed(this.#statuses, now);
@@ -544,10 +564,7 @@ export class MockTicketsApi implements TicketsApi {
   }
 
   async list(_brandId: string, query: TicketQuery = {}): Promise<TicketList> {
-    const term = query.q?.trim().toLowerCase() ?? '';
-    const matches = this.#tickets
-      .filter((ticket) => matchesQuery(ticket, query, term))
-      .sort(comparator(query));
+    const matches = this.#matching(query).sort(comparator(query));
 
     const limit = query.limit ?? TICKET_PAGE_SIZE_DEFAULT;
     const from = decodeCursor(query.cursor);
@@ -558,6 +575,45 @@ export class MockTicketsApi implements TicketsApi {
       tickets: page.map((ticket) => this.#withContact(ticket)),
       nextCursor: nextIndex < matches.length ? encodeCursor(nextIndex) : null,
     });
+  }
+
+  // ---------------------------------------------------------------- M1-05
+
+  async views(_brandId: string): Promise<TicketViewList> {
+    return Promise.resolve(this.#views.list());
+  }
+
+  async viewCounts(_brandId: string): Promise<TicketViewCountList> {
+    return Promise.resolve(this.#views.counts());
+  }
+
+  async createView(_brandId: string, request: TicketViewCreateInput): Promise<TicketView> {
+    return Promise.resolve(this.#views.create(request));
+  }
+
+  async updateView(
+    _brandId: string,
+    viewId: string,
+    request: TicketViewUpdateInput,
+  ): Promise<TicketView> {
+    return Promise.resolve().then(() => this.#views.update(viewId, request));
+  }
+
+  async deleteView(_brandId: string, viewId: string): Promise<void> {
+    return Promise.resolve().then(() => {
+      this.#views.remove(viewId);
+    });
+  }
+
+  async reorderViews(_brandId: string, viewIds: readonly string[]): Promise<TicketViewList> {
+    return Promise.resolve(this.#views.reorder(viewIds));
+  }
+
+  /** Every ticket a query matches, as the api's `WHERE` would, before paging. */
+  #matching(query: TicketQuery): Ticket[] {
+    const term = query.q?.trim().toLowerCase() ?? '';
+
+    return this.#tickets.filter((ticket) => matchesQuery(ticket, query, term, this.#now));
   }
 
   async ticket(_brandId: string, ticketId: string): Promise<TicketDetail> {
@@ -991,10 +1047,34 @@ export class MockTicketsApi implements TicketsApi {
         primary === undefined || record === undefined
           ? null
           : { ...linkOf(primary), ...this.#facts(record) },
-      related: this.#tickets
-        .filter((row) => row.splitFromId === ticket.id || row.id === ticket.splitFromId)
-        .map(linkOf),
+      related: this.#related(ticket),
     };
+  }
+
+  /**
+   * `apps/api/src/tickets/merge/related.ts` over the fixture: a link the ticket
+   * names but the store does not hold stands for one in a department the
+   * viewer cannot see, and comes back as its relation alone.
+   */
+  #related(ticket: Ticket): RelatedTicket[] {
+    const named = (relation: TicketRelation, id: string | null): RelatedTicket[] => {
+      if (id === null) {
+        return [];
+      }
+      const row = this.#tickets.find((candidate) => candidate.id === id);
+
+      return [row === undefined ? { visible: false, relation } : shownAs(relation, row)];
+    };
+    const naming = (relation: TicketRelation, matches: (row: Ticket) => boolean) =>
+      this.#tickets.filter(matches).map((row) => shownAs(relation, row));
+
+    return [
+      ...named('parent', ticket.parentId),
+      ...named('mergedInto', ticket.mergedIntoId),
+      ...naming('mergedFrom', (row) => row.mergedIntoId === ticket.id),
+      ...named('splitFrom', ticket.splitFromId),
+      ...naming('splitTo', (row) => row.splitFromId === ticket.id),
+    ];
   }
 
   #facts(record: MergeRecord) {
@@ -1283,6 +1363,13 @@ const linkOf = (ticket: Ticket): TicketLink => ({
   subject: ticket.subject,
 });
 
+const shownAs = (relation: TicketRelation, ticket: Ticket): RelatedTicket => ({
+  ...linkOf(ticket),
+  visible: true,
+  relation,
+  status: ticket.status,
+});
+
 /**
  * The text of a body, the way `body_text` is the text of `body_html`.
  *
@@ -1297,16 +1384,32 @@ const textOf = (html: string): string =>
 
 const PRIORITY_ORDER: Record<TicketPriority, number> = { low: 0, medium: 1, high: 2, urgent: 3 };
 
-const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string): boolean => {
+/**
+ * Overdue as the api decides it (M1-05): a clock that has run out on a ticket
+ * nobody has closed, and never while a status pauses the clock.
+ */
+const isOverdue = (ticket: Ticket, now: number): boolean =>
+  ticket.status.systemState !== 'closed' &&
+  !ticket.status.pausesSla &&
+  (ticket.slaBreached ||
+    [ticket.firstResponseDueAt, ticket.resolutionDueAt].some(
+      (value) => value !== null && Date.parse(value) < now,
+    ));
+
+const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string, now: number): boolean => {
   const inList = <T>(values: readonly T[] | undefined, value: T): boolean =>
     values === undefined || values.length === 0 || values.includes(value);
 
+  // `me` is the signed-in fixture, as the api reads it from the principal.
   const assignee =
     query.assigneeId === undefined ||
     query.assigneeId.length === 0 ||
     query.assigneeId.some((wanted) =>
-      wanted === 'unassigned' ? ticket.assigneeId === null : ticket.assigneeId === wanted,
+      wanted === 'unassigned'
+        ? ticket.assigneeId === null
+        : ticket.assigneeId === (wanted === 'me' ? MOCK_SELF_ID : wanted),
     );
+  const tagIds = new Set((ticket.tags ?? []).map((tag) => tag.id));
 
   return (
     inList(query.statusId, ticket.status.id) &&
@@ -1315,11 +1418,21 @@ const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string): boolean
     inList(query.departmentId, ticket.departmentId) &&
     inList(query.channel, ticket.channel) &&
     assignee &&
+    (query.tagIds ?? []).every((tagId) => tagIds.has(tagId)) &&
+    (query.overdue !== true || isOverdue(ticket, now)) &&
     (term === '' ||
       ticket.subject.toLowerCase().includes(term) ||
       `${ticket.prefix}-${ticket.number}`.toLowerCase().includes(term))
   );
 };
+
+/** A saved view's filters as the list query the fixture filters by. */
+const queryOfView = ({ tagId, tagIds, ...rest }: TicketViewFilters): TicketQuery =>
+  Object.fromEntries(
+    Object.entries({ ...rest, tagIds: [...(tagId ?? []), ...(tagIds ?? [])] }).filter(
+      ([, value]) => value !== undefined,
+    ),
+  ) as TicketQuery;
 
 const comparator =
   (query: TicketQuery) =>

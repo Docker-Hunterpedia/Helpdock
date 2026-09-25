@@ -11,6 +11,8 @@ import {
 } from '@helpdock/db';
 import type { TicketLink } from '@helpdock/schemas';
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { statusJoin } from '../ticket-query.js';
+import type { TicketWithStatus } from '../tickets.repository.js';
 
 /**
  * The statements merge, unmerge and split make that `tickets.repository.ts`
@@ -97,18 +99,34 @@ export class MergeRepository {
   }
 
   /**
-   * The tickets a split joined to this one: the one it was split from, and the
-   * ones split from it. Each is read under the caller's scope, so a split into
-   * a department the reader cannot see is simply not linked.
+   * Every ticket linked to this one, with its status: the ones its own row
+   * names (`parent_id`, `merged_into_id`, `split_from_id`) and the ones that
+   * name it (merged into it directly, split from it). Read under the caller's
+   * scope, so a ticket in a department the reader cannot see, or deleted, is
+   * simply not among the rows; `relatedTicketsOf` decides what that means.
    */
-  async splitRelated(tx: DbTransaction, ticket: TicketRow): Promise<TicketLink[]> {
-    const splitFrom = ticket.splitFromId === null ? [] : [eq(tickets.id, ticket.splitFromId)];
+  async linkedTickets(tx: DbTransaction, ticket: TicketRow): Promise<TicketWithStatus[]> {
+    const named = [ticket.parentId, ticket.mergedIntoId, ticket.splitFromId].filter(
+      (id): id is string => id !== null,
+    );
 
-    return tx
-      .select(linkColumns)
+    const rows = await tx
+      .select()
       .from(tickets)
-      .where(and(or(eq(tickets.splitFromId, ticket.id), ...splitFrom), isNull(tickets.deletedAt)))
+      .innerJoin(ticketStatuses, statusJoin)
+      .where(
+        and(
+          or(
+            eq(tickets.mergedIntoId, ticket.id),
+            eq(tickets.splitFromId, ticket.id),
+            ...(named.length === 0 ? [] : [inArray(tickets.id, named)]),
+          ),
+          isNull(tickets.deletedAt),
+        ),
+      )
       .orderBy(asc(tickets.number));
+
+    return rows.map((row) => ({ ticket: row.tickets, status: row.ticket_statuses }));
   }
 
   /** The named messages of one ticket; ids of any other ticket are not found. */

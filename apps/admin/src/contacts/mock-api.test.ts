@@ -42,6 +42,24 @@ describe('MockContactsApi', () => {
     });
   });
 
+  it('finds a contact by customer id', async () => {
+    await expect(
+      new MockContactsApi().listContacts(MOCK_BRAND, { search: 'cust-10492' }),
+    ).resolves.toMatchObject({ total: 1, contacts: [{ id: MOCK_CONTACT_MONA }] });
+  });
+
+  it('leaves out anonymised contacts from the ones a merge accepts', async () => {
+    const api = new MockContactsApi();
+    await api.anonymise(MOCK_BRAND, MOCK_CONTACT_GMAIL);
+
+    const all = await api.listContacts(MOCK_BRAND);
+    const mergeable = await api.listContacts(MOCK_BRAND, { mergeable: true });
+
+    expect(all.contacts.map((contact) => contact.id)).toContain(MOCK_CONTACT_GMAIL);
+    expect(mergeable.contacts.map((contact) => contact.id)).not.toContain(MOCK_CONTACT_GMAIL);
+    expect(mergeable.total).toBe(all.total - 1);
+  });
+
   it('narrows to contacts with open tickets', async () => {
     const list = await new MockContactsApi().listContacts(MOCK_BRAND, { hasOpenTickets: true });
 

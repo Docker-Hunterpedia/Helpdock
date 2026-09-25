@@ -21,5 +21,12 @@
   "spent": "This rating link has expired or was already used.",
   "unavailable": "This page could not be loaded. Try again in a few minutes.",
   "failed": "Your rating could not be sent. Try again.",
-  "loading": "Loading"
+  "loading": "Loading",
+  "closedBy": "closed by {{name}}",
+  "preview": {
+    "notice": "Preview: this is the page a customer sees after a ticket closes. Nothing you send here is recorded.",
+    "brand": "Your brand",
+    "subject": "A sample request about an order",
+    "agent": "Lina"
+  }
 }

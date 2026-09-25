@@ -110,6 +110,7 @@ export class ContactsService {
       search: query.search,
       accountId: query.accountId,
       duplicatesOnly: query.duplicates,
+      mergeableOnly: query.mergeable,
       cursor: query.cursor,
       limit: query.limit ?? CONTACT_PAGE_SIZE,
     });

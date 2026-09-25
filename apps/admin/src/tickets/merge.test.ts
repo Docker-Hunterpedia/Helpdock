@@ -1,6 +1,7 @@
-import type { Ticket } from '@helpdock/schemas';
+import type { RelatedTicket, Ticket } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { linkReferences, mergeCandidates, unmergeHoursLeft } from './merge.js';
+import { linkReferences, mergeCandidates, unmergeHoursLeft, visibleLinks } from './merge.js';
+import { MOCK_STATUS_CLOSED, MockTicketsApi } from './mock-api.js';
 
 const NOW = Date.parse('2026-09-24T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -61,5 +62,26 @@ describe('linkReferences', () => {
     expect(linkReferences('Continued in HD-1101', [])).toEqual([
       { kind: 'text', text: 'Continued in HD-1101' },
     ]);
+  });
+});
+
+describe('visibleLinks', () => {
+  it('keeps the linked tickets the reader can open and drops the hidden ones', async () => {
+    const { statuses } = await new MockTicketsApi().statuses('brand');
+    const status = statuses.find((row) => row.id === MOCK_STATUS_CLOSED);
+    if (status === undefined) {
+      throw new Error('the fixture seeds a Closed status');
+    }
+    const shown: RelatedTicket = {
+      visible: true,
+      relation: 'splitTo',
+      id: 't-1043',
+      number: 1043,
+      prefix: 'HD',
+      subject: 'VAT',
+      status,
+    };
+
+    expect(visibleLinks([{ visible: false, relation: 'parent' }, shown])).toEqual([shown]);
   });
 });

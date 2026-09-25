@@ -170,6 +170,15 @@ into somebody else or either contact has been erased.
 An **erased** contact cannot be merged (`anonymised`), and a merged contact
 cannot be erased (`merged`); undo the merge first.
 
+**Merge with any contact** (M1-15 part 2). A merge starts from a duplicate
+suggestion or from the contact's ⋯ menu › **Merge with…**, which opens a
+picker (panel 5 of `Admin · view dialogs`). The picker searches with
+`GET /contacts?mergeable=true`, which leaves out erased contacts, and it never
+offers the contact itself. Merged contacts are never listed anyway. **Continue**
+hands the pair to the same Merge contacts dialog a suggestion opens, and the
+survivor is chosen there. The ⋯ menu also holds **Anonymise**, for Admins only.
+A Viewer sees the button disabled, and an erased contact offers neither entry.
+
 ## Erasure
 
 "Anonymise contact" implements DOMAIN-RULES §11's privacy request.
@@ -222,7 +231,7 @@ tenant transaction.
 
 | Route | Declaration | Answers |
 |---|---|---|
-| `GET /contacts` | `contact:read` | The list. `search`, `accountId`, `hasOpenTickets`, `tag`, `duplicates`, `cursor`, `limit`. |
+| `GET /contacts` | `contact:read` | The list. `search` (name, identifier or customer id), `accountId`, `hasOpenTickets`, `tag`, `duplicates`, `mergeable` (`true` leaves out erased contacts), `cursor`, `limit`. |
 | `POST /contacts` | `contact:write` | Creates one, with any identifiers given. 409 if one is taken. |
 | `GET /contacts/:contactId` | `contact:read` | The contact, its identifiers, account, notes, duplicate suggestions and stats. |
 | `PATCH /contacts/:contactId` | `contact:write` | Name, account, language, timezone, customer id. |
@@ -318,9 +327,6 @@ setting resolution lands (the open gap in
 
 ## Known gaps
 
-- **Merging starts from a suggestion.** The api merges any two contacts of the
-  brand, but the admin offers it only from a duplicate suggestion: the "merge
-  with…" picker in the contact menu has no artboard yet.
 - **A merge does not carry the merged contact's other suggestions over.** They
   are hidden while the merge stands and come back if it is undone.
 - **Search is `ILIKE`, not trigram.** `contacts.name` and

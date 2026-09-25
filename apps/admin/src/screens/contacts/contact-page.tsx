@@ -15,13 +15,14 @@ import {
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, Trash2 } from 'lucide-react';
+import { GitMerge, Lock, Trash2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { accountRoute, contactRoute, ROUTES } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
+import { ActionsMenu, type MenuAction } from '../../ui/actions-menu.tsx';
 import { useToast } from '../../ui/toasts.tsx';
 import { AnonymiseDialog } from './anonymise-dialog.tsx';
 import { ContactDialog, IdentityDialog } from './contact-dialogs.tsx';
@@ -30,6 +31,7 @@ import { csatLabel, DASH, durationLabel, identityLabel } from './format.js';
 import { ContactAvatar, IdentityLine } from './identity-pieces.tsx';
 import { MergeBanners } from './merge-banner.tsx';
 import { MergeContactsDialog } from './merge-contacts-dialog.tsx';
+import { MergeWithDialog } from './merge-with-dialog.tsx';
 import { useContactAction, useContactErrorMessage } from './use-contact-action.js';
 
 /**
@@ -42,10 +44,12 @@ import { useContactAction, useContactErrorMessage } from './use-contact-action.j
  * caption under the heading and the inline row in the list, and it is the only
  * thing this screen says about those tickets.
  *
- * **Merging is M1-13's.** A duplicate suggestion opens the merge dialog; the
- * toast that confirms a merge carries an Undo, and the banner on the surviving
- * contact keeps one for the 24 hours DOMAIN-RULES §4.4 allows. A contact that
- * was merged away sends the viewer on to the one it was merged into.
+ * **Merging is M1-13's.** A duplicate suggestion opens the merge dialog, and
+ * so does the ⋯ menu's "Merge with…" once a contact has been picked (M1-15
+ * part 2); the toast that confirms a merge carries an Undo, and the banner on
+ * the surviving contact keeps one for the 24 hours DOMAIN-RULES §4.4 allows. A
+ * contact that was merged away sends the viewer on to the one it was merged
+ * into.
  */
 export function ContactPage(): ReactNode {
   const t = useT();
@@ -63,6 +67,9 @@ export function ContactPage(): ReactNode {
   const [erasing, setErasing] = useState(false);
   const [note, setNote] = useState('');
   const [merging, setMerging] = useState<ContactDuplicateSuggestion | null>(null);
+  const [pickingOther, setPickingOther] = useState(false);
+  /** The contact picked from "Merge with…", which is a merge no suggestion made. */
+  const [pickedOther, setPickedOther] = useState<string | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -144,6 +151,7 @@ export function ContactPage(): ReactNode {
     },
     onSuccess: async (survivor: ContactDetail, choice) => {
       setMerging(null);
+      setPickedOther(null);
       await refresh();
       const summary = survivor.merges.find((row) => row.mergedContact.id === choice.mergedId);
       if (survivor.id !== contactId) {
@@ -182,6 +190,40 @@ export function ContactPage(): ReactNode {
   if (detail.mergedIntoId !== null) {
     return <Navigate to={contactRoute(detail.mergedIntoId)} replace />;
   }
+
+  // Chrome, not permissions: the api refuses a merge to a Viewer and erasure to
+  // anybody but an Admin (DOMAIN-RULES §1.2) whatever is drawn. An anonymised
+  // contact offers neither: a merge refuses it and it is already erased.
+  const contactActions: readonly MenuAction[] = detail.anonymised
+    ? []
+    : [
+        ...(session.user.role === 'viewer'
+          ? []
+          : [
+              {
+                id: 'merge-with',
+                label: t('contacts:actions.mergeWith'),
+                icon: GitMerge,
+                onSelect: () => {
+                  setPickingOther(true);
+                },
+              },
+            ]),
+        ...(session.user.role === 'admin'
+          ? [
+              {
+                id: 'anonymise',
+                label: t('contacts:actions.anonymise'),
+                icon: Trash2,
+                tone: 'danger' as const,
+                dividerBefore: true,
+                onSelect: () => {
+                  setErasing(true);
+                },
+              },
+            ]
+          : []),
+      ];
 
   const hiddenCount = timeline.data?.hiddenCount ?? 0;
   const items = timeline.data?.items ?? [];
@@ -239,7 +281,7 @@ export function ContactPage(): ReactNode {
             </Box>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <Button
               variant="outlined"
               disabled={detail.anonymised}
@@ -249,21 +291,11 @@ export function ContactPage(): ReactNode {
             >
               {t('contacts:detail.edit')}
             </Button>
-            {/* Chrome, not a permission: erasing is Admin only (DOMAIN-RULES
-                §1.2) and the api refuses anybody else whatever is drawn. */}
-            {session.user.role === 'admin' ? (
-              <Button
-                variant="outlined"
-                color="error"
-                disabled={detail.anonymised}
-                startIcon={<Trash2 size={16} aria-hidden="true" />}
-                onClick={() => {
-                  setErasing(true);
-                }}
-              >
-                {t('contacts:actions.anonymise')}
-              </Button>
-            ) : null}
+            <ActionsMenu
+              items={contactActions}
+              label={t('contacts:actions.more')}
+              menuLabel={t('contacts:actions.menu')}
+            />
           </Box>
         </Box>
 
@@ -581,14 +613,27 @@ export function ContactPage(): ReactNode {
         }}
       />
 
+      <MergeWithDialog
+        open={pickingOther}
+        contact={detail}
+        onClose={() => {
+          setPickingOther(false);
+        }}
+        onContinue={(otherId) => {
+          setPickingOther(false);
+          setPickedOther(otherId);
+        }}
+      />
+
       <MergeContactsDialog
-        open={merging !== null}
+        open={merging !== null || pickedOther !== null}
         contactId={detail.id}
-        otherContactId={merging?.other.id ?? detail.id}
+        otherContactId={merging?.other.id ?? pickedOther ?? detail.id}
         reason={merging === null ? null : t(`contacts:duplicates.reason.${merging.reason}`)}
         busy={merge.isPending}
         onClose={() => {
           setMerging(null);
+          setPickedOther(null);
         }}
         onMerge={({ survivor, merged }) => {
           merge.mutate({

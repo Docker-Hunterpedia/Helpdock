@@ -4,10 +4,10 @@ How a brand's tickets are shaped and routed: departments, the teams inside
 them, and the brand-level behaviour that later deliverables read. The screen is
 **Admin → Ticketing**, and this guide follows its tab row.
 
-Eight tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
-**Custom fields** and **Templates** (M1-06), **Assignment** (M1-07), **Spam**
-(M1-11) and **Feedback** (M1-12). The other two exist so the row is whole and
-each says which deliverable fills it: Priorities with M1-02, Views with M1-05.
+Nine tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
+**Custom fields** and **Templates** (M1-06), **Views** (M1-05), **Assignment**
+(M1-07), **Spam** (M1-11) and **Feedback** (M1-12). The tenth exists so the row
+is whole and says which deliverable fills it: Priorities with M1-02.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -26,6 +26,8 @@ version:
 | Read the tags, custom fields and templates | yes | yes | yes |
 | Add, edit, reorder or delete tags, custom fields and templates | yes | yes | no |
 | Put tags on a ticket | yes | yes | Agent yes, Viewer no |
+| Keep personal views | yes | yes | yes |
+| Add, edit, hide, reorder or delete shared views | yes | shared with departments they lead | no |
 | Read, add or remove blocked senders; change the Spam setting | yes | yes | no |
 | Mark a ticket as spam, and block its sender from the dialog | yes | yes | Agent yes, Viewer no |
 | Change a department's assignment settings | yes | in the departments they lead | no |
@@ -282,6 +284,57 @@ blind. The count is written into the audit row, because afterwards it is the
 only record of how much was taken off.
 
 Deleting a tag also drops it from any template that listed it as a default.
+
+## Views
+
+A view is a saved filter over the ticket list: a name and exactly the query the
+list accepts. The tab lists the brand's **shared** views — the ones in
+everybody's sidebar, in the order they appear there — including the five kinds
+every brand starts with. Personal views are their owners' alone and are managed
+from the sidebar; how a view resolves, and why it never shows anybody more than
+their own departments, is in the [tickets guide](tickets.md#views).
+
+### The list
+
+Each row shows the view's name (marked **built-in** or **hidden** where it is),
+what it shows in words — "Status is live · Assignee is me" — who sees it
+(**Everyone**, or the departments), and how many tickets it holds *for you*:
+the count runs under your own department scope, as the sidebar's does, and
+stops at 999.
+
+The row menu offers **Edit**, **Move up**, **Move down**, **Hide from the
+sidebar** (or **Show in the sidebar**) and, for a view that is not built in,
+**Delete**. Reordering works as it does for departments — the handle, `↑`/`↓`
+on it, or the menu — except that only the views you may change are sent: the
+api puts them back in the places they held between them, so a Team Leader's
+reorder never moves a view they have no say over. A row you may not change is
+drawn read-only.
+
+### The editor
+
+| Field | Notes |
+|---|---|
+| Name, Name (Arabic) | Required and optional, up to 80 characters. The sidebar draws the Arabic name while the desk is in Arabic. |
+| Visible to | **Everyone in the brand**, or **Departments** with at least one chosen. A Team Leader restricted to some departments may choose only departments they lead, never the whole brand. |
+| Status | Any state, any live state (open, on hold, escalated), or one state. |
+| Assignee | Anyone, Me — whoever opens the view — or Nobody. |
+| Priority | Any, or one priority. |
+| Tags, all of | A ticket matches when it carries every tag chosen. |
+| SLA | Any, or **Breached or due**. |
+| Sort | Last updated, Oldest first, or Priority. |
+
+A view saved from the workspace can hold more than the selects draw — two
+statuses, three people. A select then shows **As saved** and leaves that part of
+the filters untouched unless you pick something else.
+
+### Built-in views
+
+Every brand has **My open**, **Unassigned**, **Overdue**, **Escalated** and one
+**All open** per department, which appears when the department is created,
+follows its name and goes when it is deleted. They can be **renamed, reordered
+and hidden** for the brand, never deleted or refiltered: the editor draws their
+audience and filters disabled, the menu has no Delete, and the api answers 409
+`view-is-built-in` whatever a client sends.
 
 ## Custom fields
 
@@ -671,6 +724,10 @@ there as well as in the brand it creates.
 | `PATCH /api/brands/:brandId/assignment/:departmentId` | `@Requires('ticketing:manage')` | Mode, load cap, auto-unassign and minutes, `onUnassign`. A Team Leader only inside the departments they lead. |
 | `GET …/assignment/:departmentId/agents` | `@Requires('ticketing:manage')` | Who can work the department: presence, open count, rotation, skills, and whether the actor may edit the row. |
 | `PATCH …/assignment/:departmentId/agents/:userId` | `@Requires('ticketing:manage')` | `inRotation` and/or the whole `skillTagIds` set. A Team Leader only for Agents. |
+| `GET/POST /api/brands/:brandId/views` | `@Requires('ticket:read')` | The views the reader may see; saves a personal one, or a shared one with `ticketing:manage` and the departments the actor leads. |
+| `GET /api/brands/:brandId/views/counts` | `@Requires('ticket:read')` | One count per view in the reader's sidebar, capped at 999. |
+| `PATCH/DELETE /api/brands/:brandId/views/:viewId` | `@Requires('ticket:read')` | The owner's own view; a shared one as for `POST`. Built-in views are renamed and hidden only. |
+| `POST /api/brands/:brandId/views/reorder` | `@Requires('ticket:read')` | Some shared views, or some of the reader's own, in a new order. |
 | `GET …/assignment/:departmentId/assignable` | `@Requires('ticket:write')` | The assignee picker: id, name, presence and open count, plus the cap. 404 for a department outside the actor's scope. |
 
 ### Refusals
@@ -696,6 +753,7 @@ the translated copy:
 | `sender-already-blocked` | 409 | That sender is on the list already. |
 | `assignee-above-actor` | 403 | Only an Admin assigns a ticket to an Admin (M1-07). |
 | `time-tracking-off` | 409 | A time entry was logged while the brand has time tracking off (M1-12). |
+| `view-is-built-in` | 409 | A built-in view was deleted, refiltered or reshared; it can only be renamed, reordered and hidden (M1-05). |
 
 A department of another brand is invisible to the request's transaction, so it
 answers **404**, not 403: "there is no such id" and "it is not yours" are the

@@ -258,3 +258,15 @@ export const assignmentModeEnum = pgEnum('assignment_mode', [
  * removed from the brand, or moved out of its department (DOMAIN-RULES §12).
  */
 export const onUnassignEnum = pgEnum('on_unassign', ['round_robin', 'leave_unassigned']);
+
+/**
+ * The seeded default views of REQUIREMENTS §4.1 (M1-05). `department_open` is
+ * "All open" for one department, one row per department of the brand.
+ */
+export const ticketViewBuiltInEnum = pgEnum('ticket_view_built_in', [
+  'my_open',
+  'unassigned',
+  'overdue',
+  'department_open',
+  'escalated',
+]);

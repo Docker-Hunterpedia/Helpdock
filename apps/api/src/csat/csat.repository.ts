@@ -3,10 +3,14 @@ import {
   type CsatResponse,
   csatResponses,
   type DbTransaction,
+  ticketActivity,
+  ticketMessages,
   ticketStatuses,
   tickets,
+  userBrandRoles,
+  users,
 } from '@helpdock/db';
-import { and, desc, eq, gt, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
 
 /**
  * Every query M1-12's survey makes, each one in the caller's transaction so the
@@ -108,6 +112,49 @@ export class CsatRepository {
           reference: `${row.prefix}-${String(row.number)}`,
           subject: row.subject,
         };
+  }
+
+  /**
+   * The name of whoever closed the ticket this survey is for, when that was a
+   * staff member who is still active in the brand and who wrote to the
+   * customer on this ticket; otherwise undefined. The last condition is what
+   * keeps the name inside the link's purpose (DOMAIN-RULES §4.6): it names
+   * somebody the customer has already had a reply from, nobody new. The
+   * close is the latest `ticket.closed` activity row written before the
+   * survey was: the survey job runs after the close it is for, and a later
+   * close has a survey of its own.
+   */
+  async closerName(tx: DbTransaction, survey: CsatResponse): Promise<string | undefined> {
+    const [row] = await tx
+      .select({ name: users.name })
+      .from(ticketActivity)
+      .innerJoin(users, sql`${users.id}::text = ${ticketActivity.actorId}`)
+      .innerJoin(
+        userBrandRoles,
+        and(
+          eq(userBrandRoles.userId, users.id),
+          eq(userBrandRoles.brandId, ticketActivity.brandId),
+        ),
+      )
+      .where(
+        and(
+          eq(ticketActivity.ticketId, survey.ticketId),
+          eq(ticketActivity.action, 'ticket.closed'),
+          eq(ticketActivity.actorType, 'staff'),
+          lte(ticketActivity.createdAt, survey.createdAt),
+          eq(users.status, 'active'),
+          sql`EXISTS (
+            SELECT 1 FROM ${ticketMessages} m
+            WHERE m.ticket_id = ${ticketActivity.ticketId}
+              AND m.kind = 'public' AND m.author_type = 'staff'
+              AND m.author_id = ${ticketActivity.actorId}
+          )`,
+        ),
+      )
+      .orderBy(desc(ticketActivity.createdAt))
+      .limit(1);
+
+    return row?.name;
   }
 
   /**

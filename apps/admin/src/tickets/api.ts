@@ -23,6 +23,11 @@ import type {
   TicketStatusList,
   TicketSystemState,
   TicketUpdateRequest,
+  TicketView,
+  TicketViewCountList,
+  TicketViewCreateInput,
+  TicketViewList,
+  TicketViewUpdateInput,
   TimeEntryCreateRequest,
   TimeEntryList,
 } from '@helpdock/schemas';
@@ -100,6 +105,18 @@ export interface TicketsApi {
   unmerge(brandId: string, ticketId: string): Promise<TicketMergeResult>;
   /** M1-09. Copies messages of `ticketId` onto a new ticket, and answers with it. */
   split(brandId: string, ticketId: string, request: TicketSplitRequest): Promise<TicketDetail>;
+
+  // ---------------------------------------------------------------- M1-05
+
+  /** The views the reader may see: shared ones first, then their own. */
+  views(brandId: string): Promise<TicketViewList>;
+  /** One capped count per view in the sidebar. */
+  viewCounts(brandId: string): Promise<TicketViewCountList>;
+  createView(brandId: string, request: TicketViewCreateInput): Promise<TicketView>;
+  updateView(brandId: string, viewId: string, request: TicketViewUpdateInput): Promise<TicketView>;
+  deleteView(brandId: string, viewId: string): Promise<void>;
+  /** Some views in a new order: all shared, or all the reader's own. */
+  reorderViews(brandId: string, viewIds: readonly string[]): Promise<TicketViewList>;
 }
 
 /**
@@ -138,8 +155,13 @@ export interface TicketQuery {
   readonly priority?: readonly TicketPriority[];
   readonly departmentId?: readonly string[];
   readonly channel?: readonly TicketChannel[];
-  readonly assigneeId?: readonly (string | 'unassigned')[];
-  /** Free text over the subject: full text first, trigram for the misspelled. */
+  /** People, `unassigned`, or `me` — the reader, resolved by the api (M1-05). */
+  readonly assigneeId?: readonly string[];
+  /** All-of: a ticket matches when it carries every tag named (M1-06). */
+  readonly tagIds?: readonly string[];
+  /** Only tickets whose SLA has run out (M1-05). */
+  readonly overdue?: boolean;
+  /** Free text: every word of the subject and first message, with a fuzzy fallback (ADR 0011). */
   readonly q?: string;
   readonly sort?: TicketSort;
   readonly direction?: TicketSortDirection;

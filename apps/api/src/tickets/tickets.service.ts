@@ -70,7 +70,7 @@ import {
   toTicketMessage,
   toTicketStatus,
 } from './ticket-view.js';
-import type { TicketRepository } from './tickets.repository.js';
+import type { TicketReader, TicketRepository } from './tickets.repository.js';
 import type { TimeEntriesService } from './time/time-entries.service.js';
 
 /**
@@ -161,12 +161,12 @@ export class TicketsService {
    * contacts gets rows without the name rather than a name it was not given.
    */
   async list(
-    brandId: string,
+    reader: TicketReader,
     query: TicketListQuery,
     { withContacts }: { readonly withContacts: boolean },
   ): Promise<TicketList> {
     const tx = getTx();
-    const rows = await this.#read(() => this.#tickets.listTickets(tx, brandId, query));
+    const { rows, search } = await this.#read(() => this.#tickets.listTickets(tx, reader, query));
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
     // M1-06: one read of `ticket_tags` for the whole page rather than one per
@@ -198,6 +198,7 @@ export class TicketsService {
               { id: last.ticket.id, sortValue: sortValueOf(last.ticket, query.sort) },
               query.sort,
               query.direction,
+              search,
             )
           : null,
     };

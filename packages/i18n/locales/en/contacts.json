@@ -139,6 +139,15 @@
     "bannerUndo": "Undo · until {{time}}",
     "undone": "Merge undone. {{name}} is a separate contact again."
   },
+  "mergeWith": {
+    "title": "Merge {{name}} with…",
+    "subtitle": "Pick the other contact. You choose which one survives on the next step.",
+    "searchLabel": "Find a contact",
+    "results": "Contacts",
+    "hint": "Search by name, email, phone or customer id. This contact and anonymised contacts are not listed.",
+    "none": "No other contact matches that search.",
+    "continue": "Continue"
+  },
   "details": {
     "title": "Details",
     "account": "Account",
@@ -185,7 +194,10 @@
     "removeIdentitySubmit": "Remove"
   },
   "actions": {
-    "anonymise": "Anonymise"
+    "anonymise": "Anonymise",
+    "more": "More actions",
+    "menu": "Contact actions",
+    "mergeWith": "Merge with…"
   },
   "toast": {
     "created": "{{name}} added.",

@@ -15,6 +15,7 @@ import {
   ticketActivity,
   ticketMessages,
   ticketParticipants,
+  ticketSearchTokens,
   tickets,
   userBrandRoles,
   users,
@@ -134,7 +135,7 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
     }) as Env;
 
   const call = <T>(
-    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     who: Person,
     payload?: unknown,
@@ -234,6 +235,15 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
 
       return row?.id ?? '';
     });
+
+  /** A ticket's search words and the department each row is filed under (ADR 0011). */
+  const tokensOf = (ticketId: string) =>
+    withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ token: ticketSearchTokens.token, departmentId: ticketSearchTokens.departmentId })
+        .from(ticketSearchTokens)
+        .where(eq(ticketSearchTokens.ticketId, ticketId)),
+    );
 
   const outboxFor = (ticketId: string) =>
     withSystem(runtime.db, seeded.brandId, (tx) =>
@@ -597,6 +607,62 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
     });
   });
 
+  describe('search words (M1-15 part 2, ADR 0011)', () => {
+    it('leaves each side of a merge searchable by its own words, filed where it now lives', async () => {
+      const secondary = await createTicket(ada, {
+        departmentId: support,
+        subject: 'Brisling tin dented',
+        bodyHtml: '<p>The lid was bent</p>',
+      });
+      const primary = await createTicket(ada, {
+        departmentId: billing,
+        subject: 'Anchovy crate short',
+        bodyHtml: '<p>Two missing</p>',
+      });
+      const primaryWords = (await tokensOf(primary.ticket.id)).map((row) => row.token).sort();
+
+      expect((await merge(ada, secondary.ticket.id, primary.ticket.id)).status).toBe(200);
+
+      // The merge moved the secondary to the primary's department, and its words
+      // went with it, so the words are readable exactly where the ticket is.
+      const moved = await tokensOf(secondary.ticket.id);
+      expect(moved.map((row) => row.token)).toEqual(
+        expect.arrayContaining(['brisl', 'tin', 'dent', 'lid', 'bent']),
+      );
+      expect(new Set(moved.map((row) => row.departmentId))).toEqual(new Set([billing]));
+      // The announcement is a later message of the primary, not its first, so
+      // what the primary is found by does not change.
+      expect((await tokensOf(primary.ticket.id)).map((row) => row.token).sort()).toEqual(
+        primaryWords,
+      );
+    });
+
+    it('gives a split ticket the words of its own subject and its copied first message', async () => {
+      const original = await createTicket(sam, {
+        departmentId: support,
+        subject: 'Sprocket order late',
+        bodyHtml: '<p>Ordered in March</p>',
+      });
+      const second = await reply(sam, original.ticket.id, 'Separately, the gasket leaks');
+
+      const created = await call<TicketDetail>(
+        'POST',
+        `${ticketPath(original.ticket.id)}/split`,
+        sam,
+        { messageIds: [second.id], subject: 'Gasket leak', departmentId: support },
+      );
+      expect(created.status).toBe(201);
+
+      const words = (await tokensOf(created.body.ticket.id)).map((row) => row.token);
+      expect(words).toEqual(expect.arrayContaining(['gasket', 'leak', 'separ']));
+      expect(words).not.toContain('sprocket');
+      // The original keeps its own words: the split copied, it did not move.
+      expect((await tokensOf(original.ticket.id)).map((row) => row.token)).toEqual(
+        expect.arrayContaining(['sprocket', 'march']),
+      );
+    });
+  });
+
   // --------------------------------------------------------------- unmerge
 
   describe('unmerge', () => {
@@ -661,6 +727,85 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
     });
   });
 
+  // --------------------------------------------------------- linked tickets
+
+  describe('linked tickets (M1-15 part 2)', () => {
+    const split = (who: Person, ticketId: string, departmentId: string) =>
+      read(who, ticketId).then(({ body }) =>
+        call<TicketDetail>('POST', `${ticketPath(ticketId)}/split`, who, {
+          messageIds: [body.messages.messages[0]?.id],
+          subject: 'Split for the linked tickets',
+          departmentId,
+        }),
+      );
+
+    it('names both ends of a merge by reference, subject and status', async () => {
+      const secondary = await createTicket(ada, { departmentId: support, subject: 'Where is it' });
+      const primary = await createTicket(ada, { departmentId: support, subject: 'Refund status' });
+      await merge(ada, secondary.ticket.id, primary.ticket.id);
+
+      const onPrimary = await read(sam, primary.ticket.id);
+      const onSecondary = await read(sam, secondary.ticket.id);
+
+      expect(onPrimary.body.related).toEqual([
+        expect.objectContaining({
+          visible: true,
+          relation: 'mergedFrom',
+          id: secondary.ticket.id,
+          number: secondary.ticket.number,
+          subject: 'Where is it',
+          status: expect.objectContaining({ systemState: 'closed' }),
+        }),
+      ]);
+      expect(onSecondary.body.related).toEqual([
+        expect.objectContaining({
+          visible: true,
+          relation: 'mergedInto',
+          id: primary.ticket.id,
+          subject: 'Refund status',
+        }),
+      ]);
+    });
+
+    it('shows a link the ticket names, but cannot be opened, as a relation and nothing else', async () => {
+      const original = await createTicket(ada, {
+        departmentId: support,
+        subject: 'Secret subject',
+      });
+      const created = await split(ada, original.ticket.id, billing);
+      expect(created.status).toBe(201);
+
+      const asBo = await read(bo, created.body.ticket.id);
+      const asSam = await read(sam, original.ticket.id);
+
+      // Exactly the relation: no id, reference, subject or status (§1.2).
+      expect(asBo.body.related).toEqual([{ visible: false, relation: 'splitFrom' }]);
+      expect(JSON.stringify(asBo.body.related)).not.toContain('Secret subject');
+      // A ticket split into a department Sam cannot see is not found at all.
+      expect(asSam.body.related).toEqual([]);
+      expect((await read(ada, original.ticket.id)).body.related).toEqual([
+        expect.objectContaining({ visible: true, relation: 'splitTo', id: created.body.ticket.id }),
+      ]);
+    });
+
+    it('hides a deleted primary the same way, and refuses to unmerge into it', async () => {
+      const secondary = await createTicket(ada, { departmentId: support });
+      const primary = await createTicket(ada, { departmentId: support });
+      await merge(ada, secondary.ticket.id, primary.ticket.id);
+      expect((await call('DELETE', ticketPath(primary.ticket.id), ada)).status).toBe(204);
+
+      const detail = await read(ada, secondary.ticket.id);
+      const undone = await unmerge(ada, secondary.ticket.id);
+
+      expect(detail.body.related).toEqual([{ visible: false, relation: 'mergedInto' }]);
+      expect(undone.status).toBe(409);
+      expect(undone.body.error.lifecycle?.reason).toBe('merge-primary-deleted');
+      expect((await read(ada, secondary.ticket.id)).body.ticket.mergedIntoId).toBe(
+        primary.ticket.id,
+      );
+    });
+  });
+
   // ----------------------------------------------------------------- split
 
   describe('split', () => {
@@ -691,7 +836,9 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
       expect(copy?.createdAt).toBe(second.createdAt);
       expect(copy?.attachments.map((row) => row.originalName)).toEqual(['invoice-9120.pdf']);
       expect(splitFrom?.kind).toBe('system');
-      expect(created.body.related?.map((link) => link.id)).toEqual([original.ticket.id]);
+      expect(created.body.related).toEqual([
+        expect.objectContaining({ visible: true, relation: 'splitFrom', id: original.ticket.id }),
+      ]);
 
       const [stored] = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx
@@ -723,7 +870,9 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
       expect(after.body.messages.messages.at(-1)?.bodyText).toBe(
         `Messages split to ${ticket.prefix}-${ticket.number}`,
       );
-      expect(after.body.related?.map((link) => link.id)).toEqual([ticket.id]);
+      expect(after.body.related).toEqual([
+        expect.objectContaining({ visible: true, relation: 'splitTo', id: ticket.id }),
+      ]);
 
       expect(await activityFor(original.ticket.id, 'ticket.split')).toHaveLength(1);
       expect((await outboxFor(ticket.id)).map((entry) => entry.event)).toContain('ticket.created');

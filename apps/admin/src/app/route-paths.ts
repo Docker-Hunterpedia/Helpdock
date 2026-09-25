@@ -98,6 +98,14 @@ export function csatTokenFromPath(pathname: string): string | null {
   return token === '' ? null : decodeURIComponent(token);
 }
 
+/**
+ * The rating page over a sample (M1-15 part 2), in the language asked for.
+ * `preview` is `CSAT_PREVIEW_TOKEN`, spelled out here so this file stays free
+ * of imports; `route-paths.test.ts` holds the two together.
+ */
+export const csatPreviewRoute = (locale: string): string =>
+  `${ROUTES.csat}preview?lang=${encodeURIComponent(locale)}`;
+
 /** One tab of the Ticketing settings, by its url segment. */
 export const ticketingRoute = (tab: string): string => `${ROUTES.ticketing}/${tab}`;
 

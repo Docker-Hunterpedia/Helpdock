@@ -62,6 +62,15 @@ test.describe('the rating page', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('names who closed the ticket by first name', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await openLink(page, MOCK_CSAT_TOKENS.open, locale);
+
+    await expect(
+      page.getByText(t('csat:closedBy', { name: MOCK_CSAT_TICKET.closedBy }), { exact: false }),
+    ).toBeVisible();
+  });
+
   test('asks for a rating before sending', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await openLink(page, MOCK_CSAT_TOKENS.open, locale);
@@ -100,5 +109,29 @@ test.describe('the rating page', () => {
     await openLink(page, MOCK_CSAT_TOKENS.open, locale);
 
     await expect(page.getByRole('navigation')).toHaveCount(0);
+  });
+});
+
+test.describe('the preview (M1-15 part 2)', () => {
+  test('draws a sample, says it is one, and thanks for a rating', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openLink(page, 'preview', locale);
+
+    // The page's loading line is a status too, until the sample arrives.
+    await expect(
+      page.getByRole('status').filter({ hasText: t('csat:preview.notice') }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(t('csat:closedBy', { name: t('csat:preview.agent') }), { exact: false }),
+    ).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: new RegExp(t('csat:ratings.5')) }).click();
+    await page.getByRole('button', { name: t('csat:submit') }).click();
+
+    await expect(page.getByText(t('csat:thanks'))).toBeVisible();
   });
 });

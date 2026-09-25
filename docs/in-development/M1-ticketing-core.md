@@ -16,7 +16,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-02 | Tickets | #46 | done (#63) |
 | M1-03 | Messages | #47 | done (#63) |
 | M1-04 | Contacts and accounts | #48 | done (#64) |
-| M1-05 | Views | #49 | planned |
+| M1-05 | Views | #49 | done in branch, awaiting PR — see [M1-05 notes](#m1-05-notes) |
 | M1-06 | Tags, custom fields (text, number, date, select | #50 | in review (#72) |
 | M1-07 | Assignment | #51 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-08 | Ticket state machine | #52 | done (#69) |
@@ -26,7 +26,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-13 | Contact identity rules | #57 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-14 | Data retention settings per brand and nightly | #58 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
-| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#70) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name: integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
+| M1-15 | Admin UI for all of the above; ticket list index set | #59 | done in branch, awaiting PR — part 1 in review (#70): the M1-02/03/04 surfaces (list, thread, composer, details, creation, realtime); M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24). Part 2 admin UI gaps (merge with any contact, linked tickets, Arabic overflow, CSAT preview and closer) and part 2 search through a token table (ADR 0011) integrated with M1-05 on `claude/hopeful-hawking-onzqjf` (2026-09-25) |
 
 ## M1-09 notes
 
@@ -95,6 +95,39 @@ Copied from the PRD, ticked as they are met.
 - Should a Team Leader read only their own departments' rows of the staff list and contact timeline? (raised in M0-06; DOMAIN-RULES §1.2 does not narrow it)
 - ~~`on_unassign` semantics on scope change~~ — answered by M1-07: after any role or department change, deactivation or removal, the tickets the person can no longer work are unassigned and each follows its department's `on_unassign`; a widened scope moves nothing. See the M1-07 notes.
 
+## M1-05 notes
+
+Saved views, in migration `0022_views` (new tenant table `views`, in the RLS negative suite, with a
+second, restrictive policy `views_owner_only` from `OWNER_SCOPED_TABLES` in `packages/db/src/rls.ts`).
+Guides: [tickets › Views](../guides/tickets.md#views), [ticketing settings › Views](../guides/ticketing-settings.md#views).
+
+- **One schema.** A view's `filters` is `ticketListQuerySchema` less `cursor` and `limit`
+  (`packages/schemas/src/views.ts`). The list gained two predicates for it, both server-side:
+  `assigneeId=me` (the reader) and `overdue=true` (not closed, clock not paused, breached or past a due
+  time). The client-side `isOverdue` is gone.
+- **Never widens access.** A view resolves to list parameters; its count is the list's own `WHERE` in the
+  reader's transaction. A personal view is invisible to anybody else at the database (404, not 403).
+- **Built-ins are rows** seeded by `seedBrandViews` (`packages/db/src/views.ts`) on brand creation,
+  install, the dev seed and department creation — idempotent; a brand that predates M1-05 gets its
+  defaults on the first views read, in that request's transaction; the department ones cascade on delete and follow a rename unless the
+  brand renamed the view. Renamable, reorderable, hideable; `view-is-built-in` (409) otherwise.
+- **Counts** are one statement per request (a capped scalar subquery per view, `LIMIT 1000`), gated in
+  `apps/api/src/testing/perf` as `list · view counts (sidebar)`. `0022` adds
+  `tickets_brand_status_updated_idx (brand_id, status_id, updated_at, id)` for the views narrowed by state
+  across departments.
+- **Admin UI**: the sidebar's Views group with "Mine", the ⋯ menu, Save as a view, Rename, Share with…,
+  the "Filters changed · Reset · Save as new · Save" bar with removable chips (`Admin/View-Dialogs`
+  panels 1–4), and the Ticketing › Views tab (`Admin/Ticketing-Views`). `?view=<id>` plus the whole filter
+  set with `custom=1` keeps the URL the state. The sidebar's nav now scrolls, since a brand's views can
+  push the Admin group below the fold.
+
+Decisions a reviewer should confirm:
+1. Personal views are **not audited**; shared ones are (`view.created/updated/deleted`).
+2. Only shared views can be hidden; a personal one is deleted instead.
+3. A Team Leader restricted to some departments cannot share with the whole brand.
+4. Rename and Share with… are drawn as small dialogs built from `ConfirmDialog`: panel 2 names the actions
+   but draws no dialog for them.
+
 ## M1-07 notes
 
 Assignment, in migration `0015_assignment` (departments gain `assignment_mode`, `load_cap`, `auto_unassign_offline`, `auto_unassign_after_minutes`, `on_unassign`; new tenant tables `assignment_agents` and `assignment_skills`, both in the RLS negative suite). Guide: [ticketing settings › Assignment](../guides/ticketing-settings.md#assignment).
@@ -131,6 +164,41 @@ Decisions a reviewer should confirm:
   [tickets guide, Performance](../guides/tickets.md#performance). **Passed on 2026-09-25**: an idle run
   pinned to 2 cores put the slowest gated list scenario at p95 53 ms (0 errors). An earlier run on the same
   machine while it was shared with six other jobs measured the queue, not the api (p95 0.8–2.1 s).
+
+## Notes: M1-15 part 2, the admin UI gaps
+
+No migration. Guides: [tickets](../guides/tickets.md#linked-tickets), [contacts](../guides/contacts.md#identity-rules-and-merging-m1-13).
+
+- **Merge with any contact**: the contact header's Anonymise button moved into a ⋯ menu (`ui/actions-menu.tsx`, shared with the ticket header) holding **Merge with…** (not for Viewers) and **Anonymise** (Admin only). The picker (`merge-with-dialog.tsx`, `Admin · view dialogs` panel 5) reads `GET /contacts?mergeable=true` (new: leaves out anonymised contacts) and hands the pair to M1-13's Merge contacts dialog. Contact search now also matches the customer id (`external_id`), which the picker's hint promises.
+- **Linked tickets**: the read's `related` (M1-09's, reused) is now `RelatedTicket[]`, each with a `relation` (`parent`, `mergedInto`, `mergedFrom`, `splitFrom`, `splitTo`) and the linked ticket's status. `merge/related.ts` builds it from one query under the caller's RLS. A link the ticket names but the reader cannot open is `{ visible: false, relation }` and carries nothing else (§1.2). One that only names this ticket is not found. The details panel draws it per panel 6.
+- **Arabic horizontal overflow**: a visually-hidden span in the composer was sized `width: 1`, which MUI reads as `100%`, so it was as wide as the viewport. The admin now has a single copy with string sizes (`ui/visually-hidden.ts`), shared by the composer, the setup layout (which had the same bug), the retention card and the feedback tab. `e2e/linked-tickets.spec.ts` asserts `scrollWidth <= clientWidth` at 1440 and 1280 in both locales, and fails without the fix.
+- **Split system line "by name"**: intended, not a bug. A system row's `author_id` is whoever acted (staff, api key, job), and the thread names only a staff id found in the directory. Covered by `merge-split.test.tsx`.
+- **Unmerge with a deleted primary**: was a 404 naming the secondary as missing. Now **409 `merge-primary-deleted`**, and the merge stays: a deleted ticket is not acted on (§2.2), and no leak is possible because a secondary always follows its primary's department.
+- **CSAT**: the Feedback tab's **Preview** opens `/csat/preview` over a fixed sample with no token and no request. The rating page's **closed by <first name>** is sent (`ticket.closedBy`) only when the closer is an active staff member who wrote a public reply on the ticket. The page then names only somebody the customer has already heard from, which is how we read §4.6's "nothing beyond their purpose". Reviewer: confirm that reading. "Browse the help center" stays out until M5.
+- **Screenshot baselines**: `contact-detail` (⋯ menu replaces the Anonymise button) and possibly `ticket-view` (no more overflow) change. They need re-rendering by the screenshots workflow.
+
+## Notes: M1-15 part 2, ticket search through a token table
+
+- **Migration** `0023_ticket_search_tokens`: `ticket_search_tokens (ticket_id, brand_id, department_id, token)`,
+  brand- and department-scoped with `FORCE`d policies, filled by `helpdock_ticket_child_department` and moved by
+  `helpdock_ticket_department_moved` (replaced, keeping every child table `0019` moved). Written only by triggers
+  (`helpdock_ticket_search_refresh`) on a ticket's insert, a subject edit, and its first message (`seq = 1`), in
+  the same transaction. Backfilled in the migration with `FORCE` lifted around it, as `0016`/`0017` do. Cascades on
+  ticket delete. Also `tickets_brand_contact_idx` for the contact-name half of the search.
+- **Query**: `q` → lexemes (`helpdock_search_lexemes`, the `english` configuration `tickets.search` uses) →
+  all-of match on `ticket_search_tokens_brand_token_idx`. The fuzzy fallback runs only when the exact half returns
+  less than a page and the term has ≥ 3 characters; it also reads the token table (a prefix range of the same
+  index, then `<%`), so a zero-match search never reads every ticket. The cursor carries the fallback. `-word`
+  still excludes; M1-09's reference and contact-name matches are kept.
+- **Proved** by an integration test that `EXPLAIN`s both halves as the runtime role under RLS and finds the token
+  lookup in `Index Cond`, and by the benchmark's plans (tickets guide, Search under row-level security).
+- **Benchmark**: the zero-match search is now in the gated mix with its own budget, `PERF_NO_MATCH_P95_MS`
+  (150 ms). Full §14 run on 2026-09-25, pinned to two cores on an idle machine, after integrating with M1-05
+  (views counts in the same mix): zero-match p95 56 ms (was 284 ms alone), slowest list scenario 115 ms
+  (`renewa`, which runs both halves), 0 errors.
+  [Tickets guide](../guides/tickets.md#what-it-measured-last-2026-09-25).
+- **Trade-offs**: a typo in the first three letters is not caught by the fallback; quotes are not a phrase
+  operator; later replies are not searched (the first message is new: before, only the subject was).
 
 ## M1-14 notes
 
@@ -175,7 +243,7 @@ guide](../guides/data-retention.md) is the reference.
 - **The rating page is hosted in the admin bundle** at `/csat/<token>`, outside the admin app, because `apps/helpcenter` is a one-line stub and its SSR host is M5's: [ADR 0010](../decisions/0010-csat-page-in-the-admin-bundle.md).
 - **Delivery is M8-06**; until then the details panel shows the survey's state and a Copy survey link button.
 - **The header ⋯ menu** is one items array (`ticket-actions-menu.tsx`, M1-09's `TicketAction`): Merge, Split, Log time, then Mark as spam behind a divider.
-- **Artboard gaps**: the Satisfaction card in the details panel has no artboard (built after the SLA card); the Feedback tab's "Preview" link and the rating page's "Browse the help center" link and "closed by <agent>" are not built (no survey to preview, no help center yet, and DOMAIN-RULES §4.6 keeps the agent's name off the link).
+- **Artboard gaps**: the Satisfaction card in the details panel has no artboard (built after the SLA card); the rating page's "Browse the help center" link is not built (no help center yet). The Feedback tab's "Preview" and "closed by <agent>" came with M1-15 part 2.
 
 ## Integration (2026-09-24)
 
@@ -238,4 +306,4 @@ Contact identity rules, manual merge with a 24-hour undo, and ticket participant
 - **Anonymised contacts** (M1-14) cannot be merged (`anonymised`), and a merged contact cannot be anonymised (`merged`).
 - **Participants:** `ticket_participants` holds the CCs (department-scoped, follows department moves); the contact and staff are derived. `GET/POST/DELETE /tickets/:id/participants`. `TicketParticipantsService.addCcParticipant(context, ticketId, contactId)` is the seam M1-09's ticket merge calls to add the secondary's contact as a CC; `ParticipantsModule` exports the service.
 - **Migration** `0019_contact_identity_and_participants`: `contact_duplicate_reason` enum, `contacts.merged_into_id`/`merged_at`, `contact_merges`, `ticket_participants`, RLS for both new tables, and `helpdock_ticket_department_moved` replaced to include `ticket_participants`.
-- **Artboard gaps:** a "merge with any contact" picker from the contact ⋯ menu is not drawn, so merging starts from a suggestion only (the api accepts any contact). The merge dialog lists identifiers without the drawn checkboxes, because every identifier is kept.
+- **Artboard gaps:** the "merge with any contact" picker came with M1-15 part 2. The merge dialog lists identifiers without the drawn checkboxes, because every identifier is kept.

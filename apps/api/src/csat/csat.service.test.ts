@@ -4,7 +4,7 @@ import { HttpException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import type { RateLimiter } from '../auth/rate-limit.js';
 import type { CsatRepository } from './csat.repository.js';
-import { CsatService } from './csat.service.js';
+import { CsatService, firstNameOf } from './csat.service.js';
 import { CsatTokens, hashCsatToken } from './tokens.js';
 
 /**
@@ -135,5 +135,17 @@ describe('the public routes’ gates', () => {
     await expect(
       service({}).submit(signedUnder(OLDER), '203.0.113.9', { rating: 5 }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('firstNameOf', () => {
+  it('keeps the part of a name before the first space', () => {
+    expect(firstNameOf('Lina Haddad')).toBe('Lina');
+    expect(firstNameOf('  لينا   حداد ')).toBe('لينا');
+  });
+
+  it('uses a single-word name whole, and gives up on a blank one', () => {
+    expect(firstNameOf('Cher')).toBe('Cher');
+    expect(firstNameOf('   ')).toBeNull();
   });
 });

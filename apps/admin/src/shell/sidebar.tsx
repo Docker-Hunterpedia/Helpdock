@@ -104,7 +104,13 @@ export function Sidebar({
     >
       <BrandSwitcher />
 
-      <Box component="nav" aria-label={t('admin:nav.label')} sx={{ flex: 1, minHeight: 0 }}>
+      {/* Scrolls on its own: a brand's views (M1-05) can make the groups taller
+          than the window, and the Admin group must stay reachable under them. */}
+      <Box
+        component="nav"
+        aria-label={t('admin:nav.label')}
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+      >
         <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {PRIMARY_NAV.map((item) => (
             <Box component="li" key={item.key}>

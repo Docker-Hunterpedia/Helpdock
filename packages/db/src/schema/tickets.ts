@@ -206,6 +206,16 @@ export const tickets = pgTable(
       table.updatedAt,
       table.id,
     ),
+    // M1-05: a view that narrows by state across departments — Escalated, and
+    // Overdue's live states — and its sidebar count. Without it both read every
+    // ticket of the brand to find the few in one status; with it, one status
+    // is a range scan, and a single status is already in keyset order.
+    index('tickets_brand_status_updated_idx').on(
+      table.brandId,
+      table.statusId,
+      table.updatedAt,
+      table.id,
+    ),
     // The nightly retention pass's read (M1-14, DOMAIN-RULES §11): "closed more
     // than N days ago", oldest first, in bounded batches. Partial, because an
     // open ticket is never a candidate and most of a busy brand's rows are open.
@@ -220,6 +230,10 @@ export const tickets = pgTable(
     index('tickets_split_from_idx')
       .on(table.splitFromId)
       .where(sql`${table.splitFromId} is not null`),
+    // M1-15 part 2: "the tickets of these contacts", which is how the list's
+    // search finds a ticket by its contact's name without reading every
+    // ticket, and what the contact screen's counts read.
+    index('tickets_brand_contact_idx').on(table.brandId, table.contactId),
     index('tickets_search_idx').using('gin', table.search),
   ],
 );

@@ -62,9 +62,15 @@ describe('the tab row', () => {
   });
 
   it('names the deliverable a tab is waiting for', async () => {
+    await renderTicketing('/admin/ticketing/priorities');
+
+    expect(await screen.findByText('Priorities arrives with M1-02.')).toBeInTheDocument();
+  });
+
+  it('draws the Views tab rather than a placeholder, since M1-05 filled it', async () => {
     await renderTicketing('/admin/ticketing/views');
 
-    expect(await screen.findByText('Views arrives with M1-05.')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Add view' })).toBeInTheDocument();
   });
 
   it('draws the Statuses tab rather than a placeholder, since M1-08 filled it', async () => {

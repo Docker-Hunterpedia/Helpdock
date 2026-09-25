@@ -11,6 +11,7 @@ import * as tenant from './tenant.js';
 import * as ticketNumbers from './ticket-numbers.js';
 import * as ticketStatuses from './ticket-statuses.js';
 import * as uuid from './uuid.js';
+import * as views from './views.js';
 
 const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'client.ts': client,
@@ -22,6 +23,7 @@ const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'ticket-numbers.ts': ticketNumbers,
   'ticket-statuses.ts': ticketStatuses,
   'uuid.ts': uuid,
+  'views.ts': views,
 };
 
 const sourceFilesIn = (directory: URL): string[] =>
@@ -77,6 +79,7 @@ describe('@helpdock/db', () => {
       'ticket-activity.ts',
       'ticket-messages.ts',
       'ticket-participants.ts',
+      'ticket-search-tokens.ts',
       'ticket-statuses.ts',
       'ticket-templates.ts',
       'ticket-time-entries.ts',
@@ -84,6 +87,7 @@ describe('@helpdock/db', () => {
       'tsvector.ts',
       'user-brand-roles.ts',
       'users.ts',
+      'views.ts',
     ]);
   });
 });

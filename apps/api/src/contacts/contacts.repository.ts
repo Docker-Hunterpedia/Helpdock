@@ -54,6 +54,8 @@ export interface ContactFilters {
   readonly search?: string | undefined;
   readonly accountId?: string | undefined;
   readonly duplicatesOnly?: boolean | undefined;
+  /** Leave out anonymised contacts, which a merge refuses. */
+  readonly mergeableOnly?: boolean | undefined;
   readonly cursor?: string | undefined;
   readonly limit: number;
 }
@@ -110,6 +112,7 @@ export class ContactsRepository {
         ? undefined
         : or(
             ilike(contacts.name, pattern),
+            ilike(contacts.externalId, pattern),
             sql`EXISTS (
               SELECT 1 FROM ${contactIdentities} i
               WHERE i.contact_id = ${contacts.id} AND i.value ILIKE ${pattern} ESCAPE '\\'
@@ -128,9 +131,17 @@ export class ContactsRepository {
           )`
         : undefined;
 
+    const mergeable = filters.mergeableOnly === true ? isNull(contacts.anonymisedAt) : undefined;
+
     // A contact merged into another (M1-13) is not somebody to list: its
     // identifiers and tickets are on the survivor now.
-    return and(isNull(contacts.mergedIntoId), matchesSearch, matchesAccount, hasDuplicate);
+    return and(
+      isNull(contacts.mergedIntoId),
+      matchesSearch,
+      matchesAccount,
+      hasDuplicate,
+      mergeable,
+    );
   }
 
   async find(tx: DbTransaction, contactId: string): Promise<ContactRow | undefined> {

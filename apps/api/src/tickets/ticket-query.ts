@@ -1,4 +1,4 @@
-import { ticketStatuses, tickets } from '@helpdock/db';
+import { ticketStatuses, tickets, ticketTags } from '@helpdock/db';
 import type { TicketListQuery, TicketSort, TicketSortDirection } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
@@ -42,6 +42,30 @@ const assigneeFilter = (values: readonly (string | 'unassigned')[]): SQL | undef
   }
 
   return clauses.length === 0 ? undefined : or(...clauses);
+};
+
+/**
+ * Tags, with **all-of** semantics (M1-06): the ticket has to carry every tag
+ * named. Two chips in a filter are how somebody narrows a queue, and "any"
+ * would widen it — the reading that is wrong in the direction that shows rows
+ * the reader asked to exclude.
+ *
+ * `GROUP BY … HAVING count(DISTINCT tag_id) = n` rather than one `EXISTS` per
+ * tag: it is one index scan of `ticket_tags_brand_tag_idx` however many tags
+ * are named, and the `DISTINCT` makes it immune to a caller repeating one.
+ *
+ * The subquery reads `ticket_tags`, which is department-scoped like `tickets`,
+ * so it narrows what the reader may already see and can never widen it.
+ */
+const tagFilter = (tagIds: readonly string[]): SQL => {
+  const wanted = [...new Set(tagIds)];
+
+  return sql`${tickets.id} IN (
+    SELECT ${ticketTags.ticketId} FROM ${ticketTags}
+    WHERE ${inArray(ticketTags.tagId, wanted)}
+    GROUP BY ${ticketTags.ticketId}
+    HAVING count(DISTINCT ${ticketTags.tagId}) = ${wanted.length}
+  )`;
 };
 
 /**
@@ -116,6 +140,12 @@ export const ticketFilters = ({
   }
   if (filters.assigneeId !== undefined && filters.assigneeId.length > 0) {
     clauses.push(assigneeFilter(filters.assigneeId));
+  }
+  // One filter, two spellings: `tagId=a&tagId=b` and `tagIds=a&tagIds=b` are
+  // the same question, so naming both is naming their union.
+  const tagIds = [...(filters.tagId ?? []), ...(filters.tagIds ?? [])];
+  if (tagIds.length > 0) {
+    clauses.push(tagFilter(tagIds));
   }
   if (filters.q !== undefined) {
     clauses.push(searchFilter(filters.q));

@@ -70,11 +70,18 @@ describe('ticketListQuerySchema', () => {
 describe('ticketCreateRequestSchema', () => {
   const valid = { subject: 'Refund request', bodyHtml: '<p>hi</p>', departmentId: UUID };
 
-  it('defaults a manual ticket to medium priority on the manual channel', () => {
-    expect(ticketCreateRequestSchema.parse(valid)).toMatchObject({
-      priority: 'medium',
-      channel: 'manual',
-    });
+  it('defaults a manual ticket to the manual channel', () => {
+    expect(ticketCreateRequestSchema.parse(valid)).toMatchObject({ channel: 'manual' });
+  });
+
+  /**
+   * M1-06 took the schema default off `priority`, because a template supplies
+   * one and a default here would overwrite it with `medium` on every request
+   * that did not name a priority. The api applies the same fallback once the
+   * template has had its say.
+   */
+  it('leaves an unnamed priority for the api to settle with the template', () => {
+    expect(ticketCreateRequestSchema.parse(valid).priority).toBeUndefined();
   });
 
   it('trims the subject, so a field of spaces is not a subject', () => {

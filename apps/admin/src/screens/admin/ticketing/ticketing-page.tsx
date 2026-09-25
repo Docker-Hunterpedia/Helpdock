@@ -6,16 +6,20 @@ import { ticketingRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
+import { CustomFieldsTab } from './custom-fields-tab.tsx';
 import { DepartmentsTab } from './departments-tab.tsx';
 import { NotBuiltYetTab } from './not-built-yet-tab.tsx';
 import { StatusesTab } from './statuses-tab.tsx';
 import { DEFAULT_TICKETING_TAB, TICKETING_TABS, type TicketingTab, tabForSegment } from './tabs.js';
+import { TagsTab } from './tags-tab.tsx';
+import { TemplatesTab } from './templates-tab.tsx';
 
 /**
  * `Admin/Ticketing`: the page header, the tab row, and whichever tab the url
- * names. Two tabs are built — Departments (M1-01) and Statuses (M1-08); the
- * rest are the routed placeholders their M1 deliverables replace, which is why
- * the row is whole from the start.
+ * names. Four of the eight are built — Departments (M1-01), Statuses (M1-08),
+ * and Tags, Custom fields and Templates (M1-06); the rest are the routed
+ * placeholders their deliverables replace, which is why the row is whole from
+ * the start.
  *
  * The tabs are links rather than state, so a tab is a url somebody can send to
  * a colleague, the browser's back button works, and a reload lands where it
@@ -74,6 +78,12 @@ function TabBody({ tab }: { readonly tab: TicketingTab }): ReactNode {
       return <DepartmentsTab />;
     case 'statuses':
       return <StatusesTab />;
+    case 'tags':
+      return <TagsTab />;
+    case 'customFields':
+      return <CustomFieldsTab />;
+    case 'templates':
+      return <TemplatesTab />;
     default:
       return <NotBuiltYetTab tab={tab} />;
   }

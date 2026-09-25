@@ -19,6 +19,8 @@ export const REFUSAL_COPY = {
   'department-in-use': 'ticketing:toast.departmentInUse',
   'name-taken': 'ticketing:toast.nameTaken',
   'not-eligible': 'ticketing:toast.notEligible',
+  'field-in-use': 'ticketing:toast.fieldInUse',
+  'option-in-use': 'ticketing:toast.optionInUse',
   'status-is-system': 'ticketing:toast.statusIsSystem',
   'status-is-default': 'ticketing:toast.statusIsDefault',
   'status-state-fixed': 'ticketing:toast.statusStateFixed',

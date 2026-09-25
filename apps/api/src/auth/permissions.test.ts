@@ -24,11 +24,11 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
   admin: {
     'ticket:read': true,
     'ticket:write': true,
+    'ticketing:manage': true,
     'contact:read': true,
     'contact:write': true,
     'brand:read': true,
     'brand:manage': true,
-    'ticketing:manage': true,
     'staff:read': true,
     'staff:manage': true,
     'settings:read': true,
@@ -39,13 +39,14 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
   team_leader: {
     'ticket:read': true,
     'ticket:write': true,
+    // M1-08. DOMAIN-RULES §2.3 makes the reopen policy "editable by Team
+    // Leaders and Admins", and §1.2 lists it among what a Team Leader manages —
+    // as it does the tags, custom fields and templates of M1-06.
+    'ticketing:manage': true,
     'contact:read': true,
     'contact:write': true,
     'brand:read': true,
     'brand:manage': false,
-    // M1-08. DOMAIN-RULES §2.3 makes the reopen policy "editable by Team
-    // Leaders and Admins", and §1.2 lists it among what a Team Leader manages.
-    'ticketing:manage': true,
     'staff:read': true,
     'staff:manage': true,
     'settings:read': true,
@@ -56,11 +57,11 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
   agent: {
     'ticket:read': true,
     'ticket:write': true,
+    'ticketing:manage': false,
     'contact:read': true,
     'contact:write': true,
     'brand:read': true,
     'brand:manage': false,
-    'ticketing:manage': false,
     'staff:read': true,
     'staff:manage': false,
     'settings:read': false,
@@ -71,11 +72,11 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
   viewer: {
     'ticket:read': true,
     'ticket:write': false,
+    'ticketing:manage': false,
     'contact:read': true,
     'contact:write': false,
     'brand:read': true,
     'brand:manage': false,
-    'ticketing:manage': false,
     'staff:read': true,
     'staff:manage': false,
     'settings:read': false,

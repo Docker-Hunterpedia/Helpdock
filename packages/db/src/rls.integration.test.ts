@@ -17,15 +17,19 @@ import {
   contactIdentities,
   contactNotes,
   contacts,
+  customFieldDefs,
   departments,
   outbox,
   settings,
+  tags,
   teamMembers,
   teams,
   ticketActivity,
   ticketMessages,
   ticketStatuses,
   tickets,
+  ticketTags,
+  ticketTemplates,
   userBrandRoles,
   users,
 } from './schema/index.js';
@@ -79,6 +83,7 @@ const departmentId = perBrand();
 const teamId = perBrand();
 const statusId = perBrand();
 const ticketId = perBrand();
+const tagId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -218,6 +223,34 @@ const fixtures = [
       }),
   },
   {
+    name: 'tags',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(tags).values({ id: tagId[brandId], brandId, name: 'Refund', color: 'info' }),
+  },
+  {
+    name: 'custom_field_defs',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(customFieldDefs).values({
+        brandId,
+        target: 'ticket',
+        // The same key in both brands, which is the point: a definition is
+        // unique inside a brand and says nothing about the brand next door.
+        key: 'tier',
+        label: 'Plan tier',
+        type: 'text',
+      }),
+  },
+  {
+    name: 'ticket_templates',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketTemplates).values({
+        brandId,
+        name: 'Refund request',
+        subject: 'Refund for {{contact.name}}',
+        bodyText: 'We have started your refund.',
+      }),
+  },
+  {
     name: 'tickets',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(tickets).values({
@@ -287,6 +320,19 @@ const fixtures = [
         mime: 'image/png',
         size: 12,
         kind: 'image',
+      }),
+  },
+  {
+    name: 'ticket_tags',
+    // The fourth child of a ticket, refused by the same trigger and for the
+    // same reason: it finds no parent, so there is no department to copy.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketTags).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        tagId: tagId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
       }),
   },
 ] as const;

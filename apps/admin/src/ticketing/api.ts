@@ -2,12 +2,23 @@ import type {
   Brand,
   BrandSettings,
   BrandUpdateRequest,
+  CustomFieldCreateRequest,
+  CustomFieldDef,
+  CustomFieldDefList,
+  CustomFieldTarget,
+  CustomFieldUpdateRequest,
+  CustomFieldUsage,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  TagCreateRequest,
+  TagList,
+  TagSummary,
+  TagUpdateRequest,
+  TagUsage,
   TeamList,
   TicketingRefusal,
   TicketStatus,
@@ -15,6 +26,11 @@ import type {
   TicketStatusList,
   TicketStatusUpdateRequest,
   TicketStatusUsage,
+  TicketTemplate,
+  TicketTemplateCreateRequest,
+  TicketTemplateList,
+  TicketTemplatePreview,
+  TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
 
 /**
@@ -90,6 +106,45 @@ export interface TicketingApi {
     brandId: string,
     request: ReplyBehaviourUpdateRequest,
   ): Promise<BrandSettings>;
+  // ---------------------------------------------------------------- M1-06
+
+  tags(brandId: string): Promise<TagList>;
+  createTag(brandId: string, request: TagCreateRequest): Promise<TagSummary>;
+  updateTag(brandId: string, tagId: string, request: TagUpdateRequest): Promise<TagSummary>;
+  /** The whole list in its new order; the server refuses a partial one. */
+  reorderTags(brandId: string, tagIds: string[]): Promise<TagList>;
+  /** Read before the confirmation, so the dialog can say what the delete costs. */
+  tagUsage(brandId: string, tagId: string): Promise<TagUsage>;
+  deleteTag(brandId: string, tagId: string): Promise<void>;
+
+  customFields(brandId: string, target?: CustomFieldTarget): Promise<CustomFieldDefList>;
+  createCustomField(brandId: string, request: CustomFieldCreateRequest): Promise<CustomFieldDef>;
+  updateCustomField(
+    brandId: string,
+    fieldId: string,
+    request: CustomFieldUpdateRequest,
+  ): Promise<CustomFieldDef>;
+  reorderCustomFields(
+    brandId: string,
+    target: CustomFieldTarget,
+    fieldIds: string[],
+  ): Promise<CustomFieldDefList>;
+  customFieldUsage(brandId: string, fieldId: string): Promise<CustomFieldUsage>;
+  deleteCustomField(brandId: string, fieldId: string): Promise<void>;
+
+  ticketTemplates(brandId: string): Promise<TicketTemplateList>;
+  createTicketTemplate(
+    brandId: string,
+    request: TicketTemplateCreateRequest,
+  ): Promise<TicketTemplate>;
+  updateTicketTemplate(
+    brandId: string,
+    templateId: string,
+    request: TicketTemplateUpdateRequest,
+  ): Promise<TicketTemplate>;
+  deleteTicketTemplate(brandId: string, templateId: string): Promise<void>;
+  /** The template with its placeholders filled, rendered by the api. */
+  previewTicketTemplate(brandId: string, templateId: string): Promise<TicketTemplatePreview>;
 }
 
 /**

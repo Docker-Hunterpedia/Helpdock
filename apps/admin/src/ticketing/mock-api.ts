@@ -2,6 +2,12 @@ import type {
   Brand,
   BrandSettings,
   BrandUpdateRequest,
+  CustomFieldCreateRequest,
+  CustomFieldDef,
+  CustomFieldDefList,
+  CustomFieldTarget,
+  CustomFieldUpdateRequest,
+  CustomFieldUsage,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
@@ -9,6 +15,11 @@ import type {
   EligibleMember,
   EligibleMemberList,
   ReplyBehaviourUpdateRequest,
+  TagCreateRequest,
+  TagList,
+  TagSummary,
+  TagUpdateRequest,
+  TagUsage,
   Team,
   TeamList,
   TicketStatus,
@@ -16,8 +27,13 @@ import type {
   TicketStatusList,
   TicketStatusUpdateRequest,
   TicketStatusUsage,
+  TicketTemplate,
+  TicketTemplateCreateRequest,
+  TicketTemplateList,
+  TicketTemplatePreview,
+  TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
-import { defaultBrandSettings } from '@helpdock/schemas';
+import { defaultBrandSettings, isChoiceField } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type TicketingApi, TicketingError } from './api.js';
@@ -187,6 +203,163 @@ const seedStatuses = (): TicketStatus[] => [
 /** Which fields a seeded row refuses, mirroring `status-rules.ts`. */
 const FIXED_ON_SYSTEM_ROWS = ['systemState', 'pausesSla', 'awaitingCustomer'] as const;
 
+/**
+ * Three tags, three field definitions across the three targets, and two
+ * templates. Enough for a list with something in it, an Arabic label on every
+ * row so the `ar` run has copy to draw, and one of each shape the editors have
+ * to handle: a choice field with options, a required field, and a template that
+ * names a department.
+ */
+const seedTags = (): TagSummary[] => [
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000101',
+    name: 'Refund',
+    nameAr: 'استرداد',
+    color: 'info',
+    sortOrder: 0,
+    ticketCount: 12,
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000102',
+    name: 'VIP',
+    nameAr: 'كبار العملاء',
+    color: 'escalated',
+    sortOrder: 1,
+    ticketCount: 3,
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000103',
+    name: 'Bug',
+    nameAr: 'خلل',
+    color: 'warning',
+    sortOrder: 2,
+    ticketCount: 0,
+  },
+];
+
+const seedFields = (): CustomFieldDef[] => [
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000201',
+    target: 'ticket',
+    key: 'tier',
+    label: 'Plan tier',
+    labelAr: 'فئة الاشتراك',
+    type: 'select',
+    options: ['gold', 'silver', 'bronze'],
+    required: true,
+    agentVisible: true,
+    sortOrder: 0,
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000202',
+    target: 'ticket',
+    key: 'renews_on',
+    label: 'Renews on',
+    labelAr: 'يتجدد في',
+    type: 'date',
+    options: [],
+    required: false,
+    agentVisible: true,
+    sortOrder: 1,
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000203',
+    target: 'contact',
+    key: 'seats',
+    label: 'Seats',
+    labelAr: 'المقاعد',
+    type: 'number',
+    options: [],
+    required: false,
+    agentVisible: false,
+    sortOrder: 0,
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000204',
+    target: 'account',
+    key: 'strategic',
+    label: 'Strategic account',
+    labelAr: 'حساب استراتيجي',
+    type: 'checkbox',
+    options: [],
+    required: false,
+    agentVisible: true,
+    sortOrder: 0,
+  },
+];
+
+/**
+ * What the fixture claims is already stored against a definition. Only the
+ * seeded `tier` field has any, so the two refusals that need populated rows —
+ * a type change and an option removal — can be reached, while anything a test
+ * creates is free to be edited.
+ */
+const SEEDED_FIELD_USAGE: Readonly<
+  Record<string, { rows: number; optionRows: Record<string, number> }>
+> = {
+  tier: { rows: 7, optionRows: { gold: 4, silver: 3 } },
+};
+
+const seedTemplates = (): TicketTemplate[] => [
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000301',
+    name: 'Refund request',
+    departmentId: MOCK_DEPARTMENTS[1]?.id ?? null,
+    priority: 'high',
+    subject: 'Refund for {{contact.name}}',
+    bodyText: 'Hello {{contact.first_name}},\n\nWe have started your refund.\n\n{{brand.name}}',
+    defaultTagIds: ['0192c3f0-1a2b-7c3d-8e4f-000000000101'],
+    customDefaults: { tier: 'gold' },
+    usageCount: 24,
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000302',
+    name: 'Password reset',
+    departmentId: null,
+    priority: 'medium',
+    subject: 'Password reset',
+    bodyText: 'Hello {{contact.first_name}},\n\nHere is how to reset your password.',
+    defaultTagIds: [],
+    customDefaults: {},
+    usageCount: 5,
+  },
+];
+
+/** The brand the fixture speaks for, for the placeholders the preview fills. */
+const MOCK_PLACEHOLDER_VALUES: ReadonlyMap<string, string> = new Map([
+  ['brand.name', 'Helpdock'],
+  ['contact.name', 'Mona Khalil'],
+  ['contact.first_name', 'Mona'],
+  ['contact.last_name', 'Khalil'],
+  ['contact.email', 'mona@example.com'],
+]);
+
+const MOCK_PLACEHOLDER = /\{\{\s*([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)\s*\}\}/gi;
+
+/**
+ * The api's renderer, in miniature: a name it knows is replaced, one it does
+ * not is left spelled out and reported. It is a `Map` here for the same reason
+ * it is one there — an object would answer `constructor`.
+ */
+const renderMock = (text: string): { text: string; unknown: string[] } => {
+  const unknown = new Set<string>();
+  const rendered = text.replace(MOCK_PLACEHOLDER, (match, name: string) => {
+    const value = MOCK_PLACEHOLDER_VALUES.get(name.toLowerCase());
+    if (value === undefined) {
+      unknown.add(name.toLowerCase());
+      return match;
+    }
+
+    return value;
+  });
+
+  return { text: rendered, unknown: [...unknown] };
+};
+
+/** Sort order first, then name, as every list in this module is ordered. */
+const byOrder = (a: TagSummary, b: TagSummary): number =>
+  a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+
 let nextId = 1;
 
 const newId = (kind: string): string => {
@@ -200,6 +373,9 @@ export class MockTicketingApi implements TicketingApi {
   #teams: Team[] = [];
   #brand = seedBrand();
   #statuses = seedStatuses();
+  #tags = seedTags();
+  #fields = seedFields();
+  #templates = seedTemplates();
   /**
    * How many tickets sit in each status, so the delete confirmation has a
    * number to print. The real count comes from a `COUNT(*)` the api runs.
@@ -541,6 +717,260 @@ export class MockTicketingApi implements TicketingApi {
     return this.#brand.settings;
   }
 
+  // ---------------------------------------------------------------- M1-06
+
+  async tags(_brandId: string): Promise<TagList> {
+    return { tags: [...this.#tags].sort(byOrder) };
+  }
+
+  async createTag(_brandId: string, request: TagCreateRequest): Promise<TagSummary> {
+    this.#assertTagNameFree(request.name);
+
+    const created: TagSummary = {
+      id: newId('11'),
+      name: request.name,
+      nameAr: request.nameAr ?? null,
+      color: request.color,
+      sortOrder: this.#tags.length,
+      ticketCount: 0,
+    };
+    this.#tags.push(created);
+
+    return created;
+  }
+
+  async updateTag(_brandId: string, tagId: string, request: TagUpdateRequest): Promise<TagSummary> {
+    const tag = this.#requireTag(tagId);
+    if (request.name !== undefined && request.name.toLowerCase() !== tag.name.toLowerCase()) {
+      this.#assertTagNameFree(request.name, tagId);
+    }
+
+    const updated: TagSummary = {
+      ...tag,
+      ...(request.name === undefined ? {} : { name: request.name }),
+      ...(request.nameAr === undefined ? {} : { nameAr: request.nameAr }),
+      ...(request.color === undefined ? {} : { color: request.color }),
+    };
+    this.#tags = this.#tags.map((row) => (row.id === tagId ? updated : row));
+
+    return updated;
+  }
+
+  async reorderTags(brandId: string, tagIds: string[]): Promise<TagList> {
+    // The api refuses anything but a permutation of the whole list rather than
+    // half-reordering a stale client's view; so does this.
+    const unique = new Set(tagIds);
+    if (
+      unique.size !== tagIds.length ||
+      unique.size !== this.#tags.length ||
+      this.#tags.some((row) => !unique.has(row.id))
+    ) {
+      throw new AuthError('unavailable');
+    }
+
+    this.#tags = this.#tags.map((row) => ({ ...row, sortOrder: tagIds.indexOf(row.id) }));
+
+    return this.tags(brandId);
+  }
+
+  async tagUsage(_brandId: string, tagId: string): Promise<TagUsage> {
+    return { tagId, ticketCount: this.#requireTag(tagId).ticketCount };
+  }
+
+  async deleteTag(_brandId: string, tagId: string): Promise<void> {
+    this.#requireTag(tagId);
+    this.#tags = this.#tags.filter((row) => row.id !== tagId);
+    // A template's defaults lose a tag the brand no longer has, exactly as the
+    // api filters them on the way out.
+    this.#templates = this.#templates.map((template) => ({
+      ...template,
+      defaultTagIds: template.defaultTagIds.filter((id) => id !== tagId),
+    }));
+  }
+
+  async customFields(_brandId: string, target?: CustomFieldTarget): Promise<CustomFieldDefList> {
+    const fields = [...this.#fields]
+      .filter((field) => target === undefined || field.target === target)
+      .sort((a, b) => a.target.localeCompare(b.target) || a.sortOrder - b.sortOrder);
+
+    return { fields };
+  }
+
+  async createCustomField(
+    _brandId: string,
+    request: CustomFieldCreateRequest,
+  ): Promise<CustomFieldDef> {
+    if (
+      this.#fields.some((field) => field.target === request.target && field.key === request.key)
+    ) {
+      throw new TicketingError('name-taken');
+    }
+
+    const created: CustomFieldDef = {
+      id: newId('22'),
+      target: request.target,
+      key: request.key,
+      label: request.label,
+      labelAr: request.labelAr ?? null,
+      type: request.type,
+      options: [...request.options],
+      required: request.required,
+      agentVisible: request.agentVisible,
+      sortOrder: this.#fields.filter((field) => field.target === request.target).length,
+    };
+    this.#fields.push(created);
+
+    return created;
+  }
+
+  async updateCustomField(
+    _brandId: string,
+    fieldId: string,
+    request: CustomFieldUpdateRequest,
+  ): Promise<CustomFieldDef> {
+    const field = this.#requireField(fieldId);
+    const used = this.#fieldUsage(field);
+
+    if (request.type !== undefined && request.type !== field.type && used.rows > 0) {
+      throw new TicketingError('field-in-use');
+    }
+
+    if (request.options !== undefined && isChoiceField(field.type)) {
+      const kept = new Set(request.options);
+      const inUse = field.options.filter(
+        (option) => !kept.has(option) && (used.optionRows[option] ?? 0) > 0,
+      );
+      if (inUse.length > 0 && !request.force) {
+        throw new TicketingError('option-in-use');
+      }
+    }
+
+    const updated: CustomFieldDef = {
+      ...field,
+      ...(request.label === undefined ? {} : { label: request.label }),
+      ...(request.labelAr === undefined ? {} : { labelAr: request.labelAr }),
+      ...(request.type === undefined ? {} : { type: request.type }),
+      ...(request.options === undefined ? {} : { options: [...request.options] }),
+      ...(request.required === undefined ? {} : { required: request.required }),
+      ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
+    };
+    this.#fields = this.#fields.map((row) => (row.id === fieldId ? updated : row));
+
+    return updated;
+  }
+
+  async reorderCustomFields(
+    brandId: string,
+    target: CustomFieldTarget,
+    fieldIds: string[],
+  ): Promise<CustomFieldDefList> {
+    const ofTarget = this.#fields.filter((field) => field.target === target);
+    const unique = new Set(fieldIds);
+    if (
+      unique.size !== fieldIds.length ||
+      unique.size !== ofTarget.length ||
+      ofTarget.some((field) => !unique.has(field.id))
+    ) {
+      throw new AuthError('unavailable');
+    }
+
+    this.#fields = this.#fields.map((field) =>
+      field.target === target ? { ...field, sortOrder: fieldIds.indexOf(field.id) } : field,
+    );
+
+    return this.customFields(brandId);
+  }
+
+  async customFieldUsage(_brandId: string, fieldId: string): Promise<CustomFieldUsage> {
+    const field = this.#requireField(fieldId);
+    const usage = this.#fieldUsage(field);
+
+    return { fieldId, rows: usage.rows, optionRows: usage.optionRows };
+  }
+
+  async deleteCustomField(_brandId: string, fieldId: string): Promise<void> {
+    this.#requireField(fieldId);
+    this.#fields = this.#fields.filter((row) => row.id !== fieldId);
+  }
+
+  async ticketTemplates(_brandId: string): Promise<TicketTemplateList> {
+    return { templates: [...this.#templates].sort((a, b) => a.name.localeCompare(b.name)) };
+  }
+
+  async createTicketTemplate(
+    _brandId: string,
+    request: TicketTemplateCreateRequest,
+  ): Promise<TicketTemplate> {
+    this.#assertTemplateNameFree(request.name);
+
+    const created: TicketTemplate = {
+      id: newId('33'),
+      name: request.name,
+      departmentId: request.departmentId ?? null,
+      priority: request.priority,
+      subject: request.subject,
+      bodyText: request.bodyText,
+      defaultTagIds: [...request.defaultTagIds],
+      customDefaults: { ...request.customDefaults },
+      usageCount: 0,
+    };
+    this.#templates.push(created);
+
+    return created;
+  }
+
+  async updateTicketTemplate(
+    _brandId: string,
+    templateId: string,
+    request: TicketTemplateUpdateRequest,
+  ): Promise<TicketTemplate> {
+    const template = this.#requireTemplate(templateId);
+    if (request.name !== undefined && request.name.toLowerCase() !== template.name.toLowerCase()) {
+      this.#assertTemplateNameFree(request.name, templateId);
+    }
+
+    const updated: TicketTemplate = {
+      ...template,
+      ...(request.name === undefined ? {} : { name: request.name }),
+      ...(request.departmentId === undefined ? {} : { departmentId: request.departmentId }),
+      ...(request.priority === undefined ? {} : { priority: request.priority }),
+      ...(request.subject === undefined ? {} : { subject: request.subject }),
+      ...(request.bodyText === undefined ? {} : { bodyText: request.bodyText }),
+      ...(request.defaultTagIds === undefined ? {} : { defaultTagIds: [...request.defaultTagIds] }),
+      ...(request.customDefaults === undefined
+        ? {}
+        : { customDefaults: { ...request.customDefaults } }),
+    };
+    this.#templates = this.#templates.map((row) => (row.id === templateId ? updated : row));
+
+    return updated;
+  }
+
+  async deleteTicketTemplate(_brandId: string, templateId: string): Promise<void> {
+    this.#requireTemplate(templateId);
+    this.#templates = this.#templates.filter((row) => row.id !== templateId);
+  }
+
+  /**
+   * The same rule the api's renderer follows: a name it knows is replaced, one
+   * it does not is left spelled out and reported, so the editor's preview
+   * behaves here as it does against a real install.
+   */
+  async previewTicketTemplate(
+    _brandId: string,
+    templateId: string,
+  ): Promise<TicketTemplatePreview> {
+    const template = this.#requireTemplate(templateId);
+    const subject = renderMock(template.subject);
+    const body = renderMock(template.bodyText);
+
+    return {
+      subject: subject.text,
+      bodyText: body.text,
+      unknownPlaceholders: [...new Set([...subject.unknown, ...body.unknown])],
+    };
+  }
+
   // ------------------------------------------------------------------
 
   #sortedStatuses(): TicketStatus[] {
@@ -631,6 +1061,60 @@ export class MockTicketingApi implements TicketingApi {
   #assertNameFree(name: string, exceptId?: string): void {
     if (
       this.#departments.some(
+        (row) => row.name.toLowerCase() === name.toLowerCase() && row.id !== exceptId,
+      )
+    ) {
+      throw new TicketingError('name-taken');
+    }
+  }
+
+  #requireTag(tagId: string): TagSummary {
+    const tag = this.#tags.find((row) => row.id === tagId);
+    if (tag === undefined) {
+      throw new AuthError('unavailable');
+    }
+
+    return tag;
+  }
+
+  #assertTagNameFree(name: string, exceptId?: string): void {
+    if (
+      this.#tags.some((row) => row.name.toLowerCase() === name.toLowerCase() && row.id !== exceptId)
+    ) {
+      throw new TicketingError('name-taken');
+    }
+  }
+
+  #requireField(fieldId: string): CustomFieldDef {
+    const field = this.#fields.find((row) => row.id === fieldId);
+    if (field === undefined) {
+      throw new AuthError('unavailable');
+    }
+
+    return field;
+  }
+
+  /**
+   * Stable, made-up usage, so the two refusals only a populated install
+   * produces have a shape here too: the seeded `tier` field is on rows and its
+   * `gold` option is in use, and anything a test creates is on none.
+   */
+  #fieldUsage(field: CustomFieldDef): { rows: number; optionRows: Record<string, number> } {
+    return SEEDED_FIELD_USAGE[field.key] ?? { rows: 0, optionRows: {} };
+  }
+
+  #requireTemplate(templateId: string): TicketTemplate {
+    const template = this.#templates.find((row) => row.id === templateId);
+    if (template === undefined) {
+      throw new AuthError('unavailable');
+    }
+
+    return template;
+  }
+
+  #assertTemplateNameFree(name: string, exceptId?: string): void {
+    if (
+      this.#templates.some(
         (row) => row.name.toLowerCase() === name.toLowerCase() && row.id !== exceptId,
       )
     ) {

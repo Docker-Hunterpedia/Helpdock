@@ -3,6 +3,7 @@ import type {
   DbTransaction,
   Ticket as TicketRow,
   TicketStatus as TicketStatusRow,
+  TicketTemplate as TicketTemplateRow,
 } from '@helpdock/db';
 import type {
   MessageCreateRequest,
@@ -16,6 +17,7 @@ import type {
   TicketListQuery,
   TicketMessage,
   TicketMessagePage,
+  TicketPriority,
   TicketStatusList,
   TicketUpdateRequest,
 } from '@helpdock/schemas';
@@ -24,7 +26,6 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -32,21 +33,27 @@ import type { Principal } from '../auth/principal.js';
 import { getTx } from '../context/request-context.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
-import { MediaRepository } from '../media/media.repository.js';
+import type { MediaRepository } from '../media/media.repository.js';
 import { uploaderFor } from '../media/uploader.js';
+// M1-06 lives in `ticketing/`; these five are what a ticket needs of it.
+import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
+import type { TagsService } from '../ticketing/tags.service.js';
+import { paragraphsFrom } from '../ticketing/template-render.js';
+import type { TemplatesService } from '../ticketing/templates.service.js';
+import { replaceTicketTags, tagsOfTicket, tagsOfTickets } from '../ticketing/ticket-tags.js';
 import { InvalidCursorError } from './cursor.js';
-import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
+import type { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import {
   escalateIntoUnseenDepartment,
   type LifecycleContext,
-  TicketLifecycleService,
+  type TicketLifecycleService,
 } from './lifecycle/lifecycle.service.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
 import { cursorAfter, sortValueOf } from './ticket-query.js';
 import { toTicket, toTicketActivity, toTicketMessage, toTicketStatus } from './ticket-view.js';
-import { TicketRepository } from './tickets.repository.js';
+import type { TicketRepository } from './tickets.repository.js';
 
 /**
  * M1-02 and M1-03: the ticket, its thread and its activity log.
@@ -74,23 +81,40 @@ import { TicketRepository } from './tickets.repository.js';
 /** How many activity rows a ticket read returns. The thread pages; this does not yet. */
 const ACTIVITY_PAGE = 100;
 
+/** What a creation writes, once the request and its template have both spoken. */
+interface FilledTicket {
+  readonly subject: string;
+  readonly bodyHtml: string;
+  readonly priority: TicketPriority;
+  /** `undefined` when the request and the template both said nothing. */
+  readonly custom: Record<string, unknown> | undefined;
+  readonly tagIds: readonly string[];
+}
+
 @Injectable()
 export class TicketsService {
   readonly #tickets: TicketRepository;
   readonly #lifecycle: TicketLifecycleService;
   readonly #lifecycleReads: TicketLifecycleRepository;
   readonly #attachments: MediaRepository;
+  /** M1-06: applies a template on creation, and answers "is this a real tag?". */
+  readonly #templates: TemplatesService;
+  readonly #tags: TagsService;
 
   constructor(
-    @Inject(TicketRepository) tickets: TicketRepository,
-    @Inject(TicketLifecycleService) lifecycle: TicketLifecycleService,
-    @Inject(TicketLifecycleRepository) lifecycleReads: TicketLifecycleRepository,
-    @Inject(MediaRepository) attachments: MediaRepository,
+    tickets: TicketRepository,
+    lifecycle: TicketLifecycleService,
+    lifecycleReads: TicketLifecycleRepository,
+    attachments: MediaRepository,
+    templates: TemplatesService,
+    tags: TagsService,
   ) {
     this.#tickets = tickets;
     this.#lifecycle = lifecycle;
     this.#lifecycleReads = lifecycleReads;
     this.#attachments = attachments;
+    this.#templates = templates;
+    this.#tags = tags;
   }
 
   // -------------------------------------------------------------------- reads
@@ -102,19 +126,21 @@ export class TicketsService {
   }
 
   async list(query: TicketListQuery): Promise<TicketList> {
-    if (query.tagId !== undefined && query.tagId.length > 0) {
-      // The parameter is declared so that M1-15's list does not have to change
-      // shape when M1-06 lands, but a filter that is accepted and not applied
-      // would quietly show rows the reader asked to exclude.
-      throw new BadRequestException('Filtering by tag arrives with deliverable M1-06');
-    }
-
-    const rows = await this.#read(() => this.#tickets.listTickets(getTx(), query));
+    const tx = getTx();
+    const rows = await this.#read(() => this.#tickets.listTickets(tx, query));
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
+    // M1-06: one read of `ticket_tags` for the whole page rather than one per
+    // row, which is how a list of fifty becomes fifty-one round trips.
+    const tags = await tagsOfTickets(
+      tx,
+      page.map(({ ticket }) => ticket.id),
+    );
 
     return {
-      tickets: page.map(({ ticket, status }) => toTicket(ticket, status)),
+      tickets: page.map(({ ticket, status }) =>
+        toTicket(ticket, status, tags.get(ticket.id) ?? []),
+      ),
       nextCursor:
         rows.length > query.limit && last !== undefined
           ? cursorAfter(
@@ -131,7 +157,7 @@ export class TicketsService {
     const found = await this.#require(tx, ticketId);
 
     return {
-      ticket: toTicket(found.ticket, found.status),
+      ticket: toTicket(found.ticket, found.status, await tagsOfTicket(tx, ticketId)),
       // `#messagePage` rather than `messages`, which would re-run the ticket
       // read this method has already done.
       messages: await this.#messagePage(tx, ticketId, {
@@ -175,26 +201,55 @@ export class TicketsService {
     const tx = getTx();
     const actor = activityActorFor(principal);
 
-    await this.#requireDepartment(tx, input.departmentId);
+    // ---- M1-06 -------------------------------------------------------------
+    // A template fills what the request left out, and the request wins wherever
+    // both speak. The row is read before the checks below because the
+    // department they are about to check may be the template's.
+    const template =
+      input.templateId === undefined ? undefined : await this.#templates.row(tx, input.templateId);
+    const departmentId = input.departmentId ?? template?.departmentId ?? undefined;
+    if (departmentId === undefined) {
+      throw new BadRequestException('That template names no department, so the request has to');
+    }
+    // ------------------------------------------------------------------------
+
+    await this.#requireDepartment(tx, departmentId);
     await this.#requireTeam(input.teamId);
     await this.#requireAssignee(tx, input.assigneeId);
     const status = await this.#requireDefaultStatus(tx);
     const prefix = await this.#requirePrefix(tx, brandId);
+    const number = await this.#tickets.nextNumber(tx, brandId);
 
-    const body = this.#body(input.bodyHtml);
+    // M1-06: what the request left out, filled by the template and validated
+    // against the brand's own definitions.
+    const filled = await this.#fill(tx, brandId, input, template, `${prefix}-${String(number)}`);
+
+    const body = this.#body(filled.bodyHtml);
     const ticket = await this.#tickets.insertTicket(tx, {
       brandId,
-      departmentId: input.departmentId,
-      number: await this.#tickets.nextNumber(tx, brandId),
+      departmentId,
+      number,
       prefix,
-      subject: input.subject,
+      subject: filled.subject,
       statusId: status.id,
-      priority: input.priority,
+      priority: filled.priority,
       channel: input.channel,
       ...(input.teamId === undefined ? {} : { teamId: input.teamId }),
       ...(input.assigneeId === undefined ? {} : { assigneeId: input.assigneeId }),
       ...(input.contactId === undefined ? {} : { contactId: input.contactId }),
+      ...(filled.custom === undefined ? {} : { custom: filled.custom }),
     });
+
+    // M1-06. After the insert, because the trigger that denormalises the
+    // department reads the parent ticket.
+    if (filled.tagIds.length > 0) {
+      await replaceTicketTags(tx, {
+        brandId,
+        ticketId: ticket.id,
+        departmentId: ticket.departmentId,
+        tagIds: filled.tagIds,
+      });
+    }
 
     const message = await this.#tickets.insertMessage(tx, {
       brandId,
@@ -216,7 +271,15 @@ export class TicketsService {
       departmentId: ticket.departmentId,
       actor,
       action: 'ticket.created',
-      to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
+      to: {
+        subject: ticket.subject,
+        statusId: status.id,
+        priority: ticket.priority,
+        // M1-06. Absent rather than empty when there is nothing to say, so the
+        // thread does not render "tags: none" on every ticket ever filed.
+        ...(filled.tagIds.length === 0 ? {} : { tagIds: filled.tagIds }),
+        ...(input.templateId === undefined ? {} : { templateId: input.templateId }),
+      },
     });
 
     await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.created, {
@@ -225,7 +288,7 @@ export class TicketsService {
     });
 
     return {
-      ticket: toTicket(ticket, status),
+      ticket: toTicket(ticket, status, await tagsOfTicket(tx, ticket.id)),
       messages: { messages: [toTicketMessage(message)], nextAfter: null },
       activity: await this.#activityOf(tx, ticket.id),
     };
@@ -254,6 +317,19 @@ export class TicketsService {
 
     const { values, from, to } = plainChanges(ticket, input);
 
+    // ---- M1-06 -------------------------------------------------------------
+    // A patch over the stored object, validated against the brand's ticket
+    // definitions. `partial`, so a request that names two fields says nothing
+    // about the other eight.
+    if (input.custom !== undefined) {
+      const patch = await parseCustomValues(tx, 'ticket', input.custom, { partial: true });
+      const merged = mergeCustomValues(ticket.custom, patch ?? {});
+      values.custom = merged;
+      from.custom = ticket.custom;
+      to.custom = merged;
+    }
+    // ------------------------------------------------------------------------
+
     // `null` for a move the actor's own scope already covers, and the target
     // for an escalation — which is allowed, and is why this is not a refusal.
     const escalation =
@@ -275,7 +351,7 @@ export class TicketsService {
     }
 
     if (Object.keys(values).length === 0) {
-      return toTicket(ticket, status);
+      return toTicket(ticket, status, await tagsOfTicket(tx, ticketId));
     }
 
     /**
@@ -346,7 +422,7 @@ export class TicketsService {
         : { previousDepartmentId: ticket.departmentId }),
     });
 
-    return toTicket(updated, nextStatus);
+    return toTicket(updated, nextStatus, await tagsOfTicket(tx, ticketId));
   }
 
   /**
@@ -576,6 +652,79 @@ export class TicketsService {
     const rows = await this.#tickets.activityOf(tx, ticketId, ACTIVITY_PAGE);
 
     return rows.reverse().map(toTicketActivity);
+  }
+
+  /**
+   * What the ticket is actually written with (M1-06): the request's own values,
+   * with a template's underneath wherever the request said nothing.
+   *
+   * Applying the template is what renders its placeholders and counts the use,
+   * so it happens here — after the number exists, because `{{ticket.number}}`
+   * is one of them — and inside the request's transaction, so a creation that
+   * rolls back takes the count with it.
+   */
+  async #fill(
+    tx: DbTransaction,
+    brandId: string,
+    input: TicketCreateRequest,
+    template: TicketTemplateRow | undefined,
+    number: string,
+  ): Promise<FilledTicket> {
+    const applied =
+      template === undefined
+        ? undefined
+        : await this.#templates.apply(tx, template, {
+            brandId,
+            ...(input.contactId === undefined ? {} : { contactId: input.contactId }),
+            number,
+          });
+
+    const subject = input.subject ?? applied?.subject;
+    const bodyHtml =
+      input.bodyHtml ?? (applied === undefined ? undefined : paragraphsFrom(applied.bodyText));
+    /* c8 ignore next 3 -- the request schema refuses a body that has neither. */
+    if (subject === undefined || bodyHtml === undefined) {
+      throw new BadRequestException('A ticket needs a subject and a first message');
+    }
+
+    return {
+      subject,
+      bodyHtml,
+      priority: input.priority ?? applied?.priority ?? 'medium',
+      custom: await parseCustomValues(
+        tx,
+        'ticket',
+        input.custom === undefined && applied === undefined
+          ? undefined
+          : mergeCustomValues(applied?.customDefaults ?? {}, input.custom ?? {}),
+        { partial: false },
+      ),
+      tagIds: await this.#startingTags(tx, applied?.defaultTagIds ?? [], input.tagIds ?? []),
+    };
+  }
+
+  /**
+   * The tags a new ticket starts with: the template's, then the request's.
+   *
+   * An id the *request* names that is not this brand's is refused, because it
+   * is a mistake the caller can fix. One the *template* names has already been
+   * filtered by `TemplatesService.apply`, so a tag deleted from the brand
+   * quietly stops being a default rather than blocking every ticket filed from
+   * that template.
+   */
+  async #startingTags(
+    tx: DbTransaction,
+    fromTemplate: readonly string[],
+    requested: readonly string[],
+  ): Promise<readonly string[]> {
+    const unknown = await this.#tags.unknownIds(tx, requested);
+    if (unknown.length > 0) {
+      // A tag of another brand is invisible to this transaction, so "no such
+      // tag" is the honest answer to both "no such id" and "not yours".
+      throw new NotFoundException('No such tag in this brand');
+    }
+
+    return [...new Set([...fromTemplate, ...requested])];
   }
 
   async #require(tx: DbTransaction, ticketId: string) {

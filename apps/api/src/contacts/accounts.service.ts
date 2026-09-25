@@ -9,6 +9,7 @@ import type {
 } from '@helpdock/schemas';
 import { CONTACT_PAGE_SIZE } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
+import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
 import { accountView, byContact, summaryView } from './contact-view.js';
@@ -107,11 +108,22 @@ export class AccountsService {
     const { tx, brandId, actor } = context;
     const existing = await this.#require(tx, accountId);
 
+    // M1-06, exactly as on a contact and against the brand's *account*
+    // definitions.
+    const custom =
+      request.custom === undefined
+        ? undefined
+        : mergeCustomValues(
+            existing.custom,
+            (await parseCustomValues(tx, 'account', request.custom, { partial: true })) ?? {},
+          );
+
     const changes = {
       ...(request.name === undefined ? {} : { name: request.name }),
       ...(request.domain === undefined
         ? {}
         : { domain: await this.#freeDomain(tx, request.domain ?? null, existing.id) }),
+      ...(custom === undefined ? {} : { custom }),
     };
 
     const updated = await this.#repository.updateAccount(tx, accountId, changes);

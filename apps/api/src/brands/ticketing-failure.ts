@@ -6,10 +6,11 @@ import { HttpException, HttpStatus } from '@nestjs/common';
  *
  * The same shape as `staff/staff-failure.ts`, and for the same reason: the
  * status says "forbidden" or "conflict", which is true but is not a sentence.
- * The Ticketing screen has nine things to say — you do not lead that
+ * The Ticketing screen has eleven things to say — you do not lead that
  * department, a brand keeps one department, tickets still point at it, that
- * name is taken, that person cannot reach this department, and the four M1-08
- * adds about a status row — and it picks between them on this code.
+ * name is taken, that person cannot reach this department, rows already carry
+ * values of that field, rows still carry that option, and the four M1-08 adds
+ * about a status row — and it picks between them on this code.
  *
  * The messages below are for the log and for `curl`. Nothing a person reads is
  * built from them.
@@ -28,6 +29,8 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'status-is-default': HttpStatus.CONFLICT,
   'status-state-fixed': HttpStatus.CONFLICT,
   'default-must-be-open': HttpStatus.CONFLICT,
+  'field-in-use': HttpStatus.CONFLICT,
+  'option-in-use': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -41,6 +44,8 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
   'status-state-fixed': "A seeded status's system state and flags are what code refers to it by",
   'default-must-be-open':
     'The default status is where a new or reopened ticket lands, so it has to be open',
+  'field-in-use': 'Rows already carry values for this field, so its type cannot change',
+  'option-in-use': 'Rows still carry that option; send force to clear them with it',
 };
 
 export class TicketingFailure extends HttpException {

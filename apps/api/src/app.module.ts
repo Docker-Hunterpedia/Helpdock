@@ -38,6 +38,7 @@ import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js'
 import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
+import { TicketingModule } from './ticketing/ticketing.module.js';
 import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 
@@ -92,6 +93,11 @@ export class AppModule implements NestModule {
     // the same object is one module to Nest, so the wizard signs its new admin
     // in with the very `SessionService` every later request uses.
     const auth = AuthModule.forRoot(options.auth);
+    // Built once and imported twice, by `AppModule` and by `TicketsModule`,
+    // for exactly the reason `auth` is: the same object is one module to Nest,
+    // so M1-06's controllers are registered once and `TicketsService` is handed
+    // the very services the settings screens write through.
+    const ticketing = TicketingModule.forRoot();
 
     return {
       module: AppModule,
@@ -112,7 +118,8 @@ export class AppModule implements NestModule {
           ticketStats: new DbTicketStatsProvider(),
           timeline: new DbContactTimelineProvider(),
         }),
-        TicketsModule.forRoot(),
+        ticketing,
+        TicketsModule.forRoot({ ticketing }),
         // M1-10. `forRoot` builds the S3 client from the bootstrap keys unless
         // a caller hands it a bucket double, which is what the suites do.
         MediaModule.forRoot({

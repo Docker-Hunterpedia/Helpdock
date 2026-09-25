@@ -13,6 +13,7 @@ import {
   openSecurity,
   openStaff,
   openTicketing,
+  openTicketingTab,
   signIn,
   submitPassword,
 } from './flows.js';
@@ -171,6 +172,79 @@ test.describe('accessibility', () => {
       })
       .click();
     await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the Tags tab has no violations, list, swatches and confirmation alike', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTicketingTab(page, locale, 'tags');
+    expect(await violations(page)).toEqual([]);
+
+    // The eight swatches are radios whose only visible content is a colour, so
+    // this is the check that each still has a name to be chosen by.
+    await page
+      .getByRole('button', { name: t('ticketing:tags.table.select', { name: 'Refund' }) })
+      .click();
+    await page.getByRole('radio').first().waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await page
+      .getByRole('button', { name: t('ticketing:tags.table.rowActions', { name: 'Refund' }) })
+      .click();
+    await page.getByRole('menu').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the Custom fields tab has no violations, option editor included', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTicketingTab(page, locale, 'custom-fields');
+    expect(await violations(page)).toEqual([]);
+
+    await page
+      .getByRole('button', {
+        name: t('ticketing:customFields.table.select', { name: 'Plan tier' }),
+      })
+      .click();
+    await page
+      .getByRole('textbox', {
+        name: t('ticketing:customFields.editor.optionLabel', { position: 1 }),
+      })
+      .waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the Templates tab has no violations, editor and preview alike', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTicketingTab(page, locale, 'templates');
+    expect(await violations(page)).toEqual([]);
+
+    await page
+      .getByRole('button', {
+        name: t('ticketing:templates.table.select', { name: 'Refund request' }),
+      })
+      .click();
+    await page
+      .getByRole('button', { name: t('ticketing:templates.editor.preview'), exact: true })
+      .click();
+    await page.getByText('Refund for Mona Khalil').waitFor();
 
     expect(await violations(page)).toEqual([]);
   });

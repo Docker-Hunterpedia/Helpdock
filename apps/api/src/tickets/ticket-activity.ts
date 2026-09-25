@@ -26,6 +26,7 @@ import type { Principal } from '../auth/principal.js';
  * `ticket.continued` on both tickets, because each is half of the answer to
  * "where did this conversation go?".
  */
+/** The verbs M1-02, M1-03, M1-06 and M1-08 write. M1-07 to M1-11 add their own beside them. */
 export type TicketActivityAction =
   | 'ticket.created'
   | 'ticket.updated'
@@ -36,7 +37,9 @@ export type TicketActivityAction =
   | 'ticket.reopened'
   | 'ticket.continued'
   | 'ticket.deleted'
-  | 'ticket.escalated';
+  | 'ticket.escalated'
+  /** M1-06. Its own verb rather than `ticket.updated`, because the thread draws chips. */
+  | 'ticket.tags.changed';
 
 /**
  * The actor behind a change, in the three words the activity log records.

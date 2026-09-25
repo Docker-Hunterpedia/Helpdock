@@ -437,9 +437,10 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/departments*` | `brand:read` to read the list and a department's teams, `brand:manage` to add, delete or reorder, `staff:manage` to edit one, its teams and its member picker | Departments, teams and team members. [The guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `GET /api/brands/:brandId/presence` | `@Requires('staff:read')` | Who is online in that brand. [The realtime guide](../../docs/guides/realtime.md#presence). |
 | `GET /api/brands/:brandId/ticket-statuses` | `@Requires('ticket:read')` | The brand's statuses. [The ticket guide](../../docs/guides/tickets.md#endpoints). |
-| `/api/brands/:brandId/tickets/*` | `ticket:read` / `ticket:write`, and `brand:manage` for the soft delete | Tickets, their threads and their activity. [The ticket guide](../../docs/guides/tickets.md#endpoints) lists them. |
+| `/api/brands/:brandId/tickets/*` | `ticket:read` / `ticket:write`, and `brand:manage` for the soft delete | Tickets, their threads, their activity and their tags. [The ticket guide](../../docs/guides/tickets.md#endpoints) lists them. |
 | `/api/brands/:brandId/ticket-statuses/*` | `@Requires('ticketing:manage')` | The Statuses tab: create, edit, reorder, delete, and the count a delete confirmation prints. [The guide](../../docs/guides/ticketing-settings.md#statuses). |
 | `PATCH /api/brands/:brandId/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of DOMAIN-RULES §2.3 a Team Leader may change. |
+| `/api/brands/:brandId/{tags,custom-fields,ticket-templates}*` | `ticket:read` or `ticket:write` to read, `ticketing:manage` to change | The brand's tags, custom field definitions and ticket templates. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
@@ -508,8 +509,34 @@ Four things are easy to get wrong here and are written down where they happen:
 - **Nothing emits to a socket from a request.** A ticket change reaches a socket
   through the outbox and the worker (§6), which is also why `TicketsModule` does
   not depend on `RealtimeModule`.
-- **The `tagId` filter answers 400 until M1-06.** A filter that is accepted and
-  not applied would quietly show rows the reader asked to exclude.
+- **The `tagId` filter has all-of semantics** (M1-06). Two chips narrow a queue;
+  "any" would widen it, which is the reading that is wrong in the direction that
+  shows rows the reader asked to exclude.
+
+## Tags, custom fields and templates
+
+`src/ticketing/` holds M1-06. What a brand configures and what the endpoints
+answer is [the settings guide](../../docs/guides/ticketing-settings.md); what
+follows is for somebody reading the code.
+
+| File | |
+|---|---|
+| `template-render.ts` | Fills `{{contact.first_name}}` from a **`Map` of fixed names**, never by walking a path into an object. A `Map` has no prototype, so `{{constructor.constructor}}` and `{{__proto__}}` resolve to nothing and are left spelled out. Also `paragraphsFrom`, which escapes a template's plain-text body before wrapping it, so the sanitiser is the second answer rather than the only one. |
+| `custom-values.ts` | The one way a `custom jsonb` value is written: reads the brand's definitions inside the request's transaction, builds the Zod schema from them (`@helpdock/schemas/custom-fields`) and turns a failure into a 400. Three callers — `POST /tickets`, `PATCH /tickets/:id`, and the contact and account patches. |
+| `ticket-tags.ts` | Reading and replacing a ticket's chips. Plain functions over the caller's transaction, as `tickets/ticket-activity.ts` is, so the ticket service uses them without depending on this module. `tagsOfTickets` reads a whole page in one query. |
+| `custom-fields.repository.ts` | The only jsonb work in the app: counting rows that carry a value or an option, and clearing an option from them under `force`. |
+| `audit.ts` | Definition changes go to `audit_log`; putting a tag on a ticket goes to `ticket_activity`, because that one is part of the ticket and is purged with it. |
+
+Three things are easy to get wrong here:
+
+- **A key never moves.** `customFieldUpdateRequestSchema` has no `key` field at
+  all, rather than a branch that refuses one: a request that cannot name it is a
+  request the api never has to say no to.
+- **A refusal is a code.** `field-in-use` and `option-in-use` join the five
+  `TicketingRefusal` values M1-01 introduced, so the screen picks the sentence.
+- **`TicketingModule.forRoot()` is built once**, by `AppModule`, and imported by
+  `TicketsModule` as a value — the same trick `AuthModule` uses. A second call
+  would be a second module to Nest and its controllers would register twice.
 
 M1-10 added one thing to the message path: `POST …/messages` accepts
 `attachmentIds`, and `TicketsService` calls `linkAttachmentsToMessage` from
@@ -672,6 +699,16 @@ only when a test passes it as an extra controller.
 - **`tickets.contact_id` and `tickets.team_id` carry no foreign key** until
   M1-04 and M1-01 create the tables they point at. The columns are here so that
   neither milestone has to backfill every row already written.
+- **A tag's ticket count is "tickets you can see".** `ticket_tags` is
+  department-scoped, so a Team Leader restricted to two departments reads the
+  count of those two. Reaching past the department policy to count rows the
+  reader may not know exist would not be an improvement — so instead, the two
+  changes that *act* on such a count (moving a custom field's type, and forcing
+  an option removal) are refused to anybody whose scope is not every
+  department.
+- **`ticket_templates.usage_count` is the whole record of which tickets came
+  from a template.** There is no `tickets.template_id`: the number is what the
+  list prints, and a column on `tickets` would be read by nothing else in v1.
 - There is no instrumentation for the `postgres` driver or for BullMQ, so
   neither appears as its own span. Both gaps are explained in the
   [operations guide](../../docs/guides/operations.md#what-is-instrumented).

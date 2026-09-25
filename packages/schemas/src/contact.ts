@@ -396,7 +396,12 @@ export const contactSearchQuerySchema = z.object({
   accountId: z.uuid().optional(),
   /** `true` narrows to contacts with at least one open ticket. */
   hasOpenTickets: queryBoolean.optional(),
-  /** Placeholder until M1-06 defines tags; accepted and ignored for now. */
+  /**
+   * Accepted and ignored. Tagging a *contact* is not M1-06's: tags hang off
+   * tickets (`ticket_tags`), and REQUIREMENTS §4.1 asks for custom fields on a
+   * contact, not tags. The parameter stays declared so the contact list's shape
+   * does not change under the screens when something does tag a contact.
+   */
   tag: z.string().max(64).optional(),
   /** Only the contacts an open duplicate suggestion points at. */
   duplicates: queryBoolean.optional(),
@@ -441,6 +446,13 @@ export const contactUpdateRequestSchema = z
     locale: localeSchema.nullish(),
     timezone: z.string().max(64).nullish(),
     externalId: z.string().max(MAX_IDENTITY_LENGTH).nullish(),
+    /**
+     * Custom field values (M1-06), as a patch: an absent key is left alone and
+     * a key set to `null` is cleared. Validated against the brand's *contact*
+     * definitions by the api, so an unknown key is refused rather than stored
+     * where nothing will ever read it.
+     */
+    custom: z.record(z.string(), z.unknown()).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Change at least one field' });
 export type ContactUpdateRequest = z.infer<typeof contactUpdateRequestSchema>;
@@ -458,6 +470,9 @@ export type AccountCreateRequest = z.infer<typeof accountCreateRequestSchema>;
 
 export const accountUpdateRequestSchema = accountCreateRequestSchema
   .partial()
+  // The same patch semantics as a contact's, against the brand's *account*
+  // definitions.
+  .extend({ custom: z.record(z.string(), z.unknown()).optional() })
   .refine((body) => Object.keys(body).length > 0, { message: 'Change at least one field' });
 export type AccountUpdateRequest = z.infer<typeof accountUpdateRequestSchema>;
 

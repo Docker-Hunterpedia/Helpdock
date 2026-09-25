@@ -33,15 +33,19 @@ describe('the schema', () => {
       'contact_identities',
       'contact_notes',
       'contacts',
+      'custom_field_defs',
       'departments',
       'job_receipts',
       'outbox',
       'settings',
+      'tags',
       'team_members',
       'teams',
       'ticket_activity',
       'ticket_messages',
       'ticket_statuses',
+      'ticket_tags',
+      'ticket_templates',
       'tickets',
       'user_brand_roles',
       'users',
@@ -77,9 +81,10 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but two has a uuid primary key; `settings` is keyed by
-    // `(key, brand_id)` and `job_receipts` by the consumer's idempotency key.
-    expect(generated).toHaveLength(byName.size - 2);
+    // Every table but three has a uuid primary key; `settings` is keyed by
+    // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key, and
+    // `ticket_tags` by the pair it joins.
+    expect(generated).toHaveLength(byName.size - 3);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

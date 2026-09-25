@@ -440,6 +440,11 @@ export const contactSearchQuerySchema = z.object({
   tag: z.string().max(64).optional(),
   /** Only the contacts an open duplicate suggestion points at. */
   duplicates: queryBoolean.optional(),
+  /**
+   * `true` leaves out the contacts a merge would refuse: anonymised ones
+   * (M1-14). Merged contacts are never listed. For the "Merge with…" picker.
+   */
+  mergeable: queryBoolean.optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(CONTACT_PAGE_SIZE).optional(),
 });

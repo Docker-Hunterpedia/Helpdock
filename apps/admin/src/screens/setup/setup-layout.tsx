@@ -119,8 +119,9 @@ export function SetupProgress({ current }: { readonly current: SetupStep }): Rea
 /** Off screen, still read aloud. The one place the admin needs it so far. */
 const visuallyHidden = {
   position: 'absolute',
-  width: 1,
-  height: 1,
+  // Strings: MUI reads a bare `1` as `100%`.
+  width: '1px',
+  height: '1px',
   padding: 0,
   margin: -1,
   overflow: 'hidden',

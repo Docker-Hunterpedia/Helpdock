@@ -4,6 +4,7 @@ import type {
   MarkSpamRequest,
   MergedTicket,
   MessageCreateRequest,
+  RelatedTicket,
   Ticket,
   TicketActivityEntry,
   TicketActivityList,
@@ -20,6 +21,7 @@ import type {
   TicketMessagePage,
   TicketParticipantList,
   TicketPriority,
+  TicketRelation,
   TicketSpamSender,
   TicketSplitRequest,
   TicketStatus,
@@ -77,6 +79,8 @@ export const MOCK_TICKET_ARABIC = '0192c3f0-1a2b-7c3d-8e4f-000000001039';
 export const MOCK_TICKET_VAT = '0192c3f0-1a2b-7c3d-8e4f-000000001035';
 export const MOCK_TICKET_CLOSED = '0192c3f0-1a2b-7c3d-8e4f-000000001030';
 export const MOCK_TICKET_TRANSCRIPT = '0192c3f0-1a2b-7c3d-8e4f-000000001028';
+/** Named by HD-1041 and held by nobody: a linked ticket the viewer cannot open. */
+const MOCK_TICKET_HIDDEN = '0192c3f0-1a2b-7c3d-8e4f-000000000999';
 
 export const MOCK_STATUS_OPEN = '0192c3f0-1a2b-7c3d-8e4f-000000000051';
 export const MOCK_STATUS_AWAITING = '0192c3f0-1a2b-7c3d-8e4f-000000000052';
@@ -206,6 +210,11 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       subject: 'Cannot sign in to the portal',
       priority: 'high',
       channel: 'chat',
+      // Linked tickets (M1-15 part 2): it continues HD-1030, and was split from
+      // a ticket the store does not hold, which the fixture reads as one in a
+      // department the viewer cannot see.
+      parentId: MOCK_TICKET_CLOSED,
+      splitFromId: MOCK_TICKET_HIDDEN,
       contactId: MOCK_CONTACT_GMAIL,
       firstResponseDueAt: at(3 * HOUR),
       resolutionDueAt: at(20 * HOUR),
@@ -991,10 +1000,34 @@ export class MockTicketsApi implements TicketsApi {
         primary === undefined || record === undefined
           ? null
           : { ...linkOf(primary), ...this.#facts(record) },
-      related: this.#tickets
-        .filter((row) => row.splitFromId === ticket.id || row.id === ticket.splitFromId)
-        .map(linkOf),
+      related: this.#related(ticket),
     };
+  }
+
+  /**
+   * `apps/api/src/tickets/merge/related.ts` over the fixture: a link the ticket
+   * names but the store does not hold stands for one in a department the
+   * viewer cannot see, and comes back as its relation alone.
+   */
+  #related(ticket: Ticket): RelatedTicket[] {
+    const named = (relation: TicketRelation, id: string | null): RelatedTicket[] => {
+      if (id === null) {
+        return [];
+      }
+      const row = this.#tickets.find((candidate) => candidate.id === id);
+
+      return [row === undefined ? { visible: false, relation } : shownAs(relation, row)];
+    };
+    const naming = (relation: TicketRelation, matches: (row: Ticket) => boolean) =>
+      this.#tickets.filter(matches).map((row) => shownAs(relation, row));
+
+    return [
+      ...named('parent', ticket.parentId),
+      ...named('mergedInto', ticket.mergedIntoId),
+      ...naming('mergedFrom', (row) => row.mergedIntoId === ticket.id),
+      ...named('splitFrom', ticket.splitFromId),
+      ...naming('splitTo', (row) => row.splitFromId === ticket.id),
+    ];
   }
 
   #facts(record: MergeRecord) {
@@ -1281,6 +1314,13 @@ const linkOf = (ticket: Ticket): TicketLink => ({
   number: ticket.number,
   prefix: ticket.prefix,
   subject: ticket.subject,
+});
+
+const shownAs = (relation: TicketRelation, ticket: Ticket): RelatedTicket => ({
+  ...linkOf(ticket),
+  visible: true,
+  relation,
+  status: ticket.status,
 });
 
 /**

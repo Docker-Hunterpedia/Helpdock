@@ -38,6 +38,16 @@ export const CSAT_PUBLIC_RULE: RateLimitRule = {
   windowSeconds: 15 * 60,
 };
 
+/**
+ * "Lina" from "Lina Haddad": the part of a display name before the first
+ * space. A name with no space is used whole. Exported for its test.
+ */
+export const firstNameOf = (name: string): string | null => {
+  const [first = ''] = name.trim().split(/\s+/u);
+
+  return first === '' ? null : first;
+};
+
 const sameHash = (stored: string, presented: string): boolean => {
   const a = Buffer.from(stored, 'utf8');
   const b = Buffer.from(presented, 'utf8');
@@ -100,7 +110,7 @@ export class CsatService {
     return this.#inBrand(token, subject, async (tx, found, brand) => {
       await this.#audit(tx, subject, found, 'csat.viewed');
 
-      return this.#publicView(found, brand);
+      return this.#publicView(tx, found, brand);
     });
   }
 
@@ -121,7 +131,7 @@ export class CsatService {
       });
 
       if (!rated) {
-        return this.#publicView(found, brand);
+        return this.#publicView(tx, found, brand);
       }
 
       await this.#audit(tx, subject, found, 'csat.rated', { rating: request.rating });
@@ -173,7 +183,11 @@ export class CsatService {
     });
   }
 
-  #publicView({ survey, reference, subject }: SurveyWithTicket, brand: CsatBrand): CsatSurveyView {
+  async #publicView(
+    tx: DbTransaction,
+    { survey, reference, subject }: SurveyWithTicket,
+    brand: CsatBrand,
+  ): Promise<CsatSurveyView> {
     if (survey.ratedAt !== null) {
       return { state: 'used', brand };
     }
@@ -181,7 +195,13 @@ export class CsatService {
       return { state: 'expired', brand };
     }
 
-    return { state: 'open', brand, ticket: { reference, subject } };
+    const closer = await this.#options.repository.closerName(tx, survey);
+
+    return {
+      state: 'open',
+      brand,
+      ticket: { reference, subject, closedBy: closer === undefined ? null : firstNameOf(closer) },
+    };
   }
 
   #agentState(survey: CsatResponse): TicketCsat['state'] {

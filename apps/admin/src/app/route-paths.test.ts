@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { CSAT_PREVIEW_TOKEN } from '../csat/preview-api.js';
 import {
+  csatPreviewRoute,
   csatTokenFromPath,
   DEFAULT_SIGNED_IN_ROUTE,
   safeReturnTo,
@@ -53,5 +55,12 @@ describe('csatTokenFromPath', () => {
 
   it.each(['/csat/', '/csat', '/tickets/csat/AAA', '/'])('is null for %s', (path) => {
     expect(csatTokenFromPath(path)).toBeNull();
+  });
+
+  it('reads the preview route as the preview token, in the language it names', () => {
+    const route = new URL(csatPreviewRoute('ar'), 'https://support.example.com');
+
+    expect(csatTokenFromPath(route.pathname)).toBe(CSAT_PREVIEW_TOKEN);
+    expect(route.searchParams.get('lang')).toBe('ar');
   });
 });

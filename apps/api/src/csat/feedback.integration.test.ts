@@ -583,6 +583,7 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
 
     it('opens for the customer with the brand, the reference and the subject', async () => {
       const { ticket } = await createTicket({ subject: 'Invoice shows the wrong VAT number' });
+      // Ada closes it without having written to the customer, so she is not named.
       const token = await closeAndSurvey(ticket.id);
 
       const { status, body } = await call<CsatSurveyView>('GET', publicPath(token), null);
@@ -594,8 +595,45 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
         ticket: {
           reference: `${ticket.prefix}-${String(ticket.number)}`,
           subject: 'Invoice shows the wrong VAT number',
+          closedBy: null,
         },
       });
+    });
+
+    it('names a closer who replied by first name only, and nobody once they have left the brand', async () => {
+      const kim = await addPerson(runtime.db, 'kim');
+      await runtime.db.update(users).set({ name: 'Kim Lee Park' }).where(eq(users.id, kim.id));
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.insert(userBrandRoles).values({
+          userId: kim.id,
+          brandId: seeded.brandId,
+          role: 'agent',
+          departmentIds: [support],
+        }),
+      );
+      kim.token = await signIn(kim.email);
+      const { ticket } = await createTicket();
+      const reply = await call('POST', `${ticketPath(ticket.id)}/messages`, kim, {
+        kind: 'public',
+        bodyHtml: '<p>Sorted, closing this now.</p>',
+      });
+      expect(reply.status).toBe(201);
+      expect(
+        (await call('PATCH', ticketPath(ticket.id), kim, { statusId: closedStatus })).status,
+      ).toBe(200);
+      await drainOutbox();
+      const link =
+        (await call<TicketDetail>('GET', ticketPath(ticket.id), sam)).body.csat?.link ?? '';
+      const token = new URL(link).pathname.replace('/csat/', '');
+
+      const named = await call<CsatSurveyView>('GET', publicPath(token), null);
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.delete(userBrandRoles).where(eq(userBrandRoles.userId, kim.id)),
+      );
+      const unnamed = await call<CsatSurveyView>('GET', publicPath(token), null);
+
+      expect(named.body).toMatchObject({ state: 'open', ticket: { closedBy: 'Kim' } });
+      expect(unnamed.body).toMatchObject({ state: 'open', ticket: { closedBy: null } });
     });
 
     it('takes one rating, answers "used" to the second, and keeps the first', async () => {

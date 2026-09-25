@@ -3,18 +3,19 @@ import {
   MERGED_MESSAGES_MAX,
   type MergedInto,
   type MergedTicket,
-  type TicketLink,
+  type RelatedTicket,
 } from '@helpdock/schemas';
 import type { MediaRepository } from '../../media/media.repository.js';
 import { toTicketMessage } from '../ticket-view.js';
 import { TicketRepository } from '../tickets.repository.js';
 import { MergeRepository } from './merge.repository.js';
 import { unmergeableUntil } from './merge-rules.js';
+import { relatedTicketsOf } from './related.js';
 
 /**
  * What a ticket read adds for M1-09: the tickets merged into this one with
- * their messages inline, the ticket this one was merged into, and the tickets
- * a split joined to it.
+ * their messages inline, the ticket this one was merged into, and every ticket
+ * linked to it (M1-15 part 2, `related.ts`).
  *
  * A plain function over the caller's transaction, like `ticketing/ticket-tags.ts`,
  * so `TicketsService.find` can call it without the ticket service taking the
@@ -32,13 +33,13 @@ import { unmergeableUntil } from './merge-rules.js';
 export interface MergeView {
   readonly merged: MergedTicket[];
   readonly mergedInto: MergedInto | null;
-  readonly related: TicketLink[];
+  readonly related: RelatedTicket[];
 }
 
 const merges = new MergeRepository();
 const threads = new TicketRepository();
 
-const linkOf = (ticket: TicketRow): TicketLink => ({
+const linkOf = (ticket: TicketRow) => ({
   id: ticket.id,
   number: ticket.number,
   prefix: ticket.prefix,
@@ -93,6 +94,6 @@ export const readMergeView = async (
   return {
     merged,
     mergedInto: primary === undefined ? null : { ...primary, ...mergeFacts(ticket, now) },
-    related: await merges.splitRelated(tx, ticket),
+    related: relatedTicketsOf(ticket, await merges.linkedTickets(tx, ticket)),
   };
 };

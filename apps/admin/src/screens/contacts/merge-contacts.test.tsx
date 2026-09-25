@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
 import { ContactError } from '../../contacts/api.js';
 import {
+  MOCK_BRAND,
+  MOCK_CONTACT_ACCOUNT,
   MOCK_CONTACT_GMAIL,
   MOCK_CONTACT_MONA,
   MOCK_DUPLICATE,
@@ -167,5 +169,64 @@ describe('a contact that was merged away', () => {
     await renderContact(contactsApi, MOCK_CONTACT_GMAIL, 'Mona Khalil');
 
     expect(screen.getByRole('heading', { name: 'Mona Khalil', level: 1 })).toBeInTheDocument();
+  });
+});
+
+describe('merge with any contact (M1-15 part 2)', () => {
+  const openPicker = async (user: ReturnType<typeof renderApp>['user']) => {
+    await user.click(await screen.findByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Merge with…' }));
+
+    return screen.findByRole('dialog', { name: /Merge Mona Khalil with/ });
+  };
+
+  it('never offers the contact itself or an anonymised one', async () => {
+    const contactsApi = new MockContactsApi();
+    await contactsApi.anonymise(MOCK_BRAND, MOCK_CONTACT_ACCOUNT);
+    const { user } = await renderContact(contactsApi);
+
+    const picker = await openPicker(user);
+    const choices = within(picker).getByRole('radiogroup', { name: 'Contacts' });
+
+    await within(choices).findByRole('radio', { name: /M\. Khalil/ });
+    expect(within(choices).queryByRole('radio', { name: /Mona Khalil/ })).toBeNull();
+    expect(within(choices).queryByRole('radio', { name: /Erased contact/ })).toBeNull();
+    expect(within(picker).getByRole('button', { name: 'Continue' })).toBeDisabled();
+  });
+
+  it('says so when the search finds nobody else', async () => {
+    const { user } = await renderContact();
+    const picker = await openPicker(user);
+
+    await user.type(
+      within(picker).getByRole('searchbox', { name: 'Find a contact' }),
+      'Mona Khalil',
+    );
+
+    expect(
+      await within(picker).findByText('No other contact matches that search.'),
+    ).toBeInTheDocument();
+  });
+
+  it('hands the chosen pair to the Merge contacts dialog, which merges them', async () => {
+    const { user, contactsApi } = await renderContact();
+    const picker = await openPicker(user);
+
+    await user.type(within(picker).getByRole('searchbox', { name: 'Find a contact' }), 'weber');
+    // The search has answered once the other names have gone.
+    await waitFor(() => {
+      expect(within(picker).queryByRole('radio', { name: /M\. Khalil/ })).toBeNull();
+    });
+    await user.click(within(picker).getByRole('radio', { name: /Jonas Weber/ }));
+    await user.click(within(picker).getByRole('button', { name: 'Continue' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Merge contacts/ });
+    await within(dialog).findByText('Keep the name and details of');
+    expect(within(dialog).getByText('Choose whose name and details to keep.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('radio', { name: /Jonas Weber/ })).toBeInTheDocument();
+    await merge(user, dialog);
+
+    const survivor = await contactsApi.contact(MOCK_BRAND, MOCK_CONTACT_MONA);
+    expect(survivor.merges.map((row) => row.mergedContact.id)).toEqual([MOCK_CONTACT_ACCOUNT]);
   });
 });

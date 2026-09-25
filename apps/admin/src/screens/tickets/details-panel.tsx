@@ -2,6 +2,7 @@ import type {
   AssignableAgent,
   ContactDetail,
   Department,
+  RelatedTicket,
   Ticket,
   TicketPriority,
   TicketStatus,
@@ -13,12 +14,13 @@ import { type ReactNode, useId } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
-import { contactRoute, ticketRoute } from '../../app/route-paths.js';
+import { contactRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { initialsOf } from '../contacts/format.js';
 import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
 import { elapsedFraction, messageTime, statusName } from './format.js';
+import { LinkedTickets } from './linked-tickets.tsx';
 import { ParticipantsCard } from './participants-card.tsx';
 
 /**
@@ -32,7 +34,7 @@ import { ParticipantsCard } from './participants-card.tsx';
  * (`assignee-picker.tsx`) rather than a select, because choosing somebody means
  * seeing who is around and how loaded they are. Two are read-only and will
  * stay that way until their own deliverable: custom fields are M1-06's, and
- * linked tickets are M1-08's `parent_id` and M1-09's merge and split.
+ * linked tickets are the read's `related` list ({@link LinkedTickets}).
  *
  * **The hidden-ticket count is the contact's, not the ticket's**
  * (DOMAIN-RULES §1.2). It comes from the contact timeline, which is the one
@@ -48,6 +50,8 @@ export interface DetailsPanelProps {
   readonly hiddenTicketCount: number;
   readonly statuses: readonly TicketStatus[];
   readonly departments: readonly Department[];
+  /** The read's `related` list: every linked ticket, hidden ones as their relation alone. */
+  readonly related: readonly RelatedTicket[];
   /** M1-07: who can work the ticket's department, and the name the button shows. */
   readonly assignee: {
     readonly name: string | null;
@@ -77,6 +81,7 @@ export function DetailsPanel({
   hiddenTicketCount,
   statuses,
   departments,
+  related,
   assignee,
   now,
   busy,
@@ -92,9 +97,6 @@ export function DetailsPanel({
   const priorityId = useId();
 
   const custom = Object.entries(ticket.custom);
-  const linked = [ticket.parentId, ticket.mergedIntoId, ticket.splitFromId].filter(
-    (value): value is string => value !== null,
-  );
 
   return (
     <Box
@@ -300,29 +302,7 @@ export function DetailsPanel({
         </Typography>
       </Box>
 
-      <Box component="section">
-        <Typography variant="caption" component="h2" sx={{ color: 'text.secondary' }}>
-          {t('tickets:details.linked')}
-        </Typography>
-        {linked.length === 0 ? (
-          <Typography variant="body2" sx={{ marginBlockStart: 2, color: 'text.secondary' }}>
-            {t('tickets:details.noLinked')}
-          </Typography>
-        ) : (
-          <Box
-            component="ul"
-            sx={{ margin: 0, marginBlockStart: 2, padding: 0, listStyle: 'none' }}
-          >
-            {linked.map((id) => (
-              <Box component="li" key={id}>
-                <MuiLink component={Link} to={ticketRoute(id)} variant="body2">
-                  <bdi>{id.slice(0, 8)}</bdi>
-                </MuiLink>
-              </Box>
-            ))}
-          </Box>
-        )}
-      </Box>
+      <LinkedTickets related={related} />
 
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         {`${t('tickets:details.created')} · `}

@@ -190,7 +190,18 @@ describe('HttpTicketsApi', () => {
           ticket: testTicket({ number: 1043, splitFromId: TICKET }),
           messages: { messages: [], nextAfter: null },
           activity: [],
-          related: [{ id: TICKET, number: 1042, prefix: 'HD', subject: 'Refund' }],
+          related: [
+            {
+              visible: true,
+              relation: 'splitFrom',
+              id: TICKET,
+              number: 1042,
+              prefix: 'HD',
+              subject: 'Refund',
+              status: testTicket().status,
+            },
+            { visible: false, relation: 'parent' },
+          ],
         },
         201,
       ),
@@ -204,7 +215,8 @@ describe('HttpTicketsApi', () => {
 
     expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/split`);
     expect(created.ticket.splitFromId).toBe(TICKET);
-    expect(created.related?.[0]?.number).toBe(1042);
+    expect(created.related?.[0]).toMatchObject({ visible: true, number: 1042 });
+    expect(created.related?.[1]).toEqual({ visible: false, relation: 'parent' });
   });
 
   it('turns a refusal the rules make into a reason the screen can read', async () => {

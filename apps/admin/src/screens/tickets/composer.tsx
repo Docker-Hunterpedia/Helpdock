@@ -305,11 +305,15 @@ function Unavailable({
   );
 }
 
-/** Read by a screen reader, drawn for nobody. */
+/**
+ * Read by a screen reader, drawn for nobody. The sizes are strings on purpose:
+ * MUI reads a bare `1` as `100%`, which made this span as wide as the viewport
+ * and gave the ticket view a horizontal scrollbar in both directions.
+ */
 const visuallyHidden = {
   position: 'absolute',
-  width: 1,
-  height: 1,
+  width: '1px',
+  height: '1px',
   overflow: 'hidden',
   clipPath: 'inset(50%)',
   whiteSpace: 'nowrap',

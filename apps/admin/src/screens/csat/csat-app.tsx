@@ -14,6 +14,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import type { CsatApi, CsatLinkProblem } from '../../csat/api.js';
 import { isCsatLinkError } from '../../csat/api.js';
+import { CSAT_PREVIEW_TOKEN, type CsatSample, PreviewCsatApi } from '../../csat/preview-api.js';
 import { createCsatApi } from '../../csat/select-api.js';
 import { CsatPage } from './csat-page.tsx';
 
@@ -31,6 +32,9 @@ import { CsatPage } from './csat-page.tsx';
  * - **the theme**, from DESIGN §8's brand accent when the brand has one, and
  *   the stock accent otherwise. Only the accent is brand-configurable here, as
  *   §8 allows; spacing, type and status hues are the system's.
+ *
+ * `/csat/preview` is the Feedback tab's preview (M1-15 part 2): the same page
+ * over {@link PreviewCsatApi}'s sample, with a line saying it is one.
  */
 
 export type LoadState =
@@ -43,6 +47,17 @@ const requestedLocale = (search: string): Locale | undefined => {
 
   return SUPPORTED_LNGS.find((candidate) => candidate === lang);
 };
+
+/** The preview's sample, in whichever language the page settled on. */
+const sampleSurvey = (i18n: ReturnType<typeof createI18n>, lng: Locale): CsatSample => ({
+  state: 'open',
+  brand: { name: i18n.t('csat:preview.brand', { lng }), locale: lng, accent: null },
+  ticket: {
+    reference: 'HD-1042',
+    subject: i18n.t('csat:preview.subject', { lng }),
+    closedBy: i18n.t('csat:preview.agent', { lng }),
+  },
+});
 
 const brandThemeFor = (accent: string | null) => {
   if (accent === null) {
@@ -67,7 +82,19 @@ export function CsatApp({
   readonly search?: string;
   readonly api?: CsatApi;
 }): ReactNode {
-  const [api] = useState(() => given ?? createCsatApi());
+  const preview = token === CSAT_PREVIEW_TOKEN;
+  const [i18n] = useState(() => createI18n({ lng: requestedLocale(search) ?? 'en' }));
+  const [api] = useState(() => {
+    if (given !== undefined) {
+      return given;
+    }
+    if (!preview) {
+      return createCsatApi();
+    }
+    const lng = requestedLocale(search) ?? 'en';
+
+    return new PreviewCsatApi(() => sampleSurvey(i18n, lng));
+  });
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const prefersDark = useMediaQuery('(prefers-color-scheme: dark)', { noSsr: true });
 
@@ -100,7 +127,6 @@ export function CsatApp({
   const mode = prefersDark ? 'dark' : 'light';
   const accent = brand?.accent ?? null;
 
-  const [i18n] = useState(() => createI18n({ lng: locale }));
   const cache = useMemo(
     () => (direction === 'rtl' ? createRtlCache() : createLtrCache()),
     [direction],
@@ -130,6 +156,7 @@ export function CsatApp({
             tokens={tokens}
             brandName={brand?.name ?? null}
             state={state}
+            preview={preview}
             onRate={(request) => api.rate(token, request)}
           />
         </I18nextProvider>

@@ -2,7 +2,7 @@ import type { CsatSubmitRequest, CsatSurveyView } from '@helpdock/schemas';
 import { CSAT_COMMENT_MAX } from '@helpdock/schemas';
 import type { SemanticTokens } from '@helpdock/ui';
 import { Box, Button, TextField, Typography } from '@mui/material';
-import { Check, Clock, TriangleAlert } from 'lucide-react';
+import { Check, Clock, Eye, TriangleAlert } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import type { LoadState } from './csat-app.tsx';
@@ -20,9 +20,12 @@ import type { LoadState } from './csat-app.tsx';
  * - The ticket reference is wrapped in `<bdi>` so it reads left to right inside
  *   Arabic (DESIGN §3.2).
  *
- * The artboard's "closed by Lina" and "Browse the help center" are left out:
- * DOMAIN-RULES §4.6 gives the link nothing beyond its purpose, so the api does
- * not send an agent's name, and there is no help center to link to until M5.
+ * - "closed by Lina" is the first name of the staff member who closed the
+ *   ticket, which the api sends only while the link is open (M1-15 part 2).
+ * - "Browse the help center" is left out: there is no help center to link to
+ *   until M5.
+ * - `preview` is the Feedback tab's sample: the same page with an info line
+ *   above it saying nothing sent from it is recorded.
  */
 
 /** The five buttons, each with the catalog key of its word. */
@@ -44,11 +47,13 @@ export function CsatPage({
   tokens,
   brandName,
   state,
+  preview = false,
   onRate,
 }: {
   readonly tokens: SemanticTokens;
   readonly brandName: string | null;
   readonly state: LoadState;
+  readonly preview?: boolean;
   onRate(request: CsatSubmitRequest): Promise<CsatSurveyView>;
 }): ReactNode {
   const t = useT();
@@ -83,6 +88,12 @@ export function CsatPage({
           gap: 6,
         }}
       >
+        {preview ? (
+          <Notice tone="info" tokens={tokens}>
+            {t('csat:preview.notice')}
+          </Notice>
+        ) : null}
+
         {brandName === null ? null : <BrandHeader name={brandName} tokens={tokens} />}
 
         {state.kind === 'loading' ? (
@@ -119,6 +130,7 @@ export function CsatPage({
           <RatingForm
             reference={view.ticket.reference}
             subject={view.ticket.subject}
+            closedBy={view.ticket.closedBy}
             tokens={tokens}
             onRate={async (request) => {
               setAnswer(await onRate(request));
@@ -164,11 +176,13 @@ function BrandHeader({
 function RatingForm({
   reference,
   subject,
+  closedBy,
   tokens,
   onRate,
 }: {
   readonly reference: string;
   readonly subject: string;
+  readonly closedBy: string | null;
   readonly tokens: SemanticTokens;
   onRate(request: CsatSubmitRequest): Promise<void>;
 }): ReactNode {
@@ -218,6 +232,7 @@ function RatingForm({
           </Typography>
           {' · '}
           {subject}
+          {closedBy === null ? null : ` · ${t('csat:closedBy', { name: closedBy })}`}
         </Typography>
       </Box>
 
@@ -340,14 +355,14 @@ function Rated({
   );
 }
 
-const NOTICE_ICON = { success: Check, warning: Clock, danger: TriangleAlert } as const;
+const NOTICE_ICON = { success: Check, warning: Clock, danger: TriangleAlert, info: Eye } as const;
 
 function Notice({
   tone,
   tokens,
   children,
 }: {
-  readonly tone: 'success' | 'warning' | 'danger';
+  readonly tone: 'success' | 'warning' | 'danger' | 'info';
   readonly tokens: SemanticTokens;
   readonly children: ReactNode;
 }): ReactNode {
@@ -355,7 +370,7 @@ function Notice({
 
   return (
     <Box
-      role={tone === 'success' ? 'status' : 'alert'}
+      role={tone === 'success' || tone === 'info' ? 'status' : 'alert'}
       sx={{
         display: 'flex',
         alignItems: 'center',

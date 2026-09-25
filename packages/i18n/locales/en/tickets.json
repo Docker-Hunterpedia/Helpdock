@@ -154,6 +154,15 @@
     "noCustom": "None",
     "linked": "Linked tickets",
     "noLinked": "None",
+    "linkedHidden": "A ticket you cannot open",
+    "linkedHiddenCaption": "{{relation}} · hidden from you",
+    "relation": {
+      "parent": "Parent · continued from",
+      "mergedInto": "Merged into",
+      "mergedFrom": "Merged from",
+      "splitFrom": "Split from",
+      "splitTo": "Split to"
+    },
     "created": "Created",
     "channel": "Channel",
     "picker": {
@@ -356,6 +365,7 @@
     "ticket-not-merged": "This ticket is not merged any more.",
     "merge-window-closed": "A merge can be undone for 24 hours, and those have passed.",
     "attachments-in-flight": "A file on those messages is still being processed. Try again in a moment.",
+    "merge-primary-deleted": "The ticket this one was merged into has been deleted, so the merge cannot be undone.",
     "ticket-not-spam": "This ticket is not marked as spam."
   }
 }

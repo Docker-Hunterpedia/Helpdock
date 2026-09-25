@@ -307,8 +307,12 @@ describe('MockTicketsApi, merge and split (M1-09)', () => {
     });
     expect(created.messages.messages[0]?.bodyText).toBe(first?.bodyText);
     expect(created.messages.messages[0]?.attachments).toHaveLength(1);
-    expect(created.related?.map((link) => link.id)).toEqual([MOCK_TICKET_REFUND]);
-    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).related?.[0]?.id).toBe(created.ticket.id);
+    expect(created.related).toEqual([
+      expect.objectContaining({ visible: true, relation: 'splitFrom', id: MOCK_TICKET_REFUND }),
+    ]);
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).related).toEqual([
+      expect.objectContaining({ visible: true, relation: 'splitTo', id: created.ticket.id }),
+    ]);
   });
 
   it('refuses a message that is not on the ticket', async () => {

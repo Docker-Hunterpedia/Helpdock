@@ -1,4 +1,4 @@
-import type { Ticket, TicketLink } from '@helpdock/schemas';
+import type { RelatedTicket, Ticket, TicketLink, VisibleRelatedTicket } from '@helpdock/schemas';
 
 /**
  * The decisions the merge and split screens make that are not drawing (M1-09,
@@ -30,6 +30,13 @@ export const unmergeHoursLeft = (unmergeableUntil: string | null, now: number): 
  */
 export const mergeCandidates = (tickets: readonly Ticket[], currentId: string): Ticket[] =>
   tickets.filter((ticket) => ticket.id !== currentId && ticket.mergedIntoId === null);
+
+/**
+ * The linked tickets this reader can open, which are the only ones a system
+ * message's reference may link to. A hidden one carries no reference to match.
+ */
+export const visibleLinks = (related: readonly RelatedTicket[]): VisibleRelatedTicket[] =>
+  related.filter((link): link is VisibleRelatedTicket => link.visible);
 
 const referenceOf = (ticket: Pick<TicketLink, 'prefix' | 'number'>): string =>
   `${ticket.prefix}-${ticket.number}`;

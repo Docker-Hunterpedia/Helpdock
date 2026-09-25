@@ -185,6 +185,8 @@ export const ticketLifecycleRefusalSchema = z.enum([
   'merge-window-closed',
   /** A message to split still has an attachment the media pipeline is working on. */
   'attachments-in-flight',
+  /** Unmerging a ticket whose primary an Admin has since deleted (M1-15 part 2). */
+  'merge-primary-deleted',
 ]);
 export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema>;
 
@@ -347,6 +349,41 @@ export const ticketLinkSchema = z.object({
 });
 export type TicketLink = z.infer<typeof ticketLinkSchema>;
 
+/**
+ * How a linked ticket is joined to the one being read, from the reader's side:
+ * `parent` is the closed ticket this one continues (§2.3), `mergedInto` and
+ * `mergedFrom` the two ends of a merge, `splitFrom` and `splitTo` the two ends
+ * of a split (§2.4).
+ */
+export const ticketRelationSchema = z.enum([
+  'parent',
+  'mergedInto',
+  'mergedFrom',
+  'splitFrom',
+  'splitTo',
+]);
+export type TicketRelation = z.infer<typeof ticketRelationSchema>;
+
+/**
+ * One linked ticket in the details panel (M1-15 part 2), read under the
+ * caller's scope. A ticket the reader cannot open is `visible: false` and
+ * carries its relation and nothing else — no id, reference, subject or status —
+ * so it is indistinguishable from one that no longer exists (§1.2). Only a
+ * link the read ticket itself names (`parentId`, `mergedIntoId`, `splitFromId`)
+ * can come back hidden: a ticket split *from* this one into a department the
+ * reader cannot see is not found at all, as the list would not find it.
+ */
+export const relatedTicketSchema = z.discriminatedUnion('visible', [
+  ticketLinkSchema.extend({
+    visible: z.literal(true),
+    relation: ticketRelationSchema,
+    status: ticketStatusSchema,
+  }),
+  z.object({ visible: z.literal(false), relation: ticketRelationSchema }),
+]);
+export type RelatedTicket = z.infer<typeof relatedTicketSchema>;
+export type VisibleRelatedTicket = Extract<RelatedTicket, { visible: true }>;
+
 /** When and by whom a ticket was merged, and until when that can be undone. */
 const mergeFactsSchema = z.object({
   mergedAt: z.iso.datetime(),
@@ -400,13 +437,14 @@ export const ticketDetailSchema = z.object({
    * against the M1-02 shape stay valid. The api always fills all three.
    *
    * `merged` is every ticket merged into this one; `mergedInto` is the ticket
-   * this one was merged into, or null; `related` is the tickets a split joined
-   * to this one — the one it was split from and the ones split from it — so a
-   * system message that names them can link to them.
+   * this one was merged into, or null; `related` is every ticket linked to
+   * this one — its parent, both ends of a merge and both ends of a split — in
+   * that order, for the details panel's Linked tickets and so a system message
+   * that names one can link to it. See {@link relatedTicketSchema}.
    */
   merged: z.array(mergedTicketSchema).optional(),
   mergedInto: mergedIntoSchema.nullable().optional(),
-  related: z.array(ticketLinkSchema).optional(),
+  related: z.array(relatedTicketSchema).optional(),
 });
 export type TicketDetail = z.infer<typeof ticketDetailSchema>;
 

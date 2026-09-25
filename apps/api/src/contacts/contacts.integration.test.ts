@@ -275,6 +275,25 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
       await expect(listContacts('?search=findme@')).resolves.toMatchObject({ total: 1 });
     });
 
+    it('finds a contact by their customer id', async () => {
+      await createContact({ name: 'Customer Id Person', externalId: 'CRM-778812' });
+
+      await expect(listContacts('?search=CRM-7788')).resolves.toMatchObject({ total: 1 });
+    });
+
+    it('leaves out anonymised contacts when asked for the ones a merge accepts', async () => {
+      const kept = await createContact({ name: 'Mergeable Candidate' });
+      const erased = await createContact({ name: 'Mergeable Candidate erased' });
+      await request('POST', `${base()}/${erased.id}/anonymise`, { headers: auth() });
+
+      const all = await listContacts('?search=Mergeable Candidate');
+      const mergeable = await listContacts('?search=Mergeable Candidate&mergeable=true');
+
+      expect(all.contacts.map((contact) => contact.id)).toContain(kept.id);
+      expect(mergeable.contacts.map((contact) => contact.id)).toEqual([kept.id]);
+      expect(mergeable.total).toBe(1);
+    });
+
     it('never finds the brand next door, whatever it is asked', async () => {
       await createContact(
         { name: 'Only Over There', identities: [{ kind: 'email', value: 'there@example.com' }] },

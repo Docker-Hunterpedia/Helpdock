@@ -22,6 +22,7 @@ export const MOCK_CSAT_BRAND: CsatBrand = { name: 'Helpdock', locale: 'en', acce
 export const MOCK_CSAT_TICKET = {
   reference: 'HD-1042',
   subject: 'Refund not received after 10 days',
+  closedBy: 'Lina',
 } as const;
 
 export class MockCsatApi implements CsatApi {

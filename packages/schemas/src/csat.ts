@@ -89,7 +89,19 @@ export const csatSurveyViewSchema = z.discriminatedUnion('state', [
   z.object({
     state: z.literal('open'),
     brand: csatBrandSchema,
-    ticket: z.object({ reference: z.string(), subject: z.string() }),
+    ticket: z.object({
+      reference: z.string(),
+      subject: z.string(),
+      /**
+       * The first name of the staff member who closed the ticket — "closed by
+       * Lina" — or null unless that was a current staff member who wrote a
+       * public reply on it (not an api key, a rule, somebody since deactivated
+       * or removed, or somebody the customer never heard from). First name
+       * only, and only while the link is open, so it names nobody the customer
+       * has not already had a reply from (DOMAIN-RULES §4.6).
+       */
+      closedBy: z.string().min(1).nullable(),
+    }),
   }),
   z.object({ state: z.literal('rated'), brand: csatBrandSchema, rating: csatRatingSchema }),
   z.object({ state: z.literal('used'), brand: csatBrandSchema }),

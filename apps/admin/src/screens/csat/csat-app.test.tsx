@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { type CsatApi, CsatLinkError } from '../../csat/api.js';
 import { MOCK_CSAT_TICKET, MOCK_CSAT_TOKENS, MockCsatApi } from '../../csat/mock-api.js';
+import { CSAT_PREVIEW_TOKEN } from '../../csat/preview-api.js';
 import { CsatApp } from './csat-app.tsx';
 
 /**
@@ -33,6 +34,27 @@ describe('an open link', () => {
     ).toBeVisible();
     expect(screen.getByText(MOCK_CSAT_TICKET.reference)).toBeVisible();
     expect(screen.getByText(MOCK_CSAT_TICKET.subject, { exact: false })).toBeVisible();
+  });
+
+  it('names who closed it by first name', async () => {
+    renderPage(MOCK_CSAT_TOKENS.open);
+
+    expect(await screen.findByText(/closed by Lina/)).toBeVisible();
+  });
+
+  it('names nobody when the api sends no closer', async () => {
+    const api: CsatApi = {
+      survey: async () => ({
+        state: 'open',
+        brand: { name: 'Helpdock', locale: 'en', accent: null },
+        ticket: { ...MOCK_CSAT_TICKET, closedBy: null },
+      }),
+      rate: () => Promise.reject(new CsatLinkError('unavailable')),
+    };
+    renderPage(MOCK_CSAT_TOKENS.open, { api });
+
+    expect(await screen.findByText(MOCK_CSAT_TICKET.subject, { exact: false })).toBeVisible();
+    expect(screen.queryByText(/closed by/)).toBeNull();
   });
 
   it('presses one rating at a time', async () => {
@@ -128,5 +150,25 @@ describe('the page’s language', () => {
       await screen.findByRole('heading', { name: 'How was our help with your request?' }),
     ).toBeVisible();
     expect(document.documentElement).toHaveAttribute('dir', 'ltr');
+  });
+});
+
+describe('the preview (M1-15 part 2)', () => {
+  it('draws the page over a sample and says it is one', async () => {
+    render(<CsatApp token={CSAT_PREVIEW_TOKEN} search="" />);
+
+    expect(await screen.findByText(/Preview: this is the page a customer sees/)).toBeVisible();
+    expect(screen.getByText(/A sample request about an order · closed by Lina/)).toBeVisible();
+  });
+
+  it('draws a rating as sent without sending it anywhere', async () => {
+    const user = userEvent.setup();
+    render(<CsatApp token={CSAT_PREVIEW_TOKEN} search="?lang=ar" />);
+
+    await user.click(await screen.findByRole('button', { name: /5\s*ممتاز/ }));
+    await user.click(screen.getByRole('button', { name: 'إرسال التقييم' }));
+
+    expect(await screen.findByText('شكراً، تم إرسال تقييمك.')).toBeVisible();
+    expect(document.documentElement).toHaveAttribute('dir', 'rtl');
   });
 });

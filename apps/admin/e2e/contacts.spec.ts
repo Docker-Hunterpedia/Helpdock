@@ -211,7 +211,8 @@ test.describe('one contact', () => {
     await signIn(page, locale);
     await openContact(page, locale, 'Mona Khalil');
 
-    await page.getByRole('button', { name: t('contacts:actions.anonymise') }).click();
+    await page.getByRole('button', { name: t('contacts:actions.more') }).click();
+    await page.getByRole('menuitem', { name: t('contacts:actions.anonymise') }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     const submit = dialog.getByRole('button', { name: t('contacts:confirm.anonymiseSubmit') });

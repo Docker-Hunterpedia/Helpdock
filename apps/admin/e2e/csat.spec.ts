@@ -120,7 +120,10 @@ test.describe('the preview (M1-15 part 2)', () => {
     const t = strings(locale);
     await openLink(page, 'preview', locale);
 
-    await expect(page.getByRole('status')).toHaveText(t('csat:preview.notice'));
+    // The page's loading line is a status too, until the sample arrives.
+    await expect(
+      page.getByRole('status').filter({ hasText: t('csat:preview.notice') }),
+    ).toBeVisible();
     await expect(
       page.getByText(t('csat:closedBy', { name: t('csat:preview.agent') }), { exact: false }),
     ).toBeVisible();

@@ -84,7 +84,10 @@ test.describe('the Feedback tab’s preview (M1-15 part 2)', () => {
     await expect(link).toHaveAttribute('target', '_blank');
     const [preview] = await Promise.all([context.waitForEvent('page'), link.click()]);
 
-    await expect(preview.getByRole('status')).toHaveText(t('csat:preview.notice'));
+    // The page's loading line is a status too, until the sample arrives.
+    await expect(
+      preview.getByRole('status').filter({ hasText: t('csat:preview.notice') }),
+    ).toBeVisible();
     await expect(preview.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
     await expect(preview.getByText(t('csat:preview.subject'), { exact: false })).toBeVisible();
     expect(await violations(preview)).toEqual([]);

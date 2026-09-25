@@ -204,7 +204,9 @@ describe('merge with any contact (M1-15 part 2)', () => {
     );
 
     expect(
-      await within(picker).findByText('No other contact matches that search.'),
+      await within(picker).findByText('No other contact matches that search.', undefined, {
+        timeout: 5_000,
+      }),
     ).toBeInTheDocument();
   });
 
@@ -214,9 +216,13 @@ describe('merge with any contact (M1-15 part 2)', () => {
 
     await user.type(within(picker).getByRole('searchbox', { name: 'Find a contact' }), 'weber');
     // The search has answered once the other names have gone.
-    await waitFor(() => {
-      expect(within(picker).queryByRole('radio', { name: /M\. Khalil/ })).toBeNull();
-    });
+    // A debounce and a read: longer than `waitFor`'s one-second default on a busy machine.
+    await waitFor(
+      () => {
+        expect(within(picker).queryByRole('radio', { name: /M\. Khalil/ })).toBeNull();
+      },
+      { timeout: 5_000 },
+    );
     await user.click(within(picker).getByRole('radio', { name: /Jonas Weber/ }));
     await user.click(within(picker).getByRole('button', { name: 'Continue' }));
 

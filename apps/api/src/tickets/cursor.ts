@@ -21,6 +21,15 @@ import { z } from 'zod';
 const direction = z.enum(['asc', 'desc']);
 
 /**
+ * `f` marks a page of a search that fell back to its fuzzy half (M1-15 part 2,
+ * `ticket-query.ts`). The fallback is decided on the first page and carried
+ * from there, so every page of one search is read by the same question: a
+ * later page that switched halves would skip the fuzzy matches that sort
+ * before it. It narrows nothing and widens nothing the policies decide.
+ */
+const shared = { d: direction, id: z.uuid(), f: z.literal(true).optional() };
+
+/**
  * The sort key of the last row on a page, and its id as the tiebreaker.
  *
  * `v` is typed **per sort**, not as "a string or a number". The value reaches
@@ -31,15 +40,6 @@ const direction = z.enum(['asc', 'desc']);
  * a cursor only reorders a page row-level security has already scoped, but
  * "the caller's mistake answers 400" is the contract this file states.
  */
-/**
- * `f` marks a page of a search that fell back to its fuzzy half (M1-15 part 2,
- * `ticket-query.ts`). The fallback is decided on the first page and carried
- * from there, so every page of one search is read by the same question: a
- * later page that switched halves would skip the fuzzy matches that sort
- * before it. It narrows nothing and widens nothing the policies decide.
- */
-const shared = { d: direction, id: z.uuid(), f: z.literal(true).optional() };
-
 export const ticketCursorSchema = z.discriminatedUnion('s', [
   z.object({ s: z.literal('updatedAt'), v: z.iso.datetime(), ...shared }),
   z.object({ s: z.literal('createdAt'), v: z.iso.datetime(), ...shared }),

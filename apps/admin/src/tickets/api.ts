@@ -139,7 +139,7 @@ export interface TicketQuery {
   readonly departmentId?: readonly string[];
   readonly channel?: readonly TicketChannel[];
   readonly assigneeId?: readonly (string | 'unassigned')[];
-  /** Free text over the subject: full text first, trigram for the misspelled. */
+  /** Free text: every word of the subject and first message, with a fuzzy fallback (ADR 0011). */
   readonly q?: string;
   readonly sort?: TicketSort;
   readonly direction?: TicketSortDirection;

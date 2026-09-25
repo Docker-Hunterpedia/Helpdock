@@ -466,7 +466,7 @@ export const ticketListQuerySchema = z.object({
    */
   tagId: coerceArray(z.uuid()).optional(),
   tagIds: coerceArray(z.uuid()).optional(),
-  /** Free text over the subject: full-text first, trigram for the misspelled. */
+  /** Free text: every word of the subject and first message, with a fuzzy fallback (ADR 0011). */
   q: z.string().trim().min(1).max(200).optional(),
   sort: ticketSortSchema.default('updatedAt'),
   direction: ticketSortDirectionSchema.default('desc'),

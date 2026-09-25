@@ -1,106 +1,188 @@
+import type { TicketView } from '@helpdock/schemas';
+import { ticketViewFiltersSchema } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { HOUR, NOW, testStatus, testTicket } from './fixtures.js';
-import { applyView, isOverdue, TICKET_VIEWS, viewByKey, viewCount } from './views.js';
+import {
+  activeFilterCount,
+  CUSTOM,
+  defaultView,
+  EMPTY_FILTERS,
+  filtersFromParams,
+  filtersOfView,
+  queryOf,
+  resolveWorkspace,
+  sameFilters,
+  sidebarViews,
+  viewFiltersOf,
+  viewLabel,
+  withFilters,
+  withoutFilters,
+} from './views.js';
 
-const ME = '0192c3f0-1a2b-7c3d-8e4f-00000000000a';
-const past = new Date(NOW - 2 * HOUR).toISOString();
-const future = new Date(NOW + 2 * HOUR).toISOString();
+const TAG = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
 
-describe('the default views', () => {
-  it('asks the api for what the api can answer', () => {
-    expect(TICKET_VIEWS.myOpen.query(ME)).toEqual({
-      assigneeId: [ME],
-      systemState: ['open', 'on_hold', 'escalated'],
+const view = (overrides: Partial<TicketView> & Pick<TicketView, 'id'>): TicketView => ({
+  name: overrides.id,
+  nameAr: null,
+  visibility: { kind: 'brand' },
+  builtIn: null,
+  departmentId: null,
+  filters: ticketViewFiltersSchema.parse({ systemState: ['open'] }),
+  hidden: false,
+  sortOrder: 0,
+  editable: true,
+  ...overrides,
+});
+
+const shared = view({ id: 'shared' });
+const hidden = view({ id: 'hidden', hidden: true });
+const mine = view({ id: 'mine', visibility: { kind: 'personal' } });
+
+describe('filtersOfView and viewFiltersOf', () => {
+  it('round-trip a view, folding both tag spellings into one', () => {
+    const saved = ticketViewFiltersSchema.parse({
+      assigneeId: ['me'],
+      tagId: [TAG],
+      overdue: true,
+      sort: 'number',
     });
-    expect(TICKET_VIEWS.unassigned.query(ME).assigneeId).toEqual(['unassigned']);
-    expect(TICKET_VIEWS.escalated.query(ME)).toEqual({ systemState: ['escalated'] });
-  });
 
-  it('is the only one of the four that needs a predicate', () => {
-    expect(TICKET_VIEWS.overdue.predicate).toBeDefined();
-    expect(TICKET_VIEWS.myOpen.predicate).toBeUndefined();
-  });
+    const workspace = filtersOfView(saved);
 
-  it('answers to its key, and to nothing else', () => {
-    expect(viewByKey('overdue')).toBe(TICKET_VIEWS.overdue);
-    expect(viewByKey('all')).toBeNull();
-    expect(viewByKey(null)).toBeNull();
+    expect(workspace.tagIds).toEqual([TAG]);
+    expect(viewFiltersOf(workspace)).toEqual({
+      assigneeId: ['me'],
+      tagIds: [TAG],
+      overdue: true,
+      sort: 'number',
+      direction: 'desc',
+    });
   });
 });
 
-describe('isOverdue', () => {
-  it('counts a first-response clock that has run out', () => {
-    expect(isOverdue(testTicket({ firstResponseDueAt: past }), NOW)).toBe(true);
+describe('queryOf', () => {
+  it('leaves the api’s defaults to the api', () => {
+    expect(queryOf({ ...EMPTY_FILTERS, priority: ['urgent'] })).toEqual({ priority: ['urgent'] });
   });
 
-  it('counts a resolution clock that has run out', () => {
-    expect(isOverdue(testTicket({ resolutionDueAt: past }), NOW)).toBe(true);
-  });
-
-  it('counts a ticket the api has already marked breached', () => {
-    expect(isOverdue(testTicket({ slaBreached: true }), NOW)).toBe(true);
-  });
-
-  it('does not count a clock that is still running', () => {
-    expect(isOverdue(testTicket({ resolutionDueAt: future }), NOW)).toBe(false);
-  });
-
-  it('does not count a paused clock: waiting is not late', () => {
-    const awaiting = testTicket({
-      status: testStatus({ systemState: 'on_hold', pausesSla: true }),
-      firstResponseDueAt: past,
+  it('sends an order that is not the default', () => {
+    expect(queryOf({ ...EMPTY_FILTERS, sort: 'priority', direction: 'asc' })).toEqual({
+      sort: 'priority',
+      direction: 'asc',
     });
-
-    expect(isOverdue(awaiting, NOW)).toBe(false);
-  });
-
-  it('does not count a closed ticket, whose clocks nobody can act on', () => {
-    const closed = testTicket({
-      status: testStatus({ systemState: 'closed' }),
-      resolutionDueAt: past,
-      slaBreached: true,
-    });
-
-    expect(isOverdue(closed, NOW)).toBe(false);
-  });
-
-  it('does not count a ticket no policy covers', () => {
-    expect(isOverdue(testTicket(), NOW)).toBe(false);
   });
 });
 
-describe('applyView', () => {
-  const rows = [
-    testTicket({ id: 'late', resolutionDueAt: past }),
-    testTicket({ id: 'fine', resolutionDueAt: future }),
-  ];
-
-  it('narrows to what the predicate keeps', () => {
-    expect(applyView(TICKET_VIEWS.overdue, rows, NOW).map((row) => row.id)).toEqual(['late']);
-  });
-
-  it('keeps every row when the query was the whole view', () => {
-    expect(applyView(TICKET_VIEWS.myOpen, rows, NOW)).toEqual(rows);
-  });
-
-  it('keeps every row when no view is selected at all', () => {
-    expect(applyView(null, rows, NOW)).toEqual(rows);
-  });
-});
-
-describe('viewCount', () => {
-  it('counts what the view actually shows', () => {
-    const list = {
-      tickets: [testTicket({ id: 'late', resolutionDueAt: past }), testTicket({ id: 'fine' })],
-      nextCursor: null,
+describe('the URL', () => {
+  it('carries every filter and reads it back', () => {
+    const filters = {
+      ...EMPTY_FILTERS,
+      systemState: ['open', 'escalated'] as const,
+      assigneeId: ['me'],
+      tagIds: [TAG],
+      overdue: true,
+      q: 'refund',
+      sort: 'createdAt' as const,
+      direction: 'asc' as const,
     };
 
-    expect(viewCount(TICKET_VIEWS.overdue, list, NOW)).toEqual({ count: 1, partial: false });
+    const params = withFilters(new URLSearchParams('view=v1'), filters);
+
+    expect(params.get('view')).toBe('v1');
+    expect(params.get(CUSTOM)).toBe('1');
+    expect(sameFilters(filtersFromParams(params), filters)).toBe(true);
   });
 
-  it('says the count is a floor while the api has more pages', () => {
-    const list = { tickets: [testTicket()], nextCursor: 'c:1' };
+  it('drops the filters and keeps the view on reset', () => {
+    const params = withFilters(new URLSearchParams('view=v1'), EMPTY_FILTERS);
 
-    expect(viewCount(TICKET_VIEWS.myOpen, list, NOW)).toEqual({ count: 1, partial: true });
+    expect(withoutFilters(params).toString()).toBe('view=v1');
+  });
+
+  it('ignores a sort it does not know', () => {
+    expect(filtersFromParams(new URLSearchParams('sort=nonsense')).sort).toBe('updatedAt');
+  });
+});
+
+describe('sameFilters', () => {
+  it('does not care about the order of chips', () => {
+    expect(
+      sameFilters(
+        { ...EMPTY_FILTERS, priority: ['high', 'urgent'] },
+        { ...EMPTY_FILTERS, priority: ['urgent', 'high'] },
+      ),
+    ).toBe(true);
+  });
+
+  it('notices a changed order', () => {
+    expect(sameFilters(EMPTY_FILTERS, { ...EMPTY_FILTERS, direction: 'asc' })).toBe(false);
+  });
+});
+
+describe('sidebarViews and defaultView', () => {
+  it('puts shared views first, leaves hidden ones out, and personal ones under Mine', () => {
+    expect(sidebarViews([mine, hidden, shared])).toEqual({ shared: [shared], mine: [mine] });
+  });
+
+  it('opens on the first shared view', () => {
+    expect(defaultView([hidden, shared, mine])).toBe(shared);
+  });
+
+  it('opens on the first personal view when nothing is shared', () => {
+    expect(defaultView([mine])).toBe(mine);
+    expect(defaultView([])).toBeNull();
+  });
+});
+
+describe('resolveWorkspace', () => {
+  it('uses the view’s own filters until the URL replaces them', () => {
+    const resolved = resolveWorkspace([shared], new URLSearchParams('view=shared&priority=high'));
+
+    expect(resolved).toMatchObject({ view: shared, changed: false });
+    expect(resolved.filters.systemState).toEqual(['open']);
+  });
+
+  it('says the filters changed when the URL replaces them with something else', () => {
+    const params = withFilters(new URLSearchParams('view=shared'), {
+      ...EMPTY_FILTERS,
+      systemState: ['open'],
+      priority: ['high'],
+    });
+
+    expect(resolveWorkspace([shared], params)).toMatchObject({ view: shared, changed: true });
+  });
+
+  it('does not, when the replacement asks for the same thing', () => {
+    const params = withFilters(new URLSearchParams('view=shared'), filtersOfView(shared.filters));
+
+    expect(resolveWorkspace([shared], params).changed).toBe(false);
+  });
+
+  it('opens the whole desk for `all`, and for a view the reader cannot see', () => {
+    expect(resolveWorkspace([shared], new URLSearchParams('view=all')).view).toBeNull();
+    expect(
+      resolveWorkspace([shared], new URLSearchParams('view=gone&priority=low')).filters.priority,
+    ).toEqual(['low']);
+  });
+
+  it('opens the first view when the URL names none', () => {
+    expect(resolveWorkspace([shared], new URLSearchParams()).view).toBe(shared);
+  });
+});
+
+describe('viewLabel', () => {
+  it('reads Arabic when there is Arabic, and the name otherwise', () => {
+    const named = view({ id: 'x', name: 'Overdue', nameAr: 'المتأخرة' });
+
+    expect(viewLabel(named, 'ar')).toBe('المتأخرة');
+    expect(viewLabel(named, 'en')).toBe('Overdue');
+    expect(viewLabel(view({ id: 'y', name: 'VIP' }), 'ar')).toBe('VIP');
+  });
+});
+
+describe('activeFilterCount', () => {
+  it('counts every chip and the overdue switch', () => {
+    expect(
+      activeFilterCount({ ...EMPTY_FILTERS, priority: ['high'], tagIds: [TAG], overdue: true }),
+    ).toBe(3);
   });
 });

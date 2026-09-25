@@ -1,6 +1,17 @@
-import type { ContactSummary, Department, StaffMember, TicketStatus } from '@helpdock/schemas';
+import type {
+  ContactSummary,
+  Department,
+  StaffMember,
+  TagSummary,
+  TicketStatus,
+} from '@helpdock/schemas';
 import { useQuery } from '@tanstack/react-query';
-import { useContactsApi, useStaffApi, useTicketsApi } from '../../auth/session.tsx';
+import {
+  useContactsApi,
+  useStaffApi,
+  useTicketingApi,
+  useTicketsApi,
+} from '../../auth/session.tsx';
 import { ticketKeys } from '../../tickets/keys.js';
 
 /**
@@ -28,11 +39,31 @@ export interface WorkspaceData {
   readonly statuses: readonly TicketStatus[];
   readonly departments: readonly Department[];
   readonly staff: readonly StaffMember[];
+  /** M1-05: what a tag filter and a view's summary are named from. */
+  readonly tags: readonly TagSummary[];
+}
+
+/**
+ * The brand's departments, on the key the Departments tab shares. `enabled`
+ * lets the sidebar, which is on every screen, read them only when a dialog
+ * needs them.
+ */
+export function useDepartments(brandId: string, enabled = true): readonly Department[] {
+  const staffApi = useStaffApi();
+  const departments = useQuery({
+    queryKey: ['departments', brandId],
+    queryFn: () => staffApi.departments(brandId),
+    staleTime: DIRECTORY_STALE_MS,
+    enabled,
+  });
+
+  return departments.data?.departments ?? [];
 }
 
 export function useWorkspaceData(brandId: string): WorkspaceData {
   const tickets = useTicketsApi();
   const staffApi = useStaffApi();
+  const ticketingApi = useTicketingApi();
 
   const statuses = useQuery({
     queryKey: ticketKeys.statuses(brandId),
@@ -40,11 +71,7 @@ export function useWorkspaceData(brandId: string): WorkspaceData {
     staleTime: DIRECTORY_STALE_MS,
   });
 
-  const departments = useQuery({
-    queryKey: ['departments', brandId],
-    queryFn: () => staffApi.departments(brandId),
-    staleTime: DIRECTORY_STALE_MS,
-  });
+  const departments = useDepartments(brandId);
 
   /**
    * `GET /staff` declares `staff:manage`, which an Agent does not hold, so this
@@ -59,10 +86,19 @@ export function useWorkspaceData(brandId: string): WorkspaceData {
     retry: false,
   });
 
+  // The Tags tab's own key, so the two share one cache and an edit there is
+  // what the filter popover shows next.
+  const tags = useQuery({
+    queryKey: ['tags', brandId],
+    queryFn: () => ticketingApi.tags(brandId),
+    staleTime: DIRECTORY_STALE_MS,
+  });
+
   return {
     statuses: statuses.data?.statuses ?? [],
-    departments: departments.data?.departments ?? [],
+    departments,
     staff: staff.data?.staff ?? [],
+    tags: tags.data?.tags ?? [],
   };
 }
 

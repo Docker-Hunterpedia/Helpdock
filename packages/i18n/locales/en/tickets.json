@@ -7,7 +7,16 @@
     "overdue": "Overdue",
     "escalated": "Escalated",
     "all": "All tickets",
-    "partialCount": "{{count}}+"
+    "partialCount": "{{count}}+",
+    "mine": "Mine",
+    "new": "Save as a view",
+    "actions": "Actions for {{name}}",
+    "edit": "Edit filters",
+    "rename": "Rename",
+    "share": "Share with…",
+    "delete": "Delete",
+    "empty": "No views to show",
+    "allTickets": "All tickets"
   },
   "list": {
     "label": "Ticket list",
@@ -193,7 +202,18 @@
     "unassigned": "Unassigned",
     "me": "Assigned to me",
     "any": "Any",
-    "clear": "Clear filters"
+    "clear": "Clear filters",
+    "state": "State",
+    "states": {
+      "open": "Open",
+      "on_hold": "On hold",
+      "escalated": "Escalated",
+      "closed": "Closed"
+    },
+    "tags": "Tags",
+    "tag": "Tag",
+    "sla": "SLA",
+    "overdue": "Breached or due"
   },
   "newTicket": {
     "action": "New ticket",
@@ -357,5 +377,73 @@
     "merge-window-closed": "A merge can be undone for 24 hours, and those have passed.",
     "attachments-in-flight": "A file on those messages is still being processed. Try again in a moment.",
     "ticket-not-spam": "This ticket is not marked as spam."
+  },
+  "summary": {
+    "me": "me",
+    "nobody": "nobody",
+    "chip": "{{field}}: {{value}}",
+    "is": "{{field}} is {{value}}",
+    "live": "live",
+    "or": " or ",
+    "and": ", ",
+    "allOf": "{{field}}: {{value}}",
+    "overdue": "SLA breached or due",
+    "search": "Search: {{value}}",
+    "sort": "Sort: {{value}}",
+    "everything": "Every ticket"
+  },
+  "sort": {
+    "updatedAt": {
+      "desc": "last updated",
+      "asc": "least recently updated"
+    },
+    "createdAt": {
+      "desc": "newest first",
+      "asc": "oldest first"
+    },
+    "number": {
+      "desc": "highest number first",
+      "asc": "lowest number first"
+    },
+    "priority": {
+      "desc": "highest priority first",
+      "asc": "lowest priority first"
+    }
+  },
+  "viewBar": {
+    "changed": "Filters changed",
+    "reset": "Reset",
+    "saveAsNew": "Save as new",
+    "save": "Save",
+    "chips": "Filters on",
+    "remove": "Remove {{filter}}"
+  },
+  "viewToast": {
+    "saved": "{{name}} saved",
+    "updated": "{{name}} updated",
+    "deleted": "{{name}} deleted",
+    "reordered": "New order saved"
+  },
+  "viewDialog": {
+    "title": "Save as a view",
+    "body": "The current filters and sort, under a name.",
+    "name": "Name",
+    "audience": "Who sees it",
+    "onlyMe": "Only me",
+    "onlyMeHint": "Under \"Mine\" in your sidebar.",
+    "departments": "Shared with departments",
+    "departmentsHint": "Team Leaders and Admins only; a Team Leader can share with the departments they lead.",
+    "departmentList": "Departments",
+    "saves": "Saves",
+    "submit": "Save view",
+    "renameTitle": "Rename {{name}}",
+    "renameSubmit": "Rename",
+    "shareTitle": "Share {{name}}",
+    "shareBody": "Shared views appear in the sidebar of everyone in the departments you choose.",
+    "shareSubmit": "Share",
+    "pickDepartment": "Choose at least one department.",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteBody": "The view goes from the sidebar. No ticket changes.",
+    "deleteSubmit": "Delete view"
   }
 }

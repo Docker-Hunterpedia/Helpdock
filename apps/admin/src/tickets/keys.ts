@@ -15,15 +15,13 @@ export const ticketKeys = {
   /** Every list, for the invalidation a created ticket needs. */
   lists: (brandId: string) => ['tickets', brandId, 'list'] as const,
   list: (brandId: string, query: TicketQuery) => ['tickets', brandId, 'list', query] as const,
+  /** M1-05: the views the reader may see, for the sidebar and the Views tab. */
+  views: (brandId: string) => ['tickets', brandId, 'views'] as const,
   /**
-   * A sidebar count. Separate from `list` on purpose: the list is read with
-   * `useInfiniteQuery`, whose cache entry is `{ pages, pageParams }` rather
-   * than a page, and a count sharing the key would read one shape and find the
-   * other the moment both are on screen — which is every time the workspace is
-   * open on the view the count is for.
+   * M1-05: the sidebar's counts, one request for every view. Under the brand
+   * prefix, and apart from `list`, whose cache entry is `{ pages, pageParams }`
+   * rather than a page.
    */
-  count: (brandId: string, view: string) => ['tickets', brandId, 'count', view] as const,
-  /** Every sidebar count, for the invalidation a created ticket needs. */
   counts: (brandId: string) => ['tickets', brandId, 'count'] as const,
   detail: (brandId: string, ticketId: string) => ['tickets', brandId, 'detail', ticketId] as const,
   /** M1-07: every department's picker options, for the invalidation an assignment needs. */

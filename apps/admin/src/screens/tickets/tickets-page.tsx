@@ -1,6 +1,5 @@
-import type { TicketPriority } from '@helpdock/schemas';
 import { Box, Button, Drawer, useMediaQuery } from '@mui/material';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TicketIcon } from 'lucide-react';
 import {
   type ReactNode,
@@ -13,23 +12,36 @@ import {
 } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
+import { usePreferences } from '../../app/providers.tsx';
 import { ROUTES, ticketIdFromPath, ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession, useTicketsApi } from '../../auth/session.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
-import type { TicketQuery } from '../../tickets/api.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import { mergePages, moveSelection } from '../../tickets/pages.js';
-import { applyView, viewByKey } from '../../tickets/views.js';
+import {
+  ALL_VIEW,
+  INTENT,
+  intentOf,
+  queryOf,
+  resolveWorkspace,
+  viewFiltersOf,
+  viewLabel,
+  type WorkspaceFilters,
+  withFilters,
+  withoutFilters,
+} from '../../tickets/views.js';
 import { useToast } from '../../ui/toasts.tsx';
-import { EMPTY_FILTERS, type TicketFilters } from './filter-popover.tsx';
+import { useFilterSummary } from './filter-summary.js';
 import { paragraph } from './format.js';
 import { shortcutFor } from './keyboard.js';
 import { NewTicketDialog, type NewTicketValue } from './new-ticket-dialog.tsx';
 import { TICKET_LIST_WIDTH, TicketList } from './ticket-list.tsx';
 import { TicketView } from './ticket-view.tsx';
 import { useDepartmentRooms } from './use-ticket-realtime.js';
+import { useViewActions } from './use-view-actions.js';
 import { useContactSearch, useWorkspaceData } from './use-workspace-data.js';
+import { SaveViewDialog } from './view-dialogs.tsx';
 
 /**
  * The ticket workspace: `/tickets` and `/tickets/:ticketId` are the same
@@ -39,6 +51,9 @@ import { useContactSearch, useWorkspaceData } from './use-workspace-data.js';
  * the query string and the open ticket is the path — which is the rule the
  * contact screens set: a filtered queue is a link an agent can send, and the
  * back button steps through what they looked at rather than out of the screen.
+ * `?view=<id>` names a saved view (M1-05); a filter changed on top of it writes
+ * the whole filter set beside it, and `tickets/views.ts` works out what that
+ * means — see it for the rules.
  *
  * **The columns of DESIGN §6.5** are 220 · 360 · flexible · 300. Below 1280 px
  * the details panel becomes a drawer; below 1024 px the list does too, which is
@@ -51,6 +66,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 export function TicketsPage(): ReactNode {
   const t = useT();
+  const { locale } = usePreferences();
   const tokens = useSemanticTokens();
   const session = useSession();
   const api = useTicketsApi();
@@ -66,16 +82,29 @@ export function TicketsPage(): ReactNode {
   const wideDetails = useMediaQuery(DETAILS_BREAKPOINT, { noSsr: true });
   const wideList = useMediaQuery(LIST_BREAKPOINT, { noSsr: true });
 
-  const viewKey = params.get('view') ?? 'myOpen';
-  const view = viewByKey(viewKey);
-  const search = params.get('q') ?? '';
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the params object is the dependency.
-  const filters = useMemo(() => filtersFrom(params), [params]);
+  const views = useQuery({
+    queryKey: ticketKeys.views(brand.id),
+    queryFn: () => api.views(brand.id),
+  });
+  const resolved = useMemo(
+    () => resolveWorkspace(views.data?.views ?? [], params),
+    [views.data, params],
+  );
+  const view = resolved.view;
+  // The search box is an override on top of the view rather than a change to
+  // it: a term typed into a view does not raise "Filters changed".
+  const search = params.get('q') ?? resolved.filters.q;
+  const filters: WorkspaceFilters = useMemo(
+    () => ({ ...resolved.filters, q: search }),
+    [resolved.filters, search],
+  );
 
   const [typed, setTyped] = useState(search);
   const [listOpen, setListOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [openFiltersToken, setOpenFiltersToken] = useState<number | null>(null);
   const [contactTerm, setContactTerm] = useState('');
   const [replyFocusToken, setReplyFocusToken] = useState<{
     mode: 'reply' | 'note';
@@ -83,6 +112,8 @@ export function TicketsPage(): ReactNode {
   } | null>(null);
 
   const directory = useWorkspaceData(brand.id);
+  const summary = useFilterSummary(directory);
+  const viewActions = useViewActions();
   const contactResults = useContactSearch(brand.id, contactTerm);
   const debounced = useDebounced(typed, SEARCH_DEBOUNCE_MS);
   const now = Date.now();
@@ -92,7 +123,7 @@ export function TicketsPage(): ReactNode {
       setParams(
         (previous) => {
           const next = new URLSearchParams(previous);
-          if (debounced === '') {
+          if (debounced === '' && resolved.filters.q === '') {
             next.delete('q');
           } else {
             next.set('q', debounced);
@@ -102,19 +133,34 @@ export function TicketsPage(): ReactNode {
         { replace: true },
       );
     }
-  }, [debounced, search, setParams]);
+  }, [debounced, search, resolved.filters.q, setParams]);
 
-  const query: TicketQuery = useMemo(
-    () => ({
-      ...(view === null ? {} : view.query(session.user.id)),
-      ...(search === '' ? {} : { q: search }),
-      ...(filters.statusId.length === 0 ? {} : { statusId: filters.statusId }),
-      ...(filters.priority.length === 0 ? {} : { priority: filters.priority }),
-      ...(filters.assigneeId.length === 0 ? {} : { assigneeId: filters.assigneeId }),
-      ...(filters.departmentId.length === 0 ? {} : { departmentId: filters.departmentId }),
-    }),
-    [view, session.user.id, search, filters],
-  );
+  // An intent from the sidebar is acted on once and dropped from the URL.
+  const intent = intentOf(params);
+  useEffect(() => {
+    if (intent === null) {
+      return;
+    }
+    if (intent === 'filters') {
+      setOpenFiltersToken(Date.now());
+    } else {
+      setSaveOpen(true);
+    }
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete(INTENT);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [intent, setParams]);
+
+  const query = useMemo(() => queryOf(filters), [filters]);
+
+  // Until the views arrive the URL's `view` means nothing yet, and reading the
+  // whole desk meanwhile would flash tickets the view does not hold.
+  const viewsSettled = !views.isPending || params.get('view') === ALL_VIEW;
 
   const list = useInfiniteQuery({
     queryKey: ticketKeys.list(brand.id, query),
@@ -122,17 +168,10 @@ export function TicketsPage(): ReactNode {
       api.list(brand.id, pageParam === null ? query : { ...query, cursor: pageParam }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
+    enabled: viewsSettled,
   });
 
-  // `now` moves on every render and the Overdue predicate reads it; rebuilding
-  // the rows for a clock tick would re-render the whole list sixty times a
-  // second, and a ticket that becomes overdue between two reads is one the
-  // next read catches.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the clock is coarse on purpose.
-  const tickets = useMemo(
-    () => applyView(view, mergePages(list.data?.pages ?? []), now),
-    [view, list.data],
-  );
+  const tickets = useMemo(() => mergePages(list.data?.pages ?? []), [list.data]);
 
   useDepartmentRooms(
     brand.id,
@@ -142,30 +181,34 @@ export function TicketsPage(): ReactNode {
   const linkSearch = params.toString() === '' ? '' : `?${params.toString()}`;
 
   const setFilters = useCallback(
-    (next: TicketFilters) => {
-      setParams((previous) => {
-        const updated = new URLSearchParams(previous);
-        updated.delete('status');
-        updated.delete('priority');
-        updated.delete('assignee');
-        updated.delete('department');
-        for (const id of next.statusId) {
-          updated.append('status', id);
-        }
-        for (const value of next.priority) {
-          updated.append('priority', value);
-        }
-        for (const value of next.assigneeId) {
-          updated.append('assignee', value);
-        }
-        for (const id of next.departmentId) {
-          updated.append('department', id);
-        }
-        return updated;
-      });
+    (next: WorkspaceFilters) => {
+      setParams((previous) => withFilters(previous, next));
     },
     [setParams],
   );
+
+  const resetFilters = useCallback(() => {
+    setParams((previous) => withoutFilters(previous));
+  }, [setParams]);
+
+  const changes =
+    view !== null && resolved.changed
+      ? {
+          // A built-in view never changes its filters, and a shared one only
+          // for somebody who manages it: Save is offered where it can succeed.
+          canSave: view.editable && view.builtIn === null,
+          onReset: resetFilters,
+          onSave: () => {
+            viewActions.update.mutate(
+              { view, request: { filters: viewFiltersOf(filters) } },
+              { onSuccess: resetFilters },
+            );
+          },
+          onSaveAsNew: () => {
+            setSaveOpen(true);
+          },
+        }
+      : null;
 
   // -------------------------------------------------------------- keyboard
 
@@ -280,7 +323,7 @@ export function TicketsPage(): ReactNode {
 
   const listColumn = (
     <TicketList
-      heading={t(view === null ? 'tickets:views.all' : `tickets:views.${view.key}`)}
+      heading={view === null ? t('tickets:views.all') : viewLabel(view, locale)}
       tickets={tickets}
       selectedId={ticketId}
       now={now}
@@ -289,8 +332,11 @@ export function TicketsPage(): ReactNode {
       filters={filters}
       statuses={directory.statuses}
       departments={directory.departments}
+      tags={directory.tags}
       staff={directory.staff.map((member) => ({ userId: member.userId, name: member.name }))}
       viewerId={session.user.id}
+      changes={changes}
+      openFiltersToken={openFiltersToken}
       hasMore={list.hasNextPage}
       loading={list.isPending || list.isFetchingNextPage}
       failed={list.isError}
@@ -393,18 +439,31 @@ export function TicketsPage(): ReactNode {
           setDialogOpen(false);
         }}
       />
+
+      <SaveViewDialog
+        open={saveOpen}
+        summary={summary.sentence(filters, { withSort: true })}
+        canShare={session.user.role === 'admin' || session.user.role === 'teamLeader'}
+        departments={directory.departments}
+        busy={viewActions.busy}
+        onClose={() => {
+          setSaveOpen(false);
+        }}
+        onSubmit={(value) => {
+          viewActions.create.mutate(
+            { ...value, filters: viewFiltersOf(filters) },
+            {
+              onSuccess: (created) => {
+                setSaveOpen(false);
+                void navigate({ pathname: ROUTES.tickets, search: `?view=${created.id}` });
+              },
+            },
+          );
+        }}
+      />
     </Box>
   );
 }
-
-/** The filters as the query string carries them. */
-export const filtersFrom = (params: URLSearchParams): TicketFilters => ({
-  ...EMPTY_FILTERS,
-  statusId: params.getAll('status'),
-  priority: params.getAll('priority') as TicketPriority[],
-  assigneeId: params.getAll('assignee'),
-  departmentId: params.getAll('department'),
-});
 
 /** `value`, but only after it has stopped changing for `delay` milliseconds. */
 function useDebounced<T>(value: T, delay: number): T {

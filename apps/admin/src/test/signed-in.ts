@@ -30,13 +30,14 @@ export async function signedInMockApis(): Promise<AdminApis> {
   // Shared, as `createApis` shares it: a sender blocked from a ticket is on the
   // Spam tab (M1-11).
   const blockList = new MockBlockList();
+  const ticketing = new MockTicketingApi(blockList);
 
   return {
     auth,
     staff,
     contacts: new MockContactsApi(),
-    ticketing: new MockTicketingApi(blockList),
-    tickets: new MockTicketsApi(undefined, Date.now(), blockList),
+    ticketing,
+    tickets: new MockTicketsApi(undefined, Date.now(), blockList, undefined, ticketing),
     uploader: new MockAttachmentUploader(),
   };
 }

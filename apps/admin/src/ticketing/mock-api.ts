@@ -293,6 +293,18 @@ const seedFields = (): CustomFieldDef[] => [
     sortOrder: 1,
   },
   {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000205',
+    target: 'ticket',
+    key: 'order_id',
+    label: 'Order id',
+    labelAr: 'رقم الطلب',
+    type: 'text',
+    options: [],
+    required: false,
+    agentVisible: true,
+    sortOrder: 2,
+  },
+  {
     id: '0192c3f0-1a2b-7c3d-8e4f-000000000203',
     target: 'contact',
     key: 'seats',

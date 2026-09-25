@@ -5,6 +5,7 @@ import type {
   MergedTicket,
   MessageCreateRequest,
   RelatedTicket,
+  Tag,
   Ticket,
   TicketActivityEntry,
   TicketActivityList,
@@ -26,6 +27,7 @@ import type {
   TicketSplitRequest,
   TicketStatus,
   TicketStatusList,
+  TicketTagList,
   TicketUpdateRequest,
   TicketView,
   TicketViewCountList,
@@ -37,7 +39,13 @@ import type {
   TimeEntryCreateRequest,
   TimeEntryList,
 } from '@helpdock/schemas';
-import { normaliseEmail, TICKET_PAGE_SIZE_DEFAULT, UNMERGE_WINDOW_MS } from '@helpdock/schemas';
+import {
+  customValuesSchema,
+  mergeCustomValues,
+  normaliseEmail,
+  TICKET_PAGE_SIZE_DEFAULT,
+  UNMERGE_WINDOW_MS,
+} from '@helpdock/schemas';
 import { ContactError } from '../contacts/api.js';
 import {
   MOCK_CONTACT_ACCOUNT,
@@ -50,6 +58,8 @@ import {
 import { MOCK_CSAT_TOKENS } from '../csat/mock-api.js';
 import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
+import type { TicketingApi } from '../ticketing/api.js';
+import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
@@ -87,6 +97,26 @@ export const MOCK_TICKET_VAT = '0192c3f0-1a2b-7c3d-8e4f-000000001035';
 export const MOCK_TICKET_CLOSED = '0192c3f0-1a2b-7c3d-8e4f-000000001030';
 export const MOCK_TICKET_TRANSCRIPT = '0192c3f0-1a2b-7c3d-8e4f-000000001028';
 /** Named by HD-1041 and held by nobody: a linked ticket the viewer cannot open. */
+/** The seeded tags of `MockTicketingApi`, as a ticket carries them. */
+const MOCK_TAG_REFUND: Tag = {
+  id: '0192c3f0-1a2b-7c3d-8e4f-000000000101',
+  name: 'Refund',
+  nameAr: 'استرداد',
+  color: 'info',
+};
+const MOCK_TAG_VIP: Tag = {
+  id: '0192c3f0-1a2b-7c3d-8e4f-000000000102',
+  name: 'VIP',
+  nameAr: 'كبار العملاء',
+  color: 'escalated',
+};
+/** A tag the catalogue no longer has: what a ticket read just before its deletion carries. */
+const MOCK_TAG_DELETED: Tag = {
+  id: '0192c3f0-1a2b-7c3d-8e4f-000000000109',
+  name: 'Legacy',
+  nameAr: 'قديم',
+  color: 'stone',
+};
 const MOCK_TICKET_HIDDEN = '0192c3f0-1a2b-7c3d-8e4f-000000000999';
 
 export const MOCK_STATUS_OPEN = '0192c3f0-1a2b-7c3d-8e4f-000000000051';
@@ -207,7 +237,8 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       firstResponseDueAt: at(-2 * HOUR),
       resolutionDueAt: at(6 * HOUR),
       slaBreached: true,
-      custom: { orderId: 'ORD-4812', plan: 'Business' },
+      custom: { tier: 'gold', order_id: 'ORD-4812' },
+      tags: [MOCK_TAG_REFUND, MOCK_TAG_VIP],
       createdAt: at(-26 * HOUR),
       updatedAt: at(-12 * MINUTE),
     }),
@@ -272,6 +303,10 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       subject: 'Chat transcript request',
       channel: 'form',
       contactId: MOCK_CONTACT_VISITOR,
+      // Read before somebody deleted its tag in Ticketing › Tags, so any change
+      // to its chips names an id the brand no longer has and is refused, as
+      // the api refuses it (M1-15).
+      tags: [MOCK_TAG_DELETED],
       // Overdue on resolution, which is what puts it in the Overdue view.
       resolutionDueAt: at(-3 * HOUR),
       createdAt: at(-11 * DAY),
@@ -528,6 +563,8 @@ export class MockTicketsApi implements TicketsApi {
   /** M1-05. Counted against this fixture's own tickets, as the api counts its own. */
   readonly #views = new MockViews((filters) => this.#matching(queryOfView(filters)).length);
   readonly #now: number;
+  /** M1-15: the brand's tags and custom fields, which the Ticketing screens own. */
+  readonly #catalog: Pick<TicketingApi, 'tags' | 'customFields'>;
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
@@ -539,7 +576,9 @@ export class MockTicketsApi implements TicketsApi {
     now: number = Date.now(),
     blockList: MockBlockList = new MockBlockList(),
     contactName: (contactId: string) => string | undefined = seedContactName,
+    catalog: Pick<TicketingApi, 'tags' | 'customFields'> = new MockTicketingApi(blockList),
   ) {
+    this.#catalog = catalog;
     this.#uploads = uploads;
     this.#now = now;
     this.#blockList = blockList;
@@ -709,7 +748,7 @@ export class MockTicketsApi implements TicketsApi {
     return this.ticket(_brandId, ticket.id);
   }
 
-  async update(_brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket> {
+  async update(brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket> {
     const ticket = this.#require(ticketId);
     // A merged ticket's state belongs to its primary (DOMAIN-RULES §2.4), and
     // so does its department; the api refuses both with the same reason.
@@ -723,9 +762,14 @@ export class MockTicketsApi implements TicketsApi {
       request.statusId === undefined
         ? ticket.status
         : (this.#statuses.find((candidate) => candidate.id === request.statusId) ?? ticket.status);
+    const custom =
+      request.custom === undefined
+        ? ticket.custom
+        : mergeCustomValues(ticket.custom, await this.#parseCustom(brandId, request.custom));
 
     const updated: Ticket = {
       ...ticket,
+      custom,
       ...(request.subject === undefined ? {} : { subject: request.subject }),
       ...(request.priority === undefined ? {} : { priority: request.priority }),
       ...(request.departmentId === undefined ? {} : { departmentId: request.departmentId }),
@@ -756,7 +800,59 @@ export class MockTicketsApi implements TicketsApi {
       },
     ];
 
-    return Promise.resolve(updated);
+    return updated;
+  }
+
+  /**
+   * M1-06's replace. Refuses an id the brand's list does not hold, as the api
+   * does — which is what a ticket read before a tag was deleted runs into.
+   */
+  async setTags(
+    brandId: string,
+    ticketId: string,
+    tagIds: readonly string[],
+  ): Promise<TicketTagList> {
+    const ticket = this.#require(ticketId);
+    const { tags: known } = await this.#catalog.tags(brandId);
+    if (tagIds.some((id) => !known.some((tag) => tag.id === id))) {
+      throw new Error('No such tag in this brand');
+    }
+
+    const tags = known
+      .filter((tag) => tagIds.includes(tag.id))
+      .map(({ id, name, nameAr, color }) => ({ id, name, nameAr, color }));
+    const before = (ticket.tags ?? []).map((tag) => tag.id);
+    this.#put({ ...ticket, tags, updatedAt: isoNow() });
+    this.#activity = [
+      ...this.#activity,
+      {
+        id: this.#nextId('8'),
+        ticketId,
+        actorType: 'staff',
+        actorId: MOCK_SELF_ID,
+        action: 'ticket.tags.changed',
+        from: { tagIds: before },
+        to: { tagIds: tags.map((tag) => tag.id) },
+        via: 'ui',
+        createdAt: isoNow(),
+      },
+    ];
+
+    return { tags };
+  }
+
+  /** A `custom` patch checked against the brand's ticket fields, as the api checks it. */
+  async #parseCustom(
+    brandId: string,
+    patch: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const { fields } = await this.#catalog.customFields(brandId, 'ticket');
+    const parsed = customValuesSchema(fields, { partial: true }).safeParse(patch);
+    if (!parsed.success) {
+      throw new Error(`custom: ${parsed.error.message}`);
+    }
+
+    return parsed.data;
   }
 
   async reply(

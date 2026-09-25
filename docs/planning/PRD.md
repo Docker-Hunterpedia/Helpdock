@@ -86,7 +86,7 @@ Update this table in the same PR that changes a milestone's status.
 | Phase | Milestone | Depends on | Effort (weeks) | Status | Started | Shipped |
 |---|---|---|---|---|---|---|
 | 0 Foundation | M0 Skeleton | — | 5–7 | shipped | 2026-09-18 | 2026-09-19 |
-| 1 Core desk | M1 Ticketing core | M0 | 6–8 | in progress | 2026-09-19 | |
+| 1 Core desk | M1 Ticketing core | M0 | 6–8 | shipped | 2026-09-19 | 2026-09-25 |
 | 1 Core desk | M2 Email channel | M1 | 3–4 | planned | | |
 | 1 Core desk | M3 Automation and SLAs | M1 | 4–5 | planned | | |
 | 2 Customer surfaces | M4 Widget and realtime | M1, M3 | 5–6 | planned | | |
@@ -185,11 +185,11 @@ Depends on: M0.
 
 Exit criteria:
 
-- [ ] An agent can create, assign, reply to, note, tag, merge, split and close tickets in the admin UI, in English and Arabic.
-- [ ] An Agent cannot see or open a ticket in another department, by list, by direct URL, by contact timeline, or by socket room.
-- [ ] Every transition in DOMAIN-RULES §2.2 and each reopen policy value has a test.
-- [ ] Every new tenant table has brand and, where applicable, department RLS policies and is covered by the negative test suite.
-- [ ] Ticket list of 50k seeded tickets loads under 150 ms p95 under the D §14 conditions.
+- [x] An agent can create, assign, reply to, note, tag, merge, split and close tickets in the admin UI, in English and Arabic. All eight verbs have browser tests in both locales; tagging came last, with the details panel's tags row (M1-15, `Admin/Ticket-Tags`). See [the milestone doc](../completed/M1-ticketing-core.md#exit-criteria).
+- [x] An Agent cannot see or open a ticket in another department, by list, by direct URL, by contact timeline, or by socket room.
+- [x] Every transition in DOMAIN-RULES §2.2 and each reopen policy value has a test.
+- [x] Every new tenant table has brand and, where applicable, department RLS policies and is covered by the negative test suite.
+- [x] Ticket list of 50k seeded tickets loads under 150 ms p95 under the D §14 conditions.
 
 #### M2 Email channel
 
@@ -438,3 +438,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-09-18 | M0 started. |
 | 2026-09-19 | M0 shipped. All fifteen deliverables merged; six of seven exit criteria met and the seventh ([all four auth methods in a Playwright test](#m0-skeleton)) met in part, because Google and GitHub wait on the OAuth credentials under external dependencies. Actual effort two days against an estimate of 5–7 weeks; the M1 estimate is left as it stands until there is more than one milestone to calibrate against. What was built, and the ten accepted gaps, are in [docs/completed/M0-skeleton.md](../completed/M0-skeleton.md). M1 Ticketing core is next. |
 | 2026-09-19 | M1 started. |
+| 2026-09-25 | M1 shipped. All fifteen deliverables merged (#63, #64, #66, #69, #70, #71, #72, #73, #74); all five exit criteria met: the first ([create, assign, reply, note, tag, merge, split and close in en and ar](#m1-ticketing-core)) was met for seven of eight verbs at close-out, and the eighth the same day, when the details panel gained its tags row and editable custom fields (M1-15, artboard `Admin/Ticket-Tags`). Actual effort seven days against an estimate of 6–8 weeks. What was built, and the accepted gaps, are in [docs/completed/M1-ticketing-core.md](../completed/M1-ticketing-core.md#gaps-accepted). M2 Email channel, M3 Automation and SLAs and M5 Help center depend only on M1 and may start. |

@@ -136,6 +136,18 @@ describe('HttpTicketsApi', () => {
     expect(ticket.priority).toBe('low');
   });
 
+  it('puts the whole tag set and parses the set the api stored', async () => {
+    const tag = { id: '0192c3f0-1a2b-7c3d-8e4f-000000000101', name: 'Refund', nameAr: null };
+    fetchMock.mockResolvedValue(json({ tags: [{ ...tag, color: 'info' }] }));
+
+    const { tags } = await api.setTags(BRAND, TICKET, [tag.id]);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/tags`);
+    expect(lastInit().method).toBe('PUT');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ tagIds: [tag.id] });
+    expect(tags.map((row) => row.name)).toEqual(['Refund']);
+  });
+
   it('posts a reply with the clientId the composer generated', async () => {
     const clientId = '0192c3f0-1a2b-7c3d-8e4f-0000000000f1';
     fetchMock.mockResolvedValue(json(testMessage({ seq: 5, clientId })));

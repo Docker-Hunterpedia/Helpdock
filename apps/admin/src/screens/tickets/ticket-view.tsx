@@ -27,6 +27,7 @@ import { EmptyState } from '../../shell/empty-state.tsx';
 import { isTicketingError } from '../../ticketing/api.js';
 import { refusalCopy } from '../../ticketing/refusal-copy.js';
 import { isTicketLifecycleError } from '../../tickets/api.js';
+import { ticketFieldsFor } from '../../tickets/custom-values.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
@@ -48,6 +49,7 @@ import { TimeCard } from './time-card.tsx';
 import { loggableSeconds } from './time-format.js';
 import { useSpamActions } from './use-spam-actions.tsx';
 import { useTicketRoom } from './use-ticket-realtime.js';
+import { useTicketTags } from './use-ticket-tags.js';
 import { useTicketTimer } from './use-ticket-timer.js';
 import { useTimeEntries } from './use-time-entries.js';
 import type { WorkspaceData } from './use-workspace-data.js';
@@ -163,6 +165,22 @@ export function TicketView({
   const timerWithComposer = brand.data?.settings.timerStartsWithComposer === true;
   const canWrite = role !== 'viewer';
   const timer = useTicketTimer(ticketId);
+
+  // M1-15: the tags row and the editable custom fields. The definitions share
+  // the Custom fields tab's key, so an edit there is what the panel draws next.
+  const tags = useTicketTags(brandId, ticketId, directory.tags);
+  const fieldDefs = useQuery({
+    queryKey: ['custom-fields', brandId],
+    queryFn: () => ticketingApi.customFields(brandId),
+    staleTime: 60_000,
+  });
+  const saveCustom = useMutation({
+    mutationFn: (custom: Record<string, unknown>) => api.update(brandId, ticketId, { custom }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
+      toast({ tone: 'success', message: t('tickets:toast.updated') });
+    },
+  });
   const time = useTimeEntries(brandId, ticketId, tracking);
   const [logOpen, setLogOpen] = useState(false);
 
@@ -563,6 +581,18 @@ export function TicketView({
       now={now}
       busy={update.isPending}
       cards={cards}
+      brandTags={directory.tags}
+      customFields={ticketFieldsFor(
+        fieldDefs.data?.fields ?? [],
+        role === 'admin' || role === 'teamLeader',
+      )}
+      canWrite={canWrite}
+      onTagsChange={(tagIds) => {
+        tags.mutate(tagIds);
+      }}
+      onCustomSave={async (key, value) => {
+        await saveCustom.mutateAsync({ [key]: value });
+      }}
       onChange={(patch) => {
         update.mutate(patchOf(patch));
       }}

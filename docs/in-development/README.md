@@ -1,11 +1,11 @@
 # In development
 
-Active milestones:
+Active milestones: none.
 
-- [M1-ticketing-core.md](M1-ticketing-core.md) — started 2026-09-19.
-
-M0 Skeleton shipped on 2026-09-19 and its document moved to
-[`../completed/M0-skeleton.md`](../completed/M0-skeleton.md).
+M0 Skeleton shipped on 2026-09-19 and M1 Ticketing core on 2026-09-25; their
+documents are in [`../completed/`](../completed/README.md). M2 Email channel,
+M3 Automation and SLAs and M5 Help center depend only on M1 and may start
+([PRD status board](../planning/PRD.md#status-board)).
 
 When a milestone starts, add a file here named `M<n>-<slug>.md` using this template:
 

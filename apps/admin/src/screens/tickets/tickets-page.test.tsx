@@ -280,12 +280,145 @@ describe('one ticket', () => {
     expect(within(details).getByText('mona@example.com')).toBeVisible();
   });
 
-  it('draws the custom fields, and says they cannot be edited yet', async () => {
+  it('draws the custom fields as editors holding the stored values', async () => {
     await openRefund();
     const details = screen.getByRole('complementary', { name: 'Ticket details' });
 
-    expect(within(details).getByText('ORD-4812')).toBeVisible();
-    expect(within(details).getByText(/read-only until M1-06/)).toBeVisible();
+    expect(within(details).getByRole('textbox', { name: 'Order id' })).toHaveValue('ORD-4812');
+    expect(within(details).getByRole('combobox', { name: 'Plan tier' })).toHaveTextContent('gold');
+  });
+
+  it('saves a custom field on blur through the ticket PATCH', async () => {
+    const tickets = new MockTicketsApi();
+    const { user } = await openRefund(tickets);
+    const field = screen.getByRole('textbox', { name: 'Order id' });
+
+    await user.clear(field);
+    await user.type(field, 'ORD-5000');
+    await user.tab();
+
+    expect(await screen.findByText('Ticket updated')).toBeVisible();
+    expect((await tickets.ticket('brand', MOCK_TICKET_REFUND)).ticket.custom).toMatchObject({
+      order_id: 'ORD-5000',
+    });
+  });
+
+  it('shows the api’s refusal under the field and puts the stored value back', async () => {
+    const tickets = new MockTicketsApi();
+    const { user } = await openRefund(tickets);
+    const field = screen.getByRole('textbox', { name: 'Order id' });
+
+    await user.clear(field);
+    // Past the 2,000 characters a text value may hold; pasted, because typing is slow.
+    await user.click(field);
+    await user.paste('x'.repeat(2001));
+    await user.tab();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Enter some text, up to 2,000 characters.',
+    );
+    expect(field).toHaveValue('ORD-4812');
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('draws the ticket’s tags as chips with a way to remove each', async () => {
+    await openRefund();
+    const details = screen.getByRole('complementary', { name: 'Ticket details' });
+
+    expect(within(details).getByText('Refund')).toBeVisible();
+    expect(within(details).getByRole('button', { name: 'Remove tag VIP' })).toBeVisible();
+  });
+
+  it('removes a tag at once and saves the set without it', async () => {
+    const tickets = new MockTicketsApi();
+    const { user } = await openRefund(tickets);
+
+    await user.click(screen.getByRole('button', { name: 'Remove tag VIP' }));
+
+    expect(screen.queryByRole('button', { name: 'Remove tag VIP' })).toBeNull();
+    await waitFor(async () => {
+      const { ticket } = await tickets.ticket('brand', MOCK_TICKET_REFUND);
+      expect(ticket.tags?.map((tag) => tag.name)).toEqual(['Refund']);
+    });
+  });
+
+  it('adds a tag from the picker with Enter, and never offers to create one', async () => {
+    const tickets = new MockTicketsApi();
+    const { user } = await openRefund(tickets);
+
+    await user.click(screen.getByRole('button', { name: 'Add a tag' }));
+    const search = await screen.findByRole('combobox', { name: 'Find a tag' });
+    await user.type(search, 'bu');
+    expect(screen.getByRole('option', { name: 'Bug' })).toHaveAttribute('aria-selected', 'false');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByRole('option', { name: 'Bug' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await waitFor(async () => {
+      const { ticket } = await tickets.ticket('brand', MOCK_TICKET_REFUND);
+      expect(ticket.tags?.map((tag) => tag.name)).toEqual(['Refund', 'VIP', 'Bug']);
+    });
+
+    await user.clear(search);
+    await user.type(search, 'warranty');
+    expect(screen.getByText(/No tag called "warranty"/)).toBeVisible();
+  });
+
+  it('moves through the picker with the arrow keys, and toggles by click too', async () => {
+    const tickets = new MockTicketsApi();
+    const { user } = await openRefund(tickets);
+
+    await user.click(screen.getByRole('button', { name: 'Add a tag' }));
+    const search = await screen.findByRole('combobox', { name: 'Find a tag' });
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowUp}');
+    expect(search).toHaveAttribute(
+      'aria-activedescendant',
+      screen.getByRole('option', { name: 'VIP' }).id,
+    );
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('option', { name: 'Bug' }));
+
+    await waitFor(async () => {
+      const { ticket } = await tickets.ticket('brand', MOCK_TICKET_REFUND);
+      expect(ticket.tags?.map((tag) => tag.name)).toEqual(['Refund', 'Bug']);
+    });
+  });
+
+  it('gives a Viewer the chips and the values with nothing to change them', async () => {
+    const apis = await signedInMockApis();
+    const session = await apis.auth.me();
+    vi.spyOn(apis.auth, 'me').mockResolvedValue(
+      session === null ? null : { ...session, user: { ...session.user, role: 'viewer' } },
+    );
+    renderApp(<AppRoutes />, {
+      authApi: apis.auth,
+      staffApi: apis.staff,
+      contactsApi: apis.contacts,
+      ticketingApi: apis.ticketing,
+      ticketsApi: apis.tickets,
+      uploader: apis.uploader,
+      initialEntries: [`/tickets/${MOCK_TICKET_REFUND}?view=all`],
+    });
+    await screen.findByRole('heading', { name: /Refund for order 42/ });
+    const details = screen.getByRole('complementary', { name: 'Ticket details' });
+
+    expect(within(details).getByText('VIP')).toBeVisible();
+    expect(within(details).queryByRole('button', { name: 'Remove tag VIP' })).toBeNull();
+    expect(within(details).queryByRole('button', { name: 'Add a tag' })).toBeNull();
+    expect(await within(details).findByRole('textbox', { name: 'Order id' })).toBeDisabled();
+  });
+
+  it('puts the chips back and says so when the api refuses the set', async () => {
+    const tickets = new MockTicketsApi();
+    vi.spyOn(tickets, 'setTags').mockRejectedValue(new Error('No such tag in this brand'));
+    const { user } = await openRefund(tickets);
+
+    await user.click(screen.getByRole('button', { name: 'Remove tag VIP' }));
+
+    expect(await screen.findByText(/The tags were not changed/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Remove tag VIP' })).toBeVisible();
   });
 
   it('draws the file the contact sent, with its size', async () => {

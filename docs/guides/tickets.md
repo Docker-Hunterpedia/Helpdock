@@ -1139,12 +1139,12 @@ costs about 5 µs a subject against about 0.25 µs for the full-text half, so
 257 ms for an Admin at 50k tickets.
 
 That case is outside the gate, and it is reported separately rather than
-hidden (below). Closing it takes one of two things: wrapper functions marked
-`LEAKPROOF`, which needs a superuser and a security argument per function, or a
-search table keyed by token and compared with a leakproof `=`. Either is an
-architecture decision for an ADR, not an index. The two GIN indexes stay: the
-PRD names the tsvector one, and both serve a path that runs as the owner, or
-the list once either decision lands.
+hidden (below). [ADR 0011](../decisions/0011-ticket-search-token-table.md)
+closes it with a token table compared by a leakproof `=`, under the same
+policies as every ticket child table, scheduled with M1-15 part 2. `LEAKPROOF`
+wrappers were rejected: the operators can raise, so the promise would be false.
+The two GIN indexes stay: the PRD names the tsvector one, and both serve paths
+that run as the owner.
 
 ### How it is measured
 

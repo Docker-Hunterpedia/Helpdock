@@ -325,8 +325,10 @@ setting resolution lands (the open gap in
   are hidden while the merge stands and come back if it is undone.
 - **Search is `ILIKE`, not trigram.** `contacts.name` and
   `contact_identities.value` are scanned with `ILIKE`; the trigram GIN index of
-  [ARCHITECTURE §5](../planning/ARCHITECTURE.md#5-data-model-core-tables) arrives
-  with the ticket index set in M1-15.
+  [ARCHITECTURE §5](../planning/ARCHITECTURE.md#5-data-model-core-tables) would
+  not be used under `FORCE ROW LEVEL SECURITY`, for the reason the ticket guide
+  gives. When contact search needs an index it follows
+  [ADR 0011](../decisions/0011-ticket-search-token-table.md).
 - **Tags are a placeholder.** The `tag` query parameter is accepted and ignored.
   Tagging a *contact* is nobody's deliverable yet: M1-06's tags hang off
   tickets, and REQUIREMENTS §4.1 gives a contact custom fields instead.

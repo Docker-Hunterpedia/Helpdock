@@ -199,11 +199,34 @@ merged onto `claude/hopeful-hawking-onzqjf`. What the merges had to decide:
   "leave it out of a count".
 - **One ⋯ menu** in the ticket header, in the artboard's order.
 - **Split copies and retention**: see the M1-09 notes.
-- **Screenshot baseline**: `ticket-view` (en) differs from its baseline by 4 %
-  after the merges; CI's screenshots workflow regenerates it.
+- **Screenshot baselines**: the screenshots workflow re-rendered every
+  baseline on the integrated branch (run 36068915967) and they matched the
+  committed ones byte for byte; the 4 % `ticket-view` difference seen locally is
+  this container's older Chromium and fonts, not a change.
+
+## Decisions (2026-09-25)
+
+Settled after integration, following the planning documents where they speak:
+
+- **Pull requests**: one PR from `claude/hopeful-hawking-onzqjf`, merged after
+  #72 (M1-06) and #70 (M1-15 part 1), which it contains. The deliverables were
+  resolved against each other during integration (spam model, menu, merge CCs,
+  shared attachment objects), so separate PRs would each be incomplete.
+- **Search under RLS**: [ADR 0011](../decisions/0011-ticket-search-token-table.md),
+  a token table, built with M1-15 part 2.
+- **M1-07 defaults** stand as written in the M1-07 notes: the load cap counts
+  per department; Agents are in rotation by default, Team Leaders and Admins
+  opt in; skills are per agent per department; a ticket nobody was eligible for
+  is not retried (it shows in Unassigned, which is where a person looks);
+  teams play no part in rotation until a deliverable asks for it.
+- **CSAT page**: in the admin bundle for now ([ADR 0010](../decisions/0010-csat-page-in-the-admin-bundle.md));
+  it moves to `apps/helpcenter` when M5 gives that app a router and theming.
+- **Anonymise** is Admin only, as DOMAIN-RULES §1.2 says; the artboard note that
+  said "Admin and Team Leader" was corrected on the canvas.
 
 ## Pull requests
-- this PR: milestone doc
+- #61: milestone doc
+- M1-07, 09, 11, 12, 13, 14 and the M1-15 data side: one PR from `claude/hopeful-hawking-onzqjf`
 
 ## M1-13 notes
 

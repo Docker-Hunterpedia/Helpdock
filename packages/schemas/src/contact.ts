@@ -292,9 +292,21 @@ export const contactNoteSchema = z.object({
 });
 export type ContactNote = z.infer<typeof contactNoteSchema>;
 
+/**
+ * Why a pair was suggested (M1-13). An identifier kind means "they share this
+ * identifier and one side of the match is not verified" (DOMAIN-RULES §4.4);
+ * `similar_name` means "filed under the same account, with names that read
+ * alike", which no identifier proves either way.
+ */
+export const contactDuplicateReasonSchema = z.enum([
+  ...contactIdentityKindSchema.options,
+  'similar_name',
+]);
+export type ContactDuplicateReason = z.infer<typeof contactDuplicateReasonSchema>;
+
 export const contactDuplicateSuggestionSchema = z.object({
   id: z.uuid(),
-  reason: contactIdentityKindSchema,
+  reason: contactDuplicateReasonSchema,
   other: z.object({
     id: z.uuid(),
     name: z.string().min(1),
@@ -307,6 +319,22 @@ export const contactDuplicateSuggestionSchema = z.object({
 });
 export type ContactDuplicateSuggestion = z.infer<typeof contactDuplicateSuggestionSchema>;
 
+/**
+ * A merge into this contact that can still be undone (M1-13): the banner on the
+ * surviving contact and the Undo in the toast. `undoUntil` is 24 hours after
+ * `createdAt` (DOMAIN-RULES §4.4); a merge past it, or already undone, is not
+ * listed at all.
+ */
+export const contactMergeSummarySchema = z.object({
+  id: z.uuid(),
+  mergedContact: z.object({ id: z.uuid(), name: z.string().min(1) }),
+  /** Null when the staff member who merged has since been deleted. */
+  actorName: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  undoUntil: z.iso.datetime(),
+});
+export type ContactMergeSummary = z.infer<typeof contactMergeSummarySchema>;
+
 export const contactDetailSchema = contactSummarySchema.extend({
   locale: localeSchema.nullable(),
   timezone: z.string().max(64).nullable(),
@@ -315,6 +343,13 @@ export const contactDetailSchema = contactSummarySchema.extend({
   identities: z.array(contactIdentitySchema),
   notes: z.array(contactNoteSchema),
   duplicates: z.array(contactDuplicateSuggestionSchema),
+  /**
+   * Set when this contact was merged into another (M1-13). The screen follows
+   * it to the survivor; nothing may be written to a merged contact.
+   */
+  mergedIntoId: z.uuid().nullable(),
+  /** Merges into this contact that can still be undone, newest first. */
+  merges: z.array(contactMergeSummarySchema),
 });
 export type ContactDetail = z.infer<typeof contactDetailSchema>;
 
@@ -506,5 +541,16 @@ export const contactRefusalSchema = z.enum([
   'anonymised',
   /** Another account of this brand already claims that domain. */
   'domain-taken',
+  /** The contact was merged into another (M1-13); change the survivor instead. */
+  'merged',
+  /** A contact cannot be merged into itself. */
+  'merge-self',
+  /** The 24 hours to undo this merge have passed, or it was already undone. */
+  'merge-expired',
+  /**
+   * The merge cannot be undone because something happened to the contacts
+   * since: the survivor was merged again, or either side was erased.
+   */
+  'merge-blocked',
 ]);
 export type ContactRefusal = z.infer<typeof contactRefusalSchema>;

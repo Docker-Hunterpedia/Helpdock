@@ -67,6 +67,20 @@ export class TicketLifecycleRepository {
     return rows[0];
   }
 
+  /**
+   * The status "Mark as spam" moves a ticket to (§2.2, M1-11). Found by
+   * `is_spam`, which a unique index keeps to one row per brand; never by name.
+   */
+  async spamStatus(tx: DbTransaction): Promise<TicketStatusRow | undefined> {
+    const rows = await tx
+      .select()
+      .from(ticketStatuses)
+      .where(eq(ticketStatuses.isSpam, true))
+      .limit(1);
+
+    return rows[0];
+  }
+
   async listStatuses(tx: DbTransaction): Promise<TicketStatusRow[]> {
     return tx
       .select()

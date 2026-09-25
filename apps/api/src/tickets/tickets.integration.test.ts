@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { decodeMasterKey, type Env } from '@helpdock/config';
+import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
   brands,
@@ -45,6 +45,9 @@ import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { CsatRepository } from '../csat/csat.repository.js';
+import { registerCsatEventHandlers } from '../csat/csat-events.js';
+import { CsatTokens } from '../csat/tokens.js';
 import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
@@ -288,6 +291,11 @@ describe.skipIf(!hasDocker)('tickets', () => {
     // start-up, publishing on a connection of its own exactly as it would.
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    // M1-12: a close writes `csat.requested` too, and the worker handles it.
+    registerCsatEventHandlers({
+      repository: new CsatRepository(),
+      tokens: new CsatTokens(createKeyring(envFor())),
+    });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
     await seed(runtime.db);
@@ -814,6 +822,41 @@ describe.skipIf(!hasDocker)('tickets', () => {
   // ------------------------------------------------------------------- list
 
   describe('the list', () => {
+    it('names each row’s contact, and says null for a ticket that names nobody (M1-15)', async () => {
+      const contact = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Idris Vantorre' },
+      );
+      const named = await createTicket(sam, {
+        subject: 'Vantorre parcel',
+        contactId: contact.body.id,
+      });
+      const anonymous = await createTicket(sam, { subject: 'Vantorre walk-in' });
+
+      const { body } = await call<TicketList>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets?q=vantorre&limit=100`,
+        sam,
+      );
+      const byId = new Map(body.tickets.map((row) => [row.id, row]));
+
+      expect(byId.get(named.ticket.id)?.contact).toEqual({
+        id: contact.body.id,
+        name: 'Idris Vantorre',
+      });
+      expect(byId.get(anonymous.ticket.id)?.contact).toBeNull();
+
+      // The ticket read names the same person, so the view and its row agree.
+      const read = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${named.ticket.id}`,
+        sam,
+      );
+      expect(read.body.ticket.contact).toEqual({ id: contact.body.id, name: 'Idris Vantorre' });
+    });
+
     it('finds both tickets whose subject matches the search', async () => {
       const jammed = await createTicket(sam, { subject: 'Kymera printer jammed again' });
       const silent = await createTicket(sam, { subject: 'Kymera printer will not print' });

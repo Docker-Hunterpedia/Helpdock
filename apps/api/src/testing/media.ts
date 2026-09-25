@@ -145,8 +145,17 @@ export interface OutboxRow {
  * repository. It records what was written so a suite can assert that the
  * `attachment.ready` event was enqueued with the status it settled on.
  */
-export const fakeTx = (written: OutboxRow[]): DbTransaction =>
+export const fakeTx = (
+  written: OutboxRow[],
+  /** Uploads some row outside the purge still names, as `object-purge.ts` reads them. */
+  stillNamed: readonly string[] = [],
+): DbTransaction =>
   ({
+    select: () => ({
+      from: () => ({
+        where: async () => stillNamed.map((s3Key) => ({ s3Key })),
+      }),
+    }),
     insert: () => ({
       values: (row: OutboxRow) => ({
         returning: async () => {

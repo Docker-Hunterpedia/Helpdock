@@ -1,4 +1,4 @@
-import type { TicketActivityEntry } from '@helpdock/schemas';
+import type { MergedTicket, TicketActivityEntry } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { testMessage } from './fixtures.js';
 import type { PendingMessage } from './pending.js';
@@ -109,5 +109,55 @@ describe('applyCatchUp', () => {
     );
 
     expect(merged.map((message) => message.seq)).toEqual([2, 4, 5]);
+  });
+});
+
+describe('buildThread, merged tickets (M1-09)', () => {
+  const merged = (overrides: Partial<MergedTicket> = {}): MergedTicket => ({
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000001038',
+    number: 1038,
+    prefix: 'HD',
+    subject: 'Refund status',
+    mergedAt: '2026-09-19T12:00:00.000Z',
+    mergedById: null,
+    unmergeableUntil: null,
+    mergedIntoId: '0192c3f0-1a2b-7c3d-8e4f-000000001042',
+    systemMessageId: null,
+    messages: [],
+    hasMoreMessages: false,
+    ...overrides,
+  });
+
+  it('draws the block where its announcement was, instead of the announcement', () => {
+    const announcement = testMessage({
+      seq: 2,
+      kind: 'system',
+      createdAt: '2026-09-19T12:00:00.000Z',
+    });
+    const block = merged({ systemMessageId: announcement.id });
+
+    const items = buildThread([testMessage({ seq: 1 }), announcement], [], [], [block]);
+
+    expect(items.map((item) => item.kind)).toEqual(['message', 'merged']);
+    expect(items[1]).toMatchObject({ kind: 'merged', at: announcement.createdAt });
+  });
+
+  it('puts a ticket merged further down a chain at its merge time', () => {
+    const block = merged({ mergedAt: '2026-09-19T09:00:00.000Z' });
+
+    const items = buildThread(
+      [testMessage({ seq: 1, createdAt: '2026-09-19T10:00:00.000Z' })],
+      [],
+      [],
+      [block],
+    );
+
+    expect(items.map((item) => item.kind)).toEqual(['merged', 'message']);
+  });
+
+  it('keeps the block when its announcement is on a page not read yet', () => {
+    const block = merged({ systemMessageId: '0192c3f0-1a2b-7c3d-8e4f-0000000009ff' });
+
+    expect(buildThread([], [], [], [block]).map((item) => item.kind)).toEqual(['merged']);
   });
 });

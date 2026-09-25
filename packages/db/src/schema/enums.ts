@@ -31,6 +31,32 @@ export const contactIdentityKindEnum = pgEnum('contact_identity_kind', [
   'external',
 ]);
 
+/**
+ * Why two contacts were suggested as one person (M1-13). The five identifier
+ * kinds are "they share this identifier, and one side of the match is not
+ * verified" (DOMAIN-RULES §4.4); `similar_name` is "filed under the same
+ * account, with names that read alike", which no identifier proves either way.
+ */
+export const contactDuplicateReasonEnum = pgEnum('contact_duplicate_reason', [
+  'email',
+  'phone',
+  'telegram',
+  'visitor',
+  'external',
+  'similar_name',
+]);
+
+/**
+ * How a CC came to be on a ticket (DOMAIN-RULES §2.5): an agent added it, it
+ * was on the `Cc:` line of an inbound email (M2), or a ticket merge brought
+ * the secondary's contact along (M1-09, DOMAIN-RULES §2.4).
+ */
+export const ticketParticipantSourceEnum = pgEnum('ticket_participant_source', [
+  'agent',
+  'email',
+  'merge',
+]);
+
 /** What became of a possible-duplicate suggestion (DOMAIN-RULES §4.4). */
 export const contactDuplicateStatusEnum = pgEnum('contact_duplicate_status', [
   'open',
@@ -202,3 +228,33 @@ export const customFieldTypeEnum = pgEnum('custom_field_type', [
   'multi_select',
   'checkbox',
 ]);
+
+/**
+ * What a block-list row matches (M1-11). Three are contact identifier kinds,
+ * stored as `contact_identities` stores them, so an inbound message is matched
+ * on the value its channel already normalised; `domain` matches every address
+ * at that domain or below it.
+ */
+export const blockedSenderKindEnum = pgEnum('blocked_sender_kind', [
+  'email',
+  'domain',
+  'phone',
+  'telegram',
+]);
+
+/**
+ * How a department hands new tickets out (M1-07, REQUIREMENTS §4.1). `manual`
+ * leaves them unassigned; the other two run the rotation of
+ * `apps/api/src/assignment/rotation.ts`.
+ */
+export const assignmentModeEnum = pgEnum('assignment_mode', [
+  'manual',
+  'round_robin',
+  'skill_based',
+]);
+
+/**
+ * What happens to a ticket whose assignee can no longer work it — deactivated,
+ * removed from the brand, or moved out of its department (DOMAIN-RULES §12).
+ */
+export const onUnassignEnum = pgEnum('on_unassign', ['round_robin', 'leave_unassigned']);

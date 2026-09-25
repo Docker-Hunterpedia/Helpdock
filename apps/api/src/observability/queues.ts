@@ -5,7 +5,7 @@ import type { Redis } from 'ioredis';
 import { MILLIS_PER_SECOND } from './time.js';
 
 /**
- * Read-only handles on the eleven queues of ARCHITECTURE §13, for the queue
+ * Read-only handles on the twelve queues of ARCHITECTURE §13, for the queue
  * depth metric and the System page. The api never adds a job to them — that is
  * the outbox relay's job and only the relay's (DOMAIN-RULES §6) — so this is
  * `getJobCounts` and nothing else.

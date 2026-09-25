@@ -5,7 +5,7 @@ import type {
 } from '@helpdock/db';
 import { withWidenedDepartments } from '@helpdock/db';
 import { createI18n, type Locale } from '@helpdock/i18n';
-import type { BrandSettings } from '@helpdock/schemas';
+import { type BrandSettings, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
@@ -193,8 +193,8 @@ export class TicketLifecycleService {
    * resolution clock left running on a ticket nobody will touch again is a
    * clock that breaches. `onClosedForCsat` is the one §2.2 qualifies — "if
    * enabled, not spam, not merged" — and both exclusions are read off data
-   * rather than off a name: `merged_into_id` on the ticket, and
-   * `excluded_from_reports` on the status a brand may have renamed.
+   * rather than off a name: `merged_into_id` on the ticket, and M1-11's
+   * `is_spam` on the status a brand may have renamed (`isSpamStatus`).
    */
   async onClosed(
     context: LifecycleContext,
@@ -205,7 +205,7 @@ export class TicketLifecycleService {
 
     await this.#hooks.onResolved(context.tx, event);
 
-    if (ticket.mergedIntoId === null && !status.excludedFromReports) {
+    if (ticket.mergedIntoId === null && !isSpamStatus(status)) {
       await this.#hooks.onClosedForCsat(context.tx, event);
     }
   }
@@ -222,6 +222,113 @@ export class TicketLifecycleService {
       status,
       at: context.now,
     });
+  }
+
+  // --------------------------------------------------------------------- spam
+
+  /**
+   * §2.2 row 7: "Marked spam — Spam status; no auto-responder, no CSAT, sender
+   * added to block list if the agent ticks 'block sender', excluded from
+   * reports and round-robin counts." (M1-11)
+   *
+   * What this method owns is the status half. The block list is the caller's
+   * (`TicketSpamService`), because it is optional and needs the brand's own
+   * sending domains; the rest of the row is carried by the Spam status itself:
+   *
+   * - **no CSAT** — {@link onClosed} withholds `onClosedForCsat` for a status
+   *   that is `excluded_from_reports`, which Spam is;
+   * - **no auto-responder, no report, no round-robin count** — every consumer
+   *   asks `isSpamStatus` / `countsInReports` of the status;
+   * - **the resolution clock stops** — `onResolved` fires for every close,
+   *   spam included, because a clock left running on a ticket nobody will
+   *   touch again is a clock that breaches.
+   *
+   * `closed_at` is kept when the ticket was already closed, as for any move
+   * between two closed statuses. Marking a ticket that is already spam changes
+   * nothing and writes nothing.
+   *
+   * The outbox event is `ticket.spam`, never `ticket.closed`, so nothing that
+   * subscribes to a close can mistake spam for one.
+   */
+  async markSpam(
+    context: LifecycleContext,
+    ticket: TicketRow,
+    status: TicketStatusRow,
+  ): Promise<{ ticket: TicketRow; status: TicketStatusRow; changed: boolean }> {
+    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'mark.spam');
+    if (outcome.kind === 'refused') {
+      throw new TicketLifecycleFailure(outcome.reason);
+    }
+
+    const spam = await this.#lifecycle.spamStatus(context.tx);
+    if (spam === undefined) {
+      // Seeded with every brand and undeletable, so a brand without one
+      // predates M1-11's migration — a configuration problem, not a request one.
+      throw new ConflictException('This brand has no Spam status');
+    }
+    if (spam.id === status.id) {
+      return { ticket, status, changed: false };
+    }
+
+    const closing = status.systemState !== 'closed';
+    const updated = await this.#applyStatus(context, ticket, status, spam, {
+      closedAt: ticket.closedAt ?? context.now,
+    });
+
+    await writeTicketActivity(context.tx, {
+      brandId: context.brandId,
+      ticketId: ticket.id,
+      departmentId: ticket.departmentId,
+      actor: context.actor,
+      action: 'ticket.marked_spam',
+      from: { statusId: status.id },
+      to: { statusId: spam.id },
+    });
+
+    if (closing) {
+      await this.onClosed(context, updated, spam);
+    }
+
+    await enqueueTicketEvent(context.tx, context.brandId, TICKET_EVENTS.spam, {
+      ticketId: ticket.id,
+      departmentId: ticket.departmentId,
+    });
+
+    return { ticket: updated, status: spam, changed: true };
+  }
+
+  /**
+   * "Not spam": the ticket comes back as an agent reopen would (§2.2 row 6) —
+   * the brand's default open status, `closed_at` cleared, §3.5's clocks
+   * restarted — because a ticket wrongly marked as spam is a ticket somebody
+   * is still waiting on.
+   *
+   * Refused with `ticket-not-spam` for a ticket in any other status, so a stale
+   * screen cannot use it as a general-purpose reopen.
+   */
+  async unmarkSpam(
+    context: LifecycleContext,
+    ticket: TicketRow,
+    status: TicketStatusRow,
+  ): Promise<CustomerReplyLanding> {
+    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'agent.reopen');
+    if (outcome.kind === 'refused') {
+      throw new TicketLifecycleFailure(outcome.reason);
+    }
+    if (!status.isSpam) {
+      throw new TicketLifecycleFailure('ticket-not-spam');
+    }
+
+    await writeTicketActivity(context.tx, {
+      brandId: context.brandId,
+      ticketId: ticket.id,
+      departmentId: ticket.departmentId,
+      actor: context.actor,
+      action: 'ticket.unmarked_spam',
+      from: { statusId: status.id },
+    });
+
+    return this.reopen(context, ticket, status);
   }
 
   // ------------------------------------------------------------- soft deletion

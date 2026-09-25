@@ -83,6 +83,19 @@ describe('the ticket outbox handler', () => {
     expect(sent[0]?.evict).toBeUndefined();
   });
 
+  it('turns ticket.spam into a ticket:changed frame under its own name (M1-11)', async () => {
+    const { sent, broadcast } = recorder();
+
+    await createTicketEventHandler(broadcast)(
+      context(TICKET_EVENTS.spam, { ticketId: TICKET, departmentId: DEPARTMENT }),
+    );
+
+    expect(sent[0]).toMatchObject({
+      event: REALTIME_EVENTS.ticketChanged,
+      data: { event: 'ticket.spam' },
+    });
+  });
+
   it('turns the ticket room out when the ticket changed department', async () => {
     // Everyone in it joined under the old department's scope, and who may read
     // the ticket has just changed.

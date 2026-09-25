@@ -1,6 +1,7 @@
 import {
   brandIdParamSchema,
   brandSettingsSchema,
+  feedbackSettingsUpdateRequestSchema,
   replyBehaviourUpdateRequestSchema,
   ticketStatusCreateRequestSchema,
   ticketStatusListSchema,
@@ -28,6 +29,10 @@ export class TicketStatusUpdateRequestDto extends createZodDto(ticketStatusUpdat
 export class TicketStatusReorderRequestDto extends createZodDto(ticketStatusReorderRequestSchema) {}
 export class ReplyBehaviourUpdateRequestDto extends createZodDto(
   replyBehaviourUpdateRequestSchema,
+) {}
+
+export class FeedbackSettingsUpdateRequestDto extends createZodDto(
+  feedbackSettingsUpdateRequestSchema,
 ) {}
 
 export class TicketingBrandParamDto extends createZodDto(brandIdParamSchema) {}

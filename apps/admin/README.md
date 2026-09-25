@@ -229,9 +229,14 @@ scanner reads it.
   drives the caption under the heading and the lock row in the list, and it is
   the only thing the screen says about those tickets.
 
-Merge is drawn on the duplicate row and disabled, with the reason on the
-button's own label rather than in a tooltip alone: acting on a suggestion is
-M1-13.
+M1-13 adds merging, from panels 1, 2 and 4 of `Admin/Contact dialogs`: the
+duplicate rows (`duplicate-suggestions.tsx`), the merge dialog
+(`merge-contacts-dialog.tsx`), and the banner on the surviving contact
+(`merge-banner.tsx`). The toast that confirms a merge carries an Undo and stays
+10 seconds; the banner keeps the Undo for 24 hours. Opening a contact that was
+merged away goes on to the survivor. The Participants card of the ticket
+details panel (`screens/tickets/participants-card.tsx`) is panel 8 of
+`Admin/Ticket dialogs`.
 
 ### Attachments (M1-10)
 
@@ -300,7 +305,8 @@ Five things M1-15 should know:
 |---|---|---|
 | `/admin/ticketing` | `Admin/Ticketing` | The tab row of the whole of M1's settings, redirecting to the first tab. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
 | `/admin/ticketing/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
-| `/admin/ticketing/{statuses,priorities,views,assignment}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Statuses and Priorities with M1-02, Views with M1-05, Assignment with M1-07. Any other segment redirects to the first tab. |
+| `/admin/ticketing/{priorities,views}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Priorities with M1-02, Views with M1-05. Any other segment redirects to the first tab. |
+| `/admin/ticketing/assignment` | `Admin/Ticketing-Assignment` | M1-07. The departments with their mode, cap, timer and agents online; the selected department's agents with presence, load, skills and rotation; the side editor. The ticket workspace's assignee picker is `screens/tickets/assignee-picker.tsx` (`AdminTicketDialogs`, panel 3). |
 
 Reordering has three ways in and one path out. The drag handle is a real button
 — so it is reachable by Tab and answers `↑`/`↓` — and the row menu offers **Move
@@ -314,6 +320,22 @@ belong on **Admin → Settings** as a "Brand" tab, and that page is still the
 milestone placeholder with no artboard. The guide says so
 ([ticketing settings](../../docs/guides/ticketing-settings.md#brand-settings)).
 
+### The screen M1-14 added
+
+| Route | Artboard | |
+|---|---|---|
+| `/admin/brand` | `AdminBrandDanger` | Redirects to the only built tab. The **Brand** item in the sidebar's Admin group is drawn for an Admin alone. |
+| `/admin/brand/danger` | `AdminBrandDanger` | The Data retention card: the windows, the "next purge" count per row and the last run. The artboard's General, Domains and Theme tabs and its "Delete this brand" section have no deliverable yet and are not drawn. |
+
+The form's rules — which day counts are valid, what a draft sends, whether it is
+dirty — are `src/screens/admin/brand/retention-form.ts`, tested without a DOM.
+The two calls live on `TicketingApi` (`retention`, `updateRetention`) beside
+the brand's other configuration.
+
+The contact page's **Anonymise** dialog (`AdminContactDialogs`, panel 3) asks
+for the contact's name before its danger button wakes up, and the button that
+opens it is drawn for an Admin alone (`src/screens/contacts/anonymise-dialog.tsx`).
+
 ### The screens M1-06 added
 
 | Route | Artboard | |
@@ -321,6 +343,7 @@ milestone placeholder with no artboard. The guide says so
 | `/admin/ticketing/tags` | `Admin/Ticketing` | The list — chip, name, Arabic name, ticket count — and the side editor with the eight-swatch colour picker. |
 | `/admin/ticketing/custom-fields` | `Admin/Ticketing` | One table per target (Ticket, Contact, Account), because the three are separate lists with separate orders, and one shared side editor. |
 | `/admin/ticketing/templates` | `Admin/Ticketing` | The list — name, department, priority, usage — and the side editor with the api-rendered preview. |
+| `/admin/ticketing/spam` | `Admin/Ticketing › Spam` | M1-11. The block list with its dropped counter and search, the "Spam status" card with `offerBlockSender`, and the "Block a sender" card whose refusals are drawn beside the field. |
 
 Three things in these tabs are worth knowing before changing them.
 
@@ -350,6 +373,30 @@ An option removal the api refuses with `option-in-use` becomes a **question**
 rather than a toast: the dialog explains that saving clears the option from the
 rows that carry it, and answering it sends the same request again with `force`.
 
+### The screens M1-12 added
+
+| Route | Artboard | |
+|---|---|---|
+| `/admin/ticketing/feedback` | `AdminTicketingFeedback` | CSAT on or off, time tracking on or off, and whether the timer starts with the composer. One form, one save. |
+| `/tickets/:id` | `AdminTicketDialogs` panels 2, 6, 8 | The Time card in the details panel, the Log time dialog, and "Log time…" in the header's ⋯ menu — all drawn only while the brand tracks time. A Satisfaction card shows the survey's state and copies its link. |
+| `/csat/:token` | `CsatEN`, `CsatAR` | The public rating page. |
+
+**The rating page is not part of the admin app.** `main.tsx` mounts
+`screens/csat/csat-app.tsx` in its place for `/csat/…`, with its own language,
+direction, theme and a `fetch` that sends no credentials; none of the staff
+providers exist on that page (ADR
+[0010](../../docs/decisions/0010-csat-page-in-the-admin-bundle.md)). It is here
+only until the help center exists. The adapter is chosen by the same
+`VITE_AUTH_API` rule (`csat/select-api.ts`), and `MockCsatApi` answers three
+tokens — open, used and expired — exported as `MOCK_CSAT_TOKENS`.
+
+**The header's ⋯ menu takes its items as data** (`ticket-actions-menu.tsx`), so
+each deliverable adds its own without editing another's; with none it is the
+disabled button it was before.
+
+**The Satisfaction card has no artboard.** It follows the SLA card beside it and
+is flagged for the canvas.
+
 ### The ticket workspace
 
 `src/screens/tickets/` is M1-15's first part, built from the
@@ -378,6 +425,20 @@ Five decisions are worth knowing before changing it:
   `processing`, so the composer sends the ids with the message and the thread
   draws a chip that settles on its own. The picker checks the brand's content
   policy first as a courtesy; the api checks it twice more.
+
+M1-09 added the ⋯ menu (`ticket-actions-menu.tsx`), which draws the entries it
+is handed so M1-11 and M1-12 add theirs without editing it; the merge and split
+dialogs; the merged block a primary's thread draws in place of the merge's
+announcement (`merged-block.tsx`); and "is replying" on the collision pill,
+announced the moment the composer fills. All of it is built from the
+`AdminTicketDialogs` artboard, panels 1, 2, 4 and 7.
+
+The header's ⋯ menu (`Admin · ticket dialogs`, panel 2) is
+`ticket-actions-menu.tsx`, which draws an **array of items** each deliverable
+contributes. M1-11's — "Mark as spam", or "Not spam" on a spam ticket — comes
+from `use-spam-actions.tsx`, together with the panel 5 dialog. The mock
+`MockTicketingApi` and `MockTicketsApi` share one `MockBlockList`, as the api's
+two sides share one table, so a sender blocked from a ticket is on the Spam tab.
 
 What the screen leaves disabled and which milestone turns it on is in
 [the ticket guide](../../docs/guides/tickets.md#the-admin-workspace), along

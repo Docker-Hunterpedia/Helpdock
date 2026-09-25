@@ -1,4 +1,10 @@
 import type {
+  AssignmentAgent,
+  AssignmentAgentList,
+  AssignmentAgentUpdateRequest,
+  BlockedSender,
+  BlockedSenderCreateRequest,
+  BlockedSenderList,
   Brand,
   BrandSettings,
   BrandUpdateRequest,
@@ -8,12 +14,19 @@ import type {
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
+  DepartmentAssignment,
+  DepartmentAssignmentList,
+  DepartmentAssignmentUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
+  FeedbackSettingsUpdateRequest,
   ReplyBehaviourUpdateRequest,
+  RetentionOverview,
+  RetentionUpdateRequest,
+  SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
   TagSummary,
@@ -82,6 +95,16 @@ export interface TicketingApi {
   brand(brandId: string): Promise<Brand>;
   updateBrand(brandId: string, request: BrandUpdateRequest): Promise<Brand>;
 
+  // ---------------------------------------------------------------- M1-14
+
+  /**
+   * The Data retention card of `Admin/Brand · Danger zone`: the windows, what
+   * the next run would purge, and what the last one did. Admin only.
+   */
+  retention(brandId: string): Promise<RetentionOverview>;
+  /** The whole form; the api refuses a partial one. */
+  updateRetention(brandId: string, request: RetentionUpdateRequest): Promise<RetentionOverview>;
+
   // ---------------------------------------------------------------- M1-08
 
   /** The brand's statuses, in their own order (DOMAIN-RULES §2.1). */
@@ -106,6 +129,11 @@ export interface TicketingApi {
     brandId: string,
     request: ReplyBehaviourUpdateRequest,
   ): Promise<BrandSettings>;
+
+  // ---------------------------------------------------------------- M1-12
+
+  /** The Feedback tab's three toggles: CSAT, time tracking, the composer timer. */
+  updateFeedback(brandId: string, request: FeedbackSettingsUpdateRequest): Promise<BrandSettings>;
   // ---------------------------------------------------------------- M1-06
 
   tags(brandId: string): Promise<TagList>;
@@ -145,6 +173,33 @@ export interface TicketingApi {
   deleteTicketTemplate(brandId: string, templateId: string): Promise<void>;
   /** The template with its placeholders filled, rendered by the api. */
   previewTicketTemplate(brandId: string, templateId: string): Promise<TicketTemplatePreview>;
+
+  // ---------------------------------------------------------------- M1-11
+
+  /** The brand's sender block list, newest first, with each row's dropped count. */
+  blockedSenders(brandId: string): Promise<BlockedSenderList>;
+  blockSender(brandId: string, request: BlockedSenderCreateRequest): Promise<BlockedSender>;
+  unblockSender(brandId: string, blockedSenderId: string): Promise<void>;
+  /** The Spam tab's one setting: whether "Mark as spam" offers "Block sender". */
+  updateSpamSettings(brandId: string, request: SpamSettingsUpdateRequest): Promise<BrandSettings>;
+
+  // ---------------------------------------------------------------- M1-07
+
+  /** Every department the viewer leads, with how it assigns tickets. */
+  assignment(brandId: string): Promise<DepartmentAssignmentList>;
+  updateAssignment(
+    brandId: string,
+    departmentId: string,
+    request: DepartmentAssignmentUpdateRequest,
+  ): Promise<DepartmentAssignment>;
+  /** Who can work the department: rotation, skills, presence and load. */
+  assignmentAgents(brandId: string, departmentId: string): Promise<AssignmentAgentList>;
+  updateAssignmentAgent(
+    brandId: string,
+    departmentId: string,
+    userId: string,
+    request: AssignmentAgentUpdateRequest,
+  ): Promise<AssignmentAgent>;
 }
 
 /**

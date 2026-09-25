@@ -2,7 +2,7 @@ import { pgTable, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { contacts } from './contacts.js';
-import { contactDuplicateStatusEnum, contactIdentityKindEnum } from './enums.js';
+import { contactDuplicateReasonEnum, contactDuplicateStatusEnum } from './enums.js';
 
 /**
  * "These two might be the same person." Written whenever an **unverified**
@@ -15,12 +15,13 @@ import { contactDuplicateStatusEnum, contactIdentityKindEnum } from './enums.js'
  * The pair is unique, because the third pre-chat form from the same typed
  * address is not a third opinion.
  *
- * `reason` is the identifier kind that matched, which is also the sentence the
- * contact screen prints ("same email"). A wider vocabulary would be a second
- * enum to keep in step with nothing.
+ * `reason` is the identifier kind that matched ("same phone"), or, from M1-13,
+ * `similar_name`: two contacts under one account whose names read alike. The
+ * contact screen turns it into the pill on the suggestion.
  *
- * Merging itself — and the 24-hour undo — is M1-13. This table and the
- * dismissal ("Not the same") are what M1-04 ships.
+ * `status` becomes `merged` when an agent merges the pair (M1-13) and goes back
+ * to `open` if that merge is undone; `dismissed` ("Not the same") is permanent
+ * for the pair.
  */
 export const contactDuplicateSuggestions = pgTable(
   'contact_duplicate_suggestions',
@@ -37,7 +38,7 @@ export const contactDuplicateSuggestions = pgTable(
     otherContactId: uuid('other_contact_id')
       .notNull()
       .references(() => contacts.id, { onDelete: 'cascade' }),
-    reason: contactIdentityKindEnum('reason').notNull(),
+    reason: contactDuplicateReasonEnum('reason').notNull(),
     status: contactDuplicateStatusEnum('status').notNull().default('open'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

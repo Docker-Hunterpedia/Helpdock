@@ -29,8 +29,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { AssignmentRepository } from '../assignment/assignment.repository.js';
+import { requestAutoAssign } from '../assignment/assignment-events.js';
+import {
+  assigneeRefusal,
+  routesAutomatically,
+  worksDepartment,
+} from '../assignment/ticket-assignment.js';
 import type { Principal } from '../auth/principal.js';
+import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { getTx } from '../context/request-context.js';
+import type { CsatService } from '../csat/csat.service.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
@@ -48,12 +57,21 @@ import {
   type LifecycleContext,
   type TicketLifecycleService,
 } from './lifecycle/lifecycle.service.js';
+import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
+import { readMergeView } from './merge/merge-view.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
 import { cursorAfter, sortValueOf } from './ticket-query.js';
-import { toTicket, toTicketActivity, toTicketMessage, toTicketStatus } from './ticket-view.js';
+import {
+  ticketContactOf,
+  toTicket,
+  toTicketActivity,
+  toTicketMessage,
+  toTicketStatus,
+} from './ticket-view.js';
 import type { TicketRepository } from './tickets.repository.js';
+import type { TimeEntriesService } from './time/time-entries.service.js';
 
 /**
  * M1-02 and M1-03: the ticket, its thread and its activity log.
@@ -100,6 +118,11 @@ export class TicketsService {
   /** M1-06: applies a template on creation, and answers "is this a real tag?". */
   readonly #templates: TemplatesService;
   readonly #tags: TagsService;
+  /** M1-07: who may hold a ticket, and whether a department hands them out itself. */
+  readonly #assignment: AssignmentRepository;
+  /** M1-12: the survey summary on a ticket read, and the per-reply timer. */
+  readonly #csat: CsatService;
+  readonly #timeEntries: TimeEntriesService;
 
   constructor(
     tickets: TicketRepository,
@@ -108,6 +131,9 @@ export class TicketsService {
     attachments: MediaRepository,
     templates: TemplatesService,
     tags: TagsService,
+    assignment: AssignmentRepository,
+    csat: CsatService,
+    timeEntries: TimeEntriesService,
   ) {
     this.#tickets = tickets;
     this.#lifecycle = lifecycle;
@@ -115,6 +141,9 @@ export class TicketsService {
     this.#attachments = attachments;
     this.#templates = templates;
     this.#tags = tags;
+    this.#assignment = assignment;
+    this.#csat = csat;
+    this.#timeEntries = timeEntries;
   }
 
   // -------------------------------------------------------------------- reads
@@ -125,21 +154,43 @@ export class TicketsService {
     return { statuses: rows.map(toTicketStatus) };
   }
 
-  async list(query: TicketListQuery): Promise<TicketList> {
+  /**
+   * One page of the list. `withContacts` is whether the caller holds
+   * `contact:read`: every staff role does, but an api key is scoped
+   * permission by permission (M8-01), and one that may read tickets and not
+   * contacts gets rows without the name rather than a name it was not given.
+   */
+  async list(
+    brandId: string,
+    query: TicketListQuery,
+    { withContacts }: { readonly withContacts: boolean },
+  ): Promise<TicketList> {
     const tx = getTx();
-    const rows = await this.#read(() => this.#tickets.listTickets(tx, query));
+    const rows = await this.#read(() => this.#tickets.listTickets(tx, brandId, query));
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
     // M1-06: one read of `ticket_tags` for the whole page rather than one per
-    // row, which is how a list of fifty becomes fifty-one round trips.
+    // row, which is how a list of fifty becomes fifty-one round trips. M1-15
+    // does the same for the contact's name.
     const tags = await tagsOfTickets(
       tx,
       page.map(({ ticket }) => ticket.id),
     );
+    const contactNames = withContacts
+      ? await this.#tickets.contactNames(
+          tx,
+          page.flatMap(({ ticket }) => (ticket.contactId === null ? [] : [ticket.contactId])),
+        )
+      : undefined;
 
     return {
       tickets: page.map(({ ticket, status }) =>
-        toTicket(ticket, status, tags.get(ticket.id) ?? []),
+        toTicket(
+          ticket,
+          status,
+          tags.get(ticket.id) ?? [],
+          contactNames === undefined ? undefined : ticketContactOf(ticket.contactId, contactNames),
+        ),
       ),
       nextCursor:
         rows.length > query.limit && last !== undefined
@@ -152,12 +203,23 @@ export class TicketsService {
     };
   }
 
-  async find(ticketId: string): Promise<TicketDetail> {
+  /** The ticket and the start of its thread. `withContacts` is as for {@link list}. */
+  async find(
+    ticketId: string,
+    { withContacts }: { readonly withContacts: boolean },
+  ): Promise<TicketDetail> {
     const tx = getTx();
     const found = await this.#require(tx, ticketId);
+    const { contactId } = found.ticket;
+    const contact = withContacts
+      ? ticketContactOf(
+          contactId,
+          await this.#tickets.contactNames(tx, contactId === null ? [] : [contactId]),
+        )
+      : undefined;
 
     return {
-      ticket: toTicket(found.ticket, found.status, await tagsOfTicket(tx, ticketId)),
+      ticket: toTicket(found.ticket, found.status, await tagsOfTicket(tx, ticketId), contact),
       // `#messagePage` rather than `messages`, which would re-run the ticket
       // read this method has already done.
       messages: await this.#messagePage(tx, ticketId, {
@@ -165,6 +227,10 @@ export class TicketsService {
         limit: TICKET_PAGE_SIZE_DEFAULT,
       }),
       activity: await this.#activityOf(tx, ticketId),
+      csat: await this.#csat.forTicket(tx, found.ticket.brandId, ticketId),
+      // M1-09: what was merged into this ticket, where it was merged to, and
+      // what a split joined to it (DOMAIN-RULES §2.4).
+      ...(await readMergeView(tx, found.ticket, new Date(), this.#attachments)),
     };
   }
 
@@ -215,7 +281,7 @@ export class TicketsService {
 
     await this.#requireDepartment(tx, departmentId);
     await this.#requireTeam(input.teamId);
-    await this.#requireAssignee(tx, input.assigneeId);
+    await this.#requireAssignee(tx, brandId, principal, input.assigneeId, departmentId);
     const status = await this.#requireDefaultStatus(tx);
     const prefix = await this.#requirePrefix(tx, brandId);
     const number = await this.#tickets.nextNumber(tx, brandId);
@@ -286,6 +352,9 @@ export class TicketsService {
       ticketId: ticket.id,
       departmentId: ticket.departmentId,
     });
+    // M1-07. Through the outbox, so the rotation runs in the worker after this
+    // commits and never inside somebody's request (DOMAIN-RULES §6).
+    await this.#routeIfUnassigned(tx, brandId, ticket.id, ticket.departmentId, ticket.assigneeId);
 
     return {
       ticket: toTicket(ticket, status, await tagsOfTicket(tx, ticket.id)),
@@ -317,6 +386,13 @@ export class TicketsService {
 
     const { values, from, to } = plainChanges(ticket, input);
 
+    // M1-09: a merged ticket stays in its primary's department, which is what
+    // lets everyone who reads the primary read its messages (§2.4). Moving it
+    // alone would break that; unmerging it is how it leaves.
+    if (ticket.mergedIntoId !== null && values.departmentId !== undefined) {
+      throw new TicketLifecycleFailure('ticket-merged');
+    }
+
     // ---- M1-06 -------------------------------------------------------------
     // A patch over the stored object, validated against the brand's ticket
     // definitions. `partial`, so a request that names two fields says nothing
@@ -338,7 +414,30 @@ export class TicketsService {
         : null;
 
     await this.#requireTeam(input.teamId ?? undefined);
-    await this.#requireAssignee(tx, input.assigneeId ?? undefined);
+    const targetDepartmentId = input.departmentId ?? ticket.departmentId;
+    await this.#requireAssignee(
+      tx,
+      brandId,
+      principal,
+      input.assigneeId ?? undefined,
+      targetDepartmentId,
+    );
+    // M1-07. A move the assignee cannot follow leaves the ticket unassigned
+    // rather than held by somebody who can no longer open it (§1.2).
+    if (
+      input.assigneeId === undefined &&
+      ticket.assigneeId !== null &&
+      targetDepartmentId !== ticket.departmentId &&
+      !(await worksDepartment(this.#assignment, tx, {
+        brandId,
+        userId: ticket.assigneeId,
+        departmentId: targetDepartmentId,
+      }))
+    ) {
+      values.assigneeId = null;
+      from.assigneeId = ticket.assigneeId;
+      to.assigneeId = null;
+    }
 
     const statusResult =
       input.statusId === undefined
@@ -412,7 +511,7 @@ export class TicketsService {
       await this.#auditEscalation(context, ticket, escalation);
     }
 
-    await enqueueTicketEvent(tx, brandId, ticketEventFor(statusResult), {
+    await enqueueTicketEvent(tx, brandId, ticketEventFor(statusResult, nextStatus), {
       ticketId,
       departmentId: updated.departmentId,
       // On a move, whoever is watching the queue the ticket has just left is in
@@ -421,6 +520,17 @@ export class TicketsService {
         ? {}
         : { previousDepartmentId: ticket.departmentId }),
     });
+    // M1-07. A ticket arriving unassigned in a department that routes by itself
+    // is routed; a manual unassignment in place is somebody's choice and is not.
+    if (updated.departmentId !== ticket.departmentId) {
+      await this.#routeIfUnassigned(
+        tx,
+        brandId,
+        ticketId,
+        updated.departmentId,
+        updated.assigneeId,
+      );
+    }
 
     return toTicket(updated, nextStatus, await tagsOfTicket(tx, ticketId));
   }
@@ -526,6 +636,19 @@ export class TicketsService {
       messageId: message.id,
       attachmentIds: input.attachmentIds ?? [],
     });
+
+    // M1-12. The per-reply timer, in the transaction that wrote the reply so
+    // the two commit or roll back together.
+    if (input.timeSpentSeconds !== undefined) {
+      await this.#timeEntries.logWithReply(tx, {
+        brandId,
+        principal,
+        ticketId: target.id,
+        departmentId: target.departmentId,
+        messageId: message.id,
+        seconds: input.timeSpentSeconds,
+      });
+    }
 
     const action = input.kind === 'note' ? 'ticket.note_added' : 'ticket.replied';
 
@@ -934,20 +1057,51 @@ export class TicketsService {
    * An assignee has to hold a role in this brand. `tickets.assignee_id`
    * references the *global* `users` table, so the foreign key alone would
    * accept a stranger's id and produce a ticket owned by somebody who cannot
-   * open it. `user_brand_roles` is brand-scoped, so the policy answers the
-   * brand half and this answers the rest.
+   * open it.
    *
-   * Which *department* an assignee must be in is M1-07's question, with the
-   * round-robin and the load caps.
+   * M1-07 adds the department half: the person must be able to work the
+   * department the ticket will be in, and only an Admin hands work to an Admin
+   * (`assignment/ticket-assignment.ts`). The load cap is not a reason to
+   * refuse — a person may pick an agent at cap by hand.
    */
-  async #requireAssignee(tx: DbTransaction, assigneeId: string | undefined): Promise<void> {
+  async #requireAssignee(
+    tx: DbTransaction,
+    brandId: string,
+    principal: Principal,
+    assigneeId: string | undefined,
+    departmentId: string,
+  ): Promise<void> {
     if (assigneeId === undefined) {
       return;
     }
 
-    if (!(await this.#tickets.isBrandMember(tx, assigneeId))) {
+    const refusal = await assigneeRefusal(this.#assignment, tx, {
+      brandId,
+      principal,
+      assigneeId,
+      departmentId,
+    });
+    if (refusal === 'not-member') {
       throw new BadRequestException('That person holds no role in this brand');
     }
+    if (refusal !== null) {
+      throw new TicketingFailure(refusal);
+    }
+  }
+
+  /** Writes `assignment.requested` when the rotation should pick for this ticket (M1-07). */
+  async #routeIfUnassigned(
+    tx: DbTransaction,
+    brandId: string,
+    ticketId: string,
+    departmentId: string,
+    assigneeId: string | null,
+  ): Promise<void> {
+    if (assigneeId !== null || !(await routesAutomatically(this.#assignment, tx, departmentId))) {
+      return;
+    }
+
+    await requestAutoAssign(tx, brandId, { ticketId, trigger: 'routed' });
   }
 
   /**
@@ -987,9 +1141,18 @@ export class TicketsService {
  * Which outbox event a status change is. `ticket.closed` and `ticket.reopened`
  * carry the same payload as `ticket.updated` and reach the same rooms; naming
  * them is what lets M1-12's survey and M3's clocks consume one event instead of
- * diffing two reads of the ticket (DOMAIN-RULES §2.2).
+ * diffing two reads of the ticket (DOMAIN-RULES §2.2). A move into Spam is
+ * `ticket.spam` whichever state it came from.
  */
-const ticketEventFor = (result: StatusChangeResult | undefined): TicketEvent => {
+const ticketEventFor = (
+  result: StatusChangeResult | undefined,
+  next: TicketStatusRow,
+): TicketEvent => {
+  // M1-11. An agent may pick Spam from the status picker as well as from "Mark
+  // as spam", and either way the queue must not hear a close.
+  if (result?.changed === true && next.isSpam) {
+    return TICKET_EVENTS.spam;
+  }
   if (result?.closing === true) {
     return TICKET_EVENTS.closed;
   }

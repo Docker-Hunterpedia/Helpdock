@@ -5,6 +5,7 @@ describe('queue names', () => {
   it('is the list in ARCHITECTURE §13', () => {
     expect([...QUEUE_NAME_LIST].sort()).toEqual([
       'ai',
+      'assignment',
       'inbound',
       'knowledge',
       'maintenance',

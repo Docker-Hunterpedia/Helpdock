@@ -69,13 +69,21 @@ out only when the job has none; the BullMQ job id then stands in, which is enoug
 for a redelivery of the same job but not for the same work arriving under a new
 id.
 
-M0 defines three jobs:
+M0 defined the first three jobs; M1-10 added `media.process` and M1-14 the retention tick:
 
 | Job | Queue | Notes |
 |---|---|---|
 | `outbox.relay` | `outbox` | The relay's identity and its 500 ms cadence. The loop runs in process — see below. |
 | `outbox.event` | `outbox` | The fan-out job the relay publishes, one per outbox row. |
-| `maintenance.retention` | `maintenance` | Nightly purge for one brand (DOMAIN-RULES §11). Defined here; the per-brand fan-out lands with M9. |
+| `maintenance.retention` | `maintenance` | Nightly purge for one brand (DOMAIN-RULES §11), payload `{ brandId, runDate }`, job id `maintenance.retention.<brandId>.<runDate>`. Consumed in `apps/api/src/retention/retention.job.ts`. |
+| `maintenance.retention.schedule` | `maintenance` | The 03:00 UTC tick (M1-14): one `maintenance.retention` per brand, then `job_receipts`. |
+
+M1 adds:
+
+| Job | Queue | Notes |
+|---|---|---|
+| `media.process` | `media` | M1-10's sniff, re-encode and scan of one attachment. |
+| `assignment.offline_unassign` | `assignment` | M1-07's auto-unassign timer, added delayed by the `assignment.staff_offline` handler. Keyed by the departure (`userId`, `departmentId`, `since`), so coming back and leaving again is a new job. |
 
 ## Handling an event
 
@@ -233,18 +241,25 @@ before its handler is registered fails as an unknown event and burns attempts.
 
 ## Retention
 
-DOMAIN-RULES §11 keeps outbox rows and receipts for seven days:
+DOMAIN-RULES §11 keeps outbox rows and receipts for seven days. Both purges
+remove **one bounded batch** and return how many rows went; `drainInBatches`
+repeats one until a batch comes back short, each call in a transaction of its
+own:
 
 ```ts
-await withSystem(db, brandId, (tx) => purgePublishedOutbox(tx, olderThanDays));
-await purgeReceipts(db, olderThanDays);
+await drainInBatches(() => withSystem(db, brandId, (tx) => purgePublishedOutbox(tx)));
+await drainInBatches(() => purgeReceipts(db));
 ```
 
 `purgePublishedOutbox` takes a transaction because `outbox` is a tenant table and
 row-level security is what keeps it to one brand; `purgeReceipts` takes either,
-because `job_receipts` is global. Keep the receipt window comfortably longer than
-the longest retry schedule: deleting a receipt while a delivery of its job can
-still arrive would let that delivery run a second time.
+because `job_receipts` is global, and the nightly tick runs it once for the
+install. Keep the receipt window comfortably longer than the longest retry
+schedule: deleting a receipt while a delivery of its job can still arrive would
+let that delivery run a second time.
+
+The brand's own windows — closed tickets, spam, the audit log — are the api's
+([the data retention guide](../../docs/guides/data-retention.md)).
 
 ## Tests
 

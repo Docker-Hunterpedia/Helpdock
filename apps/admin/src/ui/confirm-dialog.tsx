@@ -25,6 +25,7 @@ export function ConfirmDialog({
   confirmLabel,
   destructive = false,
   busy = false,
+  confirmDisabled = false,
   children,
   onConfirm,
   onClose,
@@ -36,6 +37,11 @@ export function ConfirmDialog({
   /** Draws the primary in danger and keeps `Esc` from closing mid-flight. */
   readonly destructive?: boolean;
   readonly busy?: boolean;
+  /**
+   * Holds the primary back until the confirmation is complete — erasing a
+   * contact waits for its name to be typed (M1-14).
+   */
+  readonly confirmDisabled?: boolean;
   /**
    * A field the confirmation itself needs, under the sentence. Turning the
    * second factor off asks for a live code here, because the dialog *is* the
@@ -74,7 +80,7 @@ export function ConfirmDialog({
           variant="contained"
           color={destructive ? 'error' : 'primary'}
           onClick={onConfirm}
-          disabled={busy}
+          disabled={busy || confirmDisabled}
         >
           {confirmLabel}
         </Button>

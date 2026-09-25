@@ -16,10 +16,11 @@ accounts      one customer company per brand; a name, an optional email domain
   └── contacts        one person per brand
         ├── contact_identities   how that person is recognised
         ├── contact_notes        what agents wrote about them
-        └── contact_duplicate_suggestions   "these two might be the same"
+        ├── contact_duplicate_suggestions   "these two might be the same"
+        └── contact_merges       a merge and exactly what it moved (M1-13)
 ```
 
-All five tables are **brand-scoped and never department-scoped**. An Agent may
+All six tables are **brand-scoped and never department-scoped**. An Agent may
 open any contact in the brand; what they may not see is the *tickets*, and the
 timeline says how many are hidden rather than pretending they do not exist
 (DOMAIN-RULES §1.2).
@@ -70,47 +71,104 @@ each other's customers.
 | Phone | **Never in v1** — Helpdock sends no SMS | No |
 | Email typed into a form | Never | No; suggests a duplicate |
 
-Nothing an agent types is verified. The api refuses `verified: true` on a phone
-number outright, as a programming error rather than a request it declines,
-because no caller has the standing to claim it.
+A caller never says whether an identifier is verified; it says **where it came
+from**, and `isVerifiedIdentity(kind, source)` answers from the table above
+(`IDENTITY_SOURCE_RULES` in `packages/schemas/src/identity-rules.ts`, M1-13):
+
+| Source | Kinds | Verified |
+|---|---|---|
+| `email.inbound`, `email.magic_link` | email | yes |
+| `telegram.bot` | telegram | yes |
+| `widget.signed` | external | yes |
+| `widget.visitor` | visitor | yes |
+| `widget.form` | email, phone | no |
+| `email.cc` | email | no |
+| `agent`, `import` | any | no |
+
+Nothing an agent types is verified, and no source verifies a phone number. A
+kind the source cannot produce — a phone number "from the Bot API" — throws a
+`TypeError`, as a programming error rather than a request the api declines.
 
 ### The seam every channel uses
 
-`findOrCreateContactByIdentity(tx, brandId, claim, options)` in
-`apps/api/src/contacts/identity.ts` is the one function that turns "a message
+`findOrCreateContactByIdentity(tx, brandId, { kind, value, source }, options)`
+in `apps/api/src/contacts/identity.ts` is the one function that turns "a message
 arrived from X" into a contact row. M2 (email), M4 (widget) and M6 (Telegram)
 all call it, inside their own transaction, so the contact and the domain change
 commit together.
 
-| The identifier is | What happens |
-|---|---|
-| verified, and another contact holds it | that contact is returned |
-| verified, and nobody holds it | a new contact, with the identifier verified |
-| unverified, and another contact holds it | **a new contact**, plus a duplicate suggestion |
-| unverified, and nobody holds it | a new contact, with the identifier unverified |
+**Auto-merge happens only when both sides of the match are verified**
+(DOMAIN-RULES §4.4):
 
-The third row is the point. Matching on a typed address would let anybody who
-knows it walk into that person's history through a pre-chat form. So the hint
-becomes a suggestion, and an agent decides.
+| The claim is | Another contact holds it | What happens |
+|---|---|---|
+| verified | verified | that contact is returned |
+| verified | unverified | **a new contact takes the identifier**, verified, plus a duplicate suggestion |
+| unverified | either | **a new contact**, plus a duplicate suggestion |
+| either | nobody | a new contact holding the identifier |
 
-An identifier that was unverified and is later proven — an address somebody
-typed, that an email then arrived from — is promoted in place rather than
-duplicated.
+The middle rows are the point. Matching on a typed address would let anybody
+who knows it walk into that person's history through a pre-chat form, and would
+equally let a typed address pull a real inbound email into the typist's
+contact. So a hint on either side becomes a suggestion, and an agent decides.
+When the claim is proof and the holder's is a hint, the identifier moves to the
+contact that can prove it, because the unique index allows one holder.
 
 ## Duplicates
 
-A suggestion names two contacts and which identifier kind they share. It is
-raised **once per pair**: a third form submission from the same address is not a
-third opinion, and a dismissed pair is never raised again.
+A suggestion names two contacts and **why** they were suggested:
 
-The contact screen shows it as a warning row with two actions:
+| Reason | Raised when | The pill says |
+|---|---|---|
+| `email` | an unverified email matched another contact's | email typed in a form |
+| `phone` | a phone number matched (never verified in v1) | same phone |
+| `telegram`, `visitor`, `external` | that identifier matched with one side unverified | same … |
+| `similar_name` | a contact landed under an account where another contact's name reads alike (pg_trgm `similarity` ≥ 0.4) | similar name |
+
+It is raised **once per pair, in either direction**: a third form submission
+from the same address is not a third opinion, and a dismissed pair is never
+raised again, whichever of the two is discovered first next time.
+
+The contact screen shows the suggestion under the identifiers — in a card of its
+own when there is more than one — with two actions:
 
 - **Not the same** dismisses it (`POST …/duplicates/:suggestionId/dismiss`).
-- **Merge** is drawn but disabled, with the reason on the button. Merging, and
-  its 24-hour undo, is **M1-13**.
+- **Merge…** opens the merge dialog below.
 
 The contact list counts the open suggestions and links to the filtered list
-(`/contacts?duplicates=true`).
+(`/contacts?duplicates=true`). A suggestion whose other contact has been merged
+away is hidden until that merge is undone.
+
+## Identity rules and merging (M1-13)
+
+The agent chooses **which contact survives** — its name and details are kept —
+and the other is folded into it:
+
+- **Identifiers** move to the survivor **as they are**. Verification never
+  upgrades by merging: a typed address stays "unverified" beside a proven one,
+  because a merge is an agent's judgement, not proof.
+- **Notes** move too.
+- **Every ticket** moves, including tickets in departments the agent cannot see
+  — a contact is brand-scoped, and leaving the hidden half of somebody's history
+  on a contact nobody can find would split the person in two. The dialog's
+  ticket counts include those hidden tickets (DOMAIN-RULES §1.2 lets a count be
+  shown). **Tickets are not merged with each other**; that is M1-09's.
+- The merged contact **stays as a row** with `merged_into_id` set. Lists and
+  lookups skip it, every write to it answers `merged` (409), and opening it in
+  the admin goes on to the survivor.
+- One `contact_merges` row records exactly which identifiers, notes and tickets
+  moved, and an audit entry `contact.merged` records the counts — never an
+  identifier's value.
+
+**Undo** is offered in the toast after the merge and in a banner on the survivor
+for 24 hours. It moves back exactly what the merge moved — a ticket the survivor
+gained since stays — reopens the suggestion the pair came from, and writes
+`contact.merge.undone`. It is refused with `merge-expired` after 24 hours or a
+second time, and with `merge-blocked` once the survivor has itself been merged
+into somebody else or either contact has been erased.
+
+An **erased** contact cannot be merged (`anonymised`), and a merged contact
+cannot be erased (`merged`); undo the merge first.
 
 ## Erasure
 
@@ -131,8 +189,21 @@ The contact list counts the open suggestions and links to the filtered list
   else's screen a link to a person who has been erased.
 - The audit row records counts and kinds — how many identifiers, which kinds,
   how many notes — and **no value of any kind**.
+- The **files they sent** are deleted: every attachment they uploaded and every
+  attachment on a message they wrote. The rows go in the erasure's transaction;
+  the objects are queued through the outbox and deleted by the worker (M1-14).
+- The **channel ids** of the messages they wrote (`external_message_id`) are
+  cleared. The messages themselves stay, still attributed to the erased contact,
+  and the bodies are kept under the brand's
+  [retention](data-retention.md).
+- The audit row also carries `attachmentCount` and `messageCount`.
 - An erased contact is immutable afterwards: every write answers
-  `anonymised` (409).
+  `anonymised` (409). `contacts.anonymised_at` is the marker: anything that
+  matches contacts — duplicate suggestions, the merge of M1-13 — skips a row
+  where it is set.
+
+The screen asks for the person's name to be typed before the Anonymise button
+wakes up, and only an Admin is offered the button at all.
 
 There is no undo.
 
@@ -141,7 +212,7 @@ There is no undo.
 | Action | Needs |
 |---|---|
 | Read contacts, accounts, timeline | `contact:read` — every role, Viewer included |
-| Create, edit, add or remove an identifier, note, dismiss a duplicate | `contact:write` — Admin, Team Leader, Agent |
+| Create, edit, add or remove an identifier, note, dismiss a duplicate, merge, undo a merge | `contact:write` — Admin, Team Leader, Agent |
 | Erase a contact | `contact:write` **and** the Admin role in that brand |
 
 ## API
@@ -161,6 +232,9 @@ tenant transaction.
 | `POST /contacts/:contactId/notes` | `contact:write` | Adds a staff-only note. |
 | `POST /contacts/:contactId/duplicates/:suggestionId/dismiss` | `contact:write` | "Not the same". |
 | `POST /contacts/:contactId/anonymise` | `contact:write` + Admin | The erasure above. |
+| `GET /contacts/:contactId/merge-preview?otherContactId=` | `contact:read` | Both sides with their ticket counts (hidden ones included) and the identifiers after a merge. |
+| `POST /contacts/:contactId/merge` | `contact:write` | `{ mergedContactId, suggestionId? }`: folds that contact into this one. Answers this contact. |
+| `POST /contacts/:contactId/merges/:mergeId/undo` | `contact:write` | Takes the merge back within 24 hours. |
 | `GET /accounts` | `contact:read` | The companies, with contact counts. |
 | `POST /accounts` | `contact:write` | Creates one. 409 if the domain is taken. |
 | `GET /accounts/:accountId` | `contact:read` | The account and the people filed under it. |
@@ -184,8 +258,8 @@ A refused action answers with the usual error body plus a `contact` block:
 ```
 
 `reason` is one of `identity-taken`, `identity-invalid` (with a `problem` that
-says how), `last-identity`, `anonymise-forbidden`, `anonymised` or
-`domain-taken`. The admin turns the code into a sentence; no English crosses the
+says how), `last-identity`, `anonymise-forbidden`, `anonymised`,
+`domain-taken`, `merged`, `merge-self`, `merge-expired` or `merge-blocked`. The admin turns the code into a sentence; no English crosses the
 boundary. None of the messages repeats the identifier that was refused, because
 "that address is taken" told to a stranger who is guessing addresses is an
 enumeration oracle.
@@ -244,13 +318,17 @@ setting resolution lands (the open gap in
 
 ## Known gaps
 
-- **Merge is M1-13.** The suggestion table and the dismissal ship here; the
-  merge itself, its 24-hour undo and the participants (contact + CCs) on a
-  ticket do not.
+- **Merging starts from a suggestion.** The api merges any two contacts of the
+  brand, but the admin offers it only from a duplicate suggestion: the "merge
+  with…" picker in the contact menu has no artboard yet.
+- **A merge does not carry the merged contact's other suggestions over.** They
+  are hidden while the merge stands and come back if it is undone.
 - **Search is `ILIKE`, not trigram.** `contacts.name` and
   `contact_identities.value` are scanned with `ILIKE`; the trigram GIN index of
-  [ARCHITECTURE §5](../planning/ARCHITECTURE.md#5-data-model-core-tables) arrives
-  with the ticket index set in M1-15.
+  [ARCHITECTURE §5](../planning/ARCHITECTURE.md#5-data-model-core-tables) would
+  not be used under `FORCE ROW LEVEL SECURITY`, for the reason the ticket guide
+  gives. When contact search needs an index it follows
+  [ADR 0011](../decisions/0011-ticket-search-token-table.md).
 - **Tags are a placeholder.** The `tag` query parameter is accepted and ignored.
   Tagging a *contact* is nobody's deliverable yet: M1-06's tags hang off
   tickets, and REQUIREMENTS §4.1 gives a contact custom fields instead.

@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { ticketCsatSchema } from './csat.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
 import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
+import { timeEntrySecondsSchema } from './time-entries.js';
 
 /**
  * The wire contract for tickets and their threads (M1-02, M1-03), shared by the
@@ -61,6 +63,12 @@ export const ticketStatusSchema = z.object({
    * not a resolution: no CSAT is scheduled, and reports leave the ticket out.
    */
   excludedFromReports: z.boolean(),
+  /**
+   * The status "Mark as spam" moves a ticket to (M1-11). One per brand.
+   * Merged is excluded from reports too, so this is the only way to tell
+   * "spam" from "closed and not counted"; see `isSpamStatus`.
+   */
+  isSpam: z.boolean(),
   sortOrder: z.int(),
   color: statusColorSchema,
 });
@@ -164,6 +172,19 @@ export const ticketLifecycleRefusalSchema = z.enum([
   'ticket-deleted',
   /** Reopening something that was never closed. */
   'ticket-not-closed',
+  /** "Not spam" on a ticket that is not in the Spam status (M1-11). */
+  'ticket-not-spam',
+  // M1-09 (§2.4). A merge or split the rules have no row for.
+  /** A ticket cannot be merged into itself. */
+  'merge-into-self',
+  /** The chosen primary is itself merged; merge into the ticket it went to. */
+  'merge-into-merged',
+  /** Unmerging a ticket that is not merged. */
+  'ticket-not-merged',
+  /** The 24 hours in which a merge can be undone have passed. */
+  'merge-window-closed',
+  /** A message to split still has an attachment the media pipeline is working on. */
+  'attachments-in-flight',
 ]);
 export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema>;
 
@@ -175,6 +196,17 @@ export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema
 export const TICKET_SUBJECT_MAX = 500;
 /** A single message body, after sanitising. Generous, because email bodies are. */
 export const MESSAGE_BODY_MAX = 200_000;
+
+/**
+ * The least of a contact a ticket row needs: who to name. Not the contact's
+ * identities — an address on every row of a list is fifty addresses nobody
+ * asked to see — and not its stats, which are the contact screen's.
+ */
+export const ticketContactSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+});
+export type TicketContact = z.infer<typeof ticketContactSchema>;
 
 /**
  * One ticket. `number` and `prefix` travel together because `HD-1042` is what a
@@ -216,6 +248,16 @@ export const ticketSchema = z.object({
    * about tags yet draws nothing rather than crashing on `undefined`.
    */
   tags: z.array(tagSchema).optional(),
+  /**
+   * Who the ticket is about, by name (M1-15), for the reason the status is
+   * embedded: a list row names its contact, and a row that had to page through
+   * the contact list to find the name would draw most rows without one.
+   *
+   * The list and the ticket read fill it; the writes leave it off. It is also
+   * left off for a caller without `contact:read` — an api key scoped to tickets
+   * alone — who still has `contactId`. `null` means the ticket names nobody.
+   */
+  contact: ticketContactSchema.nullable().optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -283,11 +325,88 @@ export const ticketActivityListSchema = z.object({
 });
 export type TicketActivityList = z.infer<typeof ticketActivityListSchema>;
 
+// --------------------------------------------------------------------------
+// Merge and split (M1-09, DOMAIN-RULES §2.4)
+// --------------------------------------------------------------------------
+
+/** How long a merge can be undone for (DOMAIN-RULES §2.4). */
+export const UNMERGE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The most messages of one merged ticket the primary's thread carries inline.
+ * A longer thread is read on the merged ticket itself, which stays readable.
+ */
+export const MERGED_MESSAGES_MAX = 100;
+
+/** Another ticket, named from this one's thread: "Merged into HD-1038". */
+export const ticketLinkSchema = z.object({
+  id: z.uuid(),
+  number: z.int().positive(),
+  prefix: z.string().min(1),
+  subject: z.string(),
+});
+export type TicketLink = z.infer<typeof ticketLinkSchema>;
+
+/** When and by whom a ticket was merged, and until when that can be undone. */
+const mergeFactsSchema = z.object({
+  mergedAt: z.iso.datetime(),
+  /** Null when the merge was not made by a staff member. */
+  mergedById: z.uuid().nullable(),
+  /** Null once the 24 hours have passed: the screen offers no Unmerge after that. */
+  unmergeableUntil: z.iso.datetime().nullable(),
+});
+
+/**
+ * A ticket merged into the one being read, with its messages inline and
+ * read-only (§2.4: "messages are not moved"). Each message keeps its own
+ * `ticketId`, which is how the thread marks where it came from.
+ *
+ * A chain — A merged into B, then B into C — is flattened: C lists A and B,
+ * and `mergedIntoId` says which of them A went into.
+ */
+export const mergedTicketSchema = ticketLinkSchema.extend({
+  ...mergeFactsSchema.shape,
+  mergedIntoId: z.uuid(),
+  /**
+   * The system message on the primary that announced the merge, so the thread
+   * draws this ticket's block where it happened. Null for a ticket merged
+   * further down a chain, whose announcement is in another ticket's thread.
+   */
+  systemMessageId: z.uuid().nullable(),
+  /** The oldest {@link MERGED_MESSAGES_MAX} messages. */
+  messages: z.array(ticketMessageSchema),
+  /** True when the merged ticket has more messages than are carried here. */
+  hasMoreMessages: z.boolean(),
+});
+export type MergedTicket = z.infer<typeof mergedTicketSchema>;
+
+/** Where the ticket being read was merged to, for the "Merged into HD-1038" banner. */
+export const mergedIntoSchema = ticketLinkSchema.extend(mergeFactsSchema.shape);
+export type MergedInto = z.infer<typeof mergedIntoSchema>;
+
 /** What `GET /tickets/:ticketId` answers: the ticket and the start of its thread. */
 export const ticketDetailSchema = z.object({
   ticket: ticketSchema,
   messages: ticketMessagePageSchema,
   activity: z.array(ticketActivityEntrySchema),
+  /**
+   * The survey for the ticket's latest close (M1-12), or null when there is
+   * none — never closed, closed as spam or a merge, or closed while the brand
+   * had CSAT off. Optional for the reason `ticket.tags` is.
+   */
+  csat: ticketCsatSchema.nullable().optional(),
+  /**
+   * M1-09. Optional for the reason `tags` is: a client and a fixture built
+   * against the M1-02 shape stay valid. The api always fills all three.
+   *
+   * `merged` is every ticket merged into this one; `mergedInto` is the ticket
+   * this one was merged into, or null; `related` is the tickets a split joined
+   * to this one — the one it was split from and the ones split from it — so a
+   * system message that names them can link to them.
+   */
+  merged: z.array(mergedTicketSchema).optional(),
+  mergedInto: mergedIntoSchema.nullable().optional(),
+  related: z.array(ticketLinkSchema).optional(),
 });
 export type TicketDetail = z.infer<typeof ticketDetailSchema>;
 
@@ -492,6 +611,13 @@ export const messageCreateRequestSchema = z.object({
    * is per brand and a schema is not.
    */
   attachmentIds: z.array(z.uuid()).max(ATTACHMENTS_PER_MESSAGE_CEILING).optional(),
+  /**
+   * The per-reply timer (M1-12): time spent on this reply, logged as a time
+   * entry in the same transaction as the message. Ignored when the brand has
+   * time tracking off — the reply is what the agent meant to send, and it is
+   * not refused over the timer that ran beside it.
+   */
+  timeSpentSeconds: timeEntrySecondsSchema.optional(),
 });
 export type MessageCreateRequest = z.infer<typeof messageCreateRequestSchema>;
 

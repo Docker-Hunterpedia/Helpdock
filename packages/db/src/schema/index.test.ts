@@ -25,27 +25,35 @@ describe('the schema', () => {
   it('declares the tables shipped so far (ARCHITECTURE §5)', () => {
     expect([...byName.keys()].sort()).toEqual([
       'accounts',
+      'assignment_agents',
+      'assignment_skills',
       'attachments',
       'audit_log',
+      'blocked_senders',
       'brand_domains',
       'brands',
       'contact_duplicate_suggestions',
       'contact_identities',
+      'contact_merges',
       'contact_notes',
       'contacts',
+      'csat_responses',
       'custom_field_defs',
       'departments',
       'job_receipts',
       'outbox',
+      'retention_settings',
       'settings',
       'tags',
       'team_members',
       'teams',
       'ticket_activity',
       'ticket_messages',
+      'ticket_participants',
       'ticket_statuses',
       'ticket_tags',
       'ticket_templates',
+      'ticket_time_entries',
       'tickets',
       'user_brand_roles',
       'users',
@@ -81,10 +89,11 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but three has a uuid primary key; `settings` is keyed by
-    // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key, and
-    // `ticket_tags` by the pair it joins.
-    expect(generated).toHaveLength(byName.size - 3);
+    // Every table but six has a uuid primary key; `settings` is keyed by
+    // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
+    // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
+    // they join, and `retention_settings` by its brand.
+    expect(generated).toHaveLength(byName.size - 6);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }
@@ -118,6 +127,20 @@ describe('the indexes and constraints', () => {
     expect(unique?.columns.map((column) => column.name)).toEqual(['brand_id', 'name']);
   });
 
+  it('bounds the audit log window below by the 90 days DOMAIN-RULES §11 promises', () => {
+    const names = configOf('retention_settings').checks.map((entry) => entry.name);
+
+    expect(names).toContain('retention_settings_audit_log_days_check');
+  });
+
+  it('indexes closed tickets by brand for the retention pass', () => {
+    const index = configOf('tickets').indexes.find(
+      (entry) => entry.config.name === 'tickets_brand_closed_at_idx',
+    );
+
+    expect(index?.config.where).toBeDefined();
+  });
+
   it('keeps a status name unique inside its brand, so the picker has no twins', () => {
     const unique = configOf('ticket_statuses').uniqueConstraints[0];
 
@@ -135,11 +158,33 @@ describe('the indexes and constraints', () => {
 
     expect(names).toEqual(
       expect.arrayContaining([
+        'tickets_brand_updated_idx',
         'tickets_brand_department_status_updated_idx',
-        'tickets_brand_assignee_idx',
+        'tickets_brand_assignee_updated_idx',
         'tickets_search_idx',
       ]),
     );
+  });
+
+  it('ends every ordered list index in the keyset, so a page is read in index order', () => {
+    // The list pages by `(updated_at, id)` (apps/api/src/tickets/cursor.ts). An
+    // index that stopped at `updated_at` would still need a sort for the
+    // tiebreaker, and one that put anything after them could not be read in
+    // keyset order at all.
+    const btrees = configOf('tickets').indexes.filter((entry) =>
+      [
+        'tickets_brand_updated_idx',
+        'tickets_brand_assignee_updated_idx',
+        'tickets_brand_department_status_updated_idx',
+      ].includes(entry.config.name ?? ''),
+    );
+
+    for (const entry of btrees) {
+      const columns = entry.config.columns.map((column) => ('name' in column ? column.name : ''));
+      expect(columns[0]).toBe('brand_id');
+      expect(columns.slice(-2)).toEqual(['updated_at', 'id']);
+    }
+    expect(btrees).toHaveLength(3);
   });
 
   it('derives the search vector rather than letting a writer forget it', () => {
@@ -252,5 +297,30 @@ describe('the indexes and constraints', () => {
     const prefix = configOf('brands').columns.find((column) => column.name === 'prefix');
 
     expect(prefix?.isUnique).toBe(true);
+  });
+
+  it('keeps one survey per close of a ticket, so a redelivered job cannot add a second', () => {
+    const index = configOf('csat_responses').indexes.find(
+      (entry) => entry.config.name === 'csat_responses_ticket_close_key',
+    );
+
+    expect(index?.config.unique).toBe(true);
+    expect(index?.config.columns.map((column) => ('name' in column ? column.name : ''))).toEqual([
+      'ticket_id',
+      'closed_at',
+    ]);
+  });
+
+  it('stores a hash of the survey link, never the link', () => {
+    expect(columnsOf('csat_responses')).toContain('token_hash');
+    expect(columnsOf('csat_responses')).not.toContain('token');
+  });
+
+  it('keeps time that was logged when the reply it came with is gone', () => {
+    const foreignKey = configOf('ticket_time_entries').foreignKeys.find((entry) =>
+      entry.reference().columns.some((column) => column.name === 'message_id'),
+    );
+
+    expect(foreignKey?.onDelete).toBe('set null');
   });
 });

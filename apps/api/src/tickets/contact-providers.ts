@@ -1,6 +1,13 @@
-import { type DbTransaction, departments, ticketStatuses, tickets, users } from '@helpdock/db';
+import {
+  csatResponses,
+  type DbTransaction,
+  departments,
+  ticketStatuses,
+  tickets,
+  users,
+} from '@helpdock/db';
 import type { ContactStats, ContactTimelineItem } from '@helpdock/schemas';
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type {
   ContactTimelineProvider,
   ContactTimelineResult,
@@ -45,9 +52,14 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
    * One query for the whole page. Fifty rows must not be fifty queries, which
    * is why the interface takes the ids together rather than one at a time.
    *
-   * `csat` and `averageFirstReplySeconds` stay null: CSAT is M1-12 and the
-   * first-response clock is M3-02, and a zero would read as "rated badly" and
-   * "answered instantly" rather than "not measured yet".
+   * `csat` is the share of this contact's answered surveys rated 4 or 5, as a
+   * percentage (M1-12) — the usual reading of "satisfied" on a five-point
+   * scale — and null when they have answered none, because a zero would read as
+   * "rated badly". It is read from the surveys *visible* to this principal, the
+   * same scope as the counts beside it.
+   *
+   * `averageFirstReplySeconds` stays null until the first-response clock
+   * (M3-02) exists, for the same reason.
    */
   async forContacts(
     tx: DbTransaction,
@@ -70,6 +82,8 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
       .where(inArray(tickets.contactId, [...contactIds]))
       .groupBy(tickets.contactId);
 
+    const satisfaction = await this.#satisfaction(tx, contactIds);
+
     return new Map(
       rows.flatMap((row) =>
         row.contactId === null
@@ -80,12 +94,33 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
                 {
                   openTickets: row.open,
                   totalTickets: row.total,
-                  csat: null,
+                  csat: satisfaction.get(row.contactId) ?? null,
                   averageFirstReplySeconds: null,
                   lastTicketAt: row.lastTicketAt,
                 },
               ] as const,
             ],
+      ),
+    );
+  }
+
+  async #satisfaction(
+    tx: DbTransaction,
+    contactIds: readonly string[],
+  ): Promise<ReadonlyMap<string, number>> {
+    const rows = await tx
+      .select({
+        contactId: tickets.contactId,
+        satisfied: sql<number>`(100.0 * count(*) filter (where ${csatResponses.rating} >= 4) / count(*))::float8`,
+      })
+      .from(csatResponses)
+      .innerJoin(tickets, eq(tickets.id, csatResponses.ticketId))
+      .where(and(inArray(tickets.contactId, [...contactIds]), isNotNull(csatResponses.rating)))
+      .groupBy(tickets.contactId);
+
+    return new Map(
+      rows.flatMap((row) =>
+        row.contactId === null ? [] : [[row.contactId, row.satisfied] as const],
       ),
     );
   }

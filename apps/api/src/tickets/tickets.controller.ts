@@ -21,6 +21,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
+import { principalHasPermission } from '../auth/permissions.js';
 import type { Principal } from '../auth/principal.js';
 import { Requires } from '../auth/route-declaration.js';
 import { requireRequestContext } from '../context/request-context.js';
@@ -78,10 +79,10 @@ export class TicketsController {
   @Requires('ticket:read')
   @ZodSerializerDto(TicketListDto)
   async list(
-    @Param(new ZodValidationPipe(TicketBrandParamDto)) _params: TicketBrandParamDto,
+    @Param(new ZodValidationPipe(TicketBrandParamDto)) { brandId }: TicketBrandParamDto,
     @Query(new ZodValidationPipe(TicketListQueryDto)) query: TicketListQueryDto,
   ): Promise<TicketList> {
-    return this.#tickets.list(query);
+    return this.#tickets.list(brandId, query, { withContacts: this.#readsContacts(brandId) });
   }
 
   @Post('tickets')
@@ -98,9 +99,9 @@ export class TicketsController {
   @Requires('ticket:read')
   @ZodSerializerDto(TicketDetailDto)
   async find(
-    @Param(new ZodValidationPipe(TicketParamDto)) { ticketId }: TicketParamDto,
+    @Param(new ZodValidationPipe(TicketParamDto)) { brandId, ticketId }: TicketParamDto,
   ): Promise<TicketDetail> {
-    return this.#tickets.find(ticketId);
+    return this.#tickets.find(ticketId, { withContacts: this.#readsContacts(brandId) });
   }
 
   @Patch('tickets/:ticketId')
@@ -167,6 +168,15 @@ export class TicketsController {
     @Param(new ZodValidationPipe(TicketParamDto)) { ticketId }: TicketParamDto,
   ): Promise<TicketActivityList> {
     return this.#tickets.activity(ticketId);
+  }
+
+  /**
+   * Whether the embedded contact name may be filled in (M1-15). The route
+   * asks for `ticket:read`; the name is a contact's, so it follows
+   * `contact:read` on top.
+   */
+  #readsContacts(brandId: string): boolean {
+    return principalHasPermission(this.#principal(), brandId, 'contact:read');
   }
 
   #principal(): Principal {

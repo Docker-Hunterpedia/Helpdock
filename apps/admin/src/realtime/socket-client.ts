@@ -11,6 +11,7 @@ import {
   SOCKET_IO_PATH,
   STAFF_NAMESPACE,
   socketErrorSchema,
+  type TicketViewingActivity,
   ticketChangedEnvelopeSchema,
   ticketMessageEnvelopeSchema,
   ticketViewingEnvelopeSchema,
@@ -186,7 +187,7 @@ export class SocketRealtimeClient implements RealtimeClient {
     };
   }
 
-  announceViewing(ticketId: string): void {
+  announceViewing(ticketId: string, activity: TicketViewingActivity = 'viewing'): void {
     const brandId = this.#brandId;
     if (this.#socket === null || brandId === null) {
       return;
@@ -195,7 +196,7 @@ export class SocketRealtimeClient implements RealtimeClient {
     // Nothing waits on the acknowledgement: it says only that the relay
     // happened, and a collision indicator that has not been told is simply a
     // collision indicator with nothing to draw.
-    void this.#socket.emitWithAck(REALTIME_EVENTS.ticketViewing, { brandId, ticketId });
+    void this.#socket.emitWithAck(REALTIME_EVENTS.ticketViewing, { brandId, ticketId, activity });
   }
 
   // ------------------------------------------------------------------

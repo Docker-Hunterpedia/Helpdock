@@ -10,6 +10,7 @@ import {
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
+import { AssignmentModule } from './assignment/assignment.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
@@ -19,6 +20,7 @@ import { ContactsModule } from './contacts/contacts.module.js';
 import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
 import { RequestContextMiddleware } from './context/request-context.middleware.js';
+import { CsatModule } from './csat/csat.module.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
@@ -26,7 +28,10 @@ import { MediaModule } from './media/media.module.js';
 import type { ObjectStorage } from './media/storage.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
+import { ParticipantsModule } from './participants/participants.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
+import { DbContactErasureProvider } from './retention/contact-erasure.js';
+import { RetentionModule } from './retention/retention.module.js';
 import { DomainCheckController } from './routes/domain-check.controller.js';
 import { DomainCheckService } from './routes/domain-check.service.js';
 import { HealthController } from './routes/health.controller.js';
@@ -98,6 +103,9 @@ export class AppModule implements NestModule {
     // so M1-06's controllers are registered once and `TicketsService` is handed
     // the very services the settings screens write through.
     const ticketing = TicketingModule.forRoot();
+    // M1-12, the same pattern: the public rating routes here, the summary on a
+    // ticket read in `TicketsModule`.
+    const csat = CsatModule.forRoot();
 
     return {
       module: AppModule,
@@ -117,15 +125,24 @@ export class AppModule implements NestModule {
         ContactsModule.forRoot({
           ticketStats: new DbTicketStatsProvider(),
           timeline: new DbContactTimelineProvider(),
+          // M1-14: an erasure also removes the files the person sent.
+          erasure: new DbContactErasureProvider(),
         }),
         ticketing,
-        TicketsModule.forRoot({ ticketing }),
+        csat,
+        TicketsModule.forRoot({ ticketing, csat }),
+        // M1-07's tab and picker. The rotation itself runs in the worker.
+        AssignmentModule.forRoot({ ticketing }),
+        // M1-13: a ticket's CCs. Its service is exported for M1-09's merge.
+        ParticipantsModule.forRoot(),
         // M1-10. `forRoot` builds the S3 client from the bootstrap keys unless
         // a caller hands it a bucket double, which is what the suites do.
         MediaModule.forRoot({
           env: options.env,
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
         }),
+        // M1-14: the Data retention form. The purge itself runs in the worker.
+        RetentionModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

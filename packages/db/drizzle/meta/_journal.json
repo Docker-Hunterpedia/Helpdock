@@ -92,6 +92,55 @@
       "when": 1789896300528,
       "tag": "0014_tags_custom_fields_and_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790277267936,
+      "tag": "0015_assignment",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790277444331,
+      "tag": "0016_merge_and_split",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790277445331,
+      "tag": "0017_spam_and_block_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790277446331,
+      "tag": "0018_time_tracking_and_csat",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790277447331,
+      "tag": "0019_contact_identity_and_participants",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790277448331,
+      "tag": "0020_data_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790278347013,
+      "tag": "0021_ticket_list_indexes",
+      "breakpoints": true
     }
   ]
 }

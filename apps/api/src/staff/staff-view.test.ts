@@ -10,6 +10,11 @@ const SUPPORT: Department = {
   nameAr: null,
   defaultTeamId: null,
   sortOrder: 0,
+  assignmentMode: 'manual',
+  loadCap: null,
+  autoUnassignOffline: false,
+  autoUnassignAfterMinutes: 15,
+  onUnassign: 'leave_unassigned',
   createdAt: new Date('2026-09-01T00:00:00.000Z'),
   updatedAt: new Date('2026-09-01T00:00:00.000Z'),
 };

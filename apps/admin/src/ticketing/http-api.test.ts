@@ -417,3 +417,155 @@ describe('ticket templates', () => {
     expect(lastCall().url).toContain('/preview');
   });
 });
+
+describe('the block list (M1-11)', () => {
+  const BLOCKED = '0192c3f0-1a2b-7c3d-8e4f-0000000bb001';
+  const row = {
+    id: BLOCKED,
+    kind: 'domain',
+    value: 'promo-deals.biz',
+    createdByName: 'Lina',
+    sourceTicketId: null,
+    droppedCount: 112,
+    lastDroppedAt: null,
+    createdAt: '2026-09-12T09:00:00.000Z',
+  };
+
+  it('reads the list', async () => {
+    fetchMock.mockResolvedValue(json({ senders: [row] }));
+
+    const { senders } = await api.blockedSenders(BRAND);
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/blocked-senders`);
+    expect(senders[0]?.droppedCount).toBe(112);
+  });
+
+  it('blocks a sender with the kind and the value as typed', async () => {
+    fetchMock.mockResolvedValue(json(row, 201));
+
+    await api.blockSender(BRAND, { kind: 'domain', value: '@Promo-Deals.biz' });
+
+    expect(lastCall().init.method).toBe('POST');
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({
+      kind: 'domain',
+      value: '@Promo-Deals.biz',
+    });
+  });
+
+  it('turns the brand’s own domain into the refusal the card draws', async () => {
+    fetchMock.mockResolvedValue(ticketingFailure('sender-is-own'));
+
+    const error = await api
+      .blockSender(BRAND, { kind: 'domain', value: 'helpdock.com' })
+      .catch((caught: unknown) => caught);
+
+    expect(isTicketingError(error) && error.reason).toBe('sender-is-own');
+  });
+
+  it('unblocks by id', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await api.unblockSender(BRAND, BLOCKED);
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/blocked-senders/${BLOCKED}`);
+    expect(lastCall().init.method).toBe('DELETE');
+  });
+
+  it('saves the Spam tab’s setting on its own narrow route', async () => {
+    fetchMock.mockResolvedValue(json({ offerBlockSender: false }));
+
+    const settings = await api.updateSpamSettings(BRAND, { offerBlockSender: false });
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/ticketing/spam-settings`);
+    expect(lastCall().init.method).toBe('PATCH');
+    expect(settings.offerBlockSender).toBe(false);
+  });
+});
+
+describe('assignment (M1-07)', () => {
+  const setting = {
+    departmentId: DEPARTMENT,
+    name: 'Billing',
+    nameAr: null,
+    mode: 'round_robin',
+    loadCap: 8,
+    autoUnassignOffline: true,
+    autoUnassignAfterMinutes: 15,
+    onUnassign: 'leave_unassigned',
+    agentsOnline: 1,
+    agentsInRotation: 2,
+  };
+  const agent = {
+    userId: USER,
+    name: 'Omar Nasser',
+    role: 'agent',
+    presence: 'online',
+    openCount: 3,
+    inRotation: true,
+    skills: [],
+    editable: true,
+  };
+
+  it('reads every department the viewer leads', async () => {
+    fetchMock.mockResolvedValue(json({ departments: [setting] }));
+
+    const list = await api.assignment(BRAND);
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/assignment`);
+    expect(list.departments[0]?.mode).toBe('round_robin');
+  });
+
+  it('patches one department', async () => {
+    fetchMock.mockResolvedValue(json({ ...setting, loadCap: null }));
+
+    const saved = await api.updateAssignment(BRAND, DEPARTMENT, { loadCap: null });
+
+    const { url, init } = lastCall();
+    expect(init.method).toBe('PATCH');
+    expect(url).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}`);
+    expect(JSON.parse(String(init.body))).toEqual({ loadCap: null });
+    expect(saved.loadCap).toBeNull();
+  });
+
+  it('reads and patches the agents of one department', async () => {
+    fetchMock.mockResolvedValue(json({ departmentId: DEPARTMENT, loadCap: 8, agents: [agent] }));
+    const list = await api.assignmentAgents(BRAND, DEPARTMENT);
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}/agents`);
+    expect(list.agents[0]?.name).toBe('Omar Nasser');
+
+    fetchMock.mockResolvedValue(json({ ...agent, inRotation: false }));
+    const updated = await api.updateAssignmentAgent(BRAND, DEPARTMENT, USER, { inRotation: false });
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}/agents/${USER}`);
+    expect(updated.inRotation).toBe(false);
+  });
+
+  it('turns the ceiling refusal into a code', async () => {
+    fetchMock.mockResolvedValue(ticketingFailure('out-of-scope', 403));
+
+    const error = await api
+      .updateAssignment(BRAND, DEPARTMENT, { mode: 'manual' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(isTicketingError(error) && error.reason).toBe('out-of-scope');
+  });
+});
+
+describe('the Feedback tab (M1-12)', () => {
+  it('patches the three toggles and parses the settings back', async () => {
+    fetchMock.mockResolvedValue(json({ timeTrackingEnabled: true }));
+
+    const settings = await api.updateFeedback(BRAND, { timeTrackingEnabled: true });
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/ticketing/feedback`);
+    expect(lastCall().init.method).toBe('PATCH');
+    expect(settings).toMatchObject({ timeTrackingEnabled: true, csatEnabled: true });
+  });
+
+  it('turns a refusal into its reason', async () => {
+    fetchMock.mockResolvedValue(ticketingFailure('time-tracking-off'));
+
+    await expect(api.updateFeedback(BRAND, { csatEnabled: false })).rejects.toMatchObject({
+      reason: 'time-tracking-off',
+    });
+  });
+});

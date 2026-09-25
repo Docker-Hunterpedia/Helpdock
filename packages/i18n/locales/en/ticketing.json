@@ -10,7 +10,9 @@
     "customFields": "Custom fields",
     "templates": "Templates",
     "views": "Views",
-    "assignment": "Assignment"
+    "assignment": "Assignment",
+    "spam": "Spam",
+    "feedback": "Feedback"
   },
   "soon": {
     "heading": "Not built yet",
@@ -124,7 +126,18 @@
     "templateUpdated": "{{name}} saved",
     "templateDeleted": "{{name}} deleted",
     "fieldInUse": "Rows already carry values for this field, so its type cannot change.",
-    "optionInUse": "Rows still carry one of the options you removed."
+    "optionInUse": "Rows still carry one of the options you removed.",
+    "senderBlocked": "Blocked {{value}}",
+    "senderUnblocked": "Unblocked {{value}}",
+    "spamSettingsSaved": "Spam settings saved",
+    "senderInvalid": "That is not a valid sender of this kind.",
+    "senderIsOwn": "A domain your brand sends from cannot be blocked.",
+    "senderAlreadyBlocked": "That sender is already on the block list.",
+    "assignmentSaved": "{{name}} saved",
+    "agentUpdated": "{{name}} updated",
+    "assigneeAboveActor": "Only an Admin can route work to an Admin.",
+    "feedbackSaved": "Feedback settings saved",
+    "timeTrackingOff": "Time tracking is off for this brand."
   },
   "statuses": {
     "add": "Add status",
@@ -409,5 +422,159 @@
         "submit": "Delete template"
       }
     }
+  },
+  "spam": {
+    "blockList": {
+      "heading": "Block list",
+      "caption": "Senders whose messages never become tickets in this brand.",
+      "add": "Block a sender",
+      "search": "Search the block list",
+      "searchPlaceholder": "Search senders",
+      "table": {
+        "caption": "Blocked senders of {{brand}}",
+        "sender": "Sender",
+        "kind": "Kind",
+        "addedBy": "Added by",
+        "added": "Added",
+        "dropped": "Dropped",
+        "unblock": "Unblock {{value}}",
+        "formerStaff": "Former staff"
+      },
+      "empty": {
+        "heading": "Nobody is blocked",
+        "body": "Block a sender here, or tick \"Block sender\" when you mark a ticket as spam."
+      },
+      "noMatch": {
+        "heading": "No sender matches",
+        "body": "Try part of the address, the domain or the number."
+      }
+    },
+    "kinds": {
+      "email": "Address",
+      "domain": "Domain",
+      "phone": "Phone",
+      "telegram": "Telegram"
+    },
+    "form": {
+      "heading": "Block a sender",
+      "kind": "Kind",
+      "value": "Sender",
+      "kinds": {
+        "email": "Email address",
+        "domain": "Email domain",
+        "phone": "Phone",
+        "telegram": "Telegram"
+      },
+      "hints": {
+        "email": "The whole address, such as spam@promo-deals.biz.",
+        "domain": "Blocks every address at this domain and below it.",
+        "phone": "In international form, such as +963 931 234 567.",
+        "telegram": "The chat id the bot reports, digits only."
+      },
+      "submit": "Block"
+    },
+    "status": {
+      "heading": "Spam status",
+      "body": "A ticket marked as spam is closed, sends no auto-reply and no CSAT, and is left out of reports. Purged after the brand's spam retention.",
+      "offer": "Offer \"Block sender\" when marking as spam",
+      "offerHint": "Later messages from a blocked sender are dropped before a ticket is created, and counted here."
+    },
+    "confirm": {
+      "unblock": {
+        "title": "Unblock {{value}}?",
+        "body": "Their next messages become tickets again.",
+        "submit": "Unblock"
+      }
+    }
+  },
+  "assignment": {
+    "heading": "Assignment",
+    "caption": "How new tickets find an agent, per department.",
+    "empty": {
+      "heading": "No departments to route",
+      "body": "Departments you lead appear here once they exist."
+    },
+    "table": {
+      "caption": "How each department of {{brand}} assigns tickets",
+      "department": "Department",
+      "mode": "Mode",
+      "loadCap": "Load cap",
+      "autoUnassign": "Auto-unassign",
+      "agentsOnline": "Agents online",
+      "edit": "Edit {{name}}",
+      "noCap": "—",
+      "off": "off",
+      "minutes": "{{minutes}} min",
+      "online": "{{online}} / {{total}}"
+    },
+    "modes": {
+      "manual": "Manual",
+      "round_robin": "Round-robin",
+      "skill_based": "Skill-based"
+    },
+    "modeHints": {
+      "manual": "New tickets stay unassigned.",
+      "round_robin": "Online agents in rotation, under their cap.",
+      "skill_based": "Round-robin among agents whose skills match a ticket tag; everyone if none match."
+    },
+    "agents": {
+      "heading": "Agents in {{department}}",
+      "caption": "Skills match ticket tags. The next ticket goes to the eligible agent who waited longest.",
+      "tableCaption": "Agents who can work {{department}}",
+      "name": "Agent",
+      "presence": "Presence",
+      "load": "Open tickets",
+      "skills": "Skills",
+      "rotation": "Rotation",
+      "empty": "Nobody can work this department yet. Give an agent the department on the Staff screen.",
+      "loadOf": "{{open}} / {{cap}}",
+      "atCap": "{{open}} / {{cap}} · at cap",
+      "addSkill": "skill",
+      "addSkillFor": "Add skill for {{name}}",
+      "removeSkill": "Remove {{skill}} from {{name}}",
+      "noTagsLeft": "Every tag is already a skill",
+      "inRotation": "In rotation",
+      "inRotationFor": "{{name}} in rotation"
+    },
+    "editor": {
+      "heading": "Assignment · {{department}}",
+      "mode": "Mode",
+      "loadCap": "Load cap per agent",
+      "loadCapHint": "Open and escalated tickets. Empty means no cap.",
+      "loadCapInvalid": "Enter a whole number from 1 to 500, or leave it empty.",
+      "autoUnassign": "Unassign when the agent is offline for",
+      "minutes": "Minutes offline",
+      "minutesSuffix": "minutes, not while the department is closed",
+      "minutesInvalid": "Enter a whole number of minutes from 1 to 1440.",
+      "onUnassign": "When an agent loses access",
+      "onUnassignHint": "Applies to role changes and deactivation.",
+      "onUnassignOptions": {
+        "round_robin": "Round-robin the tickets",
+        "leave_unassigned": "Leave them unassigned"
+      },
+      "save": "Save",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a department to change how it assigns tickets."
+      }
+    },
+    "note": "An agent at their cap is skipped, never queued. Tickets over the cap from a manual assignment are allowed and shown in danger in the agent's count."
+  },
+  "feedback": {
+    "heading": "Feedback and time",
+    "caption": "Customer ratings and agent time for this brand.",
+    "form": "Feedback and time settings",
+    "csatHeading": "Customer satisfaction",
+    "csatEnabled": "Ask for a rating when a ticket closes",
+    "csatHint": "One link per ticket, 1 to 5 and a comment. It works once and expires after 30 days. Never sent for spam or merged tickets.",
+    "timeHeading": "Time tracking",
+    "timeEnabled": "Track time on tickets",
+    "timeHint": "Agents see a Time card on each ticket with a timer and manual entries.",
+    "timerWithComposer": "Start the timer when an agent opens the composer",
+    "timerHint": "Stopped and logged against the reply when it is sent.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "deliveryHeading": "Delivery",
+    "deliveryBody": "The link goes out with the closing message on the ticket's channel. Email, widget and Telegram delivery arrive with those channels; until then the link is shown on the ticket for the agent to share."
   }
 }

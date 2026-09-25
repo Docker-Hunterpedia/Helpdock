@@ -36,6 +36,47 @@ test.describe('the ticket list', () => {
     await expect(page.getByRole('link', { name: /HD-/ })).toHaveCount(6);
   });
 
+  test('names each row’s contact from the ticket itself (M1-15)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+
+    // The name travels with the ticket, so a Latin name and an Arabic one are
+    // both on their rows whatever page of the contact list they would be on.
+    await expect(page.getByRole('link', { name: /HD-1042/ })).toContainText('Mona Khalil');
+    await expect(page.getByRole('link', { name: /HD-1039/ })).toContainText('سارة الحسن');
+  });
+
+  test('prints only the reference on a row whose ticket names nobody', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+
+    await page.getByRole('button', { name: t('tickets:newTicket.action') }).click();
+    await page.getByRole('button', { name: t('tickets:newTicket.contactNone') }).click();
+    await page
+      .getByRole('textbox', { name: t('tickets:newTicket.subjectLabel') })
+      .fill('Walk-in at the counter');
+    await page
+      .getByRole('textbox', { name: t('tickets:newTicket.messageLabel') })
+      .fill('No name given.');
+    await page.getByRole('button', { name: t('tickets:newTicket.submit') }).click();
+    await expect(page.getByRole('heading', { level: 1 }).last()).toContainText('Walk-in');
+    // Opening the new ticket lands the list on the default view, which is
+    // "My open"; the unassigned walk-in is on the whole desk.
+    await page.getByRole('link', { name: t('tickets:views.all'), exact: true }).click();
+
+    const row = page.getByRole('link', { name: /HD-1043/ });
+    await expect(row).toBeVisible();
+    // No separator and no stand-in: the caption is the reference alone.
+    await expect(row.locator('p').last()).toHaveText('HD-1043');
+  });
+
   test('searches the api, and says so when nothing matches', async ({
     page,
     appLocale: locale,

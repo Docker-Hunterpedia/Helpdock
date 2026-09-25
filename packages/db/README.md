@@ -42,8 +42,10 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `users` | global | Staff accounts. Unique on `lower(email)`, so addresses compare case-insensitively without the `citext` extension. |
 | `brands` | global | The tenant. `prefix` is unique, and DOMAIN-RULES §11 keeps it reserved after a brand is deleted. Inserting a row creates that brand's ticket sequence. `settings` is the brand's own ticketing behaviour, validated by `brandSettingsSchema` in `@helpdock/schemas`. |
 | `user_brand_roles` | tenant | One role per user per brand. `department_ids` null means every department; an empty array means none, which is what an Agent with nothing assigned has. |
-| `departments` | tenant | The unit a Team Leader leads and an Agent belongs to. Unique on `(brand_id, name)`. M1-01 adds `name_ar`, `sort_order` and `default_team_id`; business hours and the SLA policy are M3, `on_unassign` is M1-07, the inbox is M2. |
+| `departments` | tenant | The unit a Team Leader leads and an Agent belongs to. Unique on `(brand_id, name)`. M1-01 adds `name_ar`, `sort_order` and `default_team_id`; M1-07 adds `assignment_mode`, `load_cap` (null = no cap, otherwise positive), `auto_unassign_offline`, `auto_unassign_after_minutes` (1–1440, default 15) and `on_unassign`. Business hours and the SLA policy are M3, the inbox is M2. |
 | `teams` | tenant | A group inside one department (M1-01). Unique on `(department_id, name)`; carries `brand_id` as well, because every policy filters on it. |
+| `assignment_agents` | tenant | One person's place in one department's rotation (M1-07): `in_rotation` and `last_assigned_at`, the "longest waiting" key. Primary key `(department_id, user_id)`. A row exists only once somebody changed the default or the rotation picked them; who *may* be in rotation is read from `user_brand_roles` at the moment of picking. |
+| `assignment_skills` | tenant | An agent's skills in one department, as tags (M1-07). Primary key `(department_id, user_id, tag_id)`; deleting the tag deletes the skill. |
 | `team_members` | tenant | Who is on a team (M1-01). Unique on `(team_id, user_id)`. No foreign key to `user_brand_roles`: the rule that a member must hold a role reaching the department is checked in the service. |
 | `contacts` | tenant | A person as one brand knows them (M1-04). Brand-scoped, never department-scoped: the *timeline* hides the tickets a viewer may not read. |
 | `contact_identities` | tenant | The addresses, phone numbers and channel ids a contact writes from (M1-04). Auto-merge only on verified matches (DOMAIN-RULES §4.4). |
@@ -55,10 +57,13 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `audit_log` | tenant | Who did what. `actor_id` is text: a system actor is a job id. |
 | `outbox` | tenant | The transactional outbox of DOMAIN-RULES §6. Partial index on the unpublished backlog. |
 | `job_receipts` | global | Idempotency keys for consumers with no natural key. |
-| `ticket_statuses` | tenant | A brand's own statuses, each mapped to one of the four system states of DOMAIN-RULES §2.1. Brand-scoped and **not** department-scoped: an Agent has to read the name of the status a ticket in their own department is in. Unique on `(brand_id, name)`. |
+| `retention_settings` | tenant | One row per brand with its DOMAIN-RULES §11 windows, and the last nightly run's counts (M1-14). No row means the defaults. A table rather than a key in `brands.settings`, which the brand `PATCH` sends whole and could reset by omission. |
+| `ticket_statuses` | tenant | A brand's own statuses, each mapped to one of the four system states of DOMAIN-RULES §2.1. Brand-scoped and **not** department-scoped: an Agent has to read the name of the status a ticket in their own department is in. Unique on `(brand_id, name)`. `system_key` names the seeded rows code has to find (M1-09); `is_spam` is generated from `system_key = 'spam'` (M1-11), because Spam carries the same other flags as Merged. |
 | `tickets` | tenant, **department** | The ticket. `department_id` is not null — a ticket with no department would be invisible to everyone. `search` is a generated tsvector. |
 | `ticket_messages` | tenant, **department** | The thread. `seq` is monotonic per ticket; `(ticket_id, client_id)` dedupes a retried send; `(brand_id, channel, external_message_id)` dedupes an inbound redelivery. |
 | `ticket_activity` | tenant, **department** | Who changed what, and how. Part of the ticket rather than the brand's administrative trail, which stays `audit_log`. |
+| `ticket_time_entries` | tenant, **department** | Time spent on a ticket (M1-12): seconds, an optional note, and the reply it came with. `user_id` restricts deletion, so logged time outlives nothing it should. |
+| `csat_responses` | tenant, **department** | One satisfaction survey per close (M1-12), unique on `(ticket_id, closed_at)`, with the answer on the same row. Stores a hash of the link's token, never the token. |
 
 Ids are **UUIDv7**, generated in `src/uuid.ts`: a 48-bit millisecond timestamp,
 a 12-bit counter and 62 bits of randomness (RFC 9562). Node's
@@ -267,5 +272,6 @@ it idempotent.
   does not fall back to the install-wide value for a key a brand has not
   overridden; that resolution rule belongs to the milestone that puts per-brand
   settings in admin.
-- Nothing drops a brand's ticket sequence yet. Brand deletion and retention are
-  DOMAIN-RULES §11, and arrive with the maintenance jobs.
+- Nothing drops a brand's ticket sequence yet. Brand deletion is DOMAIN-RULES
+  §11 and is its own deliverable; retention (M1-14) purges rows, never a
+  sequence.

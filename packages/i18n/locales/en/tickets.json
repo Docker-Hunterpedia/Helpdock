@@ -45,7 +45,10 @@
     "viewingOne": "{{name}} is viewing",
     "viewingMany": "{{name}} and {{others}} others are viewing",
     "details": "Details",
-    "closeDetails": "Close the details"
+    "closeDetails": "Close the details",
+    "logTime": "Log time…",
+    "replyingOne": "{{name}} is replying",
+    "replyingMany": "{{name}} is replying · {{others}} more viewing"
   },
   "sla": {
     "label": "Service level",
@@ -152,7 +155,31 @@
     "linked": "Linked tickets",
     "noLinked": "None",
     "created": "Created",
-    "channel": "Channel"
+    "channel": "Channel",
+    "picker": {
+      "open": "Assignee: {{name}}",
+      "search": "Find an agent",
+      "list": "Assignee",
+      "footer": "Agents in {{department}}. Presence dot, then open tickets against their cap.",
+      "load": "{{open}}/{{cap}}",
+      "atCap": "{{open}}/{{cap}} at cap",
+      "offline": "offline",
+      "noMatch": "No agent matches",
+      "unavailable": "Could not load who can take this ticket."
+    }
+  },
+  "participants": {
+    "title": "Participants",
+    "contact": "contact",
+    "cc": "CC",
+    "remove": "Remove {{address}}",
+    "addLabel": "Add a CC",
+    "addPlaceholder": "Add a CC address",
+    "add": "Add",
+    "hint": "CCs receive public replies and may reply by email.",
+    "added": "{{address}} added as a CC.",
+    "removed": "{{address}} removed.",
+    "failed": "That did not work. Try again."
   },
   "filters": {
     "title": "Filter tickets",
@@ -197,7 +224,16 @@
     "noted": "Note added",
     "updated": "Ticket updated",
     "failed": "That did not work. Try again.",
-    "sendFailed": "Not sent. Try again."
+    "sendFailed": "Not sent. Try again.",
+    "markedSpam": "Marked as spam",
+    "markedSpamBlocked": "Marked as spam and blocked {{sender}}",
+    "notSpam": "Moved back to open",
+    "timeLogged": "Time logged",
+    "timeDeleted": "Time entry deleted",
+    "timeFailed": "The time could not be saved.",
+    "timeTrackingOff": "Time tracking is off for this brand.",
+    "merged": "Merged into {{reference}}",
+    "unmerged": "{{reference}} unmerged"
   },
   "keyboard": {
     "label": "Keyboard shortcuts",
@@ -212,5 +248,114 @@
     "mime_not_allowed": "This brand does not accept that file type.",
     "upload_failed": "That file did not upload. Try again.",
     "cancelled": "That upload was cancelled."
+  },
+  "actions": {
+    "markSpam": "Mark as spam",
+    "notSpam": "Not spam",
+    "label": "Ticket actions",
+    "merge": "Merge into another ticket…",
+    "split": "Split messages…",
+    "closeDialog": "Close"
+  },
+  "spam": {
+    "title": "Mark {{ticket}} as spam?",
+    "body": "The ticket closes with the Spam status. No auto-reply and no CSAT are sent, and it is left out of reports.",
+    "block": "Block",
+    "blockHint": "Their next messages are dropped. Undo from Ticketing › Spam.",
+    "submit": "Mark as spam"
+  },
+  "time": {
+    "heading": "Time",
+    "total": "{{duration}} total",
+    "timerRunning": "Timer running, {{duration}}",
+    "timerPaused": "Timer paused, {{duration}}",
+    "start": "Start timer",
+    "pause": "Pause timer",
+    "log": "Log",
+    "withReply": "with reply",
+    "manual": "manual",
+    "delete": "Delete entry",
+    "addManually": "Add time manually",
+    "empty": "No time logged yet.",
+    "loadFailed": "Time could not be loaded."
+  },
+  "logTime": {
+    "title": "Log time",
+    "caption": "On {{reference}}, as {{name}}.",
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "note": "Note",
+    "noteHint": "Optional. Staff only.",
+    "cancel": "Cancel",
+    "close": "Close",
+    "submit": "Log {{duration}}",
+    "submitEmpty": "Log time",
+    "invalid": "Minutes 0–59, hours 0–24. The total must be above zero."
+  },
+  "csat": {
+    "heading": "Satisfaction",
+    "pending": "Survey not sent yet",
+    "sent": "Survey sent",
+    "rated": "Rated {{rating}} of 5",
+    "expired": "Survey expired",
+    "shareHint": "Channels do not deliver the link yet. Share it with the customer.",
+    "copyLink": "Copy survey link",
+    "copied": "Survey link copied",
+    "copyFailed": "The link could not be copied."
+  },
+  "merge": {
+    "title": "Merge tickets",
+    "description": "The ticket you pick stays open; this one closes into it.",
+    "searchLabel": "Merge {{reference}} into",
+    "searchHint": "Search this brand by reference, subject or contact.",
+    "candidates": "Tickets to merge into",
+    "noMatches": "No ticket matches that search.",
+    "closedSuffix": "{{department}} · closed",
+    "consequencesTitle": "What happens to {{reference}}",
+    "closes": "It closes as Merged, with no CSAT, and its SLA clocks stop.",
+    "messages": "Its messages stay where they are and show inline, read-only, in {{primary}}.",
+    "tags": "Tags are combined.",
+    "tagsAndCc": "Tags are combined. {{name}} is added to {{primary}} as a CC.",
+    "undo": "You can unmerge for 24 hours.",
+    "submit": "Merge into {{reference}}",
+    "submitNone": "Merge",
+    "pickOne": "Pick the ticket to merge into."
+  },
+  "split": {
+    "title": "Split into a new ticket",
+    "description": "Same contact. Pick the messages that belong to a separate problem.",
+    "messages": "Messages to copy · selected: {{count}}",
+    "attachmentLine": "{{name}} · {{size}}",
+    "subject": "Subject",
+    "department": "Department",
+    "priority": "Priority",
+    "note": "Messages are copied, not moved. The new ticket gets a fresh number and fresh SLA clocks.",
+    "submit": "Create ticket",
+    "pickOne": "Tick at least one message.",
+    "subjectRequired": "A subject is required."
+  },
+  "merged": {
+    "intoThis": "{{reference}} was merged into this ticket · {{time}}",
+    "intoThisBy": "{{reference}} was merged into this ticket by {{name}} · {{time}}",
+    "intoOther": "{{reference}} was merged into {{primary}} · {{time}}",
+    "intoOtherBy": "{{reference}} was merged into {{primary}} by {{name}} · {{time}}",
+    "thisInto": "Merged into {{reference}} · {{time}}",
+    "thisIntoBy": "Merged into {{reference}} by {{name}} · {{time}}",
+    "unmerge": "Unmerge · {{hours}} h left",
+    "from": "From {{reference}} · read only",
+    "more": "Open {{reference}} to read the rest",
+    "open": "Open {{reference}}"
+  },
+  "systemBy": "by {{name}} · {{time}}",
+  "lifecycle": {
+    "ticket-merged": "This ticket was merged into another one. Work on that one instead.",
+    "ticket-deleted": "This ticket was deleted.",
+    "ticket-not-closed": "This ticket is not closed, so there is nothing to reopen.",
+    "merge-into-self": "A ticket cannot be merged into itself.",
+    "merge-into-merged": "That ticket was itself merged. Merge into the ticket it went to.",
+    "ticket-not-merged": "This ticket is not merged any more.",
+    "merge-window-closed": "A merge can be undone for 24 hours, and those have passed.",
+    "attachments-in-flight": "A file on those messages is still being processed. Try again in a moment.",
+    "ticket-not-spam": "This ticket is not marked as spam."
   }
 }

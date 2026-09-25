@@ -15,7 +15,7 @@ import { InstallStaffService } from './install-staff.service.js';
 import { InviteService } from './invite.service.js';
 import { InviteStore } from './invite.store.js';
 import { InvitesController } from './invites.controller.js';
-import { LoggingStaffLifecycleHooks } from './lifecycle-hooks.js';
+import { AssignmentStaffLifecycleHooks } from './lifecycle-hooks.js';
 import { StaffController } from './staff.controller.js';
 import { StaffRepository } from './staff.repository.js';
 import { StaffService } from './staff.service.js';
@@ -100,7 +100,7 @@ export class StaffModule {
               auth,
               limiter,
               settings,
-              hooks: new LoggingStaffLifecycleHooks(logger),
+              hooks: new AssignmentStaffLifecycleHooks(logger),
               logger,
               appUrl: env.APP_URL,
             }),

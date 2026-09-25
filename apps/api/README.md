@@ -170,9 +170,18 @@ A job that needs several brands enqueues one child job per brand.
 
 `src/worker/start-worker.ts` is what `APP_ROLE=worker` boots. It takes what
 `@helpdock/jobs` needs — a queue connection, the `outbox.event` consumer, the
-`media.process` consumer and the relay — through an interface, so a unit test
+`media.process` consumer, M1-07's `assignment.offline_unassign` consumer and the
+relay — through an interface, so a unit test
 proves the start and shutdown order without Redis. Adding a consumed event means
 calling `registerEventHandler` there, before the workers are created.
+
+The `maintenance` worker (M1-14) consumes the nightly retention tick and the
+per-brand runs it adds, one at a time; `createMaintenanceWorker` upserts the
+03:00 UTC job scheduler on every boot, so a Redis that lost it gets it back.
+Each run is a string of short `withSystemJob` transactions rather than one
+receipt-claiming transaction, which is why it does not go through
+`createWorker`: see `src/retention/retention.job.ts` and [the data retention
+guide](../../docs/guides/data-retention.md#the-nightly-run).
 
 The media worker runs at concurrency 1. sharp and ffmpeg are CPU-bound, and four
 conversions at once on a small VPS starve everything else on it; more replicas
@@ -310,9 +319,20 @@ this app.
 **`findOrCreateContactByIdentity` is the seam.** Every channel — M2 email, M4
 widget, M6 Telegram — turns "a message arrived from X" into a contact through
 that one function, inside its own transaction. It is where DOMAIN-RULES §4.4
-lives: a verified identifier matches an existing contact, an unverified one that
-somebody else holds starts a new contact and records a duplicate suggestion
-instead.
+lives: the caller names the identifier's `source` and the §4.4 table decides
+whether it is verified; a match joins an existing contact only when both sides
+are verified, and anything else starts a new contact and records a duplicate
+suggestion instead (M1-13).
+
+**Merging lives in `contact-merge.service.ts` (M1-13).** A merge moves a
+contact's tickets across every department through
+`helpdock_contact_reassign_tickets`, the one path that lifts the department
+predicate for a write; it touches `tickets.contact_id` and nothing else, and
+the ids it moved stay on the `contact_merges` row for the undo.
+
+**Participants live in `src/participants/` (M1-13).** `ParticipantsModule`
+exports `TicketParticipantsService`, whose `addCcParticipant` is how another
+module — M1-09's ticket merge, M2's inbound `Cc:` — copies a contact in.
 
 **Normalisation lives in `packages/schemas`, not here.** `contact_identities` is
 unique on the spelled value, and the admin, the api and the widget all have to
@@ -440,7 +460,11 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/tickets/*` | `ticket:read` / `ticket:write`, and `brand:manage` for the soft delete | Tickets, their threads, their activity and their tags. [The ticket guide](../../docs/guides/tickets.md#endpoints) lists them. |
 | `/api/brands/:brandId/ticket-statuses/*` | `@Requires('ticketing:manage')` | The Statuses tab: create, edit, reorder, delete, and the count a delete confirmation prints. [The guide](../../docs/guides/ticketing-settings.md#statuses). |
 | `PATCH /api/brands/:brandId/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of DOMAIN-RULES §2.3 a Team Leader may change. |
+| `GET`/`PUT /api/brands/:brandId/retention` | `@Requires('brand:manage')` | The brand's data retention windows, the "next purge" counts and the last run. [The data retention guide](../../docs/guides/data-retention.md#api). |
 | `/api/brands/:brandId/{tags,custom-fields,ticket-templates}*` | `ticket:read` or `ticket:write` to read, `ticketing:manage` to change | The brand's tags, custom field definitions and ticket templates. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
+| `/api/brands/:brandId/blocked-senders*`, `PATCH …/ticketing/spam-settings` | `@Requires('ticketing:manage')` | M1-11's Spam tab: the sender block list and `offerBlockSender`. [The settings guide](../../docs/guides/ticketing-settings.md#spam). |
+| `/api/brands/:brandId/tickets/:ticketId/{spam,spam-sender}` | `ticket:write` to mark or unmark, `ticket:read` for what the dialog offers | "Mark as spam" and "Not spam". [The ticket guide](../../docs/guides/tickets.md#spam). |
+| `/api/brands/:brandId/assignment*` | `ticketing:manage` for the settings and the agents, `ticket:write` for `…/:departmentId/assignable` | M1-07's Assignment tab and the assignee picker. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
@@ -477,8 +501,9 @@ handler rate-limits per source address.
 
 ## Tickets
 
-`src/tickets/` holds M1-02, M1-03 and M1-08: the ticket, its thread, its
-activity log and the state machine of DOMAIN-RULES §2. What the model is and what the endpoints answer is [the ticket
+`src/tickets/` holds M1-02, M1-03, M1-08 and M1-09: the ticket, its thread,
+its activity log, the state machine of DOMAIN-RULES §2 and merge and split
+(§2.4). What the model is and what the endpoints answer is [the ticket
 guide](../../docs/guides/tickets.md); what follows is for somebody reading the
 code.
 
@@ -490,13 +515,19 @@ code.
 | `status-change.ts` | Where a status change lands: the transition table is consulted, a status that is not this brand's is refused, and `closed_at` is kept in step with the system state. It answers *whether* the move closed or reopened the ticket; what that costs is the service's. |
 | `lifecycle/transitions.ts` | DOMAIN-RULES §2.2 as one constant. `transitions.test.ts` holds a second copy typed out from the document and asserts the two agree cell by cell. |
 | `lifecycle/reopen-policy.ts` | §2.3, as a pure function of a policy, a `closed_at` and a `now`. The boundary — "less than N days" — is named in the test in both directions. |
-| `lifecycle/hooks.ts` | The three moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`. A provider, so they replace one line of `TicketsModule`. |
+| `lifecycle/hooks.ts` | The moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`, and M1-09's `onMerged` and `onUnmerged`. A provider, so they replace one line of `TicketsModule` — M1-12's line provides `csat/csat-hooks.ts` in its place. |
 | `lifecycle/lifecycle.service.ts` | The transitions carried out: the reply paths, the reopen, the continuation ticket and its two system messages, the soft delete. |
 | `lifecycle/status-rules.ts` | What may be done to a status row, as pure functions — the same shape `brands/department-scope.ts` uses, and for the same reason. |
 | `lifecycle/ticketing-settings.*` | The Statuses tab and the Reply behaviour card over HTTP, under the new `ticketing:manage`. |
 | `ticket-activity.ts` | The activity row, written in the caller's transaction. |
-| `ticket-events.ts` | The four outbox events and the handler the worker registers for them. |
+| `ticket-events.ts` | The ticket outbox events — `ticket.spam` among them, never heard as a close — and the handler the worker registers for them. |
+| `ticket-spam.*`, `spam-sender.ts` | M1-11: "Mark as spam" and "Not spam" over HTTP, putting the lifecycle's `markSpam` and the block list in one transaction; `spam-sender.ts` picks which of a contact's identifiers the ticket's channel makes the sender. |
 | `ticket-view.ts` | Rows to the wire shapes, in one place, so a column added to a table does not quietly become a field in a response. |
+| `time/` | M1-12's time entries: the Time card's routes, and `logWithReply`, which `addMessage` calls in the reply's own transaction when a message carries `timeSpentSeconds`. |
+| `merge/merge-rules.ts` | §2.4 as pure functions: which merges and unmerges are refused and why, the 24-hour window, `closed_at` across a merge and back, which messages a split may copy. |
+| `merge/merge.service.ts` | Merge, unmerge and split carried out, each in the request's transaction with activity and outbox rows on both tickets. A merge moves the secondary into the primary's department, which is what makes "access follows the primary" true. |
+| `merge/merge-view.ts` | What a ticket read adds: the tickets merged into it with their messages, where it was merged to, and what a split joined to it. A plain function, so `TicketsService.find` calls it without depending on the merge service. |
+| `merge/participants.hook.ts` | `MergeParticipantsHook`: where the secondary's contact becomes a CC of the primary. Does nothing until M1-13 replaces the provider. |
 
 Four things are easy to get wrong here and are written down where they happen:
 
@@ -513,6 +544,24 @@ Four things are easy to get wrong here and are written down where they happen:
   "any" would widen it, which is the reading that is wrong in the direction that
   shows rows the reader asked to exclude.
 
+## Satisfaction surveys
+
+`src/csat/` holds M1-12's survey. The model, the token and the routes are in
+[the ticket guide](../../docs/guides/tickets.md#satisfaction-surveys); the code
+is laid out like this:
+
+| File | |
+|---|---|
+| `csat-hooks.ts` | `onClosedForCsat`, filled: reads the brand's `csatEnabled` in the closing transaction and writes `csat.requested` to the outbox. |
+| `csat-events.ts` | The event and the worker's handler, which creates the survey once per close and skips a close that no longer stands. Registered in `worker/start-worker.ts`. |
+| `tokens.ts` | The link's `<ids>.<mac>` token: HMAC-SHA256 under an HKDF key from `APP_MASTER_KEY`, verified under the previous key too. |
+| `csat.service.ts` | The agent's summary on a ticket read, and the two public routes' system path: rate limit, verify, one brand's transaction as `csat:<surveyId>`, hash check, audit row. |
+| `csat.controller.ts` | `GET` and `POST /api/public/csat/:token`, both `@Public()`. |
+
+`CsatModule.forRoot()` is built once and imported twice, by `AppModule` for the
+controller and by `TicketsModule` for the summary, for the reason
+`TicketingModule` is.
+
 ## Tags, custom fields and templates
 
 `src/ticketing/` holds M1-06. What a brand configures and what the endpoints
@@ -526,6 +575,8 @@ follows is for somebody reading the code.
 | `ticket-tags.ts` | Reading and replacing a ticket's chips. Plain functions over the caller's transaction, as `tickets/ticket-activity.ts` is, so the ticket service uses them without depending on this module. `tagsOfTickets` reads a whole page in one query. |
 | `custom-fields.repository.ts` | The only jsonb work in the app: counting rows that carry a value or an option, and clearing an option from them under `force`. |
 | `audit.ts` | Definition changes go to `audit_log`; putting a tag on a ticket goes to `ticket_activity`, because that one is part of the ticket and is purged with it. |
+| `block-list.*`, `block-rules.ts` | M1-11's sender block list. The rules — what counts as the brand's own sender, which rows a sender matches, which match is charged — are pure functions in `block-rules.ts`. |
+| `sender-gate.ts` | `isSenderBlocked`, the inbound gate M2, M4 and M6 call before they create a contact or a ticket. It counts the drop in the caller's transaction. |
 
 Three things are easy to get wrong here:
 
@@ -543,6 +594,35 @@ M1-10 added one thing to the message path: `POST …/messages` accepts
 `src/media/link.ts` inside the same transaction as the insert. The rules it
 enforces are the media pipeline's; what stays here is turning a refusal into a
 status code.
+
+## Assignment
+
+`src/assignment/` holds M1-07. What a brand configures is
+[the settings guide](../../docs/guides/ticketing-settings.md#assignment); what
+follows is for somebody reading the code.
+
+| File | |
+|---|---|
+| `rotation.ts` | Who may hold a ticket and who is picked next, as pure functions: `canWorkDepartment`, `isInRotation`, `mayAssignTo`, `pickAssignee`. The picker, the manual assignment and the rotation all call these, so none can offer somebody the others refuse. |
+| `auto-assign.ts` | The worker half: `autoAssign` takes the brand's rotation lock (`pg_advisory_xact_lock`), re-reads the ticket `FOR UPDATE`, picks, and writes the activity and `ticket.updated` rows. `unassignTicket` is the reverse. |
+| `assignment-events.ts` | The three outbox events and their handlers, and the delayed `assignment.offline_unassign` processor. Registered by `worker/start-worker.ts`. |
+| `ticket-assignment.ts` | What `TicketsService` asks: may this person hold this ticket, and does this department route by itself. Plain functions over the request's transaction. |
+| `staff-offline.hook.ts` | The `STAFF_OFFLINE_HOOK` implementation `RealtimeModule` provides: one outbox row, in a system transaction for the brand. |
+| `presence-adapters.ts` | M0-13's `PresenceStore` as the two questions the worker asks, and the Redis key that says which departure is the latest. |
+| `assignment.service.ts`, `.controller.ts` | The Assignment tab (`ticketing:manage`) and the picker's read (`ticket:write`). |
+
+Two things are easy to get wrong here:
+
+- **Never assign from a request.** A new or moved ticket writes
+  `assignment.requested`; the pick happens in the worker after the commit, with
+  the receipt of the job in the same transaction as the assignment. Staff
+  lifecycle changes do the same through `staff/lifecycle-hooks.ts`, whose events
+  now carry the request's `tx`.
+- **The lock is per brand, not per agent.** Taking one lock per candidate in
+  whatever order a pick visits them is how two transactions deadlock; an
+  assignment is one short transaction, so a brand-wide queue costs milliseconds.
+  `assignment.integration.test.ts` proves that six concurrent picks never put a
+  second ticket on an agent with a cap of one.
 
 ## Attachments
 
@@ -575,6 +655,19 @@ Four things are easy to get wrong here and are written down where they happen:
 - **`media.process` holds its transaction for the length of the conversion**,
   because `createWorker` claims the receipt before the handler runs. Every step
   has a deadline for that reason, and `MEDIA_BUDGET_MS` is their sum.
+
+## Retention
+
+`src/retention/` holds M1-14. What the windows are and what the purge does is
+[the data retention guide](../../docs/guides/data-retention.md).
+
+| File | |
+|---|---|
+| `retention-rules.ts` | Row ↔ settings, and the cutoff per category. Pure; the arithmetic of DOMAIN-RULES §11. |
+| `retention.repository.ts` | Every statement: the settings row, the "next purge" counts and the batches. The counts and the deletes share one `WHERE` per category, so the number on the form is the number that goes. |
+| `retention.job.ts` | The nightly tick and one brand's run. |
+| `contact-erasure.ts` | `DbContactErasureProvider`: what an erasure removes from tickets, behind the `ContactErasureProvider` seam of `contacts/providers.ts`. |
+| `../media/object-purge.ts` | The `media.objects.purge` outbox event that deletes a purged attachment's objects after the rows are gone. |
 
 ## Observability
 
@@ -650,6 +743,26 @@ ports over one Redis, which is the only way to prove that a room spans them and
 that a sign-out on one closes a socket on the other. Both skip themselves, and
 say so, when Docker is not running.
 
+### The ticket list's performance gate
+
+```bash
+pnpm --filter @helpdock/api build           # the replicas run from dist/
+pnpm --filter @helpdock/api perf:tickets    # about fifteen minutes
+```
+
+The M1 exit criterion — the ticket list under 150 ms p95 at 50k tickets, under
+the conditions of [DOMAIN-RULES §14](../../docs/planning/DOMAIN-RULES.md#14-performance-test-conditions).
+It seeds the §14 dataset into a fresh Postgres, starts two api replicas as
+separate processes, drives the list and the ticket read over HTTP as an Admin
+and as a department-restricted Agent, prints p50/p95/p99 per scenario and the
+`EXPLAIN (ANALYZE, BUFFERS)` of every list query, and fails when a list
+scenario's p95 is over the gate. It lives in `src/testing/perf/` with its own
+`vitest.perf.config.ts`, so neither `pnpm test` nor `pnpm test:integration`
+runs it, and it is not in CI: fifteen minutes on a shared runner would measure
+the runner. `PERF_SCALE=0.1 PERF_WARMUP_S=5 PERF_DURATION_S=20` is a
+one-minute smoke run; the other knobs, the method and the last measured numbers
+are in [the tickets guide](../../docs/guides/tickets.md#performance).
+
 `src/observability/observability.integration.test.ts` boots the same stack again
 to prove `/metrics` is served and guarded and that the System page's read
 reports a live install.
@@ -666,9 +779,6 @@ only when a test passes it as an extra controller.
 
 ## Known gaps
 
-- **`on_unassign` is not implemented.** Deactivating somebody, or narrowing what
-  they may see, leaves their tickets assigned to them. `staff/lifecycle-hooks.ts`
-  names the calls M1 fills in.
 - **Own-account actions write no `audit_log` row.** `audit_log` is keyed on
   `brand_id` and a password change belongs to a person; the reasoning is at the
   top of `staff/account.service.ts` and in the guide. They are logged instead.

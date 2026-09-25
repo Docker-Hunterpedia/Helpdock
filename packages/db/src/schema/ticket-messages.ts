@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   index,
   integer,
   jsonb,
@@ -76,6 +77,16 @@ export const ticketMessages = pgTable(
      * (DOMAIN-RULES §6).
      */
     externalMessageId: text('external_message_id'),
+    /**
+     * M1-09. The message this one is a copy of, when a split copied it onto a
+     * new ticket (DOMAIN-RULES §2.4: "copied (not moved) with
+     * `copied_from_message_id`"). `set null`, because the copy is a message in
+     * its own right and must outlive a purge of the ticket it came from.
+     */
+    copiedFromMessageId: uuid('copied_from_message_id').references(
+      (): AnyPgColumn => ticketMessages.id,
+      { onDelete: 'set null' },
+    ),
     /** Model, tokens, cost and the sources an AI answer cited (DOMAIN-RULES §9). */
     aiMeta: jsonb('ai_meta').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

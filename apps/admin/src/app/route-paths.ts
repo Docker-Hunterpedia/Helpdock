@@ -42,12 +42,21 @@ export const ROUTES = {
   ticketing: '/admin/ticketing',
   /** One tab of it. `/admin/ticketing` alone redirects to the first. */
   ticketingTab: '/admin/ticketing/:tab',
+  /** The brand's own settings (M1-14 ships the Danger zone tab). */
+  brand: '/admin/brand',
+  /** One tab of it. `/admin/brand` alone redirects to the first built one. */
+  brandTab: '/admin/brand/:tab',
   staff: '/admin/staff',
   system: '/admin/system',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
+  /**
+   * The public rating page (M1-12). Not a route of the admin router: `main.tsx`
+   * mounts the page on its own for this prefix, without the staff providers.
+   */
+  csat: '/csat/',
 } as const;
 
 export const ticketRoute = (ticketId: string): string => `/tickets/${encodeURIComponent(ticketId)}`;
@@ -78,8 +87,22 @@ export const accountRoute = (accountId: string): string =>
 /** The invite link the api emails, with the token in it. */
 export const inviteRoute = (token: string): string => `/invite/${encodeURIComponent(token)}`;
 
+/** The rating link's token, when the path is the rating page; otherwise null. */
+export function csatTokenFromPath(pathname: string): string | null {
+  if (!pathname.startsWith(ROUTES.csat)) {
+    return null;
+  }
+
+  const [token = ''] = pathname.slice(ROUTES.csat.length).split('/');
+
+  return token === '' ? null : decodeURIComponent(token);
+}
+
 /** One tab of the Ticketing settings, by its url segment. */
 export const ticketingRoute = (tab: string): string => `${ROUTES.ticketing}/${tab}`;
+
+/** One tab of the Brand page, by its url segment. */
+export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;
 
 /** Where a sign-in lands when nothing asked for a particular screen. */
 export const DEFAULT_SIGNED_IN_ROUTE = ROUTES.tickets;

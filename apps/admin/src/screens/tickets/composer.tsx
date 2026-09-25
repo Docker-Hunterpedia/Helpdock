@@ -72,6 +72,8 @@ export interface ComposerProps {
   onAttach(files: readonly File[]): void;
   onRemoveAttachment(attachmentId: string): void;
   onSend(): void;
+  /** The caret entered the body: M1-12's timer may start here. */
+  onBodyFocus?(): void;
 }
 
 export function Composer({
@@ -91,6 +93,7 @@ export function Composer({
   onAttach,
   onRemoveAttachment,
   onSend,
+  onBodyFocus,
 }: ComposerProps): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -164,6 +167,7 @@ export function Composer({
         onChange={(event) => {
           onBodyChange(event.target.value);
         }}
+        onFocus={onBodyFocus}
         placeholder={t(
           note ? 'tickets:composer.notePlaceholder' : 'tickets:composer.replyPlaceholder',
         )}

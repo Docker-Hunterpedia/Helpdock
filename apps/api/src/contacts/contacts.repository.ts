@@ -15,7 +15,20 @@ import {
   contacts,
   users,
 } from '@helpdock/db';
-import { and, asc, count, desc, eq, gt, ilike, inArray, isNotNull, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 /**
  * Every read and write the contacts module makes, through the transaction the
@@ -44,6 +57,15 @@ export interface ContactFilters {
   readonly cursor?: string | undefined;
   readonly limit: number;
 }
+
+/**
+ * Neither side of an open suggestion has been merged away (M1-13). Written
+ * against the alias `d` the two suggestion queries below give the table.
+ */
+const bothSidesLive = sql`NOT EXISTS (
+  SELECT 1 FROM ${contacts} merged
+  WHERE merged.id IN (d.contact_id, d.other_contact_id) AND merged.merged_into_id IS NOT NULL
+)`;
 
 /** `%` and `_` are wildcards in `LIKE`; somebody typing one means the character. */
 const escapeLike = (value: string): string => value.replaceAll(/[\\%_]/g, (match) => `\\${match}`);
@@ -102,10 +124,13 @@ export class ContactsRepository {
         ? sql`EXISTS (
             SELECT 1 FROM ${contactDuplicateSuggestions} d
             WHERE d.contact_id = ${contacts.id} AND d.status = 'open'
+              AND ${bothSidesLive}
           )`
         : undefined;
 
-    return and(matchesSearch, matchesAccount, hasDuplicate);
+    // A contact merged into another (M1-13) is not somebody to list: its
+    // identifiers and tickets are on the survivor now.
+    return and(isNull(contacts.mergedIntoId), matchesSearch, matchesAccount, hasDuplicate);
   }
 
   async find(tx: DbTransaction, contactId: string): Promise<ContactRow | undefined> {
@@ -330,24 +355,28 @@ export class ContactsRepository {
     tx: DbTransaction,
     contactId: string,
   ): Promise<{ suggestion: ContactDuplicateSuggestionRow; other: ContactRow }[]> {
-    return tx
-      .select({ suggestion: contactDuplicateSuggestions, other: contacts })
-      .from(contactDuplicateSuggestions)
-      .innerJoin(
-        contacts,
-        or(
-          and(
-            eq(contactDuplicateSuggestions.contactId, contactId),
-            eq(contacts.id, contactDuplicateSuggestions.otherContactId),
+    return (
+      tx
+        .select({ suggestion: contactDuplicateSuggestions, other: contacts })
+        .from(contactDuplicateSuggestions)
+        .innerJoin(
+          contacts,
+          or(
+            and(
+              eq(contactDuplicateSuggestions.contactId, contactId),
+              eq(contacts.id, contactDuplicateSuggestions.otherContactId),
+            ),
+            and(
+              eq(contactDuplicateSuggestions.otherContactId, contactId),
+              eq(contacts.id, contactDuplicateSuggestions.contactId),
+            ),
           ),
-          and(
-            eq(contactDuplicateSuggestions.otherContactId, contactId),
-            eq(contacts.id, contactDuplicateSuggestions.contactId),
-          ),
-        ),
-      )
-      .where(eq(contactDuplicateSuggestions.status, 'open'))
-      .orderBy(desc(contactDuplicateSuggestions.createdAt));
+        )
+        // The other side merged into somebody else (M1-13) is hidden until the
+        // merge is undone, rather than offered as a contact that is gone.
+        .where(and(eq(contactDuplicateSuggestions.status, 'open'), isNull(contacts.mergedIntoId)))
+        .orderBy(desc(contactDuplicateSuggestions.createdAt))
+    );
   }
 
   async duplicate(
@@ -380,10 +409,10 @@ export class ContactsRepository {
   }
 
   async countOpenDuplicates(tx: DbTransaction): Promise<number> {
-    const [row] = await tx
-      .select({ total: count() })
-      .from(contactDuplicateSuggestions)
-      .where(eq(contactDuplicateSuggestions.status, 'open'));
+    const [row] = await tx.execute<{ total: number }>(
+      sql`SELECT count(*)::int AS total FROM ${contactDuplicateSuggestions} d
+          WHERE d.status = 'open' AND ${bothSidesLive}`,
+    );
 
     return row?.total ?? 0;
   }

@@ -1,4 +1,10 @@
 import type {
+  AssignmentAgent,
+  AssignmentAgentList,
+  AssignmentAgentUpdateRequest,
+  BlockedSender,
+  BlockedSenderCreateRequest,
+  BlockedSenderList,
   Brand,
   BrandSettings,
   BrandUpdateRequest,
@@ -8,12 +14,19 @@ import type {
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
+  DepartmentAssignment,
+  DepartmentAssignmentList,
+  DepartmentAssignmentUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMemberList,
+  FeedbackSettingsUpdateRequest,
   ReplyBehaviourUpdateRequest,
+  RetentionOverview,
+  RetentionUpdateRequest,
+  SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
   TagSummary,
@@ -32,14 +45,21 @@ import type {
   TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
 import {
+  assignmentAgentListSchema,
+  assignmentAgentSchema,
+  blockedSenderListSchema,
+  blockedSenderSchema,
   brandSchema,
   brandSettingsSchema,
   customFieldDefListSchema,
   customFieldDefSchema,
   customFieldUsageSchema,
+  departmentAssignmentListSchema,
+  departmentAssignmentSchema,
   departmentSummaryListSchema,
   departmentSummarySchema,
   eligibleMemberListSchema,
+  retentionOverviewSchema,
   tagListSchema,
   tagSummarySchema,
   tagUsageSchema,
@@ -186,6 +206,23 @@ export class HttpTicketingApi implements TicketingApi {
     return brandSchema.parse(await this.#transport.request('PATCH', this.#brand(brandId), request));
   }
 
+  // ------------------------------------------------------------------ M1-14
+
+  async retention(brandId: string): Promise<RetentionOverview> {
+    return retentionOverviewSchema.parse(
+      await this.#transport.request('GET', `${this.#brand(brandId)}/retention`),
+    );
+  }
+
+  async updateRetention(
+    brandId: string,
+    request: RetentionUpdateRequest,
+  ): Promise<RetentionOverview> {
+    return retentionOverviewSchema.parse(
+      await this.#transport.request('PUT', `${this.#brand(brandId)}/retention`, request),
+    );
+  }
+
   // ------------------------------------------------------------------ M1-08
 
   async statuses(brandId: string): Promise<TicketStatusList> {
@@ -236,6 +273,17 @@ export class HttpTicketingApi implements TicketingApi {
         `${this.#brand(brandId)}/ticketing/reply-behaviour`,
         request,
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------- M1-12
+
+  async updateFeedback(
+    brandId: string,
+    request: FeedbackSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    return brandSettingsSchema.parse(
+      await this.#transport.request('PATCH', `${this.#brand(brandId)}/ticketing/feedback`, request),
     );
   }
 
@@ -358,7 +406,45 @@ export class HttpTicketingApi implements TicketingApi {
     );
   }
 
+  // ---------------------------------------------------------------- M1-11
+
+  async blockedSenders(brandId: string): Promise<BlockedSenderList> {
+    return blockedSenderListSchema.parse(
+      await this.#transport.request('GET', this.#blockedSenders(brandId)),
+    );
+  }
+
+  async blockSender(brandId: string, request: BlockedSenderCreateRequest): Promise<BlockedSender> {
+    return blockedSenderSchema.parse(
+      await this.#transport.request('POST', this.#blockedSenders(brandId), request),
+    );
+  }
+
+  async unblockSender(brandId: string, blockedSenderId: string): Promise<void> {
+    await this.#transport.request(
+      'DELETE',
+      `${this.#blockedSenders(brandId)}/${encodeURIComponent(blockedSenderId)}`,
+    );
+  }
+
+  async updateSpamSettings(
+    brandId: string,
+    request: SpamSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    return brandSettingsSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#brand(brandId)}/ticketing/spam-settings`,
+        request,
+      ),
+    );
+  }
+
   // ------------------------------------------------------------------
+
+  #blockedSenders(brandId: string): string {
+    return `${this.#brand(brandId)}/blocked-senders`;
+  }
 
   #statuses(brandId: string): string {
     return `${this.#brand(brandId)}/ticket-statuses`;
@@ -390,6 +476,56 @@ export class HttpTicketingApi implements TicketingApi {
 
   #tag(brandId: string, tagId: string): string {
     return `${this.#tags(brandId)}/${encodeURIComponent(tagId)}`;
+  }
+
+  // ---------------------------------------------------------------- M1-07
+
+  async assignment(brandId: string): Promise<DepartmentAssignmentList> {
+    return departmentAssignmentListSchema.parse(
+      await this.#transport.request('GET', this.#assignment(brandId)),
+    );
+  }
+
+  async updateAssignment(
+    brandId: string,
+    departmentId: string,
+    request: DepartmentAssignmentUpdateRequest,
+  ): Promise<DepartmentAssignment> {
+    return departmentAssignmentSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#assignment(brandId)}/${encodeURIComponent(departmentId)}`,
+        request,
+      ),
+    );
+  }
+
+  async assignmentAgents(brandId: string, departmentId: string): Promise<AssignmentAgentList> {
+    return assignmentAgentListSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#assignment(brandId)}/${encodeURIComponent(departmentId)}/agents`,
+      ),
+    );
+  }
+
+  async updateAssignmentAgent(
+    brandId: string,
+    departmentId: string,
+    userId: string,
+    request: AssignmentAgentUpdateRequest,
+  ): Promise<AssignmentAgent> {
+    return assignmentAgentSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#assignment(brandId)}/${encodeURIComponent(departmentId)}/agents/${encodeURIComponent(userId)}`,
+        request,
+      ),
+    );
+  }
+
+  #assignment(brandId: string): string {
+    return `${this.#brand(brandId)}/assignment`;
   }
 
   #fields(brandId: string): string {

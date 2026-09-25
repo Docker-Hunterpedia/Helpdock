@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { bigint, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { departments } from './departments.js';
@@ -66,7 +75,21 @@ export const attachments = pgTable(
      * stops two rows claiming the same bytes; it is built from uuids alone, so
      * nothing a caller typed reaches the bucket's namespace.
      */
-    s3Key: text('s3_key').notNull().unique(),
+    s3Key: text('s3_key').notNull(),
+    /**
+     * M1-09. The attachment this row is a copy of, when a split copied its
+     * message onto a new ticket. The copy points at the **same object**, which
+     * is why `s3_key` is unique only among originals: a split must not
+     * duplicate bytes, and the copy's own `department_id` — the new ticket's —
+     * is what authorises downloads through it.
+     *
+     * A plain uuid with no foreign key. It is provenance, and it must stay set
+     * after the original is purged: a copy whose column went null would become
+     * an "original" and collide with every other copy of the same object.
+     * M1-14's retention reads it to keep an object alive while any row still
+     * names its key.
+     */
+    copiedFromAttachmentId: uuid('copied_from_attachment_id'),
     /** As uploaded, with any path removed (`safeFileName` in @helpdock/schemas). */
     originalName: text('original_name').notNull(),
     /**
@@ -102,6 +125,11 @@ export const attachments = pgTable(
     // including the ones no message claimed.
     index('attachments_ticket_idx').on(table.ticketId),
     index('attachments_brand_department_idx').on(table.brandId, table.departmentId),
+    // "Stops two rows claiming the same bytes" (above), for uploads. A split's
+    // copies share their original's key on purpose, so they are left out.
+    uniqueIndex('attachments_s3_key_original_key')
+      .on(table.s3Key)
+      .where(sql`${table.copiedFromAttachmentId} is null`),
   ],
 );
 

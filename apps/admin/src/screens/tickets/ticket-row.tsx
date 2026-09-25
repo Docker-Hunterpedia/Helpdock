@@ -20,16 +20,18 @@ import { elapsed, ticketReference } from './format.js';
  * The caption is `<bdi>`-wrapped around the reference and the contact, because
  * `HD-1042` and an email address are Latin runs inside an Arabic line and
  * without it the punctuation between them jumps to the wrong end (DESIGN §7).
+ *
+ * The contact's name is the one the list response embeds (M1-15). A row
+ * without it — a ticket that names nobody, or a caller the api does not give
+ * contact names to — prints the reference alone rather than an id.
  */
 export function TicketRow({
   ticket,
-  contactName,
   selected,
   now,
   search,
 }: {
   readonly ticket: Ticket;
-  readonly contactName: string | null;
   readonly selected: boolean;
   readonly now: number;
   /** Carried onto the link so the list a person came back to is the same list. */
@@ -38,6 +40,7 @@ export function TicketRow({
   const t = useT();
   const tokens = useSemanticTokens();
   const reference = ticketReference(ticket);
+  const contactName = ticket.contact?.name ?? null;
 
   return (
     <Box component="li" sx={{ listStyle: 'none' }}>

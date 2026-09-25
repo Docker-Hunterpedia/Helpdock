@@ -21,6 +21,12 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketLifecycleRefusal, string>> = {
   'ticket-merged': 'This ticket was merged into another one; act on that one instead',
   'ticket-deleted': 'This ticket is deleted',
   'ticket-not-closed': 'This ticket is not closed, so there is nothing to reopen',
+  'ticket-not-spam': 'This ticket is not marked as spam',
+  'merge-into-self': 'A ticket cannot be merged into itself',
+  'merge-into-merged': 'That ticket was itself merged; merge into the ticket it went to',
+  'ticket-not-merged': 'This ticket is not merged, so there is nothing to unmerge',
+  'merge-window-closed': 'A merge can be undone for 24 hours, and those have passed',
+  'attachments-in-flight': 'An attachment on those messages is still being processed',
 };
 
 export class TicketLifecycleFailure extends HttpException {

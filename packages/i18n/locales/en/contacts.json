@@ -102,18 +102,42 @@
   },
   "identities": {
     "title": "Identities",
-    "duplicate": "Possible duplicate: {{name}} ({{identifier}}).",
-    "duplicateSameAccount": "Same account.",
-    "duplicateReason": {
-      "email": "Same email address.",
-      "phone": "Same phone number.",
-      "telegram": "Same Telegram chat.",
-      "visitor": "Same visitor id.",
-      "external": "Same customer id."
-    },
-    "merge": "Merge",
-    "mergeUnavailable": "Merge arrives with M1-13",
     "notTheSame": "Not the same"
+  },
+  "duplicates": {
+    "title": "Possible duplicates",
+    "one": "Possible duplicate: {{name}}",
+    "reason": {
+      "email": "email typed in a form",
+      "phone": "same phone",
+      "telegram": "same Telegram chat",
+      "visitor": "same visitor id",
+      "external": "same customer id",
+      "similar_name": "similar name"
+    },
+    "sameAccount": "same account",
+    "unverified": "unverified",
+    "merge": "Merge…",
+    "mergeWith": "Merge with {{name}}",
+    "notTheSameWith": "{{name}} is not the same person"
+  },
+  "merge": {
+    "title": "Merge contacts",
+    "subtitle": "{{name}} looks like the same person: {{reason}}.",
+    "subtitleManual": "Choose whose name and details to keep.",
+    "keep": "Keep the name and details of",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} tickets",
+    "identities": "Identities after the merge",
+    "note": "Both contacts' tickets move to {{name}}. Tickets themselves are not merged. You can undo this for 24 hours.",
+    "submit": "Merge contacts",
+    "loading": "Reading both contacts…",
+    "toast": "Merged {{merged}} into {{survivor}}.",
+    "undo": "Undo",
+    "banner": "{{merged}} was merged into this contact by {{actor}} · {{time}}",
+    "bannerNoActor": "{{merged}} was merged into this contact · {{time}}",
+    "bannerUndo": "Undo · until {{time}}",
+    "undone": "Merge undone. {{name}} is a separate contact again."
   },
   "details": {
     "title": "Details",
@@ -151,15 +175,17 @@
     "accountEditSubmit": "Save changes"
   },
   "confirm": {
-    "anonymiseTitle": "Erase {{name}}?",
-    "anonymiseBody": "Their name, addresses, phone numbers and ids are replaced with hashes and their notes are deleted. Tickets stay. This cannot be undone.",
-    "anonymiseSubmit": "Erase contact",
+    "anonymiseTitle": "Anonymise {{name}}?",
+    "anonymiseLead": "For a privacy request. Recorded in the audit log without the erased values.",
+    "anonymiseBody": "Name, email addresses, phone, Telegram and visitor ids are replaced with hashes, and the files {{name}} sent are deleted. Ticket text stays, under the brand's retention. This cannot be undone.",
+    "anonymiseTypeName": "Type {{name}} to confirm",
+    "anonymiseSubmit": "Anonymise",
     "removeIdentityTitle": "Remove this identifier?",
     "removeIdentityBody": "Messages that arrive from it will start a new contact instead.",
     "removeIdentitySubmit": "Remove"
   },
   "actions": {
-    "anonymise": "Erase contact"
+    "anonymise": "Anonymise"
   },
   "toast": {
     "created": "{{name}} added.",
@@ -176,7 +202,11 @@
     "anonymiseForbidden": "Only an administrator of this brand may erase a contact.",
     "alreadyAnonymised": "This contact has been erased and can no longer be changed.",
     "domainTaken": "Another account of this brand already claims that domain.",
-    "failed": "That did not work. Try again."
+    "failed": "That did not work. Try again.",
+    "merged": "This contact was merged into another. Open that one instead.",
+    "mergeSelf": "A contact cannot be merged into itself.",
+    "mergeExpired": "This merge can no longer be undone.",
+    "mergeBlocked": "These contacts have changed since the merge, so it cannot be undone."
   },
   "problem": {
     "empty": "Enter a value.",

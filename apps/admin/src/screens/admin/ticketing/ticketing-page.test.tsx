@@ -82,4 +82,10 @@ describe('the tab row', () => {
 
     expect(await screen.findByRole('button', { name: control })).toBeInTheDocument();
   });
+
+  it('draws the Assignment tab rather than a placeholder, since M1-07 filled it', async () => {
+    await renderTicketing('/admin/ticketing/assignment');
+
+    expect(await screen.findByRole('button', { name: 'Edit Support' })).toBeInTheDocument();
+  });
 });

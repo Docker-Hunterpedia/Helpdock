@@ -16,6 +16,7 @@ const env: WorkerEnv = {
   FFMPEG_PATH: 'ffmpeg',
   FFPROBE_PATH: 'ffprobe',
   CLAMAV_PORT: 3310,
+  APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
 };
 
 const db = {} as Db;
@@ -62,6 +63,16 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('media.close') };
       },
+      createAssignmentWorker: ({ redis }) => {
+        calls.push('assignment.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('assignment.close') };
+      },
+      createMaintenanceWorker: ({ redis }) => {
+        calls.push('maintenance.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('maintenance.close') };
+      },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
@@ -74,7 +85,7 @@ const harness = (): Harness => {
 };
 
 describe('startWorker', () => {
-  it('registers the handlers and both consumers before the relay that feeds them', () => {
+  it('registers the handlers and every consumer before the relay that feeds them', () => {
     const { deps, calls } = harness();
 
     startWorker({ env, db, log: silentLogger, deps });
@@ -86,6 +97,8 @@ describe('startWorker', () => {
       'handlers.register',
       'worker.create',
       'media.create',
+      'assignment.create',
+      'maintenance.create',
       'relay.start',
     ]);
   });
@@ -127,6 +140,8 @@ describe('startWorker', () => {
       'relay.stop',
       'worker.close',
       'media.close',
+      'assignment.close',
+      'maintenance.close',
       'producers.close',
       'connection.quit',
     ]);
@@ -144,6 +159,8 @@ describe('startWorker', () => {
       'relay.stop',
       'worker.close',
       'media.close',
+      'assignment.close',
+      'maintenance.close',
       'producers.close',
       'connection.quit',
     ]);

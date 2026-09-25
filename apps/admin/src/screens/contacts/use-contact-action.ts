@@ -25,10 +25,14 @@ const TOAST_KEY: Readonly<Record<ContactRefusal, string>> = {
   'anonymise-forbidden': 'contacts:toast.anonymiseForbidden',
   anonymised: 'contacts:toast.alreadyAnonymised',
   'domain-taken': 'contacts:toast.domainTaken',
+  merged: 'contacts:toast.merged',
+  'merge-self': 'contacts:toast.mergeSelf',
+  'merge-expired': 'contacts:toast.mergeExpired',
+  'merge-blocked': 'contacts:toast.mergeBlocked',
 };
 
 /** The sentence for a failure, whatever kind it is. */
-function useContactErrorMessage(): (error: unknown) => string {
+export function useContactErrorMessage(): (error: unknown) => string {
   const t = useT();
 
   return (error: unknown): string => {

@@ -2,13 +2,15 @@ import { dir } from '@helpdock/i18n';
 import type {
   Attachment,
   TicketDetail,
+  TicketMergeResult,
   TicketPriority,
+  TicketSplitRequest,
   TicketUpdateRequest,
 } from '@helpdock/schemas';
 import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { Box, Button, Drawer } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { TicketIcon } from 'lucide-react';
+import { Clock, GitMerge, Split, TicketIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useReducer, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
@@ -16,22 +18,38 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import {
   useAttachmentUploader,
   useContactsApi,
+  useSession,
   useTicketingApi,
   useTicketsApi,
 } from '../../auth/session.tsx';
 import { isUploadError, wouldAccept } from '../../media/upload.js';
 import { EmptyState } from '../../shell/empty-state.tsx';
+import { isTicketingError } from '../../ticketing/api.js';
+import { refusalCopy } from '../../ticketing/refusal-copy.js';
+import { isTicketLifecycleError } from '../../tickets/api.js';
 import { ticketKeys } from '../../tickets/keys.js';
+import { mergeCandidates } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
+import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
-import { assignableStaff } from './directory.js';
-import { paragraph } from './format.js';
+import { assigneeName } from './directory.js';
+import { paragraph, ticketReference } from './format.js';
+import { LogTimeDialog } from './log-time-dialog.tsx';
+import { MergeDialog } from './merge-dialog.tsx';
+import { MergedIntoBanner } from './merged-block.tsx';
+import { SplitDialog } from './split-dialog.tsx';
 import { Thread, type ThreadNames } from './thread.tsx';
+import type { TicketAction } from './ticket-actions-menu.tsx';
 import { TicketHeader } from './ticket-header.tsx';
+import { TimeCard } from './time-card.tsx';
+import { loggableSeconds } from './time-format.js';
+import { useSpamActions } from './use-spam-actions.tsx';
 import { useTicketRoom } from './use-ticket-realtime.js';
+import { useTicketTimer } from './use-ticket-timer.js';
+import { useTimeEntries } from './use-time-entries.js';
 import type { WorkspaceData } from './use-workspace-data.js';
 
 /**
@@ -49,6 +67,9 @@ import type { WorkspaceData } from './use-workspace-data.js';
 
 const EXPIRY_TICK_MS = 1000;
 
+/** How many tickets the merge dialog offers at once; the search narrows the rest. */
+const MERGE_SEARCH_LIMIT = 8;
+
 export function TicketView({
   brandId,
   ticketId,
@@ -60,6 +81,7 @@ export function TicketView({
   focusToken,
   onDetailsOpenChange,
   onGoToList,
+  onOpenTicket,
 }: {
   readonly brandId: string;
   readonly ticketId: string;
@@ -72,6 +94,8 @@ export function TicketView({
   readonly focusToken: { readonly mode: ComposerMode; readonly at: number } | null;
   onDetailsOpenChange(open: boolean): void;
   onGoToList(): void;
+  /** M1-09: where a merge or a split sends the reader afterwards. */
+  onOpenTicket(ticketId: string): void;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -89,13 +113,35 @@ export function TicketView({
   const [attachments, setAttachments] = useState<readonly Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [pending, dispatch] = useReducer(pendingReducer, [] as readonly PendingMessage[]);
+  // M1-09: the ⋯ menu's two dialogs, and what the merge search last asked for.
+  const [dialog, setDialog] = useState<'merge' | 'split' | null>(null);
+  const [mergeTerm, setMergeTerm] = useState('');
 
   const detail = useQuery({
     queryKey: ticketKeys.detail(brandId, ticketId),
     queryFn: () => api.ticket(brandId, ticketId),
   });
 
-  const { viewerIds } = useTicketRoom(brandId, ticketId, viewer.id);
+  // "Is replying" while the composer holds something unsent (M1-09).
+  const { viewers } = useTicketRoom(
+    brandId,
+    ticketId,
+    viewer.id,
+    body.trim() === '' ? 'viewing' : 'replying',
+  );
+
+  const mergeSearch = useQuery({
+    queryKey: ticketKeys.list(brandId, { q: mergeTerm.trim(), limit: MERGE_SEARCH_LIMIT }),
+    queryFn: () =>
+      api.list(brandId, {
+        ...(mergeTerm.trim() === '' ? {} : { q: mergeTerm.trim() }),
+        limit: MERGE_SEARCH_LIMIT,
+      }),
+    enabled: dialog === 'merge',
+  });
+
+  // M1-11: "Mark as spam" / "Not spam" in the header menu, and its dialog.
+  const spam = useSpamActions(brandId, detail.data?.ticket);
 
   /**
    * The brand's content policy, for the picker's courtesy check. It is the
@@ -109,6 +155,16 @@ export function TicketView({
     retry: false,
   });
   const policy = brand.data?.settings.contentPolicy ?? DEFAULT_CONTENT_POLICY;
+
+  // M1-12. The Time card, its timer and "Log time…" exist only while the
+  // brand tracks time; a Viewer reads the card and cannot write to it.
+  const { role } = useSession().user;
+  const tracking = brand.data?.settings.timeTrackingEnabled === true;
+  const timerWithComposer = brand.data?.settings.timerStartsWithComposer === true;
+  const canWrite = role !== 'viewer';
+  const timer = useTicketTimer(ticketId);
+  const time = useTimeEntries(brandId, ticketId, tracking);
+  const [logOpen, setLogOpen] = useState(false);
 
   const contactId = detail.data?.ticket.contactId ?? null;
 
@@ -169,6 +225,9 @@ export function TicketView({
         ...(message.attachmentIds.length === 0
           ? {}
           : { attachmentIds: [...message.attachmentIds] }),
+        ...(message.timeSpentSeconds === undefined
+          ? {}
+          : { timeSpentSeconds: message.timeSpentSeconds }),
       }),
     onSuccess: async (saved, message) => {
       dispatch({ type: 'acknowledged', clientId: message.clientId });
@@ -197,6 +256,9 @@ export function TicketView({
 
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      if (message.timeSpentSeconds !== undefined) {
+        await time.refresh();
+      }
     },
     onError: (_error, message) => {
       dispatch({ type: 'failed', clientId: message.clientId });
@@ -204,16 +266,97 @@ export function TicketView({
     },
   });
 
+  /**
+   * A refusal a person can act on gets its sentence: the lifecycle's (M1-08,
+   * M1-09) or the ticketing settings' (M1-07's assignee rules); anything else,
+   * the one for failure.
+   */
+  const refused = (error: unknown): void => {
+    toast({
+      tone: 'danger',
+      message: isTicketLifecycleError(error)
+        ? t(`tickets:lifecycle.${error.reason}`)
+        : isTicketingError(error)
+          ? t(refusalCopy(error.reason))
+          : t('tickets:toast.failed'),
+    });
+  };
+
   const update = useMutation({
     mutationFn: (patch: TicketUpdateRequest) => api.update(brandId, ticketId, patch),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      // A new assignee moves two people's counts in the picker.
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.assignables(brandId) });
       toast({ tone: 'success', message: t('tickets:toast.updated') });
     },
-    onError: () => {
-      toast({ tone: 'danger', message: t('tickets:toast.failed') });
+    onError: refused,
+  });
+
+  /** Both tickets moved, so both reads, every list and every count are stale. */
+  const refreshPair = async (result: TicketMergeResult): Promise<void> => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, result.primary.id) }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, result.secondary.id) }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.counts(brandId) }),
+    ]);
+  };
+
+  const merge = useMutation({
+    mutationFn: (primaryTicketId: string) => api.merge(brandId, ticketId, { primaryTicketId }),
+    onSuccess: async (result) => {
+      setDialog(null);
+      await refreshPair(result);
+      toast({
+        tone: 'success',
+        message: t('tickets:toast.merged', { reference: ticketReference(result.primary) }),
+      });
+      // The ticket that stays open is where the work continues.
+      onOpenTicket(result.primary.id);
     },
+    onError: refused,
+  });
+
+  const unmerge = useMutation({
+    mutationFn: (secondaryId: string) => api.unmerge(brandId, secondaryId),
+    onSuccess: async (result) => {
+      await refreshPair(result);
+      toast({
+        tone: 'success',
+        message: t('tickets:toast.unmerged', { reference: ticketReference(result.secondary) }),
+      });
+    },
+    onError: refused,
+  });
+
+  const split = useMutation({
+    mutationFn: (request: TicketSplitRequest) => api.split(brandId, ticketId, request),
+    onSuccess: async (created) => {
+      setDialog(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) }),
+        queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) }),
+        queryClient.invalidateQueries({ queryKey: ticketKeys.counts(brandId) }),
+      ]);
+      toast({
+        tone: 'success',
+        message: t('tickets:toast.created', { reference: ticketReference(created.ticket) }),
+      });
+      onOpenTicket(created.ticket.id);
+    },
+    onError: refused,
+  });
+
+  /** M1-07: the picker's options for the department the ticket is in now. */
+  const departmentId = detail.data?.ticket.departmentId;
+  const assignable = useQuery({
+    queryKey: ticketKeys.assignable(brandId, departmentId ?? ''),
+    queryFn: () => api.assignable(brandId, departmentId ?? ''),
+    enabled: departmentId !== undefined,
+    staleTime: 30_000,
+    retry: false,
   });
 
   const names = useMemo<ThreadNames>(
@@ -222,28 +365,45 @@ export function TicketView({
         if (authorId === null) {
           return null;
         }
+        // The customer side of a thread is the ticket's own contact: the
+        // embedded name first, which arrives with the ticket, then the full
+        // read, which also knows the address.
         if (authorType === 'contact') {
-          return directory.contactNames.get(authorId) ?? null;
+          if (authorId === contact.data?.id) {
+            return contact.data.name;
+          }
+          return authorId === detail.data?.ticket.contact?.id
+            ? detail.data.ticket.contact.name
+            : null;
         }
         if (authorId === viewer.id) {
           return viewer.name;
         }
 
-        return (
-          directory.staff.find((member) => member.userId === authorId)?.name ??
-          directory.contactNames.get(authorId) ??
-          null
-        );
+        return directory.staff.find((member) => member.userId === authorId)?.name ?? null;
       },
       addressFor: (authorId) =>
-        authorId === null ? null : (directory.contactAddresses.get(authorId) ?? null),
+        authorId !== null && authorId === contact.data?.id
+          ? (contact.data.primaryIdentity?.value ?? null)
+          : null,
+      staffName: (userId) => {
+        if (userId === null) {
+          return null;
+        }
+        if (userId === viewer.id) {
+          return viewer.name;
+        }
+
+        return directory.staff.find((member) => member.userId === userId)?.name ?? null;
+      },
     }),
-    [directory, viewer],
+    [directory, viewer, contact.data, detail.data],
   );
 
-  const viewerNames = viewerIds.map(
-    (id) => directory.staff.find((member) => member.userId === id)?.name ?? id.slice(0, 8),
-  );
+  const headerViewers = viewers.map(({ userId, activity }) => ({
+    name: directory.staff.find((member) => member.userId === userId)?.name ?? userId.slice(0, 8),
+    activity,
+  }));
 
   if (detail.isError) {
     return (
@@ -267,11 +427,124 @@ export function TicketView({
     return <Box sx={{ padding: 8 }} aria-busy="true" />;
   }
 
-  const items = buildThread(messages, detail.data?.activity ?? [], pending);
-  const staffOptions = assignableStaff(directory.staff, viewer, ticket.assigneeId);
+  const merged = detail.data?.merged ?? [];
+  const mergedInto = detail.data?.mergedInto ?? null;
+  const items = buildThread(messages, detail.data?.activity ?? [], pending, merged);
+
+  // M1-09's two come first; Log time (M1-12) and Mark as spam (M1-11) follow,
+  // in the artboard's order. A merged ticket's state is its primary's, so it
+  // offers neither merge nor split: the api would refuse both.
+  const mergeActions: readonly TicketAction[] =
+    ticket.mergedIntoId === null
+      ? [
+          {
+            id: 'merge',
+            label: t('tickets:actions.merge'),
+            icon: GitMerge,
+            onSelect: () => {
+              setMergeTerm('');
+              setDialog('merge');
+            },
+          },
+          {
+            id: 'split',
+            label: t('tickets:actions.split'),
+            icon: Split,
+            onSelect: () => {
+              setDialog('split');
+            },
+          },
+        ]
+      : [];
+  // The list embeds each ticket's contact (M1-15), so a candidate names its own.
+  const candidates = mergeSearch.data?.tickets ?? [];
+  const contactName = (id: string | null): string | null => {
+    if (id === null) {
+      return null;
+    }
+    const embedded = [ticket, ...candidates].find((row) => row.contact?.id === id)?.contact;
+
+    return embedded?.name ?? (id === contact.data?.id ? contact.data.name : null);
+  };
+  const agents = assignable.data?.agents ?? [];
   const departmentName = directory.departments.find(
     (department) => department.id === ticket.departmentId,
   )?.name;
+
+  const copyLink = async (link: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast({ tone: 'success', message: t('tickets:csat.copied') });
+    } catch {
+      toast({ tone: 'danger', message: t('tickets:csat.copyFailed') });
+    }
+  };
+
+  // Paused while the request is out, and reset only once it is logged: a
+  // failed log keeps what the timer counted.
+  const logTimer = (): void => {
+    const seconds = loggableSeconds(timer.seconds);
+    if (seconds === null) {
+      return;
+    }
+
+    timer.pause();
+    time.log.mutate(
+      { seconds },
+      {
+        onSuccess: () => {
+          timer.take();
+        },
+      },
+    );
+  };
+
+  const csat = detail.data?.csat ?? null;
+  const cards = (
+    <>
+      {tracking ? (
+        <TimeCard
+          entries={time.entries.data}
+          failed={time.entries.isError}
+          timer={timer}
+          viewerId={viewer.id}
+          canWrite={canWrite}
+          canDeleteAny={role === 'admin' || role === 'teamLeader'}
+          busy={time.log.isPending || time.remove.isPending}
+          now={now}
+          onLogTimer={logTimer}
+          onAddManually={() => {
+            setLogOpen(true);
+          }}
+          onDelete={(entry) => {
+            time.remove.mutate(entry.id);
+          }}
+        />
+      ) : null}
+      {csat === null ? null : (
+        <CsatCard
+          csat={csat}
+          onCopy={(link) => {
+            void copyLink(link);
+          }}
+        />
+      )}
+    </>
+  );
+
+  const logTimeActions: readonly TicketAction[] =
+    tracking && canWrite
+      ? [
+          {
+            id: 'log-time',
+            label: t('tickets:header.logTime'),
+            icon: Clock,
+            onSelect: () => {
+              setLogOpen(true);
+            },
+          },
+        ]
+      : [];
 
   const details = (
     <DetailsPanel
@@ -280,9 +553,15 @@ export function TicketView({
       hiddenTicketCount={timeline.data?.hiddenCount ?? 0}
       statuses={directory.statuses}
       departments={directory.departments}
-      staff={staffOptions}
+      assignee={{
+        name: assigneeName(ticket.assigneeId, { agents, staff: directory.staff, viewer }),
+        agents,
+        loadCap: assignable.data?.loadCap ?? null,
+        unavailable: assignable.isError,
+      }}
       now={now}
       busy={update.isPending}
+      cards={cards}
       onChange={(patch) => {
         update.mutate(patchOf(patch));
       }}
@@ -295,12 +574,16 @@ export function TicketView({
       return;
     }
 
+    // The timer stops with the send and its time goes with the reply (M1-12).
+    const spent = tracking ? loggableSeconds(timer.take()) : null;
+
     const message: PendingMessage = {
       clientId: crypto.randomUUID(),
       kind: mode === 'note' ? 'note' : 'public',
       bodyHtml: paragraph(text),
       bodyText: text,
       attachmentIds: attachments.map((attachment) => attachment.id),
+      ...(spent === null ? {} : { timeSpentSeconds: spent }),
       createdAt: new Date().toISOString(),
       sentAt: Date.now(),
       state: 'sending',
@@ -352,13 +635,32 @@ export function TicketView({
         <TicketHeader
           ticket={ticket}
           departmentName={departmentName}
-          viewers={viewerNames}
+          viewers={headerViewers}
           now={now}
           showDetailsButton={detailsInDrawer}
+          // One menu (the artboard's panel 2): Merge, Split, Log time, then
+          // Mark as spam behind its divider.
+          actions={[...mergeActions, ...logTimeActions, ...spam.items]}
           onShowDetails={() => {
             onDetailsOpenChange(true);
           }}
         />
+
+        {/* M1-09: above the thread rather than in it, so "this ticket was
+            merged" stays in view however far the thread is scrolled. */}
+        {mergedInto === null ? null : (
+          <Box sx={{ paddingInline: 5, paddingBlockStart: 4 }}>
+            <MergedIntoBanner
+              mergedInto={mergedInto}
+              names={names}
+              now={now}
+              busy={unmerge.isPending}
+              onUnmerge={() => {
+                unmerge.mutate(ticketId);
+              }}
+            />
+          </Box>
+        )}
 
         {/* Focusable because it scrolls: a region a mouse can scroll and a
             keyboard cannot is WCAG 2.1.1 (DESIGN §10). */}
@@ -371,6 +673,15 @@ export function TicketView({
             items={items}
             names={names}
             now={now}
+            merges={{
+              ticketId,
+              merged,
+              links: detail.data?.related ?? [],
+              busy: unmerge.isPending,
+              onUnmerge: (secondaryId) => {
+                unmerge.mutate(secondaryId);
+              },
+            }}
             onRetry={(message) => {
               dispatch({ type: 'retried', clientId: message.clientId, now: Date.now() });
               send.mutate({ ...message, state: 'sending', sentAt: Date.now() });
@@ -381,39 +692,100 @@ export function TicketView({
           />
         </Box>
 
-        <Box
-          sx={{
-            padding: 5,
-            borderBlockStart: `1px solid ${tokens['border.default']}`,
-            backgroundColor: tokens['bg.canvas'],
-          }}
-        >
-          <Composer
-            mode={mode}
-            body={body}
-            recipient={contact.data?.name ?? null}
-            statuses={directory.statuses}
-            thenStatusId={thenStatusId}
-            busy={send.isPending}
-            attachments={attachments}
-            uploading={uploading}
-            // Until the brand read answers, the defaults are what the picker
-            // measures against; the api is the one that decides either way.
-            attachmentsEnabled={!brand.isPending || brand.isError}
-            focusSignal={focusToken?.at}
-            onModeChange={setMode}
-            onBodyChange={setBody}
-            onThenStatusChange={setThenStatusId}
-            onAttach={(files) => {
-              void attach(files);
+        {mergedInto === null ? (
+          <Box
+            sx={{
+              padding: 5,
+              borderBlockStart: `1px solid ${tokens['border.default']}`,
+              backgroundColor: tokens['bg.canvas'],
             }}
-            onRemoveAttachment={(attachmentId) => {
-              setAttachments((held) => held.filter((row) => row.id !== attachmentId));
-            }}
-            onSend={queueSend}
-          />
-        </Box>
+          >
+            <Composer
+              mode={mode}
+              body={body}
+              recipient={contact.data?.name ?? null}
+              statuses={directory.statuses}
+              thenStatusId={thenStatusId}
+              busy={send.isPending}
+              attachments={attachments}
+              uploading={uploading}
+              // Until the brand read answers, the defaults are what the picker
+              // measures against; the api is the one that decides either way.
+              attachmentsEnabled={!brand.isPending || brand.isError}
+              focusSignal={focusToken?.at}
+              onModeChange={setMode}
+              onBodyChange={setBody}
+              onThenStatusChange={setThenStatusId}
+              onAttach={(files) => {
+                void attach(files);
+              }}
+              onRemoveAttachment={(attachmentId) => {
+                setAttachments((held) => held.filter((row) => row.id !== attachmentId));
+              }}
+              onSend={queueSend}
+              onBodyFocus={() => {
+                if (tracking && timerWithComposer && canWrite && !timer.running) {
+                  timer.start();
+                }
+              }}
+            />
+          </Box>
+        ) : null}
       </Box>
+
+      {spam.dialog}
+
+      <MergeDialog
+        open={dialog === 'merge'}
+        ticket={ticket}
+        candidates={mergeCandidates(candidates, ticket.id)}
+        departments={directory.departments}
+        contactName={contactName}
+        busy={merge.isPending}
+        onTermChange={setMergeTerm}
+        onSubmit={(primaryTicketId) => {
+          merge.mutate(primaryTicketId);
+        }}
+        onClose={() => {
+          setDialog(null);
+        }}
+      />
+      <SplitDialog
+        open={dialog === 'split'}
+        messages={messages.filter((message) => message.kind !== 'system')}
+        departments={directory.departments}
+        defaultDepartmentId={ticket.departmentId}
+        defaultPriority={ticket.priority}
+        authorOf={(message) =>
+          names.nameFor(message.authorType, message.authorId) ??
+          t(`tickets:thread.${message.authorType === 'staff' ? 'staff' : 'contact'}`)
+        }
+        now={now}
+        busy={split.isPending}
+        onSubmit={(request) => {
+          split.mutate(request);
+        }}
+        onClose={() => {
+          setDialog(null);
+        }}
+      />
+
+      <LogTimeDialog
+        open={logOpen}
+        reference={ticketReference(ticket)}
+        viewerName={viewer.name}
+        busy={time.log.isPending}
+        onClose={() => {
+          setLogOpen(false);
+        }}
+        onSubmit={(request) => {
+          time.log.mutate(request, {
+            onSuccess: () => {
+              setLogOpen(false);
+            },
+          });
+        }}
+      />
 
       {detailsInDrawer ? (
         <Drawer

@@ -52,6 +52,14 @@ describe('the built-in statuses', () => {
     expect(awaiting.map((status) => status.key)).toEqual(['awaiting_customer']);
   });
 
+  it('keys Spam, and only Spam, as the status "Mark as spam" moves to (M1-11)', () => {
+    // `is_spam` is generated from `system_key = 'spam'`, so the key is the flag.
+    const spam = BUILT_IN_TICKET_STATUSES.filter((status) => status.key === 'spam');
+
+    expect(spam.map((status) => status.key)).toEqual(['spam']);
+    expect(spam[0]).toMatchObject({ systemState: 'closed', excludedFromReports: true });
+  });
+
   it('gives every status an Arabic label, because the brand may run in Arabic', () => {
     expect(BUILT_IN_TICKET_STATUSES.every((status) => status.nameAr.length > 0)).toBe(true);
   });

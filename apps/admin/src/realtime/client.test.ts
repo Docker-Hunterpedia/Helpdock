@@ -69,7 +69,12 @@ describe('RealtimeListeners', () => {
       kind: 'public',
       event: 'ticket.replied',
     });
-    listeners.ticketViewing({ brandId: BRAND, ticketId: TICKET, userId: BRAND });
+    listeners.ticketViewing({
+      brandId: BRAND,
+      ticketId: TICKET,
+      activity: 'viewing',
+      userId: BRAND,
+    });
 
     expect(ticketChanged).toHaveBeenCalledOnce();
     expect(ticketMessage).toHaveBeenCalledOnce();
@@ -82,7 +87,12 @@ describe('RealtimeListeners', () => {
     const stop = listeners.add({ ticketViewing });
     stop();
 
-    listeners.ticketViewing({ brandId: BRAND, ticketId: TICKET, userId: BRAND });
+    listeners.ticketViewing({
+      brandId: BRAND,
+      ticketId: TICKET,
+      activity: 'viewing',
+      userId: BRAND,
+    });
 
     expect(ticketViewing).not.toHaveBeenCalled();
   });
@@ -93,7 +103,12 @@ describe('RealtimeListeners', () => {
     const stopSecond = listeners.add({ ticketViewing: second });
     listeners.add({ ticketViewing: () => stopSecond() });
 
-    listeners.ticketViewing({ brandId: BRAND, ticketId: TICKET, userId: BRAND });
+    listeners.ticketViewing({
+      brandId: BRAND,
+      ticketId: TICKET,
+      activity: 'viewing',
+      userId: BRAND,
+    });
 
     expect(second).toHaveBeenCalledOnce();
   });

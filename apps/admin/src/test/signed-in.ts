@@ -4,6 +4,7 @@ import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
+import { MockBlockList } from '../ticketing/mock-block-list.js';
 import { MockTicketsApi } from '../tickets/mock-api.js';
 
 /**
@@ -26,12 +27,16 @@ export async function signedInMockApis(): Promise<AdminApis> {
 
   await auth.verifyTotp(result.challengeId, MOCK_TOTP_CODE, { trustDevice: false });
 
+  // Shared, as `createApis` shares it: a sender blocked from a ticket is on the
+  // Spam tab (M1-11).
+  const blockList = new MockBlockList();
+
   return {
     auth,
     staff,
     contacts: new MockContactsApi(),
-    ticketing: new MockTicketingApi(),
-    tickets: new MockTicketsApi(),
+    ticketing: new MockTicketingApi(blockList),
+    tickets: new MockTicketsApi(undefined, Date.now(), blockList),
     uploader: new MockAttachmentUploader(),
   };
 }

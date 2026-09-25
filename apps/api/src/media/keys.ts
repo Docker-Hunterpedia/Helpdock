@@ -53,9 +53,9 @@ export interface AttachmentKeyParts {
  * The prefix every object of one attachment shares, with its trailing slash.
  *
  * The two prefixes above it — a brand's and a ticket's — are deliberately not
- * built here. Nothing lists them yet: the retention pass that purges a closed
- * ticket and a deleted brand is M1-14's (DOMAIN-RULES §11), and it can add them
- * beside this when there is something to run them.
+ * built here. The retention purge of M1-14 deletes a closed ticket's objects by
+ * naming each key (`media/object-purge.ts`), which needs no bucket listing; a
+ * prefix delete belongs to brand deletion, which is its own deliverable.
  */
 export const attachmentPrefix = ({ brandId, ticketId, attachmentId }: AttachmentKeyParts): string =>
   `brands/${uuidSegment('brand id', brandId)}/tickets/${uuidSegment('ticket id', ticketId)}/${uuidSegment('attachment id', attachmentId)}/`;
@@ -66,3 +66,21 @@ export const attachmentPrefix = ({ brandId, ticketId, attachmentId }: Attachment
  */
 export const attachmentKey = (parts: AttachmentKeyParts, variant: DownloadVariant): string =>
   `${attachmentPrefix(parts)}${variant}`;
+
+/**
+ * The key of one variant of the object an attachment row names, found from the
+ * row's own `s3_key` rather than from its ids.
+ *
+ * The two differ for a split's copy (M1-09): the copy is a row of its own on
+ * the new ticket, pointing at the **original's** objects, so its ids build a
+ * folder nothing was ever written to. Every read and every purge of the bytes
+ * goes through the stored key for that reason.
+ */
+export const objectKeyBeside = (s3Key: string, variant: DownloadVariant): string => {
+  const folder = s3Key.slice(0, s3Key.lastIndexOf('/') + 1);
+  if (folder === '' || s3Key.slice(folder.length) !== ORIGINAL_VARIANT) {
+    throw new TypeError('An attachment key must end in its original variant');
+  }
+
+  return `${folder}${variant}`;
+};

@@ -1,4 +1,10 @@
 import type {
+  AssignmentAgent,
+  AssignmentAgentList,
+  AssignmentAgentUpdateRequest,
+  BlockedSender,
+  BlockedSenderCreateRequest,
+  BlockedSenderList,
   Brand,
   BrandSettings,
   BrandUpdateRequest,
@@ -8,13 +14,20 @@ import type {
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
+  DepartmentAssignment,
+  DepartmentAssignmentList,
+  DepartmentAssignmentUpdateRequest,
   DepartmentCreateRequest,
   DepartmentSummary,
   DepartmentSummaryList,
   DepartmentUpdateRequest,
   EligibleMember,
   EligibleMemberList,
+  FeedbackSettingsUpdateRequest,
   ReplyBehaviourUpdateRequest,
+  RetentionOverview,
+  RetentionUpdateRequest,
+  SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
   TagSummary,
@@ -37,6 +50,16 @@ import { defaultBrandSettings, isChoiceField } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type TicketingApi, TicketingError } from './api.js';
+import {
+  MOCK_ASSIGNEES,
+  MOCK_OMAR_ID,
+  MOCK_SUPPORT_ID,
+  MOCK_YARA_ID,
+  type MockDepartmentAssignment,
+  seedAssignmentSettings,
+  worksIn,
+} from './mock-assignment.js';
+import { MockBlockList } from './mock-block-list.js';
 
 /**
  * The fixture the Ticketing settings run against until an install is in front
@@ -117,6 +140,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: true,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 0,
     color: 'info',
   },
@@ -130,6 +154,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 1,
     color: 'warning',
   },
@@ -143,6 +168,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 2,
     color: 'escalated',
   },
@@ -156,6 +182,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 3,
     color: 'success',
   },
@@ -169,6 +196,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: true,
+    isSpam: true,
     sortOrder: 4,
     color: 'danger',
   },
@@ -182,6 +210,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: true,
     excludedFromReports: true,
+    isSpam: false,
     sortOrder: 5,
     color: 'success',
   },
@@ -195,6 +224,7 @@ const seedStatuses = (): TicketStatus[] => [
     isDefault: false,
     isSystem: false,
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 6,
     color: 'warning',
   },
@@ -368,14 +398,46 @@ const newId = (kind: string): string => {
   return `0192c3f0-1a2b-7c3d-8e4f-${kind}${String(nextId).padStart(10, '0')}`.slice(0, 36);
 };
 
+/**
+ * The Data retention card as the artboard draws it: closed tickets kept 730
+ * days, and a last run at 03:00 that removed 74 rows. The preview counts are
+ * fixed numbers; the real ones are `COUNT(*)`s the api runs.
+ */
+const seedRetention = (): RetentionOverview => ({
+  settings: {
+    closedTickets: { kind: 'days', days: 730 },
+    spamTicketDays: 30,
+    aiCallDays: 90,
+    searchLogDays: 180,
+    auditLogDays: 730,
+    visitorSessionDays: 30,
+  },
+  preview: {
+    closedTickets: 12,
+    spamTickets: 62,
+    aiCalls: null,
+    searchLog: null,
+    auditLog: 0,
+    visitorSessions: null,
+  },
+  lastRun: {
+    at: '2026-09-24T03:00:00.000Z',
+    counts: { closedTickets: 12, spamTickets: 62, auditLog: 0, outbox: 0 },
+    total: 74,
+  },
+});
+
 export class MockTicketingApi implements TicketingApi {
   #departments = seedDepartments();
   #teams: Team[] = [];
   #brand = seedBrand();
+  #retention = seedRetention();
   #statuses = seedStatuses();
   #tags = seedTags();
   #fields = seedFields();
   #templates = seedTemplates();
+  /** M1-11. Shared with `MockTicketsApi` when `createApis` builds the pair. */
+  readonly #blockList: MockBlockList;
   /**
    * How many tickets sit in each status, so the delete confirmation has a
    * number to print. The real count comes from a `COUNT(*)` the api runs.
@@ -383,6 +445,16 @@ export class MockTicketingApi implements TicketingApi {
   #ticketsByStatus: Record<string, number> = {
     '0192c3f0-1a2b-7c3d-8e4f-0000000000e7': 12,
   };
+  /** M1-07. Keyed by department; then `${departmentId}:${userId}` for the per-agent rows. */
+  #assignment = seedAssignmentSettings();
+  #rotation = new Map<string, boolean>([[`${MOCK_SUPPORT_ID}:${MOCK_OMAR_ID}`, true]]);
+  #skills = new Map<string, string[]>([
+    [`${MOCK_SUPPORT_ID}:${MOCK_YARA_ID}`, ['0192c3f0-1a2b-7c3d-8e4f-000000000101']],
+  ]);
+
+  constructor(blockList: MockBlockList = new MockBlockList()) {
+    this.#blockList = blockList;
+  }
 
   async departments(_brandId: string): Promise<DepartmentSummaryList> {
     return { departments: this.#sorted().map((row) => this.#withCounts(row)) };
@@ -585,8 +657,32 @@ export class MockTicketingApi implements TicketingApi {
       ...(request.timezone === undefined ? {} : { timezone: request.timezone }),
       ...(request.settings === undefined ? {} : { settings: request.settings }),
     };
+    this.#blockList.offerBlockSender = this.#brand.settings.offerBlockSender;
 
     return this.#brand;
+  }
+
+  // ------------------------------------------------------------------ M1-14
+
+  async retention(_brandId: string): Promise<RetentionOverview> {
+    return this.#retention;
+  }
+
+  async updateRetention(
+    _brandId: string,
+    request: RetentionUpdateRequest,
+  ): Promise<RetentionOverview> {
+    const closedCount = seedRetention().preview.closedTickets;
+    this.#retention = {
+      ...this.#retention,
+      settings: request,
+      preview: {
+        ...this.#retention.preview,
+        closedTickets: request.closedTickets.kind === 'never' ? null : closedCount,
+      },
+    };
+
+    return this.#retention;
   }
 
   // ------------------------------------------------------------------ M1-08
@@ -608,6 +704,7 @@ export class MockTicketingApi implements TicketingApi {
       isDefault: false,
       isSystem: false,
       excludedFromReports: false,
+      isSpam: false,
       sortOrder: this.#statuses.length,
       color: request.color,
     };
@@ -713,6 +810,20 @@ export class MockTicketingApi implements TicketingApi {
         ...(request.reopenPolicy === undefined ? {} : { reopenPolicy: request.reopenPolicy }),
       },
     };
+
+    return this.#brand.settings;
+  }
+
+  // ---------------------------------------------------------------- M1-12
+
+  async updateFeedback(
+    _brandId: string,
+    request: FeedbackSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    const changes = Object.fromEntries(
+      Object.entries(request).filter(([, value]) => value !== undefined),
+    );
+    this.#brand = { ...this.#brand, settings: { ...this.#brand.settings, ...changes } };
 
     return this.#brand.settings;
   }
@@ -971,7 +1082,158 @@ export class MockTicketingApi implements TicketingApi {
     };
   }
 
+  // ---------------------------------------------------------------- M1-11
+
+  async blockedSenders(_brandId: string): Promise<BlockedSenderList> {
+    return { senders: this.#blockList.list() };
+  }
+
+  async blockSender(_brandId: string, request: BlockedSenderCreateRequest): Promise<BlockedSender> {
+    return this.#blockList.block(request, { idempotent: false });
+  }
+
+  async unblockSender(_brandId: string, blockedSenderId: string): Promise<void> {
+    this.#blockList.unblock(blockedSenderId);
+  }
+
+  async updateSpamSettings(
+    _brandId: string,
+    request: SpamSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    this.#blockList.offerBlockSender = request.offerBlockSender;
+    this.#brand = {
+      ...this.#brand,
+      settings: { ...this.#brand.settings, offerBlockSender: request.offerBlockSender },
+    };
+
+    return this.#brand.settings;
+  }
+
   // ------------------------------------------------------------------
+
+  // ---------------------------------------------------------------- M1-07
+
+  async assignment(_brandId: string): Promise<DepartmentAssignmentList> {
+    return {
+      departments: this.#sorted().map((department) => this.#assignmentOf(department)),
+    };
+  }
+
+  async updateAssignment(
+    _brandId: string,
+    departmentId: string,
+    request: DepartmentAssignmentUpdateRequest,
+  ): Promise<DepartmentAssignment> {
+    const department = this.#require(departmentId);
+    const current = this.#settingsOf(departmentId);
+    this.#assignment[departmentId] = {
+      mode: request.mode ?? current.mode,
+      loadCap: request.loadCap === undefined ? current.loadCap : request.loadCap,
+      autoUnassignOffline: request.autoUnassignOffline ?? current.autoUnassignOffline,
+      autoUnassignAfterMinutes:
+        request.autoUnassignAfterMinutes ?? current.autoUnassignAfterMinutes,
+      onUnassign: request.onUnassign ?? current.onUnassign,
+    };
+
+    return this.#assignmentOf(department);
+  }
+
+  async assignmentAgents(_brandId: string, departmentId: string): Promise<AssignmentAgentList> {
+    this.#require(departmentId);
+
+    return {
+      departmentId,
+      loadCap: this.#settingsOf(departmentId).loadCap,
+      agents: MOCK_ASSIGNEES.filter((assignee) => worksIn(assignee, departmentId)).map((assignee) =>
+        this.#agentOf(departmentId, assignee.userId),
+      ),
+    };
+  }
+
+  async updateAssignmentAgent(
+    _brandId: string,
+    departmentId: string,
+    userId: string,
+    request: AssignmentAgentUpdateRequest,
+  ): Promise<AssignmentAgent> {
+    this.#require(departmentId);
+    const assignee = MOCK_ASSIGNEES.find((row) => row.userId === userId);
+    if (assignee === undefined || !worksIn(assignee, departmentId)) {
+      throw new TicketingError('not-eligible');
+    }
+
+    const key = `${departmentId}:${userId}`;
+    if (request.inRotation !== undefined) {
+      this.#rotation.set(key, request.inRotation);
+    }
+    if (request.skillTagIds !== undefined) {
+      this.#skills.set(key, [...new Set(request.skillTagIds)]);
+    }
+
+    return this.#agentOf(departmentId, userId);
+  }
+
+  #settingsOf(departmentId: string): MockDepartmentAssignment {
+    return (
+      this.#assignment[departmentId] ?? {
+        mode: 'manual',
+        loadCap: null,
+        autoUnassignOffline: false,
+        autoUnassignAfterMinutes: 15,
+        onUnassign: 'leave_unassigned',
+      }
+    );
+  }
+
+  #inRotation(departmentId: string, userId: string): boolean {
+    const role = MOCK_ASSIGNEES.find((row) => row.userId === userId)?.role;
+
+    return this.#rotation.get(`${departmentId}:${userId}`) ?? role === 'agent';
+  }
+
+  #assignmentOf(department: DepartmentSummary): DepartmentAssignment {
+    const settings = this.#settingsOf(department.id);
+    const rotating = MOCK_ASSIGNEES.filter(
+      (assignee) =>
+        worksIn(assignee, department.id) && this.#inRotation(department.id, assignee.userId),
+    );
+
+    return {
+      departmentId: department.id,
+      name: department.name,
+      nameAr: department.nameAr,
+      mode: settings.mode,
+      loadCap: settings.loadCap,
+      autoUnassignOffline: settings.autoUnassignOffline,
+      autoUnassignAfterMinutes: settings.autoUnassignAfterMinutes,
+      onUnassign: settings.onUnassign,
+      agentsInRotation: rotating.length,
+      agentsOnline: rotating.filter((assignee) => assignee.presence === 'online').length,
+    };
+  }
+
+  #agentOf(departmentId: string, userId: string): AssignmentAgent {
+    const assignee = MOCK_ASSIGNEES.find((row) => row.userId === userId);
+    /* c8 ignore next 3 -- every caller has just found this person. */
+    if (assignee === undefined) {
+      throw new TicketingError('not-eligible');
+    }
+    const skillIds = this.#skills.get(`${departmentId}:${userId}`) ?? [];
+
+    return {
+      userId,
+      name: assignee.name,
+      role: assignee.role,
+      presence: assignee.presence,
+      openCount: assignee.open[departmentId] ?? 0,
+      inRotation: this.#inRotation(departmentId, userId),
+      skills: this.#tags
+        .filter((tag) => skillIds.includes(tag.id))
+        .map((tag) => ({ id: tag.id, name: tag.name, nameAr: tag.nameAr, color: tag.color })),
+      // The session is Lina, an Admin, who may change every row.
+      editable: true,
+    };
+  }
 
   #sortedStatuses(): TicketStatus[] {
     return [...this.#statuses].sort(

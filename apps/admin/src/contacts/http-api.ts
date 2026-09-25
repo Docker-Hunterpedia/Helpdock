@@ -9,6 +9,8 @@ import type {
   ContactDetail,
   ContactIdentityInput,
   ContactList,
+  ContactMergePreview,
+  ContactMergeRequest,
   ContactNoteRequest,
   ContactSearchQuery,
   ContactTimeline,
@@ -20,6 +22,7 @@ import {
   accountSchema,
   contactDetailSchema,
   contactListSchema,
+  contactMergePreviewSchema,
   contactTimelineSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
@@ -126,6 +129,38 @@ export class HttpContactsApi implements ContactsApi {
   async anonymise(brandId: string, contactId: string): Promise<ContactDetail> {
     return contactDetailSchema.parse(
       await this.#transport.request('POST', `${this.#contact(brandId, contactId)}/anonymise`),
+    );
+  }
+
+  async mergePreview(
+    brandId: string,
+    contactId: string,
+    otherContactId: string,
+  ): Promise<ContactMergePreview> {
+    return contactMergePreviewSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#contact(brandId, contactId)}/merge-preview${queryString({ otherContactId })}`,
+      ),
+    );
+  }
+
+  async mergeContacts(
+    brandId: string,
+    survivorId: string,
+    request: ContactMergeRequest,
+  ): Promise<ContactDetail> {
+    return contactDetailSchema.parse(
+      await this.#transport.request('POST', `${this.#contact(brandId, survivorId)}/merge`, request),
+    );
+  }
+
+  async undoMerge(brandId: string, survivorId: string, mergeId: string): Promise<ContactDetail> {
+    return contactDetailSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `${this.#contact(brandId, survivorId)}/merges/${encodeURIComponent(mergeId)}/undo`,
+      ),
     );
   }
 

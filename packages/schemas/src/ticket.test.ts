@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   messageCreateRequestSchema,
   messagePageQuerySchema,
+  ticketContactSchema,
   ticketCreateRequestSchema,
   ticketListQuerySchema,
   ticketUpdateRequestSchema,
@@ -153,5 +154,24 @@ describe('messagePageQuerySchema', () => {
 
   it('refuses a negative cursor', () => {
     expect(messagePageQuerySchema.safeParse({ after: -1 }).success).toBe(false);
+  });
+});
+
+describe('ticketContactSchema (M1-15)', () => {
+  it('carries the id and the name a list row prints', () => {
+    expect(ticketContactSchema.parse({ id: UUID, name: 'Nadia Karim' })).toEqual({
+      id: UUID,
+      name: 'Nadia Karim',
+    });
+  });
+
+  it('refuses an empty name, which a row would draw as nothing at all', () => {
+    expect(ticketContactSchema.safeParse({ id: UUID, name: '' }).success).toBe(false);
+  });
+
+  it('drops anything else a contact has, so an address cannot ride along on a row', () => {
+    expect(
+      ticketContactSchema.parse({ id: UUID, name: 'Nadia Karim', address: 'nadia@example.com' }),
+    ).not.toHaveProperty('address');
   });
 });

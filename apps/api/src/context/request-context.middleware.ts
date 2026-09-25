@@ -135,6 +135,8 @@ const CREDENTIAL_PATHS: readonly RegExp[] = [
   /^(\/api\/auth)?\/invites?\/[^/]+/,
   // The sign-in link (M0-05), for the same reason.
   /^\/api\/auth\/magic-link\/[^/]+/,
+  // The rating link (M1-12), as the page and as the public api call.
+  /^(\/api\/public)?\/csat\/[^/]+/,
 ];
 
 export const redactCredentialSegments = (path: string): string => {

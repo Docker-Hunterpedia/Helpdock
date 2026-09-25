@@ -17,6 +17,7 @@ The admin screen built on it is the [ticket workspace](#the-admin-workspace)
 tickets ──< ticket_messages          one thread per ticket, ordered by `seq`
         ──< ticket_activity          who changed what, and how
         ──< ticket_tags ──> tags     the chips, the brand's own list
+        ──< ticket_participants      the CCs (M1-13)
         ──> ticket_statuses          the brand's own list, mapped to four system states
 ```
 
@@ -27,6 +28,7 @@ tickets ──< ticket_messages          one thread per ticket, ordered by `seq`
 | `ticket_messages` | brand **and department** | `department_id` is denormalised from the ticket by trigger. |
 | `ticket_activity` | brand **and department** | The same, and for the same reason. |
 | `ticket_tags` | brand **and department** | The same again (M1-06). The primary key is `(ticket_id, tag_id)`, so adding a tag twice is one row. |
+| `ticket_participants` | brand **and department** | The CCs (M1-13). Unique on `(ticket_id, contact_id)`, so copying somebody in twice is one row. |
 | `tags`, `custom_field_defs`, `ticket_templates` | brand | Configuration, not tickets: the same list in every department. [Ticketing settings](ticketing-settings.md) covers them. |
 
 ### Department scope
@@ -168,6 +170,42 @@ answers 404 too, from the policy: the `ticket_tags_department` trigger looks the
 parent up under the caller's own row-level security, finds nothing, and the
 insert never happens — the same shape `ticket_messages` and `attachments` use.
 
+## Participants (M1-13)
+
+A ticket's participants are its **contact**, its **CCs** and its **staff**
+(DOMAIN-RULES §2.5). They decide who may thread into the ticket by email (§4.3)
+and who receives public replies — both M2's to act on. Only the CCs are stored:
+the contact is `tickets.contact_id`, and the staff are the assignee and every
+staff member who wrote on the ticket.
+
+A CC is a **contact** with the normalised address it was added under. Typing an
+address links the contact that already holds it, or creates one holding it
+unverified (`email.cc`): copying somebody in grants that contact nothing, so
+there is no history to protect and no reason for a second contact. The address
+stays on the row, so a later merge of the CC's contact never changes who may
+thread in; the list shows the surviving contact's name.
+
+```http
+GET    /api/brands/:brandId/tickets/:ticketId/participants
+POST   /api/brands/:brandId/tickets/:ticketId/participants     { "email": "finance@acme.de" }
+DELETE /api/brands/:brandId/tickets/:ticketId/participants/:participantId
+```
+
+All three answer `{ contact, ccs, staff }`. Adding is idempotent, and copying in
+the ticket's own contact changes nothing. An address that is not one answers
+400 with `contact.reason = identity-invalid` and a `problem`. Each change writes
+`ticket.participants.changed` to the activity log — naming the contact id,
+never the address — bumps `updated_at` and enqueues `ticket.updated`.
+
+`ticket_participants` is department-scoped like every child of a ticket: its
+`department_id` is filled by the shared trigger, follows the ticket through a
+department move, and a ticket in another department answers 404.
+
+Another module copies a contact in by id through
+`TicketParticipantsService.addCcParticipant(context, ticketId, contactId)`,
+exported by `ParticipantsModule`. M1-09's ticket merge uses it to add the
+secondary's contact as a CC (§2.4); M2 will use it for an inbound `Cc:` line.
+
 ### Custom values
 
 `tickets.custom` is a jsonb object keyed by `custom_field_defs.key`. Every write
@@ -286,16 +324,17 @@ change to one without the other fails.
 | open-like | Agent closes | `closed_at` set, `onResolved`, and `onClosedForCsat` unless excluded |
 | `closed` | Customer reply | The reopen policy, below |
 | `closed` | Agent reopens | Default open status, `closed_at` cleared, `onReopened` |
-| any | Marked spam | Spam. M1-11 owns what else that means |
-| any | Merged | Merged. M1-09 owns the rest |
+| any | Marked spam | Spam: `closed_at` kept or set, `onResolved`, **no** `onClosedForCsat`, `ticket.spam` rather than `ticket.closed`; see [Spam](#spam) |
+| any | Merged | Merged, with `merged_into_id` — see [Merge and split](#merge-and-split) |
 | any | Soft-deleted by Admin | Hidden from every view; purged by retention (§11) |
 
 Two facts are checked **before** the table and refuse every event, because they
 answer all of them the same way: a ticket with `merged_into_id` belongs to the
 one it was merged into (§2.4), and a soft-deleted ticket is not acted on at all.
 Both answer **409** with `error.lifecycle.reason` — `ticket-merged`,
-`ticket-deleted`, or `ticket-not-closed` for a reopen of something that was
-never closed — so the screen picks a sentence rather than printing the api's.
+`ticket-deleted`, `ticket-not-closed` for a reopen of something that was
+never closed, or `ticket-not-spam` for "Not spam" on a ticket that is not — so
+the screen picks a sentence rather than printing the api's.
 
 An agent "closing" a ticket *is* an agent setting a status whose system state is
 `closed`: there is one control on the screen and it is a status picker. Which of
@@ -304,14 +343,28 @@ whether `closed_at` moves and which hook fires.
 
 ### Which status plays which part
 
-Never by name — a brand may rename any of them (`packages/db/src/ticket-statuses.ts`):
+Never by name — a brand may rename any of them (`packages/db/src/ticket-statuses.ts`).
+A flag where one says what the row is; `system_key` (M1-09) where the flags
+cannot tell two rows apart, which is Spam and Merged:
 
 | Part | Found by |
 |---|---|
 | Where a new or reopened ticket lands | `is_default` |
 | Awaiting customer | `awaiting_customer`, seeded rows first |
-| No CSAT, out of reports | `excluded_from_reports` |
-| The secondary of a merge | `merged_into_id` on the *ticket* |
+| Out of reports and round-robin counts | `excluded_from_reports` (Spam and Merged) |
+| Spam — no CSAT, no auto-reply, the 30-day purge | `system_key = 'spam'`, read as `is_spam` (below) |
+| The secondary of a merge — no CSAT | `merged_into_id` on the *ticket* |
+| The status a merge closes into | `system_key = 'merged'` (seeded, backfilled by migration `0016`) |
+
+**One answer to "which row is Spam?".** `system_key` is the source: seeded as
+`spam` on every brand, backfilled by migrations `0016` and `0017`, and unique per
+brand. `ticket_statuses.is_spam` is a **generated** column,
+`coalesce(system_key = 'spam', false)`, kept because everything that treats
+spam differently reads a boolean through `isSpamStatus` (`@helpdock/schemas`):
+the lifecycle's "Mark as spam" and CSAT exclusion (M1-11, M1-12), and the spam
+purge (M1-14). Nothing writes it, so it cannot disagree with the key.
+`excluded_from_reports` is wider — Merged carries it too — and is only ever
+read as "leave it out of a count".
 
 ### The reopen policy
 
@@ -348,15 +401,19 @@ retried send never creates a second continuation (§7).
 
 ### The hooks later milestones fill
 
-`apps/api/src/tickets/lifecycle/hooks.ts` names three moments and does nothing
-at any of them. They are a provider, so M3-02 and M1-12 replace one line of
-`TicketsModule` rather than editing the service that calls them.
+`apps/api/src/tickets/lifecycle/hooks.ts` names five moments. They are a
+provider, so M3-02 and M1-12 replace one line of `TicketsModule` rather than
+editing the service that calls them. M1-12's line is in: `CsatLifecycleHooks`
+(`apps/api/src/csat/csat-hooks.ts`) fills `onClosedForCsat` and inherits the
+others, which M3-02 fills.
 
 | Hook | Fires when | Filled by |
 |---|---|---|
-| `onResolved` | A ticket reaches a closed state, **including** spam and merge — a clock left running on a ticket nobody will touch again is a clock that breaches | M3-02 |
-| `onClosedForCsat` | The same, **unless** the ticket is merged or the status is `excluded_from_reports` | M1-12 |
+| `onResolved` | A ticket reaches a closed state, **including** spam — a clock left running on a ticket nobody will touch again is a clock that breaches. Not on a merge, which fires `onMerged` | M3-02 |
+| `onClosedForCsat` | The same, **unless** the ticket is merged or the status is Spam (`is_spam`) | M1-12: writes `csat.requested` to the outbox when the brand has CSAT on |
 | `onReopened` | A closed ticket comes back, by policy or by an agent (§3.5) | M3-02 |
+| `onMerged` | A ticket was merged into another (§2.4): stop both clocks without recording them as met, and keep the ticket out of compliance | M3-02 |
+| `onUnmerged` | A merge was undone; `mergedMs` is how long it lasted, to leave out of the clocks | M3-02 |
 
 Every hook runs inside the caller's transaction, after the ticket row has moved
 and before the outbox row is written, so whatever it writes commits with the
@@ -376,16 +433,187 @@ answer a ticket in another department gives. A 410 would confirm it had existed.
 The department-delete guard still counts it, which is what stops a department
 being removed out from under a ticket that could be restored.
 
+### Spam
+
+[DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions): "Marked spam —
+Spam status; no auto-responder, no CSAT, sender added to block list if the agent
+ticks 'block sender', excluded from reports and round-robin counts." M1-11.
+
+**Marking** is `POST /tickets/:ticketId/spam` with `{ "blockSender": true|false }`.
+The ticket moves to the brand's Spam status — the row with `is_spam`, never
+found by name — and in the same transaction:
+
+- `ticket.status.changed` and `ticket.marked_spam` go to the activity log;
+- a ticket that was open-like gets `closed_at` and fires `onResolved`, so M3's
+  clock stops; one that was already closed keeps its `closed_at`;
+- `onClosedForCsat` does **not** fire, because the status is Spam (`isSpamStatus`);
+- the outbox gets **`ticket.spam`**, not `ticket.closed`, so nothing that acts
+  on a close — a survey, an auto-responder — can mistake spam for one;
+- with `blockSender`, the ticket's sender goes on the block list
+  ([ticketing settings](ticketing-settings.md#spam)). Which identifier is the
+  sender follows the channel: a Telegram ticket blocks the chat, anything else
+  the contact's address, then phone, then chat. A visitor id or an external id
+  is never blocked. The brand's own address or domain is refused
+  (`sender-is-own`) and the whole request rolls back with it.
+
+Picking Spam from the status picker is the same move without the block, and it
+sends `ticket.spam` too. `GET /tickets/:ticketId/spam-sender` is what the dialog
+reads first: the sender, whether the brand offers the checkbox
+(`offerBlockSender`), whether it may be blocked, and whether it already is.
+
+**"Not spam"** is `DELETE /tickets/:ticketId/spam`. It is an agent reopen: the
+default open status, `closed_at` cleared, `onReopened`, `ticket.reopened` — a
+ticket wrongly marked as spam is a ticket somebody is still waiting on. On a
+ticket that is not spam it answers 409 `ticket-not-spam` (or `ticket-not-closed`
+when it is not closed at all). A block made with it stays; undoing that is the
+Spam tab's.
+
+**What being spam means to everybody else** is one predicate, read off the
+status and never off its name, exported from `@helpdock/schemas`:
+
+| Consumer | Asks | And then |
+|---|---|---|
+| Auto-responders (M2) | `isSpamStatus(status)` | send nothing |
+| CSAT (M1-12) | nothing: the lifecycle already withholds `onClosedForCsat` | — |
+| Round-robin and load caps (M1-07) | `countsInReports(status)` | a spam or merged ticket counts against nobody |
+| Reports (M3) | `countsInReports(status)`, or `ticket_statuses.excluded_from_reports = false` in SQL | left out |
+| Retention (M1-14) | `ticket_statuses.is_spam` | purged after the brand's spam retention (§11, 30 days by default) |
+
+The default views already leave spam out: every one of them asks only for
+open-like system states, and Spam is `closed`. "All tickets" shows it, with its
+danger badge, because that view is the desk's whole history. M1 has no report
+or count query yet, so there is nothing else to exclude it from today.
+
+## Merge and split
+
+[DOMAIN-RULES §2.4](../planning/DOMAIN-RULES.md#24-merge-and-split), built by
+M1-09 in `apps/api/src/tickets/merge/`. The rules are pure functions in
+`merge-rules.ts`; `merge.service.ts` writes the rows. All three routes are
+`ticket:write`, and every path names the ticket the agent has open.
+
+| Route | Answers |
+|---|---|
+| `POST /tickets/:ticketId/merge` `{ "primaryTicketId": "…" }` | `{ primary, secondary }` — `:ticketId` is the **secondary**, which closes |
+| `POST /tickets/:ticketId/unmerge` | `{ primary, secondary }` — inside 24 hours of the merge |
+| `POST /tickets/:ticketId/split` `{ messageIds, subject, departmentId, priority? }` | **201** and the new ticket's detail |
+
+A ticket the actor cannot read — the primary in another department, or in
+another brand — answers **404**, exactly like one that does not exist
+(§1.2). A rule that refuses answers **409** with `error.lifecycle.reason`:
+
+| Reason | When |
+|---|---|
+| `merge-into-self` | The primary is the secondary |
+| `ticket-merged` | The secondary is already merged — unmerge is the only way back. Also a split of a merged ticket, and a `PATCH` that would move a merged ticket's department |
+| `merge-into-merged` | The primary is itself merged; merge into the ticket it went to. This is also what makes a cycle impossible |
+| `ticket-not-merged` | Unmerging a ticket that is not merged |
+| `merge-window-closed` | Unmerging 24 hours or more after the merge |
+| `attachments-in-flight` | A message to split has an attachment the pipeline has not finished with |
+
+### Merge
+
+In one transaction:
+
+1. both tickets are locked, in id order, so two merges of the same pair queue
+   rather than deadlock;
+2. the primary gets a `system` message "HD-1042 was merged into this ticket",
+   in its contact's language, as §2.3's "Continued in" is;
+3. the secondary moves to the **Merged** status with `merged_into_id`,
+   `merged_at`, `merged_by_id`, `closed_at` (kept if it was already closed) and
+   what an unmerge needs: `pre_merge_status_id`, `pre_merge_department_id` and
+   `merge_message_id`;
+4. the secondary **moves into the primary's department**;
+5. the primary's tags become the union of both (`ticket.tags.changed`);
+6. `onMerged` fires, and `MergeParticipantsHook.onContactMerged` when the two
+   contacts differ;
+7. `ticket.merged` is written to both activity logs, and `ticket.updated` to
+   the outbox for both, which is `ticket:changed` in both rooms.
+
+**Messages are not moved.** `GET /tickets/:primaryId` answers with `merged`:
+every ticket merged into it — a chain is flattened, and `mergedIntoId` says
+which ticket each went into — with the oldest 100 of its messages, read-only,
+each keeping its own `ticketId`. The secondary's read answers with `mergedInto`.
+Both carry `unmergeableUntil`, null once the 24 hours have passed.
+
+**Access follows the primary** because of step 4. §2.4 allows a merge across
+departments; the secondary's thread, activity, tags and attachments follow it
+through `helpdock_ticket_department_moved`, and the `tickets_merged_follow_primary`
+trigger (migration `0016`) keeps every merged ticket in its primary's department
+when the primary moves later, down a chain. So whoever may read the primary may
+read the messages shown inline in it and open their attachments — at
+`/tickets/:secondaryId/attachments/:id`, under the ordinary department policy,
+with no second authorisation path — and nobody else may. A merged ticket's
+department cannot be changed on its own: `PATCH` refuses it with
+`ticket-merged`.
+
+**Clocks.** A merge stops the secondary's clocks and keeps it out of
+compliance: the Merged status is `excluded_from_reports` and the ticket has
+`merged_into_id`. It does not fire `onResolved` — the ticket was folded into
+another, not resolved. The primary's clocks are untouched.
+
+**The contact.** §2.4 makes the secondary's contact a CC of the primary when
+the two differ. Participants are M1-13's (§2.5), so the merge calls
+`MergeParticipantsHook.onContactMerged` — a provider in `TicketsModule` that
+does nothing today and that M1-13 replaces.
+
+### Unmerge
+
+Inside 24 hours of `merged_at`, and refused at exactly 24 hours. The secondary
+goes back to the status it was in (or the default open status if that one has
+been deleted since), gets `closed_at` back only if that status is a closed one,
+and returns to the department it was merged from — which, when that department
+is outside the actor's scope, is the escalation §1.2 already allows, made in the
+same widened window `PATCH` uses. `merged_ms` accumulates how long the merge
+lasted and `onUnmerged` passes it on, which is how "clocks resume with the time
+paused during the merge excluded" reaches M3-02. The primary gets "HD-1042 was
+unmerged from this ticket" and keeps the tags the merge gave it: §2.4 does not
+say they go, and nothing records which ones it would not otherwise have by now.
+
+### Split
+
+The named messages are **copied** onto a new ticket: `split_from_id`, the same
+contact and channel, the department and subject the agent chose, the priority
+chosen or the original's, a fresh number, and the default open status. Each copy
+has `copied_from_message_id`, keeps its original `created_at`, and takes the new
+ticket's own `seq` from 1; a `system` message "Split from HD-1042" follows them,
+and the original gets "Messages split to HD-1043". The new ticket is announced
+with `ticket.created`, which is where M3-02's fresh clocks start; the original's
+are not touched.
+
+The department is one the actor may file a ticket in, as for creation — a
+split is filing a ticket, not escalating one. An id that is not a message of the
+ticket answers 404; a `system` message answers 400.
+
+**Attachments are copied as rows, not bytes.** A copy of a `ready` attachment
+points at the **same object** with the new ticket's `ticket_id`, `message_id`
+and — through the trigger — `department_id`, which is what authorises a
+download through it; `copied_from_attachment_id` names the original.
+`attachments.s3_key` is therefore unique among originals only
+(`attachments_s3_key_original_key`). Rejected and infected rows are not copied,
+and a message whose attachment is still `pending` or `processing` is refused
+with `attachments-in-flight`, because its copy would never hear from the
+worker. Every read and purge of the bytes goes by the row's `s3_key`, never its
+ids (`media/keys.ts` `objectKeyBeside`), so a copy downloads the original's
+objects; and a purge — retention's or a contact's erasure (M1-14) — leaves an
+object alone while any row it is not removing still names the key
+(`media/object-purge.ts`). The last row to go takes the bytes with it.
+
+Both tickets' reads carry `related`: the ticket this one was split from and the
+tickets split from it, so the thread can link the references its system
+messages name.
+
 ## Side effects and realtime
 
 Every mutation writes its outbox row in the same transaction as the change
-([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)). Six
+([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)). Seven
 events: `ticket.created`, `ticket.updated`, `ticket.replied`,
-`ticket.note_added`, and — from M1-08 — `ticket.closed` and `ticket.reopened`.
+`ticket.note_added`, from M1-08 `ticket.closed` and `ticket.reopened`, and from
+M1-11 `ticket.spam`.
 
-The last two carry the same payload as `ticket.updated` and reach the same
+The last three carry the same payload as `ticket.updated` and reach the same
 rooms. What they add is a name, so M1-12's survey and M3's clocks can consume
-one event instead of diffing two reads of the ticket.
+one event instead of diffing two reads of the ticket — and so a move into Spam
+is never heard as a close.
 
 ```
 request  →  tickets + ticket_activity + outbox   (one transaction)
@@ -428,6 +656,26 @@ which departments it reaches is the policies'.
 | `GET /tickets/:ticketId/activity` | `ticket:read` | The newest 100 activity entries, oldest first. It does not page yet |
 | `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
 | `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
+| `GET /tickets/:ticketId/spam-sender` | `ticket:read` | Who "Block sender" would block, and whether the dialog offers it (M1-11) |
+| `POST /tickets/:ticketId/spam` | `ticket:write` | Marks it as spam, and blocks the sender when `blockSender` is true (M1-11) |
+| `DELETE /tickets/:ticketId/spam` | `ticket:write` | "Not spam": back to the default open status (M1-11) |
+| `GET /tickets/:ticketId/participants` | `ticket:read` | The contact, the CCs and the staff (M1-13) |
+| `POST /tickets/:ticketId/participants` | `ticket:write` | Copies an address in as a CC (M1-13) |
+| `DELETE /tickets/:ticketId/participants/:participantId` | `ticket:write` | Takes a CC off (M1-13) |
+| `GET /tickets/:ticketId/time-entries` | `ticket:read` | The ticket's time, newest first, with the total (M1-12) |
+| `POST /tickets/:ticketId/time-entries` | `ticket:write` | A manual entry: `{ seconds, note? }`. 409 `time-tracking-off` while the brand has it off |
+| `DELETE /tickets/:ticketId/time-entries/:entryId` | `ticket:write` | Your own entry; anybody's with `ticketing:manage` (Team Leader, Admin), otherwise 403 |
+
+Two routes live outside the brand, because the person calling them has no
+session — see [satisfaction surveys](#satisfaction-surveys):
+
+| Route | Declares | Answers |
+|---|---|---|
+| `GET /api/public/csat/:token` | `@Public()` | The rating page's state: `open` with the brand, reference and subject; or `used` / `expired` with the brand alone |
+| `POST /api/public/csat/:token` | `@Public()` | `{ rating: 1–5, comment? }`. Answers `rated` once, then `used`; `expired` after 30 days |
+| `POST /tickets/:ticketId/merge` | `ticket:write` | Closes it into another ticket (M1-09, [below](#merge-and-split)) |
+| `POST /tickets/:ticketId/unmerge` | `ticket:write` | Undoes a merge inside 24 hours (M1-09) |
+| `POST /tickets/:ticketId/split` | `ticket:write` | Copies messages onto a new ticket (M1-09) |
 
 ### Listing
 
@@ -440,7 +688,7 @@ GET /api/brands/:brandId/tickets
   &channel=email              repeatable: email | chat | telegram | form | api | manual
   &assigneeId=<uuid>          repeatable; the value `unassigned` is a chip of its own
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
-  &q=printer                  free text over the subject
+  &q=printer                  the subject, the contact's name, or a reference
   &sort=updatedAt             updatedAt | createdAt | number | priority
   &direction=desc             asc | desc
   &limit=25                   1–100
@@ -460,6 +708,8 @@ GET /api/brands/:brandId/tickets
       "channel": "manual",
       "departmentId": "0199f4b2-…",
       "assigneeId": null,
+      "contactId": "0199f4b2-…",
+      "contact": { "id": "0199f4b2-…", "name": "Nadia Karim" },
       "slaBreached": false,
       "closedAt": null,
       "updatedAt": "2026-09-19T12:00:00.000Z"
@@ -468,6 +718,15 @@ GET /api/brands/:brandId/tickets
   "nextCursor": "eyJzIjoidXBkYXRlZEF0Iiw…"
 }
 ```
+
+**Each row names its contact** (M1-15): `contact` is `{ id, name }`, read for
+the whole page in one primary-key lookup, or `null` when the ticket names
+nobody. It is the name and nothing else, because an address on every row of a
+list is fifty addresses nobody asked to see. `GET /tickets/:ticketId` embeds the
+same thing. The field is **left off** for a caller without `contact:read`
+(every staff role holds it; an api key scoped to tickets alone would not), who
+still has `contactId`, and the write routes leave it off too. Absent means "not
+said", which a client must not read as "nobody".
 
 **Paging is keyset, not offset.** `OFFSET 10000` makes Postgres walk ten
 thousand rows it throws away, and it *skips* rows: a ticket updated between page
@@ -483,9 +742,17 @@ is refused with 400 rather than reinterpreted.
 **Search** is full text *and* trigram. `q` goes to `websearch_to_tsquery` against
 the generated `tickets.search` column — which understands quoted phrases and
 `-excluded`, and never raises on nonsense — *or* to the `<%` word-similarity
-operator against the subject, through `tickets_subject_trgm_idx`. Full text will
-not match `renewa` against "renewal"; the trigram half will. Both bind the term
-as a parameter.
+operator against the subject. Full text will not match `renewa` against
+"renewal"; the trigram half will. Both bind the term as a parameter. Under
+row-level security neither half can use its GIN index, so a search reads the
+brand's tickets newest first until it has a page; see
+[Search under row-level security](#search-under-row-level-security) for why, and
+for what that costs.
+
+From M1-09 the same `q` also matches the **contact's name** (`ILIKE`, with `%`
+and `_` escaped, through `contacts`, which is brand-scoped) and a **reference**:
+`HD-1042`, `#1042` or `1042` match ticket number 1042 whatever the prefix,
+because a brand has one sequence. The merge dialog's search is this list read.
 
 `tagId` has **all-of** semantics (M1-06): a ticket matches when it carries every
 tag named, not any of them. Two chips in a filter are how somebody narrows a
@@ -555,8 +822,15 @@ failed write can still tell the two apart.
 `teamId` is refused with 400 until M1-01 creates `teams`: `tickets.team_id` has
 no foreign key yet, so any uuid would be stored permanently. An `assigneeId` must belong to somebody who holds a role in the
 brand — `tickets.assignee_id` references the *global* `users` table, so the
-foreign key alone would accept a stranger. Which *department* an assignee must
-be in is M1-07's question.
+foreign key alone would accept a stranger (400). M1-07 adds the department:
+the assignee must be able to work the department the ticket is in — or is
+moving to — and not be a Viewer or deactivated (`not-eligible`, 409), and only
+an Admin assigns a ticket to an Admin (`assignee-above-actor`, 403). The load
+cap is not checked: a person may give an agent at cap another ticket. A move
+into a department the current assignee cannot work clears the assignee, and a
+ticket that is created or moved **unassigned** into a department that routes by
+itself is handed to the rotation through the outbox — see
+[Assignment](ticketing-settings.md#assignment).
 
 ### Replying
 
@@ -688,8 +962,28 @@ each client says so every 30 s, the gateway authorises the announcement exactly
 as it authorises the join and relays it to the rest of the room, and every
 client drops a name nobody has repeated for 90 s. Nothing is stored, and
 "closed the tab", "lost the network" and "went to lunch with it open" are one
-answer. M1-09 owns the rest of §2.4; if it grows a server-side register, this
-is what it replaces.
+answer.
+
+M1-09 added `activity`: `replying` while the composer holds something unsent,
+`viewing` otherwise. A change is announced at once rather than at the next
+interval, the pill says "Mona is replying" and puts whoever is replying first,
+and the same authorisation covers both words. It stays stateless on purpose: "is
+replying" is not a lock, so a browser that crashes mid-reply cannot leave a
+ticket claimed.
+
+### Merge and split in the workspace
+
+The ⋯ menu in the header (`ticket-actions-menu.tsx`) draws the entries it is
+handed, in order; M1-09 passes Merge and Split, and M1-12's Log time and
+M1-11's Mark as spam are added to the same array. A merged ticket offers
+neither. The merge dialog searches with the list read and never offers the
+ticket itself or a merged one; the split dialog lists the ticket's own
+messages, oldest first. After either, the workspace opens the ticket the work
+continues on. On the primary, each merged ticket is drawn where its
+announcement was: a banner with Unmerge while its 24 hours last, a divider, and
+its messages read-only on `bg.canvas`, each marked with its origin. The
+secondary shows the banner the other way round above the thread, and no
+composer. Built from `AdminTicketDialogs` panels 1, 2, 4 and 7.
 
 ### Attachments
 
@@ -720,6 +1014,17 @@ caret in the composer, `n` does the same in note mode, and `Esc` closes a
 drawer or a dialog. A single letter is only a shortcut while nobody is writing:
 anything typed into a field is left alone, as is anything carrying a modifier.
 
+### The ⋯ menu
+
+The button beside Macro in the header opens the ticket's actions menu
+(`Admin · ticket dialogs`, panel 2). Its items are an array each deliverable
+contributes to — `ticket-actions-menu.tsx` draws whatever it is handed — so
+merge and split (M1-09) and log time (M1-12) add entries rather than markup.
+M1-11's is the last: **Mark as spam**, in danger text behind a separator, which
+opens the confirmation of panel 5 with a ticked "Block <sender>" card when the
+api says the sender may be blocked; or **Not spam** on a ticket already in
+Spam, which reopens it at once. A merged secondary offers neither.
+
 ### What the screen cannot do yet, and why
 
 | Drawn | State | Owner |
@@ -730,29 +1035,307 @@ anything typed into a field is left alone, as is anything carrying a modifier.
 | Custom fields | read-only | M1-06 |
 | Linked tickets | read-only, from `parent_id` / `merged_into_id` / `split_from_id` | M1-08, M1-09 |
 | The AI bubble's confidence | not drawn: `ai_meta` is deliberately not on the wire | M7 |
-| The assignee picker | the people it can name, and the current assignee as a shortened id when it cannot | M1-07 |
+The **assignee picker** (M1-07, `AdminTicketDialogs` panel 3) reads
+`GET /brands/:id/assignment/:departmentId/assignable`, which `ticket:write`
+reaches, rather than the staff roster, which is `staff:manage` and which an
+Agent does not hold. It lists everybody who can work the ticket's department —
+minus Admins, for anybody who is not one — with a presence dot and their open
+tickets against the department's cap ("8/8 at cap" in danger, "offline" instead
+of a count). The button names the current assignee even when they are outside
+the list, from the staff read when it has them and as a shortened id when not.
 
-That last one is worth a sentence. `GET /brands/:id/staff` declares
-`staff:manage`, which an Agent does not hold — so the one screen that most
-needs a list of colleagues is the one least able to read it. The read is
-allowed to fail and the picker degrades to the viewer plus whoever it could
-name. **M1-07 should expose a read of assignable agents that `ticket:write`
-reaches.**
+The rows name their contact from the ticket itself: the list embeds
+`contact: { id, name }` ([Listing](#listing)), so a row no longer depends on its
+contact being on the first page of `GET /contacts`, and the workspace no longer
+reads that page at all. The open ticket reads its one contact in full, for the
+details card and the thread's address line.
 
-The rows also name their contact from the first page of `GET /contacts`, which
-is a page and not a map: a ticket whose contact is further down is drawn
-without a name rather than with a wrong one. Embedding the contact summary in
-the ticket list row would close that, and is a change to M1-02's response.
+## Performance
+
+The M1 exit criterion is "ticket list of 50k seeded tickets loads under 150 ms
+p95 under the D §14 conditions" ([DOMAIN-RULES §14](../planning/DOMAIN-RULES.md#14-performance-test-conditions),
+REQUIREMENTS §5.2). What makes that true, how it is measured, and what it
+measured last.
+
+### The index set
+
+Every list is ordered by the keyset `(updated_at, id)`, so every index a list
+reads *in order* ends in exactly those two columns
+(`0021_ticket_list_indexes.sql`):
+
+| Index | Serves |
+|---|---|
+| `tickets_brand_updated_idx (brand_id, updated_at, id)` | The default list; every view that filters rather than narrows (the live states, Escalated, Unassigned); search; page 2 onwards |
+| `tickets_brand_assignee_updated_idx (brand_id, assignee_id, updated_at, id)` | "My open": one person's tickets, already in list order. Replaces the PRD's `(brand_id, assignee_id)`, which is its prefix |
+| `tickets_brand_department_status_updated_idx (brand_id, department_id, status_id, updated_at, id)` | The filter popover's department and status chips. `id` was added so one department in one status is in keyset order too |
+| `tickets_brand_number_key (brand_id, number)` | `sort=number` |
+| `ticket_tags_brand_tag_idx (brand_id, tag_id)` | The all-of tag filter, one scan however many tags are named (M1-06) |
+| `tickets_search_idx` (tsvector GIN), `tickets_subject_trgm_idx` (trigram GIN) | Not the list, today: see [Search under row-level security](#search-under-row-level-security) |
+
+`sort=createdAt` and `sort=priority` have no index of their own. The workspace
+never asks for them, and at 50k tickets they are a top-N sort of the visible
+rows, which is what the default list was before its index (27 ms of database
+time); an index per sort key would be paid on every write for a
+sort nobody uses yet.
+
+### The brand equality
+
+The list's `WHERE` carries `tickets.brand_id = <the brand in the path>`
+(`ticket-query.ts`). It is **not isolation**: the policy's
+`brand_id = ANY(app.brand_ids)` already decides that, and the equality cannot
+widen it. It is for the planner. Against an array it cannot know that one brand
+is involved, so it cannot read `(brand_id, updated_at, id)` in order, and it
+fetched every visible ticket and sorted them. With the equality, a page is a
+backward index scan that stops after `limit + 1` rows. The key lines, before
+and after, as the runtime role under an Admin's context at 50k tickets:
+
+```text
+-- before: every visible ticket, then a sort
+Sort  Sort Key: tickets.updated_at DESC, tickets.id DESC  Sort Method: top-N heapsort
+  ->  Parallel Bitmap Heap Scan on tickets  (rows=16591 loops=3)
+        ->  Bitmap Index Scan on tickets_brand_assignee_idx  (rows=50000)
+Execution Time: 27.248 ms
+
+-- after: one page, in index order
+Limit
+  ->  Index Scan Backward using tickets_brand_updated_idx on tickets  (rows=26 loops=1)
+        Index Cond: ((brand_id = ANY (…app.brand_ids…)) AND (brand_id = '…'::uuid))
+Execution Time: 0.210 ms
+```
+
+Every list query of the benchmark, as Admin and as Agent (key lines; every run
+prints the full plans):
+
+| Query | Admin | Agent (2 of 5 departments) |
+|---|---|---|
+| All tickets | `Index Scan Backward using tickets_brand_updated_idx`, 26 rows read, 0.21 ms | same index, 129 read (103 removed by the department policy), 0.33 ms |
+| My open | `Index Scan Backward using tickets_brand_assignee_updated_idx`, 0.05 ms | same index, 3.9 ms |
+| Unassigned (live states) | `tickets_brand_updated_idx`, 750 read, 2.7 ms | same, 1.6 ms |
+| Live states (Overdue) | `tickets_brand_updated_idx`, 413 read, 0.85 ms | same, 1.9 ms |
+| Escalated | `tickets_brand_updated_idx`, 1 350 read, 3.1 ms | same, 6.0 ms |
+| Search `refund` | `tickets_brand_updated_idx`, 370 read, 2.0 ms | same, 6.5 ms |
+| Search `renewa` (half-typed) | `tickets_brand_updated_idx`, 237 read, 1.3 ms | same, 4.1 ms |
+| Search matching nothing | `tickets_brand_updated_idx`, **50 000 read, 257 ms** | same, 124 ms |
+| Two tags, all-of | `Bitmap Index Scan on ticket_tags_brand_tag_idx`, then `Index Scan using tickets_pkey`, 22.6 ms | same, 15.5 ms |
+| Page 2 | `Index Scan Backward using tickets_brand_updated_idx`, `Index Cond: … ROW(updated_at, id) < ROW(…)`, 0.15 ms | same, 0.42 ms |
+
+"Unassigned" reads the brand-wide index rather than the assignee one: `IS NULL`
+is an index condition but not an equality, so Postgres cannot treat the
+assignee index as ordered past it, and walking the newest tickets is cheaper
+than sorting all 4 800 unassigned ones.
+
+### Search under row-level security
+
+Postgres will not use a condition as an index condition ahead of a row-level
+security policy unless the condition's operator is `LEAKPROOF`: a function that
+is not could raise an error that reveals a row the policy was about to hide.
+`@@` (`ts_match_vq`) and `<%` (`word_similarity_op`) are not leakproof (nor is
+`=` on an enum, which is why the priority and channel filters are filters too),
+so under `FORCE ROW LEVEL SECURITY` the list evaluates a search on each visible
+ticket, newest first, until it has a page. A term that matches often costs a
+few milliseconds. **A term that matches nothing reads every visible ticket**,
+and the trigram half is what makes that expensive: evaluated row by row, `<%`
+costs about 5 µs a subject against about 0.25 µs for the full-text half, so
+257 ms for an Admin at 50k tickets.
+
+That case is outside the gate, and it is reported separately rather than
+hidden (below). [ADR 0011](../decisions/0011-ticket-search-token-table.md)
+closes it with a token table compared by a leakproof `=`, under the same
+policies as every ticket child table, scheduled with M1-15 part 2. `LEAKPROOF`
+wrappers were rejected: the operators can raise, so the promise would be false.
+The two GIN indexes stay: the PRD names the tsvector one, and both serve paths
+that run as the owner.
+
+### How it is measured
+
+```bash
+pnpm --filter @helpdock/api build
+pnpm --filter @helpdock/api perf:tickets
+```
+
+`apps/api/src/testing/perf/`, run by `apps/api/vitest.perf.config.ts`:
+
+1. **Dataset** (`dataset.ts`): five brands. The measured one has 50 000
+   tickets, about 200 000 messages and 20 000 contacts, the other four 10 000
+   tickets each. The rows are written by `INSERT … SELECT generate_series(…)` as
+   the runtime role inside each brand's system transaction, so every one passes
+   the same policies and department triggers as the api's own writes, and each
+   ticket is numbered from the brand's own sequence. The shape is a desk two
+   years in: 70 % Closed, 3 % Spam, 2 % Merged, and the live queues (Open 14 %,
+   Awaiting customer 8 %, Escalated 3 %) recent; five departments at
+   45/20/15/12/8 %; twenty assignees, a quarter of the live queue unassigned;
+   0–3 tags per ticket on a power law; 0.5 % soft-deleted. Every random choice
+   is seeded, so a run is repeatable. Articles and knowledge chunks have no
+   tables until M5.
+2. **Stack**: `pgvector/pgvector:pg17` and `redis:7-alpine` in containers, and
+   **two api replicas** started from `dist/` as separate processes with
+   `NODE_ENV=production`.
+3. **Load** (`load.ts`): 50 concurrent staff sessions, closed loop, each
+   waiting 1 s between a response and its next request, spread over the two
+   replicas. Each session cycles through every scenario, once as an Admin and
+   once as an Agent confined to the two smallest departments (20 % of the
+   tickets): All tickets, My open, Unassigned, the live states of Overdue,
+   Escalated, search `refund`, search `renewa`, two tags, page 2, and opening a
+   ticket. Two minutes of warm-up, ten measured, p50/p95/p99 by nearest rank.
+4. **Worst case, alone**: a search nothing matches, one session, twenty
+   seconds, after the load. Reported, not gated.
+5. **Plans**: `EXPLAIN (ANALYZE, BUFFERS)` of every list query, built by the
+   repository's own `listTicketsStatement`, run as the runtime role inside the
+   tenant context the request would carry.
+
+| Variable | Default | |
+|---|---|---|
+| `PERF_CONCURRENCY` | 50 | staff sessions |
+| `PERF_THINK_MS` | 1000 | pause between one session's requests |
+| `PERF_WARMUP_S` / `PERF_DURATION_S` | 120 / 600 | |
+| `PERF_REPLICAS` | 2 | api processes |
+| `PERF_P95_MS` | 150 | the gate |
+| `PERF_SCALE` | 1 | multiplies the dataset; `0.1` for a smoke run |
+| `PERF_REPORT` | none | also write the results and plans as JSON |
+
+**What differs from §14**, so the numbers are read for what they are: the host
+is whatever runs the command, not a dedicated 2 vCPU / 4 GB machine; the load
+generator shares it; there is no worker and no widget traffic (the widget is
+M4); and there are no articles or chunks. On a shared or busy machine the tail
+measures the machine, so run it on an idle one.
+
+### What it measured last (2026-09-25)
+
+**The gate passes.** The full §14 run on an idle machine, with the benchmark
+and both api replicas pinned to **2 cores** (`taskset -c 0,1`) to stand in for a
+2 vCPU host (the container has 15 GB of memory, not 4): 50 sessions, 1 s think
+time, 2 min warm-up, 10 min measured, two replicas; 48.9 req/s, overall p95
+41 ms, **no errors**. The slowest gated scenario is 53 ms against the 150 ms
+gate.
+
+| Scenario | Admin p50 / p95 / p99 ms | Agent p50 / p95 / p99 ms |
+|---|---|---|
+| All tickets | 13 / 32 / 62 | 13 / 32 / 52 |
+| My open | 8 / 21 / 42 | 13 / 28 / 45 |
+| Unassigned | 15 / 31 / 51 | 16 / 33 / 60 |
+| Live states (Overdue) | 14 / 29 / 53 | 16 / 34 / 57 |
+| Escalated | 16 / 36 / 57 | 21 / 39 / 59 |
+| Search `refund` | 26 / 47 / 72 | 30 / 51 / 71 |
+| Search `renewa` | 25 / 46 / 75 | 28 / 48 / 72 |
+| Two tags, all-of | 27 / 50 / 72 | 31 / 53 / 71 |
+| Page 2 | 13 / 28 / 47 | 13 / 29 / 46 |
+| Open a ticket | 19 / 46 / 78 | 20 / 41 / 69 |
+| Search matching nothing (alone, not gated) | 241 / 284 / 304 | 141 / 186 / 207 |
+
+The zero-match search is what [ADR 0011](../decisions/0011-ticket-search-token-table.md)
+addresses.
+
+An earlier run (2026-09-24) on the same container while six other build jobs
+shared it (load average 27–64) put list p95 at 0.8–2.1 s: that measured the
+machine's queue, not the api, which is why a run belongs on an idle host.
+
+Before the index set and the brand equality, the same quieter-machine
+comparison could not be made, but the plans could: the default list read and
+sorted every visible ticket (27 ms of database time on its own, before load),
+and a first full-scale run on the same shared machine put the default list's
+p50 at 114 ms against 20 ms after the change.
+
+## Time tracking
+
+M1-12, and optional per brand (REQUIREMENTS §4.1): **Ticketing › Feedback ›
+Track time on tickets**, off by default.
+
+`ticket_time_entries` holds one row per entry: who, how long in whole seconds
+(1 to 24 h 59 m, the Log time dialog's bounds), an optional staff-only note,
+and the reply it was logged with when it came from the per-reply timer. It is a
+child of the ticket and **department-scoped** like the thread: the shared
+triggers copy the ticket's department on insert and move it with the ticket, so
+an agent who cannot read a ticket cannot read or log its time, and the RLS
+negative suite covers the table.
+
+There are three ways time gets logged:
+
+| From | How | Row |
+|---|---|---|
+| The Log time dialog (header ⋯ → "Log time…", or "Add time manually") | `POST …/time-entries` | `message_id` null, with the note |
+| The Time card's timer, **Log** | `POST …/time-entries` with what the timer counted | `message_id` null |
+| The per-reply timer | `timeSpentSeconds` on `POST …/messages`, written in the **same transaction** as the reply | `message_id` = the reply |
+
+The timer lives in the browser (`apps/admin/src/screens/tickets/use-ticket-timer.ts`):
+nothing reaches the server until a reply is sent or Log is pressed, so an
+abandoned timer costs nothing. With **Start the timer when an agent opens the
+composer** on, it starts when the caret enters the reply box; sending a reply
+or a note stops it and sends its time with the message. A timer left running
+for longer than one entry allows is capped rather than refused, because the
+reply must not fail over it. A reply's timer is dropped, never refused, while
+the brand has tracking off.
+
+Anybody who can write to the ticket may log time; an entry is deleted by
+whoever logged it, or by a Team Leader or an Admin. A Viewer reads the card and
+has none of its controls. Entries are not realtime yet: another agent's Time
+card updates on its next read.
+
+## Satisfaction surveys
+
+M1-12 (REQUIREMENTS §4.1, DOMAIN-RULES §2.2 and §4.6). **Ticketing › Feedback ›
+Ask for a rating when a ticket closes**, on by default.
+
+**One survey per close.** A close that is not spam or a merge (read off the
+status's `is_spam` through `isSpamStatus` and the ticket's `merged_into_id`,
+never off a name) runs `onClosedForCsat`, which — when the brand has CSAT on — writes
+`csat.requested { ticketId, closedAt }` to the outbox in the closing
+transaction. The worker's handler (`apps/api/src/csat/csat-events.ts`) re-reads
+the ticket and creates the row in `csat_responses` only if that close still
+stands: a ticket reopened, merged, marked as spam or deleted before the job ran
+gets none. `(ticket_id, closed_at)` is unique, so a redelivered job is a no-op,
+and a ticket reopened and closed again gets a second survey. `csat_responses`
+is department-scoped like the other children of a ticket.
+
+**The link.** `APP_URL/csat/<token>`. The token is `<ids>.<mac>`: the brand and
+survey ids, and an HMAC-SHA256 over them under a key derived from
+`APP_MASTER_KEY` with HKDF (`apps/api/src/csat/tokens.ts`). Only a SHA-256 of it
+is stored. It is:
+
+- **signed** — an altered or guessed token is refused before any query runs;
+- **bound to one ticket** — it names one survey, and the survey one ticket;
+- **single-use** — the rating is written by an `UPDATE … WHERE rated_at IS NULL
+  AND expires_at > now()`, so two submissions cannot both win; the second
+  answers `used`;
+- **expiring** — 30 days after the survey is created, it answers `expired`.
+
+A token signed under `APP_MASTER_KEY_PREVIOUS` still verifies, so a key
+rotation does not strand the surveys already out; a key older than that does
+not.
+
+**The public routes are an explicit system path.** The token names the brand, so
+the api opens a transaction scoped to exactly that brand as the system principal
+`csat:<surveyId>`, reads one survey and its ticket's reference and subject, and
+writes an `audit_log` row (`csat.viewed`, `csat.rated`) for every use of a valid
+link. Both routes share a per-address budget of 30 requests in 15 minutes
+(`CSAT_PUBLIC_RULE`), and both collapse the token to `:token` before the request
+line is logged. A spent link answers with the brand alone — never the subject.
+
+**The agent's view.** `GET /tickets/:ticketId` carries `csat` for the latest
+close: `pending` (created, not delivered), `sent` (a channel delivered it —
+M8-06), `rated` (with the rating and comment) or `expired`, and the link while
+it can still be used. The details panel draws it on a Satisfaction card with
+**Copy survey link**, because channels do not deliver it yet.
+
+**The contact card.** A contact's `stats.csat` is the share of their answered
+surveys rated 4 or 5, as a percentage, over the tickets the viewer can see; null
+when they have answered none.
+
+**The rating page** is served by the admin bundle at `/csat/<token>` but
+mounted without any of the staff app (ADR
+[0010](../decisions/0010-csat-page-in-the-admin-bundle.md)). Its language is
+`?lang=` when it names `en` or `ar`, otherwise the brand's default; it is themed
+with the brand accent when the brand has one (none do until M5/M6's themes).
 
 ## What later milestones add
 
 | Milestone | Adds |
 |---|---|
-| M1-13 | Identity rules: verified matches, automatic merge, participants (contact + CCs) |
-| M1-07 | Assignment: round-robin, skill-based, load caps, auto-unassign |
-| M1-09 | Merge and split (`merged_into_id`, `split_from_id`), and the collision indicator on `ticket:<id>` rooms |
+| M1-13 | Shipped. Identity rules, contact merge with undo ([guide](contacts.md#identity-rules-and-merging-m1-13)), and the [participants](#participants-m1-13) card in the details panel |
+| M1-09 | Shipped in branch. Merge, unmerge and split ([above](#merge-and-split)), and "is replying" on the collision indicator. Leaves `MergeParticipantsHook` for M1-13 and `onMerged` / `onUnmerged` for M3-02 |
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
-| M1-11 | Spam semantics on the seeded Spam status, and the sender block list |
+| M1-11 | Shipped in branch. `is_spam` on the Spam status, `POST`/`DELETE …/spam`, `ticket.spam`, the sender block list and its inbound gate ([Spam](#spam)) |
+| M1-12 | Shipped. Time tracking and satisfaction surveys ([above](#time-tracking)) |
+| M8-06 | Delivering the survey link with the closing message on email, widget and Telegram; sets `csat_responses.sent_at` |
 | M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
 | M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |

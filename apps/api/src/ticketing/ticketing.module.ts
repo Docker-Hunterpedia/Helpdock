@@ -1,4 +1,9 @@
+import type { Settings } from '@helpdock/config';
 import { type DynamicModule, Module } from '@nestjs/common';
+import { SETTINGS } from '../runtime/tokens.js';
+import { BlockListController } from './block-list.controller.js';
+import { BlockListRepository } from './block-list.repository.js';
+import { BlockListService } from './block-list.service.js';
 import { CustomFieldsController } from './custom-fields.controller.js';
 import { CustomFieldsRepository } from './custom-fields.repository.js';
 import { CustomFieldsService } from './custom-fields.service.js';
@@ -40,6 +45,8 @@ export class TicketingModule {
         CustomFieldsController,
         TemplatesController,
         TicketTagsController,
+        // M1-11: the Spam tab.
+        BlockListController,
       ],
       providers: [
         { provide: TagsRepository, useFactory: (): TagsRepository => new TagsRepository() },
@@ -73,11 +80,26 @@ export class TicketingModule {
           inject: [TagsService],
           useFactory: (tags: TagsService): TicketTagsService => new TicketTagsService(tags),
         },
+        // M1-11. `SETTINGS` is the global install-scope resolver, read for the
+        // calling code phone numbers are completed with and for `smtp.from`,
+        // which is the domain a brand may not block.
+        {
+          provide: BlockListRepository,
+          useFactory: (): BlockListRepository => new BlockListRepository(),
+        },
+        {
+          provide: BlockListService,
+          inject: [BlockListRepository, SETTINGS],
+          useFactory: (repository: BlockListRepository, settings: Settings): BlockListService =>
+            new BlockListService(repository, settings),
+        },
       ],
       // `TicketsModule` applies a template and validates custom values on
       // creation, so it needs these two. Exported rather than duplicated, for
       // the reason the module comment gives.
-      exports: [TemplatesService, TagsService],
+      // M1-11: `TicketSpamService` blocks a sender through the same service the
+      // Spam tab writes through.
+      exports: [TemplatesService, TagsService, BlockListService],
     };
   }
 }

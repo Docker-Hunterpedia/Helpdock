@@ -13,6 +13,10 @@ import {
   contactIdentityParamSchema,
   contactIdParamSchema,
   contactListSchema,
+  contactMergeParamSchema,
+  contactMergePreviewQuerySchema,
+  contactMergePreviewSchema,
+  contactMergeRequestSchema,
   contactNoteRequestSchema,
   contactSearchQuerySchema,
   contactTimelineSchema,
@@ -52,3 +56,9 @@ export class AccountSearchQueryDto extends createZodDto(accountSearchQuerySchema
 export class AccountCreateRequestDto extends createZodDto(accountCreateRequestSchema) {}
 export class AccountUpdateRequestDto extends createZodDto(accountUpdateRequestSchema) {}
 export class AccountIdParamDto extends createZodDto(accountIdParamSchema) {}
+
+// M1-13: merging two contacts, and the undo.
+export class ContactMergeRequestDto extends createZodDto(contactMergeRequestSchema) {}
+export class ContactMergeParamDto extends createZodDto(contactMergeParamSchema) {}
+export class ContactMergePreviewQueryDto extends createZodDto(contactMergePreviewQuerySchema) {}
+export class ContactMergePreviewDto extends createZodDto(contactMergePreviewSchema) {}

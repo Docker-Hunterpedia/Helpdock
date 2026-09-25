@@ -25,6 +25,7 @@ import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values
 import { ERASED_CONTACT_NAME, erasedIdentityValue, erasureSummary } from './anonymise.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
+import type { ContactMergesRepository } from './contact-merges.repository.js';
 import { byContact, duplicateView, identityView, noteView, summaryView } from './contact-view.js';
 import type { ContactsRepository } from './contacts.repository.js';
 import {
@@ -33,8 +34,14 @@ import {
   insertContact,
   insertIdentity,
   requireNormalised,
+  suggestSimilarNames,
 } from './identity.js';
-import type { ContactTimelineProvider, TicketStatsProvider } from './providers.js';
+import {
+  type ContactErasureProvider,
+  type ContactTimelineProvider,
+  NoContactErasureProvider,
+  type TicketStatsProvider,
+} from './providers.js';
 
 /**
  * Contacts and accounts for one brand (M1-04).
@@ -64,20 +71,35 @@ export interface ContactContext {
 
 export interface ContactsServiceOptions {
   readonly repository: ContactsRepository;
+  /** M1-13: the merges into a contact that can still be undone, for its detail. */
+  readonly merges: ContactMergesRepository;
   readonly settings: Settings;
   readonly stats: TicketStatsProvider;
   readonly timeline: ContactTimelineProvider;
+  /** What an erasure removes from tickets. Defaults to nothing, for a brand with none. */
+  readonly erasure?: ContactErasureProvider;
 }
 
 export class ContactsService {
   readonly #repository: ContactsRepository;
+  readonly #merges: ContactMergesRepository;
   readonly #settings: Settings;
   readonly #stats: TicketStatsProvider;
   readonly #timeline: ContactTimelineProvider;
+  readonly #erasure: ContactErasureProvider;
 
-  constructor({ repository, settings, stats, timeline }: ContactsServiceOptions) {
+  constructor({
+    repository,
+    merges,
+    settings,
+    stats,
+    timeline,
+    erasure = new NoContactErasureProvider(),
+  }: ContactsServiceOptions) {
     this.#repository = repository;
+    this.#merges = merges;
     this.#settings = settings;
+    this.#erasure = erasure;
     this.#stats = stats;
     this.#timeline = timeline;
   }
@@ -123,6 +145,8 @@ export class ContactsService {
       identities: identities.map(identityView),
       notes: await this.#notes(tx, contactId),
       duplicates: await this.#duplicates(tx, contact),
+      mergedIntoId: contact.mergedIntoId,
+      merges: await this.#merges.activeInto(tx, contactId),
     };
   }
 
@@ -163,6 +187,7 @@ export class ContactsService {
       // contact with it.
       await this.#attach(context, contact, claim);
     }
+    await suggestSimilarNames(tx, brandId, contact);
 
     await writeContactAudit(tx, {
       brandId,
@@ -208,7 +233,10 @@ export class ContactsService {
       ...(custom === undefined ? {} : { custom }),
     };
 
-    await this.#repository.updateContact(tx, contactId, changes);
+    const updated = await this.#repository.updateContact(tx, contactId, changes);
+    if (updated !== undefined && request.accountId !== undefined) {
+      await suggestSimilarNames(tx, brandId, updated);
+    }
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
@@ -369,6 +397,11 @@ export class ContactsService {
       throw new ContactFailure('anonymised');
     }
 
+    // The files they sent and the channel ids of what they wrote (M1-14). Ticket
+    // bodies stay: §11 keeps them "unless the brand's ticket retention says
+    // otherwise", and that is the nightly purge's decision, not this one's.
+    const traces = await this.#erasure.eraseTraces(tx, brandId, contactId);
+
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
@@ -382,6 +415,8 @@ export class ContactsService {
           hadAccount: contact.accountId !== null,
           hadExternalId: contact.externalId !== null,
         }),
+        attachmentCount: traces.attachments,
+        messageCount: traces.messages,
       },
     });
 
@@ -455,9 +490,17 @@ export class ContactsService {
     return contact;
   }
 
+  /**
+   * An erased contact is immutable, and so — from M1-13 — is one merged into
+   * another: its identifiers, notes and tickets now live on the survivor, and
+   * an edit here would land on a row nobody can find.
+   */
   #refuseIfErased(contact: ContactRow): void {
     if (contact.anonymisedAt !== null) {
       throw new ContactFailure('anonymised');
+    }
+    if (contact.mergedIntoId !== null) {
+      throw new ContactFailure('merged');
     }
   }
 

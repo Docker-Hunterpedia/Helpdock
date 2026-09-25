@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { MOCK_EMAIL, MOCK_USER } from '../src/auth/mock-api.js';
+import { isolate } from '../src/screens/tickets/format.js';
 import {
   MOCK_ENROLMENT_CODE,
   MOCK_EXPIRED_INVITE_TOKEN,
@@ -283,6 +284,28 @@ test.describe('accessibility', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('the merge dialog and the banner it leaves have no violations', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openContact(page, locale, 'Mona Khalil');
+    await page
+      .getByRole('button', { name: t('contacts:duplicates.mergeWith', { name: 'M. Khalil' }) })
+      .click();
+    const dialog = page.getByRole('dialog', { name: t('contacts:merge.title') });
+    await dialog.getByText(t('contacts:merge.keep')).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await dialog.getByRole('button', { name: t('contacts:merge.submit') }).click();
+    await page
+      .getByRole('button', { name: t('contacts:merge.bannerUndo', { time: '' }).trim() })
+      .waitFor();
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('the create form has no violations', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
 
@@ -359,6 +382,46 @@ test.describe('accessibility', () => {
     await page.getByRole('button', { name: t('tickets:newTicket.action') }).click();
     await page.getByRole('dialog').waitFor();
 
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('merge and split have no violations: menu, both dialogs and the merged thread', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    await page.getByRole('button', { name: t('tickets:header.more') }).click();
+    await page.getByRole('menu').waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('menuitem', { name: t('tickets:actions.split') }).click();
+    const split = page.getByRole('dialog', { name: t('tickets:split.title') });
+    await split.getByRole('checkbox').first().check();
+    expect(await violations(page)).toEqual([]);
+    await split.getByRole('button', { name: t('common:actions.cancel') }).click();
+
+    await page.getByRole('button', { name: t('tickets:header.more') }).click();
+    await page.getByRole('menuitem', { name: t('tickets:actions.merge') }).click();
+    const merge = page.getByRole('dialog', { name: t('tickets:merge.title') });
+    await merge.getByRole('searchbox').fill('VAT');
+    await merge.getByRole('radio').first().check();
+    expect(await violations(page)).toEqual([]);
+
+    await merge
+      .getByRole('button', { name: t('tickets:merge.submit', { reference: 'HD-1035' }) })
+      .click();
+    await page.getByRole('button', { name: t('tickets:merged.unmerge', { hours: 24 }) }).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    // The secondary: its banner above the thread, and no composer.
+    await page.goBack();
+    await page
+      .getByRole('link', { name: t('tickets:merged.open', { reference: isolate('HD-1035') }) })
+      .waitFor();
     expect(await violations(page)).toEqual([]);
   });
 

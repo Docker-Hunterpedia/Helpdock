@@ -2,11 +2,15 @@ import type { ContactSummary, Department, StaffMember, TicketStatus } from '@hel
 import { useQuery } from '@tanstack/react-query';
 import { useContactsApi, useStaffApi, useTicketsApi } from '../../auth/session.tsx';
 import { ticketKeys } from '../../tickets/keys.js';
-import { contactAddressesOf, contactNamesOf } from './directory.js';
 
 /**
  * The reads every part of the workspace shares: the brand's statuses, its
- * departments, its staff and enough of its contacts to put names on rows.
+ * departments and its staff.
+ *
+ * Contacts are not among them. A list row's contact name arrives embedded in
+ * the ticket (M1-15), and the open ticket reads its one contact in full; the
+ * first page of the contact list this hook used to read named only the rows
+ * whose contact happened to be on it.
  *
  * They are one hook because they are one cache: the list, the thread, the
  * details panel, the filter popover and the new-ticket dialog all name the same
@@ -24,15 +28,11 @@ export interface WorkspaceData {
   readonly statuses: readonly TicketStatus[];
   readonly departments: readonly Department[];
   readonly staff: readonly StaffMember[];
-  readonly contacts: readonly ContactSummary[];
-  readonly contactNames: ReadonlyMap<string, string>;
-  readonly contactAddresses: ReadonlyMap<string, string>;
 }
 
 export function useWorkspaceData(brandId: string): WorkspaceData {
   const tickets = useTicketsApi();
   const staffApi = useStaffApi();
-  const contactsApi = useContactsApi();
 
   const statuses = useQuery({
     queryKey: ticketKeys.statuses(brandId),
@@ -49,7 +49,8 @@ export function useWorkspaceData(brandId: string): WorkspaceData {
   /**
    * `GET /staff` declares `staff:manage`, which an Agent does not hold, so this
    * read is allowed to fail: `directory.ts` names who it can and shortens the
-   * rest. M1-07 is where a read of assignable agents belongs.
+   * rest. The assignee picker does not depend on it; it reads M1-07's
+   * `assignable`, which `ticket:write` reaches (`ticket-view.tsx`).
    */
   const staff = useQuery({
     queryKey: ['staff', brandId, ''],
@@ -58,21 +59,10 @@ export function useWorkspaceData(brandId: string): WorkspaceData {
     retry: false,
   });
 
-  const contacts = useQuery({
-    queryKey: ['contacts', brandId, {}],
-    queryFn: () => contactsApi.listContacts(brandId),
-    staleTime: DIRECTORY_STALE_MS,
-  });
-
-  const rows = contacts.data?.contacts ?? [];
-
   return {
     statuses: statuses.data?.statuses ?? [],
     departments: departments.data?.departments ?? [],
     staff: staff.data?.staff ?? [],
-    contacts: rows,
-    contactNames: contactNamesOf(rows),
-    contactAddresses: contactAddressesOf(rows),
   };
 }
 

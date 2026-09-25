@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpTransport } from '../auth/http-transport.js';
+import { TicketLifecycleError } from './api.js';
 import { NOW, testMessage, testStatus, testTicket } from './fixtures.js';
 import { HttpTicketsApi, listQueryString } from './http-api.js';
 
@@ -156,6 +157,76 @@ describe('HttpTicketsApi', () => {
     await expect(api.list(BRAND)).rejects.toThrow();
   });
 
+  it('merges this ticket into the one named, and parses both halves (M1-09)', async () => {
+    const primaryTicketId = '0192c3f0-1a2b-7c3d-8e4f-000000001035';
+    fetchMock.mockResolvedValue(
+      json({
+        primary: testTicket({ id: primaryTicketId }),
+        secondary: testTicket({ mergedIntoId: primaryTicketId }),
+      }),
+    );
+
+    const result = await api.merge(BRAND, TICKET, { primaryTicketId });
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/merge`);
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ primaryTicketId });
+    expect(result.secondary.mergedIntoId).toBe(primaryTicketId);
+  });
+
+  it('unmerges with an empty post', async () => {
+    fetchMock.mockResolvedValue(json({ primary: testTicket(), secondary: testTicket() }));
+
+    await api.unmerge(BRAND, TICKET);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/unmerge`);
+    expect(lastInit().method).toBe('POST');
+  });
+
+  it('splits and answers with the new ticket', async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          ticket: testTicket({ number: 1043, splitFromId: TICKET }),
+          messages: { messages: [], nextAfter: null },
+          activity: [],
+          related: [{ id: TICKET, number: 1042, prefix: 'HD', subject: 'Refund' }],
+        },
+        201,
+      ),
+    );
+
+    const created = await api.split(BRAND, TICKET, {
+      messageIds: [TICKET],
+      subject: 'VAT',
+      departmentId: BRAND,
+    });
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/split`);
+    expect(created.ticket.splitFromId).toBe(TICKET);
+    expect(created.related?.[0]?.number).toBe(1042);
+  });
+
+  it('turns a refusal the rules make into a reason the screen can read', async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          error: {
+            code: 'conflict',
+            message: 'no',
+            requestId: 'r',
+            lifecycle: { reason: 'merge-window-closed' },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(api.unmerge(BRAND, TICKET)).rejects.toEqual(
+      new TicketLifecycleError('merge-window-closed'),
+    );
+  });
+
   it('escapes the ids it puts in a path', async () => {
     fetchMock.mockResolvedValue(json({ activity: [] }));
 
@@ -165,8 +236,148 @@ describe('HttpTicketsApi', () => {
   });
 });
 
+describe('spam (M1-11)', () => {
+  it('reads what the dialog will offer', async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        sender: { kind: 'email', value: 'spam@promo-deals.biz' },
+        offered: true,
+        blockable: true,
+        blocked: false,
+      }),
+    );
+
+    const answer = await api.spamSender(BRAND, TICKET);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/spam-sender`);
+    expect(answer.sender?.value).toBe('spam@promo-deals.biz');
+  });
+
+  it('marks as spam with the checkbox’s answer, and reads the ticket back', async () => {
+    fetchMock.mockResolvedValue(json(testTicket({ status: testStatus({ isSpam: true }) }), 201));
+
+    const ticket = await api.markSpam(BRAND, TICKET, { blockSender: true });
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/spam`);
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ blockSender: true });
+    expect(ticket.status.isSpam).toBe(true);
+  });
+
+  it('takes it back out with a DELETE', async () => {
+    fetchMock.mockResolvedValue(json(testTicket()));
+
+    await api.unmarkSpam(BRAND, TICKET);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/spam`);
+    expect(lastInit().method).toBe('DELETE');
+  });
+});
+
+describe('HttpTicketsApi.assignable (M1-07)', () => {
+  it('reads who the picker may offer for a department', async () => {
+    const DEPARTMENT = '0192c3f0-1a2b-7c3d-8e4f-0000000000d1';
+    fetchMock.mockResolvedValue(
+      json({
+        departmentId: DEPARTMENT,
+        loadCap: 8,
+        agents: [
+          {
+            userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000b',
+            name: 'Omar Nasser',
+            presence: 'online',
+            openCount: 8,
+          },
+        ],
+      }),
+    );
+
+    const list = await api.assignable(BRAND, DEPARTMENT);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}/assignable`);
+    expect(list.agents[0]?.openCount).toBe(8);
+  });
+});
+
+describe('the Time card (M1-12)', () => {
+  const ENTRY = '0192c3f0-1a2b-7c3d-8e4f-0000000000e1';
+  const list = {
+    entries: [
+      {
+        id: ENTRY,
+        ticketId: TICKET,
+        userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000a',
+        userName: 'Lina Haddad',
+        seconds: 1800,
+        note: null,
+        messageId: null,
+        createdAt: new Date(NOW).toISOString(),
+      },
+    ],
+    totalSeconds: 1800,
+  };
+
+  it('reads a ticket’s entries', async () => {
+    fetchMock.mockResolvedValue(json(list));
+
+    await expect(api.timeEntries(BRAND, TICKET)).resolves.toEqual(list);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/time-entries`);
+  });
+
+  it('posts a manual entry', async () => {
+    fetchMock.mockResolvedValue(json(list));
+
+    await api.logTime(BRAND, TICKET, { seconds: 1800, note: 'Called' });
+
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ seconds: 1800, note: 'Called' });
+  });
+
+  it('deletes one entry by id', async () => {
+    fetchMock.mockResolvedValue(json({ entries: [], totalSeconds: 0 }));
+
+    await api.deleteTimeEntry(BRAND, TICKET, ENTRY);
+
+    expect(lastInit().method).toBe('DELETE');
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/time-entries/${ENTRY}`);
+  });
+});
+
 describe('the fixtures these tests are built on', () => {
   it('anchor every date to one instant, so nothing depends on the clock', () => {
     expect(Date.parse(testTicket().updatedAt)).toBeLessThan(NOW);
+  });
+});
+
+describe('HttpTicketsApi participants (M1-13)', () => {
+  const list = {
+    contact: { id: TICKET, name: 'Mona Khalil' },
+    ccs: [
+      {
+        id: '0192c3f0-1a2b-7c3d-8e4f-0000000cc001',
+        contactId: '0192c3f0-1a2b-7c3d-8e4f-0000000cc0c1',
+        name: 'finance@acme.de',
+        address: 'finance@acme.de',
+        source: 'agent',
+      },
+    ],
+    staff: [],
+  };
+
+  it('reads, adds and removes a CC on the participants path', async () => {
+    fetchMock.mockResolvedValue(json(list));
+
+    await expect(api.participants(BRAND, TICKET)).resolves.toEqual(list);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/participants`);
+
+    fetchMock.mockResolvedValue(json(list));
+    await api.addCc(BRAND, TICKET, { email: 'finance@acme.de' });
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ email: 'finance@acme.de' });
+
+    fetchMock.mockResolvedValue(json(list));
+    await api.removeCc(BRAND, TICKET, 'p/1');
+    expect(lastInit().method).toBe('DELETE');
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/participants/p%2F1`);
   });
 });

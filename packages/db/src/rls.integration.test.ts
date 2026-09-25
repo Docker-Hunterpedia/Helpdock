@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type Db, type DbHandle, type DbTransaction } from './client.js';
 import { runMigrations } from './migrate.js';
@@ -9,27 +9,35 @@ import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
   accounts,
+  assignmentAgents,
+  assignmentSkills,
   attachments,
   auditLog,
+  blockedSenders,
   brandDomains,
   brands,
   contactDuplicateSuggestions,
   contactIdentities,
+  contactMerges,
   contactNotes,
   contacts,
+  csatResponses,
   customFieldDefs,
   departments,
   outbox,
+  retentionSettings,
   settings,
   tags,
   teamMembers,
   teams,
   ticketActivity,
   ticketMessages,
+  ticketParticipants,
   ticketStatuses,
   tickets,
   ticketTags,
   ticketTemplates,
+  ticketTimeEntries,
   userBrandRoles,
   users,
 } from './schema/index.js';
@@ -211,6 +219,11 @@ const fixtures = [
       tx.insert(outbox).values({ brandId, event: 'test.seeded', payload: { seeded: true } }),
   },
   {
+    name: 'retention_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(retentionSettings).values({ brandId, closedTicketDays: 365 }),
+  },
+  {
     name: 'ticket_statuses',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(ticketStatuses).values({
@@ -248,6 +261,33 @@ const fixtures = [
         name: 'Refund request',
         subject: 'Refund for {{contact.name}}',
         bodyText: 'We have started your refund.',
+      }),
+  },
+  {
+    name: 'blocked_senders',
+    insert: (tx: DbTransaction, brandId: string) =>
+      // The same sender in both brands: a block is the brand's own decision
+      // and says nothing about the brand next door.
+      tx.insert(blockedSenders).values({ brandId, kind: 'domain', value: 'promo-deals.biz' }),
+  },
+  {
+    name: 'assignment_agents',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(assignmentAgents).values({
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        inRotation: true,
+      }),
+  },
+  {
+    name: 'assignment_skills',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(assignmentSkills).values({
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        tagId: tagId[brandId] ?? '',
       }),
   },
   {
@@ -333,6 +373,59 @@ const fixtures = [
         ticketId: ticketId[brandId] ?? '',
         tagId: tagId[brandId] ?? '',
         departmentId: departmentId[brandId] ?? '',
+      }),
+  },
+  {
+    name: 'contact_merges',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(contactMerges).values({
+        brandId,
+        survivorId: contactId(brandId),
+        mergedId: otherContactId(brandId),
+        actorId: userId,
+        undoUntil: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }),
+  },
+  {
+    name: 'ticket_participants',
+    // The fifth child of a ticket (M1-13), refused by the same trigger.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketParticipants).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        contactId: otherContactId(brandId),
+        departmentId: departmentId[brandId] ?? '',
+        address: 'finance@example.com',
+        source: 'agent',
+      }),
+  },
+  {
+    name: 'ticket_time_entries',
+    // M1-12's two children of a ticket, refused by the same trigger for the
+    // same reason as the four above.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketTimeEntries).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        userId,
+        seconds: 1800,
+      }),
+  },
+  {
+    name: 'csat_responses',
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(csatResponses).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        closedAt: new Date(),
+        // Unique across the install, so each brand's fixture needs its own.
+        tokenHash: `seeded-${brandId}-${String(nextNumber())}`,
+        expiresAt: new Date(Date.now() + 86_400_000),
       }),
   },
 ] as const;
@@ -542,6 +635,29 @@ describe.skipIf(!hasDocker)('row-level security', () => {
     );
 
     expect(setting?.value ?? '').toBe('');
+  });
+
+  it('does not let the contact merge function reach another brand', async () => {
+    // `helpdock_contact_reassign_tickets` lifts the department predicate for
+    // one call (M1-13) and must leave the brand predicate standing: named
+    // from brand A's transaction, brand B's ticket does not move.
+    await withSystem(db, brandB, (tx) =>
+      tx
+        .update(tickets)
+        .set({ contactId: contactId(brandB) })
+        .where(eq(tickets.id, ticketId[brandB] ?? '')),
+    );
+
+    const moved = await withSystem(db, brandA, async (tx) => {
+      const [row] = await tx.execute<{ moved: string[] }>(
+        sql`SELECT helpdock_contact_reassign_tickets(
+              ${brandB}::uuid, ${contactId(brandB)}::uuid, ${otherContactId(brandB)}::uuid
+            ) AS moved`,
+      );
+      return row?.moved ?? [];
+    });
+
+    expect(moved).toEqual([]);
   });
 
   it('does not let the runtime role turn row security off', async () => {

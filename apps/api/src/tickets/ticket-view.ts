@@ -9,6 +9,7 @@ import type {
   Tag,
   Ticket,
   TicketActivityEntry,
+  TicketContact,
   TicketMessage,
   TicketStatus,
 } from '@helpdock/schemas';
@@ -34,6 +35,21 @@ import { toAttachment } from '../media/attachment-view.js';
  * will decide separately what it exposes.
  */
 
+/**
+ * The contact a ticket names, from a page's `id → name` lookup. `null` when it
+ * names none, or one the lookup did not return — which row-level security
+ * makes "not in this brand", and which a row should draw as nobody rather than
+ * as a guess.
+ */
+export const ticketContactOf = (
+  contactId: string | null,
+  names: ReadonlyMap<string, string>,
+): TicketContact | null => {
+  const name = contactId === null ? undefined : names.get(contactId);
+
+  return contactId === null || name === undefined ? null : { id: contactId, name };
+};
+
 export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
   id: row.id,
   name: row.name,
@@ -44,6 +60,7 @@ export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
   isDefault: row.isDefault,
   isSystem: row.isSystem,
   excludedFromReports: row.excludedFromReports,
+  isSpam: row.isSpam,
   sortOrder: row.sortOrder,
   color: row.color,
 });
@@ -53,11 +70,16 @@ export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
  * rows reads them once for the whole page (`ticketing/ticket-tags.ts`). A
  * caller with none to hand passes nothing and the ticket carries an empty list,
  * which is what a ticket with no tags has.
+ *
+ * M1-15: `contact` likewise, and for the same reason. `undefined` leaves the
+ * field off — the response did not resolve it, or the caller may not read
+ * contacts — which is different from `null`, "this ticket names nobody".
  */
 export const toTicket = (
   ticket: TicketRow,
   status: TicketStatusRow,
   tags: readonly Tag[] = [],
+  contact?: TicketContact | null,
 ): Ticket => ({
   id: ticket.id,
   number: ticket.number,
@@ -79,6 +101,7 @@ export const toTicket = (
   closedAt: ticket.closedAt?.toISOString() ?? null,
   custom: ticket.custom,
   tags: [...tags],
+  ...(contact === undefined ? {} : { contact }),
   createdAt: ticket.createdAt.toISOString(),
   updatedAt: ticket.updatedAt.toISOString(),
 });

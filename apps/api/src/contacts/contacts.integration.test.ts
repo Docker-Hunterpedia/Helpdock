@@ -310,25 +310,26 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
   });
 
   describe('the identity seam', () => {
-    it('matches an existing contact on a verified identifier', async () => {
-      const existing = await createContact({
-        name: 'Verified Match',
-        identities: [{ kind: 'email', value: 'verified-match@example.com' }],
-      });
-
-      const result = await withSystem(runtime.db, seeded.brandId, (tx) =>
+    it('matches an existing contact when both sides of the match are verified', async () => {
+      const first = await withSystem(runtime.db, seeded.brandId, (tx) =>
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'email',
-          value: 'Verified-Match@example.com',
-          verified: true,
+          value: 'verified-match@example.com',
           source: 'email.inbound',
         }),
       );
 
-      expect(result.created).toBe(false);
-      expect(result.contact.id).toBe(existing.id);
-      // An address that was typed and is now proven is promoted in place.
-      expect(result.identity?.verified).toBe(true);
+      const second = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        findOrCreateContactByIdentity(tx, seeded.brandId, {
+          kind: 'email',
+          value: 'Verified-Match@example.com',
+          source: 'email.inbound',
+        }),
+      );
+
+      expect(second.created).toBe(false);
+      expect(second.contact.id).toBe(first.contact.id);
+      expect(second.identity?.verified).toBe(true);
     });
 
     it('starts a new contact for an unverified identifier somebody else holds', async () => {
@@ -341,7 +342,6 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'email',
           value: 'contested@example.com',
-          verified: false,
           source: 'widget.form',
           // Typed into a pre-chat form: a hint, not proof (DOMAIN-RULES §4.4).
         }),
@@ -369,7 +369,6 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'email',
           value: 'twice@example.com',
-          verified: false,
           source: 'widget.form',
         }),
       );
@@ -377,7 +376,6 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'email',
           value: 'twice@example.com',
-          verified: false,
           source: 'widget.form',
         }),
       );
@@ -396,7 +394,6 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'email',
           value: 'dismiss@example.com',
-          verified: false,
           source: 'widget.form',
         }),
       );
@@ -417,7 +414,6 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'email',
           value: 'dismiss@example.com',
-          verified: false,
           source: 'widget.form',
         }),
       );
@@ -431,7 +427,6 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'telegram',
           value: '884413201',
-          verified: true,
           source: 'telegram.bot',
         }),
       );
@@ -667,7 +662,6 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         findOrCreateContactByIdentity(tx, seeded.brandId, {
           kind: 'email',
           value: 'twin@example.com',
-          verified: false,
           source: 'widget.form',
         }),
       );

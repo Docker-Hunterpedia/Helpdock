@@ -282,7 +282,6 @@ export function TicketsPage(): ReactNode {
     <TicketList
       heading={t(view === null ? 'tickets:views.all' : `tickets:views.${view.key}`)}
       tickets={tickets}
-      contactNames={directory.contactNames}
       selectedId={ticketId}
       now={now}
       search={search}
@@ -373,6 +372,9 @@ export function TicketsPage(): ReactNode {
             onDetailsOpenChange={setDetailsOpen}
             onGoToList={() => {
               void navigate({ pathname: ROUTES.tickets, search: linkSearch });
+            }}
+            onOpenTicket={(next) => {
+              void navigate({ pathname: ticketRoute(next), search: linkSearch });
             }}
           />
         )}

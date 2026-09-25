@@ -22,6 +22,7 @@ import { getTx, requireRequestContext } from '../../context/request-context.js';
 import { activityActorFor } from '../ticket-activity.js';
 import {
   BrandSettingsDto,
+  FeedbackSettingsUpdateRequestDto,
   ReplyBehaviourUpdateRequestDto,
   TicketingBrandParamDto,
   TicketStatusCreateRequestDto,
@@ -153,6 +154,22 @@ export class TicketingSettingsController {
     body: ReplyBehaviourUpdateRequestDto,
   ): Promise<BrandSettings> {
     return this.#settings.updateReplyBehaviour(this.#context(), body);
+  }
+
+  /**
+   * The Feedback tab (M1-12): CSAT, time tracking and the composer timer.
+   * `ticketing:manage` for the reason the reply behaviour is: a Team Leader
+   * shapes how their desk works, and the whole-brand `PATCH` is Admin-only.
+   */
+  @Patch('ticketing/feedback')
+  @Requires('ticketing:manage')
+  @ZodSerializerDto(BrandSettingsDto)
+  feedback(
+    @Param(new ZodValidationPipe(TicketingBrandParamDto)) _params: TicketingBrandParamDto,
+    @Body(new ZodValidationPipe(FeedbackSettingsUpdateRequestDto))
+    body: FeedbackSettingsUpdateRequestDto,
+  ): Promise<BrandSettings> {
+    return this.#settings.updateFeedback(this.#context(), body);
   }
 
   /**

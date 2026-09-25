@@ -51,6 +51,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'settings', departmentScoped: false },
   { name: 'audit_log', departmentScoped: false },
   { name: 'outbox', departmentScoped: false },
+  // A brand's retention windows (M1-14): configuration, read by the Admin's
+  // form and by the brand's own nightly job, never by a department.
+  { name: 'retention_settings', departmentScoped: false },
   // A brand's status list is not a ticket: an Agent has to read the name of the
   // status a ticket in their own department is in, and the list is the same
   // list for every department.
@@ -65,6 +68,14 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // is filed — not who may read it. The picker on the create screen shows every
   // template the brand has.
   { name: 'ticket_templates', departmentScoped: false },
+  // M1-11. A sender is blocked from the brand, not from a queue: the inbound
+  // gate runs before a ticket, and so before a department, exists.
+  { name: 'blocked_senders', departmentScoped: false },
+  // M1-07. A department's rotation and its agents' skills are configuration,
+  // like `teams`: which department a Team Leader may edit is a service rule
+  // (`brands/department-scope.ts`), not a ticket's department scope.
+  { name: 'assignment_agents', departmentScoped: false },
+  { name: 'assignment_skills', departmentScoped: false },
   { name: 'tickets', departmentScoped: true },
   { name: 'ticket_messages', departmentScoped: true },
   { name: 'ticket_activity', departmentScoped: true },
@@ -77,6 +88,15 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // tables; `department_id` is denormalised from the parent by the same trigger
   // `ticket_messages` uses.
   { name: 'ticket_tags', departmentScoped: true },
+  // M1-13. A merge record is about two contacts, and contacts are brand-scoped
+  // (DOMAIN-RULES §1.2); a ticket's CCs are a child of the ticket and follow
+  // its department like `ticket_tags`.
+  { name: 'contact_merges', departmentScoped: false },
+  { name: 'ticket_participants', departmentScoped: true },
+  // M1-12. Both hang off a ticket and carry its department by the same
+  // triggers; DOMAIN-RULES §1.3 names `csat_responses` among the six.
+  { name: 'ticket_time_entries', departmentScoped: true },
+  { name: 'csat_responses', departmentScoped: true },
 ];
 
 /**

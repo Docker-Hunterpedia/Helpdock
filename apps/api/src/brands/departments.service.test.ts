@@ -32,6 +32,11 @@ const department = (id: string, name: string, sortOrder: number): Department => 
   nameAr: null,
   defaultTeamId: null,
   sortOrder,
+  assignmentMode: 'manual',
+  loadCap: null,
+  autoUnassignOffline: false,
+  autoUnassignAfterMinutes: 15,
+  onUnassign: 'leave_unassigned',
   createdAt: new Date(),
   updatedAt: new Date(),
 });

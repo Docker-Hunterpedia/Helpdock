@@ -1,4 +1,4 @@
-import { ticketStatuses, tickets, ticketTags } from '@helpdock/db';
+import { contacts, ticketStatuses, tickets, ticketTags } from '@helpdock/db';
 import type { TicketListQuery, TicketSort, TicketSortDirection } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
@@ -7,11 +7,13 @@ import { decodeTicketCursor, encodeTicketCursor, type TicketCursor } from './cur
 /**
  * The ticket list's `WHERE` and `ORDER BY`, built from the parsed query.
  *
- * Nothing here narrows by brand or by department. That is row-level security's
- * job and it is not repeated: a filter that also enforced isolation would be a
- * second place for isolation to be wrong, and the one that is easiest to forget
- * (DOMAIN-RULES §1.3). What this file decides is only what the *reader asked
- * for* within what they may already see.
+ * Nothing here *isolates* by brand or by department. That is row-level
+ * security's job and it is not repeated: a filter that also enforced isolation
+ * would be a second place for isolation to be wrong, and the one that is
+ * easiest to forget (DOMAIN-RULES §1.3). What this file decides is only what
+ * the *reader asked for* within what they may already see — plus the one
+ * `brand_id = …` that {@link ticketFilters} explains, which is there for the
+ * planner and would change nothing about which rows come back if removed.
  *
  * Every value reaches SQL as a bound parameter. The search term in particular
  * goes to `websearch_to_tsquery`, which parses a user's words and never raises
@@ -83,8 +85,49 @@ const tagFilter = (tagIds: readonly string[]): SQL => {
  * words inside the subject, which is the question being asked. The query goes
  * on the left; the operator is not symmetric.
  */
-const searchFilter = (term: string): SQL =>
-  sql`(${tickets.search} @@ websearch_to_tsquery('english', ${term}) OR ${term} <% ${tickets.subject})`;
+const searchFilter = (term: string): SQL => {
+  const clauses = [
+    sql`${tickets.search} @@ websearch_to_tsquery('english', ${term})`,
+    sql`${term} <% ${tickets.subject}`,
+    // M1-09: the merge dialog searches "by reference, subject or contact". The
+    // contact half reads `contacts`, which is brand-scoped, so it can only
+    // narrow what the reader already sees.
+    sql`${tickets.contactId} IN (SELECT ${contacts.id} FROM ${contacts} WHERE ${contacts.name} ILIKE ${`%${escapeLike(term)}%`})`,
+  ];
+
+  const number = referenceNumber(term);
+  if (number !== null) {
+    clauses.push(sql`${tickets.number} = ${number}`);
+  }
+
+  return sql`(${sql.join(clauses, sql` OR `)})`;
+};
+
+/**
+ * The number in a ticket reference as an agent types one — `HD-1042`,
+ * `hd-1042`, `#1042` or `1042` — or `null` when the term is not one. The
+ * prefix is not compared: a brand has one sequence, so the number alone is the
+ * ticket, and a prefix that was renamed since is still the same ticket.
+ */
+// A string rather than a regular-expression literal: `pnpm check:routes` scans
+// this file with the compiler's scanner, which reads a bare `/` as division.
+// biome-ignore lint/complexity/useRegexLiterals: a literal stalls that scanner, as above.
+const REFERENCE = new RegExp('^(?:[A-Za-z][A-Za-z0-9]{0,9}-|#)?(\\d{1,15})$');
+
+export const referenceNumber = (term: string): number | null => {
+  const match = REFERENCE.exec(term.trim());
+  if (match?.[1] === undefined) {
+    return null;
+  }
+
+  const value = Number(match[1]);
+
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+};
+
+/** `%` and `_` are wildcards to ILIKE; a name that contains one means the character. */
+const escapeLike = (term: string): string =>
+  term.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
 
 /**
  * The keyset predicate: "strictly after the cursor row in this ordering". A row
@@ -105,21 +148,33 @@ const keysetFilter = (cursor: TicketCursor): SQL => {
 };
 
 export interface TicketFilterInput extends Pick<TicketListQuery, 'sort' | 'direction'> {
+  /** The brand in the path, which the guard has already matched to the transaction. */
+  readonly brandId: string;
   readonly filters: Omit<TicketListQuery, 'sort' | 'direction' | 'cursor' | 'limit'>;
   readonly cursor: string | undefined;
 }
 
 /** Every condition of one list read, or `undefined` when the reader asked for none. */
 export const ticketFilters = ({
+  brandId,
   filters,
   sort,
   direction,
   cursor,
 }: TicketFilterInput): SQL | undefined => {
-  // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views". It is
-  // first and unconditional rather than a filter the caller may ask for,
-  // because "all views" includes the ones added after this line was written.
-  const clauses: (SQL | undefined)[] = [isNull(tickets.deletedAt)];
+  const clauses: (SQL | undefined)[] = [
+    // Not isolation — the policy's `brand_id = ANY(app.brand_ids)` already
+    // decides that, and this cannot widen it. It is what lets the planner read
+    // `tickets_brand_updated_idx` *in order* and stop after one page: against
+    // an array it cannot know that one brand is involved, so it has to fetch
+    // every visible ticket and sort them, which at 50k tickets is the whole
+    // latency budget (M1-15, docs/guides/tickets.md "Performance").
+    eq(tickets.brandId, brandId),
+    // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views". It
+    // is unconditional rather than a filter the caller may ask for, because
+    // "all views" includes the ones added after this line was written.
+    isNull(tickets.deletedAt),
+  ];
 
   if (filters.statusId !== undefined && filters.statusId.length > 0) {
     clauses.push(inArray(tickets.statusId, [...filters.statusId]));
@@ -154,9 +209,7 @@ export const ticketFilters = ({
     clauses.push(keysetFilter(decodeTicketCursor(cursor, { sort, direction })));
   }
 
-  const present = clauses.filter((clause): clause is SQL => clause !== undefined);
-  /* c8 ignore next -- the soft-delete clause above is unconditional, so this is never empty. */
-  return present.length === 0 ? undefined : and(...present);
+  return and(...clauses.filter((clause): clause is SQL => clause !== undefined));
 };
 
 /**

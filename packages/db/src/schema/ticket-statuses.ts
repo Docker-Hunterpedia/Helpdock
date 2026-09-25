@@ -1,4 +1,14 @@
-import { boolean, integer, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  integer,
+  pgTable,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { statusColorEnum, ticketSystemStateEnum } from './enums.js';
@@ -50,6 +60,26 @@ export const ticketStatuses = pgTable(
      * `awaiting_customer` are already written with.
      */
     excludedFromReports: boolean('excluded_from_reports').notNull().default(false),
+    /**
+     * M1-09. Which seeded row this is — `open`, `awaiting_customer`,
+     * `escalated`, `closed`, `spam`, `merged` — for the rows code has to find
+     * and the flags cannot tell apart. Spam and Merged carry identical state
+     * and flags, and a brand may rename either, so "the Merged status" needs a
+     * name code owns. Null on every status a brand adds for itself.
+     */
+    systemKey: varchar('system_key', { length: 40 }),
+    /**
+     * The row "Mark as spam" moves a ticket to (DOMAIN-RULES §2.2, M1-11):
+     * derived from `system_key = 'spam'`, which is the one answer to "which row
+     * is Spam?" (M1-09). Generated rather than written, so the two can never
+     * disagree; kept as a column because everything that treats spam
+     * differently — no auto-responder, no CSAT, no round-robin count, no report,
+     * M1-14's 30-day purge — reads a boolean through `isSpamStatus`.
+     * `excluded_from_reports` cannot say it, because Merged carries that flag too.
+     */
+    isSpam: boolean('is_spam')
+      .notNull()
+      .generatedAlwaysAs(sql`coalesce(system_key = 'spam', false)`),
     sortOrder: integer('sort_order').notNull().default(0),
     color: statusColorEnum('color').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -60,7 +90,12 @@ export const ticketStatuses = pgTable(
   },
   // Two statuses of one brand with the same name would be indistinguishable in
   // the status picker, which is the only place anybody chooses one.
-  (table) => [unique('ticket_statuses_brand_name_key').on(table.brandId, table.name)],
+  (table) => [
+    unique('ticket_statuses_brand_name_key').on(table.brandId, table.name),
+    uniqueIndex('ticket_statuses_brand_system_key')
+      .on(table.brandId, table.systemKey)
+      .where(sql`${table.systemKey} is not null`),
+  ],
 );
 
 export type TicketStatus = typeof ticketStatuses.$inferSelect;

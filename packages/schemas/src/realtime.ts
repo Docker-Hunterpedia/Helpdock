@@ -159,7 +159,15 @@ export const ticketChangedSchema = z.object({
    * but a queue that hides closed tickets, and M1-12's survey, both need to
    * know *which* change happened without diffing two reads (DOMAIN-RULES §2.2).
    */
-  event: z.enum(['ticket.created', 'ticket.updated', 'ticket.closed', 'ticket.reopened']),
+  event: z.enum([
+    'ticket.created',
+    'ticket.updated',
+    'ticket.closed',
+    'ticket.reopened',
+    // M1-11. Its own name rather than `ticket.closed`, so nothing that acts on
+    // a close — a survey, an auto-responder — can mistake spam for one.
+    'ticket.spam',
+  ]),
 });
 export type TicketChanged = z.infer<typeof ticketChangedSchema>;
 
@@ -200,6 +208,10 @@ export const attachmentChangedSchema = z.object({
 });
 export type AttachmentChanged = z.infer<typeof attachmentChangedSchema>;
 
+/** What somebody with a ticket open is doing with it (M1-09). */
+export const ticketViewingActivitySchema = z.enum(['viewing', 'replying']);
+export type TicketViewingActivity = z.infer<typeof ticketViewingActivitySchema>;
+
 /**
  * What a client sends when it has a ticket open, repeated while it stays open.
  *
@@ -213,6 +225,13 @@ export type AttachmentChanged = z.infer<typeof attachmentChangedSchema>;
 export const ticketViewingRequestSchema = z.object({
   brandId: z.uuid(),
   ticketId: z.uuid(),
+  /**
+   * M1-09: `replying` while the sender has something in the composer, so the
+   * pill can say "Mona is replying" rather than only "Mona is viewing" — the
+   * collision worth warning about is two people answering the same customer.
+   * Defaults to `viewing`, so a client that predates it still parses.
+   */
+  activity: ticketViewingActivitySchema.default('viewing'),
 });
 export type TicketViewingRequest = z.infer<typeof ticketViewingRequestSchema>;
 

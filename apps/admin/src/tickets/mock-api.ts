@@ -1,30 +1,50 @@
 import type {
+  AssignableAgentList,
   Attachment,
+  MarkSpamRequest,
+  MergedTicket,
   MessageCreateRequest,
   Ticket,
   TicketActivityEntry,
   TicketActivityList,
+  TicketCc,
+  TicketCcRequest,
   TicketCreateRequest,
+  TicketCsat,
   TicketDetail,
+  TicketLink,
   TicketList,
+  TicketMergeRequest,
+  TicketMergeResult,
   TicketMessage,
   TicketMessagePage,
+  TicketParticipantList,
   TicketPriority,
+  TicketSpamSender,
+  TicketSplitRequest,
   TicketStatus,
   TicketStatusList,
   TicketUpdateRequest,
+  TimeEntry,
+  TimeEntryCreateRequest,
+  TimeEntryList,
 } from '@helpdock/schemas';
-import { TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
+import { normaliseEmail, TICKET_PAGE_SIZE_DEFAULT, UNMERGE_WINDOW_MS } from '@helpdock/schemas';
+import { ContactError } from '../contacts/api.js';
 import {
   MOCK_CONTACT_ACCOUNT,
   MOCK_CONTACT_ARABIC,
   MOCK_CONTACT_GMAIL,
   MOCK_CONTACT_MONA,
   MOCK_CONTACT_VISITOR,
+  seedContactName,
 } from '../contacts/mock-api.js';
+import { MOCK_CSAT_TOKENS } from '../csat/mock-api.js';
 import type { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
-import type { TicketQuery, TicketsApi } from './api.js';
+import { mockAssignable } from '../ticketing/mock-assignment.js';
+import { MockBlockList } from '../ticketing/mock-block-list.js';
+import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
 
 /**
  * The fixture the ticket workspace runs against until an install is in front of
@@ -83,6 +103,7 @@ const seedStatuses = (): TicketStatus[] => [
   status(MOCK_STATUS_CLOSED, 'Closed', 'مغلقة', 'closed', 'success', { sortOrder: 4 }),
   status(MOCK_STATUS_SPAM, 'Spam', 'مزعجة', 'closed', 'danger', {
     excludedFromReports: true,
+    isSpam: true,
     sortOrder: 5,
   }),
   status(MOCK_STATUS_MERGED, 'Merged', 'مدمجة', 'closed', 'info', { sortOrder: 6 }),
@@ -105,12 +126,21 @@ function status(
     awaitingCustomer: false,
     isDefault: false,
     isSystem: true,
-    // M1-11 reads it on Spam; the seed sets it there and nowhere else.
+    // Spam and Merged set it; the seed sets `isSpam` on Spam alone.
     excludedFromReports: false,
+    isSpam: false,
     sortOrder: 0,
     color,
     ...overrides,
   };
+}
+
+/** What the api keeps on a merged ticket so it can be undone (M1-09). */
+interface MergeRecord {
+  readonly mergedAt: string;
+  readonly mergedById: string;
+  readonly previousStatus: TicketStatus;
+  readonly systemMessageId: string;
 }
 
 interface Seed {
@@ -417,6 +447,37 @@ const decodeCursor = (cursor: string | undefined): number => {
   return cursor?.startsWith('c:') === true && Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
 };
 
+/**
+ * Who each fixture contact is to "Block sender" (M1-11): the identifiers
+ * `MockContactsApi` gives them, in the order the api prefers them for a
+ * channel (`apps/api/src/tickets/spam-sender.ts`).
+ */
+const MOCK_SENDERS: Readonly<
+  Record<string, Partial<Record<'email' | 'phone' | 'telegram', string>>>
+> = {
+  [MOCK_CONTACT_MONA]: { email: 'mona@example.com', phone: '+49301234567' },
+  [MOCK_CONTACT_GMAIL]: { email: 'mona.k@gmail.com' },
+  [MOCK_CONTACT_ARABIC]: { phone: '+963931234567', telegram: '884413201' },
+  [MOCK_CONTACT_ACCOUNT]: { email: 'jonas@acme.example' },
+};
+
+const senderOf = (ticket: Ticket): TicketSpamSender['sender'] => {
+  const held = ticket.contactId === null ? undefined : MOCK_SENDERS[ticket.contactId];
+  const order =
+    ticket.channel === 'telegram'
+      ? (['telegram', 'email', 'phone'] as const)
+      : (['email', 'phone', 'telegram'] as const);
+
+  for (const kind of order) {
+    const value = held?.[kind];
+    if (value !== undefined) {
+      return { kind, value };
+    }
+  }
+
+  return null;
+};
+
 export class MockTicketsApi implements TicketsApi {
   readonly #statuses = seedStatuses();
   #tickets: Ticket[];
@@ -424,18 +485,58 @@ export class MockTicketsApi implements TicketsApi {
   #activity: TicketActivityEntry[];
   #sequence = 0;
   readonly #uploads: MockAttachmentUploader | undefined;
+  /** M1-11. Shared with `MockTicketingApi`, so a block from a ticket is on the Spam tab. */
+  readonly #blockList: MockBlockList;
+  /** M1-13: the CCs per ticket. The refund ticket copies in finance, as the artboard does. */
+  #ccs = new Map<string, TicketCc[]>([
+    [
+      MOCK_TICKET_REFUND,
+      [
+        {
+          id: '0192c3f0-1a2b-7c3d-8e4f-0000000cc001',
+          contactId: '0192c3f0-1a2b-7c3d-8e4f-0000000cc0c1',
+          name: 'finance@acme.de',
+          address: 'finance@acme.de',
+          source: 'agent',
+        },
+      ],
+    ],
+  ]);
+  readonly #contactName: (contactId: string) => string | undefined;
+  /** M1-12. Newest first, as the api answers. */
+  #timeEntries: TimeEntry[] = [];
+  /** M1-12: the survey of each ticket's latest close. */
+  readonly #csat = new Map<string, TicketCsat>();
+  /** Keyed by the secondary's id; present while it is merged. */
+  readonly #merges = new Map<string, MergeRecord>();
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
    * composer is the file the thread then draws — the same arrangement
    * `MockAuthApi` and `MockStaffApi` have, and for the same reason.
    */
-  constructor(uploads?: MockAttachmentUploader, now: number = Date.now()) {
+  constructor(
+    uploads?: MockAttachmentUploader,
+    now: number = Date.now(),
+    blockList: MockBlockList = new MockBlockList(),
+    contactName: (contactId: string) => string | undefined = seedContactName,
+  ) {
     this.#uploads = uploads;
+    this.#blockList = blockList;
+    this.#contactName = contactName;
     const seeded = seed(this.#statuses, now);
     this.#tickets = seeded.tickets;
     this.#messages = seeded.messages;
     this.#activity = seeded.activity;
+    // The closed ticket on the artboard was rated; the others have not closed.
+    this.#csat.set(MOCK_TICKET_CLOSED, {
+      state: 'rated',
+      rating: 4,
+      comment: 'Sorted quickly, thank you.',
+      link: null,
+      expiresAt: new Date(now + 24 * DAY).toISOString(),
+      ratedAt: new Date(now - 5 * DAY).toISOString(),
+    });
   }
 
   async statuses(_brandId: string): Promise<TicketStatusList> {
@@ -454,7 +555,7 @@ export class MockTicketsApi implements TicketsApi {
     const nextIndex = from + page.length;
 
     return Promise.resolve({
-      tickets: page,
+      tickets: page.map((ticket) => this.#withContact(ticket)),
       nextCursor: nextIndex < matches.length ? encodeCursor(nextIndex) : null,
     });
   }
@@ -463,9 +564,11 @@ export class MockTicketsApi implements TicketsApi {
     const ticket = this.#require(ticketId);
 
     return Promise.resolve({
-      ticket,
+      ticket: this.#withContact(ticket),
       messages: this.#page(ticketId, 0),
       activity: this.#activityOf(ticketId),
+      csat: this.#csat.get(ticketId) ?? null,
+      ...this.#mergeView(ticket),
     });
   }
 
@@ -552,6 +655,14 @@ export class MockTicketsApi implements TicketsApi {
 
   async update(_brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket> {
     const ticket = this.#require(ticketId);
+    // A merged ticket's state belongs to its primary (DOMAIN-RULES §2.4), and
+    // so does its department; the api refuses both with the same reason.
+    if (
+      ticket.mergedIntoId !== null &&
+      (request.statusId !== undefined || request.departmentId !== undefined)
+    ) {
+      throw new TicketLifecycleError('ticket-merged');
+    }
     const status =
       request.statusId === undefined
         ? ticket.status
@@ -569,6 +680,11 @@ export class MockTicketsApi implements TicketsApi {
     };
 
     this.#tickets = this.#tickets.map((row) => (row.id === ticketId ? updated : row));
+    // DOMAIN-RULES §2.2: a close that is not spam or a merge is asked about.
+    // The api does it in a job; the fixture does it at once.
+    if (ticket.closedAt === null && updated.closedAt !== null && !status.excludedFromReports) {
+      this.#csat.set(ticketId, pendingSurvey());
+    }
     this.#activity = [
       ...this.#activity,
       {
@@ -623,6 +739,9 @@ export class MockTicketsApi implements TicketsApi {
     };
 
     this.#messages = [...this.#messages, message];
+    if (request.timeSpentSeconds !== undefined) {
+      this.#addTime(ticketId, request.timeSpentSeconds, null, message.id);
+    }
     this.#activity = [
       ...this.#activity,
       {
@@ -646,7 +765,353 @@ export class MockTicketsApi implements TicketsApi {
     return Promise.resolve(message);
   }
 
+  // ---------------------------------------------------------------- M1-12
+
+  async timeEntries(_brandId: string, ticketId: string): Promise<TimeEntryList> {
+    this.#require(ticketId);
+
+    return Promise.resolve(this.#timeOf(ticketId));
+  }
+
+  async logTime(
+    _brandId: string,
+    ticketId: string,
+    request: TimeEntryCreateRequest,
+  ): Promise<TimeEntryList> {
+    this.#require(ticketId);
+    this.#addTime(ticketId, request.seconds, request.note || null, null);
+
+    return Promise.resolve(this.#timeOf(ticketId));
+  }
+
+  async deleteTimeEntry(
+    _brandId: string,
+    ticketId: string,
+    entryId: string,
+  ): Promise<TimeEntryList> {
+    this.#timeEntries = this.#timeEntries.filter((entry) => entry.id !== entryId);
+
+    return Promise.resolve(this.#timeOf(ticketId));
+  }
+
+  #addTime(ticketId: string, seconds: number, note: string | null, messageId: string | null): void {
+    this.#timeEntries = [
+      {
+        id: this.#nextId('9'),
+        ticketId,
+        userId: MOCK_SELF_ID,
+        userName: 'Lina Haddad',
+        seconds,
+        note,
+        messageId,
+        createdAt: isoNow(),
+      },
+      ...this.#timeEntries,
+    ];
+  }
+
+  #timeOf(ticketId: string): TimeEntryList {
+    const entries = this.#timeEntries.filter((entry) => entry.ticketId === ticketId);
+
+    return {
+      entries,
+      totalSeconds: entries.reduce((sum, entry) => sum + entry.seconds, 0),
+    };
+  }
+
+  // ------------------------------------------------------- M1-09 merge, split
+
+  /** The rules of `apps/api/src/tickets/merge/merge-rules.ts`, on the fixture's rows. */
+  async merge(
+    _brandId: string,
+    ticketId: string,
+    { primaryTicketId }: TicketMergeRequest,
+  ): Promise<TicketMergeResult> {
+    const secondary = this.#require(ticketId);
+    const primary = this.#require(primaryTicketId);
+
+    if (secondary.id === primary.id) {
+      throw new TicketLifecycleError('merge-into-self');
+    }
+    if (secondary.mergedIntoId !== null) {
+      throw new TicketLifecycleError('ticket-merged');
+    }
+    if (primary.mergedIntoId !== null) {
+      throw new TicketLifecycleError('merge-into-merged');
+    }
+
+    const now = isoNow();
+    const announcement = this.#system(
+      primary,
+      `${reference(secondary)} was merged into this ticket`,
+    );
+    this.#merges.set(secondary.id, {
+      mergedAt: now,
+      mergedById: MOCK_SELF_ID,
+      previousStatus: secondary.status,
+      systemMessageId: announcement.id,
+    });
+
+    const merged = this.#put({
+      ...secondary,
+      status: this.#statusOf(MOCK_STATUS_MERGED),
+      mergedIntoId: primary.id,
+      departmentId: primary.departmentId,
+      closedAt: secondary.closedAt ?? now,
+      updatedAt: now,
+    });
+    const tags = [...(primary.tags ?? [])];
+    for (const tag of secondary.tags ?? []) {
+      if (!tags.some((held) => held.id === tag.id)) {
+        tags.push(tag);
+      }
+    }
+    const receiving = this.#put({ ...primary, tags, updatedAt: now });
+    this.#log(secondary.id, 'ticket.merged', { ticketId: secondary.id }, { ticketId: primary.id });
+    this.#log(primary.id, 'ticket.merged', { ticketId: secondary.id }, { ticketId: primary.id });
+
+    return Promise.resolve({ primary: receiving, secondary: merged });
+  }
+
+  async unmerge(_brandId: string, ticketId: string): Promise<TicketMergeResult> {
+    const secondary = this.#require(ticketId);
+    const record = this.#merges.get(ticketId);
+    if (secondary.mergedIntoId === null || record === undefined) {
+      throw new TicketLifecycleError('ticket-not-merged');
+    }
+    if (Date.now() - Date.parse(record.mergedAt) >= UNMERGE_WINDOW_MS) {
+      throw new TicketLifecycleError('merge-window-closed');
+    }
+
+    const primary = this.#require(secondary.mergedIntoId);
+    this.#merges.delete(ticketId);
+    this.#system(primary, `${reference(secondary)} was unmerged from this ticket`);
+
+    const restored = this.#put({
+      ...secondary,
+      status: record.previousStatus,
+      mergedIntoId: null,
+      closedAt: record.previousStatus.systemState === 'closed' ? secondary.closedAt : null,
+      updatedAt: isoNow(),
+    });
+    this.#log(ticketId, 'ticket.unmerged', { ticketId }, { ticketId: primary.id });
+    this.#log(primary.id, 'ticket.unmerged', { ticketId }, { ticketId: primary.id });
+
+    return Promise.resolve({ primary: this.#require(primary.id), secondary: restored });
+  }
+
+  async split(
+    brandId: string,
+    ticketId: string,
+    request: TicketSplitRequest,
+  ): Promise<TicketDetail> {
+    const original = this.#require(ticketId);
+    const chosen = this.#messages
+      .filter((message) => message.ticketId === ticketId && request.messageIds.includes(message.id))
+      .sort((left, right) => left.seq - right.seq);
+    if (chosen.length !== new Set(request.messageIds).size) {
+      throw new Error('no such message on this ticket');
+    }
+
+    const now = isoNow();
+    const created = this.#put({
+      ...original,
+      id: this.#nextId('1'),
+      number: Math.max(...this.#tickets.map((ticket) => ticket.number)) + 1,
+      subject: request.subject,
+      departmentId: request.departmentId,
+      priority: request.priority ?? original.priority,
+      status: this.#defaultStatus(),
+      assigneeId: null,
+      mergedIntoId: null,
+      splitFromId: original.id,
+      closedAt: null,
+      tags: [],
+      custom: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    this.#messages = [
+      ...this.#messages,
+      ...chosen.map((message, index) => ({
+        ...message,
+        id: this.#nextId('7'),
+        ticketId: created.id,
+        seq: index + 1,
+        clientId: null,
+        attachments: message.attachments
+          .filter((attachment) => attachment.status === 'ready')
+          .map((attachment) => ({ ...attachment, id: this.#nextId('9'), ticketId: created.id })),
+      })),
+    ];
+    this.#system(created, `Split from ${reference(original)}`);
+    this.#system(original, `Messages split to ${reference(created)}`);
+    this.#log(original.id, 'ticket.split', { ticketId: original.id }, { ticketId: created.id });
+    this.#log(created.id, 'ticket.split', { ticketId: original.id }, { ticketId: created.id });
+
+    return this.ticket(brandId, created.id);
+  }
+
+  /** The merge half of a ticket read, as `apps/api/src/tickets/merge/merge-view.ts` builds it. */
+  #mergeView(ticket: Ticket): Pick<TicketDetail, 'merged' | 'mergedInto' | 'related'> {
+    const merged: MergedTicket[] = [];
+    let frontier = [ticket.id];
+    while (frontier.length > 0) {
+      const level = this.#tickets.filter(
+        (row) => row.mergedIntoId !== null && frontier.includes(row.mergedIntoId),
+      );
+      for (const row of level) {
+        const record = this.#merges.get(row.id);
+        /* c8 ignore next 3 -- every merged row was merged through `merge`. */
+        if (record === undefined) {
+          continue;
+        }
+        merged.push({
+          ...linkOf(row),
+          ...this.#facts(record),
+          mergedIntoId: row.mergedIntoId ?? ticket.id,
+          systemMessageId: row.mergedIntoId === ticket.id ? record.systemMessageId : null,
+          messages: this.#page(row.id, 0).messages,
+          hasMoreMessages: false,
+        });
+      }
+      frontier = level.map((row) => row.id);
+    }
+
+    const record = this.#merges.get(ticket.id);
+    const primary =
+      ticket.mergedIntoId === null
+        ? undefined
+        : this.#tickets.find((row) => row.id === ticket.mergedIntoId);
+
+    return {
+      merged,
+      mergedInto:
+        primary === undefined || record === undefined
+          ? null
+          : { ...linkOf(primary), ...this.#facts(record) },
+      related: this.#tickets
+        .filter((row) => row.splitFromId === ticket.id || row.id === ticket.splitFromId)
+        .map(linkOf),
+    };
+  }
+
+  #facts(record: MergeRecord) {
+    const until = Date.parse(record.mergedAt) + UNMERGE_WINDOW_MS;
+
+    return {
+      mergedAt: record.mergedAt,
+      mergedById: record.mergedById,
+      unmergeableUntil: until > Date.now() ? new Date(until).toISOString() : null,
+    };
+  }
+
+  /** A system row in a thread, the way the api writes "Continued in" and its kin. */
+  #system(ticket: Ticket, text: string): TicketMessage {
+    const message: TicketMessage = {
+      id: this.#nextId('7'),
+      ticketId: ticket.id,
+      seq: this.#nextSeq(ticket.id),
+      clientId: null,
+      kind: 'system',
+      authorType: 'system',
+      authorId: MOCK_SELF_ID,
+      bodyHtml: `<p>${text}</p>`,
+      bodyText: text,
+      attachments: [],
+      channel: ticket.channel,
+      createdAt: isoNow(),
+    };
+    this.#messages = [...this.#messages, message];
+
+    return message;
+  }
+
+  #log(
+    ticketId: string,
+    action: string,
+    from: Record<string, unknown>,
+    to: Record<string, unknown>,
+  ): void {
+    this.#activity = [
+      ...this.#activity,
+      {
+        id: this.#nextId('8'),
+        ticketId,
+        actorType: 'staff',
+        actorId: MOCK_SELF_ID,
+        action,
+        from,
+        to,
+        via: 'ui',
+        createdAt: isoNow(),
+      },
+    ];
+  }
+
+  /** Writes a row over the one with its id, or adds it. */
+  #put(ticket: Ticket): Ticket {
+    this.#tickets = this.#tickets.some((row) => row.id === ticket.id)
+      ? this.#tickets.map((row) => (row.id === ticket.id ? ticket : row))
+      : [ticket, ...this.#tickets];
+
+    return ticket;
+  }
+
+  #statusOf(statusId: string): TicketStatus {
+    const found = this.#statuses.find((candidate) => candidate.id === statusId);
+    /* c8 ignore next 3 -- the ids are the ones seeded. */
+    if (found === undefined) {
+      throw new Error(`no seeded status ${statusId}`);
+    }
+
+    return found;
+  }
+
   // ------------------------------------------------------------------
+
+  // ---------------------------------------------------------------- M1-11
+
+  async spamSender(_brandId: string, ticketId: string): Promise<TicketSpamSender> {
+    const sender = senderOf(this.#require(ticketId));
+
+    return {
+      sender,
+      offered: this.#blockList.offerBlockSender,
+      blockable: sender !== null && !this.#blockList.isOwn(sender),
+      blocked: sender !== null && this.#blockList.isListed(sender),
+    };
+  }
+
+  async markSpam(brandId: string, ticketId: string, request: MarkSpamRequest): Promise<Ticket> {
+    const ticket = this.#require(ticketId);
+    const sender = senderOf(ticket);
+
+    // Before the status moves, so a refused block leaves the ticket as it was —
+    // the api's one transaction, in fixture form.
+    if (request.blockSender) {
+      if (sender === null || !this.#blockList.offerBlockSender) {
+        throw new Error('this ticket offers no sender to block');
+      }
+      this.#blockList.block(sender, { idempotent: true, sourceTicketId: ticketId });
+    }
+
+    return this.update(brandId, ticketId, { statusId: MOCK_STATUS_SPAM });
+  }
+
+  async unmarkSpam(brandId: string, ticketId: string): Promise<Ticket> {
+    // The api's `ticket-not-spam`, which the workspace draws as any failure.
+    if (!this.#require(ticketId).status.isSpam) {
+      throw new Error(`not marked as spam: ${ticketId}`);
+    }
+
+    return this.update(brandId, ticketId, { statusId: this.#defaultStatus().id });
+  }
+
+  async assignable(_brandId: string, departmentId: string): Promise<AssignableAgentList> {
+    return Promise.resolve(mockAssignable(departmentId));
+  }
 
   #page(ticketId: string, after: number): TicketMessagePage {
     const all = this.#messages
@@ -687,6 +1152,60 @@ export class MockTicketsApi implements TicketsApi {
     );
   }
 
+  async participants(_brandId: string, ticketId: string): Promise<TicketParticipantList> {
+    const ticket = this.#require(ticketId);
+    const name = ticket.contactId === null ? undefined : MOCK_CONTACT_NAMES[ticket.contactId];
+
+    return {
+      contact: ticket.contactId === null ? null : { id: ticket.contactId, name: name ?? 'Contact' },
+      ccs: [...(this.#ccs.get(ticketId) ?? [])],
+      staff: [],
+    };
+  }
+
+  /** Normalised and refused exactly as the api does, so the card's error path is real. */
+  async addCc(
+    brandId: string,
+    ticketId: string,
+    request: TicketCcRequest,
+  ): Promise<TicketParticipantList> {
+    this.#require(ticketId);
+    const result = normaliseEmail(request.email);
+    if (!result.ok) {
+      throw new ContactError('identity-invalid', result.problem);
+    }
+
+    const ccs = this.#ccs.get(ticketId) ?? [];
+    if (!ccs.some((cc) => cc.address === result.value)) {
+      this.#ccs.set(ticketId, [
+        ...ccs,
+        {
+          id: this.#nextId('c'),
+          contactId: this.#nextId('d'),
+          name: result.value,
+          address: result.value,
+          source: 'agent',
+        },
+      ]);
+    }
+
+    return this.participants(brandId, ticketId);
+  }
+
+  async removeCc(
+    brandId: string,
+    ticketId: string,
+    participantId: string,
+  ): Promise<TicketParticipantList> {
+    this.#require(ticketId);
+    this.#ccs.set(
+      ticketId,
+      (this.#ccs.get(ticketId) ?? []).filter((cc) => cc.id !== participantId),
+    );
+
+    return this.participants(brandId, ticketId);
+  }
+
   #defaultStatus(): TicketStatus {
     const fallback = this.#statuses[0];
     /* c8 ignore next 3 -- the seed always has six. */
@@ -695,6 +1214,21 @@ export class MockTicketsApi implements TicketsApi {
     }
 
     return this.#statuses.find((candidate) => candidate.isDefault) ?? fallback;
+  }
+
+  /**
+   * The contact's name, embedded the way the list and the read embed it
+   * (M1-15): null for a ticket that names nobody, or one the contact fixture
+   * does not know, which is what row-level security makes of a stranger.
+   */
+  #withContact(ticket: Ticket): Ticket {
+    const name = ticket.contactId === null ? undefined : this.#contactName(ticket.contactId);
+
+    return {
+      ...ticket,
+      contact:
+        ticket.contactId === null || name === undefined ? null : { id: ticket.contactId, name },
+    };
   }
 
   #require(ticketId: string): Ticket {
@@ -716,6 +1250,38 @@ export class MockTicketsApi implements TicketsApi {
 }
 
 const isoNow = (): string => new Date().toISOString();
+
+/** The contacts fixture's names, so a participants card reads like the contact screen. */
+const MOCK_CONTACT_NAMES: Readonly<Record<string, string>> = {
+  [MOCK_CONTACT_MONA]: 'Mona Khalil',
+  [MOCK_CONTACT_GMAIL]: 'M. Khalil',
+  [MOCK_CONTACT_ARABIC]: 'سارة الحسن',
+  [MOCK_CONTACT_ACCOUNT]: 'Jonas Weber',
+  [MOCK_CONTACT_VISITOR]: 'Visitor 7f3a…c2',
+};
+
+/**
+ * A survey as the api creates it on close: pending, with the link the agent
+ * shares. It points at the rating page's own fixture, so following it in the
+ * mock app lands on a survey that works.
+ */
+const pendingSurvey = (): TicketCsat => ({
+  state: 'pending',
+  rating: null,
+  comment: null,
+  link: new URL(`/csat/${MOCK_CSAT_TOKENS.open}`, window.location.origin).toString(),
+  expiresAt: new Date(Date.now() + 30 * DAY).toISOString(),
+  ratedAt: null,
+});
+
+const reference = (ticket: Ticket): string => `${ticket.prefix}-${ticket.number}`;
+
+const linkOf = (ticket: Ticket): TicketLink => ({
+  id: ticket.id,
+  number: ticket.number,
+  prefix: ticket.prefix,
+  subject: ticket.subject,
+});
 
 /**
  * The text of a body, the way `body_text` is the text of `body_html`.

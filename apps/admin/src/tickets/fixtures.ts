@@ -19,6 +19,7 @@ export const testStatus = (overrides: Partial<TicketStatus> = {}): TicketStatus 
   isDefault: true,
   isSystem: true,
   excludedFromReports: false,
+  isSpam: false,
   sortOrder: 1,
   color: 'info',
   ...overrides,

@@ -1,4 +1,4 @@
-import { Box, Snackbar, Typography } from '@mui/material';
+import { Box, Button, Snackbar, Typography } from '@mui/material';
 import { CircleAlert, CircleCheck } from 'lucide-react';
 import { createContext, type ReactNode, useCallback, useContext, useState } from 'react';
 import { useSemanticTokens } from '../app/tokens.js';
@@ -14,15 +14,21 @@ import { useSemanticTokens } from '../app/tokens.js';
  * `role="status"` rather than `role="alert"`: these confirm something the
  * person just did, so they belong in the polite queue and must not interrupt
  * whatever a screen reader is in the middle of.
+ *
+ * A toast may carry one inline action — the Undo after a contact merge
+ * (M1-13). It then stays ten seconds rather than six, as the `After a merge`
+ * artboard says, because a person has to read the sentence *and* decide.
  */
 
 const AUTO_DISMISS_MS = 6000;
+const WITH_ACTION_MS = 10_000;
 
 export type ToastTone = 'success' | 'danger';
 
 export interface Toast {
   readonly message: string;
   readonly tone: ToastTone;
+  readonly action?: { readonly label: string; onClick(): void };
 }
 
 export type ShowToast = (toast: Toast) => void;
@@ -53,7 +59,7 @@ export function ToastProvider({ children }: { readonly children: ReactNode }): R
       {children}
       <Snackbar
         open={toast !== null}
-        autoHideDuration={AUTO_DISMISS_MS}
+        autoHideDuration={toast?.action === undefined ? AUTO_DISMISS_MS : WITH_ACTION_MS}
         onClose={(_event, reason) => {
           // A click somewhere else is not a dismissal. DESIGN §6.4 gives a
           // toast six seconds and nothing else, and MUI's `clickaway` costs
@@ -89,9 +95,29 @@ export function ToastProvider({ children }: { readonly children: ReactNode }): R
             color={toast?.tone === 'danger' ? tokens['status.danger'] : tokens['status.success']}
             style={{ flexShrink: 0 }}
           />
-          <Typography variant="body2" sx={{ color: 'inherit', fontSize: 13 }}>
+          <Typography variant="body2" sx={{ color: 'inherit', fontSize: 13, flexGrow: 1 }}>
             {toast?.message ?? ''}
           </Typography>
+          {toast?.action === undefined ? null : (
+            <Button
+              size="small"
+              variant="text"
+              onClick={() => {
+                const action = toast.action;
+                setToast(null);
+                action?.onClick();
+              }}
+              sx={{
+                color: 'inherit',
+                textDecoration: 'underline',
+                fontWeight: 600,
+                minWidth: 0,
+                flexShrink: 0,
+              }}
+            >
+              {toast.action.label}
+            </Button>
+          )}
         </Box>
       </Snackbar>
     </ToastContext.Provider>

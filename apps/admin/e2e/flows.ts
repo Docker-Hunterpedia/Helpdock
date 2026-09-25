@@ -100,7 +100,7 @@ export async function openTicketing(page: Page, locale: Locale): Promise<void> {
 export async function openTicketingTab(
   page: Page,
   locale: Locale,
-  segment: 'departments' | 'tags' | 'custom-fields' | 'templates',
+  segment: 'departments' | 'tags' | 'custom-fields' | 'templates' | 'spam',
 ): Promise<void> {
   const t = strings(locale);
   const tab = {
@@ -108,6 +108,7 @@ export async function openTicketingTab(
     tags: 'tags',
     'custom-fields': 'customFields',
     templates: 'templates',
+    spam: 'spam',
   } as const;
   const arrived = {
     departments: t('ticketing:departments.add'),
@@ -116,6 +117,7 @@ export async function openTicketingTab(
       target: t('ticketing:customFields.targets.ticket').toLocaleLowerCase(),
     }),
     templates: t('ticketing:templates.add'),
+    spam: t('ticketing:spam.blockList.add'),
   } as const;
 
   await openTicketing(page, locale);

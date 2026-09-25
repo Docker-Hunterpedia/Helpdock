@@ -405,10 +405,38 @@ describe('StaffGateway', () => {
           event: 'ticket:viewing',
           payload: expect.objectContaining({
             seq: null,
-            data: { brandId: BRAND_A, ticketId: TICKET, userId: LINA },
+            data: { brandId: BRAND_A, ticketId: TICKET, activity: 'viewing', userId: LINA },
           }),
         },
       ]);
+    });
+
+    it('relays that the sender is replying, under the same authorisation (M1-09)', async () => {
+      const socket = socketOf('s1');
+
+      await harnessed.gateway.viewing(socket, {
+        brandId: BRAND_A,
+        ticketId: TICKET,
+        activity: 'replying',
+      });
+
+      expect(socket.relayed[0]?.payload).toEqual(
+        expect.objectContaining({ data: expect.objectContaining({ activity: 'replying' }) }),
+      );
+    });
+
+    it('refuses to relay "replying" for a ticket outside the caller\u2019s departments', async () => {
+      const refusing = harness({ ticketInScope: () => Promise.resolve(false) });
+      const socket = socketOf('s1');
+
+      const ack = await refusing.gateway.viewing(socket, {
+        brandId: BRAND_A,
+        ticketId: TICKET,
+        activity: 'replying',
+      });
+
+      expect(ack).toEqual({ ok: false, error: expect.objectContaining({ code: 'forbidden' }) });
+      expect(socket.relayed).toEqual([]);
     });
 
     it('refuses a ticket outside the caller\u2019s departments, and relays nothing', async () => {

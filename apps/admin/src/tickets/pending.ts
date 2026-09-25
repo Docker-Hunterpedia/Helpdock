@@ -35,6 +35,12 @@ export interface PendingMessage {
    * them cannot be linked.
    */
   readonly attachmentIds: readonly string[];
+  /**
+   * The per-reply timer (M1-12), taken when the reply was queued. Held on the
+   * send for the reason the attachments are: a retry logs the same time, and
+   * the api writes it in the message's own transaction.
+   */
+  readonly timeSpentSeconds?: number;
   /** When the composer sent it, which is where it sits in the thread. */
   readonly createdAt: string;
   /** Epoch milliseconds of the attempt, for the ten-second rule. */

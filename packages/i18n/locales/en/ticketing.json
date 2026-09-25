@@ -137,7 +137,13 @@
     "agentUpdated": "{{name}} updated",
     "assigneeAboveActor": "Only an Admin can route work to an Admin.",
     "feedbackSaved": "Feedback settings saved",
-    "timeTrackingOff": "Time tracking is off for this brand."
+    "timeTrackingOff": "Time tracking is off for this brand.",
+    "viewIsBuiltIn": "A built-in view can be renamed or hidden, not refiltered or deleted.",
+    "viewCreated": "{{name}} added",
+    "viewUpdated": "{{name}} saved",
+    "viewDeleted": "{{name}} deleted",
+    "viewShown": "{{name}} shown in the sidebar",
+    "viewHidden": "{{name}} hidden from the sidebar"
   },
   "statuses": {
     "add": "Add status",
@@ -579,5 +585,73 @@
     "save": "Save changes",
     "deliveryHeading": "Delivery",
     "deliveryBody": "The link goes out with the closing message on the ticket's channel. Email, widget and Telegram delivery arrive with those channels; until then the link is shown on the ticket for the agent to share."
+  },
+  "views": {
+    "heading": "Shared views",
+    "body": "Views every agent in the brand, or in the chosen departments, sees in the sidebar. Drag to reorder.",
+    "add": "Add view",
+    "builtIn": "built-in",
+    "hidden": "hidden",
+    "everyone": "Everyone",
+    "table": {
+      "caption": "Shared views of {{brand}}",
+      "view": "View",
+      "shows": "Shows",
+      "visibleTo": "Visible to",
+      "tickets": "Tickets",
+      "rowActions": "Actions for {{name}}",
+      "dragHandle": "Reorder {{name}}",
+      "select": "Edit {{name}}"
+    },
+    "actions": {
+      "edit": "Edit",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "hide": "Hide from the sidebar",
+      "show": "Show in the sidebar",
+      "delete": "Delete"
+    },
+    "empty": {
+      "heading": "No shared views",
+      "body": "Add a view to give a department a ready-made queue."
+    },
+    "editor": {
+      "heading": "Edit view · {{name}}",
+      "newHeading": "New view",
+      "name": "Name",
+      "nameAr": "Name (Arabic)",
+      "visibleTo": "Visible to",
+      "brand": "Everyone in the brand",
+      "departments": "Departments",
+      "filters": "Filters",
+      "state": "Status",
+      "anyLive": "Any live state",
+      "anyState": "Any state",
+      "assignee": "Assignee",
+      "anyone": "Anyone",
+      "me": "Me",
+      "nobody": "Nobody",
+      "priority": "Priority",
+      "any": "Any",
+      "tags": "Tags, all of",
+      "sla": "SLA",
+      "overdue": "Breached or due",
+      "sort": "Sort",
+      "save": "Save",
+      "create": "Add view",
+      "delete": "Delete view",
+      "builtInNote": "A built-in view keeps its filters and who sees it; you can rename it.",
+      "nothing": {
+        "heading": "Nothing selected",
+        "body": "Choose a view to edit its name, who sees it and what it shows."
+      },
+      "saved": "As saved"
+    },
+    "note": "Built-in views can be renamed, reordered or hidden for the brand, not deleted or refiltered. A view never widens access: an agent sees only the tickets in their own departments that match it.",
+    "confirm": {
+      "title": "Delete {{name}}?",
+      "body": "It goes from the sidebar of everyone it is shared with. No ticket changes.",
+      "submit": "Delete view"
+    }
   }
 }

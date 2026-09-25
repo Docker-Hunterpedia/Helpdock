@@ -25,9 +25,11 @@ const DEPARTMENT = '01937f5e-7e53-7000-8000-000000000011';
 const AGENT = '01937f5e-7e53-7000-8000-000000000001';
 const TICKET = '01937f5e-7e53-7000-8000-0000000000a1';
 const BRAND = '01937f5e-7e53-7000-8000-0000000000c1';
+const VIEWER = '01937f5e-7e53-7000-8000-000000000002';
 
 const query = (filters: Partial<TicketListQuery> = {}) => ({
   brandId: BRAND,
+  viewerId: VIEWER,
   filters: filters as TicketFilters,
   sort: filters.sort ?? ('updatedAt' as const),
   direction: filters.direction ?? ('desc' as const),
@@ -83,6 +85,37 @@ describe('ticketFilters', () => {
 
     expect(sql?.sql).toContain('is null');
     expect(sql?.params).toEqual([BRAND]);
+  });
+
+  it('reads `me` as the reader, never as a value the request carried (M1-05)', () => {
+    const sql = render(ticketFilters(query({ assigneeId: ['me'] })));
+
+    expect(sql?.params).toContain(VIEWER);
+    expect(sql?.params).not.toContain('me');
+  });
+
+  it('asks once for a reader named both as `me` and by id', () => {
+    const sql = render(ticketFilters(query({ assigneeId: ['me', VIEWER] })));
+
+    expect(sql?.params.filter((param) => param === VIEWER)).toHaveLength(1);
+  });
+
+  describe('overdue (M1-05)', () => {
+    it('keeps unclosed, unpaused tickets whose clock has run out', () => {
+      const sql = render(ticketFilters(query({ overdue: true })))?.sql ?? '';
+
+      expect(sql).toContain('"ticket_statuses"."system_state" <> $');
+      expect(sql).toContain('"ticket_statuses"."pauses_sla" = $');
+      expect(sql).toContain('"tickets"."sla_breached" = $');
+      expect(sql).toContain('"tickets"."first_response_due_at" < now()');
+      expect(sql).toContain('"tickets"."resolution_due_at" < now()');
+    });
+
+    it('adds nothing when it is false, which is the same as leaving it off', () => {
+      expect(render(ticketFilters(query({ overdue: false })))?.sql).toBe(
+        render(ticketFilters(query()))?.sql,
+      );
+    });
   });
 
   describe('tags (M1-06)', () => {

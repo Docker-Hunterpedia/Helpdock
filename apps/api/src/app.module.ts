@@ -46,6 +46,7 @@ import { TenantInterceptor } from './tenant/tenant.interceptor.js';
 import { TicketingModule } from './ticketing/ticketing.module.js';
 import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
 import { TicketsModule } from './tickets/tickets.module.js';
+import { ViewsModule } from './views/views.module.js';
 
 /**
  * The request lifecycle of ARCHITECTURE §6, in the order Nest runs it:
@@ -143,6 +144,8 @@ export class AppModule implements NestModule {
         }),
         // M1-14: the Data retention form. The purge itself runs in the worker.
         RetentionModule.forRoot(),
+        // M1-05: saved views and the sidebar's counts.
+        ViewsModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

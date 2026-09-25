@@ -244,6 +244,11 @@ export const ticketingRefusalSchema = z.enum([
   'assignee-above-actor',
   /** The brand has time tracking off, so no entry may be logged (409, M1-12). */
   'time-tracking-off',
+  /**
+   * A built-in view may be renamed, reordered and hidden, never deleted,
+   * refiltered or reshared (409, M1-05).
+   */
+  'view-is-built-in',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

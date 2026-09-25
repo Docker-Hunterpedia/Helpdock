@@ -393,3 +393,72 @@ describe('HttpTicketsApi participants (M1-13)', () => {
     expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/participants/p%2F1`);
   });
 });
+
+describe('views (M1-05)', () => {
+  const VIEW = '0192c3f0-1a2b-7c3d-8e4f-0000000000f1';
+  const view = {
+    id: VIEW,
+    name: 'VIP refunds',
+    nameAr: null,
+    visibility: { kind: 'personal' },
+    builtIn: null,
+    departmentId: null,
+    filters: { priority: ['urgent'], sort: 'updatedAt', direction: 'desc' },
+    hidden: false,
+    sortOrder: 0,
+    editable: true,
+  };
+
+  it('reads the views and their counts', async () => {
+    fetchMock.mockResolvedValueOnce(json({ views: [view] }));
+    fetchMock.mockResolvedValueOnce(json({ counts: [{ viewId: VIEW, count: 4, capped: false }] }));
+
+    expect((await api.views(BRAND)).views[0]?.name).toBe('VIP refunds');
+    expect((await api.viewCounts(BRAND)).counts[0]?.count).toBe(4);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/views/counts`);
+  });
+
+  it('creates, renames, reorders and deletes', async () => {
+    fetchMock.mockResolvedValueOnce(json(view, 201));
+    await api.createView(BRAND, { name: 'VIP refunds', filters: { priority: ['urgent'] } });
+    expect(lastInit().method).toBe('POST');
+
+    fetchMock.mockResolvedValueOnce(json({ ...view, name: 'VIP' }));
+    expect((await api.updateView(BRAND, 'v/1', { name: 'VIP' })).name).toBe('VIP');
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/views/v%2F1`);
+
+    fetchMock.mockResolvedValueOnce(json({ views: [view] }));
+    await api.reorderViews(BRAND, [VIEW]);
+    expect(lastInit().body).toBe(JSON.stringify({ viewIds: [VIEW] }));
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await api.deleteView(BRAND, VIEW);
+    expect(lastInit().method).toBe('DELETE');
+  });
+
+  it('turns a built-in refusal into a reason the screen can read', async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          error: {
+            code: 'conflict',
+            message: 'no',
+            requestId: 'r',
+            ticketing: { reason: 'view-is-built-in' },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(api.deleteView(BRAND, VIEW)).rejects.toMatchObject({
+      reason: 'view-is-built-in',
+    });
+  });
+
+  it('sends overdue and `me` like any other filter', () => {
+    expect(listQueryString({ assigneeId: ['me'], overdue: true })).toBe(
+      '?assigneeId=me&overdue=true',
+    );
+  });
+});

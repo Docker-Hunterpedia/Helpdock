@@ -35,7 +35,13 @@ export type TicketingAuditAction =
   // M1-11
   | 'blocked_sender.created'
   | 'blocked_sender.deleted'
-  | 'brand.spam_settings.updated';
+  | 'brand.spam_settings.updated'
+  // M1-05. Shared views only: a personal view is its owner's working habit, not
+  // the brand's configuration, and is not audited.
+  | 'view.created'
+  | 'view.updated'
+  | 'view.deleted'
+  | 'view.reordered';
 
 export type TicketingAuditTarget =
   | 'tag'
@@ -43,7 +49,8 @@ export type TicketingAuditTarget =
   | 'ticket_template'
   | 'blocked_sender'
   | 'brand'
-  | 'department';
+  | 'department'
+  | 'view';
 
 export interface TicketingAuditEntry {
   readonly brandId: string;

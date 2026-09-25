@@ -9,9 +9,15 @@ import {
   type DbHandle,
   runMigrations,
   type TenantContext,
+  views,
   withTenant,
 } from '@helpdock/db';
-import { type TicketList, ticketListQuerySchema } from '@helpdock/schemas';
+import {
+  type TicketList,
+  ticketListQuerySchema,
+  ticketViewFiltersSchema,
+  VIEW_COUNT_CAP,
+} from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { sql } from 'drizzle-orm';
@@ -31,8 +37,8 @@ import { type LoadResult, type LoadScenario, type LoadSession, runLoad } from '.
  * It seeds the §14 dataset into a fresh Postgres, starts **two api replicas**
  * from `dist/` as separate processes (§14: "2 `api` replicas"), signs in as an
  * Admin and as an Agent confined to two departments, and drives the list —
- * every default view, a search, a tag filter, the second page — and the ticket
- * read through the real HTTP stack, the guards and the tenant transaction.
+ * every default view, a search, a tag filter, the second page — the ticket
+ * read and the sidebar's view counts (M1-05) through the real HTTP stack, the guards and the tenant transaction.
  * Then it `EXPLAIN (ANALYZE, BUFFERS)`s each list query as the runtime role, so
  * the plans the report prints are the ones row-level security actually shapes.
  *
@@ -255,6 +261,13 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
           session: sessions[session],
           path: `${listPath}/${firstPage.tickets[0]?.id}`,
         });
+        // M1-05: every visible view counted, capped, in one request — what the
+        // sidebar asks for on every screen that shows it. Gated like a list.
+        reads.push({
+          name: 'list · view counts (sidebar)',
+          session: sessions[session],
+          path: `/api/brands/${dataset.brandId}/views/counts`,
+        });
 
         cases.push(
           { name: 'all (default)', session, query: {} },
@@ -344,10 +357,43 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
 
       const rows = await withTenant(app.db, context, (tx) =>
         tx.execute<{ 'QUERY PLAN': string }>(
-          sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.listTicketsStatement(tx, dataset.brandId, parsedQuery(listCase.query))}`,
+          sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.listTicketsStatement(tx, { brandId: dataset.brandId, viewerId: context.principalId }, parsedQuery(listCase.query))}`,
         ),
       );
       plans[`${listCase.session} · ${listCase.name}`] = [...rows]
+        .map((row) => row['QUERY PLAN'])
+        .join('\n');
+    }
+
+    // M1-05: the sidebar's counts, as the counts route runs them — one
+    // statement over every view the session's sidebar shows.
+    for (const session of ['admin', 'agent'] as const) {
+      const principalId = session === 'admin' ? dataset.admin.id : dataset.agent.id;
+      const context: TenantContext = {
+        brandIds: [dataset.brandId],
+        departmentIds: session === 'admin' ? 'all' : dataset.agentDepartmentIds,
+        principalType: 'staff',
+        principalId,
+      };
+
+      const rows = await withTenant(app.db, context, async (tx) => {
+        const shown = (await tx.select().from(views)).filter(
+          (view) =>
+            view.visibleDepartmentIds === null ||
+            context.departmentIds === 'all' ||
+            view.visibleDepartmentIds.some((id) => context.departmentIds.includes(id)),
+        );
+
+        return tx.execute<{ 'QUERY PLAN': string }>(
+          sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.countTicketsStatement(
+            tx,
+            { brandId: dataset.brandId, viewerId: principalId },
+            shown.map((view) => ticketViewFiltersSchema.parse(view.filters)),
+            VIEW_COUNT_CAP,
+          )}`,
+        );
+      });
+      plans[`${session} · view counts (sidebar)`] = [...rows]
         .map((row) => row['QUERY PLAN'])
         .join('\n');
     }

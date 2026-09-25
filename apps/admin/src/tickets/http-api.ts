@@ -17,6 +17,11 @@ import type {
   TicketSplitRequest,
   TicketStatusList,
   TicketUpdateRequest,
+  TicketView,
+  TicketViewCountList,
+  TicketViewCreateInput,
+  TicketViewList,
+  TicketViewUpdateInput,
   TimeEntryCreateRequest,
   TimeEntryList,
 } from '@helpdock/schemas';
@@ -32,6 +37,9 @@ import {
   ticketSchema,
   ticketSpamSenderSchema,
   ticketStatusListSchema,
+  ticketViewCountListSchema,
+  ticketViewListSchema,
+  ticketViewSchema,
   timeEntryListSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
@@ -226,6 +234,55 @@ export class HttpTicketsApi implements TicketsApi {
     return ticketDetailSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/split`, request),
     );
+  }
+
+  async views(brandId: string): Promise<TicketViewList> {
+    return ticketViewListSchema.parse(await this.#transport.request('GET', this.#views(brandId)));
+  }
+
+  async viewCounts(brandId: string): Promise<TicketViewCountList> {
+    return ticketViewCountListSchema.parse(
+      await this.#transport.request('GET', `${this.#views(brandId)}/counts`),
+    );
+  }
+
+  async createView(brandId: string, request: TicketViewCreateInput): Promise<TicketView> {
+    return ticketViewSchema.parse(
+      await this.#transport.request('POST', this.#views(brandId), request),
+    );
+  }
+
+  async updateView(
+    brandId: string,
+    viewId: string,
+    request: TicketViewUpdateInput,
+  ): Promise<TicketView> {
+    return ticketViewSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#views(brandId)}/${encodeURIComponent(viewId)}`,
+        request,
+      ),
+    );
+  }
+
+  async deleteView(brandId: string, viewId: string): Promise<void> {
+    await this.#transport.request(
+      'DELETE',
+      `${this.#views(brandId)}/${encodeURIComponent(viewId)}`,
+    );
+  }
+
+  async reorderViews(brandId: string, viewIds: readonly string[]): Promise<TicketViewList> {
+    return ticketViewListSchema.parse(
+      await this.#transport.request('POST', `${this.#views(brandId)}/reorder`, {
+        viewIds: [...viewIds],
+      }),
+    );
+  }
+
+  #views(brandId: string): string {
+    return `${this.#brand(brandId)}/views`;
   }
 
   #brand(brandId: string): string {

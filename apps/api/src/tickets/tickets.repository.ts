@@ -17,8 +17,8 @@ import {
   ticketStatuses,
   tickets,
 } from '@helpdock/db';
-import type { TicketListQuery } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import type { TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
+import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
 
 /**
@@ -34,6 +34,16 @@ import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
  * The only exception is `brands`, which is a global table with no policy, so
  * the read of a brand's prefix names its id explicitly.
  */
+
+/**
+ * Who a list is read for: the brand in the path, and the principal whose id
+ * `assigneeId=me` stands for. Isolation is still the policies' — neither value
+ * widens what the transaction may read.
+ */
+export interface TicketReader {
+  readonly brandId: string;
+  readonly viewerId: string;
+}
 
 export interface TicketWithStatus {
   readonly ticket: TicketRow;
@@ -105,10 +115,10 @@ export class TicketRepository {
    */
   async listTickets(
     tx: DbTransaction,
-    brandId: string,
+    reader: TicketReader,
     query: TicketListQuery,
   ): Promise<TicketWithStatus[]> {
-    const rows = await this.listTicketsStatement(tx, brandId, query);
+    const rows = await this.listTicketsStatement(tx, reader, query);
 
     return rows.map(withStatus);
   }
@@ -118,9 +128,9 @@ export class TicketRepository {
    * harness can `EXPLAIN` exactly what the api sends rather than a copy of it
    * that drifts (`src/testing/perf`).
    */
-  listTicketsStatement(tx: DbTransaction, brandId: string, query: TicketListQuery) {
+  listTicketsStatement(tx: DbTransaction, reader: TicketReader, query: TicketListQuery) {
     const { sort, direction, cursor, limit, ...filters } = query;
-    const where = ticketFilters({ brandId, filters, sort, direction, cursor });
+    const where = ticketFilters({ ...reader, filters, sort, direction, cursor });
 
     return tx
       .select()
@@ -129,6 +139,57 @@ export class TicketRepository {
       .where(where)
       .orderBy(...ticketOrder(sort, direction))
       .limit(limit + 1);
+  }
+
+  /**
+   * How many tickets the reader can see that match each of several views'
+   * filters, reading at most `cap + 1` for each (M1-05). The `LIMIT` sits
+   * inside every count, so the planner stops after `cap + 1` rows instead of
+   * counting a whole queue: a sidebar number past the cap reads "999+", and
+   * nobody works a queue by whether it holds a thousand or four.
+   *
+   * One statement with one scalar subquery per view: each keeps its own plan
+   * — the index its filters reach — and the sidebar costs one round trip
+   * rather than one per view. Each `WHERE` is the list's own, so a count can
+   * never disagree with the list about which tickets match.
+   */
+  async countTickets(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: readonly TicketViewFilters[],
+    cap: number,
+  ): Promise<number[]> {
+    if (filters.length === 0) {
+      return [];
+    }
+
+    const rows = await tx.execute<Record<string, number>>(
+      this.countTicketsStatement(tx, reader, filters, cap),
+    );
+    const row = [...rows][0] ?? {};
+
+    return filters.map((_filters, index) => Number(row[`c${index}`] ?? 0));
+  }
+
+  /** The statement {@link countTickets} runs, unexecuted, for the performance harness. */
+  countTicketsStatement(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: readonly TicketViewFilters[],
+    cap: number,
+  ): SQL {
+    const counts = filters.map(({ sort, direction, ...rest }, index) => {
+      const matching = tx
+        .select({ id: tickets.id })
+        .from(tickets)
+        .innerJoin(ticketStatuses, statusJoin)
+        .where(ticketFilters({ ...reader, filters: rest, sort, direction, cursor: undefined }))
+        .limit(cap + 1);
+
+      return sql`(SELECT count(*)::int FROM (${matching}) AS matching) AS ${sql.identifier(`c${index}`)}`;
+    });
+
+    return sql`SELECT ${sql.join(counts, sql`, `)}`;
   }
 
   /**

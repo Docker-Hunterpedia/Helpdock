@@ -478,6 +478,17 @@ const coerceArray = <T extends z.ZodType>(item: T) =>
     z.array(item).max(50),
   );
 
+/** The assignee filter's two values that are not a person. */
+export const TICKET_ASSIGNEE_UNASSIGNED = 'unassigned';
+export const TICKET_ASSIGNEE_ME = 'me';
+
+/**
+ * A boolean in a query string, parsed idempotently: the global pipe and the
+ * parameter's own both parse a query, and the second is handed the boolean the
+ * first produced. The same arrangement as `contactSearchQuerySchema`'s.
+ */
+const queryBoolean = z.union([z.boolean(), z.stringbool()]);
+
 export const ticketListQuerySchema = z.object({
   statusId: coerceArray(z.uuid()).optional(),
   /** Filter by the four system states, for "everything still open". */
@@ -489,8 +500,14 @@ export const ticketListQuerySchema = z.object({
    * `unassigned` is a value rather than a separate flag, because "unassigned"
    * is one of the chips in the same filter and a second parameter would let a
    * caller ask for both at once.
+   *
+   * `me` is the reader, resolved by the api from the principal (M1-05). A
+   * saved view says `me` rather than a person's id so that one shared "My
+   * open" means *mine* to everybody who opens it.
    */
-  assigneeId: coerceArray(z.union([z.uuid(), z.literal('unassigned')])).optional(),
+  assigneeId: coerceArray(
+    z.union([z.uuid(), z.literal(TICKET_ASSIGNEE_UNASSIGNED), z.literal(TICKET_ASSIGNEE_ME)]),
+  ).optional(),
   /**
    * Tags, with **all-of** semantics: a ticket matches when it carries every tag
    * named, not any of them. Two chips in a filter are how somebody narrows a
@@ -506,6 +523,12 @@ export const ticketListQuerySchema = z.object({
   tagIds: coerceArray(z.uuid()).optional(),
   /** Free text over the subject: full-text first, trigram for the misspelled. */
   q: z.string().trim().min(1).max(200).optional(),
+  /**
+   * `true` keeps only tickets whose SLA has run out (M1-05's "Overdue"): not
+   * closed, clock not paused, and breached or past a due time. `false` is the
+   * same as leaving it off — "not overdue" is not a queue anybody works.
+   */
+  overdue: queryBoolean.optional(),
   sort: ticketSortSchema.default('updatedAt'),
   direction: ticketSortDirectionSchema.default('desc'),
   /** Opaque. It is the api's own encoding of "the row after this one". */

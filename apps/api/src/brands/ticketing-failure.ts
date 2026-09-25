@@ -40,6 +40,8 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'assignee-above-actor': HttpStatus.FORBIDDEN,
   // M1-12. The brand's setting refuses, not the actor's role.
   'time-tracking-off': HttpStatus.CONFLICT,
+  // M1-05. The view's shape refuses, not the actor's role.
+  'view-is-built-in': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -60,6 +62,8 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
   'sender-already-blocked': 'That sender is already on the block list',
   'assignee-above-actor': 'Only an Admin may route work to an Admin',
   'time-tracking-off': 'This brand has time tracking turned off',
+  'view-is-built-in':
+    'A built-in view may be renamed, reordered or hidden, never deleted, refiltered or reshared',
 };
 
 export class TicketingFailure extends HttpException {

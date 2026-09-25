@@ -5,6 +5,7 @@ import {
   type DbTransaction,
   departments,
   seedBrandStatuses,
+  seedBrandViews,
   tags,
   ticketStatuses,
   userBrandRoles,
@@ -340,6 +341,10 @@ const seedBrand = async (
       .insert(departments)
       .values(DEPARTMENTS.map(([name], sortOrder) => ({ brandId, name, sortOrder })))
       .returning({ id: departments.id, name: departments.name });
+
+    // M1-05: the default views, so the sidebar's counts are measured over the
+    // same five-plus-one-per-department views a real brand starts with.
+    await seedBrandViews(tx, brandId);
 
     const tagRows = await tx
       .insert(tags)

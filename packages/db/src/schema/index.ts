@@ -31,3 +31,4 @@ export * from './tickets.js';
 export * from './tsvector.js';
 export * from './user-brand-roles.js';
 export * from './users.js';
+export * from './views.js';

@@ -46,8 +46,8 @@ describe('AppShell', () => {
   it('lists every destination as a link in one named navigation', async () => {
     await renderShell();
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    // The view counts are read from the ticket list, so the group is only
-    // complete once they have arrived (M1-15).
+    // The views and their counts are two reads, so the group is only complete
+    // once the counts have arrived (M1-05).
     await screen.findByRole('link', { name: /^Escalated 1$/ });
 
     expect(
@@ -59,11 +59,18 @@ describe('AppShell', () => {
       'Contacts812',
       'Help center36',
       'Reports9',
+      // The + beside "Views": an icon link, named by its aria-label.
+      '',
       'All tickets',
       'My open2',
       'Unassigned2',
       'Overdue3',
+      'All open · Support4',
+      'All open · Billing1',
+      'All open · Onboarding0',
       'Escalated1',
+      'VIP refunds1',
+      'Urgent, mine1',
       'Brand',
       'Settings',
       'Ticketing',

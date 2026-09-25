@@ -5,6 +5,7 @@ import { MockAttachmentUploader } from '../../media/mock-uploader.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { MOCK_TICKET_REFUND, MockTicketsApi } from '../../tickets/mock-api.js';
+import { MOCK_VIEW_ESCALATED } from '../../tickets/mock-views.js';
 
 /**
  * The ticket workspace against the fixture. What is worth asserting is what the
@@ -84,7 +85,9 @@ describe('the ticket list', () => {
   });
 
   it('says what an empty view means, without pretending a search failed', async () => {
-    await renderTickets('/tickets?view=escalated&priority=low');
+    await renderTickets(
+      `/tickets?view=${MOCK_VIEW_ESCALATED}&custom=1&state=escalated&priority=low`,
+    );
 
     expect(await screen.findByText('Nothing in this view')).toBeVisible();
   });

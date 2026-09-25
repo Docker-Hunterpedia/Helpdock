@@ -57,6 +57,7 @@ describe('the schema', () => {
       'tickets',
       'user_brand_roles',
       'users',
+      'views',
     ]);
   });
 

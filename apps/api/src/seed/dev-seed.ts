@@ -5,6 +5,7 @@ import {
   type Db,
   departments,
   seedBrandStatuses,
+  seedBrandViews,
   userBrandRoles,
   users,
   withSystem,
@@ -132,6 +133,9 @@ export const seedDevInstall = async ({
       .insert(departments)
       .values({ brandId, name: DEV_DEPARTMENT_NAME, sortOrder: 0 })
       .onConflictDoNothing({ target: [departments.brandId, departments.name] });
+
+    // M1-05: the default views. Idempotent, like the statuses above.
+    await seedBrandViews(tx, brandId);
   });
 
   log(

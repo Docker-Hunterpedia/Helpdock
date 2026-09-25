@@ -22,7 +22,7 @@ import {
 } from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { principalHasPermission } from '../auth/permissions.js';
-import type { Principal } from '../auth/principal.js';
+import { type Principal, principalIdOf } from '../auth/principal.js';
 import { Requires } from '../auth/route-declaration.js';
 import { requireRequestContext } from '../context/request-context.js';
 import {
@@ -82,7 +82,9 @@ export class TicketsController {
     @Param(new ZodValidationPipe(TicketBrandParamDto)) { brandId }: TicketBrandParamDto,
     @Query(new ZodValidationPipe(TicketListQueryDto)) query: TicketListQueryDto,
   ): Promise<TicketList> {
-    return this.#tickets.list(brandId, query, { withContacts: this.#readsContacts(brandId) });
+    return this.#tickets.list({ brandId, viewerId: principalIdOf(this.#principal()) }, query, {
+      withContacts: this.#readsContacts(brandId),
+    });
   }
 
   @Post('tickets')

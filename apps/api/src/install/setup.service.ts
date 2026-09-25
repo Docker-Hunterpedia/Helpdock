@@ -10,6 +10,7 @@ import {
   departments,
   INSTALL_SCOPE_BRAND_ID,
   seedBrandStatuses,
+  seedBrandViews,
   userBrandRoles,
   users,
   uuidv7,
@@ -435,6 +436,8 @@ export class SetupService {
     // (DOMAIN-RULES §2.1), so the six built-in ones are written in the same
     // transaction as the brand rather than on first use.
     await seedBrandStatuses(tx, brandId);
+    // M1-05: the default views, including the first department's "All open".
+    await seedBrandViews(tx, brandId);
 
     await tx.insert(auditLog).values({
       brandId: INSTALL_SCOPE_BRAND_ID,

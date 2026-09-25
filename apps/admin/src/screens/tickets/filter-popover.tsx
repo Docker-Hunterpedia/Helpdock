@@ -1,46 +1,37 @@
-import type { Department, TicketPriority, TicketStatus } from '@helpdock/schemas';
-import { ticketPrioritySchema } from '@helpdock/schemas';
+import type { Department, TagSummary, TicketStatus, TicketSystemState } from '@helpdock/schemas';
+import { ticketPrioritySchema, ticketSystemStateSchema } from '@helpdock/schemas';
 import { Box, Button, Chip, Popover, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
+import { activeFilterCount, EMPTY_FILTERS, type WorkspaceFilters } from '../../tickets/views.js';
 import { statusName } from './format.js';
 
 /**
- * The Filter button's popover: status, priority, assignee and department, each
- * a row of toggle chips.
+ * The Filter button's popover: state, status, priority, assignee, department,
+ * tags and SLA, each a row of toggle chips.
  *
  * There is no Apply button. Every choice is written straight into the query
  * string and the list re-reads, which is the same rule the contact screens
  * follow — the URL is the state, so a filtered list is a link a colleague can
- * open and the back button steps through what somebody looked at.
+ * open and the back button steps through what somebody looked at. On a saved
+ * view the change is what raises "Filters changed" (M1-05).
  *
  * Assignee offers two values that are not people: "Assigned to me" and
  * "Unassigned". They are values of the same filter rather than switches of
  * their own, because `assigneeId` is one parameter and two switches would let
- * a person ask for both at once and get nothing.
+ * a person ask for both at once and get nothing. "Me" is sent as `me`, which
+ * the api reads as whoever is asking — so a view saved from it means the same
+ * to everybody who opens it.
  */
 
-export interface TicketFilters {
-  readonly statusId: readonly string[];
-  readonly priority: readonly TicketPriority[];
-  readonly assigneeId: readonly (string | 'unassigned')[];
-  readonly departmentId: readonly string[];
-}
-
-export const EMPTY_FILTERS: TicketFilters = {
-  statusId: [],
-  priority: [],
-  assigneeId: [],
-  departmentId: [],
-};
-
-/** How many filters are on, for the count beside the button's label. */
-export const activeFilterCount = (filters: TicketFilters): number =>
-  filters.statusId.length +
-  filters.priority.length +
-  filters.assigneeId.length +
-  filters.departmentId.length;
+/** Clearing keeps the order: it is not a filter, and the list header shows it. */
+const cleared = (filters: WorkspaceFilters): WorkspaceFilters => ({
+  ...EMPTY_FILTERS,
+  q: filters.q,
+  sort: filters.sort,
+  direction: filters.direction,
+});
 
 const toggle = <T,>(values: readonly T[], value: T): readonly T[] =>
   values.includes(value) ? values.filter((member) => member !== value) : [...values, value];
@@ -90,18 +81,20 @@ export function FilterPopover({
   filters,
   statuses,
   departments,
+  tags,
   staff,
   viewerId,
   onChange,
   onClose,
 }: {
   readonly anchorEl: HTMLElement | null;
-  readonly filters: TicketFilters;
+  readonly filters: WorkspaceFilters;
   readonly statuses: readonly TicketStatus[];
   readonly departments: readonly Department[];
+  readonly tags: readonly TagSummary[];
   readonly staff: readonly { readonly userId: string; readonly name: string }[];
   readonly viewerId: string;
-  onChange(filters: TicketFilters): void;
+  onChange(filters: WorkspaceFilters): void;
   onClose(): void;
 }): ReactNode {
   const t = useT();
@@ -123,6 +116,19 @@ export function FilterPopover({
         aria-label={t('tickets:filters.title')}
         sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}
       >
+        <Group label={t('tickets:filters.state')}>
+          {ticketSystemStateSchema.options.map((state: TicketSystemState) => (
+            <FilterChip
+              key={state}
+              label={t(`tickets:filters.states.${state}`)}
+              on={filters.systemState.includes(state)}
+              onToggle={() => {
+                onChange({ ...filters, systemState: toggle(filters.systemState, state) });
+              }}
+            />
+          ))}
+        </Group>
+
         <Group label={t('tickets:filters.status')}>
           {statuses.map((status) => (
             <FilterChip
@@ -152,9 +158,9 @@ export function FilterPopover({
         <Group label={t('tickets:filters.assignee')}>
           <FilterChip
             label={t('tickets:filters.me')}
-            on={filters.assigneeId.includes(viewerId)}
+            on={filters.assigneeId.includes('me')}
             onToggle={() => {
-              onChange({ ...filters, assigneeId: toggle(filters.assigneeId, viewerId) });
+              onChange({ ...filters, assigneeId: toggle(filters.assigneeId, 'me') });
             }}
           />
           <FilterChip
@@ -196,13 +202,38 @@ export function FilterPopover({
           </Group>
         )}
 
+        {tags.length === 0 ? null : (
+          <Group label={t('tickets:filters.tags')}>
+            {tags.map((tag) => (
+              <FilterChip
+                key={tag.id}
+                label={locale === 'ar' && tag.nameAr !== null ? tag.nameAr : tag.name}
+                on={filters.tagIds.includes(tag.id)}
+                onToggle={() => {
+                  onChange({ ...filters, tagIds: toggle(filters.tagIds, tag.id) });
+                }}
+              />
+            ))}
+          </Group>
+        )}
+
+        <Group label={t('tickets:filters.sla')}>
+          <FilterChip
+            label={t('tickets:filters.overdue')}
+            on={filters.overdue}
+            onToggle={() => {
+              onChange({ ...filters, overdue: !filters.overdue });
+            }}
+          />
+        </Group>
+
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button
             variant="text"
             size="small"
             disabled={activeFilterCount(filters) === 0}
             onClick={() => {
-              onChange(EMPTY_FILTERS);
+              onChange(cleared(filters));
             }}
           >
             {t('tickets:filters.clear')}

@@ -8,3 +8,4 @@ export * from './tenant.js';
 export * from './ticket-numbers.js';
 export * from './ticket-statuses.js';
 export * from './uuid.js';
+export * from './views.js';

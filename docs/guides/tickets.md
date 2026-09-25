@@ -1124,9 +1124,9 @@ prints the full plans):
 | Unassigned (live states) | `tickets_brand_updated_idx`, 750 read, 2.7 ms | same, 1.6 ms |
 | Live states (Overdue) | `tickets_brand_updated_idx`, 413 read, 0.85 ms | same, 1.9 ms |
 | Escalated | `tickets_brand_updated_idx`, 1 350 read, 3.1 ms | same, 6.0 ms |
-| Search `refund` | `tickets_brand_updated_idx`, 370 read, 2.0 ms | same, 6.5 ms |
-| Search `renewa` (half-typed) | `tickets_brand_updated_idx`, 237 read, 1.3 ms | same, 4.1 ms |
-| Search matching nothing | `tickets_brand_updated_idx`, **50 000 read, 257 ms** | same, 124 ms |
+| Search `refund` | `Index Only Scan using ticket_search_tokens_brand_token_idx`, `Index Cond: … token = ANY('{refund}')`, 3 191 ids, then `tickets_pkey` and a top-N sort, 37 ms | same, 17 ms |
+| Search `renewa` (half-typed) | exact half: token index, 0 ids, 9.1 ms; fuzzy fallback: prefix range of the token index, 53 ms | 8.7 ms; 30 ms |
+| Search matching nothing | exact half: token index, **0 ids, 8.8 ms**; fuzzy fallback: prefix range, 0 candidates, 9.5 ms | 8.2 ms; 8.2 ms |
 | Two tags, all-of | `Bitmap Index Scan on ticket_tags_brand_tag_idx`, then `Index Scan using tickets_pkey`, 22.6 ms | same, 15.5 ms |
 | Page 2 | `Index Scan Backward using tickets_brand_updated_idx`, `Index Cond: … ROW(updated_at, id) < ROW(…)`, 0.15 ms | same, 0.42 ms |
 
@@ -1141,21 +1141,49 @@ Postgres will not use a condition as an index condition ahead of a row-level
 security policy unless the condition's operator is `LEAKPROOF`: a function that
 is not could raise an error that reveals a row the policy was about to hide.
 `@@` (`ts_match_vq`) and `<%` (`word_similarity_op`) are not leakproof (nor is
-`=` on an enum, which is why the priority and channel filters are filters too),
-so under `FORCE ROW LEVEL SECURITY` the list evaluates a search on each visible
-ticket, newest first, until it has a page. A term that matches often costs a
-few milliseconds. **A term that matches nothing reads every visible ticket**,
-and the trigram half is what makes that expensive: evaluated row by row, `<%`
-costs about 5 µs a subject against about 0.25 µs for the full-text half, so
-257 ms for an Admin at 50k tickets.
+`=` on an enum, which is why the priority and channel filters are filters too).
+Until M1-15 part 2 the list evaluated a search on each visible ticket, newest
+first, until it had a page, and **a term that matched nothing read every visible
+ticket**: 257 ms for an Admin at 50k tickets.
 
-That case is outside the gate, and it is reported separately rather than
-hidden (below). [ADR 0011](../decisions/0011-ticket-search-token-table.md)
-closes it with a token table compared by a leakproof `=`, under the same
-policies as every ticket child table, scheduled with M1-15 part 2. `LEAKPROOF`
-wrappers were rejected: the operators can raise, so the promise would be false.
+[ADR 0011](../decisions/0011-ticket-search-token-table.md) moved search onto
+`ticket_search_tokens`, one row per lexeme of a ticket's subject and first
+message, under the same `FORCE`d brand and department policies as every ticket
+child table. `=` and the range comparisons on `text` are leakproof, so the
+token lookup is an **index condition ahead of the policy**, and the policy's
+department check runs on the index entry (`department_id` is in the index, so
+no heap is read). The key lines, as the runtime role under an Admin's context at
+50k tickets, for a term nothing matches:
+
+```text
+-- exact half
+Index Only Scan using ticket_search_tokens_brand_token_idx on ticket_search_tokens tokens  (rows=0 loops=1)
+  Index Cond: ((brand_id = ANY (…app.brand_ids…)) AND (brand_id = '…'::uuid) AND (token = ANY ('{zebra}'::text[])))
+  Filter: (COALESCE(…app.all_departments…) OR (department_id = ANY (…app.department_ids…)))
+Execution Time: 8.798 ms
+
+-- fuzzy fallback: the words sharing the first three letters, then <%
+Index Only Scan using ticket_search_tokens_brand_token_idx on ticket_search_tokens near  (rows=0 loops=1)
+  Index Cond: ((brand_id = ANY (…)) AND (brand_id = '…'::uuid) AND (token >= "left"(wanted.lexeme, 3)) AND (token < ("left"(wanted.lexeme, 3) || '…'::text)))
+Execution Time: 9.487 ms
+```
+
+Most of those 9 ms is the contact-name half (`ILIKE` over the brand's 20 000
+contacts); the token lookups themselves take well under a millisecond. The
+fuzzy half's candidates are read in a `LATERAL` subquery kept apart with
+`OFFSET 0`: flattened, the planner read every token of the brand and applied the
+range as a join filter (151 ms). An integration test (`tickets.integration.test.ts`,
+"looks the … words up in the token index ahead of the policy") `EXPLAIN`s both
+halves as the runtime role and fails if the token condition leaves `Index Cond`.
+
+What it costs: a common word is no longer "stop after a page". Every ticket
+carrying `refund` (3 191 of 50 000) is found, joined and top-N sorted, so that
+search went from p95 47 ms to 86 ms under load. That is inside the gate and
+grows with how many tickets share a word, not with the brand's size.
+
 The two GIN indexes stay: the PRD names the tsvector one, and both serve paths
-that run as the owner.
+that run as the owner. `LEAKPROOF` wrappers were rejected: the operators can
+raise, so the promise would be false.
 
 ### How it is measured
 
@@ -1186,10 +1214,11 @@ pnpm --filter @helpdock/api perf:tickets
    replicas. Each session cycles through every scenario, once as an Admin and
    once as an Agent confined to the two smallest departments (20 % of the
    tickets): All tickets, My open, Unassigned, the live states of Overdue,
-   Escalated, search `refund`, search `renewa`, two tags, page 2, and opening a
+   Escalated, search `refund`, search `renewa`, a search nothing matches (`zebra`), two tags, page 2, and opening a
    ticket. Two minutes of warm-up, ten measured, p50/p95/p99 by nearest rank.
-4. **Worst case, alone**: a search nothing matches, one session, twenty
-   seconds, after the load. Reported, not gated.
+4. **Zero-match search**: a search nothing matches is in the mix like every
+   other scenario, gated by its own budget, `PERF_NO_MATCH_P95_MS` (ADR 0011).
+   Until M1-15 part 2 it was measured alone and reported, not gated.
 5. **Plans**: `EXPLAIN (ANALYZE, BUFFERS)` of every list query, built by the
    repository's own `listTicketsStatement`, run as the runtime role inside the
    tenant context the request would carry.
@@ -1201,6 +1230,7 @@ pnpm --filter @helpdock/api perf:tickets
 | `PERF_WARMUP_S` / `PERF_DURATION_S` | 120 / 600 | |
 | `PERF_REPLICAS` | 2 | api processes |
 | `PERF_P95_MS` | 150 | the gate |
+| `PERF_NO_MATCH_P95_MS` | 150 | the zero-match search's own gate |
 | `PERF_SCALE` | 1 | multiplies the dataset; `0.1` for a smoke run |
 | `PERF_REPORT` | none | also write the results and plans as JSON |
 
@@ -1212,29 +1242,34 @@ measures the machine, so run it on an idle one.
 
 ### What it measured last (2026-09-25)
 
-**The gate passes.** The full §14 run on an idle machine, with the benchmark
-and both api replicas pinned to **2 cores** (`taskset -c 0,1`) to stand in for a
-2 vCPU host (the container has 15 GB of memory, not 4): 50 sessions, 1 s think
-time, 2 min warm-up, 10 min measured, two replicas; 48.9 req/s, overall p95
-41 ms, **no errors**. The slowest gated scenario is 53 ms against the 150 ms
-gate.
+**The gate passes, zero-match search included** (M1-15 part 2, after ADR 0011).
+The full §14 run: 50 sessions, 1 s think time, 2 min warm-up, 10 min measured,
+two replicas; 48.6 req/s, overall p95 70 ms, **no errors**. The slowest list
+scenario is 110 ms against the 150 ms gate. This run was **not pinned**: the
+container was shared with other build jobs and the load average stayed above
+the threshold for a pinned run (mean 3.1, range 1.3–8.9 over the run), so read
+the tail as an upper bound. The previous column is the pinned, idle run of the
+index set before the token table.
 
-| Scenario | Admin p50 / p95 / p99 ms | Agent p50 / p95 / p99 ms |
-|---|---|---|
-| All tickets | 13 / 32 / 62 | 13 / 32 / 52 |
-| My open | 8 / 21 / 42 | 13 / 28 / 45 |
-| Unassigned | 15 / 31 / 51 | 16 / 33 / 60 |
-| Live states (Overdue) | 14 / 29 / 53 | 16 / 34 / 57 |
-| Escalated | 16 / 36 / 57 | 21 / 39 / 59 |
-| Search `refund` | 26 / 47 / 72 | 30 / 51 / 71 |
-| Search `renewa` | 25 / 46 / 75 | 28 / 48 / 72 |
-| Two tags, all-of | 27 / 50 / 72 | 31 / 53 / 71 |
-| Page 2 | 13 / 28 / 47 | 13 / 29 / 46 |
-| Open a ticket | 19 / 46 / 78 | 20 / 41 / 69 |
-| Search matching nothing (alone, not gated) | 241 / 284 / 304 | 141 / 186 / 207 |
+| Scenario | Admin p50 / p95 / p99 ms | Agent p50 / p95 / p99 ms | Before, p95 Admin / Agent |
+|---|---|---|---|
+| All tickets | 13 / 29 / 45 | 14 / 27 / 41 | 32 / 32 |
+| My open | 8 / 19 / 32 | 13 / 28 / 41 | 21 / 28 |
+| Unassigned | 15 / 29 / 45 | 16 / 31 / 41 | 31 / 33 |
+| Live states (Overdue) | 14 / 28 / 43 | 16 / 33 / 51 | 29 / 34 |
+| Escalated | 16 / 32 / 46 | 21 / 38 / 48 | 36 / 39 |
+| Search `refund` | 54 / 86 / 110 | 35 / 60 / 82 | 47 / 51 |
+| Search `renewa` (fuzzy fallback) | 74 / 110 / 129 | 58 / 91 / 114 | 46 / 48 |
+| **Search matching nothing** | **31 / 51 / 70** | **31 / 51 / 65** | 284 / 186 (alone, not gated) |
+| Two tags, all-of | 27 / 48 / 66 | 32 / 54 / 77 | 50 / 53 |
+| Page 2 | 13 / 27 / 40 | 14 / 27 / 42 | 28 / 29 |
+| Open a ticket | 20 / 39 / 56 | 20 / 40 / 58 | 46 / 41 |
 
-The zero-match search is what [ADR 0011](../decisions/0011-ticket-search-token-table.md)
-addresses.
+The zero-match search went from reading every visible ticket to two index
+probes: p95 284 ms measured alone to 51 ms inside the full load. A word many
+tickets share costs more than before, and a half-typed word pays for two
+statements (the exact half, then the fallback); both are explained under
+[Search under row-level security](#search-under-row-level-security).
 
 An earlier run (2026-09-24) on the same container while six other build jobs
 shared it (load average 27–64) put list p95 at 0.8–2.1 s: that measured the

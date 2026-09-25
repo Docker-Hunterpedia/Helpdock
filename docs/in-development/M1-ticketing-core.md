@@ -148,7 +148,9 @@ Decisions a reviewer should confirm:
 - **Proved** by an integration test that `EXPLAIN`s both halves as the runtime role under RLS and finds the token
   lookup in `Index Cond`, and by the benchmark's plans (tickets guide, Search under row-level security).
 - **Benchmark**: the zero-match search is now in the gated mix with its own budget, `PERF_NO_MATCH_P95_MS`
-  (150 ms). Numbers in the [tickets guide](../guides/tickets.md#what-it-measured-last-2026-09-25).
+  (150 ms). Full §14 run on 2026-09-25, unpinned because the shared container's load stayed above 3: zero-match
+  p95 51 ms (was 284 ms alone), slowest list scenario 110 ms (`renewa`, which runs both halves), 0 errors.
+  [Tickets guide](../guides/tickets.md#what-it-measured-last-2026-09-25).
 - **Trade-offs**: a typo in the first three letters is not caught by the fallback; quotes are not a phrase
   operator; later replies are not searched (the first message is new: before, only the subject was).
 

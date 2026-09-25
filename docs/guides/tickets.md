@@ -481,8 +481,9 @@ status and never off its name, exported from `@helpdock/schemas`:
 
 The default views already leave spam out: every one of them asks only for
 open-like system states, and Spam is `closed`. "All tickets" shows it, with its
-danger badge, because that view is the desk's whole history. M1 has no report
-or count query yet, so there is nothing else to exclude it from today.
+danger badge, because that view is the desk's whole history. The sidebar's
+counts are the views' own filters, so they leave it out too; M1 has no report
+to exclude it from yet.
 
 ## Merge and split
 
@@ -602,6 +603,66 @@ Both tickets' reads carry `related`: the ticket this one was split from and the
 tickets split from it, so the thread can link the references its system
 messages name.
 
+## Views
+
+A view is **a list query with a name** (M1-05, REQUIREMENTS §4.1). Its
+`filters` are the `GET /tickets` query schema itself, less the cursor and the
+page size — one schema, not two — so anything the list accepts a view can save,
+and a view can never ask for something the list does not understand. Views are
+rows of the `views` table (migration `0022_views`), brand-scoped like every
+tenant table.
+
+**A view never widens access.** Resolving one produces list parameters, and
+those go through the same department-scoped read as a query typed by hand. A
+view shared with Billing shows a Support agent nothing they could not already
+see; its count is the list's own `WHERE`, run in the reader's transaction.
+
+### Who sees which
+
+| View | Sees it | Changes it |
+|---|---|---|
+| Personal | Its owner, and nobody else | Its owner |
+| Shared with the brand | Everybody in the brand | An Admin, or a Team Leader who reaches every department |
+| Shared with departments | Staff whose scope reaches one of them | An Admin, or a Team Leader who leads all of them |
+
+A personal view is guarded by the **database**, not by the service: a
+restrictive policy (`views_owner_only`) on top of the brand policy keeps a row
+with an `owner_id` its owner's, so another person's personal view is a row the
+request cannot read, and every route answers 404 for it — the same answer as
+for an id that does not exist. The RLS negative suite covers it. Sharing needs
+`ticketing:manage`, so an Agent or a Viewer keeps personal views only; a Team
+Leader restricted to some departments may share only with departments they
+lead, never with the whole brand. Every change to a shared view is audited
+(`view.created`, `view.updated`, `view.deleted`); a personal one is nobody
+else's business.
+
+### The built-in views
+
+Every brand is seeded with **My open** (`assigneeId=me`, the live states),
+**Unassigned** (`assigneeId=unassigned`, the live states), **Overdue**
+(`overdue=true`, the live states), **Escalated** (`systemState=escalated`), and
+one **All open · <department>** per department (that department, the live
+states), in both languages. The department ones follow the department: created
+with it, renamed with it unless the brand has renamed the view itself, and
+deleted with it.
+
+A built-in view may be **renamed, reordered and hidden** for the brand. It may
+not be deleted, refiltered or reshared: those answer 409 `view-is-built-in`,
+because REQUIREMENTS §4.1 promises every brand those queues. Only a shared view
+can be hidden; a person deletes their own.
+
+### Counts
+
+`GET /views/counts` answers one number per view the sidebar shows, in **one
+statement**: a scalar subquery per view, each the list's `WHERE` with a
+`LIMIT 1000` inside the count, so each walks the index its filters reach and
+stops. A number past 999 reads `999+` (`capped: true`); nobody triages a queue
+by whether it holds a thousand or four. Migration `0022` adds one index for it,
+`tickets_brand_status_updated_idx (brand_id, status_id, updated_at, id)`, which
+turns a view narrowed by state across departments — Escalated, Overdue's live
+states — into a range scan per status rather than a read of every ticket in the
+brand. The counts request is a scenario of the [performance gate](#performance).
+
 ## Side effects and realtime
 
 Every mutation writes its outbox row in the same transaction as the change
@@ -677,6 +738,18 @@ session — see [satisfaction surveys](#satisfaction-surveys):
 | `POST /tickets/:ticketId/unmerge` | `ticket:write` | Undoes a merge inside 24 hours (M1-09) |
 | `POST /tickets/:ticketId/split` | `ticket:write` | Copies messages onto a new ticket (M1-09) |
 
+The saved views of [Views](#views) are under the same prefix, every one
+`ticket:read`; what a shared view needs on top is decided per view:
+
+| Route | Declares | Answers |
+|---|---|---|
+| `GET /views` | `ticket:read` | The views the reader may see: shared ones in the brand's order, then their own |
+| `GET /views/counts` | `ticket:read` | One capped count per view the sidebar shows |
+| `POST /views` | `ticket:read` | Saves a view: personal by default, shared with `ticketing:manage` |
+| `PATCH /views/:viewId` | `ticket:read` | Name, Arabic name, filters, visibility, `hidden` |
+| `DELETE /views/:viewId` | `ticket:read` | A view that is not built in |
+| `POST /views/reorder` | `ticket:read` | `{ viewIds }`: some shared views, or some of the reader's own, in a new order |
+
 ### Listing
 
 ```
@@ -686,9 +759,10 @@ GET /api/brands/:brandId/tickets
   &priority=urgent            repeatable: low | medium | high | urgent
   &departmentId=<uuid>        repeatable
   &channel=email              repeatable: email | chat | telegram | form | api | manual
-  &assigneeId=<uuid>          repeatable; the value `unassigned` is a chip of its own
+  &assigneeId=<uuid>          repeatable; `unassigned` and `me` are values of their own
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  the subject, the contact's name, or a reference
+  &overdue=true               only tickets whose SLA has run out (M1-05)
   &sort=updatedAt             updatedAt | createdAt | number | priority
   &direction=desc             asc | desc
   &limit=25                   1–100
@@ -759,6 +833,16 @@ tag named, not any of them. Two chips in a filter are how somebody narrows a
 queue, and "any" would widen it — the reading that is wrong in the direction
 that shows rows the reader asked to exclude. `tagIds` is the same filter under
 another name, and naming both is naming their union.
+
+`assigneeId=me` is **whoever is asking**, resolved from the session (M1-05). A
+saved view says `me` rather than a person's id, so one shared "My open" means
+*mine* to everybody who opens it.
+
+`overdue=true` keeps the tickets whose clock has run out: not closed, not in a
+status that pauses the SLA ("Awaiting customer" is waiting, not late), and
+either `sla_breached` or past `first_response_due_at` or `resolution_due_at` by
+the transaction's `now()`. `false` is the same as leaving it off. It narrows the
+scan the other live-state filters use rather than needing an index of its own.
 
 ### Creating
 
@@ -889,7 +973,7 @@ list, the thread and the details panel, on one route. The boundary it reads
 through is `apps/admin/src/tickets/` — `TicketsApi`, an http adapter and a
 fixture — the same shape the contact screens use.
 
-It covers what the api can answer today. Views (M1-05), tags and custom-field
+It covers what the api can answer today. Views (M1-05, [below](#views-in-the-workspace)), tags and custom-field
 editing (M1-06), the state machine's transitions (M1-08), merge and split
 (M1-09) and attachments (M1-10) add to it rather than change it; what each one
 needs is at the end of this section.
@@ -909,25 +993,36 @@ looked at rather than out of the screen.
 
 | Parameter | |
 |---|---|
-| `view` | `all`, `myOpen`, `unassigned`, `overdue` or `escalated`. Absent means `myOpen`. |
-| `q` | Free text, debounced 250 ms, passed to the api's own search |
-| `status`, `priority`, `assignee`, `department` | Repeatable, one per chip in the filter popover |
+| `view` | A view's id, or `all` for the whole desk. Absent means the first view of the sidebar. |
+| `q` | Free text, debounced 250 ms, passed to the api's own search. A term typed into a view does not count as changing it |
+| `state`, `status`, `priority`, `assignee`, `department`, `tag`, `channel` | Repeatable, one per chip in the filter popover. `assignee=me` is whoever opens the link |
+| `overdue`, `sort`, `dir` | `overdue=1`; the order when it is not "last updated, newest first" |
+| `custom` | Present when the filters above *replace* the view's rather than being empty |
+| `intent` | `filters` or `save`: the sidebar asking the workspace to open the filters or the save dialog. Acted on once and dropped from the URL |
 
-### The four views
+### Views in the workspace
 
-Three of them are filters `GET /tickets` already understands, so the server
-narrows them: `myOpen` is `assigneeId=<me>` plus the three live system states,
-`unassigned` is `assigneeId=unassigned`, `escalated` is
-`systemState=escalated`. **`overdue` is not** — the list has no filter on
-`first_response_due_at` or `resolution_due_at` — so it asks for everything
-still open and decides in the browser: a clock that has run out, or
-`sla_breached`, on a ticket that is neither closed nor in a status that pauses
-the clock. M1-05 replaces all four with saved views; that predicate is the one
-thing it has to move to the server.
+The sidebar's **Views** group (`views-nav.tsx`, `Admin/View-Dialogs` panels 1–2)
+lists the brand's shared views in the order Ticketing › Views gives them, then
+the reader's own under **Mine**. The names and the counts are two reads, so the
+rows are usable before the numbers arrive; Overdue's number is in the danger
+hue while it is above zero. A ⋯ appears on hover and on focus for a view the
+reader may change: **Edit filters**, **Rename**, **Share with…** (a personal
+view, for Team Leaders and Admins) and **Delete**; a built-in view offers
+Rename alone. The **+** beside "Views" opens "Save as a view" on whatever the
+list shows.
 
-The counts beside them are what one page of each view holds, not a `COUNT(*)`:
-the list is keyset paged and the api offers no total, so a brand with more than
-a page reads `25+`. That is the honest answer and means the same thing.
+Changing a filter on a view writes the **whole** resulting filter set into the
+URL beside `view` and `custom=1`, so a changed view is still a link a colleague
+can open. When those filters differ from the saved ones, the list header grows
+the **Filters changed · Reset · Save as new · Save** bar (panel 4) and every
+filter that is on is a chip that removes itself. Reset drops the filter
+parameters; Save overwrites the view and is offered only where it can succeed —
+the reader's own view, or a shared one they manage, never a built-in one; Save
+as new opens **Save as a view** (panel 3): a name, "Only me" or (for Team
+Leaders and Admins) "Shared with departments", and the filters and sort in
+words. A view the reader cannot see — a link to somebody else's personal view —
+falls back to the whole desk, filtered by whatever the link carried.
 
 ### Sending, sent, not sent
 
@@ -1068,6 +1163,7 @@ reads *in order* ends in exactly those two columns
 | `tickets_brand_updated_idx (brand_id, updated_at, id)` | The default list; every view that filters rather than narrows (the live states, Escalated, Unassigned); search; page 2 onwards |
 | `tickets_brand_assignee_updated_idx (brand_id, assignee_id, updated_at, id)` | "My open": one person's tickets, already in list order. Replaces the PRD's `(brand_id, assignee_id)`, which is its prefix |
 | `tickets_brand_department_status_updated_idx (brand_id, department_id, status_id, updated_at, id)` | The filter popover's department and status chips. `id` was added so one department in one status is in keyset order too |
+| `tickets_brand_status_updated_idx (brand_id, status_id, updated_at, id)` | A view narrowed by state across departments, and its sidebar count (M1-05, `0022_views.sql`) |
 | `tickets_brand_number_key (brand_id, number)` | `sort=number` |
 | `ticket_tags_brand_tag_idx (brand_id, tag_id)` | The all-of tag filter, one scan however many tags are named (M1-06) |
 | `tickets_search_idx` (tsvector GIN), `tickets_subject_trgm_idx` (trigram GIN) | Not the list, today: see [Search under row-level security](#search-under-row-level-security) |

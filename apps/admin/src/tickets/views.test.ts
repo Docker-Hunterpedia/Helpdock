@@ -8,12 +8,15 @@ import {
   EMPTY_FILTERS,
   filtersFromParams,
   filtersOfView,
+  intentOf,
   queryOf,
   resolveWorkspace,
   sameFilters,
+  selectedViewId,
   sidebarViews,
   viewFiltersOf,
   viewLabel,
+  viewSearch,
   withFilters,
   withoutFilters,
 } from './views.js';
@@ -184,5 +187,27 @@ describe('activeFilterCount', () => {
     expect(
       activeFilterCount({ ...EMPTY_FILTERS, priority: ['high'], tagIds: [TAG], overdue: true }),
     ).toBe(3);
+  });
+});
+
+describe('intents and links', () => {
+  it('reads only the two intents the workspace acts on', () => {
+    expect(intentOf(new URLSearchParams('intent=save'))).toBe('save');
+    expect(intentOf(new URLSearchParams('intent=filters'))).toBe('filters');
+    expect(intentOf(new URLSearchParams('intent=delete'))).toBeNull();
+    expect(intentOf(new URLSearchParams())).toBeNull();
+  });
+
+  it('links to a view, with an intent when one is asked for', () => {
+    expect(viewSearch('abc')).toBe('?view=abc');
+    expect(viewSearch('abc', 'filters')).toBe('?view=abc&intent=filters');
+  });
+
+  it('marks the view the URL names, else the one the desk opens on, else the whole desk', () => {
+    const first = view({ id: 'first' });
+
+    expect(selectedViewId([first], new URLSearchParams('view=other'))).toBe('other');
+    expect(selectedViewId([first], new URLSearchParams())).toBe('first');
+    expect(selectedViewId([], new URLSearchParams())).toBe('all');
   });
 });

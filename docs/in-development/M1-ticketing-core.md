@@ -16,7 +16,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-02 | Tickets | #46 | done (#63) |
 | M1-03 | Messages | #47 | done (#63) |
 | M1-04 | Contacts and accounts | #48 | done (#64) |
-| M1-05 | Views | #49 | planned |
+| M1-05 | Views | #49 | done in branch, awaiting PR — see [M1-05 notes](#m1-05-notes) |
 | M1-06 | Tags, custom fields (text, number, date, select | #50 | in review (#72) |
 | M1-07 | Assignment | #51 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-08 | Ticket state machine | #52 | done (#69) |
@@ -94,6 +94,39 @@ Copied from the PRD, ticked as they are met.
 ## Open questions
 - Should a Team Leader read only their own departments' rows of the staff list and contact timeline? (raised in M0-06; DOMAIN-RULES §1.2 does not narrow it)
 - ~~`on_unassign` semantics on scope change~~ — answered by M1-07: after any role or department change, deactivation or removal, the tickets the person can no longer work are unassigned and each follows its department's `on_unassign`; a widened scope moves nothing. See the M1-07 notes.
+
+## M1-05 notes
+
+Saved views, in migration `0022_views` (new tenant table `views`, in the RLS negative suite, with a
+second, restrictive policy `views_owner_only` from `OWNER_SCOPED_TABLES` in `packages/db/src/rls.ts`).
+Guides: [tickets › Views](../guides/tickets.md#views), [ticketing settings › Views](../guides/ticketing-settings.md#views).
+
+- **One schema.** A view's `filters` is `ticketListQuerySchema` less `cursor` and `limit`
+  (`packages/schemas/src/views.ts`). The list gained two predicates for it, both server-side:
+  `assigneeId=me` (the reader) and `overdue=true` (not closed, clock not paused, breached or past a due
+  time). The client-side `isOverdue` is gone.
+- **Never widens access.** A view resolves to list parameters; its count is the list's own `WHERE` in the
+  reader's transaction. A personal view is invisible to anybody else at the database (404, not 403).
+- **Built-ins are rows** seeded by `seedBrandViews` (`packages/db/src/views.ts`) on brand creation,
+  install, the dev seed and department creation — idempotent; a brand that predates M1-05 gets its
+  defaults on the first views read, in that request's transaction; the department ones cascade on delete and follow a rename unless the
+  brand renamed the view. Renamable, reorderable, hideable; `view-is-built-in` (409) otherwise.
+- **Counts** are one statement per request (a capped scalar subquery per view, `LIMIT 1000`), gated in
+  `apps/api/src/testing/perf` as `list · view counts (sidebar)`. `0022` adds
+  `tickets_brand_status_updated_idx (brand_id, status_id, updated_at, id)` for the views narrowed by state
+  across departments.
+- **Admin UI**: the sidebar's Views group with "Mine", the ⋯ menu, Save as a view, Rename, Share with…,
+  the "Filters changed · Reset · Save as new · Save" bar with removable chips (`Admin/View-Dialogs`
+  panels 1–4), and the Ticketing › Views tab (`Admin/Ticketing-Views`). `?view=<id>` plus the whole filter
+  set with `custom=1` keeps the URL the state. The sidebar's nav now scrolls, since a brand's views can
+  push the Admin group below the fold.
+
+Decisions a reviewer should confirm:
+1. Personal views are **not audited**; shared ones are (`view.created/updated/deleted`).
+2. Only shared views can be hidden; a personal one is deleted instead.
+3. A Team Leader restricted to some departments cannot share with the whole brand.
+4. Rename and Share with… are drawn as small dialogs built from `ConfirmDialog`: panel 2 names the actions
+   but draws no dialog for them.
 
 ## M1-07 notes
 

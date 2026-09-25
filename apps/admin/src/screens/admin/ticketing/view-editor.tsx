@@ -14,6 +14,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { viewLabel } from '../../../tickets/views.js';
 import { Field } from '../../../ui/field.tsx';
 import { DepartmentChoice } from '../../tickets/view-dialogs.tsx';
 import {
@@ -106,7 +107,7 @@ export function ViewEditor({
   const heading =
     view === null
       ? t('ticketing:views.editor.newHeading')
-      : t('ticketing:views.editor.heading', { name: view.name });
+      : t('ticketing:views.editor.heading', { name: viewLabel(view, locale) });
 
   const select = (
     id: string,

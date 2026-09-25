@@ -62,13 +62,13 @@ test.describe('ticketing settings', () => {
     await signIn(page, locale);
     await openTicketing(page, locale);
 
-    // Views, because M1-06 filled Tags, Custom fields and Templates and M1-08
-    // filled Statuses.
-    await page.getByRole('tab', { name: t('ticketing:tabs.views') }).click();
+    // Priorities, the one tab no deliverable has filled since M1-05 filled
+    // Views.
+    await page.getByRole('tab', { name: t('ticketing:tabs.priorities') }).click();
 
     await expect(
       page.getByText(
-        t('ticketing:soon.body', { tab: t('ticketing:tabs.views'), milestone: 'M1-05' }),
+        t('ticketing:soon.body', { tab: t('ticketing:tabs.priorities'), milestone: 'M1-02' }),
       ),
     ).toBeVisible();
   });

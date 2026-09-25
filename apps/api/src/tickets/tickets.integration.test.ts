@@ -565,7 +565,10 @@ describe.skipIf(!hasDocker)('tickets', () => {
         `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
         sam,
       );
-      expect(detail.body.activity.map((entry) => entry.action)).toContain('ticket.status.changed');
+      // DOMAIN-RULES §2.2 row 3: "Activity log records actor".
+      expect(
+        detail.body.activity.find((entry) => entry.action === 'ticket.status.changed'),
+      ).toMatchObject({ actorType: 'staff', actorId: sam.id, via: 'ui' });
     });
 
     it('answers 404 for a status that is not this brand’s', async () => {

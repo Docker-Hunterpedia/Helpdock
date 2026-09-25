@@ -31,16 +31,20 @@ const direction = z.enum(['asc', 'desc']);
  * a cursor only reorders a page row-level security has already scoped, but
  * "the caller's mistake answers 400" is the contract this file states.
  */
+/**
+ * `f` marks a page of a search that fell back to its fuzzy half (M1-15 part 2,
+ * `ticket-query.ts`). The fallback is decided on the first page and carried
+ * from there, so every page of one search is read by the same question: a
+ * later page that switched halves would skip the fuzzy matches that sort
+ * before it. It narrows nothing and widens nothing the policies decide.
+ */
+const shared = { d: direction, id: z.uuid(), f: z.literal(true).optional() };
+
 export const ticketCursorSchema = z.discriminatedUnion('s', [
-  z.object({ s: z.literal('updatedAt'), d: direction, v: z.iso.datetime(), id: z.uuid() }),
-  z.object({ s: z.literal('createdAt'), d: direction, v: z.iso.datetime(), id: z.uuid() }),
-  z.object({ s: z.literal('number'), d: direction, v: z.int().positive(), id: z.uuid() }),
-  z.object({
-    s: z.literal('priority'),
-    d: direction,
-    v: z.enum(['low', 'medium', 'high', 'urgent']),
-    id: z.uuid(),
-  }),
+  z.object({ s: z.literal('updatedAt'), v: z.iso.datetime(), ...shared }),
+  z.object({ s: z.literal('createdAt'), v: z.iso.datetime(), ...shared }),
+  z.object({ s: z.literal('number'), v: z.int().positive(), ...shared }),
+  z.object({ s: z.literal('priority'), v: z.enum(['low', 'medium', 'high', 'urgent']), ...shared }),
 ]);
 
 export interface TicketCursor {
@@ -48,6 +52,8 @@ export interface TicketCursor {
   readonly direction: TicketSortDirection;
   readonly value: string | number;
   readonly id: string;
+  /** The page was read with the search's fuzzy half; so is the next one. */
+  readonly fuzzy?: true;
 }
 
 /** A cursor that does not decode, or that belongs to a different ordering. */
@@ -58,10 +64,11 @@ export class InvalidCursorError extends Error {
   }
 }
 
-export const encodeTicketCursor = ({ sort, direction, value, id }: TicketCursor): string =>
-  Buffer.from(JSON.stringify({ s: sort, d: direction, v: value, id }), 'utf8').toString(
-    'base64url',
-  );
+export const encodeTicketCursor = ({ sort, direction, value, id, fuzzy }: TicketCursor): string =>
+  Buffer.from(
+    JSON.stringify({ s: sort, d: direction, v: value, id, ...(fuzzy ? { f: true } : {}) }),
+    'utf8',
+  ).toString('base64url');
 
 /**
  * The cursor, or a refusal naming what is wrong with it. A cursor read under a
@@ -94,5 +101,6 @@ export const decodeTicketCursor = (
     direction: cursor.data.d,
     value: cursor.data.v,
     id: cursor.data.id,
+    ...(cursor.data.f ? { fuzzy: true } : {}),
   };
 };

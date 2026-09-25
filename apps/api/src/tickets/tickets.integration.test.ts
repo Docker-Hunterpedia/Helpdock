@@ -7,11 +7,13 @@ import {
   createDb,
   type Db,
   type DbHandle,
+  type DbTransaction,
   departments,
   outbox,
   seedBrandStatuses,
   ticketActivity,
   ticketMessages,
+  ticketSearchTokens,
   tickets,
   userBrandRoles,
   users,
@@ -1018,6 +1020,186 @@ describe.skipIf(!hasDocker)('tickets', () => {
 
       expect(body.tickets.map((row) => row.id)).toContain(mine.body.ticket.id);
       expect(body.tickets.every((row) => row.prefix === 'GLX')).toBe(true);
+    });
+  });
+
+  // ------------------------------------------------------------------ search
+
+  describe('search through the token table (M1-15 part 2, ADR 0011)', () => {
+    const search = async (who: Person, q: string, extra = '') =>
+      (
+        await call<TicketList>(
+          'GET',
+          `${brandPath(seeded.brandId)}/tickets?q=${encodeURIComponent(q)}&limit=100${extra}`,
+          who,
+        )
+      ).body;
+
+    const idsFor = async (who: Person, q: string) =>
+      (await search(who, q)).tickets.map((row) => row.id).sort();
+
+    const wordsOf = (ticketId: string) =>
+      withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({
+            token: ticketSearchTokens.token,
+            departmentId: ticketSearchTokens.departmentId,
+          })
+          .from(ticketSearchTokens)
+          .where(eq(ticketSearchTokens.ticketId, ticketId)),
+      );
+
+    it('stores the words of the subject and the first message, in the same transaction', async () => {
+      const { ticket } = await createTicket(sam, {
+        subject: 'Quillon hinge squeaks',
+        bodyHtml: '<p>The <b>zarkov</b> latch is loose</p>',
+      });
+
+      const words = await wordsOf(ticket.id);
+      // Lexemes of the `english` configuration: stemmed, lower-cased, no stop words.
+      expect(words.map((row) => row.token).sort()).toEqual(
+        ['hing', 'latch', 'loos', 'quillon', 'squeak', 'zarkov'].sort(),
+      );
+      expect(new Set(words.map((row) => row.departmentId))).toEqual(new Set([support]));
+      expect(await idsFor(sam, 'zarkov')).toEqual([ticket.id]);
+    });
+
+    it('is not searched by a later message', async () => {
+      const { ticket } = await createTicket(sam, { subject: 'Ferrule cracked' });
+      await call('POST', `${brandPath(seeded.brandId)}/tickets/${ticket.id}/messages`, sam, {
+        kind: 'public',
+        bodyHtml: '<p>plumbago</p>',
+      });
+
+      expect(await idsFor(sam, 'plumbago')).toEqual([]);
+      expect(await idsFor(sam, 'ferrule')).toEqual([ticket.id]);
+    });
+
+    it('follows a subject edit', async () => {
+      const { ticket } = await createTicket(sam, { subject: 'Tamarisk delivery' });
+
+      await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, sam, {
+        subject: 'Oleander delivery',
+      });
+
+      expect(await idsFor(sam, 'oleander')).toEqual([ticket.id]);
+      expect(await idsFor(sam, 'tamarisk')).toEqual([]);
+    });
+
+    it('asks for every word, not any of them', async () => {
+      const stapler = await createTicket(sam, { subject: 'Vellum stapler jammed' });
+      const binder = await createTicket(sam, { subject: 'Vellum binder torn' });
+
+      expect(await idsFor(sam, 'vellum stapler')).toEqual([stapler.ticket.id]);
+      expect(await idsFor(sam, 'vellum')).toEqual([stapler.ticket.id, binder.ticket.id].sort());
+      expect(await idsFor(sam, 'vellum -binder')).toEqual([stapler.ticket.id]);
+    });
+
+    it('answers an empty page for a word nobody used, fallback included', async () => {
+      const page = await search(ada, 'xylquorzz');
+
+      expect(page.tickets).toEqual([]);
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('finds Arabic words, whole and half-typed', async () => {
+      const { ticket } = await createTicket(sam, {
+        subject: 'طلب استرداد المبلغ',
+        bodyHtml: '<p>لم يصل الطرد</p>',
+      });
+
+      expect(await idsFor(sam, 'استرداد')).toEqual([ticket.id]);
+      expect(await idsFor(sam, 'الطرد')).toEqual([ticket.id]);
+      // Half-typed: the exact half finds nothing, the fuzzy fallback does.
+      expect(await idsFor(sam, 'استردا')).toEqual([ticket.id]);
+    });
+
+    it('pages a fuzzy search by the fuzzy half from start to end', async () => {
+      const created = [
+        await createTicket(sam, { subject: 'Glimmerton spring one' }),
+        await createTicket(sam, { subject: 'Glimmerton spring two' }),
+        await createTicket(sam, { subject: 'Glimmerton spring three' }),
+      ].map((detail) => detail.ticket.id);
+
+      // `glimmerto` matches nothing exactly, so page one falls back and its
+      // cursor says so; without the flag, page two would ask the exact half
+      // again and come back empty.
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const suffix: string = cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`;
+        const page: TicketList = (
+          await call<TicketList>(
+            'GET',
+            `${brandPath(seeded.brandId)}/tickets?q=glimmerto&limit=1${suffix}`,
+            sam,
+          )
+        ).body;
+        seen.push(...page.tickets.map((row) => row.id));
+        cursor = page.nextCursor;
+      } while (cursor !== null && seen.length < 10);
+
+      expect(seen.sort()).toEqual([...created].sort());
+    });
+
+    it('moves the words with a ticket that changes department', async () => {
+      const { ticket } = await createTicket(ada, { subject: 'Wolfram invoice' });
+
+      await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada, {
+        departmentId: billing,
+      });
+
+      expect(new Set((await wordsOf(ticket.id)).map((row) => row.departmentId))).toEqual(
+        new Set([billing]),
+      );
+      expect(await idsFor(sam, 'wolfram')).toEqual([]);
+      expect(await idsFor(bo, 'wolfram')).toEqual([ticket.id]);
+    });
+
+    it('hides another department’s words from raw SQL, and refuses to write them', async () => {
+      const { ticket } = await createTicket(bo, {
+        subject: 'Cobalt refund',
+        departmentId: billing,
+      });
+      const asSam = <T>(work: (tx: DbTransaction) => Promise<T>) =>
+        withTenant(
+          runtime.db,
+          {
+            brandIds: [seeded.brandId],
+            departmentIds: [support],
+            principalType: 'staff',
+            principalId: sam.id,
+          },
+          work,
+        );
+
+      const visible = await asSam((tx) =>
+        tx
+          .select({ token: ticketSearchTokens.token })
+          .from(ticketSearchTokens)
+          .where(eq(ticketSearchTokens.ticketId, ticket.id)),
+      );
+      expect(visible).toEqual([]);
+
+      const rejection = await asSam((tx) =>
+        tx.insert(ticketSearchTokens).values({
+          brandId: seeded.brandId,
+          ticketId: ticket.id,
+          departmentId: support,
+          token: 'planted',
+        }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+      expect(rejection?.cause?.message).toMatch(/not visible in this transaction/i);
+    });
+
+    it('keeps the reference and contact-name matches (M1-09)', async () => {
+      const { ticket } = await createTicket(sam, { subject: 'Numbered only' });
+
+      expect(await idsFor(sam, `#${ticket.number}`)).toContain(ticket.id);
+      expect(await idsFor(sam, `${ticket.prefix}-${ticket.number}`)).toContain(ticket.id);
     });
   });
 

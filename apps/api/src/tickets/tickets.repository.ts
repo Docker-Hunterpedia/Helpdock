@@ -19,7 +19,14 @@ import {
 } from '@helpdock/db';
 import type { TicketListQuery } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
-import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
+import { decodeTicketCursor } from './cursor.js';
+import {
+  fallsBackToFuzzy,
+  type SearchMode,
+  statusJoin,
+  ticketFilters,
+  ticketOrder,
+} from './ticket-query.js';
 
 /**
  * Every statement the ticket endpoints make, in one file.
@@ -38,6 +45,12 @@ import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
 export interface TicketWithStatus {
   readonly ticket: TicketRow;
   readonly status: TicketStatusRow;
+}
+
+/** A page of the list, and which half of the search read it. */
+export interface TicketListPage {
+  readonly rows: TicketWithStatus[];
+  readonly search: SearchMode;
 }
 
 const withStatus = (row: { tickets: TicketRow; ticket_statuses: TicketStatusRow }) => ({
@@ -102,25 +115,49 @@ export class TicketRepository {
    * One page of the list. `limit + 1` rows are read so the caller knows whether
    * a next page exists without a second `COUNT(*)`, which at 50k tickets would
    * cost more than the page itself (REQUIREMENTS §5.2).
+   *
+   * A search is read with its exact half first, and again with the fuzzy half
+   * only when {@link fallsBackToFuzzy} says so (ADR 0011); a later page of a
+   * search that fell back goes straight to the fuzzy half its cursor names.
    */
   async listTickets(
     tx: DbTransaction,
     brandId: string,
     query: TicketListQuery,
-  ): Promise<TicketWithStatus[]> {
-    const rows = await this.listTicketsStatement(tx, brandId, query);
+  ): Promise<TicketListPage> {
+    const cursor = query.cursor === undefined ? undefined : decodeTicketCursor(query.cursor, query);
+    const read = async (search: SearchMode): Promise<TicketListPage> => ({
+      rows: (await this.listTicketsStatement(tx, brandId, query, search)).map(withStatus),
+      search,
+    });
 
-    return rows.map(withStatus);
+    if (query.q !== undefined && cursor?.fuzzy === true) {
+      return read('fuzzy');
+    }
+    const exact = await read('exact');
+    const fallBack = fallsBackToFuzzy({
+      q: query.q,
+      cursor,
+      found: exact.rows.length,
+      limit: query.limit,
+    });
+
+    return fallBack ? read('fuzzy') : exact;
   }
 
   /**
-   * The statement {@link listTickets} runs, unexecuted, so the performance
-   * harness can `EXPLAIN` exactly what the api sends rather than a copy of it
-   * that drifts (`src/testing/perf`).
+   * The statement {@link listTickets} runs for one half of a search, unexecuted,
+   * so the performance harness can `EXPLAIN` exactly what the api sends rather
+   * than a copy of it that drifts (`src/testing/perf`).
    */
-  listTicketsStatement(tx: DbTransaction, brandId: string, query: TicketListQuery) {
+  listTicketsStatement(
+    tx: DbTransaction,
+    brandId: string,
+    query: TicketListQuery,
+    search: SearchMode = 'exact',
+  ) {
     const { sort, direction, cursor, limit, ...filters } = query;
-    const where = ticketFilters({ brandId, filters, sort, direction, cursor });
+    const where = ticketFilters({ brandId, filters, sort, direction, cursor, search });
 
     return tx
       .select()

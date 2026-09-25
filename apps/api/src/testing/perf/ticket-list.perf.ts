@@ -17,6 +17,7 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../../auth/password.js';
+import type { SearchMode } from '../../tickets/ticket-query.js';
 import { TicketRepository } from '../../tickets/tickets.repository.js';
 import { DOMAIN_RULES_14, type PerfDataset, seedPerfDataset } from './dataset.js';
 import { type LoadResult, type LoadScenario, type LoadSession, runLoad } from './load.js';
@@ -46,6 +47,7 @@ import { type LoadResult, type LoadScenario, type LoadSession, runLoad } from '.
  * | `PERF_THINK_MS` | 1000 | Pause between a session's requests |
  * | `PERF_REPLICAS` | 2 | Api processes |
  * | `PERF_P95_MS` | 150 | The gate |
+ * | `PERF_NO_MATCH_P95_MS` | 150 | The zero-match search's own gate (ADR 0011) |
  * | `PERF_REPORT` | — | Also write the results as JSON to this path |
  * | `PERF_SCALE` | 1 | Multiplies the dataset, for a quick smoke run (`0.1`) |
  *
@@ -80,6 +82,7 @@ const settings = {
   thinkMs: number('PERF_THINK_MS', 1000),
   replicas: Math.max(1, number('PERF_REPLICAS', 2)),
   gateMs: number('PERF_P95_MS', 150),
+  noMatchGateMs: number('PERF_NO_MATCH_P95_MS', 150),
   scale: number('PERF_SCALE', 1),
 };
 
@@ -98,12 +101,13 @@ interface ListCase {
   readonly session: 'admin' | 'agent';
   readonly query: Readonly<Record<string, string | readonly string[]>>;
   /**
-   * `false` for the known worst case (a search nothing matches), which is
-   * measured alone after the load and reported, not gated: its cost is the
-   * limit docs/guides/tickets.md "Performance" describes, and inside the mix
-   * it would be measuring that limit through every other scenario's tail.
+   * A p95 budget of its own instead of the list's. The search nothing matches
+   * has one (ADR 0011): until the token table it read every visible ticket and
+   * was measured alone, ungated; now it is an index probe and is gated in the
+   * mix like everything else, against a budget that can be tuned apart from
+   * the list's exit criterion.
    */
-  readonly gated?: false;
+  readonly budgetMs?: number;
 }
 
 const queryString = (query: ListCase['query']): string => {
@@ -272,8 +276,14 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
           { name: 'view: escalated', session, query: { systemState: 'escalated' } },
           { name: 'search: refund', session, query: { q: 'refund' } },
           { name: 'search: renewa (typo)', session, query: { q: 'renewa' } },
-          // The worst case: nothing matches, so every visible ticket is read.
-          { name: 'search: no match', session, query: { q: 'zebra' }, gated: false },
+          // Nothing matches, and the term is long enough for the fuzzy fallback
+          // to run too: before ADR 0011 this read every visible ticket.
+          {
+            name: 'search: no match',
+            session,
+            query: { q: 'zebra' },
+            budgetMs: settings.noMatchGateMs,
+          },
           { name: 'tags: all-of two', session, query: { tagIds: [...dataset.tagPair] } },
           {
             name: 'page 2 (keyset)',
@@ -288,48 +298,44 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
         session: sessions[listCase.session],
         path: `${listPath}${queryString(listCase.query)}`,
       });
-      const scenarios: LoadScenario[] = [
-        ...cases.filter((listCase) => listCase.gated !== false).map(toScenario),
-        ...reads,
-      ];
+      const scenarios: LoadScenario[] = [...cases.map(toScenario), ...reads];
+      const budgets = new Map(
+        cases.map((listCase) => [toScenario(listCase).name, listCase.budgetMs ?? settings.gateMs]),
+      );
 
       const plans = await explainAll(cases);
       let result: LoadResult;
-      let alone: LoadResult;
       try {
         result = await runLoad({ baseUrls, scenarios, ...settings });
-        // One session, nothing else running: what the worst case costs by itself.
-        alone = await runLoad({
-          baseUrls,
-          scenarios: cases.filter((listCase) => listCase.gated === false).map(toScenario),
-          concurrency: 1,
-          warmupMs: 2_000,
-          durationMs: 20_000,
-          thinkMs: 0,
-        });
       } finally {
         clearInterval(refresh);
       }
 
-      report(result, alone, plans);
+      report(result, plans);
       if (process.env.PERF_REPORT !== undefined && process.env.PERF_REPORT !== '') {
         await writeFile(
           process.env.PERF_REPORT,
-          JSON.stringify({ settings, result, alone, plans }, null, 2),
+          JSON.stringify({ settings, result, plans }, null, 2),
         );
       }
 
       const lists = result.scenarios.filter((scenario) => scenario.name.startsWith('list'));
       expect(result.scenarios.every((scenario) => scenario.errors === 0)).toBe(true);
       expect(
-        lists.filter((scenario) => scenario.p95 > settings.gateMs).map((scenario) => scenario.name),
+        lists
+          .filter((scenario) => scenario.p95 > (budgets.get(scenario.name) ?? settings.gateMs))
+          .map((scenario) => `${scenario.session} ${scenario.name}`),
       ).toEqual([]);
     },
     // Warm-up and measured window, plus the time the plans take.
     settings.warmupMs + settings.durationMs + 600_000,
   );
 
-  /** The runtime role's plan for each list case, under that session's tenant context. */
+  /**
+   * The runtime role's plan for each list case, under that session's tenant
+   * context. A search that falls back to its fuzzy half is explained twice,
+   * because the api runs both statements (ADR 0011).
+   */
   const explainAll = async (cases: readonly ListCase[]): Promise<Record<string, string>> => {
     const repository = new TicketRepository();
     const plans: Record<string, string> = {};
@@ -341,15 +347,21 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
         principalType: 'staff',
         principalId: listCase.session === 'admin' ? dataset.admin.id : dataset.agent.id,
       };
+      const query = parsedQuery(listCase.query);
 
-      const rows = await withTenant(app.db, context, (tx) =>
-        tx.execute<{ 'QUERY PLAN': string }>(
-          sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.listTicketsStatement(tx, dataset.brandId, parsedQuery(listCase.query))}`,
-        ),
-      );
-      plans[`${listCase.session} · ${listCase.name}`] = [...rows]
-        .map((row) => row['QUERY PLAN'])
-        .join('\n');
+      await withTenant(app.db, context, async (tx) => {
+        const page = await repository.listTickets(tx, dataset.brandId, query);
+        const halves: SearchMode[] = page.search === 'fuzzy' ? ['exact', 'fuzzy'] : ['exact'];
+        for (const search of halves) {
+          const rows = await tx.execute<{ 'QUERY PLAN': string }>(
+            sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.listTicketsStatement(tx, dataset.brandId, query, search)}`,
+          );
+          const label = search === 'fuzzy' ? ' · fuzzy fallback' : '';
+          plans[`${listCase.session} · ${listCase.name}${label}`] = [...rows]
+            .map((row) => row['QUERY PLAN'])
+            .join('\n');
+        }
+      });
     }
 
     return plans;
@@ -403,17 +415,13 @@ const table = (result: LoadResult): string[] => [
   ),
 ];
 
-const report = (result: LoadResult, alone: LoadResult, plans: Record<string, string>): void => {
+const report = (result: LoadResult, plans: Record<string, string>): void => {
   const lines = [
     '',
     `Settings: ${JSON.stringify(settings)}`,
     `Throughput: ${result.requestsPerSecond.toFixed(1)} req/s; overall p95 ${result.overall.p95.toFixed(1)} ms`,
     '',
     ...table(result),
-    '',
-    'Measured alone, not gated:',
-    '',
-    ...table(alone),
     '',
     ...Object.entries(plans).flatMap(([name, plan]) => [`--- ${name}`, plan, '']),
   ];

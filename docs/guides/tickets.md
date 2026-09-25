@@ -739,15 +739,24 @@ nothing, because every row it can reach is a row the policies would have shown
 anyway. It is validated all the same, and a cursor issued under a different sort
 is refused with 400 rather than reinterpreted.
 
-**Search** is full text *and* trigram. `q` goes to `websearch_to_tsquery` against
-the generated `tickets.search` column — which understands quoted phrases and
-`-excluded`, and never raises on nonsense — *or* to the `<%` word-similarity
-operator against the subject. Full text will not match `renewa` against
-"renewal"; the trigram half will. Both bind the term as a parameter. Under
-row-level security neither half can use its GIN index, so a search reads the
-brand's tickets newest first until it has a page; see
-[Search under row-level security](#search-under-row-level-security) for why, and
-for what that costs.
+**Search** reads the words of each ticket's **subject and first message**
+(M1-15 part 2, [ADR 0011](../decisions/0011-ticket-search-token-table.md)).
+`q` is turned into lexemes by the same `english` text-search configuration
+`tickets.search` uses, so `refunds` finds "refund" and stop words such as `the`
+are dropped. A ticket matches when it carries **every** word, in any order. A
+word typed as `-word` rules out the tickets that carry it. Quotes are not a
+phrase operator (the words must all appear, anywhere), `or` is a stop word
+rather than an operator, and replies after the first message are not searched.
+
+When the exact words fill less than a page and the words are at least three
+characters long, the list **falls back** to a fuzzy reading: each word also
+matches a stored word that starts with the same three characters and is
+word-similar to it (`<%`, pg_trgm's 0.6 threshold). `renewa` finds "renewal";
+`rfund` does not find "refund", because the first three letters differ. The
+fallback is decided on the first page and the cursor carries it, so every page
+of one search is answered the same way. The term is always bound as a
+parameter. Why the search works this way, and what it costs, is under
+[Search under row-level security](#search-under-row-level-security).
 
 From M1-09 the same `q` also matches the **contact's name** (`ILIKE`, with `%`
 and `_` escaped, through `contacts`, which is brand-scoped) and a **reference**:
@@ -1070,7 +1079,9 @@ reads *in order* ends in exactly those two columns
 | `tickets_brand_department_status_updated_idx (brand_id, department_id, status_id, updated_at, id)` | The filter popover's department and status chips. `id` was added so one department in one status is in keyset order too |
 | `tickets_brand_number_key (brand_id, number)` | `sort=number` |
 | `ticket_tags_brand_tag_idx (brand_id, tag_id)` | The all-of tag filter, one scan however many tags are named (M1-06) |
-| `tickets_search_idx` (tsvector GIN), `tickets_subject_trgm_idx` (trigram GIN) | Not the list, today: see [Search under row-level security](#search-under-row-level-security) |
+| `ticket_search_tokens_brand_token_idx (brand_id, token, ticket_id, department_id)` | Search: every word of `q` is an index lookup, and the fuzzy fallback a prefix range (M1-15 part 2) |
+| `tickets_brand_contact_idx (brand_id, contact_id)` | Search by the contact's name: the tickets of the contacts whose name matched (M1-15 part 2) |
+| `tickets_search_idx` (tsvector GIN), `tickets_subject_trgm_idx` (trigram GIN) | Not the list: see [Search under row-level security](#search-under-row-level-security) |
 
 `sort=createdAt` and `sort=priority` have no index of their own. The workspace
 never asks for them, and at 50k tickets they are a top-N sort of the visible

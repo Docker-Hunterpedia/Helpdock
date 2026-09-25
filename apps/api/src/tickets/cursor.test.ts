@@ -19,6 +19,27 @@ describe('ticket cursors', () => {
     });
   });
 
+  it('round-trips the fuzzy fallback of a search (ADR 0011)', () => {
+    const encoded = encodeTicketCursor({
+      ...UPDATED_AT_DESC,
+      value: '2026-09-19T10:00:00.000Z',
+      id: TICKET,
+      fuzzy: true,
+    });
+
+    expect(decodeTicketCursor(encoded, UPDATED_AT_DESC).fuzzy).toBe(true);
+  });
+
+  it('says nothing about a fallback that did not happen', () => {
+    const encoded = encodeTicketCursor({
+      ...UPDATED_AT_DESC,
+      value: '2026-09-19T10:00:00.000Z',
+      id: TICKET,
+    });
+
+    expect(decodeTicketCursor(encoded, UPDATED_AT_DESC)).not.toHaveProperty('fuzzy');
+  });
+
   it('round-trips a numeric sort value', () => {
     const encoded = encodeTicketCursor({
       sort: 'number',

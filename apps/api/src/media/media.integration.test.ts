@@ -66,16 +66,17 @@ import { createS3Client, S3ObjectStorage } from './storage.js';
 const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
 const REDIS_IMAGE = 'redis:7-alpine';
 /**
- * MinIO from **Quay**, pinned, and not `minio/minio` from Docker Hub.
+ * MinIO from **Chainguard**, pinned by digest.
  *
- * A GitHub-hosted runner shares its address with everybody else's, so an
- * anonymous Docker Hub pull of an image the job does not already have is
- * rate-limited — it comes back as `pull access denied for minio/minio`, which
- * fails this suite for a reason that has nothing to do with the code. Quay is
- * MinIO's own registry and does not meter anonymous pulls. `docker-compose.yml`
- * names the same image for the same reason.
+ * MinIO's own images are no longer pullable anonymously: the pinned Quay tag
+ * this suite used answers "no such manifest", and `minio/minio` on Docker Hub
+ * and `ghcr.io/minio/minio` answer "access denied". Chainguard's build of the
+ * same server is public, runs `minio` as its entrypoint, and serves the same
+ * `/minio/health/live`. The digest, not `latest`, so the suite does not change
+ * under it. `docker-compose.yml` names the same image.
  */
-const MINIO_IMAGE = 'quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z';
+const MINIO_IMAGE =
+  'cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1';
 const BUCKET = 'helpdock-test';
 const S3_KEY = 'helpdock';
 const S3_SECRET = 'helpdock-secret';

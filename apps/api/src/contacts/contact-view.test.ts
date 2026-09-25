@@ -47,6 +47,8 @@ const contact = (overrides: Partial<ContactRow> = {}): ContactRow => ({
   createdAt: AT,
   updatedAt: AT,
   anonymisedAt: null,
+  mergedAt: null,
+  mergedIntoId: null,
   ...overrides,
 });
 

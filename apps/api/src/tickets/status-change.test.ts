@@ -20,6 +20,7 @@ const status = (id: string, systemState: TicketStatusRow['systemState']): Ticket
     isSystem: true,
     excludedFromReports: false,
     isSpam: false,
+    systemKey: null,
     sortOrder: 0,
     color: 'info',
     createdAt: EARLIER,

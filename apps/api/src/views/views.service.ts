@@ -43,14 +43,14 @@ export interface ViewsContext {
   readonly actor: ViewActor;
 }
 
-/** What a count needs from the ticket list: its own `WHERE`, under a cap. */
+/** What a count needs from the ticket list: its own `WHERE`, once per view, under a cap. */
 export interface TicketCounter {
   countTickets(
     tx: DbTransaction,
     reader: TicketReader,
-    filters: TicketViewFilters,
+    filters: readonly TicketViewFilters[],
     cap: number,
-  ): Promise<number>;
+  ): Promise<number[]>;
 }
 
 export class ViewsService {
@@ -68,34 +68,29 @@ export class ViewsService {
   }
 
   /**
-   * One count per view in the sidebar. Sequential, in the request's one
-   * transaction: each is an index scan that stops at the cap, and a handful of
-   * them in a row is cheaper than the connections running them side by side
-   * would cost the pool.
+   * One count per view in the sidebar, every view in one statement: each is
+   * an index scan that stops at the cap, and one round trip for all of them
+   * is what keeps the sidebar as cheap as a page of the list.
    */
   async counts(context: ViewsContext): Promise<TicketViewCountList> {
-    const reader: TicketReader = { brandId: context.brandId, viewerId: context.actor.userId };
-    const counts: TicketViewCountList['counts'] = [];
+    const shown = (await this.#visible(context)).filter((row) => !row.hidden);
+    const matched = await this.#tickets.countTickets(
+      context.tx,
+      { brandId: context.brandId, viewerId: context.actor.userId },
+      shown.map(filtersOf),
+      VIEW_COUNT_CAP,
+    );
 
-    for (const row of await this.#visible(context)) {
-      if (row.hidden) {
-        continue;
-      }
-
-      const matched = await this.#tickets.countTickets(
-        context.tx,
-        reader,
-        filtersOf(row),
-        VIEW_COUNT_CAP,
-      );
-      counts.push({
-        viewId: row.id,
-        count: Math.min(matched, VIEW_COUNT_CAP),
-        capped: matched > VIEW_COUNT_CAP,
-      });
-    }
-
-    return { counts };
+    return {
+      counts: shown.map((row, index) => {
+        const count = matched[index] ?? 0;
+        return {
+          viewId: row.id,
+          count: Math.min(count, VIEW_COUNT_CAP),
+          capped: count > VIEW_COUNT_CAP,
+        };
+      }),
+    };
   }
 
   async create(context: ViewsContext, request: TicketViewCreateRequest): Promise<TicketView> {

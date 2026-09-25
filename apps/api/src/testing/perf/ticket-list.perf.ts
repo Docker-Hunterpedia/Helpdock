@@ -365,7 +365,8 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
         .join('\n');
     }
 
-    // M1-05: each default view's count, as the counts route runs it.
+    // M1-05: the sidebar's counts, as the counts route runs them — one
+    // statement over every view the session's sidebar shows.
     for (const session of ['admin', 'agent'] as const) {
       const principalId = session === 'admin' ? dataset.admin.id : dataset.agent.id;
       const context: TenantContext = {
@@ -375,22 +376,26 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
         principalId,
       };
 
-      await withTenant(app.db, context, async (tx) => {
-        const shared = await tx.select().from(views);
-        for (const view of shared) {
-          const rows = await tx.execute<{ 'QUERY PLAN': string }>(
-            sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.countTicketsStatement(
-              tx,
-              { brandId: dataset.brandId, viewerId: principalId },
-              ticketViewFiltersSchema.parse(view.filters),
-              VIEW_COUNT_CAP,
-            )}`,
-          );
-          plans[`${session} · count: ${view.name}`] = [...rows]
-            .map((row) => row['QUERY PLAN'])
-            .join('\n');
-        }
+      const rows = await withTenant(app.db, context, async (tx) => {
+        const shown = (await tx.select().from(views)).filter(
+          (view) =>
+            view.visibleDepartmentIds === null ||
+            context.departmentIds === 'all' ||
+            view.visibleDepartmentIds.some((id) => context.departmentIds.includes(id)),
+        );
+
+        return tx.execute<{ 'QUERY PLAN': string }>(
+          sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.countTicketsStatement(
+            tx,
+            { brandId: dataset.brandId, viewerId: principalId },
+            shown.map((view) => ticketViewFiltersSchema.parse(view.filters)),
+            VIEW_COUNT_CAP,
+          )}`,
+        );
       });
+      plans[`${session} · view counts (sidebar)`] = [...rows]
+        .map((row) => row['QUERY PLAN'])
+        .join('\n');
     }
 
     return plans;

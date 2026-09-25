@@ -108,8 +108,8 @@ const repository = {
 
 const counter: TicketCounter = {
   countTickets: async (_tx, reader, filters) => {
-    counted.push({ reader, filters });
-    return matches;
+    counted.push(...filters.map((one) => ({ reader, filters: one })));
+    return filters.map(() => matches);
   },
 };
 

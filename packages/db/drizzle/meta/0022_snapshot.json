@@ -1,5 +1,5 @@
 {
-  "id": "e055fa10-d90e-4982-b438-1a57f685186d",
+  "id": "4e71ec91-134f-400d-a3ce-c07f6e32ad5d",
   "prevId": "2e9628d8-bec3-4a2d-abcb-cb5b1feaf265",
   "version": "7",
   "dialect": "postgresql",
@@ -3971,6 +3971,39 @@
             },
             {
               "expression": "department_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tickets_brand_status_updated_idx": {
+          "name": "tickets_brand_status_updated_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -18,7 +18,7 @@ import {
   tickets,
 } from '@helpdock/db';
 import type { TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { statusJoin, ticketFilters, ticketOrder } from './ticket-query.js';
 
 /**
@@ -142,43 +142,54 @@ export class TicketRepository {
   }
 
   /**
-   * How many tickets the reader can see that match a view's filters, reading
-   * at most `cap + 1` of them (M1-05). The `LIMIT` sits inside the count, so
-   * the planner stops after `cap + 1` rows instead of counting a whole queue:
-   * a sidebar number past the cap reads "999+", and nobody works a queue by
-   * whether it holds a thousand or four.
+   * How many tickets the reader can see that match each of several views'
+   * filters, reading at most `cap + 1` for each (M1-05). The `LIMIT` sits
+   * inside every count, so the planner stops after `cap + 1` rows instead of
+   * counting a whole queue: a sidebar number past the cap reads "999+", and
+   * nobody works a queue by whether it holds a thousand or four.
    *
-   * The `WHERE` is the list's own, so a count walks the same index the list
-   * does and can never disagree with it about which tickets match.
+   * One statement with one scalar subquery per view: each keeps its own plan
+   * — the index its filters reach — and the sidebar costs one round trip
+   * rather than one per view. Each `WHERE` is the list's own, so a count can
+   * never disagree with the list about which tickets match.
    */
   async countTickets(
     tx: DbTransaction,
     reader: TicketReader,
-    filters: TicketViewFilters,
+    filters: readonly TicketViewFilters[],
     cap: number,
-  ): Promise<number> {
-    const rows = await this.countTicketsStatement(tx, reader, filters, cap);
+  ): Promise<number[]> {
+    if (filters.length === 0) {
+      return [];
+    }
 
-    return rows[0]?.count ?? 0;
+    const rows = await tx.execute<Record<string, number>>(
+      this.countTicketsStatement(tx, reader, filters, cap),
+    );
+    const row = [...rows][0] ?? {};
+
+    return filters.map((_filters, index) => Number(row[`c${index}`] ?? 0));
   }
 
   /** The statement {@link countTickets} runs, unexecuted, for the performance harness. */
   countTicketsStatement(
     tx: DbTransaction,
     reader: TicketReader,
-    filters: TicketViewFilters,
+    filters: readonly TicketViewFilters[],
     cap: number,
-  ) {
-    const { sort, direction, ...rest } = filters;
-    const matching = tx
-      .select({ id: tickets.id })
-      .from(tickets)
-      .innerJoin(ticketStatuses, statusJoin)
-      .where(ticketFilters({ ...reader, filters: rest, sort, direction, cursor: undefined }))
-      .limit(cap + 1)
-      .as('matching');
+  ): SQL {
+    const counts = filters.map(({ sort, direction, ...rest }, index) => {
+      const matching = tx
+        .select({ id: tickets.id })
+        .from(tickets)
+        .innerJoin(ticketStatuses, statusJoin)
+        .where(ticketFilters({ ...reader, filters: rest, sort, direction, cursor: undefined }))
+        .limit(cap + 1);
 
-    return tx.select({ count: sql<number>`count(*)::int` }).from(matching);
+      return sql`(SELECT count(*)::int FROM (${matching}) AS matching) AS ${sql.identifier(`c${index}`)}`;
+    });
+
+    return sql`SELECT ${sql.join(counts, sql`, `)}`;
   }
 
   /**

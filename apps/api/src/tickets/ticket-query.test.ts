@@ -73,6 +73,45 @@ describe('ticketFilters', () => {
     expect(sql?.params).toEqual([]);
   });
 
+  describe('tags (M1-06)', () => {
+    const REFUND = '01937f5e-7e53-7000-8000-0000000000b1';
+    const VIP = '01937f5e-7e53-7000-8000-0000000000b2';
+
+    it('asks for tickets carrying every tag named, not any of them', () => {
+      const sql = render(ticketFilters(query({ tagId: [REFUND, VIP] })));
+
+      // All-of: two chips in a filter are how somebody narrows a queue.
+      expect(sql?.sql).toContain('count(DISTINCT');
+      expect(sql?.sql).toContain('HAVING');
+      expect(sql?.params).toEqual([REFUND, VIP, 2]);
+    });
+
+    it('reads tagIds as the same filter, so naming both is naming their union', () => {
+      const sql = render(ticketFilters(query({ tagId: [REFUND], tagIds: [VIP] })));
+
+      expect(sql?.params).toEqual([REFUND, VIP, 2]);
+    });
+
+    it('counts a repeated id once, so a duplicate cannot make the filter impossible', () => {
+      const sql = render(ticketFilters(query({ tagId: [REFUND], tagIds: [REFUND] })));
+
+      expect(sql?.params).toEqual([REFUND, 1]);
+    });
+
+    it('binds the ids rather than pasting them', () => {
+      const sql = render(ticketFilters(query({ tagId: [REFUND] })));
+
+      expect(sql?.sql).not.toContain(REFUND);
+    });
+
+    it('adds nothing when the list is empty', () => {
+      // Only M1-08's soft-delete clause is left, which is the "no filters" shape.
+      expect(render(ticketFilters(query({ tagId: [] })))?.sql).toBe(
+        '"tickets"."deleted_at" is null',
+      );
+    });
+  });
+
   it('combines several filters', () => {
     const sql = render(
       ticketFilters(

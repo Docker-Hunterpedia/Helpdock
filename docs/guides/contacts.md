@@ -251,10 +251,14 @@ setting resolution lands (the open gap in
   `contact_identities.value` are scanned with `ILIKE`; the trigram GIN index of
   [ARCHITECTURE §5](../planning/ARCHITECTURE.md#5-data-model-core-tables) arrives
   with the ticket index set in M1-15.
-- **Tags are a placeholder.** The `tag` query parameter is accepted and ignored
-  until M1-06 defines tags.
-- **Custom fields are stored, not edited.** `contacts.custom` and
-  `accounts.custom` are read by the details card; the editor is M1-06.
+- **Tags are a placeholder.** The `tag` query parameter is accepted and ignored.
+  Tagging a *contact* is nobody's deliverable yet: M1-06's tags hang off
+  tickets, and REQUIREMENTS §4.1 gives a contact custom fields instead.
+- **Custom field values are validated, not yet edited here.** `PATCH` on a
+  contact or an account takes a `custom` object and checks it against the
+  brand's own definitions ([ticketing settings](ticketing-settings.md#custom-fields));
+  the details card reads the values, and the screen that edits them field by
+  field is M1-15's.
 - **Erasure reaches what exists today.** DOMAIN-RULES §11 also says it deletes
   the attachments the person sent and rewrites message author fields. Neither
   table exists yet — messages are M1-03 and attachments are M1-10 — so the

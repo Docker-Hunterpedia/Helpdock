@@ -226,6 +226,10 @@ export const ticketingRefusalSchema = z.enum([
   'status-state-fixed',
   /** A new or reopened ticket lands in the default, so it has to be open-like (409, M1-08). */
   'default-must-be-open',
+  /** Rows already carry values for this field, so its type cannot move (409). */
+  'field-in-use',
+  /** Rows still carry that option; send `force` to clear them with it (409). */
+  'option-in-use',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

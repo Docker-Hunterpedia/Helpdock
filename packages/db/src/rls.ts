@@ -55,6 +55,16 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // status a ticket in their own department is in, and the list is the same
   // list for every department.
   { name: 'ticket_statuses', departmentScoped: false },
+  // A brand's tag list and its custom field definitions are configuration, not
+  // tickets: the same list in every department, and an Agent has to read the
+  // name of a tag that is on a ticket of their own. What is department-scoped
+  // is which tickets carry which tag, which is `ticket_tags` below.
+  { name: 'tags', departmentScoped: false },
+  { name: 'custom_field_defs', departmentScoped: false },
+  // A template may name a department, but that is where a ticket made from it
+  // is filed — not who may read it. The picker on the create screen shows every
+  // template the brand has.
+  { name: 'ticket_templates', departmentScoped: false },
   { name: 'tickets', departmentScoped: true },
   { name: 'ticket_messages', departmentScoped: true },
   { name: 'ticket_activity', departmentScoped: true },
@@ -63,6 +73,10 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // presigned URL is issued from a row, and a row in another department is not
   // a row this transaction can read.
   { name: 'attachments', departmentScoped: true },
+  // DOMAIN-RULES §1.3 names `ticket_tags` among the six department-scoped
+  // tables; `department_id` is denormalised from the parent by the same trigger
+  // `ticket_messages` uses.
+  { name: 'ticket_tags', departmentScoped: true },
 ];
 
 /**

@@ -54,8 +54,16 @@ export function ToastProvider({ children }: { readonly children: ReactNode }): R
       <Snackbar
         open={toast !== null}
         autoHideDuration={AUTO_DISMISS_MS}
-        onClose={() => {
-          setToast(null);
+        onClose={(_event, reason) => {
+          // A click somewhere else is not a dismissal. DESIGN §6.4 gives a
+          // toast six seconds and nothing else, and MUI's `clickaway` costs
+          // more than the toast it closes: its document listener runs *after*
+          // the React handler that raised the next one, so confirming a dialog
+          // while a toast is up would set the new message and then clear it —
+          // and the action would look as though it had not happened.
+          if (reason !== 'clickaway') {
+            setToast(null);
+          }
         }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         // Logical, so the stack sits at the inline end in both directions.

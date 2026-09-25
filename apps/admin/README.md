@@ -90,8 +90,10 @@ src/ui/             the small pieces DESIGN §6 has no component for yet: the
 src/install/        what the app may know before anyone signs in
 src/screens/setup/  the first-run wizard (M0-08): four steps, its api client
 src/screens/admin/system/   the System page (M0-10), its api client and formatters
-src/screens/admin/ticketing/  the Ticketing settings (M1-01): the tab row, the
-                    Departments tab and its side editor, the reorder helper
+src/screens/admin/ticketing/  the Ticketing settings: the tab row, the
+                    Departments tab (M1-01), the Tags, Custom fields and
+                    Templates tabs (M1-06), their side editors, the reorder
+                    helper and the tag tints
 e2e/                Playwright, one project per locale
 e2e/api/            Playwright against a real api, its own config
 ```
@@ -298,7 +300,7 @@ Five things M1-15 should know:
 |---|---|---|
 | `/admin/ticketing` | `Admin/Ticketing` | The tab row of the whole of M1's settings, redirecting to the first tab. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
 | `/admin/ticketing/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
-| `/admin/ticketing/{statuses,priorities,tags,custom-fields,templates,views,assignment}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Statuses and Priorities with M1-02, Views with M1-05, Tags, Custom fields and Templates with M1-06, Assignment with M1-07. Any other segment redirects to the first tab. |
+| `/admin/ticketing/{statuses,priorities,views,assignment}` | `Admin/Ticketing` | Routed placeholders that name the deliverable filling them: Statuses and Priorities with M1-02, Views with M1-05, Assignment with M1-07. Any other segment redirects to the first tab. |
 
 Reordering has three ways in and one path out. The drag handle is a real button
 — so it is reachable by Tab and answers `↑`/`↓` — and the row menu offers **Move
@@ -311,6 +313,42 @@ endpoint (`PATCH /api/brands/:brandId`, on `TicketingApi`) but no screen: they
 belong on **Admin → Settings** as a "Brand" tab, and that page is still the
 milestone placeholder with no artboard. The guide says so
 ([ticketing settings](../../docs/guides/ticketing-settings.md#brand-settings)).
+
+### The screens M1-06 added
+
+| Route | Artboard | |
+|---|---|---|
+| `/admin/ticketing/tags` | `Admin/Ticketing` | The list — chip, name, Arabic name, ticket count — and the side editor with the eight-swatch colour picker. |
+| `/admin/ticketing/custom-fields` | `Admin/Ticketing` | One table per target (Ticket, Contact, Account), because the three are separate lists with separate orders, and one shared side editor. |
+| `/admin/ticketing/templates` | `Admin/Ticketing` | The list — name, department, priority, usage — and the side editor with the api-rendered preview. |
+
+Three things in these tabs are worth knowing before changing them.
+
+**The colour picker is a radio group.** Eight swatches, each a real `<input
+type="radio">` whose accessible name is the colour's name, so the choice is
+reachable by Tab, moved with the arrow keys, announced, and never carried by
+colour alone (DESIGN §10). The selected one also gets a second ring, so it
+survives greyscale. `tag-colours.ts` maps each of the eight keys to semantic
+tokens — the four status tints, and four steps of the warm neutral ramp read off
+`bg.canvas`, `bg.muted`, `border.default` and `border.strong` — so a brand's
+`surfaceTone` moves the neutrals with the rest of the app and dark mode needs no
+second table.
+
+**The option list is reordered from the keyboard.** `↑` and `↓` inside a row
+move that option, and the two buttons beside it do the same for a pointer. Both
+go through `reorder.ts`, the helper the department list uses, so the two routes
+cannot drift.
+
+**The preview is the api's answer, shown as it came back.** The editor never
+fills placeholders itself: the renderer decides which names a placeholder may
+reach, and a second implementation in the browser would be a second answer to
+that. `MockTicketingApi` carries a miniature of the same renderer so the fixture
+produces the states the real service does — including a name it does not know,
+which is left spelled out.
+
+An option removal the api refuses with `option-in-use` becomes a **question**
+rather than a toast: the dialog explains that saving clears the option from the
+rows that carry it, and answering it sends the same request again with `force`.
 
 ### The ticket workspace
 
@@ -349,8 +387,9 @@ with the two reads it wants that the api does not offer yet.
 
 Everything the screens need is `AuthApi` in `src/auth/api.ts`, `StaffApi` in
 `src/staff/api.ts`, `ContactsApi` in `src/contacts/api.ts`, `TicketingApi` in
-`src/ticketing/api.ts` and `TicketsApi` in `src/tickets/api.ts`. Their DTOs are
-Zod schemas in [`@helpdock/schemas`](../../packages/schemas/src/), so the api
+`src/ticketing/api.ts` — which from M1-06 also carries the tags, the custom
+field definitions and the templates — and `TicketsApi` in `src/tickets/api.ts`.
+Their DTOs are Zod schemas in [`@helpdock/schemas`](../../packages/schemas/src/), so the api
 declares its responses against the same shapes the app parses them with. Two
 adapters implement it:
 

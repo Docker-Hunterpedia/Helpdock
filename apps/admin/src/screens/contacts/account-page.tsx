@@ -28,8 +28,8 @@ import { useContactAction } from './use-contact-action.js';
 
 /**
  * One customer company and the people filed under it. Minimal on purpose: a
- * name, a domain and a list, because that is what an account *is* until M1-06
- * gives it custom fields.
+ * name, a domain and a list. M1-06 gave an account custom *values* and the api
+ * validates them, but the fields the screen draws them in are M1-15's.
  */
 export function AccountPage(): ReactNode {
   const t = useT();

@@ -4,10 +4,10 @@ How a brand's tickets are shaped and routed: departments, the teams inside
 them, and the brand-level behaviour that later deliverables read. The screen is
 **Admin → Ticketing**, and this guide follows its tab row.
 
-Two tabs are built: **Departments** (M1-01) and **Statuses** (M1-08). The other
-six exist so the row is whole and each says which deliverable fills it:
-Priorities with M1-02, Views with M1-05, Tags, Custom fields and Templates with
-M1-06, Assignment with M1-07.
+Five tabs are built: **Departments** (M1-01), **Statuses** (M1-08) and **Tags**,
+**Custom fields** and **Templates** (M1-06). The other three exist so the row is
+whole and each says which deliverable fills it: Priorities with M1-02, Views
+with M1-05, Assignment with M1-07.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -23,10 +23,20 @@ version:
 | Add, edit, reorder or delete a status | yes | yes | no |
 | Change the reply behaviour and the reopen policy | yes | yes | no |
 | Change the brand's name, language, time zone or settings | yes | no | no |
+| Read the tags, custom fields and templates | yes | yes | yes |
+| Add, edit, reorder or delete tags, custom fields and templates | yes | yes | no |
+| Put tags on a ticket | yes | yes | Agent yes, Viewer no |
 
 "Which departments a brand has" is the brand's shape, so it stays with the
 Admin. "What is inside one" is the Team Leader's, which is what §1.2 means by
 "departments they lead".
+
+Tags, custom fields and templates are `ticketing:manage`, which the Admin and
+the Team Leader hold: they are the M1 half of "macros, canned responses…" in
+§1.2's last column. They are deliberately **not** `brand:manage` — adding a tag
+does not change how the brand routes work, and adding a department does. A
+template that names a department is narrowed further, to the departments a Team
+Leader leads.
 
 ---
 
@@ -206,6 +216,164 @@ Both are stored in `brands.settings`, and this route **merges** rather than
 replacing — a key a later milestone adds is not reset by a screen that predates
 it. `PATCH /api/brands/:brandId` still writes the object whole, because the
 screen there holds the whole object.
+## Tags
+
+A tag is a label an agent puts on a ticket to find it again. The list is the
+brand's own and is the same list in every department; which *tickets* carry
+which tag is department-scoped, so an Agent sees the chips on their own tickets
+and on nobody else's.
+
+### The list
+
+Each row shows the chip as it will be drawn, the name, the Arabic name and how
+many tickets carry it. The row menu offers **Edit**, **Move up**, **Move down**
+and **Delete**, and reordering works exactly as it does for departments: drag
+the handle, focus it and press `↑`/`↓`, or use the menu. All three send the
+whole list.
+
+The ticket count is "tickets you can see with this tag". For an Admin that is
+every ticket in the brand; for a Team Leader restricted to two departments it is
+the tickets in those two. Reaching past the department policy to count rows the
+reader may not know exist would not be an improvement.
+
+### The editor
+
+| Field | Notes |
+|---|---|
+| Name | Required, up to 60 characters, unique inside the brand **whatever its case**. "Refund" and "refund" are one label to whoever reads a ticket. |
+| Name (Arabic) | Optional. Drawn on the chip while the desk is in Arabic; the Latin name is the fallback. |
+| Colour | One of the eight tints in [DESIGN §6.2](../../DESIGN.md#62-indicators): `info`, `success`, `warning`, `escalated` and four warm neutrals — `sand`, `stone`, `clay`, `bark`. **Never the danger tint**: red means "breached" or "destructive" on this desk. The picker is eight radio buttons, each named by its colour, so the choice is never carried by colour alone. |
+
+### Deleting one
+
+Nothing refuses it. Deleting a tag **detaches** it: the tickets stay and lose
+one chip. That is why the confirmation reads the live count first and says how
+many tickets keep no tag — the decision is the person's, and they cannot make it
+blind. The count is written into the audit row, because afterwards it is the
+only record of how much was taken off.
+
+Deleting a tag also drops it from any template that listed it as a default.
+
+## Custom fields
+
+A custom field keeps something a brand needs that Helpdock does not ship. Three
+targets — **Ticket**, **Contact**, **Account** — each with its own list and its
+own order, which is why the tab draws three tables.
+
+The *definitions* are rows. The *values* live in one `custom jsonb` column on
+the row they describe, so reading a ticket is one row rather than eleven. What
+jsonb gives up is the database enforcing the shape, so every write goes through
+a Zod schema built from the brand's own definitions
+(`packages/schemas/src/custom-fields.ts`). A value that does not fit never
+reaches a column.
+
+### The types
+
+| Type | Accepts | Stored as |
+|---|---|---|
+| Text | a non-empty string | the trimmed string |
+| Number | a finite number, or a string holding one | a number |
+| Date | an ISO date or date-time | `YYYY-MM-DD` |
+| Select | one of the field's options | that option |
+| Multi-select | a set of the field's options, no duplicates | an array |
+| Checkbox | a boolean | a boolean |
+
+`true`, `[]` and `null` are **not** coerced into numbers. A checkbox ticked in
+the wrong field must not become the number one.
+
+### The editor
+
+| Field | Notes |
+|---|---|
+| Label, Label (Arabic) | What a person reads. Correctable at any time. |
+| Key | snake_case, suggested from the label while the field is new, and **fixed once the field exists**. It is written into every stored value, every template default and (from M3) every rule condition; renaming it would orphan all of them silently. |
+| Type | Fixed while rows carry a value — see below. |
+| Options | Only for Select and Multi-select. One choice per row, reordered with the arrow buttons or with `↑`/`↓` inside the row. The order is the order the menu offers. |
+| Required | Enforced when a ticket is **created**, not when one is patched: a `PATCH` that names two fields says nothing about the other eight. |
+| Placement | Which target the field hangs off. Fixed after creation. |
+| Visible to agents | Off keeps the field for administrators and rules. It **hides** the field; it does not protect it — the value sits in the same jsonb column either way. |
+
+### The two rules that exist because values are already stored
+
+- **A type cannot change while rows carry a value.** "Yes" is not a number and
+  `2026-01-02` is not one of three options; changing the type underneath would
+  leave rows that no longer validate and that nobody can save again. The
+  refusal is `field-in-use` and carries a count.
+- **An option in use is not removed by accident.** The api refuses with
+  `option-in-use` and answers with how many rows carry each option; the editor
+  asks, and the same request sent again with `force` removes the option *and*
+  clears it from those rows. A `select` loses the key; a `multi_select` keeps
+  its other choices, and loses the key too when that was the last one.
+- **Neither change is offered to somebody who cannot see every department.** A
+  usage count is of rows the actor can read, and tickets are department-scoped,
+  so a Team Leader restricted to two departments would be deciding on a number
+  that leaves out the rest — and the rows left behind would carry an option
+  that no longer exists and would fail validation the next time anybody saved
+  them. Changing a type or forcing an option removal therefore answers
+  `out-of-scope` for a restricted actor. Renaming, reordering and changing the
+  flags are unaffected, because nothing stored changes. An Admin always reaches
+  every department, and so does an unrestricted Team Leader.
+
+A template's `customDefaults` are validated the same way when the **template**
+is saved, not only when a ticket is filed from it: a default that no field
+accepts would otherwise turn every ticket created from that template into a
+400, and the person who can fix it is the one saving the template. The values
+are stored coerced, so `"12"` for a number field is kept as `12`.
+
+Deleting a definition leaves the stored values where they are. Rewriting every
+ticket, contact and account of a brand to strip one key is a migration run
+inside a request, for a change somebody may undo in a minute; reads filter by
+the definitions instead, so an orphaned key is invisible everywhere and a
+definition re-created with the same key brings its values back. The confirmation
+says how many rows are affected.
+
+## Ticket templates
+
+A template is a starting point for a ticket an agent files by hand: a subject, a
+body, a priority, a department, some tags and some custom values.
+
+`POST /api/brands/:brandId/tickets` takes a `templateId` and applies it
+**server-side**. The browser never sends a copy of the template, so a template
+edited between the picker rendering and the ticket being filed is applied as it
+now is, and an API client gets the same behaviour without reimplementing it.
+Anything the request names beside `templateId` wins over what the template says.
+
+| Field | Notes |
+|---|---|
+| Name | Unique inside the brand whatever its case. |
+| Department | Where a ticket made from it is filed. "Chosen when filing" means the creating request has to name one, and a request that names neither is a 400. |
+| Priority | Applied unless the request names one. |
+| Subject, Body | May carry placeholders; see below. The body is plain text in this release — the rich composer is M5's TipTap. It is escaped, wrapped into paragraphs and put through the same sanitiser as any other message, so a template containing `<script>` becomes that *text* in the thread. |
+| Default tags | Applied on creation. A tag the brand has since deleted is dropped rather than refused: a template is not broken by somebody tidying the tag list. |
+| Custom field defaults | Values for the brand's *ticket* fields, written under the request's own values. |
+
+`usageCount` counts tickets created from the template. It is incremented in the
+same transaction that writes the ticket, so a creation that rolls back takes the
+count with it.
+
+### Placeholders
+
+Six names, and only these six:
+
+```
+{{contact.first_name}}   {{contact.last_name}}   {{contact.name}}
+{{contact.email}}        {{ticket.number}}       {{brand.name}}
+```
+
+The renderer resolves a **fixed list of names, not a path into an object**. That
+is the whole design: a renderer that walked properties would answer
+`{{constructor.constructor}}` with a function and `{{__proto__}}` with an
+object. A name it does not know — including a typo such as `{{contcat.name}}` —
+is left exactly as it was written and reported by the preview, because an author
+has to see their typo rather than find a hole in a sentence a customer read.
+
+`{{ticket.number}}` has no value in the preview: the ticket does not exist yet.
+It is filled when a ticket is actually created from the template.
+
+**Preview** asks the api to render the template and shows what comes back. The
+admin never fills placeholders itself, because the renderer is what decides
+which names a placeholder may reach and a second implementation would be a
+second answer to that.
 
 ## Brand settings
 
@@ -285,6 +453,21 @@ there as well as in the brand it creates.
 | `PATCH …/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of §2.3. Team Leaders included. |
 | `PATCH /api/brands/:brandId` | `@Requires('brand:manage')` | Name, default locale, time zone, settings. Never the prefix. |
 | `POST /api/install/brands` | `@Requires('install:admin')` | An additional brand. Audited. |
+| `GET /api/brands/:brandId/tags` | `@Requires('ticket:read')` | The brand's tags with their ticket counts. |
+| `POST /api/brands/:brandId/tags` | `@Requires('ticketing:manage')` | Creates one at the end of the list. |
+| `POST /api/brands/:brandId/tags/reorder` | `@Requires('ticketing:manage')` | The whole order; a partial list is a 400. |
+| `GET /api/brands/:brandId/tags/:tagId/usage` | `@Requires('ticketing:manage')` | How many tickets carry it, for the confirmation. |
+| `PATCH/DELETE /api/brands/:brandId/tags/:tagId` | `@Requires('ticketing:manage')` | Name, Arabic name, colour. Delete detaches. |
+| `GET /api/brands/:brandId/tickets/:ticketId/tags` | `@Requires('ticket:read')` | The chips on one ticket. |
+| `PUT /api/brands/:brandId/tickets/:ticketId/tags` | `@Requires('ticket:write')` | Replaces the whole set. Writes `ticket.tags.changed` and one outbox row. |
+| `GET /api/brands/:brandId/custom-fields` | `@Requires('ticket:read')` | Every definition, or one target's with `?target=`. |
+| `POST /api/brands/:brandId/custom-fields` | `@Requires('ticketing:manage')` | Creates one. The key is refused if the target has it. |
+| `POST /api/brands/:brandId/custom-fields/reorder` | `@Requires('ticketing:manage')` | One target's whole order. |
+| `GET /api/brands/:brandId/custom-fields/:fieldId/usage` | `@Requires('ticketing:manage')` | Rows carrying a value, and rows per option. |
+| `PATCH/DELETE /api/brands/:brandId/custom-fields/:fieldId` | `@Requires('ticketing:manage')` | Never the key. `force` clears an option in use. |
+| `GET /api/brands/:brandId/ticket-templates` | `@Requires('ticket:write')` | The picker's list. |
+| `GET …/ticket-templates/:templateId/preview` | `@Requires('ticket:write')` | The template rendered, with `?contactId=` optional. |
+| `POST/PATCH/DELETE …/ticket-templates[/:templateId]` | `@Requires('ticketing:manage')` | A Team Leader only inside the departments they lead. |
 
 ### Refusals
 
@@ -302,14 +485,17 @@ the translated copy:
 | `status-is-default` | 409 | Make another status the default before deleting this one. |
 | `status-state-fixed` | 409 | A seeded status's system state and flags are what code refers to it by. |
 | `default-must-be-open` | 409 | The default is where a new or reopened ticket lands, so it has to be open-like. |
+| `field-in-use` | 409 | Rows already carry values for this custom field, so its type cannot change. |
+| `option-in-use` | 409 | Rows still carry an option the request removes. Send it again with `force` to clear them. |
 
 A department of another brand is invisible to the request's transaction, so it
 answers **404**, not 403: "there is no such id" and "it is not yours" are the
-same answer.
+same answer. The same holds for a tag, a custom field and a template — and, for
+`ticket_tags`, for a ticket in another department.
 
 ## Data model
 
-Three tenant tables, all under a `FORCE`d row-level security policy on
+Eight tenant tables, all under a `FORCE`d row-level security policy on
 `brand_id` (DOMAIN-RULES §1.3):
 
 | Table | Columns that matter | Notes |
@@ -318,12 +504,29 @@ Three tenant tables, all under a `FORCE`d row-level security policy on
 | `ticket_statuses` | `system_state`, `pauses_sla`, `awaiting_customer`, `is_default`, `is_system`, `excluded_from_reports`, `sort_order`, `color` | Unique on `(brand_id, name)`. Brand-scoped, never department-scoped: an Agent reads the name of the status their own ticket is in. |
 | `teams` | `department_id`, `name`, `sort_order` | Unique on `(department_id, name)`. Cascades from its department. |
 | `team_members` | `team_id`, `user_id` | Unique on `(team_id, user_id)`. Cascades from its team and from the account. |
+| `tags` | `name`, `name_ar`, `color`, `sort_order` | Unique on `(brand_id, lower(name))`, so two spellings of one label cannot both exist. |
+| `ticket_tags` | `ticket_id`, `tag_id`, `department_id` | Primary key is the pair, so "add this tag" is idempotent in the database. **Department-scoped.** |
+| `custom_field_defs` | `target`, `key`, `label`, `type`, `options`, `required`, `agent_visible` | Unique on `(brand_id, target, key)`. |
+| `ticket_templates` | `name`, `department_id`, `priority`, `subject`, `body_text`, `default_tag_ids`, `custom_defaults`, `usage_count` | Unique on `(brand_id, lower(name))`. `department_id` is `ON DELETE SET NULL`. |
 
 Neither `teams` nor `team_members` is department-scoped in the row-level
 security sense: §1.3 lists the six ticket-scoped tables and neither is one. A
 Team Leader's scope is a service-layer rule
 (`apps/api/src/brands/department-scope.ts`), exactly as it already is for
 `departments` itself.
+
+`ticket_tags` **is** one of them. Its `department_id` is denormalised from the
+parent ticket by the shared `helpdock_ticket_child_department` trigger, so the
+policy is a predicate on the table and never a join back to `tickets`, and a
+ticket that moves department takes its tags with it through the same
+`tickets_department_moved` trigger that moves its messages, its activity and its
+attachments. An agent tagging a ticket they cannot read finds no parent to copy
+from, and the insert never happens.
+
+`tags`, `custom_field_defs` and `ticket_templates` are brand-scoped and not
+department-scoped: they are the same list in every department, an Agent has to
+read the name of a tag on a ticket of their own, and a template's department is
+where its tickets are filed rather than who may read it.
 
 `brands.settings` is a `jsonb` column rather than rows in `settings`: these are
 the brand's own fields, read with the brand in one row, and `settings` is
@@ -332,6 +535,8 @@ which none of these may ever be.
 
 ## See also
 
+- [Tickets](tickets.md) — what a tag and a custom value look like on a ticket,
+  and how a template is applied.
 - [Staff and roles](staff-and-roles.md) — who holds which role, and how
   department scope is set per person.
 - [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules) — the

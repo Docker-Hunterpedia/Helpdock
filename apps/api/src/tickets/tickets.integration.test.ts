@@ -946,14 +946,18 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(status).toBe(400);
     });
 
-    it('refuses a tag filter it cannot yet apply, rather than ignoring it', async () => {
-      const { status } = await call(
+    it('answers an empty page for a tag nothing carries, now that M1-06 applies it', async () => {
+      // Until M1-06 this parameter was refused rather than ignored. It is
+      // applied now, so an id no ticket carries narrows to nothing — which is
+      // the answer, not an error.
+      const { status, body } = await call<TicketList>(
         'GET',
         `${brandPath(seeded.brandId)}/tickets?tagId=${uuidv7()}`,
         sam,
       );
 
-      expect(status).toBe(400);
+      expect(status).toBe(200);
+      expect(body.tickets).toEqual([]);
     });
 
     it('shows a brand its own tickets and none of another brand’s', async () => {

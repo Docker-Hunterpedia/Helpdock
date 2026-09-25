@@ -62,14 +62,24 @@ describe('the tab row', () => {
   });
 
   it('names the deliverable a tab is waiting for', async () => {
-    await renderTicketing('/admin/ticketing/tags');
+    await renderTicketing('/admin/ticketing/views');
 
-    expect(await screen.findByText('Tags arrives with M1-06.')).toBeInTheDocument();
+    expect(await screen.findByText('Views arrives with M1-05.')).toBeInTheDocument();
   });
 
   it('draws the Statuses tab rather than a placeholder, since M1-08 filled it', async () => {
     await renderTicketing('/admin/ticketing/statuses');
 
     expect(await screen.findByRole('button', { name: 'Edit Open' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['/admin/ticketing/tags', 'Add tag'],
+    ['/admin/ticketing/custom-fields', 'Add ticket field'],
+    ['/admin/ticketing/templates', 'Add template'],
+  ])('draws %s rather than a placeholder, since M1-06 filled it', async (route, control) => {
+    await renderTicketing(route);
+
+    expect(await screen.findByRole('button', { name: control })).toBeInTheDocument();
   });
 });

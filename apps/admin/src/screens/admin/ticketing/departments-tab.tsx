@@ -14,7 +14,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown,
   ArrowUp,
@@ -27,16 +27,13 @@ import {
 import { type ReactNode, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
-import { isAuthError } from '../../../auth/api.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
-import { isTicketingError } from '../../../ticketing/api.js';
-import { refusalCopy } from '../../../ticketing/refusal-copy.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
-import { useToast } from '../../../ui/toasts.tsx';
 import { type DepartmentDraft, DepartmentEditor } from './department-editor.tsx';
 import { DepartmentTeams } from './department-teams.tsx';
 import { moveBy, moveTo } from './reorder.js';
+import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 
 /**
  * The Departments tab of `Admin/Ticketing`: the 820 px list on the start side,
@@ -63,8 +60,8 @@ export function DepartmentsTab(): ReactNode {
   const api = useTicketingApi();
   const session = useSession();
   const tokens = useSemanticTokens();
-  const toast = useToast();
   const queryClient = useQueryClient();
+  const report = useTicketingReport();
 
   const brand = currentBrand(session);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -103,18 +100,6 @@ export function DepartmentsTab(): ReactNode {
       queryClient.invalidateQueries({ queryKey: ['departments', brand.id] }),
       queryClient.invalidateQueries({ queryKey: ['teams', brand.id] }),
     ]);
-  };
-
-  const report = (error: unknown): void => {
-    if (isTicketingError(error)) {
-      toast({ tone: 'danger', message: t(refusalCopy(error.reason)) });
-      return;
-    }
-
-    toast({
-      tone: 'danger',
-      message: isAuthError(error) ? t('auth:unavailable') : t('ticketing:toast.failed'),
-    });
   };
 
   const create = useTicketingAction(
@@ -527,28 +512,4 @@ export function DepartmentsTab(): ReactNode {
       />
     </Box>
   );
-}
-
-/**
- * One mutation, wired the same way every time: invalidate what the server just
- * changed, then say so in a toast, and turn a refusal into the sentence its
- * code names. The same shape as `useStaffAction` on the staff screen, because
- * these two screens answer failures identically.
- */
-function useTicketingAction<TInput, TResult>(
-  run: (input: TInput) => Promise<TResult>,
-  message: (input: TInput) => string,
-  refresh: () => Promise<void>,
-  report: (error: unknown) => void,
-) {
-  const toast = useToast();
-
-  return useMutation({
-    mutationFn: run,
-    onSuccess: async (_result: TResult, input: TInput) => {
-      await refresh();
-      toast({ tone: 'success', message: message(input) });
-    },
-    onError: report,
-  });
 }

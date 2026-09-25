@@ -5,7 +5,13 @@ import type {
   Ticket as TicketRow,
   TicketStatus as TicketStatusRow,
 } from '@helpdock/db';
-import type { Ticket, TicketActivityEntry, TicketMessage, TicketStatus } from '@helpdock/schemas';
+import type {
+  Tag,
+  Ticket,
+  TicketActivityEntry,
+  TicketMessage,
+  TicketStatus,
+} from '@helpdock/schemas';
 import { toAttachment } from '../media/attachment-view.js';
 
 /**
@@ -42,7 +48,17 @@ export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
   color: row.color,
 });
 
-export const toTicket = (ticket: TicketRow, status: TicketStatusRow): Ticket => ({
+/**
+ * M1-06: the chips are passed in rather than read here, because a list of fifty
+ * rows reads them once for the whole page (`ticketing/ticket-tags.ts`). A
+ * caller with none to hand passes nothing and the ticket carries an empty list,
+ * which is what a ticket with no tags has.
+ */
+export const toTicket = (
+  ticket: TicketRow,
+  status: TicketStatusRow,
+  tags: readonly Tag[] = [],
+): Ticket => ({
   id: ticket.id,
   number: ticket.number,
   prefix: ticket.prefix,
@@ -62,6 +78,7 @@ export const toTicket = (ticket: TicketRow, status: TicketStatusRow): Ticket => 
   slaBreached: ticket.slaBreached,
   closedAt: ticket.closedAt?.toISOString() ?? null,
   custom: ticket.custom,
+  tags: [...tags],
   createdAt: ticket.createdAt.toISOString(),
   updatedAt: ticket.updatedAt.toISOString(),
 });

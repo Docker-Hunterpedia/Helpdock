@@ -64,7 +64,7 @@ Copied from the PRD, ticked as they are met.
 - [ ] An Agent cannot see or open a ticket in another department, by list, by direct URL, by contact timeline, or by socket room.
 - [ ] Every transition in DOMAIN-RULES §2.2 and each reopen policy value has a test.
 - [ ] Every new tenant table has brand and, where applicable, department RLS policies and is covered by the negative test suite.
-- [ ] Ticket list of 50k seeded tickets loads under 150 ms p95 under the D §14 conditions.
+- [x] Ticket list of 50k seeded tickets loads under 150 ms p95 under the D §14 conditions. (2026-09-25: worst list p95 53 ms, 0 errors; see the M1-15 notes.)
 
 ## M1-11 Spam
 
@@ -123,15 +123,14 @@ Decisions a reviewer should confirm:
 - **Search cannot use its GIN indexes under `FORCE ROW LEVEL SECURITY`**: `@@` and `<%` are not `LEAKPROOF`, so
   Postgres will not evaluate them ahead of the policy. Common terms stop after a few hundred rows; a term that
   matches nothing reads every visible ticket (257 ms as an Admin at 50k). Measured and reported outside the gate;
-  fixing it is an ADR (leakproof wrappers, or a token table), not an index.
+  fixed by [ADR 0011](../decisions/0011-ticket-search-token-table.md) in M1-15 part 2.
 - **Rows embed `contact: { id, name }`** on the list and the ticket read, when the caller holds `contact:read`.
   The workspace no longer reads the first page of `GET /contacts` to name rows.
 - **The gate** is `pnpm --filter @helpdock/api perf:tickets` (`apps/api/src/testing/perf/`): the §14 dataset, two
   api replicas, 50 staff sessions, Admin and department-restricted Agent. Method, plans and numbers:
-  [tickets guide, Performance](../guides/tickets.md#performance). **Not yet demonstrated**: the only machine
-  available was shared with six other jobs (load average 27–64 on 4 vCPUs), and there the full run's list p95
-  was 0.8–2.1 s; with the machine quieter the api's own cost was a p95 of 14–52 ms. The exit criterion stays
-  unticked until a run on an idle §14 host.
+  [tickets guide, Performance](../guides/tickets.md#performance). **Passed on 2026-09-25**: an idle run
+  pinned to 2 cores put the slowest gated list scenario at p95 53 ms (0 errors). An earlier run on the same
+  machine while it was shared with six other jobs measured the queue, not the api (p95 0.8–2.1 s).
 
 ## M1-14 notes
 

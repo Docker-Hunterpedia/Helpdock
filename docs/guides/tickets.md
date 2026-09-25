@@ -1199,47 +1199,35 @@ generator shares it; there is no worker and no widget traffic (the widget is
 M4); and there are no articles or chunks. On a shared or busy machine the tail
 measures the machine, so run it on an idle one.
 
-### What it measured last (2026-09-24)
+### What it measured last (2026-09-25)
 
-**The gate has not yet been demonstrated on a §14 host.** The only machine
-available was a 4-vCPU container shared with six other build-and-test jobs,
-with a load average of **27–64 on 4 cores** throughout the run: the tail below
-measures that queue far more than the api. Tick the exit criterion only after a
-run on an idle 2 vCPU / 4 GB machine.
+**The gate passes.** The full §14 run on an idle machine, with the benchmark
+and both api replicas pinned to **2 cores** (`taskset -c 0,1`) to stand in for a
+2 vCPU host (the container has 15 GB of memory, not 4): 50 sessions, 1 s think
+time, 2 min warm-up, 10 min measured, two replicas; 48.9 req/s, overall p95
+41 ms, **no errors**. The slowest gated scenario is 53 ms against the 150 ms
+gate.
 
-The full §14 run (50 sessions, 1 s think time, 2 min warm-up, 10 min measured,
-two replicas; 37 req/s; no errors):
-
-| Scenario | Admin p50 / p95 ms | Agent p50 / p95 ms |
+| Scenario | Admin p50 / p95 / p99 ms | Agent p50 / p95 / p99 ms |
 |---|---|---|
-| All tickets | 124 / 1 096 | 124 / 1 081 |
-| My open | 71 / 825 | 158 / 1 203 |
-| Unassigned | 139 / 1 023 | 166 / 1 206 |
-| Live states (Overdue) | 131 / 1 147 | 165 / 1 308 |
-| Escalated | 152 / 1 277 | 245 / 1 528 |
-| Search `refund` | 158 / 1 299 | 244 / 1 623 |
-| Search `renewa` | 163 / 1 232 | 208 / 1 429 |
-| Two tags, all-of | 331 / 2 026 | 345 / 2 138 |
-| Page 2 | 126 / 1 075 | 132 / 1 078 |
-| Open a ticket | 140 / 1 324 | 157 / 1 397 |
+| All tickets | 13 / 32 / 62 | 13 / 32 / 52 |
+| My open | 8 / 21 / 42 | 13 / 28 / 45 |
+| Unassigned | 15 / 31 / 51 | 16 / 33 / 60 |
+| Live states (Overdue) | 14 / 29 / 53 | 16 / 34 / 57 |
+| Escalated | 16 / 36 / 57 | 21 / 39 / 59 |
+| Search `refund` | 26 / 47 / 72 | 30 / 51 / 71 |
+| Search `renewa` | 25 / 46 / 75 | 28 / 48 / 72 |
+| Two tags, all-of | 27 / 50 / 72 | 31 / 53 / 71 |
+| Page 2 | 13 / 28 / 47 | 13 / 29 / 46 |
+| Open a ticket | 19 / 46 / 78 | 20 / 41 / 69 |
+| Search matching nothing (alone, not gated) | 241 / 284 / 304 | 141 / 186 / 207 |
 
-The same stack at a moment the machine was quieter (load average about 6),
-two sessions with no think time, 40 s measured, which is the api's own cost per
-request with little queueing in front of it:
+The zero-match search is what [ADR 0011](../decisions/0011-ticket-search-token-table.md)
+addresses.
 
-| Scenario | Admin p50 / p95 ms | Agent p50 / p95 ms |
-|---|---|---|
-| All tickets | 11 / 23 | 12 / 22 |
-| My open | 7 / 14 | 12 / 27 |
-| Unassigned | 12 / 25 | 14 / 25 |
-| Live states (Overdue) | 12 / 22 | 14 / 27 |
-| Escalated | 14 / 26 | 19 / 33 |
-| Search `refund` | 14 / 28 | 20 / 34 |
-| Search `renewa` | 14 / 24 | 17 / 30 |
-| Two tags, all-of | 26 / 46 | 32 / 52 |
-| Page 2 | 12 / 23 | 12 / 23 |
-| Open a ticket | 14 / 25 | 13 / 25 |
-| Search matching nothing (alone, not gated) | 243 / 271 | 138 / 163 |
+An earlier run (2026-09-24) on the same container while six other build jobs
+shared it (load average 27–64) put list p95 at 0.8–2.1 s: that measured the
+machine's queue, not the api, which is why a run belongs on an idle host.
 
 Before the index set and the brand equality, the same quieter-machine
 comparison could not be made, but the plans could: the default list read and

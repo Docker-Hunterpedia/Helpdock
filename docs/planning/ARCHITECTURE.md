@@ -309,7 +309,7 @@ services:
   worker:   { image: ghcr.io/docker-hunterpedia/helpdock:latest, env_file: .env, environment: { APP_ROLE: worker }, depends_on: [postgres, redis] }
   postgres: { image: pgvector/pgvector:pg17, volumes: [pg_data:/var/lib/postgresql/data] }
   redis:    { image: redis:7-alpine, command: ["redis-server","--appendonly","yes"], volumes: [redis_data:/data] }
-  minio:    { image: quay.io/minio/minio, profiles: [dev] }   # prod: external S3
+  minio:    { image: cgr.dev/chainguard/minio, profiles: [dev] }   # prod: external S3
   clamav:   { image: clamav/clamav, profiles: [clamav] }      # optional
 ```
 

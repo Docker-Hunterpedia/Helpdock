@@ -18,6 +18,7 @@ import { SecurityScreen } from '../screens/security.tsx';
 import { SetupPage } from '../screens/setup/setup-page.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
 import { StaffScreen } from '../screens/staff.tsx';
+import { TicketsPage } from '../screens/tickets/tickets-page.tsx';
 import { Totp } from '../screens/totp.tsx';
 import { TotpEnrolment } from '../screens/totp-enrolment.tsx';
 import { AppShell } from '../shell/app-shell.tsx';
@@ -92,6 +93,13 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.ticketing} element={<TicketingPage />} />
           <Route path={ROUTES.ticketingTab} element={<TicketingPage />} />
           <Route path={ROUTES.security} element={<SecurityScreen />} />
+        </Route>
+
+        {/* M1-15. Its own shell, without the page padding: the workspace is
+            three columns inside one viewport-high frame (DESIGN §6.5). One
+            route for the list and the ticket, because they are one screen. */}
+        <Route element={<AppShell flush />}>
+          <Route path={ROUTES.ticketWorkspace} element={<TicketsPage />} />
         </Route>
       </Route>
 

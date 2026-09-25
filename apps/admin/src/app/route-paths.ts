@@ -15,6 +15,20 @@ export const ROUTES = {
   acceptInvite: '/invite/:token',
   oauthCallback: '/oauth/callback',
   tickets: '/tickets',
+  /** One ticket, beside the list it came from (M1-15). */
+  ticket: '/tickets/:ticketId',
+  /**
+   * What the router actually registers, once, for both of the above.
+   *
+   * One route, not two, and a splat rather than an optional parameter: two
+   * `<Route>`s rendering the same component unmount and remount it every time
+   * a ticket is opened or closed, and the workspace keeps things a remount
+   * throws away — the composer's draft, which sends are still in flight, and a
+   * window-level key listener that for a frame would be the old mount's.
+   *
+   * The id is read from the path by {@link ticketIdFromPath} instead.
+   */
+  ticketWorkspace: '/tickets/*',
   contacts: '/contacts',
   /** The create form, on a route of its own so it can be linked to (M1-04). */
   contactNew: '/contacts/new',
@@ -35,6 +49,25 @@ export const ROUTES = {
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
 } as const;
+
+export const ticketRoute = (ticketId: string): string => `/tickets/${encodeURIComponent(ticketId)}`;
+
+/**
+ * The ticket the workspace has open, from the path it is being read at.
+ *
+ * `/tickets` is the list with nothing open; `/tickets/<id>` is that ticket.
+ * Anything deeper is still that ticket — a stray segment is not worth a dead
+ * end on a screen whose whole state is in the URL.
+ */
+export function ticketIdFromPath(pathname: string): string | null {
+  if (!pathname.startsWith(ROUTES.tickets)) {
+    return null;
+  }
+
+  const [id = ''] = pathname.slice(ROUTES.tickets.length).replace(/^\//, '').split('/');
+
+  return id === '' ? null : decodeURIComponent(id);
+}
 
 export const contactRoute = (contactId: string): string =>
   `/contacts/${encodeURIComponent(contactId)}`;

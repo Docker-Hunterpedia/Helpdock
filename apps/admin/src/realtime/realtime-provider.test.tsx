@@ -31,6 +31,21 @@ const NEVER_IDLE_MS = 600_000;
 
 /** A client a test drives: it never opens anything and announces on demand. */
 class TestClient implements RealtimeClient {
+  readonly rooms = new Set<string>();
+  readonly announced: string[] = [];
+
+  joinRoom(room: string): () => void {
+    this.rooms.add(room);
+
+    return () => {
+      this.rooms.delete(room);
+    };
+  }
+
+  announceViewing(ticketId: string): void {
+    this.announced.push(ticketId);
+  }
+
   readonly listeners = new RealtimeListeners();
   readonly started: string[] = [];
   readonly set: SettablePresenceStatus[] = [];

@@ -2,8 +2,10 @@ import type { Session, SessionBrand } from '@helpdock/schemas';
 import { type UseQueryResult, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext } from 'react';
 import type { ContactsApi } from '../contacts/api.js';
+import type { AttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
 import type { TicketingApi } from '../ticketing/api.js';
+import type { TicketsApi } from '../tickets/api.js';
 import type { AuthApi } from './api.js';
 
 /** One cache entry holds the session; every screen reads it from there. */
@@ -13,6 +15,8 @@ const AuthApiContext = createContext<AuthApi | null>(null);
 const StaffApiContext = createContext<StaffApi | null>(null);
 const ContactsApiContext = createContext<ContactsApi | null>(null);
 const TicketingApiContext = createContext<TicketingApi | null>(null);
+const TicketsApiContext = createContext<TicketsApi | null>(null);
+const UploaderContext = createContext<AttachmentUploader | null>(null);
 const SessionContext = createContext<Session | null>(null);
 
 export function AuthApiProvider({
@@ -20,6 +24,8 @@ export function AuthApiProvider({
   staffApi,
   contactsApi,
   ticketingApi,
+  ticketsApi,
+  uploader,
   children,
 }: {
   readonly api: AuthApi;
@@ -28,6 +34,8 @@ export function AuthApiProvider({
   readonly contactsApi?: ContactsApi | undefined;
   /** Optional for the same reason; the Ticketing screens are the only readers. */
   readonly ticketingApi?: TicketingApi | undefined;
+  readonly ticketsApi?: TicketsApi | undefined;
+  readonly uploader?: AttachmentUploader | undefined;
   readonly children: ReactNode;
 }): ReactNode {
   return (
@@ -35,7 +43,11 @@ export function AuthApiProvider({
       <StaffApiContext.Provider value={staffApi ?? null}>
         <ContactsApiContext.Provider value={contactsApi ?? null}>
           <TicketingApiContext.Provider value={ticketingApi ?? null}>
-            {children}
+            <TicketsApiContext.Provider value={ticketsApi ?? null}>
+              <UploaderContext.Provider value={uploader ?? null}>
+                {children}
+              </UploaderContext.Provider>
+            </TicketsApiContext.Provider>
           </TicketingApiContext.Provider>
         </ContactsApiContext.Provider>
       </StaffApiContext.Provider>
@@ -77,6 +89,24 @@ export function useContactsApi(): ContactsApi {
   }
 
   return api;
+}
+
+export function useTicketsApi(): TicketsApi {
+  const api = useContext(TicketsApiContext);
+  if (!api) {
+    throw new Error('useTicketsApi needs an <AuthApiProvider> with a ticketsApi above it');
+  }
+
+  return api;
+}
+
+export function useAttachmentUploader(): AttachmentUploader {
+  const uploader = useContext(UploaderContext);
+  if (!uploader) {
+    throw new Error('useAttachmentUploader needs an <AuthApiProvider> with an uploader above it');
+  }
+
+  return uploader;
 }
 
 /**

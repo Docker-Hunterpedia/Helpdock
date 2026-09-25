@@ -12,6 +12,8 @@ import {
   roomJoinSchema,
   roomSchema,
   ticketRoom,
+  ticketViewingRequestSchema,
+  ticketViewingSchema,
 } from './realtime.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
@@ -58,6 +60,7 @@ describe('the message schemas', () => {
       REALTIME_EVENTS.ticketChanged,
       REALTIME_EVENTS.ticketMessage,
       REALTIME_EVENTS.attachmentChanged,
+      REALTIME_EVENTS.ticketViewing,
     ]);
   });
 
@@ -90,6 +93,17 @@ describe('the message schemas', () => {
     expect(attachmentChangedSchema.safeParse({ ...frame, status: 'processing' }).success).toBe(
       false,
     );
+  });
+
+  it('carries nothing but ids on a viewing announcement (M1-15)', () => {
+    // The collision indicator says who, never what: the announcement is
+    // relayed to everybody in the room, and a subject in it would be a subject
+    // sent to a room whose members re-read the ticket over REST anyway.
+    expect(Object.keys(ticketViewingSchema.shape)).toEqual(['brandId', 'ticketId', 'userId']);
+    expect(ticketViewingRequestSchema.safeParse({ brandId: BRAND, ticketId: BRAND }).success).toBe(
+      true,
+    );
+    expect(ticketViewingRequestSchema.safeParse({ ticketId: BRAND }).success).toBe(false);
   });
 
   it('carries no message body on a ticket event, so a note cannot leak over a socket', () => {

@@ -12,8 +12,10 @@ import type { AuthApi } from '../auth/api.js';
 import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
 import type { ContactsApi } from '../contacts/api.js';
+import type { AttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
 import type { TicketingApi } from '../ticketing/api.js';
+import type { TicketsApi } from '../tickets/api.js';
 import { ToastProvider } from '../ui/toasts.tsx';
 import {
   resolveInitialLocale,
@@ -87,6 +89,10 @@ export interface AppProvidersProps {
   readonly contactsApi?: ContactsApi;
   /** Defaults to the matching adapter. Only the Ticketing screens read it. */
   readonly ticketingApi?: TicketingApi;
+  /** Defaults to the matching adapter. The ticket workspace needs it. */
+  readonly ticketsApi?: TicketsApi;
+  /** Defaults to the matching adapter. The composer and the thread need it. */
+  readonly uploader?: AttachmentUploader;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -111,6 +117,8 @@ export function AppProviders({
   staffApi,
   contactsApi,
   ticketingApi,
+  ticketsApi,
+  uploader,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -129,6 +137,8 @@ export function AppProviders({
   const staff = staffApi ?? fallback.staff;
   const contacts = contactsApi ?? fallback.contacts;
   const ticketing = ticketingApi ?? fallback.ticketing;
+  const tickets = ticketsApi ?? fallback.tickets;
+  const attachments = uploader ?? fallback.uploader;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -188,6 +198,8 @@ export function AppProviders({
                 staffApi={staff}
                 contactsApi={contacts}
                 ticketingApi={ticketing}
+                ticketsApi={tickets}
+                uploader={attachments}
               >
                 <ToastProvider>
                   <Router>{children}</Router>

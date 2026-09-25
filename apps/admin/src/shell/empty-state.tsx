@@ -4,17 +4,22 @@ import type { ReactNode } from 'react';
 import { useSemanticTokens } from '../app/tokens.js';
 
 /**
- * DESIGN §6.3: a 24 px icon in the muted neutral, an h3 and one sentence.
- * Never an illustration, and no action while there is nothing to act on.
+ * DESIGN §6.3: a 24 px icon in the muted neutral, an h3 and one sentence, and
+ * at most one action. Never an illustration, and no action while there is
+ * nothing to act on — "Try again" on a read that failed is such an action;
+ * "there is nothing here yet" is not.
  */
 export function EmptyState({
   icon: Icon,
   heading,
   body,
+  action,
 }: {
   readonly icon: LucideIcon;
   readonly heading: string;
   readonly body: string;
+  /** One primary or secondary button. Left out when there is nothing to do. */
+  readonly action?: ReactNode | undefined;
 }): ReactNode {
   const tokens = useSemanticTokens();
 
@@ -39,6 +44,7 @@ export function EmptyState({
       <Typography variant="body2" sx={{ color: 'text.secondary', maxWidth: 420 }}>
         {body}
       </Typography>
+      {action}
     </Box>
   );
 }

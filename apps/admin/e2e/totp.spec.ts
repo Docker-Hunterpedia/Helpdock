@@ -46,7 +46,7 @@ test.describe('the second factor', () => {
     await page.getByRole('button', { name: t('auth:totp.submit') }).click();
 
     await expect(
-      page.getByRole('heading', { name: t('admin:nav.tickets'), level: 1 }),
+      page.getByRole('heading', { name: t('tickets:views.myOpen'), level: 1 }),
     ).toBeVisible();
   });
 

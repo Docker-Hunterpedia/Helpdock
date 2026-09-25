@@ -46,6 +46,9 @@ describe('AppShell', () => {
   it('lists every destination as a link in one named navigation', async () => {
     await renderShell();
     const nav = screen.getByRole('navigation', { name: 'Main' });
+    // The view counts are read from the ticket list, so the group is only
+    // complete once they have arrived (M1-15).
+    await screen.findByRole('link', { name: /^Escalated 1$/ });
 
     expect(
       within(nav)
@@ -56,6 +59,11 @@ describe('AppShell', () => {
       'Contacts812',
       'Help center36',
       'Reports9',
+      'All tickets',
+      'My open2',
+      'Unassigned2',
+      'Overdue3',
+      'Escalated1',
       'Settings',
       'Ticketing',
       'Staff and roles',

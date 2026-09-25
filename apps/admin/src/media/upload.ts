@@ -82,6 +82,8 @@ export class UploadError extends Error {
  * before anything is sent; the api decides it again from what was asked for,
  * because a client's opinion is not an authorisation.
  */
+export const isUploadError = (error: unknown): error is UploadError => error instanceof UploadError;
+
 export const kindOf = (mime: string): AttachmentKind => {
   // Lower-cased first: a browser is allowed to report `IMAGE/PNG`, and a file
   // that fell through to `file` because of its case would be measured against

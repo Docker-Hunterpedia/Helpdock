@@ -8,6 +8,9 @@ import {
   roomJoinSchema,
   roomLeaveSchema,
   STAFF_NAMESPACE,
+  type TicketViewingAck,
+  ticketRoom,
+  ticketViewingRequestSchema,
 } from '@helpdock/schemas';
 import { Inject, UseFilters } from '@nestjs/common';
 import {
@@ -244,6 +247,54 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     );
 
     return ok({ at: new Date().toISOString() });
+  }
+
+  /**
+   * "Somebody else has this ticket open", which is the collision indicator of
+   * DESIGN §6.5 and all M1-15 needs of DOMAIN-RULES §2.4 (M1-09 owns the rest).
+   *
+   * A room is not a membership list. `socketsJoin` can tell this replica who is
+   * in `ticket:<id>` *here*, and the answer has to be true across every
+   * replica, so the clients say so instead and the server relays it. The
+   * announcement is authorised exactly as the join was — the sender may already
+   * be in the room, and a socket that left the room is not entitled to put a
+   * name into it — and it is relayed to the rest of the room rather than
+   * echoed, because a client knows it is looking at the ticket itself.
+   *
+   * Nothing is stored. A name nobody repeats inside `TICKET_VIEWING_TTL_MS` is
+   * dropped by each client, which is what makes "closed the tab" and "lost the
+   * network" the same thing here.
+   */
+  @SubscribeMessage(REALTIME_EVENTS.ticketViewing)
+  @Requires('ticket:read')
+  async viewing(
+    @ConnectedSocket() socket: StaffSocket,
+    @MessageBody() body: unknown,
+  ): Promise<TicketViewingAck> {
+    const { brandId, ticketId } = parseMessage(ticketViewingRequestSchema, body);
+    await this.#requireLiveSession(socket);
+
+    const room = ticketRoom(ticketId);
+    const authorization = await authorizeRoom({
+      principal: socket.data.principal,
+      brandId,
+      room,
+      reader: this.#rooms,
+    });
+    if (!authorization.ok) {
+      return { ok: false, error: authorization.error };
+    }
+
+    socket.to(room).emit(
+      REALTIME_EVENTS.ticketViewing,
+      this.#publisher.envelope(REALTIME_EVENTS.ticketViewing, {
+        brandId,
+        ticketId,
+        userId: userIdOf(socket.data),
+      }),
+    );
+
+    return ok({ ticketId });
   }
 
   /**

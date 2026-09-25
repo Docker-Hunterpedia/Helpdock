@@ -53,7 +53,7 @@ describe('RequireSession', () => {
     });
 
     expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Tickets' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'My open' })).toBeInTheDocument();
   });
 
   it('sends an unknown path to the default screen', async () => {
@@ -62,6 +62,6 @@ describe('RequireSession', () => {
       initialEntries: ['/nowhere'],
     });
 
-    expect(await screen.findByRole('heading', { name: 'Tickets' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'My open' })).toBeInTheDocument();
   });
 });

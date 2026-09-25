@@ -123,6 +123,38 @@ export async function openTicketingTab(
   await page.getByRole('button', { name: arrived[segment], exact: true }).waitFor();
 }
 
+/**
+ * Opens the ticket workspace by clicking the nav item, for the reason
+ * `openStaff` gives: the fixture keeps its session in memory, so a `page.goto`
+ * would sign the browser out.
+ */
+export async function openTickets(page: Page, locale: Locale, view?: string): Promise<void> {
+  const t = strings(locale);
+
+  await page
+    .getByRole('link', { name: new RegExp(t('admin:nav.tickets')) })
+    .first()
+    .click();
+  await page.getByRole('region', { name: t('tickets:list.label') }).waitFor();
+
+  if (view !== undefined) {
+    const name = t(`tickets:views.${view}` as 'tickets:views.all');
+    await page.getByRole('link', { name, exact: true }).click();
+    // The heading rather than the list: the list is already there, and the
+    // click is only finished once the list is the one that view asked for.
+    await page.getByRole('heading', { name, level: 1 }).waitFor();
+  }
+}
+
+/** Opens `HD-1042`, the fixture's fullest ticket, from whichever view holds it. */
+export async function openTicket(page: Page, locale: Locale, reference = 'HD-1042'): Promise<void> {
+  const t = strings(locale);
+
+  await openTickets(page, locale, 'all');
+  await page.getByRole('link', { name: new RegExp(reference) }).click();
+  await page.getByRole('region', { name: t('tickets:header.label') }).waitFor();
+}
+
 export async function openSecurity(
   page: Page,
   locale: Locale,

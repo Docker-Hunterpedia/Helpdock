@@ -18,7 +18,7 @@ test.describe('signing in', () => {
     await submitTotp(page, locale);
 
     await expect(
-      page.getByRole('heading', { name: t('admin:nav.tickets'), level: 1 }),
+      page.getByRole('heading', { name: t('tickets:views.myOpen'), level: 1 }),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/tickets$/);
   });

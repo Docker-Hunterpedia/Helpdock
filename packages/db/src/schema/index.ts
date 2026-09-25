@@ -24,6 +24,7 @@ export * from './teams.js';
 export * from './ticket-activity.js';
 export * from './ticket-messages.js';
 export * from './ticket-participants.js';
+export * from './ticket-search-tokens.js';
 export * from './ticket-statuses.js';
 export * from './ticket-templates.js';
 export * from './ticket-time-entries.js';

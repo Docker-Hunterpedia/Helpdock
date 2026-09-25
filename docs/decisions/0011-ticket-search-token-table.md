@@ -34,3 +34,23 @@ Implementation is scheduled with M1-15 part 2, which also owns the list's search
 - **`LEAKPROOF` wrappers.** Rejected: the promise would be false, and it needs a superuser at migration time, which the install does not otherwise require.
 - **`SECURITY DEFINER` search function.** Rejected: a second, hand-maintained isolation path for the most-used query.
 - **An external search engine.** Out of the stack table (ARCHITECTURE §1) and out of scope for a self-hosted single-Postgres install.
+
+## Implementation note (M1-15 part 2, 2026-09-25)
+
+Built as decided, with one refinement the decision did not spell out. Run as
+written, the trigram fallback would have read every visible ticket whenever the
+exact half came back short, which is every search that matches nothing: the
+zero-match case this ADR set out to remove would have come back through the
+fallback. So the fuzzy half also reads the token table. For each word it takes
+the tokens that share the word's first three characters, a range of the same
+btree index (`>=` and `<` on `text` are leakproof; the column is
+`COLLATE "C"` so a prefix is a contiguous range), and keeps those that are
+word-similar to it (`<%`, pg_trgm's 0.6 threshold). The similarity is computed
+on a few candidate words rather than on every ticket. What it gives up: a typo
+in the first three letters is no longer caught. The subject trigram index stays
+for owner-role paths, as the decision says.
+
+The fallback is decided on the first page and carried by the cursor, so one
+search never switches halves between pages. `-word` exclusions keep working;
+quoted phrases are read as their words, in any order. Plans and numbers are in
+the [tickets guide](../guides/tickets.md#search-under-row-level-security).

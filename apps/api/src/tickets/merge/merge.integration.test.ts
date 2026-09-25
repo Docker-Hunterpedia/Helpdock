@@ -15,6 +15,7 @@ import {
   ticketActivity,
   ticketMessages,
   ticketParticipants,
+  ticketSearchTokens,
   tickets,
   userBrandRoles,
   users,
@@ -234,6 +235,15 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
 
       return row?.id ?? '';
     });
+
+  /** A ticket's search words and the department each row is filed under (ADR 0011). */
+  const tokensOf = (ticketId: string) =>
+    withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ token: ticketSearchTokens.token, departmentId: ticketSearchTokens.departmentId })
+        .from(ticketSearchTokens)
+        .where(eq(ticketSearchTokens.ticketId, ticketId)),
+    );
 
   const outboxFor = (ticketId: string) =>
     withSystem(runtime.db, seeded.brandId, (tx) =>
@@ -594,6 +604,62 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
           .where(inArray(tickets.id, [first.ticket.id, second.ticket.id])),
       );
       expect(rows.map((row) => row.department)).toEqual([billing, billing]);
+    });
+  });
+
+  describe('search words (M1-15 part 2, ADR 0011)', () => {
+    it('leaves each side of a merge searchable by its own words, filed where it now lives', async () => {
+      const secondary = await createTicket(ada, {
+        departmentId: support,
+        subject: 'Brisling tin dented',
+        bodyHtml: '<p>The lid was bent</p>',
+      });
+      const primary = await createTicket(ada, {
+        departmentId: billing,
+        subject: 'Anchovy crate short',
+        bodyHtml: '<p>Two missing</p>',
+      });
+      const primaryWords = (await tokensOf(primary.ticket.id)).map((row) => row.token).sort();
+
+      expect((await merge(ada, secondary.ticket.id, primary.ticket.id)).status).toBe(200);
+
+      // The merge moved the secondary to the primary's department, and its words
+      // went with it, so the words are readable exactly where the ticket is.
+      const moved = await tokensOf(secondary.ticket.id);
+      expect(moved.map((row) => row.token)).toEqual(
+        expect.arrayContaining(['brisl', 'tin', 'dent', 'lid', 'bent']),
+      );
+      expect(new Set(moved.map((row) => row.departmentId))).toEqual(new Set([billing]));
+      // The announcement is a later message of the primary, not its first, so
+      // what the primary is found by does not change.
+      expect((await tokensOf(primary.ticket.id)).map((row) => row.token).sort()).toEqual(
+        primaryWords,
+      );
+    });
+
+    it('gives a split ticket the words of its own subject and its copied first message', async () => {
+      const original = await createTicket(sam, {
+        departmentId: support,
+        subject: 'Sprocket order late',
+        bodyHtml: '<p>Ordered in March</p>',
+      });
+      const second = await reply(sam, original.ticket.id, 'Separately, the gasket leaks');
+
+      const created = await call<TicketDetail>(
+        'POST',
+        `${ticketPath(original.ticket.id)}/split`,
+        sam,
+        { messageIds: [second.id], subject: 'Gasket leak', departmentId: support },
+      );
+      expect(created.status).toBe(201);
+
+      const words = (await tokensOf(created.body.ticket.id)).map((row) => row.token);
+      expect(words).toEqual(expect.arrayContaining(['gasket', 'leak', 'separ']));
+      expect(words).not.toContain('sprocket');
+      // The original keeps its own words: the split copied, it did not move.
+      expect((await tokensOf(original.ticket.id)).map((row) => row.token)).toEqual(
+        expect.arrayContaining(['sprocket', 'march']),
+      );
     });
   });
 

@@ -33,6 +33,7 @@ import {
   ticketActivity,
   ticketMessages,
   ticketParticipants,
+  ticketSearchTokens,
   ticketStatuses,
   tickets,
   ticketTags,
@@ -435,6 +436,20 @@ const fixtures = [
     // personal views, and the owner rule has its own tests below.
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(views).values({ brandId, name: 'VIP refunds', filters: { priority: ['urgent'] } }),
+  },
+  {
+    name: 'ticket_search_tokens',
+    // M1-15 part 2. The `tickets` fixture above already has its words, written
+    // by the search triggers; this row is one more, inserted by hand, and a
+    // ticket of another brand is refused by the same child trigger as above.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketSearchTokens).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        token: 'fixture',
+      }),
   },
 ] as const;
 

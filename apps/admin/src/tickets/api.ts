@@ -161,7 +161,7 @@ export interface TicketQuery {
   readonly tagIds?: readonly string[];
   /** Only tickets whose SLA has run out (M1-05). */
   readonly overdue?: boolean;
-  /** Free text over the subject: full text first, trigram for the misspelled. */
+  /** Free text: every word of the subject and first message, with a fuzzy fallback (ADR 0011). */
   readonly q?: string;
   readonly sort?: TicketSort;
   readonly direction?: TicketSortDirection;

@@ -34,6 +34,8 @@ const MIGRATION_TAGS = [
   '0019_contact_identity_and_participants',
   '0020_data_retention',
   '0021_ticket_list_indexes',
+  '0022_views',
+  '0023_ticket_search_tokens',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

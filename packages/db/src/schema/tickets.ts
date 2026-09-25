@@ -230,6 +230,10 @@ export const tickets = pgTable(
     index('tickets_split_from_idx')
       .on(table.splitFromId)
       .where(sql`${table.splitFromId} is not null`),
+    // M1-15 part 2: "the tickets of these contacts", which is how the list's
+    // search finds a ticket by its contact's name without reading every
+    // ticket, and what the contact screen's counts read.
+    index('tickets_brand_contact_idx').on(table.brandId, table.contactId),
     index('tickets_search_idx').using('gin', table.search),
   ],
 );

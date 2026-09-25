@@ -26,7 +26,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-13 | Contact identity rules | #57 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-14 | Data retention settings per brand and nightly | #58 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
-| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#70) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name: integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR. Part 2 admin UI gaps (merge with any contact, linked tickets, Arabic overflow, CSAT preview and closer): done in branch, awaiting PR |
+| M1-15 | Admin UI for all of the above; ticket list index set | #59 | done in branch, awaiting PR — part 1 in review (#70): the M1-02/03/04 surfaces (list, thread, composer, details, creation, realtime); M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24). Part 2 admin UI gaps (merge with any contact, linked tickets, Arabic overflow, CSAT preview and closer) and part 2 search through a token table (ADR 0011) integrated with M1-05 on `claude/hopeful-hawking-onzqjf` (2026-09-25) |
 
 ## M1-09 notes
 
@@ -176,6 +176,29 @@ No migration. Guides: [tickets](../guides/tickets.md#linked-tickets), [contacts]
 - **Unmerge with a deleted primary**: was a 404 naming the secondary as missing. Now **409 `merge-primary-deleted`**, and the merge stays: a deleted ticket is not acted on (§2.2), and no leak is possible because a secondary always follows its primary's department.
 - **CSAT**: the Feedback tab's **Preview** opens `/csat/preview` over a fixed sample with no token and no request. The rating page's **closed by <first name>** is sent (`ticket.closedBy`) only when the closer is an active staff member who wrote a public reply on the ticket. The page then names only somebody the customer has already heard from, which is how we read §4.6's "nothing beyond their purpose". Reviewer: confirm that reading. "Browse the help center" stays out until M5.
 - **Screenshot baselines**: `contact-detail` (⋯ menu replaces the Anonymise button) and possibly `ticket-view` (no more overflow) change. They need re-rendering by the screenshots workflow.
+
+## Notes: M1-15 part 2, ticket search through a token table
+
+- **Migration** `0023_ticket_search_tokens`: `ticket_search_tokens (ticket_id, brand_id, department_id, token)`,
+  brand- and department-scoped with `FORCE`d policies, filled by `helpdock_ticket_child_department` and moved by
+  `helpdock_ticket_department_moved` (replaced, keeping every child table `0019` moved). Written only by triggers
+  (`helpdock_ticket_search_refresh`) on a ticket's insert, a subject edit, and its first message (`seq = 1`), in
+  the same transaction. Backfilled in the migration with `FORCE` lifted around it, as `0016`/`0017` do. Cascades on
+  ticket delete. Also `tickets_brand_contact_idx` for the contact-name half of the search.
+- **Query**: `q` → lexemes (`helpdock_search_lexemes`, the `english` configuration `tickets.search` uses) →
+  all-of match on `ticket_search_tokens_brand_token_idx`. The fuzzy fallback runs only when the exact half returns
+  less than a page and the term has ≥ 3 characters; it also reads the token table (a prefix range of the same
+  index, then `<%`), so a zero-match search never reads every ticket. The cursor carries the fallback. `-word`
+  still excludes; M1-09's reference and contact-name matches are kept.
+- **Proved** by an integration test that `EXPLAIN`s both halves as the runtime role under RLS and finds the token
+  lookup in `Index Cond`, and by the benchmark's plans (tickets guide, Search under row-level security).
+- **Benchmark**: the zero-match search is now in the gated mix with its own budget, `PERF_NO_MATCH_P95_MS`
+  (150 ms). Full §14 run on 2026-09-25, pinned to two cores on an idle machine, after integrating with M1-05
+  (views counts in the same mix): zero-match p95 56 ms (was 284 ms alone), slowest list scenario 115 ms
+  (`renewa`, which runs both halves), 0 errors.
+  [Tickets guide](../guides/tickets.md#what-it-measured-last-2026-09-25).
+- **Trade-offs**: a typo in the first three letters is not caught by the fallback; quotes are not a phrase
+  operator; later replies are not searched (the first message is new: before, only the subject was).
 
 ## M1-14 notes
 

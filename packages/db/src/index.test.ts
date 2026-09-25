@@ -79,6 +79,7 @@ describe('@helpdock/db', () => {
       'ticket-activity.ts',
       'ticket-messages.ts',
       'ticket-participants.ts',
+      'ticket-search-tokens.ts',
       'ticket-statuses.ts',
       'ticket-templates.ts',
       'ticket-time-entries.ts',

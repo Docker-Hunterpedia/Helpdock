@@ -50,6 +50,7 @@ describe('the schema', () => {
       'ticket_activity',
       'ticket_messages',
       'ticket_participants',
+      'ticket_search_tokens',
       'ticket_statuses',
       'ticket_tags',
       'ticket_templates',
@@ -90,11 +91,12 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but six has a uuid primary key; `settings` is keyed by
+    // Every table but seven has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
     // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
-    // they join, and `retention_settings` by its brand.
-    expect(generated).toHaveLength(byName.size - 6);
+    // they join, `retention_settings` by its brand, and `ticket_search_tokens`
+    // by the ticket and the word.
+    expect(generated).toHaveLength(byName.size - 7);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

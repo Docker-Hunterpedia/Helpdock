@@ -565,9 +565,10 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
       const { body } = await call<TicketDetail>('GET', ticketPath(ticket.id), sam);
 
       expect(body.csat).toMatchObject({ state: 'pending', rating: null, ratedAt: null });
-      expect(body.csat?.link).toMatch(
-        new RegExp(`^${APP_URL}/csat/[A-Za-z0-9_-]{43}\\.[A-Za-z0-9_-]{43}$`),
-      );
+      const prefix = `${APP_URL}/csat/`;
+      const link = body.csat?.link ?? '';
+      expect(link.startsWith(prefix)).toBe(true);
+      expect(link.slice(prefix.length)).toMatch(/^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/);
     });
 
     it('stores a hash of the link and never the link', async () => {

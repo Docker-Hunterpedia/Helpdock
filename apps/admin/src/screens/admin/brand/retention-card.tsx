@@ -5,6 +5,7 @@ import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import {
   type DayField,
   type DraftField,
@@ -403,13 +404,3 @@ function LastRun({ overview }: { readonly overview: RetentionOverview }): ReactN
     </Typography>
   );
 }
-
-/** Read by a screen reader, drawn as nothing: the "—" means "not counted yet". */
-const visuallyHidden = {
-  position: 'absolute',
-  inlineSize: 1,
-  blockSize: 1,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-} as const;

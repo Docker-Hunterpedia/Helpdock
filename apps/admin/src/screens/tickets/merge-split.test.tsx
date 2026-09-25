@@ -1,7 +1,13 @@
-import type { TicketMergeRequest, TicketMergeResult } from '@helpdock/schemas';
+import type {
+  TicketDetail,
+  TicketMergeRequest,
+  TicketMergeResult,
+  TicketMessagePage,
+} from '@helpdock/schemas';
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
+import { MOCK_DEPARTMENTS } from '../../staff/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { TicketLifecycleError } from '../../tickets/api.js';
@@ -225,5 +231,77 @@ describe('split', () => {
     const back = await within(thread()).findByRole('link', { name: 'HD-1042' });
     expect(back).toHaveAttribute('href', `/tickets/${MOCK_TICKET_REFUND}`);
     expect(within(thread()).getByText(/I returned order 42 three weeks ago/)).toBeVisible();
+  });
+});
+
+/**
+ * The api writes a system row's `author_id` as whoever acted: a staff member,
+ * an api key, a job (`ticket-activity.ts`). Only a staff member has a name to
+ * show, so a split made through the api reads without a "by".
+ */
+class ApiKeyAuthoredTicketsApi extends MockTicketsApi {
+  static readonly KEY = '0192c3f0-1a2b-7c3d-8e4f-0000000a91e1';
+
+  static #rewrite(page: TicketMessagePage): TicketMessagePage {
+    return {
+      ...page,
+      messages: page.messages.map((message) =>
+        message.kind === 'system'
+          ? { ...message, authorId: ApiKeyAuthoredTicketsApi.KEY }
+          : message,
+      ),
+    };
+  }
+
+  override async ticket(brandId: string, ticketId: string): Promise<TicketDetail> {
+    const detail = await super.ticket(brandId, ticketId);
+
+    return { ...detail, messages: ApiKeyAuthoredTicketsApi.#rewrite(detail.messages) };
+  }
+
+  override async messages(
+    brandId: string,
+    ticketId: string,
+    after = 0,
+  ): Promise<TicketMessagePage> {
+    return ApiKeyAuthoredTicketsApi.#rewrite(await super.messages(brandId, ticketId, after));
+  }
+}
+
+describe('who a split line names', () => {
+  beforeEach(wideViewport);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const splitOne = async (api: MockTicketsApi) => {
+    const { messages } = await api.ticket('brand', MOCK_TICKET_REFUND);
+    await api.split('brand', MOCK_TICKET_REFUND, {
+      messageIds: [messages.messages[0]?.id ?? ''],
+      subject: 'The return label',
+      departmentId: MOCK_DEPARTMENTS[0]?.id ?? '',
+    });
+  };
+
+  it('names the staff member who split it', async () => {
+    const api = new MockTicketsApi();
+    await splitOne(api);
+    await openTicket(MOCK_TICKET_REFUND, api);
+
+    const link = await within(thread()).findByRole('link', { name: 'HD-1043' });
+
+    expect(link.closest('li')).toHaveTextContent(/Messages split to HD-1043 by Lina Haddad · /);
+  });
+
+  it('names nobody when an api key split it', async () => {
+    const api = new ApiKeyAuthoredTicketsApi();
+    await splitOne(api);
+    await openTicket(MOCK_TICKET_REFUND, api);
+
+    const link = await within(thread()).findByRole('link', { name: 'HD-1043' });
+    const line = link.closest('li');
+
+    expect(line).toHaveTextContent(/^Messages split to HD-1043 · /);
+    expect(line).not.toHaveTextContent(/ by /);
   });
 });

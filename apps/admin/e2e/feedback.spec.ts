@@ -70,6 +70,27 @@ test.describe('the Feedback tab', () => {
   });
 });
 
+test.describe('the Feedback tab’s preview (M1-15 part 2)', () => {
+  test('opens the rating page over a sample in a new tab, in the admin’s language', async ({
+    page,
+    context,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openFeedback(page, locale);
+
+    const link = page.getByRole('link', { name: new RegExp(t('ticketing:feedback.previewLink')) });
+    await expect(link).toHaveAttribute('target', '_blank');
+    const [preview] = await Promise.all([context.waitForEvent('page'), link.click()]);
+
+    await expect(preview.getByRole('status')).toHaveText(t('csat:preview.notice'));
+    await expect(preview.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
+    await expect(preview.getByText(t('csat:preview.subject'), { exact: false })).toBeVisible();
+    expect(await violations(preview)).toEqual([]);
+  });
+});
+
 test.describe('the Time card', () => {
   test('logs time from the header menu, totals it, and deletes it again', async ({
     page,

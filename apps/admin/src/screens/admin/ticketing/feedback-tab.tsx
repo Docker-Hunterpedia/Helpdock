@@ -8,6 +8,7 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { csatPreviewRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
+import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 
 /**
@@ -269,13 +270,3 @@ function Toggle({
     />
   );
 }
-
-/** Read aloud, drawn as nothing. Sizes as strings: MUI reads a bare `1` as `100%`. */
-const visuallyHidden = {
-  position: 'absolute',
-  width: '1px',
-  height: '1px',
-  overflow: 'hidden',
-  clipPath: 'inset(50%)',
-  whiteSpace: 'nowrap',
-} as const;

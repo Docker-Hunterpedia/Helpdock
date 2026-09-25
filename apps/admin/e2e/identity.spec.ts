@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
 import { openContact, openTicket, signIn } from './flows.js';
 import { strings } from './strings.js';
@@ -108,6 +109,67 @@ test.describe('merging contacts', () => {
         name: t('contacts:duplicates.mergeWith', { name: 'M. Khalil' }),
       }),
     ).toBeVisible();
+  });
+});
+
+test.describe('merging with any contact (M1-15 part 2)', () => {
+  test('picks another contact from the ⋯ menu and merges it', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openContact(page, locale, 'Mona Khalil');
+
+    await page.getByRole('button', { name: t('contacts:actions.more') }).click();
+    await page.getByRole('menuitem', { name: t('contacts:actions.mergeWith') }).click();
+    const picker = page.getByRole('dialog', {
+      name: new RegExp(t('contacts:mergeWith.title', { name: 'Mona Khalil' })),
+    });
+    const choices = picker.getByRole('radiogroup', { name: t('contacts:mergeWith.results') });
+    await expect(choices.getByRole('radio', { name: /M\. Khalil/ })).toBeVisible();
+    await expect(choices.getByRole('radio', { name: /Mona Khalil/ })).toHaveCount(0);
+    const axe = await new AxeBuilder({ page })
+      .include('[role="dialog"]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    expect(axe.violations.map((violation) => violation.id)).toEqual([]);
+
+    await picker
+      .getByRole('searchbox', { name: t('contacts:mergeWith.searchLabel') })
+      .fill('weber');
+    await choices.getByRole('radio', { name: /Jonas Weber/ }).check();
+    await picker.getByRole('button', { name: t('contacts:mergeWith.continue') }).click();
+
+    const dialog = page.getByRole('dialog', { name: t('contacts:merge.title') });
+    await dialog.getByRole('button', { name: t('contacts:merge.submit') }).click();
+
+    await expect(
+      page.getByText(t('contacts:merge.toast', { merged: 'Jonas Weber', survivor: 'Mona Khalil' })),
+    ).toBeVisible();
+  });
+
+  test('says so when the search finds nobody else, and continues with nothing picked', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openContact(page, locale, 'Mona Khalil');
+
+    await page.getByRole('button', { name: t('contacts:actions.more') }).click();
+    await page.getByRole('menuitem', { name: t('contacts:actions.mergeWith') }).click();
+    const picker = page.getByRole('dialog', {
+      name: new RegExp(t('contacts:mergeWith.title', { name: 'Mona Khalil' })),
+    });
+    await picker
+      .getByRole('searchbox', { name: t('contacts:mergeWith.searchLabel') })
+      .fill('Mona Khalil');
+
+    await expect(picker.getByText(t('contacts:mergeWith.none'))).toBeVisible();
+    await expect(
+      picker.getByRole('button', { name: t('contacts:mergeWith.continue') }),
+    ).toBeDisabled();
   });
 });
 

@@ -389,6 +389,14 @@ providers exist on that page (ADR
 only until the help center exists. The adapter is chosen by the same
 `VITE_AUTH_API` rule (`csat/select-api.ts`), and `MockCsatApi` answers three
 tokens — open, used and expired — exported as `MOCK_CSAT_TOKENS`.
+`/csat/preview` is the Feedback tab's preview (M1-15 part 2). Whatever the
+adapter setting, it is answered by `csat/preview-api.ts` with a sample in the
+page's language, and it makes no request.
+
+**The contact header's ⋯ menu** (M1-15 part 2) uses the same component as the
+ticket header's (`ui/actions-menu.tsx`). It holds Merge with… (the picker is
+`Admin · view dialogs` panel 5) and Anonymise. The details panel's Linked
+tickets are panel 6 of the same file (`screens/tickets/linked-tickets.tsx`).
 
 **The header's ⋯ menu takes its items as data** (`ticket-actions-menu.tsx`), so
 each deliverable adds its own without editing another's; with none it is the

@@ -1,7 +1,7 @@
 import type { RelatedTicket } from '@helpdock/schemas';
 import { Box, Link as MuiLink, Typography } from '@mui/material';
 import { Lock } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { ticketRoute } from '../../app/route-paths.js';
@@ -27,6 +27,7 @@ export function LinkedTickets({
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
+  const headingId = useId();
 
   const card = {
     display: 'flex',
@@ -39,8 +40,8 @@ export function LinkedTickets({
   } as const;
 
   return (
-    <Box component="section">
-      <Typography variant="caption" component="h2" sx={{ color: 'text.secondary' }}>
+    <Box component="section" aria-labelledby={headingId}>
+      <Typography id={headingId} variant="caption" component="h2" sx={{ color: 'text.secondary' }}>
         {t('tickets:details.linked')}
       </Typography>
       {related.length === 0 ? (

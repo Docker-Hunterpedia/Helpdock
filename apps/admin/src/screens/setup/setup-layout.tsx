@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { BrandMark } from '../../ui/brand-mark.tsx';
+import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { SETUP_STEPS, type SetupStep, stepsRemaining } from './setup-state.js';
 
 /**
@@ -115,20 +116,6 @@ export function SetupProgress({ current }: { readonly current: SetupStep }): Rea
     </Box>
   );
 }
-
-/** Off screen, still read aloud. The one place the admin needs it so far. */
-const visuallyHidden = {
-  position: 'absolute',
-  // Strings: MUI reads a bare `1` as `100%`.
-  width: '1px',
-  height: '1px',
-  padding: 0,
-  margin: -1,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-  border: 0,
-} as const;
 
 function MasterKeyNote(): ReactNode {
   const t = useT();

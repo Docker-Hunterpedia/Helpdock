@@ -26,7 +26,7 @@ Artboards on the design canvas for this milestone: `Admin · ticket view` (list 
 | M1-12 | Time tracking (toggle), CSAT model and rating page with | #56 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-13 | Contact identity rules | #57 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
 | M1-14 | Data retention settings per brand and nightly | #58 | integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
-| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#70) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name: integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR |
+| M1-15 | Admin UI for all of the above; ticket list index set | #59 | in review (#70) — the M1-02/03/04 surfaces: list, thread, composer, details, creation, realtime. M1-05/06/08/09/10 extend it. Index set, 50k performance gate and the embedded contact name: integrated on `claude/hopeful-hawking-onzqjf` (2026-09-24), awaiting PR. Part 2 admin UI gaps (merge with any contact, linked tickets, Arabic overflow, CSAT preview and closer): done in branch, awaiting PR |
 
 ## M1-09 notes
 
@@ -132,6 +132,18 @@ Decisions a reviewer should confirm:
   pinned to 2 cores put the slowest gated list scenario at p95 53 ms (0 errors). An earlier run on the same
   machine while it was shared with six other jobs measured the queue, not the api (p95 0.8–2.1 s).
 
+## Notes: M1-15 part 2, the admin UI gaps
+
+No migration. Guides: [tickets](../guides/tickets.md#linked-tickets), [contacts](../guides/contacts.md#identity-rules-and-merging-m1-13).
+
+- **Merge with any contact**: the contact header's Anonymise button moved into a ⋯ menu (`ui/actions-menu.tsx`, shared with the ticket header) holding **Merge with…** (not for Viewers) and **Anonymise** (Admin only). The picker (`merge-with-dialog.tsx`, `Admin · view dialogs` panel 5) reads `GET /contacts?mergeable=true` (new: leaves out anonymised contacts) and hands the pair to M1-13's Merge contacts dialog. Contact search now also matches the customer id (`external_id`), which the picker's hint promises.
+- **Linked tickets**: the read's `related` (M1-09's, reused) is now `RelatedTicket[]`, each with a `relation` (`parent`, `mergedInto`, `mergedFrom`, `splitFrom`, `splitTo`) and the linked ticket's status. `merge/related.ts` builds it from one query under the caller's RLS. A link the ticket names but the reader cannot open is `{ visible: false, relation }` and carries nothing else (§1.2). One that only names this ticket is not found. The details panel draws it per panel 6.
+- **Arabic horizontal overflow**: a visually-hidden span in the composer was sized `width: 1`, which MUI reads as `100%`, so it was as wide as the viewport. The admin now has a single copy with string sizes (`ui/visually-hidden.ts`), shared by the composer, the setup layout (which had the same bug), the retention card and the feedback tab. `e2e/linked-tickets.spec.ts` asserts `scrollWidth <= clientWidth` at 1440 and 1280 in both locales, and fails without the fix.
+- **Split system line "by name"**: intended, not a bug. A system row's `author_id` is whoever acted (staff, api key, job), and the thread names only a staff id found in the directory. Covered by `merge-split.test.tsx`.
+- **Unmerge with a deleted primary**: was a 404 naming the secondary as missing. Now **409 `merge-primary-deleted`**, and the merge stays: a deleted ticket is not acted on (§2.2), and no leak is possible because a secondary always follows its primary's department.
+- **CSAT**: the Feedback tab's **Preview** opens `/csat/preview` over a fixed sample with no token and no request. The rating page's **closed by <first name>** is sent (`ticket.closedBy`) only when the closer is an active staff member who wrote a public reply on the ticket. The page then names only somebody the customer has already heard from, which is how we read §4.6's "nothing beyond their purpose". Reviewer: confirm that reading. "Browse the help center" stays out until M5.
+- **Screenshot baselines**: `contact-detail` (⋯ menu replaces the Anonymise button) and possibly `ticket-view` (no more overflow) change. They need re-rendering by the screenshots workflow.
+
 ## M1-14 notes
 
 Data retention and contact anonymisation. [The data retention
@@ -175,7 +187,7 @@ guide](../guides/data-retention.md) is the reference.
 - **The rating page is hosted in the admin bundle** at `/csat/<token>`, outside the admin app, because `apps/helpcenter` is a one-line stub and its SSR host is M5's: [ADR 0010](../decisions/0010-csat-page-in-the-admin-bundle.md).
 - **Delivery is M8-06**; until then the details panel shows the survey's state and a Copy survey link button.
 - **The header ⋯ menu** is one items array (`ticket-actions-menu.tsx`, M1-09's `TicketAction`): Merge, Split, Log time, then Mark as spam behind a divider.
-- **Artboard gaps**: the Satisfaction card in the details panel has no artboard (built after the SLA card); the Feedback tab's "Preview" link and the rating page's "Browse the help center" link and "closed by <agent>" are not built (no survey to preview, no help center yet, and DOMAIN-RULES §4.6 keeps the agent's name off the link).
+- **Artboard gaps**: the Satisfaction card in the details panel has no artboard (built after the SLA card); the rating page's "Browse the help center" link is not built (no help center yet). The Feedback tab's "Preview" and "closed by <agent>" came with M1-15 part 2.
 
 ## Integration (2026-09-24)
 
@@ -238,4 +250,4 @@ Contact identity rules, manual merge with a 24-hour undo, and ticket participant
 - **Anonymised contacts** (M1-14) cannot be merged (`anonymised`), and a merged contact cannot be anonymised (`merged`).
 - **Participants:** `ticket_participants` holds the CCs (department-scoped, follows department moves); the contact and staff are derived. `GET/POST/DELETE /tickets/:id/participants`. `TicketParticipantsService.addCcParticipant(context, ticketId, contactId)` is the seam M1-09's ticket merge calls to add the secondary's contact as a CC; `ParticipantsModule` exports the service.
 - **Migration** `0019_contact_identity_and_participants`: `contact_duplicate_reason` enum, `contacts.merged_into_id`/`merged_at`, `contact_merges`, `ticket_participants`, RLS for both new tables, and `helpdock_ticket_department_moved` replaced to include `ticket_participants`.
-- **Artboard gaps:** a "merge with any contact" picker from the contact ⋯ menu is not drawn, so merging starts from a suggestion only (the api accepts any contact). The merge dialog lists identifiers without the drawn checkboxes, because every identifier is kept.
+- **Artboard gaps:** the "merge with any contact" picker came with M1-15 part 2. The merge dialog lists identifiers without the drawn checkboxes, because every identifier is kept.

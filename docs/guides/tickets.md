@@ -508,6 +508,7 @@ another brand — answers **404**, exactly like one that does not exist
 | `merge-into-merged` | The primary is itself merged; merge into the ticket it went to. This is also what makes a cycle impossible |
 | `ticket-not-merged` | Unmerging a ticket that is not merged |
 | `merge-window-closed` | Unmerging 24 hours or more after the merge |
+| `merge-primary-deleted` | Unmerging a ticket whose primary an Admin has since deleted |
 | `attachments-in-flight` | A message to split has an attachment the pipeline has not finished with |
 
 ### Merge
@@ -568,6 +569,33 @@ lasted and `onUnmerged` passes it on, which is how "clocks resume with the time
 paused during the merge excluded" reaches M3-02. The primary gets "HD-1042 was
 unmerged from this ticket" and keeps the tags the merge gave it: §2.4 does not
 say they go, and nothing records which ones it would not otherwise have by now.
+
+**A deleted primary keeps the merge.** When an Admin has soft-deleted the
+primary, unmerge answers **409** `merge-primary-deleted` rather than 404, and
+the secondary stays merged: §2.2 hides a deleted ticket from every view, so
+nothing can be written to it, and a 404 would claim the secondary in the path
+does not exist. It leaks nothing. A secondary always sits in its primary's
+department, so whoever can read the secondary could read the primary, and the
+only way it is missing is the delete.
+
+### Linked tickets
+
+Every ticket read carries `related`, each ticket linked to this one with how:
+`parent` (the closed ticket this one continues, §2.3), `mergedInto` and
+`mergedFrom` (the two ends of a merge), `splitFrom` and `splitTo` (the two ends
+of a split), in that order. `apps/api/src/tickets/merge/related.ts` builds it
+from one query under the caller's scope.
+
+A visible entry has the id, reference, subject and status. A link the reader
+cannot open comes in two kinds (§1.2):
+
+- **One the read ticket names itself** (`parentId`, `mergedIntoId`,
+  `splitFromId`) is `{ "visible": false, "relation": "…" }` and nothing else. The
+  id is already on the ticket, so saying there is a ticket there adds nothing;
+  which ticket, and whether it sits in another department or was deleted, is
+  what stays unsaid.
+- **One that names the read ticket** (merged into it, split from it) is not
+  found by the scoped query, so it is left out.
 
 ### Split
 
@@ -985,6 +1013,16 @@ its messages read-only on `bg.canvas`, each marked with its origin. The
 secondary shows the banner the other way round above the thread, and no
 composer. Built from `AdminTicketDialogs` panels 1, 2, 4 and 7.
 
+A system line names who acted ("Messages split to HD-1043 by Lina · 14:12")
+only when that was a staff member. The row's `author_id` is whoever made the
+request, which can be an api key or a job, and the screen names it only when it
+finds that id in the staff directory.
+
+The details panel's **Linked tickets** (`linked-tickets.tsx`, panel 6 of
+`Admin · view dialogs`) draws `related`: a card per visible ticket with its
+reference, status, subject and relation, which opens it, and a locked line
+("A ticket you cannot open · Split from · hidden from you") for a hidden one.
+
 ### Attachments
 
 Attach is real from M1-10. A file goes up as soon as it is chosen: the brand's
@@ -1033,7 +1071,6 @@ Spam, which reopens it at once. A merged secondary offers neither.
 | Translate | disabled, with the reason | M7 |
 | Tags | not drawn at all until a ticket has any | M1-06 |
 | Custom fields | read-only | M1-06 |
-| Linked tickets | read-only, from `parent_id` / `merged_into_id` / `split_from_id` | M1-08, M1-09 |
 | The AI bubble's confidence | not drawn: `ai_meta` is deliberately not on the wire | M7 |
 The **assignee picker** (M1-07, `AdminTicketDialogs` panel 3) reads
 `GET /brands/:id/assignment/:departmentId/assignable`, which `ticket:write`
@@ -1325,6 +1362,22 @@ mounted without any of the staff app (ADR
 [0010](../decisions/0010-csat-page-in-the-admin-bundle.md)). Its language is
 `?lang=` when it names `en` or `ar`, otherwise the brand's default; it is themed
 with the brand accent when the brand has one (none do until M5/M6's themes).
+
+**Who closed it.** An open link's `ticket.closedBy` is the first name of the
+staff member who closed the ticket ("closed by Lina"), and null otherwise. It is
+set only when that person is still active in the brand and wrote a public reply
+on the ticket, so the page names nobody the customer has not already heard
+from. That keeps it inside §4.6's "nothing beyond their purpose". An api key, a
+rule, or a staff member who never replied is not named. A spent link sends no
+name. "Browse the help center" waits for M5.
+
+**The preview.** Ticketing › Feedback › **Open the rating page as a customer
+sees it** opens `/csat/preview?lang=<admin's language>` in a new tab. That is
+the same page over a fixed sample (`apps/admin/src/csat/preview-api.ts`), under
+a line that says it is a preview. It makes no request: it holds no token, reads
+no ticket, and a rating sent from it is drawn as sent and stored nowhere.
+`preview` cannot collide with a real token, which is always two base64url
+halves joined by a dot.
 
 ## What later milestones add
 

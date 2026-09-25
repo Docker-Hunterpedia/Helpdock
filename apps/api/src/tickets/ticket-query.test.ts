@@ -230,6 +230,7 @@ describe('ticketFilters', () => {
     const sql = render(
       ticketFilters({
         brandId: BRAND,
+        viewerId: VIEWER,
         filters: {} as TicketFilters,
         sort: 'number',
         direction: 'asc',

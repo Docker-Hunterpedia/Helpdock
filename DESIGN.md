@@ -160,6 +160,7 @@ Anatomy, sizes and states for the shared set in `packages/ui`. Every component s
 | Checkbox, Radio, Switch | 16 px box · switch 20×36 | | checked, indeterminate, focus, disabled |
 | SegmentedControl | md 32 | | used for Reply / Internal note, People / Accounts, and the contact timeline filter. Unselected options use `text.secondary`, the selected one `action.primary` on `action.primary.tint` |
 | Search | md 32 (admin) · lg 40 (help center) | | shows `⌘K` hint in admin |
+| ToggleChip | sm 24 | outlined (off), filled `action.primary` (on) | a multi-select filter that is a row of named choices rather than a menu: the tags and the shared departments of a saved view (M1-05, `Admin/Ticketing-Views`). A real button with `aria-pressed` inside a labelled `role="group"`, so the state is announced and never carried by colour alone; disabled while the view's filters are fixed |
 
 Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below at 12 px. Required fields show a text "required" suffix in the label, not an asterisk.
 
@@ -174,6 +175,7 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
 | Avatar | 20 · 24 · 28 · 36 px circles, initials in weight 600. Staff use teal100/teal700; contacts use n200/n700; the assigned agent on a row uses solid teal with white. Unassigned = dashed n400 ring. Presence dot 8 px bottom-end. |
 | ChannelIcon | 14 px Lucide icon + caption label in `text.secondary`. |
 | PresenceDot | 8 px: online success, away warning, offline n400. |
+| Label | A 12 px caption on `bg.muted` in `text.secondary`, radius md, no dot and no border: a fact about a row, not a status. "built-in" and "hidden" beside a view's name in Ticketing › Views (M1-05). Never a status colour, which would read as a StatusBadge. |
 | StepProgress | One 4 px bar per step above a caption, as an `<ol>`. Done = solid `action.primary` with a check icon and the word "done"; current = the same hue at 50 % with the caption in weight 600 and `aria-current="step"`; later = `border.default` with the caption in `text.secondary`. A remaining count sits below. Used by the first-run wizard (`Admin/Wizard`); M7-10 appends a step to it. |
 | PasswordStrengthBar | Four 4 px segments under a password field, filled to the reading in `status.danger` / `status.warning` / `status.info` / `status.success`. `aria-hidden`: the same judgement is named in the field's hint, which is what a screen reader reads. It is a hint and never a policy — the only rule the api enforces is the twelve-character floor. |
 
@@ -298,3 +300,4 @@ Every PR that touches UI ticks these in the description:
 | 2026-09-20 | 1.4. Named the eight tag tints in §6.2 (M1-06). The four neutral ones are steps of the warm ramp rather than new values, so a brand's `surfaceTone` moves them and dark mode needs no second table; each tag also gets a 1 px border, because `sand` on a white card is otherwise invisible. |
 | 2026-09-24 | 1.5. A Toast that carries an action (the Undo after a contact merge, M1-13) stays 10 s rather than 6, as the `After a merge` artboard says, and draws the action in `text.inverse`, underlined: there is no teal token that holds its contrast on `bg.inverse` in both themes. |
 | 2026-09-24 | 1.6. Added MergedThread to §6.3 for merge and split (M1-09). It is built from the Banner, the hairline caption of the system event and the `bg.canvas` card, so it adds no token. |
+| 2026-09-25 | 1.7. Added ToggleChip to §6.1 and Label to §6.2 for saved views (M1-05). Both are built from existing tokens (`action.primary`, `bg.muted`, `text.secondary`), so nothing new is added to the palette. |

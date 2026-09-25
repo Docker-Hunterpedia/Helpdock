@@ -1,5 +1,5 @@
 import type { DbTransaction, NewView, View as ViewRow } from '@helpdock/db';
-import type { TicketViewFilters } from '@helpdock/schemas';
+import type { TicketViewCreateRequest, TicketViewFilters } from '@helpdock/schemas';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
@@ -230,11 +230,11 @@ describe('create', () => {
   });
 
   it('refuses an Agent a shared view', async () => {
-    const request = {
+    const request: TicketViewCreateRequest = {
       name: 'Shared',
       filters: { sort: 'updatedAt', direction: 'desc' },
       visibility: { kind: 'departments', departmentIds: [SUPPORT] },
-    } as const;
+    };
 
     expect(await refusal(service.create(as(AGENT), request))).toBe('out-of-scope');
   });
@@ -251,21 +251,21 @@ describe('create', () => {
   });
 
   it('refuses a Team Leader a department they do not lead', async () => {
-    const request = {
+    const request: TicketViewCreateRequest = {
       name: 'Billing VIP',
       filters: { sort: 'updatedAt', direction: 'desc' },
       visibility: { kind: 'departments', departmentIds: [BILLING] },
-    } as const;
+    };
 
     expect(await refusal(service.create(as(LEADER), request))).toBe('out-of-scope');
   });
 
   it('answers 404 for a department the brand does not have', async () => {
-    const request = {
+    const request: TicketViewCreateRequest = {
       name: 'Nowhere',
       filters: { sort: 'updatedAt', direction: 'desc' },
       visibility: { kind: 'departments', departmentIds: ['01937f5e-7e53-7000-8000-0000000000ff'] },
-    } as const;
+    };
 
     expect(await refusal(service.create(as(ADMIN), request))).toBeInstanceOf(NotFoundException);
   });

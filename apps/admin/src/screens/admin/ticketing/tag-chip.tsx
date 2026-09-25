@@ -14,9 +14,11 @@ import { tagTint } from './tag-colours.js';
  * The Arabic name wins while the desk is in Arabic and falls back to the Latin
  * one, as a department's name does on its own list.
  *
- * With `onRemove` the chip ends in a 16 px × that takes it off at once — the
- * details panel's tags row (`AdminTicketTags`, panel 1). `removeLabel` names
- * the button, because "×" alone does not say which chip it removes.
+ * With `onRemove` the chip ends in a × that takes it off at once — the details
+ * panel's tags row (`AdminTicketTags`, panel 1). The glyph is 12 px but the
+ * button is the 28 px admin target of DESIGN §10, overhanging the 22 px chip
+ * rather than growing it. `removeLabel` names the button, because "×" alone
+ * does not say which chip it removes.
  */
 export function TagChip({
   tag,
@@ -59,8 +61,11 @@ export function TagChip({
           aria-label={removeLabel}
           onClick={onRemove}
           sx={{
-            inlineSize: 16,
-            blockSize: 16,
+            inlineSize: 28,
+            blockSize: 28,
+            marginBlock: '-3px',
+            marginInlineStart: '-6px',
+            marginInlineEnd: '-8px',
             borderRadius: '4px',
             color: 'inherit',
             // The theme's focus ring (DESIGN §10), which it gives Button but not ButtonBase.

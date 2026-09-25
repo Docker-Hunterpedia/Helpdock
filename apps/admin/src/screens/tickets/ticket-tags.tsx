@@ -87,7 +87,9 @@ export function TicketTags({
             marginBlockStart: 2,
             display: 'flex',
             flexWrap: 'wrap',
-            gap: 2,
+            columnGap: 2,
+            // The × targets overhang their chips by 3 px, so a wrapped row keeps ≥ 8 px between them (DESIGN §10).
+            rowGap: 4,
           }}
         >
           {tags.map((tag) => (

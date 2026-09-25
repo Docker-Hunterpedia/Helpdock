@@ -162,7 +162,7 @@ describe('ticketFilters', () => {
       const sql = render(ticketFilters({ ...query({ q: 'renewa' }), search: 'fuzzy' }));
 
       // `<%`, not `%`: the query word against one stored word, as before.
-      expect(sql?.sql).toContain('wanted.lexeme <% "near"."token"');
+      expect(sql?.sql).toContain('wanted.lexeme <% candidate.token');
       // The candidates are an index range, not every visible ticket.
       expect(sql?.sql).toContain('"near"."token" >= left(wanted.lexeme, 3)');
       expect(sql?.sql).toContain('"near"."token" < left(wanted.lexeme, 3) || chr(1114111)');

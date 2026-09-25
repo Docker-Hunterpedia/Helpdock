@@ -180,13 +180,20 @@ const exactTicketIds = (brandId: string, words: string): SQL => sql`
 const fuzzyTicketIds = (brandId: string, words: string): SQL => sql`(
   SELECT ${tokens.ticketId} FROM ${TOKENS}
   JOIN (
-    SELECT DISTINCT wanted.word, ${near.token} AS token
+    SELECT DISTINCT wanted.word, candidate.token
     FROM unnest(${lexemesOf(words)}) WITH ORDINALITY AS wanted(lexeme, word)
-    JOIN ${NEAR} ON ${near.brandId} = ${brandId}
-      AND ${near.token} >= left(wanted.lexeme, ${PREFIX})
-      AND ${near.token} < left(wanted.lexeme, ${PREFIX}) || chr(1114111)
-    WHERE ${near.token} = wanted.lexeme
-      OR (char_length(wanted.lexeme) >= ${PREFIX} AND wanted.lexeme <% ${near.token})
+    CROSS JOIN LATERAL (
+      SELECT DISTINCT ${near.token} AS token FROM ${NEAR}
+      WHERE ${near.brandId} = ${brandId}
+        AND ${near.token} >= left(wanted.lexeme, ${PREFIX})
+        AND ${near.token} < left(wanted.lexeme, ${PREFIX}) || chr(1114111)
+      -- Keeps the subquery from being flattened, so the range stays an index
+      -- condition per word. Flattened, the planner read every token of the
+      -- brand and applied the range as a join filter (151 ms at 50k tickets).
+      OFFSET 0
+    ) candidate
+    WHERE candidate.token = wanted.lexeme
+      OR (char_length(wanted.lexeme) >= ${PREFIX} AND wanted.lexeme <% candidate.token)
   ) matched ON matched.token = ${tokens.token}
   WHERE ${tokens.brandId} = ${brandId}
   GROUP BY ${tokens.ticketId}

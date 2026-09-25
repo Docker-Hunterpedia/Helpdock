@@ -37,6 +37,7 @@ import {
   type TicketStatus,
   type TicketStatusList,
   type TicketStatusUsage,
+  ticketListQuerySchema,
   ticketRoom,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -54,6 +55,8 @@ import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { registerTicketEventHandlers } from './ticket-events.js';
+import type { SearchMode } from './ticket-query.js';
+import { TicketRepository } from './tickets.repository.js';
 
 /**
  * M1-02 and M1-03 against a real Postgres and a real Redis, over real sessions.
@@ -1194,6 +1197,42 @@ describe.skipIf(!hasDocker)('tickets', () => {
       );
       expect(rejection?.cause?.message).toMatch(/not visible in this transaction/i);
     });
+
+    it.each<SearchMode>(['exact', 'fuzzy'])(
+      'looks the %s words up in the token index ahead of the policy, as the runtime role',
+      async (mode) => {
+        // With sequential and bitmap scans off the planner must use an index,
+        // and it may only put a condition into the index ahead of the policy
+        // when the operator is leakproof (ADR 0011). A non-leakproof operator
+        // would show as a Filter above the policy instead.
+        const plan = await withTenant(
+          runtime.db,
+          {
+            brandIds: [seeded.brandId],
+            departmentIds: [support],
+            principalType: 'staff',
+            principalId: sam.id,
+          },
+          async (tx) => {
+            await tx.execute(sql`SET LOCAL enable_seqscan = off`);
+            await tx.execute(sql`SET LOCAL enable_bitmapscan = off`);
+            const statement = new TicketRepository().listTicketsStatement(
+              tx,
+              seeded.brandId,
+              ticketListQuerySchema.parse({ q: 'renewa' }),
+              mode,
+            );
+            const rows = await tx.execute<{ 'QUERY PLAN': string }>(sql`EXPLAIN ${statement}`);
+            return [...rows].map((row) => row['QUERY PLAN']).join('\n');
+          },
+        );
+
+        const tokenLookup =
+          mode === 'exact' ? /Index Cond: .*token = ANY/ : /Index Cond: .*token >= "left"/;
+        expect(plan).toMatch(/ticket_search_tokens_brand_token_idx/);
+        expect(plan).toMatch(tokenLookup);
+      },
+    );
 
     it('keeps the reference and contact-name matches (M1-09)', async () => {
       const { ticket } = await createTicket(sam, { subject: 'Numbered only' });

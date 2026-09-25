@@ -10,6 +10,7 @@ import {
   MOCK_TICKET_CLOSED,
   MOCK_TICKET_REFUND,
   MOCK_TICKET_SIGN_IN,
+  MOCK_TICKET_TRANSCRIPT,
   MOCK_TICKET_VAT,
   MockTicketsApi,
 } from './mock-api.js';
@@ -189,6 +190,44 @@ describe('MockTicketsApi', () => {
     const { activity } = await api.activity(BRAND, MOCK_TICKET_REFUND);
 
     expect(activity.at(-1)?.action).toBe('ticket.updated');
+  });
+
+  it('checks custom values against the brand’s ticket fields and merges them in', async () => {
+    const updated = await api.update(BRAND, MOCK_TICKET_REFUND, {
+      custom: { order_id: ' ORD-9 ', renews_on: '2026-10-01', tier: null },
+    });
+
+    expect(updated.custom).toEqual({ order_id: 'ORD-9', renews_on: '2026-10-01' });
+    await expect(
+      api.update(BRAND, MOCK_TICKET_REFUND, { custom: { tier: 'platinum' } }),
+    ).rejects.toThrow(/custom/);
+    await expect(
+      api.update(BRAND, MOCK_TICKET_REFUND, { custom: { nobody_defined: 'x' } }),
+    ).rejects.toThrow(/custom/);
+  });
+
+  it('replaces a ticket’s tags with the set asked for, in the brand’s order (M1-15)', async () => {
+    const { tags } = await api.setTags(BRAND, MOCK_TICKET_REFUND, [
+      '0192c3f0-1a2b-7c3d-8e4f-000000000103',
+      '0192c3f0-1a2b-7c3d-8e4f-000000000101',
+    ]);
+
+    expect(tags.map((tag) => tag.name)).toEqual(['Refund', 'Bug']);
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.tags).toEqual(tags);
+    const { activity } = await api.activity(BRAND, MOCK_TICKET_REFUND);
+    expect(activity.at(-1)?.action).toBe('ticket.tags.changed');
+  });
+
+  it('refuses a tag the brand no longer has, as the api does', async () => {
+    const { ticket } = await api.ticket(BRAND, MOCK_TICKET_TRANSCRIPT);
+
+    await expect(
+      api.setTags(
+        BRAND,
+        MOCK_TICKET_TRANSCRIPT,
+        (ticket.tags ?? []).map((tag) => tag.id),
+      ),
+    ).rejects.toThrow(/No such tag/);
   });
 
   it('gives a reply the next seq and bumps the ticket', async () => {

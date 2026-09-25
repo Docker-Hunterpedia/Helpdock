@@ -81,15 +81,23 @@ export function createApis(
   // And the contact fixture, so a ticket filed against a contact created in
   // this session names them the way the api would.
   const contacts = new MockContactsApi();
+  const ticketing = new MockTicketingApi(blockList);
 
   return {
     auth: new MockAuthApi(staff),
     staff,
     contacts,
     // One block list for both, so a sender blocked from a ticket is on the
-    // Spam tab (M1-11).
-    ticketing: new MockTicketingApi(blockList),
-    tickets: new MockTicketsApi(uploads, Date.now(), blockList, (id) => contacts.nameOf(id)),
+    // Spam tab (M1-11); and the ticketing fixture is the ticket fixture's list
+    // of tags and fields, so a tag made in Ticketing › Tags can go on a ticket.
+    ticketing,
+    tickets: new MockTicketsApi(
+      uploads,
+      Date.now(),
+      blockList,
+      (id) => contacts.nameOf(id),
+      ticketing,
+    ),
     uploader: uploads,
   };
 }

@@ -1011,9 +1011,10 @@ through is `apps/admin/src/tickets/` — `TicketsApi`, an http adapter and a
 fixture — the same shape the contact screens use.
 
 It covers what the api can answer today. Views (M1-05, [below](#views-in-the-workspace)), tags and custom-field
-editing (M1-06), the state machine's transitions (M1-08), merge and split
-(M1-09) and attachments (M1-10) add to it rather than change it; what each one
-needs is at the end of this section.
+editing ([below](#tags-and-custom-fields-in-the-workspace)), the state machine's
+transitions (M1-08), merge and split (M1-09) and attachments (M1-10) add to it
+rather than change it; what the screen still cannot do is at the end of this
+section.
 
 ### One screen, one route
 
@@ -1156,6 +1157,47 @@ caret in the composer, `n` does the same in note mode, and `Esc` closes a
 drawer or a dialog. A single letter is only a shortcut while nobody is writing:
 anything typed into a field is left alone, as is anything carrying a modifier.
 
+### Tags and custom fields in the workspace
+
+The details panel edits both (artboard `Admin/Ticket-Tags`). A Viewer, who has
+no `ticket:write`, sees the same panel with nothing to press: chips without ×
+or Add, and the custom fields disabled.
+
+**Tags** sit below Priority as chips in each tag's tint. The × on a chip takes
+it off at once. **Add** opens a multi-select Combobox of the brand's tags:
+typing filters by either name, ↑ and ↓ move through the list, Enter toggles the
+highlighted tag, a click toggles too, and Esc closes it. A ticked tag is on the
+ticket. The picker never creates a tag. When nothing matches it says so and
+points to Ticketing › Tags, because what a brand labels its tickets with is
+configuration (`ticketing:manage`), not something to make up mid-ticket.
+
+Each change sends the whole new set to
+[`PUT /tickets/:id/tags`](#tags) and draws it before the answer arrives. When
+the api refuses (most often because somebody deleted a tag after the ticket was
+read), the chips go back to what they were and a toast says the tags were not
+changed. Either way the ticket is read again afterwards, so its activity line
+appears.
+
+**Custom fields** are one editor per *ticket* definition, in the brand's order,
+of the definition's type:
+
+| Type | Editor | Saves |
+|---|---|---|
+| Text | text input | on blur, or Enter |
+| Number | number input | on blur, or Enter; sent as a number |
+| Date | date input | on blur, or Enter |
+| Select | select with an empty "—" option | on change |
+| Multi-select | multi-select Combobox with chips inside | on change |
+| Checkbox | checkbox | on change |
+
+Each save is a `PATCH` naming that one key ([Custom values](#custom-values)).
+Emptying a field sends `null`, which clears it. A blur that changed nothing
+sends nothing. The api is the only judge of a value: when it answers 400, a
+sentence for the field's type appears under the field as an alert, the input is
+marked invalid, and the stored value comes back. A field whose definition is
+not visible to agents is left out for Agents and Viewers, and shown to Admins
+and Team Leaders.
+
 ### The ⋯ menu
 
 The button beside Macro in the header opens the ticket's actions menu
@@ -1173,8 +1215,6 @@ Spam, which reopens it at once. A merged secondary offers neither.
 |---|---|---|
 | Canned response, Macro | disabled, with the reason | M3 |
 | Translate | disabled, with the reason | M7 |
-| Tags | not drawn at all until a ticket has any | M1-06 |
-| Custom fields | read-only | M1-06 |
 | The AI bubble's confidence | not drawn: `ai_meta` is deliberately not on the wire | M7 |
 The **assignee picker** (M1-07, `AdminTicketDialogs` panel 3) reads
 `GET /brands/:id/assignment/:departmentId/assignable`, which `ticket:write`

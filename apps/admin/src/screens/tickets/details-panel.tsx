@@ -1,8 +1,10 @@
 import type {
   AssignableAgent,
   ContactDetail,
+  CustomFieldDef,
   Department,
   RelatedTicket,
+  TagSummary,
   Ticket,
   TicketPriority,
   TicketStatus,
@@ -19,22 +21,27 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { initialsOf } from '../contacts/format.js';
 import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
+import { CustomFieldsCard } from './custom-fields-card.tsx';
 import { elapsedFraction, messageTime, statusName } from './format.js';
 import { LinkedTickets } from './linked-tickets.tsx';
 import { ParticipantsCard } from './participants-card.tsx';
+import { TicketTags } from './ticket-tags.tsx';
 
 /**
  * DESIGN §6.3 DetailsPanel: 300 px on `bg.surface`, a contact card, labelled
  * fields, the SLA card on `bg.canvas` with its 4 px bar, custom fields and
  * linked tickets.
  *
- * Four of the fields are **controls rather than labels**, because they are what
- * an agent changes while reading — assignee, department, status and priority
- * all go through the one `PATCH` M1-02 gave us. The assignee is M1-07's picker
- * (`assignee-picker.tsx`) rather than a select, because choosing somebody means
- * seeing who is around and how loaded they are. Two are read-only and will
- * stay that way until their own deliverable: custom fields are M1-06's, and
- * linked tickets are the read's `related` list ({@link LinkedTickets}).
+ * Most of the fields are **controls rather than labels**, because they are what
+ * an agent changes while reading — assignee, department, status, priority and
+ * the custom fields all go through the one `PATCH` M1-02 gave us. The assignee
+ * is M1-07's picker (`assignee-picker.tsx`) rather than a select, because
+ * choosing somebody means seeing who is around and how loaded they are. Tags
+ * go through M1-06's replace ({@link TicketTags}). Linked tickets are the
+ * read's `related` list and stay read-only ({@link LinkedTickets}).
+ *
+ * Without `ticket:write` (a Viewer) the tags are chips and the custom fields
+ * are disabled: the same panel, with nothing to press.
  *
  * **The hidden-ticket count is the contact's, not the ticket's**
  * (DOMAIN-RULES §1.2). It comes from the contact timeline, which is the one
@@ -67,6 +74,15 @@ export interface DetailsPanelProps {
    * know what they read.
    */
   readonly cards?: ReactNode;
+  /** M1-15: the brand's tags, which the tag picker offers. */
+  readonly brandTags: readonly TagSummary[];
+  /** M1-15: the ticket's custom fields this reader may see, in the brand's order. */
+  readonly customFields: readonly CustomFieldDef[];
+  /** Whether the reader holds `ticket:write`, which the tags and the custom fields need. */
+  readonly canWrite: boolean;
+  onTagsChange(tagIds: string[]): void;
+  /** Resolves once saved; rejects with the api's refusal, which the field then shows. */
+  onCustomSave(key: string, value: unknown): Promise<void>;
   onChange(patch: {
     statusId?: string;
     priority?: TicketPriority;
@@ -86,6 +102,11 @@ export function DetailsPanel({
   now,
   busy,
   cards,
+  brandTags,
+  customFields,
+  canWrite,
+  onTagsChange,
+  onCustomSave,
   onChange,
 }: DetailsPanelProps): ReactNode {
   const t = useT();
@@ -95,8 +116,6 @@ export function DetailsPanel({
   const departmentId = useId();
   const statusId = useId();
   const priorityId = useId();
-
-  const custom = Object.entries(ticket.custom);
 
   return (
     <Box
@@ -258,6 +277,13 @@ export function DetailsPanel({
         ))}
       </TextField>
 
+      <TicketTags
+        tags={ticket.tags ?? []}
+        brandTags={brandTags}
+        canWrite={canWrite}
+        onChange={onTagsChange}
+      />
+
       <SlaCard ticket={ticket} now={now} />
 
       {cards}
@@ -271,36 +297,12 @@ export function DetailsPanel({
         </Box>
       </Box>
 
-      <Box component="section">
-        <Typography variant="caption" component="h2" sx={{ color: 'text.secondary' }}>
-          {t('tickets:details.custom')}
-        </Typography>
-        {custom.length === 0 ? (
-          <Typography variant="body2" sx={{ marginBlockStart: 2, color: 'text.secondary' }}>
-            {t('tickets:details.noCustom')}
-          </Typography>
-        ) : (
-          <Box component="dl" sx={{ margin: 0, marginBlockStart: 2, display: 'grid', gap: 2 }}>
-            {custom.map(([key, value]) => (
-              <Box key={key} sx={{ display: 'flex', justifyContent: 'space-between', gap: 3 }}>
-                <Typography component="dt" variant="caption" sx={{ color: 'text.secondary' }}>
-                  {key}
-                </Typography>
-                <Typography component="dd" variant="mono" sx={{ margin: 0, fontSize: 12 }}>
-                  <bdi>{String(value)}</bdi>
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        )}
-        <Typography
-          variant="caption"
-          component="p"
-          sx={{ marginBlockStart: 2, color: 'text.secondary' }}
-        >
-          {t('tickets:details.customReadOnly')}
-        </Typography>
-      </Box>
+      <CustomFieldsCard
+        fields={customFields}
+        values={ticket.custom}
+        canWrite={canWrite}
+        onSave={onCustomSave}
+      />
 
       <LinkedTickets related={related} />
 

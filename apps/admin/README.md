@@ -458,6 +458,21 @@ from `use-spam-actions.tsx`, together with the panel 5 dialog. The mock
 `MockTicketingApi` and `MockTicketsApi` share one `MockBlockList`, as the api's
 two sides share one table, so a sender blocked from a ticket is on the Spam tab.
 
+M1-15's last part (`Admin/Ticket-Tags`) made the details panel's tags and
+custom fields editable. `ticket-tags.tsx` is the tags row and its multi-select
+Combobox; the search field keeps focus and the highlighted option is
+`aria-activedescendant`, so ↑/↓ and Enter work without leaving it.
+`use-ticket-tags.ts` saves through `TicketsApi.setTags` optimistically and puts
+the previous read back on a refusal. `custom-fields-card.tsx` is one editor per
+type, saving through the ticket `PATCH`; `tickets/custom-values.ts` converts
+between what an input holds and what the api stores, and validates nothing,
+because the api's schema is the only judge. `MockTicketsApi` takes
+`MockTicketingApi` as its list of tags and fields (`createApis` and
+`signedInMockApis` pass the same one), so a tag made in Ticketing › Tags can go
+on a ticket and a custom value is checked against the brand's definitions
+exactly as the api checks it. HD-1028 carries a tag the list no longer has,
+which is how the specs reach the refusal.
+
 What the screen leaves disabled and which milestone turns it on is in
 [the ticket guide](../../docs/guides/tickets.md#the-admin-workspace), along
 with the two reads it wants that the api does not offer yet.

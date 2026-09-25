@@ -22,6 +22,7 @@ import type {
   TicketSplitRequest,
   TicketStatusList,
   TicketSystemState,
+  TicketTagList,
   TicketUpdateRequest,
   TicketView,
   TicketViewCountList,
@@ -61,6 +62,12 @@ export interface TicketsApi {
   create(brandId: string, request: TicketCreateRequest): Promise<TicketDetail>;
   update(brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket>;
   reply(brandId: string, ticketId: string, request: MessageCreateRequest): Promise<TicketMessage>;
+
+  /**
+   * M1-06's replace: `tagIds` is the whole set the ticket carries afterwards,
+   * and the answer is that set as the api stored it.
+   */
+  setTags(brandId: string, ticketId: string, tagIds: readonly string[]): Promise<TicketTagList>;
 
   // ---------------------------------------------------------------- M1-11
 

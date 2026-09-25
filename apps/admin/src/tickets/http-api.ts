@@ -16,6 +16,7 @@ import type {
   TicketSpamSender,
   TicketSplitRequest,
   TicketStatusList,
+  TicketTagList,
   TicketUpdateRequest,
   TicketView,
   TicketViewCountList,
@@ -37,6 +38,7 @@ import {
   ticketSchema,
   ticketSpamSenderSchema,
   ticketStatusListSchema,
+  ticketTagListSchema,
   ticketViewCountListSchema,
   ticketViewListSchema,
   ticketViewSchema,
@@ -114,6 +116,18 @@ export class HttpTicketsApi implements TicketsApi {
   ): Promise<TicketMessage> {
     return ticketMessageSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/messages`, request),
+    );
+  }
+
+  async setTags(
+    brandId: string,
+    ticketId: string,
+    tagIds: readonly string[],
+  ): Promise<TicketTagList> {
+    return ticketTagListSchema.parse(
+      await this.#transport.request('PUT', `${this.#ticket(brandId, ticketId)}/tags`, {
+        tagIds: [...tagIds],
+      }),
     );
   }
 

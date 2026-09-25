@@ -154,13 +154,33 @@
     "department": "Department",
     "status": "Status",
     "priority": "Priority",
+    "tags": "Tags",
+    "noTags": "None",
+    "tagPicker": {
+      "add": "Add",
+      "open": "Add a tag",
+      "search": "Find a tag",
+      "list": "Tags",
+      "remove": "Remove tag {{name}}",
+      "noMatch": "No tag called \"{{term}}\". Tags are created in Ticketing › Tags.",
+      "none": "This brand has no tags yet. Tags are created in Ticketing › Tags.",
+      "footer": "Enter toggles, Esc closes. Changes save as you pick."
+    },
     "sla": "Service level",
     "firstResponse": "First response",
     "resolution": "Resolution",
     "slaNone": "No policy applies to this ticket yet.",
     "custom": "Custom fields",
-    "customReadOnly": "Custom fields are read-only until M1-06.",
     "noCustom": "None",
+    "customNone": "—",
+    "customRefused": {
+      "text": "Enter some text, up to 2,000 characters.",
+      "number": "Enter a number.",
+      "date": "Enter a date.",
+      "select": "Choose one of the options.",
+      "multi_select": "Choose from the options.",
+      "checkbox": "That value was not saved."
+    },
     "linked": "Linked tickets",
     "noLinked": "None",
     "linkedHidden": "A ticket you cannot open",
@@ -262,7 +282,8 @@
     "timeFailed": "The time could not be saved.",
     "timeTrackingOff": "Time tracking is off for this brand.",
     "merged": "Merged into {{reference}}",
-    "unmerged": "{{reference}} unmerged"
+    "unmerged": "{{reference}} unmerged",
+    "tagsFailed": "The tags were not changed. Reload the ticket and try again."
   },
   "keyboard": {
     "label": "Keyboard shortcuts",

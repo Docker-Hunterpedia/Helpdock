@@ -18,7 +18,7 @@ Full deliverable list and specs: [PRD §4 · M1 Ticketing core](../planning/PRD.
 
 Built from the design canvas artboards `Admin · ticket view`, `Admin/Contacts`,
 `Admin/Contact`, `Admin/Ticketing` and its tabs, `AdminTicketDialogs`,
-`Admin/View-Dialogs`, `AdminBrandDanger`, `CsatEN` and `CsatAR`.
+`Admin/View-Dialogs`, `Admin/Ticket-Tags`, `AdminBrandDanger`, `CsatEN` and `CsatAR`.
 
 ## Deliverables
 
@@ -42,29 +42,23 @@ Built from the design canvas artboards `Admin · ticket view`, `Admin/Contacts`,
 
 ## Exit criteria
 
-Copied from the PRD. Four of five are met; the first is met for seven of its
-eight verbs, and the eighth is written down below with the reason. Every test
-named here was run on 2026-09-25 against `aad60e3`: the admin Playwright specs
-in both locales (76 passed), the lifecycle unit tests (127 passed) and eight
-integration suites against real Postgres and Redis (574 passed).
+Copied from the PRD. All five are met. Every test named here was run on
+2026-09-25 against `aad60e3`: the admin Playwright specs in both locales (76
+passed), the lifecycle unit tests (127 passed) and eight integration suites
+against real Postgres and Redis (574 passed). The tag verb was closed afterwards
+on the same day by M1-15's tags row, whose specs are named below.
 
-- [ ] **An agent can create, assign, reply to, note, tag, merge, split and close
-      tickets in the admin UI, in English and Arabic.** Seven of eight. Every
-      spec below runs in the `en` and `ar` projects of
-      `apps/admin/playwright.config.ts`:
+- [x] **An agent can create, assign, reply to, note, tag, merge, split and close
+      tickets in the admin UI, in English and Arabic.** Every spec below runs in
+      the `en` and `ar` projects of `apps/admin/playwright.config.ts`:
       - create: `e2e/tickets.spec.ts` "creates a ticket from the dialog and opens it"
       - assign: `e2e/assignment.spec.ts` "assigns an agent at cap by hand"
       - reply: `e2e/tickets.spec.ts` "sends a reply and shows it in the thread once it has a seq"
       - note: `e2e/tickets.spec.ts` "adds an internal note in note mode"
+      - tag: `e2e/ticket-tags.spec.ts` "adds a tag from the picker with the keyboard" and "removes a tag with its ×" (artboard `Admin/Ticket-Tags`); against the real api, `e2e/api/ticket-tags.api.spec.ts` "puts a tag on from the picker and takes it off with its ×"
       - merge: `e2e/merge-split.spec.ts` "closes a ticket into another, shows its messages inline there, and undoes it"
       - split: `e2e/merge-split.spec.ts` "copies the ticked messages onto a new ticket and opens it"
       - close: `e2e/feedback.spec.ts` "appears pending when the ticket closes, and its link opens the rating page", which closes the ticket from the details panel's status picker
-      - **tag: not met.** The api takes `PUT /tickets/:id/tags` (M1-06,
-        covered by `ticketing.integration.test.ts`), and the header draws a
-        ticket's tags, but the workspace has no control that puts a tag on a
-        ticket. No artboard draws one, and DESIGN-first means the control is
-        not improvised; a browser test for it cannot be written until it
-        exists. Carried as the first gap below.
 - [x] **An Agent cannot see or open a ticket in another department, by list, by
       direct URL, by contact timeline, or by socket room.** All four in
       `apps/api/src/tickets/tickets.integration.test.ts`:
@@ -130,12 +124,10 @@ parallel and integrated on one branch (see [Integration](#integration)).
 
 ## Gaps accepted
 
-Written down and carried forward. The first one is the unmet part of an exit
-criterion; none of the others blocks M2, M3 or M5.
+Written down and carried forward. None of them blocks M2, M3 or M5.
 
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
-| **No control puts a tag on a ticket, or edits its custom field values, in the workspace** | The api does both (`PUT /tickets/:id/tags`, `PATCH` with `custom`), the header draws tags and the details panel draws values read-only. No artboard draws the control, and the design-first rule forbids improvising one. It needs an artboard, then the control and its en/ar Playwright test. | [tickets guide](../guides/tickets.md#what-the-screen-cannot-do-yet-and-why), this file |
 | **A Team Leader reads the whole brand's roster and contact timeline counts**, not only their own departments | DOMAIN-RULES §1.2 does not narrow *reading* them, and narrowing is a product decision nobody has taken. | [staff-and-roles](../guides/staff-and-roles.md#known-gaps) |
 | **Nothing re-routes a ticket nobody was eligible for** | It shows in Unassigned, which is where a person looks. Re-routing later is a rule (M3). | [M1-07 notes](#m1-07-assignment) |
 | **Auto-unassign ignores business hours** | Business hours are M3; "never while closed" is a seam in the job. | [M1-07 notes](#m1-07-assignment) |
@@ -311,6 +303,14 @@ No migration. Guides: [tickets](../guides/tickets.md#linked-tickets), [contacts]
 - **Linked tickets**: the read's `related` is `RelatedTicket[]`, each with a `relation` (`parent`, `mergedInto`, `mergedFrom`, `splitFrom`, `splitTo`) and the linked ticket's status. A link the reader cannot open is `{ visible: false, relation }` and carries nothing else (§1.2).
 - **Arabic horizontal overflow**: a visually-hidden span sized `width: 1`, which MUI reads as `100%`, is replaced by one shared `ui/visually-hidden.ts`. `e2e/linked-tickets.spec.ts` asserts no sideways scroll at 1440 and 1280 in both locales.
 - **CSAT**: the rating page's "closed by <first name>" is sent only when the closer is active staff who wrote a public reply on the ticket, which is how we read §4.6's "nothing beyond their purpose".
+
+### M1-15 part 3, tags and custom fields in the details panel
+
+No migration and no api change; artboard `Admin/Ticket-Tags`. Guide: [tickets](../guides/tickets.md#tags-and-custom-fields-in-the-workspace).
+
+- **Tags row** below Priority: chips in the tag's tint with a × each, and an Add button opening a multi-select Combobox of the brand's tags (↑/↓, Enter toggles, Esc closes). It never creates a tag. Each change sends the whole set to `PUT /tickets/:id/tags` optimistically; a refusal puts the chips back and says so in a toast. A Viewer gets the chips alone.
+- **Custom fields** are editors of their definition's type, saving on blur (text, number, date) or on change (select, multi-select, checkbox) through the ticket `PATCH`'s `custom`. A refusal shows under the field as an alert and the stored value comes back. Fields hidden from Agents are left out for Agents and Viewers.
+- **Tests**: `src/tickets/tags.test.ts`, `src/tickets/custom-values.test.ts`, `src/screens/tickets/custom-fields-card.test.tsx` and the workspace tests in `tickets-page.test.tsx`; `e2e/ticket-tags.spec.ts` in both locales with axe; `e2e/api/ticket-tags.api.spec.ts` against the real api.
 
 ## Integration
 

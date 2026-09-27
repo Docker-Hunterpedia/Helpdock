@@ -38,7 +38,7 @@ import { type SeededInstall, seedDevInstall } from '../../seed/dev-seed.js';
 import { FakeStorage } from '../../testing/media.js';
 import { reindexArticles } from '../search/search-index.js';
 import { createPageCacheHandler } from './cache-events.js';
-import { RedisPageCache } from './page-cache.js';
+import { generationKey, RedisPageCache } from './page-cache.js';
 import { PRIVATE_CACHE_CONTROL, PUBLIC_CACHE_CONTROL } from './site.js';
 import { STAFF_COOKIE } from './staff-access.js';
 
@@ -61,6 +61,10 @@ import { STAFF_COOKIE } from './staff-access.js';
  * 6. **Settings** (M5-06): the cards save, refuse what DESIGN §8 refuses,
  *    sanitise the custom CSS, are audited, announce `site_changed`, and reach
  *    the page.
+ * 7. **M5's exit criteria** short of real TLS: an article in both languages on
+ *    the brand's host, a sitemap Postgres parses as valid XML, search in both
+ *    languages, and an article toggled from public to internal gone from the
+ *    sitemap, public search and every public page the cache holds.
  */
 
 const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
@@ -513,6 +517,171 @@ describe.skipIf(!hasDocker)('the help center pages (M5-03, M5-04, M5-06)', () =>
       expect(logged[0]?.openedAt).not.toBeNull();
       expect(views.length).toBeGreaterThan(0);
       expect(votes.map((row) => row.helpful)).toEqual([true]);
+    });
+  });
+
+  describe('M5 exit criteria, on the brand’s host', () => {
+    const SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+    const TITLES = { en: 'Exchange windows', ar: 'مواعيد الاستبدال' } as const;
+    const BODIES = {
+      en: '<p>You have thirty days to exchange an item.</p>',
+      ar: '<p>لديك ثلاثون يومًا لاستبدال المنتج.</p>',
+    } as const;
+    let exchanges: HcCategory;
+    let bilingual: HcArticle;
+
+    /** One `xpath` over the sitemap, parsed by Postgres's own XML parser. */
+    const sitemapPath = async (body: string, path: string): Promise<string[]> => {
+      const rows = await owner.db.execute<{ value: string }>(
+        sql`SELECT unnest(xpath(${path}, XMLPARSE(DOCUMENT ${body}), ARRAY[ARRAY['s', ${SITEMAP_NS}], ARRAY['x', 'http://www.w3.org/1999/xhtml']]))::text AS value`,
+      );
+      return rows.map((row) => row.value);
+    };
+
+    beforeAll(async () => {
+      exchanges = await ok<HcCategory>('POST', hc('/categories'), ada, {
+        names: { en: 'Exchanges', ar: 'الاستبدال' },
+      });
+      const section = await ok<HcSection>('POST', hc('/sections'), ada, {
+        categoryId: exchanges.id,
+        names: { en: 'Sizes', ar: 'المقاسات' },
+      });
+      bilingual = await ok<HcArticle>('POST', hc('/articles'), ada, {
+        sectionId: section.id,
+        locale: 'en',
+        title: TITLES.en,
+      });
+      for (const locale of ['en', 'ar'] as const) {
+        await ok('PUT', hc(`/articles/${bilingual.id}/versions/${locale}`), ada, {
+          title: TITLES[locale],
+          description: `${TITLES[locale]}.`,
+          bodyHtml: BODIES[locale],
+        });
+        await ok('PUT', hc(`/articles/${bilingual.id}/versions/${locale}/status`), ada, {
+          status: 'published',
+        });
+      }
+      await deliverPageEvents();
+      await withSystem(runtime.db, seeded.brandId, (tx) => reindexArticles(tx));
+    });
+
+    it('answers a published article in both languages on support.<brand>, with a valid sitemap', async () => {
+      for (const [locale, other, dir] of [
+        ['en', 'ar', 'ltr'],
+        ['ar', 'en', 'rtl'],
+      ] as const) {
+        const response = await page(`/${locale}/articles/${bilingual.slug}`);
+        expect(response.statusCode).toBe(200);
+        expect(response.headers['cache-control']).toBe(PUBLIC_CACHE_CONTROL);
+        expect(response.body).toContain(`<html lang="${locale}" dir="${dir}">`);
+        expect(response.body).toContain(TITLES[locale]);
+        expect(response.body).toContain(
+          `<link rel="canonical" href="https://${HOST}/${locale}/articles/${bilingual.slug}">`,
+        );
+        expect(response.body).toContain(
+          `<link rel="alternate" hreflang="${other}" href="https://${HOST}/${other}/articles/${bilingual.slug}">`,
+        );
+      }
+
+      const sitemap = await page('/sitemap.xml');
+      expect(sitemap.statusCode).toBe(200);
+      const [wellFormed] = await owner.db.execute<{ ok: boolean }>(
+        sql`SELECT xml_is_well_formed_document(${sitemap.body}) AS ok`,
+      );
+      expect(wellFormed?.ok).toBe(true);
+      const urls = await sitemapPath(sitemap.body, 'count(/s:urlset/s:url)');
+      const locs = await sitemapPath(sitemap.body, '/s:urlset/s:url/s:loc/text()');
+      // Every <url> has exactly one <loc>, absolute, on this host, and none twice.
+      expect(locs).toHaveLength(Number(urls[0]));
+      expect(new Set(locs).size).toBe(locs.length);
+      expect(locs.every((loc) => loc.startsWith(`https://${HOST}/`))).toBe(true);
+      for (const locale of ['en', 'ar'] as const) {
+        const loc = `https://${HOST}/${locale}/articles/${bilingual.slug}`;
+        expect(locs).toContain(loc);
+        const alternates = await sitemapPath(
+          sitemap.body,
+          `/s:urlset/s:url[s:loc="${loc}"]/x:link[@rel="alternate"]/@hreflang`,
+        );
+        expect(alternates.sort()).toEqual(['ar', 'en']);
+        const [lastmod] = await sitemapPath(
+          sitemap.body,
+          `/s:urlset/s:url[s:loc="${loc}"]/s:lastmod/text()`,
+        );
+        expect(Number.isNaN(Date.parse(lastmod ?? ''))).toBe(false);
+      }
+    });
+
+    it('finds the article from the help center’s search in English and in Arabic', async () => {
+      const english = await page('/en/search?q=exchange');
+      const arabic = await page(`/ar/search?q=${encodeURIComponent('الاستبدال')}`);
+
+      expect(english.statusCode).toBe(200);
+      expect(english.body).toContain(`/en/articles/${bilingual.slug}?sid=`);
+      expect(arabic.statusCode).toBe(200);
+      expect(arabic.body).toContain(`/ar/articles/${bilingual.slug}?sid=`);
+    });
+
+    it('drops an article toggled from public to internal from the sitemap, public search and every public cached page', async () => {
+      const cachedPaths = [
+        ...(['en', 'ar'] as const).map((locale) => `/${locale}/articles/${bilingual.slug}`),
+        ...(['en', 'ar'] as const).map((locale) => `/${locale}/categories/${exchanges.slug}`),
+        '/sitemap.xml',
+      ];
+      for (const path of cachedPaths) {
+        const before = await page(path);
+        expect(before.statusCode, path).toBe(200);
+        expect(before.body, path).toContain(bilingual.slug);
+      }
+
+      for (const locale of ['en', 'ar'] as const) {
+        await ok('PUT', hc(`/articles/${bilingual.id}/versions/${locale}/visibility`), ada, {
+          visibility: 'internal',
+        });
+      }
+      // Search filters visibility in SQL before ranking, so it needs no event.
+      for (const [locale, q] of [
+        ['en', 'exchange'],
+        ['ar', 'الاستبدال'],
+      ] as const) {
+        const search = await page(`/${locale}/search?q=${encodeURIComponent(q)}`);
+        expect(search.body).not.toContain(bilingual.slug);
+        expect(search.body).not.toContain(TITLES[locale]);
+      }
+
+      expect(await deliverPageEvents()).toBeGreaterThan(0);
+
+      for (const path of cachedPaths) {
+        const after = await page(path);
+        expect(after.body, path).not.toContain(bilingual.slug);
+        for (const title of Object.values(TITLES)) {
+          expect(after.body, path).not.toContain(title);
+        }
+      }
+      for (const locale of ['en', 'ar'] as const) {
+        const article = await page(`/${locale}/articles/${bilingual.slug}`);
+        expect(article.statusCode).toBe(404);
+      }
+
+      // What the page cache holds for visitors now, read from Redis itself:
+      // nothing in the current generation names the article.
+      const generation = (await runtime.redis.get(generationKey(seeded.brandId))) ?? '0';
+      const keys = await runtime.redis.keys(`hc:page:${seeded.brandId}:${generation}:public:*`);
+      expect(keys.length).toBeGreaterThan(0);
+      for (const key of keys) {
+        const stored = (await runtime.redis.get(key)) ?? '';
+        expect(stored).not.toContain(bilingual.slug);
+        for (const title of Object.values(TITLES)) {
+          expect(stored).not.toContain(title);
+        }
+      }
+
+      // Staff still read it.
+      const cookie = await staffCookie(ada);
+      const staff = await page(`/ar/articles/${bilingual.slug}`, {
+        cookies: { [STAFF_COOKIE]: cookie },
+      });
+      expect(staff.statusCode).toBe(200);
+      expect(staff.body).toContain(TITLES.ar);
     });
   });
 

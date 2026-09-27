@@ -144,8 +144,8 @@ workflow_rules(trigger, conditions jsonb, actions jsonb, order, enabled), workfl
 channels(kind, config_encrypted, status, last_error) ; mailbox/telegram/widget/form/api rows
 api_keys(brand_id, hash, scopes[], rate_limit, last_used_at)
 webhooks, webhook_deliveries
-hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, search tsvector, status)
-hc_article_feedback, hc_search_log
+hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, status, visibility), hc_settings, hc_media
+hc_search_documents(version_id, locale, title, body_text, search tsvector, title_normalized), hc_search_log, hc_article_views, hc_article_feedback
 knowledge_sources(kind: article|file|crawl|notion|gdrive, config_encrypted, sync_status)
 knowledge_chunks(source_id, locale, content, embedding vector(<dims>), embedding_model, visibility, meta jsonb)   -- HNSW index; dims set by knowledge.configure (DOMAIN-RULES §8)
 outbox(id, brand_id, event, payload jsonb, created_at, published_at), job_receipts(key, completed_at)   -- DOMAIN-RULES §6
@@ -154,7 +154,7 @@ ai_calls(brand_id, ticket_id, purpose, model, tokens_in, tokens_out, cost, sourc
 csat_responses, notifications, notification_prefs, audit_log, settings(key, value_encrypted, is_secret, updated_by)
 ```
 
-Search: `tickets.search` and `hc_article_versions.search` are generated tsvectors using `english` or `arabic` config by locale; trigram GIN on subjects/titles for fuzzy matching; semantic search via `knowledge_chunks`. Under `FORCE`d row-level security Postgres cannot use those GIN indexes ahead of a policy (their operators are not `LEAKPROOF`), so the ticket list searches through `ticket_search_tokens`, one row per lexeme of a ticket's subject and first message, compared with a leakproof `=` ([ADR 0011](../decisions/0011-ticket-search-token-table.md)).
+Search: `tickets.search` and the help center index `hc_search_documents.search` (M5-05, one row per published article version, kept current from the `help_center.*` events) are generated tsvectors using `english` or `arabic` config by locale; trigram GIN on subjects/titles for fuzzy matching; semantic search via `knowledge_chunks`. Under `FORCE`d row-level security Postgres cannot use those GIN indexes ahead of a policy (their operators are not `LEAKPROOF`), so the ticket list searches through `ticket_search_tokens`, one row per lexeme of a ticket's subject and first message, compared with a leakproof `=` ([ADR 0011](../decisions/0011-ticket-search-token-table.md)). The help center has no such token table: a brand has at most 5 000 articles in two languages, so its search narrows by brand and language on a btree and matches what is left, and its trigram match is on titles only.
 
 ---
 

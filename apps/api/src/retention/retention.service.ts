@@ -75,7 +75,7 @@ export class RetentionService {
   /**
    * "Next purge" per row. Counted with the same conditions the job deletes by
    * (`retention.repository.ts`), so the number on the form is the number that
-   * goes. The three categories whose tables do not exist yet are null.
+   * goes. The two categories whose purge has not arrived yet are null.
    */
   async #preview(
     tx: DbTransaction,
@@ -91,7 +91,7 @@ export class RetentionService {
           : await this.#repository.countTickets(tx, brandId, 'closed', cutoffs.closedTickets),
       spamTickets: await this.#repository.countTickets(tx, brandId, 'spam', cutoffs.spamTickets),
       aiCalls: null,
-      searchLog: null,
+      searchLog: await this.#repository.countSearchLog(tx, brandId, cutoffs.searchLog),
       auditLog: await this.#repository.countAuditLog(tx, brandId, cutoffs.auditLog),
       visitorSessions: null,
     };

@@ -6,9 +6,9 @@ import { Icon } from '../ui/icons.js';
 const SEARCH_DEBOUNCE_MS = 250;
 
 /**
- * `WidgetModesEN` column 4 (M4-05): help center only. With no query it lists
- * the brand's popular articles; a query goes to `searchArticles`, which filters
- * those same articles until M5-10 wires help center search behind it.
+ * `WidgetModesEN` column 4 (M4-05, M5-10): help center only. With no query it
+ * lists the brand's popular articles; a query goes to `searchArticles`, the
+ * help center's own search over its public articles.
  */
 export default function HelpCenter({
   onOpenArticle,
@@ -83,11 +83,11 @@ export default function HelpCenter({
               <li key={article.id}>
                 <a
                   class="hd-article-card"
-                  href={article.url}
+                  href={article.url ?? '#'}
                   target="_blank"
                   rel="noopener"
                   onClick={(event) => {
-                    if (!(event.metaKey || event.ctrlKey || event.shiftKey)) {
+                    if (!(article.url && (event.metaKey || event.ctrlKey || event.shiftKey))) {
                       event.preventDefault();
                       onOpenArticle(article);
                     }

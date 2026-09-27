@@ -9,7 +9,12 @@ import {
   renderWebFormPage,
   SUBMISSION_FIELD,
 } from './page/render.js';
-import { ATTACHMENTS_FIELD, type UploadedFile } from './submission.js';
+import {
+  ATTACHMENTS_FIELD,
+  articleIdFrom,
+  postedArticleId,
+  type UploadedFile,
+} from './submission.js';
 import type { LoadedForm, SubmitResult, WebFormPost } from './web-form-public.service.js';
 import { pageLocale } from './web-form-public.service.js';
 
@@ -52,6 +57,8 @@ export interface WebFormPageRequest {
   /** From `/contact/<brandId>`; absent on `/contact`. */
   readonly brandId?: string | undefined;
   readonly lang: string | undefined;
+  /** `?article=`: the help center article "Still need help?" came from (M5-08). */
+  readonly article?: string | undefined;
   readonly ip: string;
   /** Absent for a GET. */
   readonly body?: {
@@ -146,7 +153,10 @@ export class WebFormPage {
       });
     }
     if (request.body === undefined) {
-      return this.#respond(200, { ...view, state: this.#formState(form, new Map(), randomUUID()) });
+      return this.#respond(200, {
+        ...view,
+        state: this.#formState(form, new Map(), randomUUID(), articleIdFrom(request.article)),
+      });
     }
 
     const post = { fields: request.body.fields, files: request.body.files, ip: request.ip };
@@ -158,6 +168,7 @@ export class WebFormPage {
       result = { kind: 'refused', error: 'failed' };
     }
     const posted = post.fields.get(SUBMISSION_FIELD)?.[0] ?? randomUUID();
+    const article = postedArticleId(post.fields);
 
     switch (result.kind) {
       case 'created':
@@ -168,12 +179,18 @@ export class WebFormPage {
       case 'invalid':
         return this.#respond(422, {
           ...view,
-          state: { ...this.#formState(form, post.fields, posted), fieldErrors: result.errors },
+          state: {
+            ...this.#formState(form, post.fields, posted, article),
+            fieldErrors: result.errors,
+          },
         });
       case 'refused':
         return this.#respond(STATUS_FOR_REFUSAL[result.error], {
           ...view,
-          state: { ...this.#formState(form, post.fields, posted), formError: result.error },
+          state: {
+            ...this.#formState(form, post.fields, posted, article),
+            formError: result.error,
+          },
         });
     }
   }
@@ -196,6 +213,7 @@ export class WebFormPage {
     form: LoadedForm,
     values: ReadonlyMap<string, readonly string[]>,
     submissionId: string,
+    articleId: string | null,
   ): Extract<PageState, { kind: 'form' }> {
     return {
       kind: 'form',
@@ -206,6 +224,7 @@ export class WebFormPage {
       submissionId,
       attachments: form.attachments,
       captcha: form.captcha,
+      articleId,
     };
   }
 

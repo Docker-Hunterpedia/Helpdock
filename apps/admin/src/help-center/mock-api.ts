@@ -9,6 +9,8 @@ import {
   type HcCategory,
   type HcCategoryCreateRequest,
   type HcCategoryUpdateRequest,
+  type HcInsights,
+  type HcInsightsQuery,
   type HcLocale,
   type HcMedia,
   type HcMediaPresignRequest,
@@ -60,6 +62,57 @@ export const MOCK_HELP_CENTER = {
 } as const;
 
 const M = MOCK_HELP_CENTER;
+
+/** The Insights board (`Admin/HelpCenter-Settings`, board 2), in numbers. */
+const MOCK_TOP_SEARCHES: HcInsights['topSearches'] = [
+  { query: 'refund', locale: 'en', searches: 412, openedRate: 0.68 },
+  { query: 'track order', locale: 'en', searches: 305, openedRate: 0.74 },
+  { query: 'cancel order', locale: 'en', searches: 188, openedRate: 0.61 },
+  { query: 'change address', locale: 'en', searches: 141, openedRate: 0.55 },
+  { query: 'invoice', locale: 'en', searches: 120, openedRate: 0.49 },
+  { query: 'استرداد', locale: 'ar', searches: 96, openedRate: 0.58 },
+];
+
+const MOCK_ZERO_RESULT_SEARCHES: HcInsights['zeroResultSearches'] = [
+  { query: 'klarna', locale: 'en', searches: 23, lastSearchedAt: '2026-09-26T15:10:00.000Z' },
+  { query: 'gift wrap', locale: 'en', searches: 14, lastSearchedAt: '2026-09-25T09:00:00.000Z' },
+  { query: 'تقسيط', locale: 'ar', searches: 9, lastSearchedAt: '2026-09-24T11:30:00.000Z' },
+];
+
+const MOCK_ARTICLE_STATS: HcInsights['articles'] = [
+  {
+    articleId: M.articles.timelines,
+    title: 'Refund timelines',
+    views: 2184,
+    helpful: 212,
+    votes: 246,
+    comments: 9,
+  },
+  {
+    articleId: M.articles.whereIsMyOrder,
+    title: 'Where is my order?',
+    views: 1902,
+    helpful: 150,
+    votes: 190,
+    comments: 14,
+  },
+  {
+    articleId: M.articles.restocking,
+    title: 'Restocking fees',
+    views: 1244,
+    helpful: 88,
+    votes: 124,
+    comments: 0,
+  },
+  {
+    articleId: M.articles.bundles,
+    title: 'Returning part of a bundle',
+    views: 406,
+    helpful: 0,
+    votes: 0,
+    comments: 0,
+  },
+];
 const OMAR = 'Omar Aziz';
 const KARIM = 'Karim Saleh';
 
@@ -540,6 +593,28 @@ export class MockHelpCenterApi implements HelpCenterApi {
 
   async image(brandId: string, mediaId: string): Promise<HcMedia> {
     return this.confirmImage(brandId, mediaId);
+  }
+
+  /** The Insights board's figures, narrowed and sorted the way the api does. */
+  async insights(_brandId: string, query: HcInsightsQuery): Promise<HcInsights> {
+    await delay();
+    const inLocale = <T extends { locale: HcLocale }>(rows: readonly T[]): T[] =>
+      rows.filter((row) => query.locale === undefined || row.locale === query.locale);
+    const articles = [...MOCK_ARTICLE_STATS].sort((a, b) =>
+      query.sort === 'least_helpful'
+        ? Number(a.votes === 0) - Number(b.votes === 0) ||
+          a.helpful / Math.max(a.votes, 1) - b.helpful / Math.max(b.votes, 1)
+        : b.views - a.views,
+    );
+
+    return {
+      days: query.days,
+      locale: query.locale ?? null,
+      topSearches: inLocale(MOCK_TOP_SEARCHES),
+      // The fixture's last week found an answer to every search, for the empty state.
+      zeroResultSearches: query.days === 7 ? [] : inLocale(MOCK_ZERO_RESULT_SEARCHES),
+      articles: query.locale === 'ar' ? articles.slice(0, 2) : articles,
+    };
   }
 
   #slug(

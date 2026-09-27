@@ -16,12 +16,12 @@ Owner: @Docker-Hunterpedia
 | M5-02 | Editor (per ADR): rich text, images to WebP, code, callouts, tables, video embed,… | #118 | in review — see [Editor](#m5-02-editor) |
 | M5-03 | SSR app served by api on brand host; Redis page cache keyed by audience with… | #119 | not started |
 | M5-04 | SEO: canonical, hreflang, sitemap per brand, OG, JSON-LD | #120 | not started |
-| M5-05 | Search: tsvector per language (`english`, `arabic`) + trigram fuzzy; semantic merge… | #121 | not started |
+| M5-05 | Search: tsvector per language (`english`, `arabic`) + trigram fuzzy; semantic merge… | #121 | in review — see [Search](#m5-05-search) |
 | M5-06 | Theme tokens, logo, favicon, sanitized custom CSS, header/footer links, home layout | #122 | not started |
 | M5-07 | Custom domains: CNAME + TXT verification in admin, `/internal/domain-check` for Caddy… | #123 | in review: DNS verification (`domains` queue, `domain.verify` every 15 min), Caddy `/internal/domain-check`, Cloudflare flag, `BrandHostResolver`, Brand › Domains and General tabs; migration 0030; new env `HELPCENTER_CNAME_TARGET` |
-| M5-08 | Article feedback, view counts, "Still need help?" handoff to widget/form with article… | #124 | not started |
+| M5-08 | Article feedback, view counts, "Still need help?" handoff to widget/form with article… | #124 | in review — see [Feedback, views and Insights](#m5-08-feedback-views-and-insights) |
 | M5-09 | Visibility model: `public`/`internal` on article versions, internal-only help center… | #125 | in review — see [Visibility](#m5-09-visibility) |
-| M5-10 | Widget "help center" and "chat + articles" modes wired to real content | #126 | not started |
+| M5-10 | Widget "help center" and "chat + articles" modes wired to real content | #126 | in review — see [The widget](#m5-10-the-widget) |
 
 ## Artboards
 
@@ -81,13 +81,56 @@ Migration `0033_help_center` adds six tenant tables, all brand-scoped and none d
 | `help_center.structure_changed` | `{ kind: 'category' \| 'section', id }` | a category or section is created, renamed, reordered or deleted |
 | `help_center.access_changed` | `{ access }` | the help center becomes public or internal-only |
 
-  Until search (M5-05), the page cache (M5-03) and, from M7, `knowledge.sync` subscribe to them under their own subscriber names, the default handler logs them (and adds the delayed publish for `scheduled`). The relay publishes within about a second, so the 60-second budget of DOMAIN-RULES §5 is the consumers' to keep.
+  Search (M5-05) subscribes to all three as `search`; the page cache (M5-03) and, from M7, `knowledge.sync` subscribe under their own subscriber names beside it, and the default handler logs them (and adds the delayed publish for `scheduled`). The relay publishes within about a second, so the 60-second budget of DOMAIN-RULES §5 is the consumers' to keep.
 - **The exit criterion's setup** is proved in `apps/api/src/help-center/help-center.integration.test.ts`: an article toggled from public to internal is absent from `articleBySlug`, `tree` and `sitemap` for the public audience in both languages, `changedSince` reports it as not visible without its slug, and staff still read it.
+
+## M5-05 Search
+
+`HelpCenterSearch` (`apps/api/src/help-center/ports.ts`) is bound in `HelpCenterModule` to `HelpCenterSearchService` (`help-center/search/`), which the help center pages (M5-03) and the widget (M5-10) search through.
+
+Migration `0034_help_center_search` adds the search index, the search log and the two M5-08 tables, all brand-scoped tenant tables in `TENANT_TABLES` and the negative suite:
+
+| Table | Holds |
+|---|---|
+| `hc_search_documents` | one row per **published** version: its published title, description and body text, a generated `search` tsvector in the language's own configuration (`english` for `en`, `arabic` for `ar`; Postgres ships both), weighted title A, description B, body C, and a generated `title_normalized` for trigram matching (lower case, Arabic diacritics and tatweel removed, alef, yaa and taa marbuta folded) |
+| `hc_search_log` | query (trimmed, lower-cased, at most 200 characters), locale, source (`help_center` or `widget`), hit count, when a hit was opened, when |
+| `hc_article_views` | one row per visitor per article per UTC day (M5-08) |
+| `hc_article_feedback` | one "Was this helpful?" answer per visitor per article version, with an optional comment (M5-08) |
+
+- **Visibility before ranking** (DOMAIN-RULES §5). The query opens with `readableVersions(audience)` and an index row takes part only by joining the live version it lets through, so a visitor never matches an internal, draft or archived version, or anything in an internal-only help center — not even in the second or two before the index catches up. `search/lexical.test.ts` asserts the join precedes the ranking in the SQL; `search.integration.test.ts` toggles an article to internal and back, and switches the help center to internal-only, around searches.
+- **Ranking.** Every word must match, the last as a prefix (the widget searches while the visitor types); `ts_rank_cd` of that, plus half the rank of any word matching, plus 0.6 × `word_similarity` of the query and the title, so a misspelt title ("refnd timelnes") still ranks first. A version takes part when any word matches or its title is at least 0.4 similar. One version per article: the reader's language when the index has it, else the brand's default, as the pages fall back. Snippets are `ts_headline` with no markers, plain text for the renderer to escape.
+- **The M7 seam.** Search asks each `CandidateSource` (`search/ranking.ts`) for its best 100 articles, each filtering by audience in SQL first, and merges the lists by reciprocal rank fusion. M5 has the lexical source; M7 adds a semantic one over `knowledge_chunks` beside it and changes nothing else.
+- **Keeping the index current.** The `search` subscriber of `help_center.article_changed` re-indexes that article in the event's own transaction, about a second after the commit; `structure_changed` and `access_changed` re-index the brand (a statement that skips every current row). The hourly `help_center.search_reindex.sweep` adds one `help_center.search_reindex` per active brand on the `knowledge` queue, the safety net behind the events and what fills the index on an install that already had articles.
+- **No GIN index.** Under FORCEd row-level security a GIN index cannot run ahead of the policy (ADR 0011), so the brand and language narrow the rows by btree and the match runs over what is left, at most 5 000 articles × 2 languages per brand.
+- **The search log** keeps the query and never who asked. A search with no word in it ("?!") is neither run nor logged; only the first page of a search is logged, and the widget's suggestions while a chat message is typed are not logged at all (`SearchQuery.log: false`). **Retention:** the log is kept for the brand's search log window (Brand › Data retention, 180 days by default, DOMAIN-RULES §11) and hard-deleted by `maintenance.retention`, which also deletes the view rows older than the same window.
+
+## M5-08 Feedback, views and Insights
+
+`HelpCenterFeedback` is bound to `HelpCenterFeedbackService` (`help-center/feedback/`).
+
+- **`recordView`** inserts one row per visitor per article per UTC day and ignores a repeat. The visitor is whatever key the caller passes (the widget passes its visitor id, the pages their visitor cookie), stored as SHA-256 of the brand and the key. With the `searchId` a search answered, it marks that search as opened. A view of a version that is not published is ignored. Staff visits and previews are the caller's to leave out.
+- **`recordVote`** writes one answer per visitor per article version; a second answer replaces the first, comment included. `comment` (optional, at most 1 000 characters) is the "What was missing?" after a "No" on `HelpCenter/Article-AR`.
+- **`popular`** answers the audience's readable articles by views over the last 30 days, in the reader's language or the default; articles nobody viewed follow, newest first, so a new help center still lists something.
+- **Help center › Insights** (`Admin/HelpCenter-Settings` board 2) reads `GET /api/brands/:brandId/help-center/insights?days=7|30|90&locale=en|ar&sort=views|least_helpful` under `help_center:read`: Top searches (searches and the share that opened a result), Searches with no results (with "Write article", which opens a draft titled with the search in the first section, for someone who may manage the help center), and Articles (views, the helpful share as a meter with "x of y", and the comment count). Ten rows in each search table, twenty articles.
+- **"Still need help?"** The widget takes `Helpdock('open', { article })` and sends `articleId` with the next conversation or contact form it starts; the web form takes `?article=` into a hidden field. When the id names a published, public article of the brand, the ticket gets one `ticket.source_article` activity row, which its thread shows as "Came from the help center article “…”". Anything else is dropped without an error.
+
+## M5-10 The widget
+
+- The config's `popularArticles` is `popular` for the public audience, five articles in the config's language.
+- `GET /api/widget/:brandId/articles?q=&locale=&purpose=search|suggest` and `GET /api/widget/:brandId/articles/:articleId?locale=&searchId=` are the widget's search and article reads, behind the same gate as every widget route (origin, visitor credential, throttle), public audience only; an internal article is `not_found` like a missing one. `docs/guides/widget-protocol.md` § Help center is the reference.
+- The widget's help center mode searches and opens real articles; the chat + articles strip suggests articles from the text being typed (unlogged, 400 ms after typing stops). An article's `url` is on the brand's primary help center domain, or null without one, and then the widget offers no link out. `widget.js` is 25.6 KB gzipped.
+
+## Accepted gaps (M5-05, M5-08, M5-10)
+
+- **Comments are counted, not listed.** The Articles table shows "n comments" as text; the artboard links it to a list that has no artboard yet.
+- **Typos are forgiven in titles only.** A misspelt word that appears only in an article's body does not match; trigram matching over bodies needs an index row-level security cannot use.
+- **The search log counts partial queries** the help center's search box sends while the visitor types, as the widget's search does, each as its own search.
+- **Insights reads the log live**; there is no daily rollup, which the 180-day window and the brand limits keep cheap enough for now.
 
 ## Accepted gaps (M5-01, M5-02, M5-09)
 
 - **Preview and "View help center"** on the artboards need the pages of M5-03 and are not drawn until it lands.
-- **Settings › Theme, Home page and links** are M5-06, and **Insights** M5-08; the Settings tab holds "Who can read it" alone, and Insights says where it comes from.
+- **Settings › Theme, Home page and links** are M5-06; the Settings tab holds "Who can read it" alone.
 - **An image in an internal article** is served by the same public redirect as any other: its address is a UUIDv7 nobody can list, but whoever has it can load it. Tying an image to the visibility of the articles that use it needs a reference table and is left for M5-03 to decide with the page renderer.
 - **Article images of a deleted brand** are not yet purged from the bucket by retention (M1-14 knows attachments only).
 - **The category and section dialogs** name a new category or section in both languages; there is no artboard for them beyond DESIGN §6.4 Dialog, and renaming an existing one is available over the api only.
@@ -107,3 +150,4 @@ Migration `0033_help_center` adds six tenant tables, all brand-scoped and none d
 
 - Custom domains (M5-07): #131.
 - Help center content, the editor and visibility (M5-01, M5-02, M5-09): this branch.
+- Search, feedback, Insights and the widget's help center (M5-05, M5-08, M5-10): this branch.

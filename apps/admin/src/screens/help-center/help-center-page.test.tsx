@@ -164,13 +164,6 @@ describe('Who can read it', () => {
     });
   });
 
-  it('says where Insights will come from', async () => {
-    await renderHelpCenter('/help-center/insights');
-    expect(
-      await screen.findByRole('heading', { name: 'Insights' }, { timeout: 5000 }),
-    ).toBeInTheDocument();
-  });
-
   it('opens Articles for a tab that does not exist', async () => {
     await renderHelpCenter('/help-center/nope');
     expect(

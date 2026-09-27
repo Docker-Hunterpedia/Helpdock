@@ -173,14 +173,24 @@ export class MockTransport implements WidgetTransport {
     return { ticket_ref: `HD-${this.#tickets}` };
   }
 
+  /** Every article the fixture has (or the popular ones), matched on title and excerpt. */
   async searchArticles(query: string, locale: WidgetLocale) {
     this.#record('searchArticles', query, locale);
+    this.#assertOnline();
+    return this.#find(query, locale);
+  }
+
+  async suggestArticles(query: string, locale: WidgetLocale) {
+    this.#record('suggestArticles', query, locale);
+    return this.#find(query, locale);
+  }
+
+  #find(query: string, locale: WidgetLocale) {
     const needle = query.trim().toLowerCase();
-    return this.#options
-      .config(locale)
-      .popular_articles.filter((article) =>
-        `${article.title} ${article.excerpt}`.toLowerCase().includes(needle),
-      );
+    const catalog = this.#options.articles ?? this.#options.config(locale).popular_articles;
+    return catalog
+      .filter((article) => `${article.title} ${article.excerpt}`.toLowerCase().includes(needle))
+      .map(({ id, title, excerpt, section, url }) => ({ id, title, excerpt, section, url }));
   }
 
   async getArticle(id: string, locale: WidgetLocale): Promise<ArticleDetail> {

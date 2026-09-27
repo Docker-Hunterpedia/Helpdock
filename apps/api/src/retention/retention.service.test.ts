@@ -48,6 +48,7 @@ const fakes = () => {
       return kind === 'closed' ? 12 : 62;
     },
     countAuditLog: async () => 0,
+    countSearchLog: async () => 7,
   } as unknown as RetentionRepository;
   const tx = {
     insert: () => ({
@@ -69,7 +70,7 @@ describe('RetentionService.overview', () => {
       closedTickets: null,
       spamTickets: 62,
       aiCalls: null,
-      searchLog: null,
+      searchLog: 7,
       auditLog: 0,
       visitorSessions: null,
     });

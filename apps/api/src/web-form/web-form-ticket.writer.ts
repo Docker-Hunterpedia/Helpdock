@@ -15,6 +15,7 @@ import { routesAutomatically } from '../assignment/ticket-assignment.js';
 import type { AttachmentSink } from '../channels/inbound/conversation-router.js';
 import { findOrCreateContactByIdentity } from '../contacts/identity.js';
 import { enqueueEmailReceived } from '../email/email-events.js';
+import { recordHandoff } from '../help-center/feedback/handoff.js';
 import type { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
@@ -53,6 +54,8 @@ export interface WebFormTicketInput {
   readonly submissionId: string;
   readonly submission: WebFormSubmission;
   readonly sink: AttachmentSink;
+  /** M5-08: the help center article the customer came from, as the page posted it. */
+  readonly articleId?: string | null;
 }
 
 export interface FiledTicket {
@@ -177,6 +180,13 @@ export class WebFormTicketWriter {
       actor,
       action: 'ticket.created',
       to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
+    });
+    await recordHandoff(tx, {
+      brandId,
+      ticket,
+      actor,
+      articleId: input.articleId ?? undefined,
+      locale: input.locale,
     });
     await this.#deps.lifecycle.onCreated(
       { tx, brandId, actor, now: ticket.createdAt },

@@ -73,6 +73,7 @@ describe('@helpdock/db', () => {
       'email-deliveries.ts',
       'email-outbound-settings.ts',
       'enums.ts',
+      'help-center-search.ts',
       'help-center.ts',
       'job-receipts.ts',
       'mailboxes.ts',

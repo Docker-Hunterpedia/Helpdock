@@ -225,6 +225,13 @@
       "when": 1790518700128,
       "tag": "0033_help_center",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790521276125,
+      "tag": "0034_help_center_search",
+      "breakpoints": true
     }
   ]
 }

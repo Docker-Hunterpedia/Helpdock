@@ -15,6 +15,7 @@ import {
 import { z } from 'zod';
 import { kindForMime } from '../channels/inbound/attachment-sink.js';
 import { checkUpload, PolicyRefusal } from '../media/content-policy.js';
+import { ARTICLE_FIELD } from './page/render.js';
 
 /**
  * One submission of the public form, read and checked before anything is
@@ -64,6 +65,21 @@ const emailSchema = z.email().max(WEB_FORM_EMAIL_MAX);
 
 const first = (fields: ReadonlyMap<string, readonly string[]>, name: string): string =>
   (fields.get(name)?.[0] ?? '').trim();
+
+const articleIdSchema = z.uuid();
+
+/**
+ * M5-08: the article "Still need help?" came from, when the value is a uuid.
+ * Anything else is dropped rather than refused: the field is hidden, and the
+ * ticket is what the customer came to file.
+ */
+export const articleIdFrom = (value: string | undefined): string | null => {
+  const parsed = articleIdSchema.safeParse(value?.trim());
+  return parsed.success ? parsed.data : null;
+};
+
+export const postedArticleId = (fields: ReadonlyMap<string, readonly string[]>): string | null =>
+  articleIdFrom(fields.get(ARTICLE_FIELD)?.[0]);
 
 /** How many files the form takes, after the brand's content policy has had its say. */
 export const maxFilesFor = (policy: ContentPolicy): number => {

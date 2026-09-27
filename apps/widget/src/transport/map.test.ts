@@ -7,6 +7,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 import {
   agentOf,
+  toArticle,
   toAvailability,
   toConfig,
   toConversation,
@@ -295,5 +296,32 @@ describe('toWireKind and agentOf', () => {
 
   it('falls back to the brand for an agent without a name', () => {
     expect(agentOf(null, null, 'Acme').name).toBe('Acme');
+  });
+});
+
+describe('toArticle (M5-10)', () => {
+  it('turns the api’s article into the UI’s, address and all', () => {
+    expect(
+      toArticle({
+        id: 'a1',
+        title: 'Refund timelines',
+        excerpt: 'How long a refund takes',
+        section: null,
+        url: null,
+        locale: 'ar',
+        updatedAt: '2026-09-12T10:00:00.000Z',
+        readingMinutes: 3,
+        bodyHtml: '<p>Body</p>',
+      }),
+    ).toEqual({
+      id: 'a1',
+      title: 'Refund timelines',
+      excerpt: 'How long a refund takes',
+      section: null,
+      url: null,
+      updated_at: '2026-09-12T10:00:00.000Z',
+      reading_minutes: 3,
+      body_html: '<p>Body</p>',
+    });
   });
 });

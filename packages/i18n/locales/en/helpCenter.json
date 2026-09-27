@@ -8,7 +8,56 @@
   },
   "insights": {
     "heading": "Insights",
-    "body": "Views, feedback and searches with no results arrive with article feedback and view counts (M5-08)."
+    "period": "Period",
+    "periods": {
+      "7": "Last 7 days",
+      "30": "Last 30 days",
+      "90": "Last 90 days"
+    },
+    "language": "Language",
+    "languages": {
+      "all": "All languages",
+      "en": "English",
+      "ar": "Arabic"
+    },
+    "retention": "Search terms are kept for the search log period in Brand › Data retention. Staff visits are not counted.",
+    "failed": "Insights could not be loaded.",
+    "retry": "Try again",
+    "top": {
+      "heading": "Top searches",
+      "body": "What visitors typed most, and how often they opened a result.",
+      "search": "Search",
+      "searches": "Searches",
+      "opened": "Opened a result",
+      "empty": "No searches in this period."
+    },
+    "zero": {
+      "heading": "Searches with no results",
+      "body": "Questions the help center does not answer yet.",
+      "last": "Last",
+      "action": "Action",
+      "write": "Write article",
+      "writeLabel": "Write an article for “{{query}}”",
+      "empty": "Every search in this period found something."
+    },
+    "articles": {
+      "heading": "Articles",
+      "body": "Views and “Was this helpful?” answers.",
+      "sort": "Sort by",
+      "sorts": {
+        "views": "Most viewed",
+        "least_helpful": "Least helpful"
+      },
+      "article": "Article",
+      "views": "Views",
+      "helpful": "Helpful",
+      "comments": "Comments",
+      "commentCount_one": "{{count}} comment",
+      "commentCount_other": "{{count}} comments",
+      "ofVotes": "{{helpful}} of {{votes}}",
+      "noVotes": "No answers yet",
+      "empty": "No article was read or rated in this period."
+    }
   },
   "newArticle": {
     "label": "New article",

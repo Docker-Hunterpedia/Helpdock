@@ -88,7 +88,7 @@ that refused, and a client picks its words from that field:
 | `unauthenticated` | 401 | No `Authorization: Visitor` header, or a secret this brand never issued. |
 | `rate_limited` | 429 | A throttle refused the request (see [Throttles](#throttles)). |
 | `captcha_required` | 403 | The brand requires a CAPTCHA and `captchaToken` is missing or failed. |
-| `not_found` | 404 | The conversation or attachment does not exist *for this visitor*. |
+| `not_found` | 404 | The conversation, attachment or help center article does not exist *for this visitor*. |
 | `read_only` | 409 | The visitor may read this conversation but not write to it (another channel's ticket). |
 | `content_policy` | 400 | The brand's content policy refuses this upload or attachment. |
 | `unavailable` | 404 | The brand is not active, or the brand has switched the feature off (transcripts). |
@@ -215,7 +215,7 @@ everything the first paint needs:
 | `captcha` | the provider and site key, or `null` |
 | `signedIdentity` | whether the brand accepts a signed identity |
 | `availability` | as below |
-| `popularArticles` | the brand's popular public articles; empty until the help center has content (M5) |
+| `popularArticles` | up to five of the brand's public articles in `locale`, most viewed over 30 days first, then the newest (see [Help center](#help-center)) |
 | `helpCenterUrl` | the help center on the brand's primary verified domain, or `null` |
 | `showPoweredBy` | whether to draw "Powered by Helpdock" |
 
@@ -280,6 +280,11 @@ A start opens the conversation, with or without its first message:
   unverified (DOMAIN-RULES §4.1).
 - The api validates a retry's `clientId` before it verifies the CAPTCHA, so a
   retried start does not need a fresh token.
+- `articleId` (optional) names the help center article the visitor pressed
+  "Still need help?" on. When it is a published, public article of the brand,
+  the ticket's thread tells the agents which one ("Came from the help center
+  article …"); anything else is ignored without an error, so a start never
+  fails over it and never reveals whether an article exists.
 
 ### Sending, and the delivery contract
 
@@ -337,6 +342,54 @@ shows agents. It has no field that could carry an internal note.
   access, and goes through the outbox. It works only when the brand turned
   transcripts on (`unavailable` otherwise) and only for `chat` conversations
   (`read_only` otherwise). Each conversation allows three transcripts an hour.
+
+## Help center
+
+The widget's help center modes read the brand's help center (M5-10). Every
+route here needs the visitor's credential and answers **public** articles only:
+published, public, of a help center that is not internal-only. An internal or
+draft article is `not_found`, the same as one that does not exist.
+
+| Method and path | Query | Response |
+|---|---|---|
+| `GET /articles` | `widgetArticleSearchQuerySchema`: `q` (1–200), `locale`, `limit` (1–20, default 10), `purpose` (`search` or `suggest`) | `widgetArticleSearchSchema` |
+| `GET /articles/:articleId` | `widgetArticleQuerySchema`: `locale`, `searchId` (optional) | `widgetArticleSchema` |
+
+```json
+{
+  "articles": [
+    {
+      "id": "0192c3f0-…",
+      "title": "Refund timelines",
+      "excerpt": "We issue your refund as soon as the return reaches our warehouse …",
+      "section": "Refunds",
+      "url": "https://help.example.com/en/articles/refund-timelines"
+    }
+  ],
+  "searchId": "0192c3f1-…"
+}
+```
+
+- **Search** matches whole words in the language's own stemming (`english` or
+  `arabic`), the last word as a prefix, and article titles through typos. A
+  title match ranks above a body match. An article with no version in
+  `locale` is searched, and answered, in the brand's default language.
+- `excerpt` is plain text: the words around the match, or the article's
+  description in the config's list. Escape it before you put it in a page.
+- `url` is the article on the brand's help center domain, or `null` while the
+  brand has none. Offer "Open in help center" only when it is set.
+- `purpose: 'search'` is a visitor's search. The api writes it to the brand's
+  search log (the query, the language, how many articles it found; never who
+  asked) and answers its `searchId`. `purpose: 'suggest'` is for suggestions
+  while a chat message is typed: searched the same way, not logged, and
+  `searchId` is `null`.
+- **Opening an article** counts one view for this visitor per article per day.
+  Send the `searchId` of the search it was found by, and the Insights tab
+  counts that search as "opened a result".
+- The article's `bodyHtml` was sanitised when it was saved. It runs on the
+  customer's origin, so sanitise it again before you render it, as the bundled
+  widget does. `readingMinutes` counts 200 words a minute; `updatedAt` is when
+  the version was last published.
 
 ## Attachments
 
@@ -472,3 +525,4 @@ rule. A throttled request gets `rate_limited` (429). Back off and retry.
 | `WIDGET_SEND_TIMEOUT_MS` | 10,000 |
 | `WIDGET_SSE_MAX_AGE_MS` | 300,000 |
 | `WIDGET_TYPING_TTL_MS` | 6,000 |
+| `WIDGET_ARTICLE_SEARCH_MAX` | 20 |

@@ -16,6 +16,12 @@ import { CaptchaVerifier, DbCaptchaKeys, safeCaptchaTransport } from '../captcha
 import { EmailRepository } from '../email/email.repository.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { SettingsInstallSmtp } from '../email/transport.js';
+import {
+  HELP_CENTER_FEEDBACK,
+  HELP_CENTER_SEARCH,
+  type HelpCenterFeedback,
+  type HelpCenterSearch,
+} from '../help-center/ports.js';
 import type { Logger } from '../logging/logger.js';
 import { MediaRepository } from '../media/media.repository.js';
 import { MediaService } from '../media/media.service.js';
@@ -34,6 +40,8 @@ import { WidgetController } from './widget.controller.js';
 import { WidgetGateway } from './widget.gateway.js';
 import { WidgetRepository } from './widget.repository.js';
 import { WidgetActivityService } from './widget-activity.service.js';
+import { WidgetArticlesController } from './widget-articles.controller.js';
+import { WidgetArticlesService } from './widget-articles.service.js';
 import { WIDGET_DIST, WidgetBundleController } from './widget-bundle.controller.js';
 import { resolveWidgetDist } from './widget-bundle.js';
 import { WidgetConfigService } from './widget-config.service.js';
@@ -56,6 +64,8 @@ import { WidgetUploadsService } from './widget-uploads.service.js';
 export interface WidgetModuleOptions {
   /** `AppModule`'s own `RealtimeModule`, so presence and the staff publisher are the ones it runs. */
   readonly realtime: DynamicModule;
+  /** `AppModule`'s own `HelpCenterModule`, for its search and feedback ports (M5-10). */
+  readonly helpCenter: DynamicModule;
   readonly env: Env;
   readonly db: Db;
   readonly logger: Logger;
@@ -149,10 +159,11 @@ export class WidgetModule {
 
     return {
       module: WidgetModule,
-      imports: [options.realtime],
+      imports: [options.realtime, options.helpCenter],
       controllers: [
         WidgetSettingsController,
         WidgetController,
+        WidgetArticlesController,
         WidgetStreamController,
         WidgetBundleController,
       ],
@@ -183,15 +194,22 @@ export class WidgetModule {
         },
         {
           provide: WidgetConfigService,
-          inject: [WidgetGate, PresenceService],
-          useFactory: (gate: WidgetGate, presence: PresenceService) =>
+          inject: [WidgetGate, PresenceService, HELP_CENTER_FEEDBACK],
+          useFactory: (gate: WidgetGate, presence: PresenceService, feedback: HelpCenterFeedback) =>
             new WidgetConfigService({
               gate,
               businessHours: new BusinessHoursService(slaRepository, new SlaService(slaRepository)),
               presence,
               captcha: captchaKeys,
               assetOrigin: env.APP_URL,
+              popular: feedback,
             }),
+        },
+        {
+          provide: WidgetArticlesService,
+          inject: [WidgetGate, HELP_CENTER_SEARCH, HELP_CENTER_FEEDBACK],
+          useFactory: (gate: WidgetGate, search: HelpCenterSearch, feedback: HelpCenterFeedback) =>
+            new WidgetArticlesService({ gate, search, feedback }),
         },
         {
           provide: WidgetSessionService,

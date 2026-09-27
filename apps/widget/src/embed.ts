@@ -8,6 +8,7 @@ import type { SignedIdentity, WidgetTransport } from './transport/types.js';
  *   <script type="module" src="https://support.example.com/widget.js" data-brand="acme"></script>
  *   <script>window.Helpdock = window.Helpdock || function () { (Helpdock.q = Helpdock.q || []).push(arguments) };</script>
  *   <script>Helpdock('identify', { user_id, email, name, ts, signature });</script>
+ *   <script>Helpdock('open', { article: '<article id>' });</script>   // "Still need help?" (M5-08)
  *
  * The script defines `<helpdock-widget>` and adds one to the page when the tag
  * carries `data-brand` and the page has none. Commands queued before the
@@ -25,17 +26,34 @@ export interface EmbedOptions {
 
 const mounted = new Set<MountedWidget>();
 let pendingIdentity: SignedIdentity | null = null;
+let pendingArticle: string | null = null;
+
+/**
+ * M5-08: `Helpdock('open', { article: '<id>' })` — "Still need help?" on a help
+ * center article. Only an id-shaped string is taken; the api checks the rest.
+ */
+export const articleOf = (payload: unknown): string | null => {
+  const article = (payload as { article?: unknown } | null | undefined)?.article;
+  return typeof article === 'string' && /^[0-9a-f-]{36}$/i.test(article) ? article : null;
+};
 
 export function runCommand([name, payload]: readonly unknown[]): void {
+  const article = name === 'open' ? articleOf(payload) : null;
   for (const widget of mounted) {
     if (name === 'identify') {
       void widget.controller.identify(payload as SignedIdentity).catch(() => undefined);
     } else if (name === 'open' || name === 'close') {
+      if (article !== null) {
+        widget.controller.setArticleContext(article);
+      }
       widget.controller.setOpen(name === 'open');
     }
   }
   if (name === 'identify') {
     pendingIdentity = payload as SignedIdentity;
+  }
+  if (article !== null) {
+    pendingArticle = article;
   }
 }
 
@@ -58,6 +76,9 @@ export function defineWidgetElement(options: EmbedOptions): void {
         mounted.add(this.#widget);
         if (pendingIdentity) {
           void this.#widget.controller.identify(pendingIdentity).catch(() => undefined);
+        }
+        if (pendingArticle) {
+          this.#widget.controller.setArticleContext(pendingArticle);
         }
       }
 

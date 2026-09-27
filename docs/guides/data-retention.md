@@ -15,7 +15,7 @@ retention card. Only an Admin sees the page and only an Admin may change it
 | Closed tickets and their messages | **Forever** | Forever, or 1 to 3650 days after close | Hard-deletes the ticket, its messages, activity, tags and attachments, and queues the attachments' objects for deletion from the bucket |
 | Spam tickets | **30 days** | 1 to 3650 | The same hard delete, on its own clock |
 | AI call logs | **90 days** | 1 to 3650 | Stored only. `ai_calls` arrives with M7, which adds the purge |
-| Help center search log | **180 days** | 1 to 3650 | Stored only. The search log arrives with M5 |
+| Help center search log | **180 days** | 1 to 3650 | Hard-deletes the search log (M5-05) and, in the same window, the article view rows that dedupe view counts (M5-08). The count is the search log's |
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Stored only. Visitor sessions arrive with M4 |
 | Outbox rows and job receipts | 7 days | fixed | Hard delete, 7 days after publish or completion |
@@ -47,7 +47,7 @@ forever, or a table that does not exist yet.
 
 ```
 03:00 UTC  maintenance.retention.schedule   one job per brand, then job_receipts
-           maintenance.retention (brand)    closed, spam, audit log, outbox → audit row
+           maintenance.retention (brand)    closed, spam, search log and views, audit log, outbox → audit row
 ```
 
 The worker registers the schedule on every boot, so a Redis that lost it gets
@@ -101,10 +101,10 @@ Both answer `{ settings, preview, lastRun }`, as `retentionOverviewSchema` in
 
 ## Known gaps
 
-- AI call logs, the help center search log and visitor sessions are stored but
-  not purged: their tables do not exist yet. The milestone that creates each one
-  adds its cutoff to `apps/api/src/retention/retention-rules.ts` and its purge to
-  `retention.job.ts`.
+- AI call logs and visitor sessions are stored but not purged yet. The
+  milestone that purges each one adds its cutoff to
+  `apps/api/src/retention/retention-rules.ts` and its purge to
+  `retention.job.ts`, as M5-05 did for the help center search log.
 - Composer uploads that were never sent (`message_id` still null) are not swept.
   They are deleted with their ticket.
 - Brand deletion (the other half of the Danger zone) is its own deliverable.

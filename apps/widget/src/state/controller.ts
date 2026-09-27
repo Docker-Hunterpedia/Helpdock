@@ -75,6 +75,7 @@ export class WidgetController {
   #wasDisconnected = false;
   #typingTimer: ReturnType<typeof setTimeout> | null = null;
   #starting: Promise<ConversationSummary> | null = null;
+  #articleId: string | null = null;
 
   constructor(transport: WidgetTransport, locale: WidgetLocale) {
     this.#transport = transport;
@@ -182,8 +183,26 @@ export class WidgetController {
     }
   }
 
+  /**
+   * M5-08: the help center article "Still need help?" was pressed on
+   * (`Helpdock('open', { article })`). The next conversation the visitor
+   * starts carries it, so the agents see where they came from; then it is spent.
+   */
+  setArticleContext(articleId: string | null): void {
+    this.#articleId = articleId;
+  }
+
+  get articleId(): string | null {
+    return this.#articleId;
+  }
+
+  #withArticle(input: StartConversationInput): StartConversationInput {
+    return this.#articleId === null ? input : { ...input, article_id: this.#articleId };
+  }
+
   async startConversation(input: StartConversationInput): Promise<void> {
-    const conversation = await this.#transport.startConversation(input);
+    const conversation = await this.#transport.startConversation(this.#withArticle(input));
+    this.#articleId = null;
     this.#set({ visitorEmail: input.email ?? this.#state.visitorEmail });
     await this.#attach(conversation);
   }
@@ -195,8 +214,9 @@ export class WidgetController {
       return Promise.resolve(conversation);
     }
     this.#starting ??= this.#transport
-      .startConversation({})
+      .startConversation(this.#withArticle({}))
       .then(async (started) => {
+        this.#articleId = null;
         await this.#attach(started);
         return started;
       })

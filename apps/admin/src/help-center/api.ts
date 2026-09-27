@@ -5,6 +5,8 @@ import type {
   HcCategory,
   HcCategoryCreateRequest,
   HcCategoryUpdateRequest,
+  HcInsights,
+  HcInsightsQuery,
   HcLocale,
   HcMedia,
   HcMediaPresignRequest,
@@ -72,6 +74,8 @@ export interface HelpCenterApi {
   /** PUTs the bytes to the presigned URL. The real one talks to the bucket, not the api. */
   uploadImage(upload: HcMediaPresignResponse, file: Blob): Promise<void>;
   confirmImage(brandId: string, mediaId: string): Promise<HcMedia>;
+  /** M5-08: Help center › Insights. */
+  insights(brandId: string, query: HcInsightsQuery): Promise<HcInsights>;
   image(brandId: string, mediaId: string): Promise<HcMedia>;
 }
 
@@ -81,6 +85,8 @@ export const helpCenterKeys = {
   structure: (brandId: string) => ['help-center', brandId, 'structure'] as const,
   article: (brandId: string, id: string) => ['help-center', brandId, 'article', id] as const,
   settings: (brandId: string) => ['help-center', brandId, 'settings'] as const,
+  insights: (brandId: string, query: HcInsightsQuery) =>
+    ['help-center', brandId, 'insights', query.days, query.locale ?? 'all', query.sort] as const,
 };
 
 /** A change the api refused by a rule, with the reason the screen turns into a sentence. */

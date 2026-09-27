@@ -28,10 +28,14 @@ import {
   departments,
   emailDeliveries,
   emailOutboundSettings,
+  hcArticleFeedback,
   hcArticles,
   hcArticleVersions,
+  hcArticleViews,
   hcCategories,
   hcMedia,
+  hcSearchDocuments,
+  hcSearchLog,
   hcSections,
   hcSettings,
   holidays,
@@ -119,6 +123,7 @@ const ruleId = perBrand();
 const hcCategoryId = perBrand();
 const hcSectionId = perBrand();
 const hcArticleId = perBrand();
+const hcVersionId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -672,6 +677,7 @@ const fixtures = [
     name: 'hc_article_versions',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(hcArticleVersions).values({
+        id: hcVersionId[brandId] ?? '',
         brandId,
         articleId: hcArticleId[brandId] ?? '',
         locale: 'en',
@@ -692,6 +698,49 @@ const fixtures = [
         originalName: 'screenshot.png',
         mime: 'image/png',
         size: 1024,
+      }),
+  },
+  // M5-05, M5-08. Search and feedback: brand-scoped like the content.
+  {
+    name: 'hc_search_documents',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcSearchDocuments).values({
+        versionId: hcVersionId[brandId] ?? '',
+        brandId,
+        articleId: hcArticleId[brandId] ?? '',
+        locale: 'en',
+        title: 'Refund timelines',
+        sourceChangedAt: new Date(),
+      }),
+  },
+  {
+    name: 'hc_search_log',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx
+        .insert(hcSearchLog)
+        .values({ brandId, query: 'refund', locale: 'en', source: 'widget', hits: 1 }),
+  },
+  {
+    name: 'hc_article_views',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcArticleViews).values({
+        brandId,
+        articleId: hcArticleId[brandId] ?? '',
+        visitorHash: `visitor-${nextNumber()}`,
+        day: '2026-09-27',
+        locale: 'en',
+      }),
+  },
+  {
+    name: 'hc_article_feedback',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcArticleFeedback).values({
+        brandId,
+        articleId: hcArticleId[brandId] ?? '',
+        versionId: hcVersionId[brandId] ?? '',
+        locale: 'en',
+        visitorHash: `visitor-${nextNumber()}`,
+        helpful: true,
       }),
   },
 ] as const;

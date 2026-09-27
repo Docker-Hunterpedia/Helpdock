@@ -14,6 +14,9 @@ import {
   helpCenterPublishDueJob,
   helpCenterPublishDueJobId,
   helpCenterPublishDueSweepJob,
+  helpCenterSearchReindexJob,
+  helpCenterSearchReindexJobId,
+  helpCenterSearchReindexSweepJob,
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   maintenanceRetentionJob,
@@ -447,6 +450,24 @@ describe('the help center jobs (M5-01, M5-02)', () => {
     );
     expect(() => parseJobPayload(helpCenterMediaProcessJob, { brandId })).toThrow(
       PayloadValidationError,
+    );
+  });
+});
+
+describe('the help center search reindex (M5-05)', () => {
+  it('sweeps hourly and keys one brand’s run by its tick, with a job id BullMQ accepts', () => {
+    const payload = parseJobPayload(helpCenterSearchReindexJob, {
+      brandId,
+      tick: '2026-10-01T06:00:00.000Z',
+    });
+
+    expect(helpCenterSearchReindexSweepJob.schedule).toEqual({ everyMs: 3_600_000 });
+    expect(helpCenterSearchReindexJob.queue).toBe('knowledge');
+    expect(helpCenterSearchReindexJobId(payload)).toBe(
+      `help_center.search_reindex.${brandId}.${Date.parse('2026-10-01T06:00:00.000Z')}`,
+    );
+    expect(idempotencyKeyFor(helpCenterSearchReindexJob, payload, 'job-1')).toBe(
+      `help_center.search_reindex:${brandId}:2026-10-01T06:00:00.000Z`,
     );
   });
 });

@@ -68,6 +68,7 @@ export function createTransport(
     requestTranscript: (id, email) => remote().then((t) => t.requestTranscript(id, email)),
     submitContactForm: (input) => remote().then((t) => t.submitContactForm(input)),
     searchArticles: (query, locale) => remote().then((t) => t.searchArticles(query, locale)),
+    suggestArticles: (query, locale) => remote().then((t) => t.suggestArticles(query, locale)),
     getArticle: (id, locale) => remote().then((t) => t.getArticle(id, locale)),
   };
 }

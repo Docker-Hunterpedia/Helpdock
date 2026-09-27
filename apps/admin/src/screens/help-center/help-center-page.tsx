@@ -1,5 +1,5 @@
 import type { StaffRole } from '@helpdock/schemas';
-import { Box, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Tab, Tabs } from '@mui/material';
 import { BarChart3, FileText, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
@@ -9,14 +9,15 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useSession } from '../../auth/session.tsx';
 import { PageHeader } from '../../shell/page-header.tsx';
 import { ArticlesTab } from './articles-tab.tsx';
+import { InsightsTab } from './insights-tab.tsx';
 import { NewArticleButton } from './new-article-button.tsx';
 import { SettingsTab } from './settings-tab.tsx';
 
 /**
  * `Admin/HelpCenter` (M5-01, M5-09): the page header, the tab row, and the
  * Articles tab. Settings holds "Who can read it" (M5-09); the theme, home
- * page and links below it arrive with M5-06, and Insights with M5-08, which
- * is what that tab says until then.
+ * page and links below it arrive with M5-06. Insights is M5-08's
+ * (`insights-tab.tsx`).
  *
  * An Agent sees Articles alone (the artboard's footnote); a Viewer sees every
  * tab read-only; changing anything is an Admin's or a Team Leader's.
@@ -84,23 +85,7 @@ export function HelpCenterPage(): ReactNode {
       ) : tab.key === 'settings' ? (
         <SettingsTab canManage={canManage} />
       ) : (
-        <Box
-          component="section"
-          aria-labelledby="hc-insights"
-          sx={{
-            borderRadius: '10px',
-            border: `1px solid ${tokens['border.default']}`,
-            backgroundColor: tokens['bg.surface'],
-            padding: 6,
-          }}
-        >
-          <Typography variant="h3" component="h2" id="hc-insights">
-            {t('helpCenter:insights.heading')}
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {t('helpCenter:insights.body')}
-          </Typography>
-        </Box>
+        <InsightsTab canManage={canManage} />
       )}
     </>
   );

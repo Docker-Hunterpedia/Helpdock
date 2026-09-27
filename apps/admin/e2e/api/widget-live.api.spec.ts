@@ -22,6 +22,10 @@ import {
  * the api is submitted twice, and when the network comes back the widget
  * holds exactly one copy — as does the ticket — and has caught up on the
  * reply the agent wrote meanwhile, without the visitor pressing anything.
+ *
+ * Last, M5-10: an article published in the admin is listed in the widget's
+ * help center mode, found by its search once the worker has indexed it, and
+ * read inside the window.
  */
 
 test.skip(
@@ -191,4 +195,77 @@ test.describe('the widget against the real api', () => {
     await expect(thread.getByText(MEANWHILE)).toBeVisible();
     await expect(thread.getByText(SECOND)).toHaveCount(1);
   });
+
+  test('an article the agent publishes is listed, found and read in the widget (M5-10)', async () => {
+    // Staff: a category, a section and one published article.
+    await admin.getByRole('link', { name: new RegExp(t('admin:nav.helpCenter')) }).click();
+    await admin.getByRole('button', { name: t('helpCenter:tree.addCategory') }).click();
+    let dialog = admin.getByRole('dialog', { name: t('helpCenter:tree.dialog.category') });
+    await dialog.getByLabel(t('helpCenter:tree.dialog.english')).fill(CATEGORY);
+    await dialog.getByRole('button', { name: t('helpCenter:tree.dialog.create') }).click();
+    await admin
+      .getByRole('button', { name: t('helpCenter:tree.expand', { name: CATEGORY }) })
+      .click();
+    await admin.getByRole('button', { name: t('helpCenter:tree.addSection') }).click();
+    dialog = admin.getByRole('dialog', { name: t('helpCenter:tree.dialog.section') });
+    await dialog.getByLabel(t('helpCenter:tree.dialog.english')).fill(SECTION);
+    await dialog.getByRole('button', { name: t('helpCenter:tree.dialog.create') }).click();
+    await admin
+      .getByRole('button', { name: t('helpCenter:newArticle.label') })
+      .first()
+      .click();
+    const body = admin.getByRole('textbox', { name: t('helpCenter:editor.body') });
+    await body.waitFor();
+    await admin.getByLabel(t('helpCenter:editor.title'), { exact: true }).fill(ARTICLE_TITLE);
+    await body.click();
+    await admin.keyboard.type(ARTICLE_BODY);
+    await expect(
+      admin
+        .getByRole('status')
+        .filter({ hasText: t('helpCenter:editor.saved', { time: '' }).trim() }),
+    ).toBeVisible();
+    await admin.getByRole('button', { name: t('helpCenter:editor.publish'), exact: true }).click();
+    await expect(
+      admin.getByRole('status').filter({ hasText: t('helpCenter:toast.status.published') }),
+    ).toBeVisible();
+
+    // The widget in help center mode.
+    await admin.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
+    await admin.getByRole('tab', { name: t('channels:tabs.widget') }).click();
+    const appearance = admin.getByRole('region', { name: t('channels:widget.appearance.heading') });
+    await appearance
+      .getByRole('radio', {
+        name: new RegExp(t('channels:widget.appearance.modes.helpcenter.label')),
+      })
+      .check();
+    await appearance.getByRole('button', { name: t('channels:widget.save') }).click();
+    await expect(
+      admin.getByRole('status').filter({ hasText: t('channels:widget.appearance.saved') }),
+    ).toBeVisible();
+
+    // The visitor: listed from the config, then found by search once the
+    // worker's subscriber has indexed it, then read inside the window.
+    await visitor.reload();
+    await visitor.getByRole('button', { name: t('widget:launcher.open') }).click();
+    const window = visitor.getByRole('region', { name: t('widget:window.label') });
+    await expect(
+      window.getByRole('list', { name: t('widget:articles.popular') }).getByText(ARTICLE_TITLE),
+    ).toBeVisible();
+
+    const search = window.getByRole('searchbox', { name: t('widget:articles.searchLabel') });
+    const results = window.getByRole('list', { name: t('widget:articles.resultsLabel') });
+    await expect(async () => {
+      await search.fill('');
+      await search.fill('courier');
+      await expect(results.getByText(ARTICLE_TITLE)).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+
+    await results.getByRole('link', { name: new RegExp(ARTICLE_TITLE) }).click();
+    await expect(window.getByText(ARTICLE_BODY)).toBeVisible();
+  });
 });
+
+const CATEGORY = 'Orders';
+const SECTION = 'Tracking';
+const ARTICLE_TITLE = 'Where is my parcel?';
+const ARTICLE_BODY = 'Every parcel is handed to the courier within two working days.';

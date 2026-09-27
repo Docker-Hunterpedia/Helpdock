@@ -60,13 +60,15 @@ export const rowValuesFrom = (settings: RetentionSettings): RetentionWindowColum
  * for "never", which is §11's default and means the category is skipped
  * entirely rather than purged with an infinitely old cutoff.
  *
- * AI calls, the search log and visitor sessions are absent: their tables do not
- * exist yet (M7, M5, M4). Their windows are stored so the form is whole, and
- * the milestone that creates each table adds its cutoff here.
+ * AI calls and visitor sessions are absent: their purges arrive with M7 and
+ * M4. Their windows are stored so the form is whole, and the milestone that
+ * purges each adds its cutoff here. The search log's (M5-05) covers the help
+ * center's article views too (M5-08), which are kept exactly as long.
  */
 export interface RetentionCutoffs {
   readonly closedTickets: Date | null;
   readonly spamTickets: Date;
+  readonly searchLog: Date;
   readonly auditLog: Date;
   readonly outbox: Date;
 }
@@ -77,6 +79,7 @@ export const retentionCutoffs = (settings: RetentionSettings, now: Date): Retent
       ? null
       : retentionCutoff(settings.closedTickets.days, now),
   spamTickets: retentionCutoff(settings.spamTicketDays, now),
+  searchLog: retentionCutoff(settings.searchLogDays, now),
   auditLog: retentionCutoff(settings.auditLogDays, now),
   // Fixed by DOMAIN-RULES §6, not by the brand.
   outbox: retentionCutoff(RETENTION_DAYS, now),

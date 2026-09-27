@@ -48,13 +48,13 @@ export class WebFormPageController {
   @Get()
   @Public()
   async show(
-    @Query(new ZodValidationPipe(webFormPageQuerySchema)) { lang }: WebFormPageQuery,
+    @Query(new ZodValidationPipe(webFormPageQuerySchema)) { lang, article }: WebFormPageQuery,
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
     await send(
       reply,
-      await this.#page.handle({ host: request.headers.host, lang, ip: request.ip }),
+      await this.#page.handle({ host: request.headers.host, lang, article, ip: request.ip }),
     );
   }
 
@@ -80,13 +80,19 @@ export class WebFormPageController {
   @Public()
   async showForBrand(
     @Param(new ZodValidationPipe(webFormPageParamSchema)) { brandId }: WebFormPageParam,
-    @Query(new ZodValidationPipe(webFormPageQuerySchema)) { lang }: WebFormPageQuery,
+    @Query(new ZodValidationPipe(webFormPageQuerySchema)) { lang, article }: WebFormPageQuery,
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
     await send(
       reply,
-      await this.#page.handle({ host: request.headers.host, brandId, lang, ip: request.ip }),
+      await this.#page.handle({
+        host: request.headers.host,
+        brandId,
+        lang,
+        article,
+        ip: request.ip,
+      }),
     );
   }
 

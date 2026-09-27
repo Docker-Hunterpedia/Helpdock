@@ -48,6 +48,8 @@ export type PageState =
       readonly submissionId: string;
       readonly attachments: PageAttachments | null;
       readonly captcha: CaptchaRenderConfig | null;
+      /** M5-08: the help center article "Still need help?" came from, carried to the post. */
+      readonly articleId?: string | null;
     }
   | { readonly kind: 'success'; readonly reference: string; readonly thankYou: string }
   | { readonly kind: 'closed' | 'unavailable' | 'not_found' };
@@ -70,6 +72,8 @@ export const FONTS_STYLESHEET = '/_hd/fonts/fonts.css';
 export const HONEYPOT_FIELD = 'hd_website';
 export const SUBMISSION_FIELD = 'hd_submission';
 export const LANG_FIELD = 'lang';
+/** M5-08: the article id, from `?article=` on the page to the hidden field of the post. */
+export const ARTICLE_FIELD = 'hd_article';
 
 /** A DOM id for a field reference: `custom:order_number` → `wf-custom-order_number`. */
 export const fieldId = (field: string): string => `wf-${field.replace(/[^a-z0-9_-]/gi, '-')}`;
@@ -242,7 +246,7 @@ const formBody = (
 ${banner}
 <input type="hidden" name="${LANG_FIELD}" value="${view.locale}">
 <input type="hidden" name="${SUBMISSION_FIELD}" value="${escapeHtml(state.submissionId)}">
-<div class="hd-hp"><label for="wf-hp">Website</label><input id="wf-hp" name="${HONEYPOT_FIELD}" type="text" tabindex="-1" autocomplete="off"></div>
+${state.articleId ? `<input type="hidden" name="${ARTICLE_FIELD}" value="${escapeHtml(state.articleId)}">\n` : ''}<div class="hd-hp"><label for="wf-hp">Website</label><input id="wf-hp" name="${HONEYPOT_FIELD}" type="text" tabindex="-1" autocomplete="off"></div>
 <div class="hd-grid">
 ${controls}
 ${attachments}

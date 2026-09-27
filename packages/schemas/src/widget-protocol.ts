@@ -170,15 +170,72 @@ export const widgetThemeSchema = z.object({
 });
 export type WidgetTheme = z.infer<typeof widgetThemeSchema>;
 
-/** A public help center article the widget lists (M4-05; M5-10 swaps in search). */
+/**
+ * A public help center article the widget lists (M5-10): a popular one in the
+ * config, a hit of `GET …/articles?q=`. Public audience only (DOMAIN-RULES §5).
+ */
 export const widgetArticleSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
+  /** Plain text: the article's description, or the words around the match. */
   excerpt: z.string(),
   section: z.string().nullable(),
-  url: z.string(),
+  /** The article on the brand's help center domain, or null while it has none. */
+  url: z.string().nullable(),
 });
 export type WidgetArticleSummary = z.infer<typeof widgetArticleSummarySchema>;
+
+/** The most hits one widget search answers. */
+export const WIDGET_ARTICLE_SEARCH_MAX = 20;
+
+/**
+ * `GET …/articles?q=&locale=`. `purpose: 'suggest'` is the chat composer's
+ * "Articles that might help" strip: searched like any other query but not
+ * written to the search log, because it is a message being typed, not a
+ * search.
+ */
+export const widgetArticleSearchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(200),
+  locale: widgetLocaleSchema,
+  limit: z.coerce.number().int().min(1).max(WIDGET_ARTICLE_SEARCH_MAX).default(10),
+  purpose: z.enum(['search', 'suggest']).default('search'),
+});
+export type WidgetArticleSearchQuery = z.infer<typeof widgetArticleSearchQuerySchema>;
+
+export const widgetArticleSearchSchema = z.object({
+  articles: z.array(widgetArticleSummarySchema),
+  /**
+   * The search log row, which the widget sends back when the visitor opens a
+   * hit, for the Insights tab's "Opened a result". Null for a suggestion.
+   */
+  searchId: z.uuid().nullable(),
+});
+export type WidgetArticleSearch = z.infer<typeof widgetArticleSearchSchema>;
+
+export const widgetArticleParamSchema = z.object({
+  brandId: z.uuid(),
+  articleId: z.uuid(),
+});
+export type WidgetArticleParam = z.infer<typeof widgetArticleParamSchema>;
+
+/** `GET …/articles/:articleId?locale=&searchId=`. */
+export const widgetArticleQuerySchema = z.object({
+  locale: widgetLocaleSchema,
+  /** The search the visitor opened this from, if any. */
+  searchId: z.uuid().optional(),
+});
+export type WidgetArticleQuery = z.infer<typeof widgetArticleQuerySchema>;
+
+/** One published public article, read inside the widget. */
+export const widgetArticleSchema = widgetArticleSummarySchema.extend({
+  /** The language it is in: the one asked for, or the brand's default on a fallback. */
+  locale: widgetLocaleSchema,
+  updatedAt: z.iso.datetime(),
+  readingMinutes: z.int().positive(),
+  /** Sanitised when saved (ADR 0007); the widget sanitises it again before use. */
+  bodyHtml: z.string(),
+});
+export type WidgetArticle = z.infer<typeof widgetArticleSchema>;
 
 /**
  * `GET /api/widget/:brandId/config?locale=`. Everything the widget needs for
@@ -213,7 +270,7 @@ export const widgetConfigSchema = z.object({
   /** Whether the brand accepts a signed identity from its site (§4.2). */
   signedIdentity: z.boolean(),
   availability: widgetAvailabilitySchema,
-  /** The brand's popular public articles; empty until the help center has content (M5). */
+  /** The brand's most viewed public articles over 30 days, in `locale` (M5-10). */
   popularArticles: z.array(widgetArticleSummarySchema),
   /** The brand's help center on its primary verified domain, or null. */
   helpCenterUrl: z.string().nullable(),
@@ -407,6 +464,12 @@ export const widgetStartRequestSchema = z.object({
   prechat: widgetPrechatAnswersSchema.optional(),
   /** The CAPTCHA token, when the config asks for one (ADR 0003). */
   captchaToken: z.string().max(4096).optional(),
+  /**
+   * M5-08: the help center article the visitor came from ("Still need
+   * help?"). Recorded on the ticket for the agents when it is a published
+   * public article of the brand, and ignored otherwise.
+   */
+  articleId: z.uuid().optional(),
 });
 export type WidgetStartRequest = z.input<typeof widgetStartRequestSchema>;
 

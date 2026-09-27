@@ -522,26 +522,24 @@ const generic = async (payload: InboundPayload): Promise<InboundEnvelope> => {
   return { email, recipients: recipientsOf(email) };
 };
 
-const PARSERS: ReadonlyMap<
-  InboundParseProvider,
-  (payload: InboundPayload) => Promise<InboundEnvelope>
-> = new Map([
-  ['postmark', postmark],
-  ['sendgrid', sendgrid],
-  ['mailgun', mailgun],
-  ['resend', resend],
-  ['generic', generic],
-]);
-
 export const parseInboundPayload = (
   provider: InboundParseProvider,
   payload: InboundPayload,
 ): Promise<InboundEnvelope> => {
-  // A Map, not an object index: the provider arrives in a URL, and an object
-  // lookup would also reach `constructor` and the rest of its prototype.
-  const parse = PARSERS.get(provider);
-  if (parse === undefined) {
-    return Promise.reject(new Error(`Unknown inbound-parse provider: ${provider}`));
+  // A switch, not a lookup table: the provider arrives in a URL, and a lookup
+  // keyed by it would be a dynamic call CodeQL cannot prove is one of ours.
+  switch (provider) {
+    case 'postmark':
+      return postmark(payload);
+    case 'sendgrid':
+      return sendgrid(payload);
+    case 'mailgun':
+      return mailgun(payload);
+    case 'resend':
+      return resend(payload);
+    case 'generic':
+      return generic(payload);
+    default:
+      return Promise.reject(new Error(`Unknown inbound-parse provider: ${String(provider)}`));
   }
-  return parse(payload);
 };

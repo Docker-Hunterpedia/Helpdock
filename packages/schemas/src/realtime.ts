@@ -111,6 +111,9 @@ export const REALTIME_EVENTS = {
   ticketMessage: 'ticket:message',
   attachmentChanged: 'attachment:changed',
   notificationCreated: 'notification:created',
+  /** M4-04. A widget visitor is typing in, or has read up to a `seq` of, a conversation. */
+  visitorTyping: 'ticket:visitor_typing',
+  visitorRead: 'ticket:visitor_read',
 } as const;
 
 export const roomJoinSchema = z.object({
@@ -256,6 +259,26 @@ export const notificationCreatedSchema = z.object({
 });
 export type NotificationCreated = z.infer<typeof notificationCreatedSchema>;
 
+/**
+ * M4-04. The visitor on a widget conversation is typing, or stopped. Ephemeral
+ * (§7): never stored, never replayed, and a client drops it on its own after
+ * {@link TICKET_VIEWING_TTL_MS} without a repeat.
+ */
+export const visitorTypingSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  typing: z.boolean(),
+});
+export type VisitorTyping = z.infer<typeof visitorTypingSchema>;
+
+/** M4-04. The visitor's read receipt: they have seen the thread up to `seq` (§7). */
+export const visitorReadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  seq: z.int().positive(),
+});
+export type VisitorRead = z.infer<typeof visitorReadSchema>;
+
 /** Every server → client event and the payload it carries. M4 extends it again. */
 export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.presenceChanged]: presenceChangedSchema,
@@ -264,6 +287,8 @@ export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.attachmentChanged]: attachmentChangedSchema,
   [REALTIME_EVENTS.ticketViewing]: ticketViewingSchema,
   [REALTIME_EVENTS.notificationCreated]: notificationCreatedSchema,
+  [REALTIME_EVENTS.visitorTyping]: visitorTypingSchema,
+  [REALTIME_EVENTS.visitorRead]: visitorReadSchema,
 } as const;
 
 export type ServerEvent = keyof typeof REALTIME_EVENT_PAYLOADS;

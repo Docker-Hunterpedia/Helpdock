@@ -1,5 +1,5 @@
 import { outboundMessageId } from '@helpdock/channels';
-import type { DbTransaction, EmailDelivery } from '@helpdock/db';
+import { type DbTransaction, type EmailDelivery, uuidv7 } from '@helpdock/db';
 import type { EmailSenderKey } from '@helpdock/schemas';
 import type { EmailRepository } from './email.repository.js';
 import { enqueueEmailSend } from './email-events.js';
@@ -105,6 +105,48 @@ export class OutboundEmailService {
         id: input.ticketId,
         fromAddress: sender.from.address,
       }),
+    });
+  }
+
+  /**
+   * M4-08. A widget conversation, to the address the visitor typed and to
+   * nobody else (DOMAIN-RULES §4.1): no CCs, and the brand's sender for the
+   * conversation's department. Keyed by its own delivery row, so asking twice
+   * sends twice and a redelivered job still sends once.
+   */
+  async queueTranscript(
+    tx: DbTransaction,
+    input: {
+      readonly brandId: string;
+      readonly ticketId: string;
+      readonly to: string;
+      readonly locale: 'en' | 'ar';
+    },
+  ): Promise<EmailDelivery | undefined> {
+    const addressing = await this.#repository.replyAddressing(tx, input.ticketId);
+    if (addressing === undefined) {
+      return undefined;
+    }
+    const sender = await this.#sender(tx, input.brandId, addressing.departmentId, undefined);
+    if (sender === undefined) {
+      return undefined;
+    }
+
+    const id = uuidv7();
+    return this.#insertAndEnqueue(tx, input.brandId, {
+      id,
+      ticketId: input.ticketId,
+      departmentId: addressing.departmentId,
+      ticketMessageId: null,
+      kind: 'transcript',
+      fromName: sender.from.name,
+      fromAddress: sender.from.address,
+      replyTo: sender.replyTo,
+      toName: null,
+      toAddress: input.to,
+      ccAddresses: [],
+      locale: input.locale,
+      messageId: outboundMessageId({ kind: 'transcript', id, fromAddress: sender.from.address }),
     });
   }
 

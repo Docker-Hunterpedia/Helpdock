@@ -537,6 +537,8 @@ export class TicketLifecycleService {
       parentId: closed.id,
       ...(closed.contactId === null ? {} : { contactId: closed.contactId }),
       ...(closed.teamId === null ? {} : { teamId: closed.teamId }),
+      // M4-02: a widget conversation's continuation is still the visitor's.
+      ...(closed.visitorId === null ? {} : { visitorId: closed.visitorId }),
     });
 
     // M3-02: the continuation is a new ticket, so it gets fresh clocks.

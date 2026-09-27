@@ -282,6 +282,8 @@ export const emailDeliveryKindEnum = pgEnum('email_delivery_kind', [
   'reply',
   'acknowledgment',
   'out_of_hours',
+  // M4-08: a widget conversation sent to the address the visitor typed.
+  'transcript',
 ]);
 
 /**

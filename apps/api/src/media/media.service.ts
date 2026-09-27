@@ -79,8 +79,9 @@ export class MediaService {
     ticketId: string,
     principal: Principal,
     input: AttachmentPresignRequest,
+    // M4-07: the widget passes the brand transaction it opened for a visitor.
+    tx: DbTransaction = getTx(),
   ): Promise<AttachmentPresignResponse> {
-    const tx = getTx();
     const policy = await this.#policy(tx, brandId);
 
     this.#refuseOutsidePolicy(policy, input);
@@ -145,8 +146,12 @@ export class MediaService {
    * renders a rejection from the worker with, rather than from a status code it
    * would have to map separately.
    */
-  async confirm(brandId: string, ticketId: string, attachmentId: string): Promise<Attachment> {
-    const tx = getTx();
+  async confirm(
+    brandId: string,
+    ticketId: string,
+    attachmentId: string,
+    tx: DbTransaction = getTx(),
+  ): Promise<Attachment> {
     const row = await this.#require(tx, ticketId, attachmentId);
 
     if (row.status !== 'pending') {
@@ -197,8 +202,8 @@ export class MediaService {
     ticketId: string,
     attachmentId: string,
     query: AttachmentDownloadQuery,
+    tx: DbTransaction = getTx(),
   ): Promise<AttachmentDownload> {
-    const tx = getTx();
     const row = await this.#require(tx, ticketId, attachmentId);
 
     if (row.status !== 'ready') {

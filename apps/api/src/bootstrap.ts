@@ -34,6 +34,7 @@ import { METRICS } from './observability/tokens.js';
 import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
 import { resolveAdminDist } from './static/admin-assets.js';
+import { registerWidgetCors } from './widget/widget-cors.js';
 import { startWorker } from './worker/start-worker.js';
 
 /**
@@ -178,6 +179,8 @@ export interface CreateApiAppOptions {
   readonly objectStorage?: AppModuleOptions['objectStorage'];
   /** M2's IMAP connection and image fetcher, for suites. */
   readonly channels?: AppModuleOptions['channels'];
+  /** M4's siteverify call and SSE timings, for suites. */
+  readonly widget?: AppModuleOptions['widget'];
 }
 
 export const createApiApp = async ({
@@ -186,6 +189,7 @@ export const createApiApp = async ({
   brandResolver,
   objectStorage,
   channels,
+  widget,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -213,6 +217,7 @@ export const createApiApp = async ({
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(channels === undefined ? {} : { channels }),
+      ...(widget === undefined ? {} : { widget }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
@@ -232,6 +237,8 @@ export const createApiApp = async ({
   // is the same on every replica without a second thing to configure.
   await app.register(cookie);
   await app.register(helmet, securityHeaderOptions({ appUrl: env.APP_URL }));
+  // M4-03. After helmet, so the widget routes' cross-origin headers win.
+  registerWidgetCors(app.getHttpAdapter().getInstance());
 
   // Before `init()`, which is when Nest binds gateways to whatever adapter is
   // installed. After it, the gateway would have been bound to Nest's default

@@ -4,7 +4,8 @@
   "tabList": "Channel sections",
   "tabs": {
     "mailboxes": "Mailboxes",
-    "outgoing": "Outgoing email"
+    "outgoing": "Outgoing email",
+    "widget": "Widget"
   },
   "mailboxes": {
     "heading": "Mailboxes",
@@ -334,5 +335,207 @@
     "retried": "Sent back to the queue.",
     "retriedAll": "Every failed send went back to the queue.",
     "discarded": "Discarded. The reply stays on the ticket, marked Not delivered."
+  },
+  "widget": {
+    "loadFailed": "The widget settings could not be loaded. Reload the page to try again.",
+    "save": "Save changes",
+    "embed": {
+      "heading": "Embed code",
+      "caption": "Paste it before </body> on each page that should show the widget. The page's origin must be in Allowed origins below.",
+      "label": "Embed code",
+      "copy": "Copy code",
+      "copied": "Embed code copied",
+      "hint": "The widget follows the page's lang; add locale=\"ar\" to force Arabic.",
+      "protocol": "Native apps use the same protocol:",
+      "protocolLink": "widget protocol guide"
+    },
+    "appearance": {
+      "heading": "Appearance",
+      "caption": "Mode and look. The preview updates as you change them; visitors see them once saved.",
+      "mode": "Mode",
+      "modes": {
+        "chat": {
+          "label": "Chat",
+          "hint": "Visitors write to your team. With nobody online it switches to the contact form."
+        },
+        "chat_articles": {
+          "label": "Chat and suggested articles",
+          "hint": "Suggests articles while the visitor types, before they send. Until help center search arrives it offers the most-read articles."
+        },
+        "helpcenter": {
+          "label": "Help center",
+          "hint": "Search and browse articles inside the widget. A Contact us link opens the form."
+        },
+        "form": {
+          "label": "Contact form",
+          "hint": "No live chat. Visitors leave a message that becomes a ticket."
+        }
+      },
+      "theme": "Theme",
+      "accent": "Accent",
+      "pickAccent": "Pick the accent colour",
+      "contrastPass": "White text on it: {{ratio}} : 1, passes. Below 3 : 1 is refused.",
+      "contrastFail": "White text on it: {{ratio}} : 1. Below 3 : 1 is refused; choose a darker colour.",
+      "invalidColor": "Enter a colour like #0F766E.",
+      "scheme": "Light or dark",
+      "schemes": {
+        "light": "Light",
+        "dark": "Dark",
+        "auto": "Auto"
+      },
+      "schemeHint": "Auto follows the visitor's system setting.",
+      "position": "Launcher position",
+      "positions": {
+        "end": "Bottom right",
+        "start": "Bottom left"
+      },
+      "positionHint": "Mirrored for Arabic visitors.",
+      "launcher": "Launcher shows",
+      "launchers": {
+        "icon": "Icon",
+        "icon_text": "Icon and text",
+        "text": "Text"
+      },
+      "launcherHint": "With text, it reads “Chat with us” in the visitor's language.",
+      "greetingEn": "Greeting · English",
+      "greetingAr": "Greeting · العربية",
+      "greetingHint": "The greeting is the first message a visitor sees. An empty Arabic greeting falls back to the English one.",
+      "saved": "Appearance saved"
+    },
+    "preview": {
+      "heading": "Live preview",
+      "language": "Preview language",
+      "theme": "Preview theme",
+      "light": "Light",
+      "dark": "Dark",
+      "caption": "Unsaved changes included. Shown with the pre-chat form on and an agent online.",
+      "team": "{{brand}} support",
+      "replies": "Usually replies in a few minutes",
+      "beforeStart": "Before we start",
+      "name": "Name",
+      "email": "Email",
+      "optional": "(optional)",
+      "start": "Start chat",
+      "powered": "Powered by Helpdock",
+      "launcherText": "Chat with us",
+      "region": "Widget preview"
+    },
+    "conversation": {
+      "heading": "Conversation",
+      "caption": "What visitors see before, during and after a chat.",
+      "prechat": "Ask for details before the first message",
+      "prechatHint": "An email typed here is not verified. Agents see an Unverified badge, and it never opens the visitor's other conversations.",
+      "fields": "Pre-chat fields",
+      "order": "Order",
+      "field": "Field",
+      "type": "Type",
+      "required": "Required",
+      "remove": "Remove",
+      "builtIn": "Built in",
+      "customField": "Ticket custom field",
+      "types": {
+        "text": "Text",
+        "email": "Email",
+        "number": "Number",
+        "date": "Date",
+        "select": "Select",
+        "multi_select": "Multi-select",
+        "checkbox": "Checkbox"
+      },
+      "reorder": "Reorder {{field}}",
+      "requiredField": "{{field}} is required",
+      "removeField": "Remove {{field}}",
+      "addLabel": "Add a custom field",
+      "addPlaceholder": "Add a ticket custom field…",
+      "add": "Add",
+      "fieldsHint": "Fields come from Ticketing › Custom fields. Answers are saved on the ticket.",
+      "fieldsLink": "Ticketing › Custom fields",
+      "agent": "Show the agent's name and photo",
+      "agentHint": "When an agent joins, visitors see their first name and avatar.",
+      "unavailable": "When nobody is available",
+      "unavailableForm": "Switch to the contact form",
+      "unavailableKeep": "Keep chat open and say when we reply",
+      "unavailableHint": "Outside business hours, or when no agent is online. Hours are set in Ticketing › Business hours.",
+      "transcript": "Offer a transcript by email",
+      "transcriptHint": "When the chat ends, visitors can have it sent to the address they typed. The email holds this conversation only, with no link back into it.",
+      "saved": "Conversation settings saved"
+    },
+    "policy": {
+      "heading": "What visitors can send",
+      "caption": "Each kind on or off, with a size cap and the file types allowed. Admins and Team Leaders.",
+      "table": "Content policy",
+      "kind": "Kind",
+      "maxSize": "Max size",
+      "types": "Allowed types",
+      "text": "Text",
+      "alwaysOn": "Always on",
+      "emoji": "Emoji",
+      "image": "Images",
+      "imageHint": "Saved as WebP, EXIF removed",
+      "video": "Video",
+      "videoHint": "Stored as sent, poster frame made",
+      "voice": "Voice messages",
+      "voiceHint": "Recorded in the browser, stored as Opus",
+      "file": "Files",
+      "mb": "MB",
+      "sizeLabel": "{{kind}} maximum size in MB",
+      "typesLabel": "{{kind}} allowed types",
+      "tooLarge": "Above this install's upload limit of {{limit}} MB.",
+      "badSize": "Enter a whole number of MB, 1 or more.",
+      "badTypes": "Enter MIME types like image/png, separated by commas.",
+      "perMessage": "Attachments per message",
+      "perMessageHint": "Uploads are checked by their content, not their name. Anything else is refused before it is stored.",
+      "badPerMessage": "Enter a whole number from 0 to {{max}}.",
+      "saved": "Content policy saved"
+    },
+    "access": {
+      "heading": "Where the widget may run",
+      "caption": "Requests from any other site are refused: the config, the visitor sign-in and the live connection.",
+      "adminsOnly": "Admins only",
+      "origins": "Allowed origins",
+      "remove": "Remove {{origin}}",
+      "addLabel": "Add an origin",
+      "add": "Add origin",
+      "badOrigin": "Enter an origin only: scheme and host, like https://shop.helpdock.com. No path.",
+      "duplicate": "That origin is already allowed.",
+      "originsHint": "With no origins the widget loads nowhere. Visitors are also throttled per visitor and per IP address.",
+      "captcha": "Check for bots before the first message",
+      "captchaHint": "Visitors pass one challenge per conversation. The provider's script is loaded only while this is on.",
+      "provider": "Provider",
+      "providers": {
+        "turnstile": "Cloudflare Turnstile",
+        "hcaptcha": "hCaptcha"
+      },
+      "siteKey": "Site key",
+      "secretKey": "Secret key",
+      "replace": "Replace",
+      "keepSecret": "Keep the saved key",
+      "secretSaved": "Saved {{date}} by {{name}}. The web form uses the same keys.",
+      "secretSavedBySystem": "Saved {{date}}. The web form uses the same keys.",
+      "noSecret": "No secret saved yet. The web form uses the same keys.",
+      "needsKeys": "Enter a site key and a secret key to switch the check on.",
+      "saved": "Access settings saved"
+    },
+    "signed": {
+      "heading": "Signed identity",
+      "caption": "Your site vouches for a signed-in user, so they keep their widget conversations across devices.",
+      "enabled": "Accept signed identity from your site",
+      "enabledHint": "Your server signs the user id and a timestamp with this secret (HMAC-SHA256). Signatures older than 5 minutes are refused. A bad signature leaves the visitor anonymous and is logged.",
+      "secret": "Signing secret",
+      "secretCreated": "Created {{date}} by {{name}}. Replacing it stops signatures made with the old one at once.",
+      "secretCreatedBySystem": "Created {{date}}. Replacing it stops signatures made with the old one at once.",
+      "noSecret": "No signing secret yet. Replace makes one.",
+      "replace": "Replace",
+      "newSecret": "New signing secret",
+      "copy": "Copy",
+      "copied": "Signing secret copied",
+      "copyNow": "Copy it now and put it on your server. It will not be shown again.",
+      "done": "I have copied it",
+      "replaced": "Signing secret replaced",
+      "allChannels": "Signed-in visitors also see their email and Telegram tickets",
+      "allChannelsHint": "Off by default. When off, a verified visitor sees only their widget conversations.",
+      "guide": "How to sign: widget protocol guide",
+      "saved": "Signed identity saved"
+    }
   }
 }

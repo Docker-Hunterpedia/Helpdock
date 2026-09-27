@@ -13,12 +13,13 @@ describe('outboundMessageId', () => {
     );
   });
 
-  it('keeps a reply and the two auto-replies of one id apart', () => {
-    const ids = (['reply', 'acknowledgment', 'out_of_hours'] as const).map((kind) =>
+  it('keeps a reply, the two auto-replies and a transcript of one id apart', () => {
+    const ids = (['reply', 'acknowledgment', 'out_of_hours', 'transcript'] as const).map((kind) =>
       outboundMessageId({ kind, id: ID, fromAddress: 'a@b.example' }),
     );
 
-    expect(new Set(ids).size).toBe(3);
+    expect(new Set(ids).size).toBe(4);
+    expect(ids[3]).toBe(`<hd.t.${ID}@b.example>`);
   });
 });
 

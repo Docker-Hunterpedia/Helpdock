@@ -20,14 +20,17 @@ import type { Logger } from '../logging/logger.js';
  *   no other command, so the publisher cannot be the subscriber. With them,
  *   `to('brand:…')` reaches every replica's sockets; without them a room would
  *   only ever mean "on this process" (ARCHITECTURE §3).
- * - **One origin.** A WebSocket handshake is not covered by the same-origin
- *   policy, so a page anywhere could otherwise open one. `allowRequest` is what
- *   enforces it — the `cors` option only writes response headers, which a
- *   WebSocket client is free to ignore — and a request with no `Origin` at all
- *   is allowed, because that is a server-to-server client rather than a page.
- *   It is defence in depth either way: the credential is the bearer token in
- *   `auth.token` and never a cookie, so a cross-origin page has nothing to
- *   present. The widget's own allow-list is M4-03, on its own namespace.
+ * - **An origin check per namespace.** A WebSocket handshake is not covered
+ *   by the same-origin policy, so a page anywhere could otherwise open one.
+ *   The engine cannot tell which namespace a connection is for — that arrives
+ *   in the first packet, after the upgrade — so the check is each
+ *   namespace's own handshake middleware: `/staff` accepts `APP_URL` alone
+ *   ({@link isStaffOrigin}), and `/widget` the brand's allowed origins
+ *   (M4-03, `widget/widget.gateway.ts`). The `cors` option only writes
+ *   response headers, which a WebSocket client is free to ignore, so it is
+ *   not what enforces either. It is defence in depth for `/staff`: the
+ *   credential is the bearer token in `auth.token` and never a cookie, so a
+ *   cross-origin page has nothing to present.
  * - **No client bundle.** `serveClient: false`; the admin ships its own.
  */
 export class RedisIoAdapter extends IoAdapter {
@@ -72,10 +75,6 @@ export class RedisIoAdapter extends IoAdapter {
       allowUpgrades: false,
       serveClient: false,
       cors: { origin: this.#appUrl, credentials: true, methods: ['GET'] },
-      allowRequest: (request, accept) => {
-        const origin = request.headers.origin;
-        accept(null, origin === undefined || origin === this.#appUrl);
-      },
     } satisfies Partial<ServerOptions> as ServerOptions;
 
     const server = super.createIOServer(port, merged);
@@ -105,6 +104,22 @@ export class RedisIoAdapter extends IoAdapter {
     await Promise.all([quietly(pub), quietly(sub)]);
   }
 }
+
+/**
+ * The `/staff` namespace's origin rule: the admin's own origin, or none at all
+ * — a request with no `Origin` is a server-to-server client, not a page.
+ */
+export const isStaffOrigin = (origin: string | string[] | undefined, appUrl: string): boolean => {
+  const value = Array.isArray(origin) ? origin[0] : origin;
+  if (value === undefined) {
+    return true;
+  }
+  try {
+    return new URL(value).origin === new URL(appUrl).origin;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * `@socket.io/redis-adapter` unsubscribes fire-and-forget when a namespace

@@ -7,6 +7,7 @@
     "splitTo": "نُقلت نسخة من الرسائل إلى {{ticket}}",
     "splitFrom": "مفصولة من {{ticket}}",
     "threadMismatch": "أشار إلى {{ticket}} لكن المرسل ليس مشاركًا فيها",
-    "noSubject": "(بلا موضوع)"
+    "noSubject": "(بلا موضوع)",
+    "chatSubject": "محادثة دردشة"
   }
 }

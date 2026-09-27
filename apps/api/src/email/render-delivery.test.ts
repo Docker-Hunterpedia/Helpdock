@@ -20,6 +20,7 @@ const facts: SendFacts = {
     signatureEn: 'Lina Haddad\nBilling team',
     signatureAr: null,
   },
+  transcript: [],
 };
 
 const thread = { inReplyTo: '<customer@mail.example>', references: ['<customer@mail.example>'] };
@@ -111,5 +112,54 @@ describe('signatureFor', () => {
   it('is null when the author has none, or there is no author', () => {
     expect(signatureFor({ name: 'Lina', signatureEn: '  ', signatureAr: null }, 'en')).toBeNull();
     expect(signatureFor(null, 'en')).toBeNull();
+  });
+});
+
+describe('renderDelivery, a widget transcript (M4-08)', () => {
+  const delivery = deliveryRow({
+    kind: 'transcript',
+    ticketMessageId: null,
+    ccAddresses: [],
+    toName: null,
+    toAddress: 'visitor@example.com',
+    messageId: '<hd.t.delivery@helpdock.io>',
+  });
+  const message = renderDelivery({
+    delivery,
+    facts: {
+      ...facts,
+      message: null,
+      author: null,
+      transcript: [
+        {
+          from: 'visitor',
+          agentName: null,
+          text: 'Where is <my> order?',
+          at: new Date('2026-09-27T10:00:00Z'),
+        },
+        {
+          from: 'agent',
+          agentName: 'Lina',
+          text: 'On its way.',
+          at: new Date('2026-09-27T10:01:00Z'),
+        },
+      ],
+    },
+    thread: { inReplyTo: undefined, references: [] },
+    templates,
+  });
+
+  it('carries the conversation, escaped, to the address typed and nobody else', () => {
+    expect(message.subject).toBe('Your chat with Helpdock [HD-1042]');
+    expect(message.to).toEqual({ address: 'visitor@example.com' });
+    expect(message.cc).toEqual([]);
+    expect(message.html).toContain('Where is &lt;my&gt; order?');
+    expect(message.text).toContain('Lina · ');
+    expect(message.text).toContain('This email holds this conversation only');
+  });
+
+  it('is not an auto-reply, so it carries no loop-protection headers and no reply marker', () => {
+    expect(message.headers).toBeUndefined();
+    expect(message.html).not.toContain('##-');
   });
 });

@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
 import { describe, expect, it, vi } from 'vitest';
-import { quietly, unawaitedUnsubscribeIsSafe } from './redis-io.adapter.js';
+import { isStaffOrigin, quietly, unawaitedUnsubscribeIsSafe } from './redis-io.adapter.js';
 
 /** A client whose commands fail the way ioredis's do once Redis has gone. */
 const goneRedis = (): Redis & { disconnected: number } => {
@@ -62,5 +62,20 @@ describe('quietly', () => {
     await quietly(client);
 
     expect(client.disconnected).toBe(1);
+  });
+});
+
+describe('isStaffOrigin', () => {
+  const APP_URL = 'https://support.example.com';
+
+  it('lets the admin’s own origin and a client with no origin open a staff socket', () => {
+    expect(isStaffOrigin('https://support.example.com', APP_URL)).toBe(true);
+    expect(isStaffOrigin(['https://support.example.com'], APP_URL)).toBe(true);
+    expect(isStaffOrigin(undefined, APP_URL)).toBe(true);
+  });
+
+  it('refuses a page anywhere else, the widget’s customers included', () => {
+    expect(isStaffOrigin('https://shop.example.com', APP_URL)).toBe(false);
+    expect(isStaffOrigin('not a url', APP_URL)).toBe(false);
   });
 });

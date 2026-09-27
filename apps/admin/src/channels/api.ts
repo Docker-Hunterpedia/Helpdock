@@ -1,5 +1,6 @@
 import type {
   ChannelsRefusal,
+  ContentPolicy,
   ImapTestRequest,
   ImapTestResult,
   InboundParseSecret,
@@ -8,6 +9,12 @@ import type {
   MailboxCreateRequest,
   MailboxList,
   MailboxUpdateRequest,
+  WidgetAccessUpdate,
+  WidgetAppearance,
+  WidgetConversationSettings,
+  WidgetSettings,
+  WidgetSignedIdentity,
+  WidgetSigningSecret,
 } from '@helpdock/schemas';
 
 /**
@@ -40,7 +47,26 @@ export interface ChannelsApi {
    * the proxy needs the access token a plain `<img src>` cannot send.
    */
   remoteImage(brandId: string, ticketId: string, messageId: string, index: number): Promise<string>;
+
+  // Channels › Widget (M4-03, M4-06 to M4-08). One save per card; a Team
+  // Leader's view has `access` and `signedIdentity` as null.
+  widgetSettings(brandId: string): Promise<WidgetSettings>;
+  saveWidgetAppearance(brandId: string, request: WidgetAppearance): Promise<WidgetSettings>;
+  saveWidgetConversation(
+    brandId: string,
+    request: WidgetConversationSettings,
+  ): Promise<WidgetSettings>;
+  saveWidgetContentPolicy(brandId: string, request: ContentPolicy): Promise<WidgetSettings>;
+  saveWidgetAccess(brandId: string, request: WidgetAccessUpdate): Promise<WidgetSettings>;
+  saveWidgetSignedIdentity(brandId: string, request: WidgetSignedIdentity): Promise<WidgetSettings>;
+  /** "Replace": the new signing secret, which the screen shows once. */
+  replaceWidgetSigningSecret(brandId: string): Promise<WidgetSigningSecret>;
 }
+
+/** Query keys for the Widget tab. */
+export const widgetKeys = {
+  settings: (brandId: string) => ['channels', brandId, 'widget'] as const,
+};
 
 export class ChannelsError extends Error {
   readonly reason: ChannelsRefusal;

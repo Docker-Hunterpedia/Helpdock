@@ -1,4 +1,5 @@
 import type {
+  ContentPolicy,
   ImapTestRequest,
   ImapTestResult,
   InboundParseSecret,
@@ -7,6 +8,12 @@ import type {
   MailboxCreateRequest,
   MailboxList,
   MailboxUpdateRequest,
+  WidgetAccessUpdate,
+  WidgetAppearance,
+  WidgetConversationSettings,
+  WidgetSettings,
+  WidgetSignedIdentity,
+  WidgetSigningSecret,
 } from '@helpdock/schemas';
 import {
   imapTestResultSchema,
@@ -14,6 +21,8 @@ import {
   inboundParseSettingsSchema,
   mailboxListSchema,
   mailboxSchema,
+  widgetSettingsSchema,
+  widgetSigningSecretSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
 import { blobToDataUrl, type ChannelsApi } from './api.js';
@@ -87,6 +96,54 @@ export class HttpChannelsApi implements ChannelsApi {
     const path = `${this.#brand(brandId)}/tickets/${encodeURIComponent(ticketId)}/messages/${encodeURIComponent(messageId)}/remote-images/${String(index)}`;
 
     return blobToDataUrl(await this.#transport.requestBlob(path));
+  }
+
+  async widgetSettings(brandId: string): Promise<WidgetSettings> {
+    return widgetSettingsSchema.parse(
+      await this.#transport.request('GET', `${this.#widget(brandId)}/settings`),
+    );
+  }
+
+  saveWidgetAppearance(brandId: string, request: WidgetAppearance): Promise<WidgetSettings> {
+    return this.#putWidget(brandId, 'appearance', request);
+  }
+
+  saveWidgetConversation(
+    brandId: string,
+    request: WidgetConversationSettings,
+  ): Promise<WidgetSettings> {
+    return this.#putWidget(brandId, 'conversation', request);
+  }
+
+  saveWidgetContentPolicy(brandId: string, request: ContentPolicy): Promise<WidgetSettings> {
+    return this.#putWidget(brandId, 'content-policy', request);
+  }
+
+  saveWidgetAccess(brandId: string, request: WidgetAccessUpdate): Promise<WidgetSettings> {
+    return this.#putWidget(brandId, 'access', request);
+  }
+
+  saveWidgetSignedIdentity(
+    brandId: string,
+    request: WidgetSignedIdentity,
+  ): Promise<WidgetSettings> {
+    return this.#putWidget(brandId, 'signed-identity', request);
+  }
+
+  async replaceWidgetSigningSecret(brandId: string): Promise<WidgetSigningSecret> {
+    return widgetSigningSecretSchema.parse(
+      await this.#transport.request('POST', `${this.#widget(brandId)}/signing-secret`),
+    );
+  }
+
+  async #putWidget(brandId: string, card: string, request: unknown): Promise<WidgetSettings> {
+    return widgetSettingsSchema.parse(
+      await this.#transport.request('PUT', `${this.#widget(brandId)}/${card}`, request),
+    );
+  }
+
+  #widget(brandId: string): string {
+    return `${this.#brand(brandId)}/widget`;
   }
 
   #brand(brandId: string): string {

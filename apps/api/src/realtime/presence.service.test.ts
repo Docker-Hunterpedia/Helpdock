@@ -65,6 +65,17 @@ describe('PresenceService', () => {
     vi.useRealTimers();
   });
 
+  it('tells a listener of every change in a brand, until it unsubscribes (M4-04)', async () => {
+    const heard: string[] = [];
+    const stop = service.onChange((brandId) => heard.push(brandId));
+
+    await service.join({ brandId: BRAND, userId: LINA, socketId: 's1' });
+    stop();
+    await service.leave({ brandId: BRAND, userId: LINA, socketId: 's1' });
+
+    expect(heard).toEqual([BRAND]);
+  });
+
   it('announces an arrival to the brand room, once per person', async () => {
     expect(await service.join({ brandId: BRAND, userId: LINA, socketId: 's1' })).toBe('online');
     await service.join({ brandId: BRAND, userId: LINA, socketId: 's2' });

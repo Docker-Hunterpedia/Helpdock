@@ -68,19 +68,17 @@ test.describe('Channels › Outgoing email', () => {
 
     const senders = page.getByRole('region', { name: t('channels:senders.heading') });
     await senders.getByRole('combobox', { name: t('channels:senders.addLabel') }).click();
-    await page.getByRole('option').first().click();
+    const department = (await page.getByRole('option').nth(1).textContent()) ?? '';
+    await page.getByRole('option').nth(1).click();
     await senders.getByRole('button', { name: t('channels:senders.add') }).click();
-    await senders.getByRole('textbox').last().fill('not a sender');
+    const from = senders.getByRole('textbox', {
+      name: t('channels:senders.fromFor', { department }),
+    });
+    await from.fill('not a sender');
     await senders.getByRole('button', { name: t('channels:senders.save') }).click();
     await expect(senders.getByText(t('channels:senders.invalid'))).toBeVisible();
 
-    await senders
-      .getByRole('row')
-      .last()
-      .getByRole('textbox')
-      .first()
-      .fill('Helpdock Support <help@helpdock.io>');
-    await senders.getByRole('textbox').last().fill('');
+    await from.fill('Helpdock Support <help@helpdock.io>');
     await senders.getByRole('button', { name: t('channels:senders.save') }).click();
     await expect(page.getByText(t('channels:senders.saved'))).toBeVisible();
 

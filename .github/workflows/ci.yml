@@ -15,65 +15,46 @@ concurrency:
 permissions:
   contents: read
 
+# Every job below repeats the same short setup (checkout, pnpm, Node, install)
+# rather than sharing a workspace: jobs run on separate runners, and an install
+# from the pnpm cache is quicker than uploading and downloading `node_modules`.
+#
+# Notes that apply to each copy:
+# - `persist-credentials: false` because nothing here pushes. By default
+#   `checkout` leaves the run's token in `.git/config`, where every install
+#   script, build plugin and test could read it — and on a pull request those
+#   steps are running the contributor's code.
+# - The Docker Hub login is optional on purpose. Anonymous pulls are rate
+#   limited per IP and a GitHub-hosted runner shares its address with everybody
+#   else's; authenticating lifts the limit. A fork has no such secret, and the
+#   run must still work without one — which is why MinIO comes from Chainguard's
+#   public registry instead (`docker-compose.yml`, `media.integration.test.ts`).
+#   `secrets` is not a context `if:` can read, but `jobs.<id>.env` can, so
+#   `DOCKERHUB_CONFIGURED` turns "is an account configured?" into an ordinary
+#   value without ever putting the token in an expression.
+# - ffmpeg: the media pipeline spawns ffmpeg and ffprobe (ARCHITECTURE §9) and
+#   the suites that exercise them skip themselves when they are absent, so the
+#   jobs that run those suites install it.
+
 jobs:
-  # Named `ci` so it can be added as the required status check on the `main`
-  # ruleset. Every check a pull request has to pass is a step of this one job,
-  # in the order a developer would run them: cheap and local first, containers
-  # and browsers after.
-  ci:
-    name: ci
+  # Cheap, local and first to fail: lint, the three source checks and the
+  # typecheck.
+  checks:
+    name: checks
     runs-on: ubuntu-latest
-    env:
-      # `secrets` is not a context `if:` can read, on a step or on a job
-      # (GitHub's "context availability" table), but `jobs.<id>.env` can. This
-      # turns "is a Docker Hub account configured?" into an ordinary env value
-      # the login step below can be conditioned on, without ever putting the
-      # token itself in an expression.
-      DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    timeout-minutes: 15
     steps:
-      # `persist-credentials: false` because this job pushes nothing. By default
-      # `checkout` leaves the run's token in `.git/config`, where every install
-      # script, build plugin and test in the steps below could read it — and on
-      # a pull request those steps are running the contributor's code.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      # Anonymous pulls from Docker Hub are rate limited per IP, and a
-      # GitHub-hosted runner shares its address with everybody else's. This job
-      # pulls `node` for the image build, `pgvector/pgvector:pg17` and
-      # `redis:7-alpine` for both Testcontainers and the Compose smoke test, and
-      # Testcontainers' own `ryuk` reaper — so a busy hour used to fail a run for
-      # a reason unrelated to the code. Authenticating lifts the limit. It is
-      # optional on purpose: a fork has no such secret, and the run must still
-      # work without one — which is why M1-10's MinIO comes from Quay instead
-      # (`docker-compose.yml`, `media.integration.test.ts`): a fork without the
-      # secret would otherwise fail on the one image this job cannot do without.
-      - name: Log in to Docker Hub
-        if: env.DOCKERHUB_CONFIGURED == 'true'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
-
-      # The media pipeline spawns ffmpeg and ffprobe for voice notes and video
-      # posters (ARCHITECTURE §9), and `docker/Dockerfile` installs them into
-      # the image. The integration suite that exercises them skips itself when
-      # they are absent, so without this step the encoding assertions would
-      # silently not run. `ffmpeg` on the runner image pulls `ffprobe` with it.
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -97,54 +78,255 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      # The `packages/*` gate of ARCHITECTURE §15 lives in the root
-      # `vitest.config.ts` and fails this step at under 80 % of lines.
-      - name: Test with coverage
-        run: pnpm test
+  # The `packages/*` gate of ARCHITECTURE §15 (80 % of lines, root
+  # `vitest.config.ts`). The api and admin unit suites are left out here
+  # because their own gates below run them; the packages' number does not
+  # depend on them.
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      # GitHub-hosted runners ship a Docker daemon, so Testcontainers starts the
-      # containers itself. No service container is declared here on purpose.
-      - name: Integration tests
-        run: pnpm test:integration
+      # Workspace packages resolve to `dist/` through their `exports` maps, and
+      # the suites import them. Turbo's `test` task depends on `^build` for the
+      # same reason.
+      - name: Build workspace packages
+        run: pnpm exec turbo run build --filter='./packages/*'
 
-      # The api is the one workspace whose behaviour is mostly reached over
-      # HTTP, so its gate is measured across the unit and the integration
-      # suites together (M0-05).
-      - name: Api coverage gate
-        run: pnpm --filter @helpdock/api test:coverage
 
-      # The admin has a gate of its own from M0-08: the first-run wizard is the
-      # one screen an operator cannot skip, and the root gate in
-      # `vitest.config.ts` measures `packages/*` only.
-      - name: Admin coverage gate
+      - name: Packages unit tests with coverage
+        run: pnpm exec vitest run --coverage --project='!integration' --project='!@helpdock/api' --project='!@helpdock/admin'
+
+  # The admin's own gate from M0-08: the first-run wizard is the one screen an
+  # operator cannot skip, and the packages gate measures `packages/*` only.
+  admin-unit:
+    name: admin-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Workspace packages resolve to `dist/` through their `exports` maps, and
+      # the suites import them. Turbo's `test` task depends on `^build` for the
+      # same reason.
+      - name: Build workspace packages
+        run: pnpm exec turbo run build --filter='./packages/*'
+
+
+      - name: Admin unit tests with coverage
         run: pnpm --filter @helpdock/admin test:coverage
 
-      - name: Build
-        run: pnpm build
+  # The api is the one workspace whose behaviour is mostly reached over HTTP,
+  # so its gate is measured across its unit and integration suites together
+  # (M0-05). This is the only run of either: GitHub-hosted runners ship a
+  # Docker daemon, and Testcontainers starts Postgres, Redis and MinIO itself.
+  api:
+    name: api
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_CONFIGURED == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Workspace packages resolve to `dist/` through their `exports` maps, and
+      # the suites import them. Turbo's `test` task depends on `^build` for the
+      # same reason.
+      - name: Build workspace packages
+        run: pnpm exec turbo run build --filter='./packages/*'
+
+
+      - name: Api unit and integration tests with coverage
+        run: pnpm --filter @helpdock/api test:coverage
+
+  # The integration suites under `packages/*`; the api's run in the job above.
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_CONFIGURED == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Workspace packages resolve to `dist/` through their `exports` maps, and
+      # the suites import them. Turbo's `test` task depends on `^build` for the
+      # same reason.
+      - name: Build workspace packages
+        run: pnpm exec turbo run build --filter='./packages/*'
+
+
+      - name: Packages integration tests
+        run: pnpm exec vitest run --project=integration packages/
+
+  # The admin in a browser against mocked adapters, split across runners. The
+  # screenshot comparison and the real-api run are in `browser-api` below.
+  e2e:
+    name: e2e (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Workspace packages resolve to `dist/` through their `exports` maps; the
+      # mocked run serves the admin from Vite and needs no app build.
+      - name: Build workspace packages
+        run: pnpm exec turbo run build --filter='./packages/*'
 
       # Keyed by the Playwright version the lockfile resolved, so an upgrade
       # downloads the matching browser instead of reusing the old one.
       - name: Resolve the Playwright version
         id: playwright
         run: echo "version=$(pnpm --filter @helpdock/admin exec playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
-
       - name: Cache Playwright browsers
-        id: playwright-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-
       - name: Install Playwright browsers
         run: pnpm --filter @helpdock/admin exec playwright install --with-deps chromium
 
       - name: Browser tests
-        run: pnpm --filter @helpdock/admin e2e
+        run: pnpm --filter @helpdock/admin e2e --shard=${{ matrix.shard }}/2
 
-      # Pixels, not behaviour, and a comparison with no baseline on disk fails
-      # rather than skips — so the step asks first. The baselines are Linux and
-      # are produced by `screenshots.yml` on this same runner image with this
-      # same browser install, which is what makes them comparable at all.
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: apps/admin/playwright-report
+          retention-days: 7
+
+  # Pixels, and the same screens against a real api, Postgres and Redis (the M0
+  # exit criterion that every auth method works end to end).
+  browser-api:
+    name: browser-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_CONFIGURED == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `e2e:api` starts `apps/api/dist/main.js` and serves `apps/admin/dist`.
+      - name: Build
+        run: pnpm build
+
+      - name: Resolve the Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter @helpdock/admin exec playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright browsers
+        run: pnpm --filter @helpdock/admin exec playwright install --with-deps chromium
+
+      # A comparison with no baseline on disk fails rather than skips, so the
+      # step asks first. The baselines are Linux and are produced by
+      # `screenshots.yml` on this same runner image with this same browser
+      # install, which is what makes them comparable at all.
       - name: Are the screenshot baselines committed?
         id: baselines
         run: |
@@ -153,13 +335,10 @@ jobs:
           else
             echo 'present=false' >> "$GITHUB_OUTPUT"
           fi
-
       - name: Screenshot comparison
         if: steps.baselines.outputs.present == 'true'
         run: pnpm --filter @helpdock/admin e2e:screenshots
 
-      # The same screens against a real api, a real Postgres and a real Redis:
-      # the M0 exit criterion that every auth method works end to end.
       - name: Browser tests against the real api
         run: pnpm --filter @helpdock/admin e2e:api
 
@@ -167,9 +346,29 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-report
+          name: playwright-report-api
           path: apps/admin/playwright-report
           retention-days: 7
+
+  # The image this commit produces, and the browser-less M0-09 smoke test on
+  # it. Needs no Node: Docker builds everything from the Dockerfile.
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_CONFIGURED == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -192,9 +391,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # The browser-less end-to-end test for M0-09: the stack comes up, the api
-      # serves the admin build, and an unverified domain gets no certificate.
+      # The stack comes up, the api serves the admin build, an unverified domain
+      # gets no certificate, and an image goes through the media pipeline.
       - name: Compose smoke test
         run: ./scripts/compose-smoke.sh
         env:
           HELPDOCK_VERSION: ci
+
+  # The one required status check on the `main` ruleset, under the name it has
+  # always had. It passes only when every job above passed, so the ruleset does
+  # not have to list them, and adding a job here never needs a settings change.
+  ci:
+    name: ci
+    if: always()
+    needs: [checks, unit, admin-unit, api, integration, e2e, browser-api, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != 'success' ]; then
+              exit 1
+            fi
+          done

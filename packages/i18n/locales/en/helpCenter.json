@@ -105,7 +105,10 @@
     "not-empty": "Move or delete what is inside it first.",
     "was-published": "This article has been published. Archive it instead.",
     "schedule-in-past": "Choose a time in the future.",
-    "limit-reached": "This help center already has as many of these as it can keep."
+    "limit-reached": "This help center already has as many of these as it can keep.",
+    "low-contrast": "That accent is too light to read against the page. Choose a darker colour.",
+    "media-not-ready": "That image is not ready yet. Try again in a moment.",
+    "unknown-article": "One of the featured articles is no longer in this help center."
   },
   "filters": {
     "label": "Filter articles",
@@ -295,6 +298,119 @@
         "moved": "Moved",
         "slug_changed": "Address changed"
       }
+    }
+  },
+  "viewHelpCenter": "View help center",
+  "preview": "Preview",
+  "open": {
+    "opening": "Opening the help center…",
+    "failed": "The help center could not be opened.",
+    "back": "Back to the help center"
+  },
+  "site": {
+    "saved": "Saved. Pages update within 60 s.",
+    "theme": {
+      "heading": "Theme",
+      "caption": "Colours, corners, type and images for the help center.",
+      "accent": "Accent",
+      "pickAccent": "Pick the accent colour",
+      "contrastPass": "White text on it: {{ratio}} : 1, passes.",
+      "contrastFail": "Too light: {{ratio}} : 1 against the page, below 3 : 1. Choose a darker colour.",
+      "invalidColor": "Enter a colour like #0F766E.",
+      "surfaceTone": "Surface tone",
+      "surfaceToneHint": "The page ground and greys. Light mode only.",
+      "tones": {
+        "warm": "Warm",
+        "neutral": "Neutral",
+        "cool": "Cool"
+      },
+      "radius": "Corner radius",
+      "radiusHint": "px, 0 to 12",
+      "radiusError": "Enter a whole number from 0 to 12.",
+      "mode": "Light or dark",
+      "modeHint": "Auto follows the reader’s device.",
+      "modes": {
+        "light": "Light",
+        "dark": "Dark",
+        "auto": "Auto"
+      },
+      "font": "Typeface",
+      "fontHint": "Each choice has an Arabic companion and is served from this install.",
+      "fonts": {
+        "ibm-plex": "IBM Plex Sans with IBM Plex Sans Arabic",
+        "noto-sans": "Noto Sans with Noto Sans Arabic",
+        "vazirmatn": "Vazirmatn"
+      },
+      "logo": "Logo",
+      "favicon": "Favicon",
+      "none": "None yet",
+      "imageSize": "{{width}} × {{height}}",
+      "upload": "Upload",
+      "replace": "Replace",
+      "remove": "Remove",
+      "uploading": "Uploading…",
+      "imageHint": "PNG, JPEG, WebP or GIF. Images are re-encoded and scaled to 512 px at most.",
+      "imageRejected": "That image could not be used. Try a PNG or a JPEG."
+    },
+    "home": {
+      "heading": "Home page",
+      "caption": "What the help center’s front page shows, top to bottom.",
+      "search": "Search",
+      "searchHint": "Always shown at the top.",
+      "categories": "Category cards",
+      "categoriesHint": "One card per category with its article count.",
+      "featured": "Featured articles",
+      "featuredHint": "Up to 6, in the order below.",
+      "featuredList": "Featured articles, in order",
+      "move": "Move {{title}}",
+      "remove": "Remove {{title}} from featured",
+      "add": "Add article",
+      "addLabel": "Article to feature",
+      "popular": "Popular articles",
+      "popularHint": "The 5 most viewed public articles of the last 30 days."
+    },
+    "links": {
+      "heading": "Header and footer links",
+      "caption": "Links next to the category menu and at the foot of every page.",
+      "header": "Header",
+      "footer": "Footer",
+      "order": "Order",
+      "english": "English",
+      "arabic": "Arabic",
+      "address": "Address",
+      "removeColumn": "Remove",
+      "untitled": "New link",
+      "move": "Move {{name}}",
+      "englishLabel": "{{name}}, English label",
+      "arabicLabel": "{{name}}, Arabic label",
+      "addressLabel": "{{name}}, address",
+      "remove": "Remove {{name}}",
+      "add": "Add link",
+      "invalid": "Each link needs a label and an address starting with https://, http:// or mailto:."
+    },
+    "css": {
+      "heading": "Custom CSS",
+      "caption": "Applied after the theme, so it can override it.",
+      "label": "Custom CSS",
+      "removedTitle": "Sanitised on save: these rules were removed",
+      "dismiss": "Dismiss",
+      "reasons": {
+        "import": "@import is not allowed. Pick a typeface under Theme.",
+        "at-rule": "Only @media blocks are allowed.",
+        "url": "url() may only point to an image uploaded here or an inline image.",
+        "expression": "Script in CSS is not allowed.",
+        "fixed": "Fixed overlays are not allowed.",
+        "escape": "CSS escapes are not allowed.",
+        "malformed": "This rule could not be read."
+      }
+    },
+    "rest": {
+      "heading": "Where the rest lives",
+      "address": "The help center’s address and its certificate:",
+      "domains": "Brand › Domains",
+      "widgetTheme": "The widget’s own theme:",
+      "widget": "Channels › Widget",
+      "cache": "Saving a card clears this help center’s cached pages."
     }
   }
 }

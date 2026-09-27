@@ -81,6 +81,8 @@ import {
   createSearchKnowledgeProcessor,
   registerSearchEventHandlers,
 } from '../help-center/search/search-events.js';
+import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
+import { RedisPageCache } from '../help-center/site/page-cache.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
@@ -451,6 +453,10 @@ export const workerDependencies: WorkerDependencies = {
     // M5-05. The search index follows the same three events under its own
     // subscriber name, in the event's transaction.
     registerSearchEventHandlers();
+
+    // M5-03. After the content module's own handlers: every help center
+    // event drops the brand's cached pages, under its own subscriber name.
+    registerPageCacheHandlers(new RedisPageCache(redis));
 
     return {
       close: async () => {

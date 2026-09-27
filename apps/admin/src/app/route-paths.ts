@@ -40,6 +40,11 @@ export const ROUTES = {
   helpCenterTab: '/help-center/:tab',
   /** The article editor (M5-02). Deeper than a tab, so the two never compete. */
   helpCenterArticle: '/help-center/articles/:articleId',
+  /**
+   * M5-03: asks for a staff pass and leaves for the help center on the
+   * brand's host. Static, so it wins over `/help-center/:tab`.
+   */
+  helpCenterOpen: '/help-center/open',
   reports: '/reports',
   settings: '/admin/settings',
   /** How this brand's tickets are shaped and routed (M1-01). */

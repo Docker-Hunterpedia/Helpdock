@@ -1,0 +1,136 @@
+{
+  "siteName": {
+    "public": "{{brand}} Help",
+    "internal": "{{brand}} Team KB"
+  },
+  "otherLanguage": "العربية",
+  "languageName": {
+    "en": "English",
+    "ar": "Arabic"
+  },
+  "nav": {
+    "label": "Help center",
+    "footer": "Footer",
+    "breadcrumb": "Breadcrumb",
+    "home": "Help",
+    "homeInternal": "Team KB",
+    "otherTopics": "Other topics",
+    "inSection": "In this section"
+  },
+  "search": {
+    "label": "Search help articles",
+    "submit": "Search",
+    "clear": "Clear search",
+    "title": "Search results",
+    "count_one": "1 result in {{language}}",
+    "count_other": "{{count}} results in {{language}}",
+    "filter": "Filter by topic",
+    "allTopics": "All topics",
+    "prompt": "Type what you are looking for above.",
+    "empty": {
+      "heading": "No results for “{{q}}”",
+      "body": "Check the spelling, or try fewer or different words.",
+      "browse": "Browse a topic instead:"
+    }
+  },
+  "home": {
+    "title": "How can we help?",
+    "intro": "Search our guides or browse by topic.",
+    "browse": "Browse by topic",
+    "featured": "Featured",
+    "popular": "Popular articles",
+    "empty": "Nothing has been published here yet."
+  },
+  "counts": {
+    "sections_one": "1 section",
+    "sections_other": "{{count}} sections",
+    "articles_one": "1 article",
+    "articles_other": "{{count}} articles"
+  },
+  "category": {
+    "seeAll_one": "See the article",
+    "seeAll_other": "See all {{count}} articles"
+  },
+  "article": {
+    "updated": "Updated {{date}}",
+    "readTime_one": "1 min read",
+    "readTime_other": "{{count}} min read",
+    "related": "Related",
+    "internal": "Internal",
+    "video": "Video",
+    "fallback": {
+      "title": "This article is not available in {{language}} yet.",
+      "body": "We are showing you the {{original}} version until it is translated.",
+      "browse": "Browse this section"
+    },
+    "feedback": {
+      "question": "Was this article helpful?",
+      "yes": "Yes",
+      "no": "No",
+      "thanks": "Thank you.",
+      "thanksBody": "We will use your answer to improve this article."
+    }
+  },
+  "help": {
+    "heading": "Still need help?",
+    "body": "Our team is here when the articles do not answer your question.",
+    "articleBody": "Start a chat and we will bring this article with you.",
+    "searchBody": "Tell us what you were looking for.",
+    "message": "Send us a message",
+    "chat": "Chat with us",
+    "offInPreview": "Off in preview."
+  },
+  "states": {
+    "notFound": {
+      "title": "Page not found",
+      "heading": "We can’t find that page",
+      "body": "The link may be out of date, or the article may have moved. Try a search.",
+      "home": "Go to the help center home",
+      "popular": "Popular:"
+    },
+    "gone": {
+      "title": "Article archived",
+      "heading": "This article was archived",
+      "body": "“{{title}}” was retired on {{date}} and is no longer kept up to date.",
+      "more": "More in {{section}}"
+    },
+    "wall": {
+      "title": "Sign in",
+      "heading": "Sign in to read the team knowledge base",
+      "body": "This help center is for {{brand}} staff only. Sign in with your staff account to continue.",
+      "button": "Sign in with your staff account",
+      "note": "You will come back to the page you asked for. Customer accounts cannot open this help center."
+    },
+    "internal": "Internal",
+    "signOut": "Sign out"
+  },
+  "preview": {
+    "label": "Preview",
+    "edit": "Edit in admin",
+    "exit": "Exit preview",
+    "draftMeta": "Draft · not yet published",
+    "draft": {
+      "title": "Draft preview",
+      "body": "Only signed-in staff can see this page. It is not published and not in search or the sitemap."
+    },
+    "scheduled": {
+      "title": "Scheduled",
+      "body": "Publishes on {{date}}. Until then only signed-in staff can see it."
+    },
+    "changes": {
+      "title": "Unpublished changes",
+      "body": "You are previewing a new draft. Visitors see the version published on {{date}}."
+    },
+    "archived": {
+      "title": "Archived",
+      "body": "Visitors get “This article was archived”. You see it because you are signed in as staff."
+    },
+    "published": {
+      "title": "Published",
+      "body": "Visitors see this version."
+    }
+  },
+  "meta": {
+    "description": "Answers and guides from {{brand}}."
+  }
+}

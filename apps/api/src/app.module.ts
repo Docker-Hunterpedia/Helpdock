@@ -148,6 +148,18 @@ export class AppModule implements NestModule {
       db: options.db,
       ownHosts: ownHostsOf(options.env),
     });
+    // M5-01 to M5-09: imported by `AppModule` for its routes, by
+    // `WidgetModule` for the search and feedback ports (M5-10), and by
+    // `StaticModule`, whose catch-all hands a help center host to its pages;
+    // one module to Nest.
+    const helpCenter = HelpCenterModule.forRoot({
+      env: options.env,
+      redis: options.redis,
+      logger: options.logger,
+      signingKeys: options.auth.signingKeys,
+      hosts: options.brandResolver ?? hostResolver,
+      ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+    });
     // M0-13's gateway, imported by `AppModule` and by `WidgetModule` as one
     // module, so `/widget` shares the presence and publisher `/staff` runs.
     const realtime = RealtimeModule.forRoot({
@@ -158,12 +170,6 @@ export class AppModule implements NestModule {
         // M4-04: an agent's open composer is the visitor's "typing".
         onViewing: agentTypingRelay(new RedisWidgetBroadcast(options.redis)),
       },
-    });
-    // M5: imported by `AppModule` for its routes and by `WidgetModule` for
-    // the search and feedback ports (M5-10), one module to Nest.
-    const helpCenter = HelpCenterModule.forRoot({
-      env: options.env,
-      ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
     });
 
     return {
@@ -249,11 +255,12 @@ export class AppModule implements NestModule {
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...options.webForm,
         }),
-        // M5-01, M5-02, M5-09: help center content, the editor and its images,
-        // and the read service the help center pages are built on.
+        // M5-01, M5-02, M5-09: help center content, the editor and its images;
+        // M5-03, M5-04, M5-06: the pages, SEO and the site settings;
+        // M5-05, M5-08: search, feedback, views and Insights.
         helpCenter,
         // Last, so its catch-all route is registered after every declared one.
-        StaticModule.forRoot({ env: options.env, logger: options.logger }),
+        StaticModule.forRoot({ env: options.env, logger: options.logger, hostPages: helpCenter }),
       ],
       controllers: [
         HealthController,

@@ -149,14 +149,15 @@ describe('Who can read it', () => {
   it('switches the help center to internal only', async () => {
     const { user, apis } = await renderHelpCenter('/help-center/settings');
     const internal = await screen.findByRole('radio', { name: /Internal only/ }, { timeout: 5000 });
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    const card = within(screen.getByRole('region', { name: 'Who can read it' }));
+    expect(card.getByRole('button', { name: 'Save changes' })).toBeDisabled();
 
     await user.click(internal);
-    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    await user.click(card.getByRole('button', { name: 'Discard' }));
     expect(screen.getByRole('radio', { name: /Public/ })).toBeChecked();
 
     await user.click(internal);
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(card.getByRole('button', { name: 'Save changes' }));
 
     await screen.findByText('Saved. It takes effect within 60 s.');
     await waitFor(async () => {

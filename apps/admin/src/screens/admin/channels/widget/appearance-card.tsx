@@ -292,7 +292,7 @@ export function AppearanceCard({
 }
 
 /** DESIGN §6.1's SegmentedControl, labelled, with a hint under it. */
-function Segmented<V extends string>({
+export function Segmented<V extends string>({
   label,
   hint,
   value,

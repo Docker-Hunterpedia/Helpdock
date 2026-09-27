@@ -14,10 +14,10 @@ Owner: @Docker-Hunterpedia
 |---|---|---|---|
 | M5-01 | Content model: category → section → article, versions per locale,… | #117 | in review — see [Content model](#m5-01-content-model) |
 | M5-02 | Editor (per ADR): rich text, images to WebP, code, callouts, tables, video embed,… | #118 | in review — see [Editor](#m5-02-editor) |
-| M5-03 | SSR app served by api on brand host; Redis page cache keyed by audience with… | #119 | not started |
-| M5-04 | SEO: canonical, hreflang, sitemap per brand, OG, JSON-LD | #120 | not started |
+| M5-03 | SSR app served by api on brand host; Redis page cache keyed by audience with… | #119 | in review — see [Pages](#m5-03-pages) |
+| M5-04 | SEO: canonical, hreflang, sitemap per brand, OG, JSON-LD | #120 | in review — see [SEO](#m5-04-seo) |
 | M5-05 | Search: tsvector per language (`english`, `arabic`) + trigram fuzzy; semantic merge… | #121 | in review — see [Search](#m5-05-search) |
-| M5-06 | Theme tokens, logo, favicon, sanitized custom CSS, header/footer links, home layout | #122 | not started |
+| M5-06 | Theme tokens, logo, favicon, sanitized custom CSS, header/footer links, home layout | #122 | in review — see [Theme and site settings](#m5-06-theme-and-site-settings); migration 0035 |
 | M5-07 | Custom domains: CNAME + TXT verification in admin, `/internal/domain-check` for Caddy… | #123 | in review: DNS verification (`domains` queue, `domain.verify` every 15 min), Caddy `/internal/domain-check`, Cloudflare flag, `BrandHostResolver`, Brand › Domains and General tabs; migration 0030; new env `HELPCENTER_CNAME_TARGET` |
 | M5-08 | Article feedback, view counts, "Still need help?" handoff to widget/form with article… | #124 | in review — see [Feedback, views and Insights](#m5-08-feedback-views-and-insights) |
 | M5-09 | Visibility model: `public`/`internal` on article versions, internal-only help center… | #125 | in review — see [Visibility](#m5-09-visibility) |
@@ -84,6 +84,28 @@ Migration `0033_help_center` adds six tenant tables, all brand-scoped and none d
   Search (M5-05) subscribes to all three as `search`; the page cache (M5-03) and, from M7, `knowledge.sync` subscribe under their own subscriber names beside it, and the default handler logs them (and adds the delayed publish for `scheduled`). The relay publishes within about a second, so the 60-second budget of DOMAIN-RULES §5 is the consumers' to keep.
 - **The exit criterion's setup** is proved in `apps/api/src/help-center/help-center.integration.test.ts`: an article toggled from public to internal is absent from `articleBySlug`, `tree` and `sitemap` for the public audience in both languages, `changedSince` reports it as not visible without its slug, and staff still read it.
 
+## M5-03 Pages
+
+[ADR 0015](../decisions/0015-help-center-pages-rendered-by-the-api.md) records the choice: the api renders the pages as plain HTML from `apps/api/src/help-center/site/`, as ADR 0013 does for the web form, and `apps/helpcenter` stays an empty package (the render code belongs to the api that serves it, and `apps/*` never import each other). [The help center guide](../guides/help-center.md) is the operator's view.
+
+- **Where.** On a verified help center host (M5-07's `BrandHostResolver`) every path is the help center's: the admin SPA's catch-all hands the request to the pages (`HOST_PAGES`). A brand without a domain is served on the install's host under `/hc/<brandId>`; one brand's domain never serves another's pages.
+- **Pages** (`paths.ts`): `/` redirects to the reader's language by `Accept-Language`, else the brand's default; `/<locale>` home, `/<locale>/categories/<slug>`, `/<locale>/sections/<slug>` (the category layout with one card, as the artboard's note says), `/<locale>/articles/<slug>`, `/<locale>/search?q=`, and the states: 404 (also for an internal or draft article asked for by a visitor), 410 for an archived article, 401 for the internal-only wall. Everything is `dir="rtl"` in Arabic; an article missing in the language asked for is shown in the default language with the notice of `HelpCenter/Article-AR`, its text marked `lang`/`dir`.
+- **Audience.** `internal` only for a request with a live staff session of the brand, carried to the brand's host by the **staff pass** (ADR 0015): `POST /api/brands/:brandId/help-center/staff-pass` (`help_center:read`) answers a one-minute, one-use `/_hd/staff?pass=…` address; spending it sets the host-only `hd_hc_staff` cookie (ES256, eight hours), which every page checks against the admin session's refresh family, so an admin sign-out ends it. Staff see internal articles inline with the Internal badge, their name and a Sign out button. Everything else is `public`.
+- **Preview.** The editor's Preview opens the article's working copy at its real address with `?preview=1`, staff only, under the banner of `HelpCenter/States-EN` panel 5 (draft, scheduled, unpublished changes, archived, published). Feedback and "Still need help?" are off, views are not counted, nothing is cached.
+- **Caching** (`page-cache.ts`): public pages in Redis per brand, host, path, locale and audience for 10 minutes, under a per-brand generation that the page cache's own outbox subscriber (`help_center.page_cache`, `cache-events.ts`) bumps on `help_center.article_changed`, `structure_changed`, `access_changed` and the new `help_center.site_changed`. A page rendered before an invalidation is stored under the old generation, where nobody reads it. Headers: public pages `Cache-Control: public, s-maxage=300, stale-while-revalidate=60` with a strong `ETag` and 304; staff pages, previews, the wall and search `private, no-store`, never stored.
+- **CSP.** Per response, with a fresh nonce even for a cached page (stored with a placeholder): `default-src 'none'`, the page's nonce'd style, fonts from `/_hd/fonts/`, images from this origin, `data:` and the bucket, frames for the two video players only, `form-action 'self'`, `frame-ancestors 'none'`; scripts only on a page that loads the widget.
+- **Search and feedback** go through the two ports of `ports.ts` only, which `HelpCenterModule` binds to M5-05's `HelpCenterSearchService` and M5-08's `HelpCenterFeedbackService`. Search is called with the request's audience and `source: 'help_center'`; "Was this helpful?" posts to `/_hd/feedback` (origin-checked, the article re-read for the audience) and calls `recordVote`; an article page calls `recordView` for a visitor, on a cache hit too, with the `searchId` of the results page it was opened from (`?sid=`); staff and previews record neither views nor votes. The visitor key is the first-party `hd_hc_v` cookie (set only when a visitor votes) or a keyed hash of address and user agent; nothing third-party.
+- **"Still need help?"** links to the web form (`/contact?lang=…` on the host, `/contact/<brandId>?lang=…` on the fallback, with `&article=<id>` on an article) and, where the brand's widget may run on this origin (Channels › Widget, allowed origins), loads `widget.js` and opens it with `Helpdock('open', { article: <id> })` on an article, `Helpdock('open', null)` elsewhere.
+- **Images in internal articles** (decided here, as M5-02 left open): the page renderer does **not** gate them. The article page itself is what is gated (404 to a visitor, `private, no-store` to staff), the image address is a UUIDv7 nobody can list, and the redirect it answers with is a five-minute presigned URL; tying each image to the visibility of every article that uses it would need a reference table kept in step with every save and publish, for an address that has already been handed only to readers who could see it. The pages' referrer policy is `strict-origin-when-cross-origin`, so an image address does not leave in a Referer.
+
+## M5-04 SEO
+
+- **Canonical and hreflang** on every page a visitor may read: one `<link rel="alternate">` per language the page exists in and an `x-default` on the brand's default; a fallback article's canonical is the article in its own language, with no alternate in the language asked for. On the fallback path of a brand that has a domain, the canonical points at the domain.
+- **Open Graph** (`og:type`, title, description, url, site name, locale, the logo as image) and **JSON-LD**: `WebSite` with a `SearchAction` on home, `BreadcrumbList` on categories, sections and articles, `Article` on articles.
+- **`sitemap.xml`** per brand from `HelpCenterContentService.sitemap` (public audience only): both home pages and every readable article and language with its alternates; **404 when internal-only**.
+- **`robots.txt`**: a public help center disallows its search results and `/_hd/` and names its sitemap; an internal-only one is `Disallow: /`.
+- Every state, search, staff and preview page is `noindex` (meta and `X-Robots-Tag`) with no canonical.
+
 ## M5-05 Search
 
 `HelpCenterSearch` (`apps/api/src/help-center/ports.ts`) is bound in `HelpCenterModule` to `HelpCenterSearchService` (`help-center/search/`), which the help center pages (M5-03) and the widget (M5-10) search through.
@@ -102,7 +124,18 @@ Migration `0034_help_center_search` adds the search index, the search log and th
 - **The M7 seam.** Search asks each `CandidateSource` (`search/ranking.ts`) for its best 100 articles, each filtering by audience in SQL first, and merges the lists by reciprocal rank fusion. M5 has the lexical source; M7 adds a semantic one over `knowledge_chunks` beside it and changes nothing else.
 - **Keeping the index current.** The `search` subscriber of `help_center.article_changed` re-indexes that article in the event's own transaction, about a second after the commit; `structure_changed` and `access_changed` re-index the brand (a statement that skips every current row). The hourly `help_center.search_reindex.sweep` adds one `help_center.search_reindex` per active brand on the `knowledge` queue, the safety net behind the events and what fills the index on an install that already had articles.
 - **No GIN index.** Under FORCEd row-level security a GIN index cannot run ahead of the policy (ADR 0011), so the brand and language narrow the rows by btree and the match runs over what is left, at most 5 000 articles × 2 languages per brand.
-- **The search log** keeps the query and never who asked. A search with no word in it ("?!") is neither run nor logged; only the first page of a search is logged, and the widget's suggestions while a chat message is typed are not logged at all (`SearchQuery.log: false`). **Retention:** the log is kept for the brand's search log window (Brand › Data retention, 180 days by default, DOMAIN-RULES §11) and hard-deleted by `maintenance.retention`, which also deletes the view rows older than the same window.
+- **The search log** keeps the query and never who asked. A search with no word in it ("?!") is neither run nor logged; only the first page of a search is logged, and the widget's suggestions while a chat message is typed are not logged at all (`SearchQuery.log: false`); nor are staff searches on the help center pages, as their views and votes are not counted. **Retention:** the log is kept for the brand's search log window (Brand › Data retention, 180 days by default, DOMAIN-RULES §11) and hard-deleted by `maintenance.retention`, which also deletes the view rows older than the same window.
+
+## M5-06 Theme and site settings
+
+Migration `0035_help_center_site` adds to `hc_settings` (no new table): `theme`, `logo_media_id`, `favicon_media_id`, `home`, `links` (jsonb, validated by `help-center-site.ts` in `@helpdock/schemas` and read with defaults underneath) and `custom_css`; and `hc_media.purpose` (`article` · `logo` · `favicon`).
+
+- **Help center › Settings** (`Admin/HelpCenter-Settings`), each card saving on its own under `help_center:manage`, audited as `hc_settings.updated` with the card, and announced as `help_center.site_changed`:
+  - **Theme** — accent (refused below 3:1 on the page in any mode the brand shows, `low-contrast`; the card shows white text's ratio on it), surface tone, corner radius 0–12, light / dark / auto, typeface pair (`resolveBrandTheme`, DESIGN §8), and logo and favicon uploaded through the M5-02 pipeline with their purpose, which scales them to 512 px. The page's tokens are `tokensCssBundle(resolveBrandTheme(theme))`.
+  - **Home page** — category cards, featured articles (up to six, ordered; each must be this brand's, `unknown-article`), popular articles. Search is always shown.
+  - **Header and footer links** — up to eight each, a label per language and an http(s) or mailto address.
+  - **Custom CSS** — up to 20 000 characters, sanitised on save by an allowlist parser (`site/custom-css.ts`; ADR 0007's library has no stylesheet parser): only style rules and `@media` blocks; no `@import` or other at-rule, no `url()` except an inline PNG/JPEG/GIF/WebP or this brand's own media route, no `expression()`, `javascript:` or binding, no `position: fixed`, and never a backslash or a `<`. What was removed is answered and listed on the card with the reason.
+- **View help center** (page header) and the editor's **Preview** open `/help-center/open` in a new tab, which asks for a staff pass and leaves for the help center.
 
 ## M5-08 Feedback, views and Insights
 
@@ -124,16 +157,26 @@ Migration `0034_help_center_search` adds the search index, the search log and th
 
 - **Comments are counted, not listed.** The Articles table shows "n comments" as text; the artboard links it to a list that has no artboard yet.
 - **Typos are forgiven in titles only.** A misspelt word that appears only in an article's body does not match; trigram matching over bodies needs an index row-level security cannot use.
-- **The search log counts partial queries** the help center's search box sends while the visitor types, as the widget's search does, each as its own search.
+- **The search log counts partial queries** the widget's search sends while the visitor types, each as its own search. The help center's search box submits a whole query.
 - **Insights reads the log live**; there is no daily rollup, which the 180-day window and the brand limits keep cheap enough for now.
 
 ## Accepted gaps (M5-01, M5-02, M5-09)
 
-- **Preview and "View help center"** on the artboards need the pages of M5-03 and are not drawn until it lands.
-- **Settings › Theme, Home page and links** are M5-06; the Settings tab holds "Who can read it" alone.
-- **An image in an internal article** is served by the same public redirect as any other: its address is a UUIDv7 nobody can list, but whoever has it can load it. Tying an image to the visibility of the articles that use it needs a reference table and is left for M5-03 to decide with the page renderer.
+- **An image in an internal article** is served by the same public redirect as any other; M5-03 decided to keep it so (see [Pages](#m5-03-pages)).
 - **Article images of a deleted brand** are not yet purged from the bucket by retention (M1-14 knows attachments only).
 - **The category and section dialogs** name a new category or section in both languages; there is no artboard for them beyond DESIGN §6.4 Dialog, and renaming an existing one is available over the api only.
+
+## Accepted gaps (M5-03, M5-04, M5-06)
+
+- **Spelling correction and "Popular searches"** on the search artboards are not drawn: the search port answers neither.
+- **"Was this helpful?" has no comment step** (`HelpCenter/Article-AR` panel 2): `recordVote` accepts an optional comment, but the page does not draw the comment form yet, so both answers go straight to the thanks.
+- **Category icons** on the artboards need an icon per category, which the content model does not have: every category is drawn with Lucide `Folder`. The category page's "Updated" date is left out for the same reason (the tree has no dates).
+- **Typefaces.** Only IBM Plex ships in `packages/ui/fonts`; Noto Sans and Vazirmatn fall back to the system stack until their files arrive (`BRAND_FONTS`). "System fonts" on the artboard is not one of DESIGN §8's pairs and is not offered. SVG logos are not accepted: rasterising an uploaded SVG lets it reference other files, and the pipeline takes PNG, JPEG, WebP and GIF.
+- **The Custom CSS card's "the contrast and focus checks still run on the result"** is not claimed: nothing checks the rendered page at save time. The axe runs of the Playwright suite cover the shipped styles.
+- **A CDN in front** of a help center may serve a public page for up to five minutes without the api seeing it, and that view is not counted.
+- **The staff cookie is not revoked by the pass alone:** it ends with the admin session's refresh family (sign-out, sign-out everywhere, password reset, role change) or after eight hours.
+- **Section pages** have no artboard of their own; they follow the category artboard's note ("reuses this layout with one card").
+- **`/help-center/open`** has no artboard: it shows a status line while it asks for the pass and the DESIGN §6.4 Banner if it cannot.
 
 ## Exit criteria
 
@@ -149,5 +192,6 @@ Migration `0034_help_center_search` adds the search index, the search log and th
 ## Pull requests
 
 - Custom domains (M5-07): #131.
-- Help center content, the editor and visibility (M5-01, M5-02, M5-09): this branch.
-- Search, feedback, Insights and the widget's help center (M5-05, M5-08, M5-10): this branch.
+- Help center content, the editor and visibility (M5-01, M5-02, M5-09): #134.
+- Search, feedback, Insights and the widget's help center (M5-05, M5-08, M5-10): #135.
+- The pages, SEO and the site settings (M5-03, M5-04, M5-06): this branch.

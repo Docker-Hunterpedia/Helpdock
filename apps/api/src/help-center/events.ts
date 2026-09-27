@@ -12,9 +12,11 @@ import {
   HC_ACCESS_CHANGED_EVENT,
   HC_ARTICLE_CHANGED_EVENT,
   HC_MEDIA_UPLOADED_EVENT,
+  HC_SITE_CHANGED_EVENT,
   HC_STRUCTURE_CHANGED_EVENT,
   type HcAccess,
   type HcArticleChangedPayload,
+  type HcSiteCard,
   hcArticleChangedPayloadSchema,
 } from '@helpdock/schemas';
 import { z } from 'zod';
@@ -29,13 +31,14 @@ import { z } from 'zod';
  * | `help_center.structure_changed` | a category or section is created, renamed, reordered or removed | logged |
  * | `help_center.access_changed` | the help center becomes public or internal-only | logged |
  * | `help_center.media_uploaded` | an article image is confirmed | adds `help_center.media_process` |
+ * | `help_center.site_changed` | the theme, home page, links or custom CSS are saved (M5-06) | logged |
  *
  * The first three are the contract M5-09 promises: search (M5-05) and the
  * page cache (M5-03) subscribe to them under their own subscriber names and
  * re-read through `HelpCenterContentService`, and from M7 `knowledge.sync`
  * re-labels chunks, all within 60 seconds of the commit (the relay polls every
- * 500 ms). Until then the default handler only logs, which is what keeps the
- * events from failing as unknown.
+ * 500 ms). The default handler only logs, which is what keeps the events from
+ * failing as unknown; the page cache's subscription is `site/cache-events.ts`.
  */
 
 export const enqueueArticleChanged = (
@@ -58,6 +61,13 @@ export const enqueueAccessChanged = (
   access: HcAccess,
 ): Promise<string> =>
   enqueueOutbox(tx, { brandId, event: HC_ACCESS_CHANGED_EVENT, payload: { access } });
+
+export const enqueueSiteChanged = (
+  tx: DbTransaction,
+  brandId: string,
+  card: HcSiteCard,
+): Promise<string> =>
+  enqueueOutbox(tx, { brandId, event: HC_SITE_CHANGED_EVENT, payload: { card } });
 
 export const enqueueMediaUploaded = (
   tx: DbTransaction,
@@ -118,5 +128,6 @@ export const registerHelpCenterEventHandlers = (
   dispatcher.register(HC_ARTICLE_CHANGED_EVENT, createArticleChangedHandler(queues));
   dispatcher.register(HC_STRUCTURE_CHANGED_EVENT, logOnly);
   dispatcher.register(HC_ACCESS_CHANGED_EVENT, logOnly);
+  dispatcher.register(HC_SITE_CHANGED_EVENT, logOnly);
   dispatcher.register(HC_MEDIA_UPLOADED_EVENT, createMediaUploadedHandler(queues));
 };

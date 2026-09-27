@@ -17,6 +17,7 @@ export * from './error.js';
 export * from './health.js';
 export * from './help-center.js';
 export * from './help-center-insights.js';
+export * from './help-center-site.js';
 export * from './identity-rules.js';
 export * from './install.js';
 export * from './macros.js';

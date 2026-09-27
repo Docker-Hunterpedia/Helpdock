@@ -1,6 +1,6 @@
 import type { StaffRole } from '@helpdock/schemas';
-import { Box, Tab, Tabs } from '@mui/material';
-import { BarChart3, FileText, Settings } from 'lucide-react';
+import { Box, Button, Tab, Tabs } from '@mui/material';
+import { BarChart3, ExternalLink, FileText, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -12,12 +12,13 @@ import { ArticlesTab } from './articles-tab.tsx';
 import { InsightsTab } from './insights-tab.tsx';
 import { NewArticleButton } from './new-article-button.tsx';
 import { SettingsTab } from './settings-tab.tsx';
+import { openHelpCenterHref } from './site/site-draft.js';
 
 /**
- * `Admin/HelpCenter` (M5-01, M5-09): the page header, the tab row, and the
- * Articles tab. Settings holds "Who can read it" (M5-09); the theme, home
- * page and links below it arrive with M5-06. Insights is M5-08's
- * (`insights-tab.tsx`).
+ * `Admin/HelpCenter` (M5-01, M5-09): the page header with "View help
+ * center" (M5-03), the tab row, and the Articles tab. Settings holds "Who can
+ * read it" (M5-09) and the Theme, Home page, Links and Custom CSS cards
+ * (M5-06). Insights is M5-08's (`insights-tab.tsx`).
  *
  * An Agent sees Articles alone (the artboard's footnote); a Viewer sees every
  * tab read-only; changing anything is an Admin's or a Team Leader's.
@@ -58,7 +59,20 @@ export function HelpCenterPage(): ReactNode {
       <PageHeader
         title={t('helpCenter:title')}
         caption={`${brand.name} · ${brand.domain}`}
-        action={tab.key === 'articles' && canManage ? <NewArticleButton /> : undefined}
+        action={
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <Button
+              variant="outlined"
+              href={openHelpCenterHref(brand.id, {})}
+              target="_blank"
+              rel="noopener"
+              startIcon={<ExternalLink size={16} aria-hidden="true" />}
+            >
+              {t('helpCenter:viewHelpCenter')}
+            </Button>
+            {tab.key === 'articles' && canManage ? <NewArticleButton /> : null}
+          </Box>
+        }
       />
 
       <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>

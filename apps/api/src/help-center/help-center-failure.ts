@@ -14,6 +14,9 @@ const STATUS_BY_REASON: Readonly<Record<HcRefusal, number>> = {
   'was-published': HttpStatus.CONFLICT,
   'schedule-in-past': HttpStatus.BAD_REQUEST,
   'limit-reached': HttpStatus.CONFLICT,
+  'low-contrast': HttpStatus.UNPROCESSABLE_ENTITY,
+  'media-not-ready': HttpStatus.UNPROCESSABLE_ENTITY,
+  'unknown-article': HttpStatus.UNPROCESSABLE_ENTITY,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<HcRefusal, string>> = {
@@ -22,6 +25,10 @@ const MESSAGE_BY_REASON: Readonly<Record<HcRefusal, string>> = {
   'was-published': 'This article has been published, so it is archived rather than deleted',
   'schedule-in-past': 'A scheduled publish has to be in the future',
   'limit-reached': 'This help center already has as many of these as it may keep',
+  'low-contrast':
+    'That accent is below 3:1 against the page, so text and buttons on it would not be readable',
+  'media-not-ready': 'That image is not a finished upload for this purpose',
+  'unknown-article': 'One of the featured articles is not in this help center',
 };
 
 export class HelpCenterFailure extends HttpException {

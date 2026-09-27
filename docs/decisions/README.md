@@ -22,6 +22,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0012](0012-widget-bundle-shape.md) | Ship the widget as an ES module with lazy chunks and a catalog-compatible translator | accepted |
 | [0013](0013-web-form-page-rendered-by-the-api.md) | Render the hosted web form as plain HTML from the api until the help center exists | accepted |
 | [0014](0014-markdown-through-tiptap.md) | Markdown import and export through `@tiptap/markdown`, in the browser | accepted |
+| [0015](0015-help-center-pages-rendered-by-the-api.md) | Render the help center as plain HTML from the api, and carry the staff session to its host with a one-use pass | accepted |
 
 ## Template
 

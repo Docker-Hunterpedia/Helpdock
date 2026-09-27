@@ -1,12 +1,17 @@
 import {
+  type HcAppearance,
+  type HcAppearanceUpdateRequest,
   type HcArticle,
   type HcArticleCreateRequest,
   type HcArticleUpdateRequest,
   type HcCategory,
   type HcCategoryCreateRequest,
   type HcCategoryUpdateRequest,
+  type HcCustomCssResult,
+  type HcHomeLayout,
   type HcInsights,
   type HcInsightsQuery,
+  type HcLinks,
   type HcLocale,
   type HcMedia,
   type HcMediaPresignRequest,
@@ -16,17 +21,26 @@ import {
   type HcSectionCreateRequest,
   type HcSectionUpdateRequest,
   type HcSettings,
+  type HcSite,
+  type HcStaffPassRequest,
+  type HcStaffPassResponse,
   type HcStructure,
   type HcVersionSaveRequest,
   type HcVersionStatusRequest,
   type HcVisibility,
+  hcAppearanceSchema,
   hcArticleSchema,
   hcCategorySchema,
+  hcCustomCssResultSchema,
+  hcHomeLayoutSchema,
   hcInsightsSchema,
+  hcLinksSchema,
   hcMediaPresignResponseSchema,
   hcMediaSchema,
   hcSectionSchema,
   hcSettingsSchema,
+  hcSiteSchema,
+  hcStaffPassResponseSchema,
   hcStructureSchema,
 } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
@@ -197,5 +211,29 @@ export class HttpHelpCenterApi implements HelpCenterApi {
       params.set('locale', query.locale);
     }
     return this.#call(hcInsightsSchema, 'GET', brandId, `/insights?${params.toString()}`);
+  }
+
+  site(brandId: string): Promise<HcSite> {
+    return this.#call(hcSiteSchema, 'GET', brandId, '/site');
+  }
+
+  saveAppearance(brandId: string, request: HcAppearanceUpdateRequest): Promise<HcAppearance> {
+    return this.#call(hcAppearanceSchema, 'PUT', brandId, '/site/appearance', request);
+  }
+
+  saveHome(brandId: string, request: HcHomeLayout): Promise<HcHomeLayout> {
+    return this.#call(hcHomeLayoutSchema, 'PUT', brandId, '/site/home', request);
+  }
+
+  saveLinks(brandId: string, request: HcLinks): Promise<HcLinks> {
+    return this.#call(hcLinksSchema, 'PUT', brandId, '/site/links', request);
+  }
+
+  saveCustomCss(brandId: string, css: string): Promise<HcCustomCssResult> {
+    return this.#call(hcCustomCssResultSchema, 'PUT', brandId, '/site/custom-css', { css });
+  }
+
+  staffPass(brandId: string, request: HcStaffPassRequest): Promise<HcStaffPassResponse> {
+    return this.#call(hcStaffPassResponseSchema, 'POST', brandId, '/staff-pass', request);
   }
 }

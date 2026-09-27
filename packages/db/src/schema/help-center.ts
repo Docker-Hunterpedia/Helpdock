@@ -16,6 +16,7 @@ import { brands } from './brands.js';
 import {
   hcAccessEnum,
   hcArticleStatusEnum,
+  hcMediaPurposeEnum,
   hcMediaStatusEnum,
   hcVisibilityEnum,
   localeEnum,
@@ -196,14 +197,32 @@ export const hcArticleVersions = pgTable(
 
 /**
  * A brand's help center as a whole (M5-09): who may read it. One row per
- * brand, written on first save; no row reads as the default, `public`. The
- * theme and home layout of M5-06 join this row.
+ * brand, written on first save; no row reads as the default, `public`.
+ *
+ * M5-06 adds the site: the theme, logo and favicon, the home page, the header
+ * and footer links and the custom CSS. The jsonb columns are validated by the
+ * schemas in `@helpdock/schemas` (`help-center-site.ts`) on write and parsed
+ * with their defaults underneath on read, so a row written before a key
+ * existed still renders.
  */
 export const hcSettings = pgTable('hc_settings', {
   brandId: uuid('brand_id')
     .primaryKey()
     .references(() => brands.id, { onDelete: 'cascade' }),
   access: hcAccessEnum('access').notNull().default('public'),
+  /** `{ accent, surfaceTone, radius, mode, font }` (DESIGN §8). */
+  theme: jsonb('theme').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  /** A `ready` `hc_media` row uploaded for the purpose; cleared if the image goes. */
+  logoMediaId: uuid('logo_media_id').references(() => hcMedia.id, { onDelete: 'set null' }),
+  faviconMediaId: uuid('favicon_media_id').references(() => hcMedia.id, {
+    onDelete: 'set null',
+  }),
+  /** `{ categories, featured, featuredArticleIds, popular }`. */
+  home: jsonb('home').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  /** `{ header: [], footer: [] }`, each link `{ labelEn, labelAr, url }`. */
+  links: jsonb('links').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  /** Already sanitised (`custom-css.ts` in the api); rendered after the theme. */
+  customCss: text('custom_css').notNull().default(''),
   updatedBy: uuid('updated_by'),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
@@ -235,6 +254,8 @@ export const hcMedia = pgTable(
     mime: text('mime').notNull(),
     size: bigint('size', { mode: 'number' }).notNull(),
     status: hcMediaStatusEnum('status').notNull().default('pending'),
+    /** An article image, or the site's logo or favicon (M5-06), which decides the largest edge. */
+    purpose: hcMediaPurposeEnum('purpose').notNull().default('article'),
     /** A key, never a tool's stderr. */
     rejectReason: text('reject_reason'),
     /** The WebP the pipeline wrote. Null until `ready`. */

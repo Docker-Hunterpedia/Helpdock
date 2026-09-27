@@ -115,6 +115,17 @@ export class RedisStub {
     return Promise.all(keys.flat().map((key) => this.get(key)));
   }
 
+  /** The help center's page cache generation (M5-03). */
+  async incr(key: string): Promise<number> {
+    const entry = this.#live(key);
+    const next = (entry?.data.kind === 'string' ? Number(entry.data.value) : 0) + 1;
+    this.#entries.set(key, {
+      data: { kind: 'string', value: String(next) },
+      expiresAt: entry?.expiresAt ?? null,
+    });
+    return next;
+  }
+
   async getdel(key: string): Promise<string | null> {
     const value = await this.get(key);
     this.#entries.delete(key);

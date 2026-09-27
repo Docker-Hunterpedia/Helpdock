@@ -1,6 +1,10 @@
 import {
+  HC_HOME_DEFAULTS,
+  HC_THEME_DEFAULTS,
   type HcActivityAction,
   type HcActivityEntry,
+  type HcAppearance,
+  type HcAppearanceUpdateRequest,
   type HcArticle,
   type HcArticleCreateRequest,
   type HcArticleStatus,
@@ -9,8 +13,12 @@ import {
   type HcCategory,
   type HcCategoryCreateRequest,
   type HcCategoryUpdateRequest,
+  type HcCssRemoval,
+  type HcCustomCssResult,
+  type HcHomeLayout,
   type HcInsights,
   type HcInsightsQuery,
+  type HcLinks,
   type HcLocale,
   type HcMedia,
   type HcMediaPresignRequest,
@@ -20,6 +28,9 @@ import {
   type HcSectionCreateRequest,
   type HcSectionUpdateRequest,
   type HcSettings,
+  type HcSite,
+  type HcStaffPassRequest,
+  type HcStaffPassResponse,
   type HcStructure,
   type HcVersion,
   type HcVersionSaveRequest,
@@ -281,6 +292,35 @@ export class MockHelpCenterApi implements HelpCenterApi {
   sections: HcSection[];
   stored: Stored[];
   #settings: HcSettings = { access: 'public' };
+  #site: {
+    appearance: HcAppearance;
+    home: HcHomeLayout;
+    links: HcLinks;
+    customCss: string;
+    url: string;
+  } = {
+    appearance: { theme: { ...HC_THEME_DEFAULTS }, logo: null, favicon: null },
+    home: {
+      ...HC_HOME_DEFAULTS,
+      featured: true,
+      featuredArticleIds: [
+        MOCK_HELP_CENTER.articles.timelines,
+        MOCK_HELP_CENTER.articles.whereIsMyOrder,
+      ],
+    },
+    links: {
+      header: [
+        { labelEn: 'Main site', labelAr: 'الموقع الرئيسي', url: 'https://www.helpdock.com' },
+        { labelEn: 'Service status', labelAr: 'حالة الخدمة', url: 'https://status.helpdock.com' },
+      ],
+      footer: [
+        { labelEn: 'Privacy', labelAr: 'الخصوصية', url: 'https://www.helpdock.com/privacy' },
+        { labelEn: 'Terms', labelAr: 'الشروط', url: 'https://www.helpdock.com/terms' },
+      ],
+    },
+    customCss: '.hd-header { border-block-end-width: 2px; }',
+    url: 'https://help.helpdock.test/',
+  };
   readonly #images = new Map<string, HcMedia>();
 
   constructor() {
@@ -614,6 +654,93 @@ export class MockHelpCenterApi implements HelpCenterApi {
       // The fixture's last week found an answer to every search, for the empty state.
       zeroResultSearches: query.days === 7 ? [] : inLocale(MOCK_ZERO_RESULT_SEARCHES),
       articles: query.locale === 'ar' ? articles.slice(0, 2) : articles,
+    };
+  }
+
+  async site(): Promise<HcSite> {
+    await delay();
+    return structuredClone(this.#site);
+  }
+
+  async saveAppearance(
+    _brandId: string,
+    request: HcAppearanceUpdateRequest,
+  ): Promise<HcAppearance> {
+    await delay();
+    const image = (mediaId: string | null) => {
+      if (mediaId === null) {
+        return null;
+      }
+      const found = this.#images.get(mediaId);
+      if (found?.status !== 'ready' || found.src === null) {
+        throw new HelpCenterError('media-not-ready');
+      }
+      return { mediaId, src: found.src, width: found.width, height: found.height };
+    };
+    this.#site.appearance = {
+      theme: request.theme,
+      logo: image(request.logoMediaId),
+      favicon: image(request.faviconMediaId),
+    };
+    return structuredClone(this.#site.appearance);
+  }
+
+  async saveHome(_brandId: string, request: HcHomeLayout): Promise<HcHomeLayout> {
+    await delay();
+    if (
+      request.featuredArticleIds.some(
+        (articleId) => !this.stored.some((entry) => entry.article.id === articleId),
+      )
+    ) {
+      throw new HelpCenterError('unknown-article');
+    }
+    this.#site.home = structuredClone(request);
+    return structuredClone(request);
+  }
+
+  async saveLinks(_brandId: string, request: HcLinks): Promise<HcLinks> {
+    await delay();
+    this.#site.links = structuredClone(request);
+    return structuredClone(request);
+  }
+
+  /**
+   * The api's sanitiser keeps an allowlist (`custom-css.ts`); the fixture only
+   * imitates its three most common refusals, which is what the screen needs
+   * to show a list of removals.
+   */
+  async saveCustomCss(_brandId: string, css: string): Promise<HcCustomCssResult> {
+    await delay();
+    const removed: HcCssRemoval[] = [];
+    const kept = css
+      .split('\n')
+      .filter((line) => {
+        const reason = /^\s*@import/.test(line)
+          ? 'import'
+          : /url\(\s*['"]?https?:/.test(line)
+            ? 'url'
+            : /position:\s*fixed/.test(line)
+              ? 'fixed'
+              : null;
+        if (reason !== null) {
+          removed.push({ rule: line.trim(), reason });
+        }
+        return reason === null;
+      })
+      .join('\n')
+      .trim();
+    this.#site.customCss = kept;
+    return { css: kept, removed };
+  }
+
+  async staffPass(brandId: string, request: HcStaffPassRequest): Promise<HcStaffPassResponse> {
+    await delay();
+    const path =
+      request.preview === undefined
+        ? (request.path ?? '/en')
+        : `/${request.preview.locale}/articles/preview?preview=1`;
+    return {
+      url: `https://help.helpdock.test/_hd/staff?pass=mock-${brandId}&to=${encodeURIComponent(path)}`,
     };
   }
 

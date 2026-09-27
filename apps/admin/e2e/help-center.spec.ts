@@ -210,7 +210,10 @@ test.describe('Who can read it', () => {
     await page
       .getByRole('radio', { name: new RegExp(t('helpCenter:settings.access.internal_only.label')) })
       .check();
-    await page.getByRole('button', { name: t('helpCenter:settings.save') }).click();
+    await page
+      .getByRole('region', { name: t('helpCenter:settings.heading') })
+      .getByRole('button', { name: t('helpCenter:settings.save') })
+      .click();
 
     await expect(page.getByText(t('helpCenter:settings.saved'))).toBeVisible();
     expect(await violations(page)).toEqual([]);

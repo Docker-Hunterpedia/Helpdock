@@ -19,6 +19,7 @@ import { ContactsPage } from '../screens/contacts/contacts-page.tsx';
 import { NewContactPage } from '../screens/contacts/new-contact-page.tsx';
 import { ArticleEditorRoute } from '../screens/help-center/article-editor-route.tsx';
 import { HelpCenterPage } from '../screens/help-center/help-center-page.tsx';
+import { OpenHelpCenter } from '../screens/help-center/site/open-help-center.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
@@ -116,6 +117,8 @@ export function AppRoutes(): ReactNode {
           {/* M5-01, M5-02, M5-09. `/help-center` alone opens Articles. */}
           <Route path={ROUTES.helpCenter} element={<HelpCenterPage />} />
           <Route path={ROUTES.helpCenterTab} element={<HelpCenterPage />} />
+          {/* M5-03: "View help center", "Preview" and the internal-only wall land here. */}
+          <Route path={ROUTES.helpCenterOpen} element={<OpenHelpCenter />} />
           {/* General, Domains (M5-07) and Danger zone (M1-14); `/admin/brand`
               with no tab redirects to General, as `/admin/ticketing` does to
               its first. */}

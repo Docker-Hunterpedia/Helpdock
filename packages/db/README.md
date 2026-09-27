@@ -39,7 +39,7 @@ Tables live in `src/schema/`, one file each, re-exported from
 
 | Table | Scope | Notes |
 |---|---|---|
-| `users` | global | Staff accounts. Unique on `lower(email)`, so addresses compare case-insensitively without the `citext` extension. |
+| `users` | global | Staff accounts. Unique on `lower(email)`, so addresses compare case-insensitively without the `citext` extension. M2-05 adds `signature_en` and `signature_ar`, the lines under a person's email replies. |
 | `brands` | global | The tenant. `prefix` is unique, and DOMAIN-RULES §11 keeps it reserved after a brand is deleted. Inserting a row creates that brand's ticket sequence. `settings` is the brand's own ticketing behaviour, validated by `brandSettingsSchema` in `@helpdock/schemas`. |
 | `user_brand_roles` | tenant | One role per user per brand. `department_ids` null means every department; an empty array means none, which is what an Agent with nothing assigned has. |
 | `departments` | tenant | The unit a Team Leader leads and an Agent belongs to. Unique on `(brand_id, name)`. M1-01 adds `name_ar`, `sort_order` and `default_team_id`; M1-07 adds `assignment_mode`, `load_cap` (null = no cap, otherwise positive), `auto_unassign_offline`, `auto_unassign_after_minutes` (1–1440, default 15) and `on_unassign`. Business hours and the SLA policy are M3, the inbox is M2. |
@@ -64,6 +64,8 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `ticket_activity` | tenant, **department** | Who changed what, and how. Part of the ticket rather than the brand's administrative trail, which stays `audit_log`. |
 | `ticket_time_entries` | tenant, **department** | Time spent on a ticket (M1-12): seconds, an optional note, and the reply it came with. `user_id` restricts deletion, so logged time outlives nothing it should. |
 | `csat_responses` | tenant, **department** | One satisfaction survey per close (M1-12), unique on `(ticket_id, closed_at)`, with the answer on the same row. Stores a hash of the link's token, never the token. |
+| `email_outbound_settings` | tenant | A brand's outbound mail (M2-05, M2-06): its SMTP server (password as a `v1.…` envelope, never returned), the default and per-department senders, both auto-reply toggles, template overrides and the per-sender hourly cap. No row means the install's server, no sender override and both auto-replies off. |
+| `email_deliveries` | tenant, **department** | One outbound email (M2-05): a reply (`ticket_message_id`, unique) or an auto-reply (unique per ticket and kind). Freezes the sender, the recipients and the deterministic `message_id` at creation; `status` is `queued`, `sent`, `failed` (Failed sends) or `discarded`. Follows its ticket to another department. |
 | `ticket_search_tokens` | tenant, **department** | The words the ticket list's search reads (M1-15 part 2, [ADR 0011](../../docs/decisions/0011-ticket-search-token-table.md)): one row per distinct lexeme of a ticket's subject and first message, keyed by `(ticket_id, token)`. Written only by triggers (`helpdock_ticket_search_refresh`), in the same transaction as the ticket or message write. `token` is `COLLATE "C"` so a prefix is a range of `ticket_search_tokens_brand_token_idx`. |
 
 Ids are **UUIDv7**, generated in `src/uuid.ts`: a 48-bit millisecond timestamp,

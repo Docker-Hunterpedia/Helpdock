@@ -211,7 +211,7 @@ describe('one ticket', () => {
   it('shows a reply as sending, then as part of the thread once it has a seq', async () => {
     const { user } = await openRefund();
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'On its way.');
-    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await user.click(screen.getByRole('button', { name: 'Send email' }));
 
     expect(await screen.findByText('Reply sent')).toBeVisible();
     const thread = screen.getByRole('list', { name: 'Conversation' });
@@ -228,7 +228,7 @@ describe('one ticket', () => {
 
     const { user } = await openRefund(new RefusingApi());
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'On its way.');
-    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await user.click(screen.getByRole('button', { name: 'Send email' }));
 
     expect(await screen.findByText('Not sent, retry')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
@@ -254,7 +254,7 @@ describe('one ticket', () => {
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Closing this.');
     await user.click(screen.getByRole('combobox', { name: 'Then set status' }));
     await user.click(await screen.findByRole('option', { name: 'Closed' }));
-    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await user.click(screen.getByRole('button', { name: 'Send email' }));
 
     await waitFor(async () => {
       expect((await tickets.ticket('brand', MOCK_TICKET_REFUND)).ticket.status.name).toBe('Closed');
@@ -444,7 +444,7 @@ describe('one ticket', () => {
     expect(await screen.findByText('receipt.pdf')).toBeVisible();
 
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Here it is.');
-    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await user.click(screen.getByRole('button', { name: 'Send email' }));
 
     await waitFor(async () => {
       const { messages } = await tickets.messages('brand', MOCK_TICKET_REFUND, 4);

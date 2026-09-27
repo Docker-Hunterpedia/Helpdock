@@ -130,7 +130,7 @@ describe('time tracking on', () => {
     // A second, so the timer has something to send.
     await new Promise((resolve) => setTimeout(resolve, 1_100));
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'On it.');
-    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await user.click(screen.getByRole('button', { name: 'Send email' }));
 
     await within(card).findByText(/with reply/);
     const { entries } = await tickets.timeEntries('brand', MOCK_TICKET_REFUND);

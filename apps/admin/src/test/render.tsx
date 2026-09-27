@@ -7,6 +7,8 @@ import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { EmailApi } from '../email/api.js';
+import { MockEmailApi } from '../email/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
@@ -25,6 +27,7 @@ export interface RenderAppOptions {
   readonly ticketingApi?: TicketingApi;
   readonly ticketsApi?: TicketsApi;
   readonly uploader?: AttachmentUploader;
+  readonly emailApi?: EmailApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -36,6 +39,7 @@ export interface RenderedApp extends RenderResult {
   readonly ticketingApi: TicketingApi;
   readonly ticketsApi: TicketsApi;
   readonly uploader: AttachmentUploader;
+  readonly emailApi: EmailApi;
 }
 
 /**
@@ -51,6 +55,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
   const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
   const uploader = options.uploader ?? new MockAttachmentUploader();
+  const emailApi = options.emailApi ?? new MockEmailApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -62,6 +67,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       ticketingApi={ticketingApi}
       ticketsApi={ticketsApi}
       uploader={uploader}
+      emailApi={emailApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -80,5 +86,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     ticketingApi,
     ticketsApi,
     uploader,
+    emailApi,
   };
 }

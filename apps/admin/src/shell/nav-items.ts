@@ -4,6 +4,7 @@ import {
   Building2,
   ChartColumn,
   type LucideIcon,
+  Mail,
   Server,
   Settings,
   ShieldUser,
@@ -22,6 +23,7 @@ export type NavKey =
   | 'reports'
   | 'settings'
   | 'ticketing'
+  | 'channels'
   | 'staff'
   | 'system';
 
@@ -87,6 +89,9 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   ticketing: item('ticketing', ROUTES.ticketing, SlidersHorizontal, {
     roles: ['admin', 'teamLeader'],
   }),
+  // How customers reach the brand (M2-08): its mail server and mailboxes are
+  // brand-wide configuration, which DOMAIN-RULES §1.2 keeps with the Admin.
+  channels: item('channels', ROUTES.channels, Mail, { roles: ['admin'] }),
   // "Staff and roles" is the Admin and Team Leader screen: they are the two
   // roles that hold `staff:manage` (DOMAIN-RULES §1.2).
   staff: item('staff', ROUTES.staff, ShieldUser, { roles: ['admin', 'teamLeader'] }),
@@ -107,6 +112,7 @@ export const ADMIN_NAV: readonly NavItem[] = [
   NAV_BY_KEY.brand,
   NAV_BY_KEY.settings,
   NAV_BY_KEY.ticketing,
+  NAV_BY_KEY.channels,
   NAV_BY_KEY.staff,
   NAV_BY_KEY.system,
 ];

@@ -2,6 +2,7 @@ import type { Session, SessionBrand } from '@helpdock/schemas';
 import { type UseQueryResult, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext } from 'react';
 import type { ContactsApi } from '../contacts/api.js';
+import type { EmailApi } from '../email/api.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
 import type { TicketingApi } from '../ticketing/api.js';
@@ -17,6 +18,7 @@ const ContactsApiContext = createContext<ContactsApi | null>(null);
 const TicketingApiContext = createContext<TicketingApi | null>(null);
 const TicketsApiContext = createContext<TicketsApi | null>(null);
 const UploaderContext = createContext<AttachmentUploader | null>(null);
+const EmailApiContext = createContext<EmailApi | null>(null);
 const SessionContext = createContext<Session | null>(null);
 
 export function AuthApiProvider({
@@ -26,6 +28,7 @@ export function AuthApiProvider({
   ticketingApi,
   ticketsApi,
   uploader,
+  emailApi,
   children,
 }: {
   readonly api: AuthApi;
@@ -36,6 +39,8 @@ export function AuthApiProvider({
   readonly ticketingApi?: TicketingApi | undefined;
   readonly ticketsApi?: TicketsApi | undefined;
   readonly uploader?: AttachmentUploader | undefined;
+  /** M2-05: Channels › Outgoing email, the signature tab, the composer's email mode. */
+  readonly emailApi?: EmailApi | undefined;
   readonly children: ReactNode;
 }): ReactNode {
   return (
@@ -45,7 +50,9 @@ export function AuthApiProvider({
           <TicketingApiContext.Provider value={ticketingApi ?? null}>
             <TicketsApiContext.Provider value={ticketsApi ?? null}>
               <UploaderContext.Provider value={uploader ?? null}>
-                {children}
+                <EmailApiContext.Provider value={emailApi ?? null}>
+                  {children}
+                </EmailApiContext.Provider>
               </UploaderContext.Provider>
             </TicketsApiContext.Provider>
           </TicketingApiContext.Provider>
@@ -95,6 +102,15 @@ export function useTicketsApi(): TicketsApi {
   const api = useContext(TicketsApiContext);
   if (!api) {
     throw new Error('useTicketsApi needs an <AuthApiProvider> with a ticketsApi above it');
+  }
+
+  return api;
+}
+
+export function useEmailApi(): EmailApi {
+  const api = useContext(EmailApiContext);
+  if (!api) {
+    throw new Error('useEmailApi needs an <AuthApiProvider> with an emailApi above it');
   }
 
   return api;

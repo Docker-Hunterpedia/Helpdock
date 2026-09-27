@@ -66,5 +66,30 @@
     "signOutEverywhere": "Sign out everywhere",
     "signedOut": "That browser was signed out.",
     "empty": "No other browser is signed in."
+  },
+  "tabs": {
+    "label": "Your account sections",
+    "security": "Security",
+    "signature": "Email signature"
+  },
+  "signature": {
+    "pageTitle": "Your account",
+    "pageCaption": "Only you see these settings",
+    "heading": "Email signature",
+    "caption": "Added under your public replies by email. Never on internal notes, chat or Telegram.",
+    "en": "English",
+    "ar": "Arabic",
+    "arNative": "العربية",
+    "enHint": "Plain text, up to 6 lines. Links are made clickable.",
+    "arHint": "Used when the customer's language is Arabic. Left empty, the English one is used.",
+    "tooManyLines": "A signature can have at most 6 lines.",
+    "discard": "Discard",
+    "save": "Save signature",
+    "saved": "Signature saved.",
+    "actionFailed": "That did not work. Nothing was changed.",
+    "previewHeading": "Preview",
+    "previewCaption": "The end of a reply as the customer sees it. Updates as you type.",
+    "sampleGreeting": "Hi Mona,",
+    "sampleBody": "…it should appear by 11 September."
   }
 }

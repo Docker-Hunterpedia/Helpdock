@@ -6,6 +6,7 @@ import arContacts from '../locales/ar/contacts.json' with { type: 'json' };
 import arCsat from '../locales/ar/csat.json' with { type: 'json' };
 import arEmail from '../locales/ar/email.json' with { type: 'json' };
 import arMe from '../locales/ar/me.json' with { type: 'json' };
+import arRules from '../locales/ar/rules.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
 import arSystem from '../locales/ar/system.json' with { type: 'json' };
@@ -21,6 +22,7 @@ import enContacts from '../locales/en/contacts.json' with { type: 'json' };
 import enCsat from '../locales/en/csat.json' with { type: 'json' };
 import enEmail from '../locales/en/email.json' with { type: 'json' };
 import enMe from '../locales/en/me.json' with { type: 'json' };
+import enRules from '../locales/en/rules.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
 import enSystem from '../locales/en/system.json' with { type: 'json' };
@@ -56,6 +58,8 @@ export const NAMESPACES = [
   'ticket',
   // The public rating page (M1-12): read by the customer, not by staff.
   'csat',
+  // `Admin/Automation` (M3-03 to M3-05): workflow rules, their log and the test run.
+  'rules',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -78,6 +82,7 @@ export const resources = {
     brand: enBrand,
     ticket: enTicket,
     csat: enCsat,
+    rules: enRules,
   },
   ar: {
     common: arCommon,
@@ -95,6 +100,7 @@ export const resources = {
     brand: arBrand,
     ticket: arTicket,
     csat: arCsat,
+    rules: arRules,
   },
 };
 

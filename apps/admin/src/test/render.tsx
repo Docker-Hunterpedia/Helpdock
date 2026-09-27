@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
+import type { AutomationApi } from '../automation/api.js';
+import { MockAutomationApi } from '../automation/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
@@ -25,6 +27,8 @@ export interface RenderAppOptions {
   readonly ticketingApi?: TicketingApi;
   readonly ticketsApi?: TicketsApi;
   readonly uploader?: AttachmentUploader;
+  /** Defaults to a fresh fixture, for `Admin/Automation`. */
+  readonly automationApi?: AutomationApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -36,6 +40,7 @@ export interface RenderedApp extends RenderResult {
   readonly ticketingApi: TicketingApi;
   readonly ticketsApi: TicketsApi;
   readonly uploader: AttachmentUploader;
+  readonly automationApi: AutomationApi;
 }
 
 /**
@@ -51,6 +56,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
   const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
   const uploader = options.uploader ?? new MockAttachmentUploader();
+  const automationApi = options.automationApi ?? new MockAutomationApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -62,6 +68,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       ticketingApi={ticketingApi}
       ticketsApi={ticketsApi}
       uploader={uploader}
+      automationApi={automationApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -80,5 +87,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     ticketingApi,
     ticketsApi,
     uploader,
+    automationApi,
   };
 }

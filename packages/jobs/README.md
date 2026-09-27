@@ -84,6 +84,9 @@ M1 adds:
 |---|---|---|
 | `media.process` | `media` | M1-10's sniff, re-encode and scan of one attachment. |
 | `assignment.offline_unassign` | `assignment` | M1-07's auto-unassign timer, added delayed by the `assignment.staff_offline` handler. Keyed by the departure (`userId`, `departmentId`, `since`), so coming back and leaving again is a new job. |
+| `rules.evaluate` | `rules` | M3-03: one brand's event rules for one ticket after one domain event. Added by the rules module's `outbox.event` handler with `jobId = rules.evaluate.<outboxId>`, and keyed by the outbox row, so an event is evaluated once. The payload carries the rule chain the depth guard counts. |
+| `rules.time_based.schedule` | `rules` | M3-04's five-minute tick (`*/5 * * * *`): one `rules.time_based` job per active brand. |
+| `rules.time_based` | `rules` | One brand's due time-based rules for one tick; the job id names the brand and the tick, so a tick that fires twice adds nothing. |
 
 ## Handling an event
 
@@ -235,6 +238,13 @@ of a connection a worker blocks on.
 
 Leaving `status` out is allowed: the relay runs exactly as before and the System
 page says the worker has not reported.
+
+An event may have **several handlers** (M3): a ticket change is a socket
+frame, a reason to evaluate workflow rules and a clock to move, and each module
+registers its own. They run in registration order in the one transaction the
+receipt is claimed in, so a handler that throws rolls the others back and the
+job is retried whole. Registering the same function twice for one event is
+refused.
 
 Registering handlers before starting the worker matters: a job that arrives
 before its handler is registered fails as an unknown event and burns attempts.

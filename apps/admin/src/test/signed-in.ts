@@ -1,5 +1,6 @@
 import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE, MockAuthApi } from '../auth/mock-api.js';
 import type { AdminApis } from '../auth/select-api.js';
+import { MockAutomationApi } from '../automation/mock-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockStaffApi } from '../staff/mock-api.js';
@@ -39,5 +40,6 @@ export async function signedInMockApis(): Promise<AdminApis> {
     ticketing,
     tickets: new MockTicketsApi(undefined, Date.now(), blockList, undefined, ticketing),
     uploader: new MockAttachmentUploader(),
+    automation: new MockAutomationApi(),
   };
 }

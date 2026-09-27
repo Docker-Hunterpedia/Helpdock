@@ -11,6 +11,8 @@ import { BrowserRouter } from 'react-router';
 import type { AuthApi } from '../auth/api.js';
 import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
+import type { AutomationApi } from '../automation/api.js';
+import { AutomationApiProvider } from '../automation/context.tsx';
 import type { ContactsApi } from '../contacts/api.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
@@ -93,6 +95,8 @@ export interface AppProvidersProps {
   readonly ticketsApi?: TicketsApi;
   /** Defaults to the matching adapter. The composer and the thread need it. */
   readonly uploader?: AttachmentUploader;
+  /** Defaults to the matching adapter. Only `Admin/Automation` reads it. */
+  readonly automationApi?: AutomationApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -119,6 +123,7 @@ export function AppProviders({
   ticketingApi,
   ticketsApi,
   uploader,
+  automationApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -139,6 +144,7 @@ export function AppProviders({
   const ticketing = ticketingApi ?? fallback.ticketing;
   const tickets = ticketsApi ?? fallback.tickets;
   const attachments = uploader ?? fallback.uploader;
+  const automation = automationApi ?? fallback.automation;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -201,9 +207,11 @@ export function AppProviders({
                 ticketsApi={tickets}
                 uploader={attachments}
               >
-                <ToastProvider>
-                  <Router>{children}</Router>
-                </ToastProvider>
+                <AutomationApiProvider api={automation}>
+                  <ToastProvider>
+                    <Router>{children}</Router>
+                  </ToastProvider>
+                </AutomationApiProvider>
               </AuthApiProvider>
             </QueryClientProvider>
           </I18nextProvider>

@@ -1,3 +1,6 @@
+import type { AutomationApi } from '../automation/api.js';
+import { HttpAutomationApi } from '../automation/http-api.js';
+import { MockAutomationApi } from '../automation/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
@@ -31,6 +34,8 @@ export interface AdminApis {
   readonly tickets: TicketsApi;
   /** M1-10's client half; the composer and the thread are its only callers. */
   readonly uploader: AttachmentUploader;
+  /** M3-03 to M3-05: `Admin/Automation`. */
+  readonly automation: AutomationApi;
 }
 
 /**
@@ -70,6 +75,7 @@ export function createApis(
       ticketing: new HttpTicketingApi(transport),
       tickets: new HttpTicketsApi(transport),
       uploader: new HttpAttachmentUploader(transport),
+      automation: new HttpAutomationApi(transport),
     };
   }
 
@@ -99,5 +105,6 @@ export function createApis(
       ticketing,
     ),
     uploader: uploads,
+    automation: new MockAutomationApi(),
   };
 }

@@ -52,6 +52,7 @@ const ticket = (n: number, links: Partial<TicketRow> = {}): TicketRow => ({
   resolutionDueAt: null,
   slaBreached: false,
   closedAt: null,
+  statusChangedAt: AT,
   custom: {},
   search: null,
   deletedAt: null,

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
+import { AutomationPage } from '../screens/admin/automation/automation-page.tsx';
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
@@ -93,6 +94,11 @@ export function AppRoutes(): ReactNode {
               which the page itself does, so both paths are one component. */}
           <Route path={ROUTES.ticketing} element={<TicketingPage />} />
           <Route path={ROUTES.ticketingTab} element={<TicketingPage />} />
+          {/* M3-03 to M3-05. The builder's path is deeper than a tab's, so the
+              two never compete for a url. */}
+          <Route path={ROUTES.automation} element={<AutomationPage />} />
+          <Route path={ROUTES.automationTab} element={<AutomationPage />} />
+          <Route path={ROUTES.automationRule} element={<AutomationPage />} />
           {/* M1-14. Only the Danger zone tab is built; `/admin/brand` with no
               tab redirects to it, as `/admin/ticketing` does to its first. */}
           <Route path={ROUTES.brand} element={<BrandPage />} />

@@ -1,10 +1,11 @@
 # In development
 
-Active milestones: [M2 Email channel](M2-email-channel.md) and [M3 Automation and SLAs](M3-automation-and-slas.md), both started 2026-09-27.
+No milestone is in development.
 
-M0 Skeleton shipped on 2026-09-19 and M1 Ticketing core on 2026-09-25; their
-documents are in [`../completed/`](../completed/README.md). M2 Email channel,
-M3 Automation and SLAs and M5 Help center depend only on M1 and may start
+M0 Skeleton shipped on 2026-09-19, M1 Ticketing core on 2026-09-25, and M2
+Email channel and M3 Automation and SLAs on 2026-09-27; their documents are in
+[`../completed/`](../completed/README.md). M4 Widget and realtime, M5 Help
+center, M6 Telegram and M8 API, webhooks, reports may start
 ([PRD status board](../planning/PRD.md#status-board)).
 
 When a milestone starts, add a file here named `M<n>-<slug>.md` using this template:

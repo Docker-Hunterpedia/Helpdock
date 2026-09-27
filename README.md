@@ -2,7 +2,7 @@
 
 Open-source customer support platform: ticketing, help center, live chat widget and grounded AI, in one deploy that serves many brands. A self-hosted alternative to Zoho Desk, Zendesk and Freshdesk.
 
-> **Status:** pre-alpha. **M0 Skeleton shipped** on 2026-09-19; **M1 Ticketing core** is next. What works today: `docker compose up`, the first-run wizard, sign-in with a password and a second factor, staff and roles, and the System page — in English and Arabic. There is no ticketing yet. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, [what M0 actually built](docs/completed/M0-skeleton.md), plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
+> **Status:** pre-alpha. M0 Skeleton, M1 Ticketing core, M2 Email channel and M3 Automation and SLAs have shipped. What works today: `docker compose up` and the first-run wizard; sign-in with a password and a second factor; staff, roles and brands; the ticket workspace with views, assignment, merge and split; email in and out; business hours and SLAs; workflow rules and macros; and staff notifications — in English and Arabic. There is no widget, help center or AI yet. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, and [docs/completed/](docs/completed/README.md) for what each milestone built, plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
 
 ## Why Helpdock
 
@@ -24,9 +24,9 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 | Milestone | Scope | Status |
 |---|---|---|
 | M0 | Monorepo skeleton, config, database and RLS, auth, admin shell, Compose, CI | [shipped](docs/completed/M0-skeleton.md) |
-| M1 | Ticketing core | next |
-| M2 | Email channel | planned |
-| M3 | Automation and SLAs | planned |
+| M1 | Ticketing core | [shipped](docs/completed/M1-ticketing-core.md) |
+| M2 | Email channel | [shipped](docs/completed/M2-email-channel.md) |
+| M3 | Automation and SLAs | [shipped](docs/completed/M3-automation-and-slas.md) |
 | M4 | Widget and realtime | planned |
 | M5 | Help center | planned |
 | M6 | Telegram | planned |

@@ -22,10 +22,14 @@ export type AccentCheck =
   | { readonly kind: 'invalid' }
   | { readonly kind: 'pass' | 'fail'; readonly ratio: number };
 
+// The `#` stays out of the pattern: scripts/controller-scan.ts tokenizes this
+// file without a parser, and `/^#` there reads as a private name that never ends.
+const SIX_HEX_DIGITS = /^[0-9a-fA-F]{6}$/;
+
 /** The artboard's line under the Accent field: the ratio of white text on it, and whether it passes. */
 export const checkAccent = (value: string): AccentCheck => {
   const hex = value.trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+  if (!(hex.startsWith('#') && SIX_HEX_DIGITS.test(hex.slice(1)))) {
     return { kind: 'invalid' };
   }
   const ratio = Math.round(whiteContrastOn(hex) * 10) / 10;

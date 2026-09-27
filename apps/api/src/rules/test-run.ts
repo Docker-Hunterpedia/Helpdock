@@ -90,10 +90,17 @@ const previewOne = async (
       sim.changes.add('priority');
       return CHANGED;
     case 'set_field':
-      if ((facts.custom[action.key] ?? null) === action.value) {
+      // Own-property read and `fromEntries` write: the key is a validated
+      // field key, but the simulation never touches an object's prototype.
+      if (
+        (Object.hasOwn(facts.custom, action.key) ? facts.custom[action.key] : null) === action.value
+      ) {
         return UNCHANGED;
       }
-      sim.facts = { ...facts, custom: { ...facts.custom, [action.key]: action.value } };
+      sim.facts = {
+        ...facts,
+        custom: Object.fromEntries([...Object.entries(facts.custom), [action.key, action.value]]),
+      };
       sim.changes.add('custom');
       return CHANGED;
     case 'assign_team': {

@@ -88,6 +88,11 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('inbound.close') };
       },
+      createSlaWorker: ({ redis }) => {
+        calls.push('sla.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('sla.close') };
+      },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
@@ -116,6 +121,7 @@ describe('startWorker', () => {
       'assignment.create',
       'maintenance.create',
       'inbound.create',
+      'sla.create',
       'relay.start',
     ]);
   });
@@ -190,6 +196,7 @@ describe('startWorker', () => {
       'assignment.close',
       'maintenance.close',
       'inbound.close',
+      'sla.close',
       'producers.close',
       'connection.quit',
     ]);
@@ -211,6 +218,7 @@ describe('startWorker', () => {
       'assignment.close',
       'maintenance.close',
       'inbound.close',
+      'sla.close',
       'producers.close',
       'connection.quit',
     ]);

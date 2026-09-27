@@ -26,9 +26,9 @@ import { DEFAULT_HOURLY_CAP } from './outgoing-settings.js';
  */
 
 /**
- * "Is this department open now?" — M3's business hours (M3-01), owned by the
- * SLA work. Until it is wired, every hour counts as open, which is what the
- * artboard promises with no hours set: the out-of-hours reply is never sent.
+ * "Is this department open now?" — M3-01's business hours. The worker passes
+ * `businessHoursProbe` (`sla/business-hours-probe.ts`); {@link ALWAYS_OPEN},
+ * the default, is for callers that do not care about the out-of-hours reply.
  */
 export interface BusinessHoursProbe {
   isOpen(

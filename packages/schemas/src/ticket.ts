@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ticketCsatSchema } from './csat.js';
 import { emailMessageViewSchema } from './email-inbound.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
+import { ticketSlaSchema, ticketSlaSummarySchema } from './sla.js';
 import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
 import { timeEntrySecondsSchema } from './time-entries.js';
 
@@ -261,6 +262,12 @@ export const ticketSchema = z.object({
    * alone — who still has `contactId`. `null` means the ticket names nobody.
    */
   contact: ticketContactSchema.nullable().optional(),
+  /**
+   * The SlaTimer of a list row (M3-02): the worst clock still counting,
+   * already judged against the brand's calendar. Null when no policy applies.
+   * Optional for the reason `tags` is.
+   */
+  sla: ticketSlaSummarySchema.nullable().optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -438,6 +445,11 @@ export const ticketDetailSchema = z.object({
    * had CSAT off. Optional for the reason `ticket.tags` is.
    */
   csat: ticketCsatSchema.nullable().optional(),
+  /**
+   * The DetailsPanel SLA card (M3-02): the current clocks and the step that ran
+   * last. Null when no policy applies. Optional for the reason `csat` is.
+   */
+  sla: ticketSlaSchema.nullable().optional(),
   /**
    * M1-09. Optional for the reason `tags` is: a client and a fixture built
    * against the M1-02 shape stay valid. The api always fills all three.

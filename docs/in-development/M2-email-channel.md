@@ -17,7 +17,7 @@ Owner: @Docker-Hunterpedia
 | M2-03 | Inbound parse webhooks | #82 | done — `POST /internal/inbound-parse/{postmark,sendgrid,mailgun,resend,generic}` with a per-brand shared secret; Resend only with the body included (see gaps) |
 | M2-04 | Threading and the participant check | #83 | done — DOMAIN-RULES §4.3 in the router, quoted-reply stripping, inline images, automated senders dropped unless allow-listed |
 | M2-05 | Outbound SMTP through the outbox | #84 | done: per-brand SMTP, department senders, signatures, `email.send` with a deterministic `Message-ID`, five attempts then Failed sends; see [outbound email](../guides/outbound-email.md) |
-| M2-06 | Auto-responders and loop protection | #85 | done: acknowledgment and out-of-hours (en/ar templates), `Auto-Submitted`, `Precedence`, per-sender cap; business hours default to open until M3 wires them |
+| M2-06 | Auto-responders and loop protection | #85 | done: acknowledgment and out-of-hours (en/ar templates), `Auto-Submitted`, `Precedence`, per-sender cap; out of hours is decided by M3-01's business hours |
 | M2-07 | Email security: sanitised HTML and remote images | #86 | done — allowlist sanitiser on every body, remote images removed from `body_html` and served only through the SSRF-safe, re-encoding proxy; optional SPF/DKIM-failure-as-spam per mailbox |
 | M2-08 | Admin: mailboxes, inbound parse and email health | #87 | done: Channels › Mailboxes (list with health, mailbox form with Test IMAP, inbound-parse endpoints and secret) and Channels › Outgoing email (SMTP + test, senders, auto-replies, Failed sends), the Email signature tab, the composer's email mode |
 

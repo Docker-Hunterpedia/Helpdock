@@ -60,12 +60,13 @@
     "replyingMany": "{{name}} يكتب ردًا · {{others}} آخرون يطالعون"
   },
   "sla": {
-    "label": "مستوى الخدمة",
     "running": "بقي {{remaining}}",
     "breachedFirstResponse": "تجاوز الرد الأول {{over}}",
     "breachedResolution": "تجاوز الحل {{over}}",
     "paused": "موقوف",
-    "none": "لا سياسة خدمة"
+    "breached": "أُخلّ بها {{over}}",
+    "met": "تحقق",
+    "next": "التالي {{remaining}}"
   },
   "priority": {
     "label": "الأولوية",
@@ -170,10 +171,6 @@
       "none": "لا توجد وسوم لهذه العلامة التجارية بعد. تُنشأ الوسوم من التذاكر والتوجيه › الوسوم.",
       "footer": "Enter يبدّل الاختيار وEsc يغلق. تُحفظ التغييرات فور الاختيار."
     },
-    "sla": "مستوى الخدمة",
-    "firstResponse": "الرد الأول",
-    "resolution": "الحل",
-    "slaNone": "لا تنطبق أي سياسة على هذه التذكرة بعد.",
     "custom": "الحقول المخصصة",
     "noCustom": "لا شيء",
     "customNone": "—",
@@ -522,5 +519,34 @@
       "open": "فتح {{ticket}}",
       "merge": "الدمج في {{ticket}}…"
     }
+  },
+  "slaCard": {
+    "heading": "مستوى الخدمة",
+    "headingPolicy": "مستوى الخدمة · {{policy}}",
+    "clock": {
+      "first_response": "الرد الأول",
+      "next_response": "الرد التالي",
+      "resolution": "الحل"
+    },
+    "left": "متبقٍّ {{remaining}}",
+    "due": "يستحق {{time}}",
+    "met": "تحقق خلال {{elapsed}}",
+    "breached": "أُخلّ به منذ {{over}}",
+    "wasDue": "كان مستحقًّا {{time}}",
+    "pausedNoDue": "متوقف، بلا موعد استحقاق",
+    "progress": "الوقت المستهلك من {{clock}}",
+    "pausedSince": "متوقف منذ {{time}} · {{status}}",
+    "stepRan": "نُفذت خطوة {{percent}} % {{time}}",
+    "escalatedAt": "صُعّدت عند {{percent}} %",
+    "leadsNotified": "أُشعر قادة الفرق",
+    "reopened": "أُعيد فتحها {{time}}",
+    "initial": {
+      "met": "تحقق الرد الأول",
+      "breached": "أُخلّ بالرد الأول"
+    },
+    "closed": "أُغلقت {{time}}",
+    "none": "لا تنطبق سياسة مستوى خدمة",
+    "noneDetail": "لا سياسة تطابق {{department}} بأولوية {{priority}}.",
+    "policiesLink": "سياسات مستوى الخدمة"
   }
 }

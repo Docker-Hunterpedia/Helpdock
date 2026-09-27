@@ -112,8 +112,10 @@ shipped follows the catalog wording as it improves.
 
 - **Acknowledge new tickets**: sent once when an email opens a new ticket.
 - **Out-of-hours reply**: sent *instead of* the acknowledgment when the email
-  arrives outside the department's business hours. Until business hours are
-  set (M3), every hour counts as open and it is never sent.
+  arrives outside the department's business hours (Ticketing › Business hours;
+  see [Business hours and SLAs](slas.md#business-hours)): the department's own
+  hours and holidays if it has them, otherwise the brand's. A brand that never
+  saved hours counts Monday–Friday 09:00–17:00 in its time zone.
 
 Loop protection, in order:
 

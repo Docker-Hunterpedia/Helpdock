@@ -210,6 +210,55 @@ export class TicketLifecycleService {
     }
   }
 
+  /** M3-02: a ticket was filed, so its clocks start (§3.1). */
+  async onCreated(
+    context: LifecycleContext,
+    ticket: TicketRow,
+    status: TicketStatusRow,
+  ): Promise<void> {
+    await this.#hooks.onCreated(context.tx, {
+      brandId: context.brandId,
+      ticket,
+      status,
+      at: context.now,
+    });
+  }
+
+  /**
+   * M3-02: the status, priority or department may have moved; the clocks
+   * follow (§3.2, §3.3). `previousDepartmentId` is set on a move, so the time
+   * already counted stays counted under the old department's hours.
+   */
+  async onChanged(
+    context: LifecycleContext,
+    ticket: TicketRow,
+    status: TicketStatusRow,
+    previousDepartmentId?: string,
+  ): Promise<void> {
+    await this.#hooks.onChanged(context.tx, {
+      brandId: context.brandId,
+      ticket,
+      status,
+      at: context.now,
+      previousDepartmentId,
+    });
+  }
+
+  /** M3-02: a staff member's public reply, which may meet the response clock (§3.1). */
+  async onResponded(
+    context: LifecycleContext,
+    ticket: TicketRow,
+    status: TicketStatusRow,
+  ): Promise<void> {
+    await this.#hooks.onResponded(context.tx, {
+      brandId: context.brandId,
+      ticket,
+      status,
+      at: context.now,
+      by: 'staff',
+    });
+  }
+
   /** §3.5's clocks, once a status change has taken a ticket out of a closed state. */
   async onReopened(
     context: LifecycleContext,
@@ -354,7 +403,14 @@ export class TicketLifecycleService {
       throw new TicketLifecycleFailure(outcome.reason);
     }
 
-    await this.#tickets.updateTicket(context.tx, ticket.id, { deletedAt: context.now });
+    const deleted = await this.#tickets.updateTicket(context.tx, ticket.id, {
+      deletedAt: context.now,
+    });
+    // M3-02: a deleted ticket's clocks stop, so no timer fires on a ticket
+    // nobody can see.
+    if (deleted !== undefined) {
+      await this.onChanged(context, deleted, status);
+    }
 
     await writeTicketActivity(context.tx, {
       brandId: context.brandId,
@@ -478,6 +534,8 @@ export class TicketLifecycleService {
       ...(closed.teamId === null ? {} : { teamId: closed.teamId }),
     });
 
+    // M3-02: the continuation is a new ticket, so it gets fresh clocks.
+    await this.onCreated(context, created, open);
     await this.#writeContinuationMessage(context, created, 'continuedFrom', locale, closed);
     await this.#writeContinuationMessage(context, closed, 'continuedIn', locale, created);
 
@@ -583,6 +641,9 @@ export class TicketLifecycleService {
       from: { statusId: from.id },
       to: { statusId: to.id },
     });
+    // M3-02: a status that pauses the clocks pauses them here (§3.2), and one
+    // that closes the ticket resolves them.
+    await this.onChanged(context, updated, to);
 
     return updated;
   }

@@ -401,17 +401,22 @@ retried send never creates a second continuation (§7).
 
 ### The hooks later milestones fill
 
-`apps/api/src/tickets/lifecycle/hooks.ts` names five moments. They are a
+`apps/api/src/tickets/lifecycle/hooks.ts` names eight moments. They are a
 provider, so M3-02 and M1-12 replace one line of `TicketsModule` rather than
-editing the service that calls them. M1-12's line is in: `CsatLifecycleHooks`
-(`apps/api/src/csat/csat-hooks.ts`) fills `onClosedForCsat` and inherits the
-others, which M3-02 fills.
+editing the service that calls them. Both lines are in: `SlaLifecycleHooks`
+(`apps/api/src/sla/sla-hooks.ts`) fills the clocks' moments and extends
+`CsatLifecycleHooks` (`apps/api/src/csat/csat-hooks.ts`), which fills
+`onClosedForCsat`. What the clocks do at each is the
+[SLA guide](slas.md#the-clocks).
 
 | Hook | Fires when | Filled by |
 |---|---|---|
-| `onResolved` | A ticket reaches a closed state, **including** spam — a clock left running on a ticket nobody will touch again is a clock that breaches. Not on a merge, which fires `onMerged` | M3-02 |
+| `onCreated` | A ticket is filed: created, continued (§2.3) or split (§2.4). Every path that inserts a ticket calls it | M3-02: starts the clocks |
+| `onChanged` | After every status, priority or department write, with the previous department on a move | M3-02: pause, resume, retarget |
+| `onResponded` | A public staff reply (`by: 'staff'`); M3-03's rule reply and M7's auto-reply call it with `rule` and `ai` | M3-02: meets the response clock |
+| `onResolved` | A ticket reaches a closed state, **including** spam — a clock left running on a ticket nobody will touch again is a clock that breaches. Not on a merge, which fires `onMerged` | M3-02: resolution met; spam stops the clocks |
 | `onClosedForCsat` | The same, **unless** the ticket is merged or the status is Spam (`is_spam`) | M1-12: writes `csat.requested` to the outbox when the brand has CSAT on |
-| `onReopened` | A closed ticket comes back, by policy or by an agent (§3.5) | M3-02 |
+| `onReopened` | A closed ticket comes back, by policy or by an agent (§3.5) | M3-02: next-response and resolution clocks |
 | `onMerged` | A ticket was merged into another (§2.4): stop both clocks without recording them as met, and keep the ticket out of compliance | M3-02 |
 | `onUnmerged` | A merge was undone; `mergedMs` is how long it lasted, to leave out of the clocks | M3-02 |
 
@@ -1576,6 +1581,6 @@ halves joined by a dot.
 | M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
 | M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |
-| M3-02 | The SLA engine, filling `first_response_due_at`, `resolution_due_at` and `sla_breached` |
+| M3-02 | Built in branch. The SLA engine fills `first_response_due_at`, `resolution_due_at`, `sla_breached`, `sla_policy_id` and `sla_cycle`; a ticket read carries `sla`, a list row `ticket.sla` ([guide](slas.md)) |
 | M7 | AI that suggests tags, a priority and a department for a ticket |
 | M5 | Per-locale search configuration; `tickets.search` uses `english` for every brand today |

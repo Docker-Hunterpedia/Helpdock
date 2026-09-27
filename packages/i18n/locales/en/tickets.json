@@ -60,12 +60,13 @@
     "replyingMany": "{{name}} is replying · {{others}} more viewing"
   },
   "sla": {
-    "label": "Service level",
     "running": "{{remaining}} left",
     "breachedFirstResponse": "First response breached {{over}}",
     "breachedResolution": "Resolution breached {{over}}",
     "paused": "paused",
-    "none": "No SLA policy"
+    "breached": "Breached {{over}}",
+    "met": "met",
+    "next": "next {{remaining}}"
   },
   "priority": {
     "label": "Priority",
@@ -166,10 +167,6 @@
       "none": "This brand has no tags yet. Tags are created in Ticketing › Tags.",
       "footer": "Enter toggles, Esc closes. Changes save as you pick."
     },
-    "sla": "Service level",
-    "firstResponse": "First response",
-    "resolution": "Resolution",
-    "slaNone": "No policy applies to this ticket yet.",
     "custom": "Custom fields",
     "noCustom": "None",
     "customNone": "—",
@@ -514,5 +511,34 @@
       "open": "Open {{ticket}}",
       "merge": "Merge into {{ticket}}…"
     }
+  },
+  "slaCard": {
+    "heading": "SLA",
+    "headingPolicy": "SLA · {{policy}}",
+    "clock": {
+      "first_response": "First response",
+      "next_response": "Next response",
+      "resolution": "Resolution"
+    },
+    "left": "{{remaining}} left",
+    "due": "due {{time}}",
+    "met": "met in {{elapsed}}",
+    "breached": "breached {{over}}",
+    "wasDue": "was due {{time}}",
+    "pausedNoDue": "paused, no due time",
+    "progress": "{{clock}} time used",
+    "pausedSince": "Paused since {{time}} · {{status}}",
+    "stepRan": "{{percent}} % step ran {{time}}",
+    "escalatedAt": "Escalated at {{percent}} %",
+    "leadsNotified": "team leads notified",
+    "reopened": "Reopened {{time}}",
+    "initial": {
+      "met": "initial response met",
+      "breached": "initial response breached"
+    },
+    "closed": "Closed {{time}}",
+    "none": "No SLA policy applies",
+    "noneDetail": "No policy matches {{department}} at {{priority}} priority.",
+    "policiesLink": "SLA policies"
   }
 }

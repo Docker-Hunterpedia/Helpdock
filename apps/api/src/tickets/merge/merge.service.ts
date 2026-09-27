@@ -315,6 +315,15 @@ export class MergeService {
     }
 
     const created = await this.#fileSplitTicket(context, original.ticket, request);
+    // M3-02: "new clocks start at split time under the new ticket's policy"
+    // (§2.4); the original's are untouched.
+    const createdStatus = await this.#requireDefaultStatus(tx);
+    await this.#hooks.onCreated(tx, {
+      brandId,
+      ticket: created,
+      status: createdStatus,
+      at: context.now,
+    });
     await this.#copyMessages(context, created, selection.messages, files);
 
     await this.#writeSystemMessage(context, {

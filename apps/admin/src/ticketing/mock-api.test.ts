@@ -229,6 +229,8 @@ describe('the brand', () => {
         csatEnabled: true,
         timeTrackingEnabled: false,
         timerStartsWithComposer: false,
+        aiCountsAsFirstResponse: true,
+        slaCountReopens: false,
       },
     });
 

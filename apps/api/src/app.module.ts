@@ -43,6 +43,7 @@ import { ConfigModule } from './runtime/config.module.js';
 import { DbModule } from './runtime/db.module.js';
 import { SettingsModule } from './runtime/settings.module.js';
 import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js';
+import { SlaModule } from './sla/sla.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
@@ -114,6 +115,9 @@ export class AppModule implements NestModule {
     // M1-12, the same pattern: the public rating routes here, the summary on a
     // ticket read in `TicketsModule`.
     const csat = CsatModule.forRoot();
+    // M3-01 and M3-02, the same pattern again: the Business hours and SLAs
+    // tabs here, the clocks in `TicketsModule`'s lifecycle hooks.
+    const sla = SlaModule.forRoot();
 
     return {
       module: AppModule,
@@ -138,7 +142,8 @@ export class AppModule implements NestModule {
         }),
         ticketing,
         csat,
-        TicketsModule.forRoot({ ticketing, csat }),
+        sla,
+        TicketsModule.forRoot({ ticketing, csat, sla }),
         // M1-07's tab and picker. The rotation itself runs in the worker.
         AssignmentModule.forRoot({ ticketing }),
         // M1-13: a ticket's CCs. Its service is exported for M1-09's merge.

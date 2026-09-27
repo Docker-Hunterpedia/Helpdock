@@ -38,6 +38,7 @@ const MIGRATION_TAGS = [
   '0023_ticket_search_tokens',
   '0024_email_outbound',
   '0025_email_inbound',
+  '0026_sla_engine',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

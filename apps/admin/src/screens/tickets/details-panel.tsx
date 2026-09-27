@@ -7,6 +7,7 @@ import type {
   TagSummary,
   Ticket,
   TicketPriority,
+  TicketSla,
   TicketStatus,
 } from '@helpdock/schemas';
 import { ticketPrioritySchema } from '@helpdock/schemas';
@@ -22,9 +23,10 @@ import { initialsOf } from '../contacts/format.js';
 import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
 import { CustomFieldsCard } from './custom-fields-card.tsx';
-import { elapsedFraction, messageTime, statusName } from './format.js';
+import { messageTime, statusName } from './format.js';
 import { LinkedTickets } from './linked-tickets.tsx';
 import { ParticipantsCard } from './participants-card.tsx';
+import { SlaCard } from './sla-card.tsx';
 import { TicketTags } from './ticket-tags.tsx';
 
 /**
@@ -68,6 +70,10 @@ export interface DetailsPanelProps {
   };
   readonly now: number;
   readonly busy: boolean;
+  /** M3-02: the read's SLA card, or `null` when no policy applies. */
+  readonly sla?: TicketSla | null | undefined;
+  /** Whether the reader may open Ticketing › SLAs, which the empty card links to. */
+  readonly canConfigure?: boolean;
   /**
    * The cards later deliverables add under the SLA card — M1-12's Time and
    * Satisfaction — composed by the ticket view so this panel does not have to
@@ -101,6 +107,8 @@ export function DetailsPanel({
   assignee,
   now,
   busy,
+  sla,
+  canConfigure = false,
   cards,
   brandTags,
   customFields,
@@ -284,7 +292,16 @@ export function DetailsPanel({
         onChange={onTagsChange}
       />
 
-      <SlaCard ticket={ticket} now={now} />
+      <SlaCard
+        ticket={ticket}
+        sla={sla}
+        statusLabel={statusName(ticket.status, locale)}
+        departmentName={
+          departments.find((department) => department.id === ticket.departmentId)?.name ?? ''
+        }
+        now={now}
+        canConfigure={canConfigure}
+      />
 
       {cards}
 
@@ -310,68 +327,6 @@ export function DetailsPanel({
         {`${t('tickets:details.created')} · `}
         <bdi>{messageTime(ticket.createdAt, locale, now)}</bdi>
       </Typography>
-    </Box>
-  );
-}
-
-/** The SLA card of §6.3: on `bg.canvas`, with a 4 px bar of how much is gone. */
-function SlaCard({ ticket, now }: { readonly ticket: Ticket; readonly now: number }): ReactNode {
-  const t = useT();
-  const tokens = useSemanticTokens();
-  const { locale } = usePreferences();
-  const due = ticket.firstResponseDueAt ?? ticket.resolutionDueAt;
-
-  return (
-    <Box
-      component="section"
-      sx={{
-        padding: 4,
-        borderRadius: '8px',
-        backgroundColor: tokens['bg.canvas'],
-        border: `1px solid ${tokens['border.default']}`,
-      }}
-    >
-      <Typography variant="caption" component="h2" sx={{ color: 'text.secondary' }}>
-        {t('tickets:details.sla')}
-      </Typography>
-
-      {due === null ? (
-        <Typography variant="body2" sx={{ marginBlockStart: 2, color: 'text.secondary' }}>
-          {t('tickets:details.slaNone')}
-        </Typography>
-      ) : (
-        <>
-          <Typography variant="body2" component="p" sx={{ marginBlockStart: 2 }}>
-            {`${t(
-              ticket.firstResponseDueAt === null
-                ? 'tickets:details.resolution'
-                : 'tickets:details.firstResponse',
-            )} · `}
-            <bdi>{messageTime(due, locale, now)}</bdi>
-          </Typography>
-          <Box
-            aria-hidden="true"
-            sx={{
-              marginBlockStart: 3,
-              height: 4,
-              borderRadius: '2px',
-              backgroundColor: tokens['border.default'],
-              overflow: 'hidden',
-            }}
-          >
-            <Box
-              sx={{
-                width: `${elapsedFraction(ticket.createdAt, due, now) * 100}%`,
-                height: '100%',
-                backgroundColor:
-                  ticket.slaBreached || Date.parse(due) <= now
-                    ? tokens['status.danger']
-                    : tokens['action.primary'],
-              }}
-            />
-          </Box>
-        </>
-      )}
     </Box>
   );
 }

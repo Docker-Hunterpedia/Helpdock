@@ -189,6 +189,11 @@ the five-minute `rules.time_based.schedule` tick with the per-brand
 `rules.time_based` runs it adds; `createRulesWorker` upserts that schedule on
 every boot. See [Workflow rules](#workflow-rules).
 
+The `notify` worker (M3-07) carries two job families on one queue, routed by
+job name: `notify.email` and `notify.push`, and `auth.email` — the sign-in
+link, the password reset and the staff invitation. See
+[Authentication](#authentication).
+
 The media worker runs at concurrency 1. sharp and ffmpeg are CPU-bound, and four
 conversions at once on a small VPS starve everything else on it; more replicas
 is how this scales, not more concurrency.
@@ -325,6 +330,19 @@ application and it is confined to that file.
 `src/staff/` changes a password and turns a second factor off — and they must do
 it through the same `AuthService`: the same pepper, the same keyring, the same
 decoy hash. A second `AuthModule.forRoot` would silently build a second graph.
+
+**Auth email goes through the outbox.** `auth-email.ts` (`OutboxAuthMail`) is
+the request half: it seals the link under `APP_MASTER_KEY` and writes one
+`auth.email_requested` outbox row — in the staff route's transaction for an
+invitation, in a transaction of its own after the Redis token exists for a
+sign-in link or a password reset. `auth-email.job.ts` is the worker half: the
+outbox handler adds one `auth.email` job per row, and the job renders
+`email-templates.ts` in the recipient's language and sends it from
+`InstallChannels.systemSender()`, or logs that it would have without SMTP. The
+api holds no `EmailSender` at all. The HTTP suites follow links with
+`testing/auth-mail.ts` (`QueuedAuthMail`), which reads the queued rows and
+renders them as the job would; `auth-email.integration.test.ts` proves the
+worker half against Mailpit.
 
 ## Contacts and accounts
 

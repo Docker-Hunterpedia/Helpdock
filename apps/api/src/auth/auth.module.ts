@@ -1,5 +1,3 @@
-import type { EmailSender } from '@helpdock/channels';
-import { LoggingEmailSender } from '@helpdock/channels';
 import type { Env, Keyring, Settings } from '@helpdock/config';
 import { createKeyring, decodeMasterKey } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
@@ -9,6 +7,7 @@ import type { Logger } from '../logging/logger.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { OutboxAuthMail } from './auth-email.js';
 import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
 import { OauthService } from './oauth/oauth.service.js';
@@ -40,8 +39,6 @@ export interface AuthModuleOptions {
    * module cannot see, and because boot has it in hand already.
    */
   readonly logger: Logger;
-  /** Overridden by the tests so they can read the link that was "sent". */
-  readonly emailSender?: EmailSender;
 }
 
 export interface AuthRuntime {
@@ -63,7 +60,6 @@ export const createAuthRuntime = ({
   settings,
   logger,
   signingKeys,
-  emailSender,
   keyring = createKeyring(env),
 }: {
   readonly env: Env;
@@ -72,7 +68,6 @@ export const createAuthRuntime = ({
   readonly settings: Settings;
   readonly logger: Logger;
   readonly signingKeys: SigningKeys;
-  readonly emailSender?: EmailSender;
   readonly keyring?: Keyring;
 }): AuthRuntime => {
   const masterKey = decodeMasterKey(env.APP_MASTER_KEY);
@@ -95,14 +90,6 @@ export const createAuthRuntime = ({
     settings,
   });
 
-  const email =
-    emailSender ??
-    new LoggingEmailSender({
-      log: (fields, message) => {
-        logger.info(fields, message);
-      },
-    });
-
   const auth = new AuthService({
     staff,
     sessions,
@@ -115,7 +102,7 @@ export const createAuthRuntime = ({
     oauth: new OauthService({ settings, redis, logger, appUrl: env.APP_URL }),
     settings,
     keyring,
-    email,
+    mail: new OutboxAuthMail({ db, keyring, staff }),
     logger,
     appUrl: env.APP_URL,
   });
@@ -154,7 +141,6 @@ export class AuthModule {
               settings,
               logger: options.logger,
               signingKeys: options.signingKeys,
-              ...(options.emailSender === undefined ? {} : { emailSender: options.emailSender }),
             }),
         },
         {

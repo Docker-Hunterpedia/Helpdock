@@ -14,6 +14,53 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 0.2.0 — 2026-09-27
+
+**M2 Email channel** and **M3 Automation and SLAs**. Helpdock now talks to
+customers by email and runs the desk on its own: business hours and SLA clocks,
+workflow and time-based rules, macros and canned responses, and staff
+notifications in the admin, by email and by browser push.
+
+### M2 Email channel
+
+- **Inbound email** from IMAP mailboxes or inbound-parse webhooks (Postmark,
+  SendGrid, Mailgun, Resend, generic JSON). Replies thread onto their ticket by
+  `Message-ID`, `References` or the ticket number, and only when the sender is a
+  participant — anyone else quoting a ticket gets a new ticket.
+- **Outbound email** through each brand's SMTP server, from the department's
+  address, in English or Arabic with the agent's signature. Every send goes
+  through the outbox with a fixed `Message-ID`, retries five times, and lands in
+  **Failed sends** in the admin when it cannot be delivered.
+- **Auto-replies** (acknowledgment and out-of-hours) with loop protection.
+- **Email security**: sanitised HTML, remote images blocked or proxied, an
+  optional SPF/DKIM spam rule.
+
+### M3 Automation and SLAs
+
+- **Business hours and holidays** per brand, with department overrides.
+- **SLA engine**: first-response and resolution clocks in business time, pause
+  on "awaiting customer", escalation steps, and timers rebuilt after a Redis loss.
+- **Workflow rules** on events and on a schedule, with a test run and a loop
+  guard; **macros and canned responses** in English and Arabic.
+- **Notifications** in the admin, by email and by web push, with per-person
+  preferences; an **audit log** viewer for install admins.
+
+### Upgrade notes
+
+- Run the migrations (`0024`–`0029`); the worker needs a restart to pick up the
+  new queues.
+- **Sign-in links, password resets and invitations are now emailed** through the
+  install's SMTP server (the wizard's outgoing email step). Before this release
+  they were only logged. Without SMTP they are still not delivered; the install
+  guide says how to use Mailpit in development.
+- Optional: `HD_PUSH_VAPID_PUBLIC_KEY` and `HD_PUSH_VAPID_PRIVATE_KEY` turn on
+  browser push notifications.
+
+### Known gaps
+
+Listed in [M2](docs/completed/M2-email-channel.md) and
+[M3](docs/completed/M3-automation-and-slas.md); none blocks upgrading.
+
 ## 0.1.0 — 2026-09-27
 
 The first release: **M0 Skeleton** and **M1 Ticketing core**. Helpdock is now a

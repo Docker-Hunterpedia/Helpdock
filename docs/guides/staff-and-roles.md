@@ -304,17 +304,15 @@ No new `.env` key.
 
 ## Sending
 
-The invitation goes out through the same seam as the sign-in link and the
-password reset: `EmailSender` in
-[`packages/channels`](../../packages/channels/src/email/sender.ts). That seam is
-not wired to M2's SMTP yet ([authentication › Sending](authentication.md#sending)),
-so the development sender writes one line to the log — the recipient,
-the subject and the locale, never the body, because an invitation's body
-contains a working credential.
-
-Like the other two, it is a documented exception to the outbox rule of
-DOMAIN-RULES §6: it is not a domain change, and it is useless the moment its
-Redis token expires.
+The invitation goes out the same way as the sign-in link and the password
+reset ([authentication › Sending](authentication.md#sending)): an
+`auth.email_requested` outbox row written in the invite's own transaction, and
+an `auth.email` job in the worker that sends it from the install's system
+sender, in the invitee's language. An invitation, or a resend, that rolls back
+sends nothing. The link is encrypted under `APP_MASTER_KEY` in the outbox row
+and the job, because it contains a working credential, and it is never logged.
+Without SMTP the worker logs that the invitation would have been sent, and
+sends nothing.
 
 ## Tests
 

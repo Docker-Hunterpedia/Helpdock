@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { EmailMessage, EmailSender } from '@helpdock/channels';
-import type { Env } from '@helpdock/config';
+import type { EmailMessage } from '@helpdock/channels';
+import { createKeyring, type Env } from '@helpdock/config';
 import {
   auditLog,
   brands,
@@ -28,6 +28,7 @@ import { REFRESH_COOKIE } from '../auth/session/cookies.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { QueuedAuthMail } from '../testing/auth-mail.js';
 import { anonymisedEmail, FORMER_STAFF_NAME } from './anonymise.js';
 
 /**
@@ -61,24 +62,6 @@ if (!hasDocker) {
   );
 }
 
-class CollectingEmailSender implements EmailSender {
-  readonly sent: EmailMessage[] = [];
-
-  send(message: EmailMessage): Promise<void> {
-    this.sent.push(message);
-    return Promise.resolve();
-  }
-
-  last(): EmailMessage {
-    const message = this.sent.at(-1);
-    if (message === undefined) {
-      throw new Error('no email was sent');
-    }
-
-    return message;
-  }
-}
-
 /** The link in an invitation, as the person who received it would follow it. */
 const tokenIn = (message: EmailMessage): string => {
   const match = /\/invite\/([A-Za-z0-9_-]+)/.exec(message.text);
@@ -100,7 +83,8 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
   let billingId: string;
   /** A second brand, so a cross-brand membership can be exercised. */
   let otherBrandId: string;
-  const email = new CollectingEmailSender();
+  /** The invitations the api queued, rendered as the worker would send them. */
+  let email: QueuedAuthMail;
 
   const envFor = (): Env =>
     ({
@@ -197,9 +181,13 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
     const invited = await invite(token, { email: address, role, departmentIds });
     expect(invited.statusCode).toBe(201);
 
-    const accepted = await request('POST', `/api/auth/invites/${tokenIn(email.last())}/accept`, {
-      body: { name, password: NEW_PASSWORD, locale: 'en' },
-    });
+    const accepted = await request(
+      'POST',
+      `/api/auth/invites/${tokenIn(await email.last())}/accept`,
+      {
+        body: { name, password: NEW_PASSWORD, locale: 'en' },
+      },
+    );
     expect(accepted.statusCode).toBe(201);
 
     return {
@@ -248,7 +236,8 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
         destination: { write: () => {} },
       }),
     });
-    app = await createApiApp({ runtime, emailSender: email });
+    app = await createApiApp({ runtime });
+    email = new QueuedAuthMail({ db: runtime.db, keyring: createKeyring(env) });
     seeded = await seedDevInstall({ db: runtime.db, env, withTotp: true });
 
     const [otherBrand] = await runtime.db
@@ -287,7 +276,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
   });
 
   beforeEach(async () => {
-    email.sent.length = 0;
+    await email.clear();
     await runtime.settings.set('roles.viewerEnabled', true, { updatedBy: 'integration-test' });
 
     const rateKeys = await runtime.redis.keys('auth:rate:*');
@@ -317,7 +306,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
         departments: [{ id: supportId, name: 'Support' }],
       });
 
-      const message = email.last();
+      const message = await email.last();
       expect(message.to.address).toBe(address);
       expect(message.subject).toContain('Helpdock Dev');
 
@@ -332,7 +321,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       const token = await signInAsAdmin();
       const address = `preview.${Date.now()}@example.com`;
       await invite(token, { email: address, role: 'agent', departmentIds: [billingId] });
-      const link = tokenIn(email.last());
+      const link = tokenIn(await email.last());
 
       const first = await request('GET', `/api/auth/invites/${link}`);
       expect(first.statusCode).toBe(200);
@@ -378,7 +367,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       const token = await signInAsAdmin();
       const address = `resend.${Date.now()}@example.com`;
       const invited = await invite(token, { email: address, role: 'agent', departmentIds: [] });
-      const first = tokenIn(email.last());
+      const first = tokenIn(await email.last());
 
       const resent = await request(
         'POST',
@@ -387,7 +376,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       );
       expect(resent.statusCode).toBe(204);
 
-      const second = tokenIn(email.last());
+      const second = tokenIn(await email.last());
       expect(second).not.toBe(first);
       expect((await request('GET', `/api/auth/invites/${first}`)).statusCode).toBe(410);
       expect((await request('GET', `/api/auth/invites/${second}`)).statusCode).toBe(200);
@@ -398,7 +387,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       const address = `revoke.${Date.now()}@example.com`;
       const invited = await invite(token, { email: address, role: 'agent', departmentIds: [] });
       const { userId } = invited.json() as StaffMember;
-      const link = tokenIn(email.last());
+      const link = tokenIn(await email.last());
 
       const revoked = await request('DELETE', `${staffBase()}/invites/${userId}`, {
         headers: bearer(token),
@@ -447,7 +436,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       const address = `crossbrand.${Date.now()}@example.com`;
       await inviteAndAccept(token, address);
 
-      email.sent.length = 0;
+      await email.clear();
       const added = await request('POST', `/api/brands/${otherBrandId}/staff/invites`, {
         body: { email: address, role: 'agent', departmentIds: [] },
         headers: bearer(token),
@@ -455,7 +444,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
 
       expect(added.statusCode).toBe(201);
       expect(added.json()).toMatchObject({ status: 'active', invitedAt: null });
-      expect(email.sent).toHaveLength(0);
+      expect(await email.count()).toBe(0);
     });
   });
 

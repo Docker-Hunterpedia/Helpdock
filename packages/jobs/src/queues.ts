@@ -18,7 +18,7 @@ export const QUEUE_NAMES = {
   knowledge: 'knowledge',
   /** `media.process`, `media.scan`. */
   media: 'media',
-  /** `notify.inapp`, `notify.email`, `notify.push`. */
+  /** `notify.inapp`, `notify.email`, `notify.push`, and `auth.email` for sign-in mail. */
   notify: 'notify',
   /** `webhook.deliver`. */
   webhooks: 'webhooks',

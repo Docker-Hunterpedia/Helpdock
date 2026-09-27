@@ -97,9 +97,11 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   automation: item('automation', ROUTES.automation, Workflow, {
     roles: ['admin', 'teamLeader', 'agent'],
   }),
-  // How customers reach the brand (M2-08): its mail server and mailboxes are
-  // brand-wide configuration, which DOMAIN-RULES §1.2 keeps with the Admin.
-  channels: item('channels', ROUTES.channels, Mail, { roles: ['admin'] }),
+  // How customers reach the brand (M2-08, M4): its mail server and mailboxes
+  // are brand-wide configuration, which DOMAIN-RULES §1.2 keeps with the
+  // Admin, and a Team Leader owns the widget's theme and content policy, so
+  // the page is theirs too with the Widget tab alone (`channels/tabs.ts`).
+  channels: item('channels', ROUTES.channels, Mail, { roles: ['admin', 'teamLeader'] }),
   // "Staff and roles" is the Admin and Team Leader screen: they are the two
   // roles that hold `staff:manage` (DOMAIN-RULES §1.2).
   staff: item('staff', ROUTES.staff, ShieldUser, { roles: ['admin', 'teamLeader'] }),

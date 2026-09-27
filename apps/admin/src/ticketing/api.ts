@@ -8,6 +8,8 @@ import type {
   Brand,
   BrandSettings,
   BrandUpdateRequest,
+  BusinessHoursOverview,
+  BusinessHoursUpdateRequest,
   CustomFieldCreateRequest,
   CustomFieldDef,
   CustomFieldDefList,
@@ -23,9 +25,15 @@ import type {
   DepartmentUpdateRequest,
   EligibleMemberList,
   FeedbackSettingsUpdateRequest,
+  Holiday,
+  HolidayCreateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
+  SlaPolicy,
+  SlaPolicyCreateRequest,
+  SlaPolicyList,
+  SlaSettingsUpdateRequest,
   SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
@@ -200,6 +208,34 @@ export interface TicketingApi {
     userId: string,
     request: AssignmentAgentUpdateRequest,
   ): Promise<AssignmentAgent>;
+
+  // ---------------------------------------------------------------- M3-01
+
+  /** The Business hours tab in one read: the brand's week, each department's override, holidays. */
+  businessHours(brandId: string): Promise<BusinessHoursOverview>;
+  /** The tab's Save: the brand's hours and every override, together. */
+  updateBusinessHours(
+    brandId: string,
+    request: BusinessHoursUpdateRequest,
+  ): Promise<BusinessHoursOverview>;
+  createHoliday(brandId: string, request: HolidayCreateRequest): Promise<Holiday>;
+  deleteHoliday(brandId: string, holidayId: string): Promise<void>;
+
+  // ---------------------------------------------------------------- M3-02
+
+  /** The brand's SLA policies, in the order they are tried. */
+  slaPolicies(brandId: string): Promise<SlaPolicyList>;
+  createSlaPolicy(brandId: string, request: SlaPolicyCreateRequest): Promise<SlaPolicy>;
+  updateSlaPolicy(
+    brandId: string,
+    policyId: string,
+    request: SlaPolicyCreateRequest,
+  ): Promise<SlaPolicy>;
+  deleteSlaPolicy(brandId: string, policyId: string): Promise<void>;
+  /** The whole list in its new order. */
+  reorderSlaPolicies(brandId: string, policyIds: string[]): Promise<SlaPolicyList>;
+  /** "For every policy": the AI toggle and "count reopens". */
+  updateSlaSettings(brandId: string, request: SlaSettingsUpdateRequest): Promise<BrandSettings>;
 }
 
 /**

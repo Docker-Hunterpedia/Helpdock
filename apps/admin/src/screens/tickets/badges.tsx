@@ -7,6 +7,7 @@ import type {
 } from '@helpdock/schemas';
 import { Box, Typography } from '@mui/material';
 import {
+  Check,
   Clock,
   FileText,
   Mail,
@@ -168,6 +169,14 @@ export function SlaTimer({
     return null;
   }
 
+  if (state.kind === 'met') {
+    return (
+      <Pill tone="success" icon={<Check size={12} aria-hidden="true" />}>
+        {t('tickets:sla.met')}
+      </Pill>
+    );
+  }
+
   if (state.kind === 'paused') {
     return (
       <Pill tone="neutral" icon={<PauseCircle size={12} aria-hidden="true" />}>
@@ -177,14 +186,13 @@ export function SlaTimer({
   }
 
   if (state.kind === 'breached') {
-    const key =
-      ticket.firstResponseDueAt === null
-        ? 'tickets:sla.breachedResolution'
-        : 'tickets:sla.breachedFirstResponse';
+    const resolution =
+      ticket.sla == null ? ticket.firstResponseDueAt === null : ticket.sla.clock === 'resolution';
+    const key = resolution ? 'tickets:sla.breachedResolution' : 'tickets:sla.breachedFirstResponse';
 
     return (
       <Pill tone="danger" icon={<Clock size={12} aria-hidden="true" />}>
-        {compact ? `-${state.over}` : t(key, { over: state.over })}
+        {compact ? t('tickets:sla.breached', { over: state.over }) : t(key, { over: state.over })}
       </Pill>
     );
   }
@@ -194,7 +202,11 @@ export function SlaTimer({
       tone={state.kind === 'atRisk' ? 'warning' : 'success'}
       icon={<Clock size={12} aria-hidden="true" />}
     >
-      {compact ? state.remaining : t('tickets:sla.running', { remaining: state.remaining })}
+      {state.reopened
+        ? t('tickets:sla.next', { remaining: state.remaining })
+        : compact
+          ? state.remaining
+          : t('tickets:sla.running', { remaining: state.remaining })}
     </Pill>
   );
 }

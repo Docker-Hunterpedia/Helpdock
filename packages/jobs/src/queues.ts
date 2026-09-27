@@ -8,7 +8,7 @@ export const QUEUE_NAMES = {
   inbound: 'inbound',
   /** `email.send`, `telegram.send`, `widget.deliver`. */
   outbound: 'outbound',
-  /** `sla.first_response`, `sla.resolution`, `sla.escalate`. Delayed jobs. */
+  /** `sla.timer` (one per clock and step, delayed) and `sla.rebuild` (M3-02). */
   sla: 'sla',
   /** `rules.evaluate`, `rules.time_based`. */
   rules: 'rules',
@@ -26,7 +26,7 @@ export const QUEUE_NAMES = {
   outbox: 'outbox',
   /** `assignment.offline_unassign` (M1-07). Delayed jobs. */
   assignment: 'assignment',
-  /** `cleanup.tokens`, `maintenance.retention`, `stats.rollup`, `sla.rebuild`. */
+  /** `cleanup.tokens`, `maintenance.retention`, `stats.rollup`. */
   maintenance: 'maintenance',
 } as const;
 

@@ -239,6 +239,17 @@ page says the worker has not reported.
 Registering handlers before starting the worker matters: a job that arrives
 before its handler is registered fails as an unknown event and burns attempts.
 
+## SLA timers
+
+M3-02 defines two jobs on the `sla` queue. `sla.timer` is one escalation step,
+or the breach at 100 %, of one clock of one ticket, added with a delay; its id
+is `slaTimerJobId({ ticketId, clock, stepPercent })` — `sla.<ticket>.<clock>.<step>`,
+dots because BullMQ refuses a colon — so re-adding a timer moves it rather than
+duplicating it. It has no `job_receipts` key: the clock row records the steps
+that fired, and a timer that fires early moves itself instead of acting.
+`sla.rebuild` re-plans every running clock's timers; the worker adds it on boot
+and hourly. The consumers are in `apps/api/src/sla/` ([guide](../../docs/guides/slas.md#timers)).
+
 ## Retention
 
 DOMAIN-RULES §11 keeps outbox rows and receipts for seven days. Both purges

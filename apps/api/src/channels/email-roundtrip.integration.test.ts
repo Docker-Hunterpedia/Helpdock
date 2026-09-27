@@ -11,6 +11,7 @@ import {
   emailDeliveries,
   outbox,
   ticketMessages,
+  ticketSlaClocks,
   withSystem,
 } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
@@ -18,6 +19,7 @@ import type {
   EmailOutgoingSettings,
   InboundParseSecret,
   Mailbox,
+  SlaPolicy,
   TicketMessage,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -40,6 +42,10 @@ import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { type InstallSmtp, smtpTransportFactory } from '../email/transport.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { BusinessHoursService } from '../sla/business-hours.service.js';
+import { businessHoursProbe } from '../sla/business-hours-probe.js';
+import { SlaRepository } from '../sla/sla.repository.js';
+import { SlaService } from '../sla/sla.service.js';
 import { FakeStorage } from '../testing/media.js';
 
 /**
@@ -53,6 +59,8 @@ import { FakeStorage } from '../testing/media.js';
  *    `In-Reply-To` our `Message-ID`, no ticket number in the subject —
  *    threads onto the same ticket. A stranger holding the same `Message-ID`
  *    still gets a ticket of their own (DOMAIN-RULES §4.3).
+ * 3. Where M2 meets M3: the out-of-hours reply reads M3-01's business hours,
+ *    and a mailed ticket runs M3-02's clocks as a ticket typed in does.
  *
  * The worker is played by hand, one outbox row at a time, as the outbound
  * suite does: the relay and BullMQ are covered elsewhere.
@@ -193,12 +201,15 @@ describe.skipIf(!hasDocker)('inbound and outbound email together', () => {
   };
 
   /** The worker's half of `email.received`: the auto-responder decides. */
-  const handleReceived = async (event: {
-    id: string;
-    payload: Record<string, unknown>;
-  }): Promise<void> => {
+  const handleReceived = async (
+    event: {
+      id: string;
+      payload: Record<string, unknown>;
+    },
+    service: AutoReplyService = autoReplies(),
+  ): Promise<void> => {
     await withSystem(runtime.db, seeded.brandId, (tx) =>
-      createEmailReceivedEventHandler(autoReplies())({
+      createEmailReceivedEventHandler(service)({
         outboxId: event.id,
         brandId: seeded.brandId,
         event: EMAIL_EVENTS.received,
@@ -522,5 +533,146 @@ describe.skipIf(!hasDocker)('inbound and outbound email together', () => {
       inReplyTo: `<${sent?.MessageID ?? ''}>`,
     });
     expect((await messageOf('mallory-1@evil.example')).ticketId).not.toBe(first.ticketId);
+  });
+
+  describe('with M3 business hours and SLAs', () => {
+    /** The auto-responder as the worker builds it, with M3-01's calendar and a fixed clock. */
+    const autoRepliesAt = (now: Date): AutoReplyService => {
+      const repository = new EmailRepository();
+      const sla = new SlaRepository();
+      return new AutoReplyService(
+        repository,
+        new OutboundEmailService(repository, NO_INSTALL_SMTP),
+        businessHoursProbe(new BusinessHoursService(sla, new SlaService(sla))),
+        () => now,
+      );
+    };
+
+    const kindsOf = async (ticketId: string) =>
+      (
+        await owner.db
+          .select({ kind: emailDeliveries.kind })
+          .from(emailDeliveries)
+          .where(eq(emailDeliveries.ticketId, ticketId))
+      ).map((row) => row.kind);
+
+    const clocksOf = (ticketId: string) =>
+      owner.db
+        .select()
+        .from(ticketSlaClocks)
+        .where(and(eq(ticketSlaClocks.ticketId, ticketId), eq(ticketSlaClocks.isCurrent, true)));
+
+    it('sends the out-of-hours reply instead of the acknowledgment while the department is closed', async () => {
+      // Open on Sundays 10:00–14:00 UTC only.
+      const hours = await call('PUT', `${brandPath()}/business-hours`, {
+        brand: {
+          timezone: 'UTC',
+          weekly: [[{ start: '10:00', end: '14:00' }], [], [], [], [], [], []],
+        },
+        departments: [],
+      });
+      expect(hours.status).toBe(200);
+      const saved = await call<EmailOutgoingSettings>('GET', `${brandPath()}/email/outgoing`);
+      expect(
+        (
+          await call('PUT', `${brandPath()}/email/outgoing/auto-replies`, {
+            ...saved.body.autoReplies,
+            acknowledgment: { ...saved.body.autoReplies.acknowledgment, enabled: true },
+            outOfHours: { ...saved.body.autoReplies.outOfHours, enabled: true },
+          })
+        ).status,
+      ).toBe(200);
+
+      const answer = async (messageId: string, at: Date): Promise<string> => {
+        await receive({
+          from: { address: `${messageId}@example.com` },
+          subject: 'Printer jammed',
+          text: 'Paper everywhere.',
+          messageId: `<${messageId}@example.com>`,
+        });
+        const filed = await messageOf(`${messageId}@example.com`);
+        const [event] = await receivedEvents(filed.ticketId);
+        if (event === undefined) {
+          throw new Error('no email.received event');
+        }
+        await handleReceived(event, autoRepliesAt(at));
+        return filed.ticketId;
+      };
+
+      // Monday 2027-01-04 11:00 UTC: closed.
+      const closed = await answer('hours-closed', new Date('2027-01-04T11:00:00Z'));
+      expect(await kindsOf(closed)).toEqual(['out_of_hours']);
+      await sendQueued(closed);
+      const [notice] = await mailpitMessages();
+      expect(notice?.To.map((to) => to.Address)).toEqual(['hours-closed@example.com']);
+      expect((await mailpitHeaders(notice?.ID ?? ''))['Auto-Submitted']).toEqual(['auto-replied']);
+
+      // Sunday 2027-01-03 11:00 UTC: open.
+      const open = await answer('hours-open', new Date('2027-01-03T11:00:00Z'));
+      expect(await kindsOf(open)).toEqual(['acknowledgment']);
+    });
+
+    it('starts the clocks of a mailed ticket and resumes them when the customer mails back', async () => {
+      await setAcknowledgment(false);
+      const hours = await call('PUT', `${brandPath()}/business-hours`, {
+        brand: {
+          timezone: 'UTC',
+          weekly: Array.from({ length: 7 }, () => [{ start: '00:00', end: '24:00' }]),
+        },
+        departments: [],
+      });
+      expect(hours.status).toBe(200);
+      const policy = await call<SlaPolicy>('POST', `${brandPath()}/sla-policies`, {
+        name: 'Support by email',
+        conditions: [{ field: 'department', operator: 'any', values: [support] }],
+        timeMode: 'calendar',
+        targets: {
+          low: { firstResponseMinutes: 60, resolutionMinutes: 480 },
+          medium: { firstResponseMinutes: 60, resolutionMinutes: 480 },
+          high: { firstResponseMinutes: 30, resolutionMinutes: 240 },
+          urgent: { firstResponseMinutes: 15, resolutionMinutes: 120 },
+        },
+        escalation: [],
+      });
+      expect(policy.status).toBe(201);
+
+      // 1. The mail files a ticket: both clocks start under the policy.
+      await receive({
+        from: { address: 'sami@example.com' },
+        subject: 'Cannot log in',
+        text: 'The password reset never arrives.',
+        messageId: '<sla-1@example.com>',
+      });
+      const filed = await messageOf('sla-1@example.com');
+      const started = await clocksOf(filed.ticketId);
+      expect(started.map((clock) => clock.kind).sort()).toEqual(['first_response', 'resolution']);
+      expect(started.every((clock) => clock.policyId === policy.body.id)).toBe(true);
+      expect(started.find((clock) => clock.kind === 'first_response')?.targetMinutes).toBe(60);
+
+      // 2. The agent answers: first response met, and Awaiting customer pauses resolution.
+      const reply = await call<TicketMessage>(
+        'POST',
+        `${brandPath()}/tickets/${filed.ticketId}/messages`,
+        { kind: 'public', bodyHtml: '<p>Try again now, please.</p>' },
+      );
+      expect(reply.status).toBe(201);
+      const answered = await clocksOf(filed.ticketId);
+      expect(answered.find((clock) => clock.kind === 'first_response')?.satisfiedAt).not.toBeNull();
+      expect(answered.find((clock) => clock.kind === 'resolution')?.pausedAt).not.toBeNull();
+
+      // 3. The customer mails back on the thread: a customer message, so it resumes.
+      await sendQueued(filed.ticketId);
+      const [sent] = await mailpitMessages();
+      await receive({
+        from: { address: 'sami@example.com' },
+        subject: 'Re: Cannot log in',
+        text: 'Still nothing.',
+        messageId: '<sla-2@example.com>',
+        inReplyTo: `<${sent?.MessageID ?? ''}>`,
+      });
+      expect((await messageOf('sla-2@example.com')).ticketId).toBe(filed.ticketId);
+      const resumed = await clocksOf(filed.ticketId);
+      expect(resumed.find((clock) => clock.kind === 'resolution')?.pausedAt).toBeNull();
+    });
   });
 });

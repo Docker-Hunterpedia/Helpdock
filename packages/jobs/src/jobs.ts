@@ -345,6 +345,79 @@ export const emailPollJob = defineJob({
 
 /** The scheduler id of one mailbox's poller. Dots, not colons, for the reason {@link retentionJobId} gives. */
 export const emailPollSchedulerId = (mailboxId: string): string => `email.poll.${mailboxId}`;
+export const slaTimerPayloadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  clock: z.enum(['first_response', 'next_response', 'resolution']),
+  /** The share of the target this timer fires at; 100 is the breach. */
+  stepPercent: z.int().positive(),
+});
+
+export type SlaTimerPayload = z.infer<typeof slaTimerPayloadSchema>;
+
+/**
+ * One SLA timer (M3-02, DOMAIN-RULES §3.4): an escalation step, or the breach
+ * at 100 %, of one clock of one ticket. Added with a delay by the
+ * `sla.schedule` outbox handler, never by a request.
+ *
+ * The job id is {@link slaTimerJobId}, one per ticket, clock and step, so
+ * re-adding a timer that already exists moves it rather than duplicating it.
+ * It has no receipt: the clock row records the steps that fired, which is the
+ * natural key, and a timer that fires early — its clock was paused, or its
+ * target raised, after it was added — moves itself back rather than doing
+ * anything, which a receipt claimed on that first delivery would forbid.
+ */
+export const slaTimerJob = defineJob({
+  name: 'sla.timer',
+  queue: QUEUE_NAMES.sla,
+  schema: slaTimerPayloadSchema,
+  options: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 5_000 },
+    // Removed as soon as it completes, so the same id can be added again when
+    // a reopen starts the same clock over.
+    removeOnComplete: true,
+    removeOnFail: { age: 7 * 86_400 },
+  },
+});
+
+/**
+ * `sla:<ticket_id>:<clock>:<step>` of DOMAIN-RULES §3.4, spelled with dots:
+ * BullMQ refuses a custom id with a colon in it (see {@link retentionJobId}).
+ */
+export const slaTimerJobId = ({
+  ticketId,
+  clock,
+  stepPercent,
+}: Pick<SlaTimerPayload, 'ticketId' | 'clock' | 'stepPercent'>): string =>
+  `sla.${ticketId}.${clock}.${String(stepPercent)}`;
+
+export const slaRebuildPayloadSchema = z.object({
+  /** Absent on the boot tick, which adds one job per brand; present on those. */
+  brandId: z.uuid().optional(),
+});
+
+export type SlaRebuildPayload = z.infer<typeof slaRebuildPayloadSchema>;
+
+/**
+ * `sla.rebuild` (DOMAIN-RULES §3.4, §10): on worker boot, and hourly after, it
+ * re-creates every timer of every running clock, which is what protects the
+ * SLA against losing Redis. Runs on the `sla` queue beside the timers it
+ * rebuilds; a tick without a brand fans out one job per brand, as retention
+ * does, rather than widening a tenant context (DOMAIN-RULES §1.4).
+ */
+export const slaRebuildJob = defineJob({
+  name: 'sla.rebuild',
+  queue: QUEUE_NAMES.sla,
+  schema: slaRebuildPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  schedule: { everyMs: 3_600_000 },
+});
 
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
@@ -356,6 +429,8 @@ export const JOB_DEFINITIONS = Object.freeze({
   [assignmentOfflineUnassignJob.name]: assignmentOfflineUnassignJob,
   [emailSendJob.name]: emailSendJob,
   [emailPollJob.name]: emailPollJob,
+  [slaTimerJob.name]: slaTimerJob,
+  [slaRebuildJob.name]: slaRebuildJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

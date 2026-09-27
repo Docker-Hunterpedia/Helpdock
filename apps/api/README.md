@@ -477,6 +477,7 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/blocked-senders*`, `PATCH …/ticketing/spam-settings` | `@Requires('ticketing:manage')` | M1-11's Spam tab: the sender block list and `offerBlockSender`. [The settings guide](../../docs/guides/ticketing-settings.md#spam). |
 | `/api/brands/:brandId/tickets/:ticketId/{spam,spam-sender}` | `ticket:write` to mark or unmark, `ticket:read` for what the dialog offers | "Mark as spam" and "Not spam". [The ticket guide](../../docs/guides/tickets.md#spam). |
 | `/api/brands/:brandId/assignment*` | `ticketing:manage` for the settings and the agents, `ticket:write` for `…/:departmentId/assignable` | M1-07's Assignment tab and the assignee picker. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
+| `/api/brands/:brandId/{business-hours,holidays,sla-policies}*`, `PATCH …/ticketing/sla-settings` | `@Requires('ticketing:manage')` | M3-01's Business hours tab and M3-02's SLAs tab; every save recomputes the clocks. [The SLA guide](../../docs/guides/slas.md#endpoints) lists them. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
@@ -527,7 +528,7 @@ code.
 | `status-change.ts` | Where a status change lands: the transition table is consulted, a status that is not this brand's is refused, and `closed_at` is kept in step with the system state. It answers *whether* the move closed or reopened the ticket; what that costs is the service's. |
 | `lifecycle/transitions.ts` | DOMAIN-RULES §2.2 as one constant. `transitions.test.ts` holds a second copy typed out from the document and asserts the two agree cell by cell. |
 | `lifecycle/reopen-policy.ts` | §2.3, as a pure function of a policy, a `closed_at` and a `now`. The boundary — "less than N days" — is named in the test in both directions. |
-| `lifecycle/hooks.ts` | The moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`, and M1-09's `onMerged` and `onUnmerged`. A provider, so they replace one line of `TicketsModule` — M1-12's line provides `csat/csat-hooks.ts` in its place. |
+| `lifecycle/hooks.ts` | The moments M3-02 and M1-12 fill: `onResolved`, `onClosedForCsat`, `onReopened`, M1-09's `onMerged` and `onUnmerged`, and M3-02's `onCreated`, `onChanged` and `onResponded`. A provider, so they replace one line of `TicketsModule` — which now provides `sla/sla-hooks.ts`, extending M1-12's `csat/csat-hooks.ts`. |
 | `lifecycle/lifecycle.service.ts` | The transitions carried out: the reply paths, the reopen, the continuation ticket and its two system messages, the soft delete. |
 | `lifecycle/status-rules.ts` | What may be done to a status row, as pure functions — the same shape `brands/department-scope.ts` uses, and for the same reason. |
 | `lifecycle/ticketing-settings.*` | The Statuses tab and the Reply behaviour card over HTTP, under the new `ticketing:manage`. |

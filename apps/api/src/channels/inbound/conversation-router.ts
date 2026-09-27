@@ -329,6 +329,14 @@ export class ConversationRouter {
       await this.#writeMismatchNote(context, actor, ticket, referenced, locale);
     }
 
+    // M3-02: the clocks start from the moment the ticket was filed (§3.1), as
+    // they do for a ticket created through `TicketsService.create`.
+    await this.#deps.lifecycle.onCreated(
+      { ...lifecycleContext(context, actor), now: ticket.createdAt },
+      ticket,
+      status,
+    );
+
     await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.created, {
       ticketId: ticket.id,
       departmentId: ticket.departmentId,

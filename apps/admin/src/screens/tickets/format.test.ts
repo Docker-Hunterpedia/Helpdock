@@ -1,8 +1,9 @@
+import type { TicketSlaSummary } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { HOUR, NOW, testStatus, testTicket } from '../../tickets/fixtures.js';
 import {
+  clockDuration,
   elapsed,
-  elapsedFraction,
   messageTime,
   PRIORITY_TONE,
   paragraph,
@@ -94,7 +95,7 @@ describe('slaState', () => {
   it('is running while more than a fifth of the window is left', () => {
     const running = testTicket({ createdAt: iso(-HOUR), firstResponseDueAt: iso(3 * HOUR) });
 
-    expect(slaState(running, NOW)).toEqual({ kind: 'running', remaining: '3h' });
+    expect(slaState(running, NOW)).toEqual({ kind: 'running', remaining: '3h', reopened: false });
   });
 
   it('is at risk under a fifth of the window (DESIGN §6.2)', () => {
@@ -161,17 +162,49 @@ describe('paragraph', () => {
   });
 });
 
-describe('elapsedFraction', () => {
-  it('is how much of the window has gone', () => {
-    expect(elapsedFraction(iso(-2 * HOUR), iso(2 * HOUR), NOW)).toBe(0.5);
+describe('slaState from the api’s judgement (M3-02)', () => {
+  const judged = (sla: TicketSlaSummary | null) => slaState(testTicket({ sla }), NOW);
+  const summary = {
+    clock: 'first_response' as const,
+    remainingMs: 80 * 60_000,
+    breachedAt: null,
+    reopened: false,
+  };
+
+  it('prefers what the api said over the due dates', () => {
+    expect(judged({ ...summary, state: 'running' })).toEqual({
+      kind: 'running',
+      remaining: '1h 20m',
+      reopened: false,
+    });
+    expect(judged({ ...summary, state: 'warning', reopened: true })).toMatchObject({
+      kind: 'atRisk',
+      reopened: true,
+    });
+    expect(judged({ ...summary, state: 'paused' })).toEqual({ kind: 'paused' });
+    expect(judged({ ...summary, state: 'met' })).toEqual({ kind: 'met' });
+    expect(judged(null)).toEqual({ kind: 'none' });
   });
 
-  it('never runs past the track', () => {
-    expect(elapsedFraction(iso(-10 * HOUR), iso(-2 * HOUR), NOW)).toBe(1);
-    expect(elapsedFraction(iso(HOUR), iso(2 * HOUR), NOW)).toBe(0);
+  it('measures a breach from the moment it was recorded', () => {
+    expect(
+      judged({ ...summary, state: 'breached', remainingMs: -HOUR, breachedAt: iso(-2 * HOUR) }),
+    ).toEqual({ kind: 'breached', over: '2h' });
+    expect(judged({ ...summary, state: 'breached', remainingMs: -HOUR })).toEqual({
+      kind: 'breached',
+      over: '1h',
+    });
   });
+});
 
-  it('is full when the window is not a window at all', () => {
-    expect(elapsedFraction(iso(0), iso(0), NOW)).toBe(1);
+describe('clockDuration', () => {
+  it('prints hours with padded minutes, days with hours', () => {
+    expect(clockDuration(30_000)).toBe('now');
+    expect(clockDuration(18 * 60_000)).toBe('18m');
+    expect(clockDuration(2 * HOUR)).toBe('2h');
+    expect(clockDuration(2 * HOUR + 4 * 60_000)).toBe('2h 04m');
+    expect(clockDuration(-(HOUR + 20 * 60_000))).toBe('1h 20m');
+    expect(clockDuration(3 * 24 * HOUR)).toBe('3d');
+    expect(clockDuration(3 * 24 * HOUR + 4 * HOUR)).toBe('3d 4h');
   });
 });

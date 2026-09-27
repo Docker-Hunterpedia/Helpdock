@@ -204,7 +204,7 @@ department move, and a ticket in another department answers 404.
 Another module copies a contact in by id through
 `TicketParticipantsService.addCcParticipant(context, ticketId, contactId)`,
 exported by `ParticipantsModule`. M1-09's ticket merge uses it to add the
-secondary's contact as a CC (§2.4); M2 will use it for an inbound `Cc:` line.
+secondary's contact as a CC (§2.4); M2's inbound email uses it for a `Cc:` line.
 
 ### Custom values
 

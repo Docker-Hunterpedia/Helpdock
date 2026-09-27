@@ -183,12 +183,15 @@ every request passes, rather than in each handler.
 
 ### Sending
 
-SMTP arrives with M2. Until then the development sender writes one line to the
-log — the recipient, the subject and the locale, never the body, because a
-sign-in link *is* a credential — and the message itself is in the log of the
-process that made it. The interface it implements is
+The development sender writes one line to the log — the recipient, the
+subject and the locale, never the body, because a sign-in link *is* a
+credential — and the message itself is in the log of the process that made it.
+M2 built SMTP for ticket mail, but this seam is not wired to it yet: nothing
+passes a real `EmailSender` to `createApiApp`, so sign-in links, password resets
+and invitations are only logged ([M2 gaps](../completed/M2-email-channel.md#gaps-and-follow-ups)).
+The interface is
 [`packages/channels/src/email/sender.ts`](../../packages/channels/src/email/sender.ts),
-and M2 puts a real transport behind it without the auth service changing.
+so a real transport goes behind it without the auth service changing.
 
 The two messages are rendered from the `email` catalogs in `@helpdock/i18n`, in
 the recipient's own language, right to left for Arabic.

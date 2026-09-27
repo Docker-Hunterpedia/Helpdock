@@ -656,9 +656,9 @@ somebody reading the code.
 | `ticket-facts.ts` | What conditions are asked about, read once per ticket. The evaluator itself is `evaluateConditions` in `@helpdock/schemas`, shared with the admin's mock. |
 | `engine.ts` | `evaluateEventRules` and `runScheduledRules`: which rules run, each rule's actions in a savepoint, and the log. |
 | `actions.ts` | The actions, carried out as a person's change is: the column, a `ticket_activity` row as `rule:<id>`, and one outbox event carrying the rule chain. |
-| `rules-jobs.ts` | The `outbox.event` handler that adds `rules.evaluate`, the `rule.notify` placeholder, and the `rules` queue's processor. Registered by `worker/start-worker.ts`. |
+| `rules-jobs.ts` | The `outbox.event` handler that adds `rules.evaluate`, registered as the `rules` subscriber beside each event's owner, and the `rules` queue's processor. Registered by `worker/start-worker.ts`. |
 | `engine-deps.ts` | What the engine acts with outside Nest: the repositories, M1's lifecycle with M3-02's SLA hooks (which extend the survey hook), and M3-01's calendar. |
-| `ports.ts` | The two seams: M3-06's `CannedResponsesService.render`, still a stand-in (a canned reply is unavailable), and M3-01's business hours, filled by `sla/business-hours-probe.ts` in `engine-deps.ts` and `RulesModule.forRoot({ sla })`. |
+| `ports.ts` | The two seams: M3-06's canned responses, filled by `macros/canned-response-port.ts`, and M3-01's business hours, filled by `sla/business-hours-probe.ts`; both in `engine-deps.ts` and `RulesModule.forRoot({ sla, macros })`. |
 | `test-run.ts` | M3-05's preview: what the actions would do and what they could set off. Reads only. |
 | `rules.service.ts`, `.controller.ts`, `.repository.ts` | The builder's routes. |
 

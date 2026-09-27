@@ -3,7 +3,131 @@
   "subtitle": "{{brand}} · identity, locale and domains for this brand only",
   "tabList": "Brand sections",
   "tabs": {
+    "general": "General",
+    "domains": "Domains",
     "danger": "Danger zone"
+  },
+  "general": {
+    "heading": "Identity",
+    "lead": "Shown to customers in emails, the widget and the help center.",
+    "name": "Brand name",
+    "nameRequired": "Enter the brand's name.",
+    "prefix": "Ticket prefix",
+    "prefixHint": "Fixed at creation. It is printed in every ticket number.",
+    "locale": "Default language",
+    "localeHint": "Used for auto-responders and the help center fallback.",
+    "timezone": "Time zone",
+    "timezoneHint": "Business hours and SLA clocks use this unless a department overrides it.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "saved": "Brand saved.",
+    "failed": "The brand could not be saved. Try again.",
+    "loadFailed": "The brand could not be loaded.",
+    "whoHeading": "Who can edit this",
+    "whoBody": "Admins of this brand. Team Leaders edit ticketing settings on the Ticketing page instead."
+  },
+  "domains": {
+    "heading": "Help center domains",
+    "lead": "Your own address for the help center. The primary domain is the one in links, the sitemap and canonical tags.",
+    "add": {
+      "label": "Add a domain",
+      "placeholder": "support.example.com",
+      "action": "Add domain",
+      "hint": "A host name only, without https:// or a path. You get the records to create next."
+    },
+    "refusals": {
+      "domain-invalid": "Enter a host name such as support.example.com, without https:// or a path.",
+      "domain-not-public": "That name can never be reached from the internet. Use a domain you own.",
+      "domain-reserved": "That is one of this install's own host names.",
+      "domain-taken": "That domain is already in use, by this brand or another one.",
+      "domain-limit": "This brand already has {{max}} domains, the most it may have. Remove one first.",
+      "domain-not-verified": "Only a verified domain can be the primary one."
+    },
+    "listLabel": "Domains",
+    "primary": "Primary",
+    "state": {
+      "issued": "Verified · certificate issued {{date}}, renews by itself",
+      "tlsPending": "Verified · the certificate is issued on the first visit",
+      "cloudflare": "Verified · Cloudflare serves HTTPS",
+      "pending": "Waiting for DNS · checked {{ago}}",
+      "pendingNever": "Waiting for DNS · not checked yet",
+      "failed": {
+        "certificate_failed": "Certificate failed",
+        "cloudflare_not_flagged": "Certificate failed",
+        "cname_mismatch": "CNAME points elsewhere",
+        "records_removed": "Verification lost"
+      }
+    },
+    "failure": {
+      "certificate_failed": "DNS is verified, but HTTPS on this name did not answer with a valid certificate ({{detail}}). Check that ports 80 and 443 reach this server.",
+      "cloudflare_not_flagged": "DNS is verified, but the name resolves to Cloudflare ({{detail}}), so no certificate could be issued. If you proxy it through Cloudflare, turn on Proxied by Cloudflare. Otherwise set the record to DNS only.",
+      "cname_mismatch": "The CNAME record points at {{detail}}, not at {{target}}. Change it to the value below.",
+      "records_removed": "The TXT record is gone, so this domain is no longer verified and does not serve the help center. Publish the records again.",
+      "lastTry": "Last try {{time}}."
+    },
+    "records": {
+      "heading": "Create these two records at your DNS provider",
+      "tableLabel": "DNS records for {{domain}}",
+      "columns": {
+        "type": "Type",
+        "name": "Name",
+        "value": "Value",
+        "seen": "Seen by Helpdock"
+      },
+      "found": "Found",
+      "notYet": "Not yet",
+      "copyName": "Copy the {{type}} name",
+      "copyValue": "Copy the {{type}} value",
+      "copied": "Copied."
+    },
+    "cloudflare": {
+      "label": "Proxied by Cloudflare",
+      "hint": "Turn on if this record is proxied (orange cloud) in Cloudflare. Helpdock then does not request a certificate and Cloudflare serves HTTPS. The custom domains guide lists the SSL mode to use."
+    },
+    "dnsDelay": "DNS changes can take up to 48 hours to show. Helpdock keeps checking; Check now looks at once.",
+    "checkNow": "Check now",
+    "tryAgain": "Try again",
+    "actionsFor": "Actions for {{domain}}",
+    "makePrimary": "Make primary",
+    "proxyOn": "Mark as proxied by Cloudflare",
+    "proxyOff": "Mark as not proxied by Cloudflare",
+    "remove": "Remove domain",
+    "removeConfirm": {
+      "title": "Remove {{domain}}?",
+      "body": "The help center stops answering on this name, and no new certificate is issued for it. Its DNS records can be deleted afterwards.",
+      "action": "Remove domain"
+    },
+    "toast": {
+      "added": "{{domain}} added. Create the two records shown under it.",
+      "checking": "Checking {{domain}}. The result shows here shortly.",
+      "primary": "{{domain}} is now the primary domain.",
+      "proxied": "Saved. {{domain}} is being checked again.",
+      "removed": "{{domain}} removed.",
+      "failed": "That did not work. Try again."
+    },
+    "loadFailed": "The domains could not be loaded.",
+    "empty": {
+      "heading": "No domains yet",
+      "body": "Add the host name customers should reach the help center on."
+    },
+    "aside": {
+      "label": "About domains",
+      "howHeading": "How a domain goes live",
+      "how1": "Add it here.",
+      "how2": "Create the CNAME and TXT records.",
+      "how3": "Helpdock sees both and marks it verified.",
+      "how4": "The certificate is issued on the first visit, unless Cloudflare proxies it.",
+      "statesHeading": "States",
+      "stateVerified": "Verified: DNS checks out and HTTPS works.",
+      "statePending": "Waiting: a record is missing or not seen yet.",
+      "stateFailed": "Failed: the reason is shown under the domain.",
+      "widgetHeading": "Chat widget sites",
+      "widgetBefore": "The sites allowed to embed the widget are set on",
+      "widgetLink": "Channels › Widget",
+      "widgetAfter": ". They need no DNS records.",
+      "whoHeading": "Who can change this",
+      "whoBody": "Admins of this brand. Adding, verifying and removing a domain is written to the audit log."
+    }
   },
   "retention": {
     "heading": "Data retention",

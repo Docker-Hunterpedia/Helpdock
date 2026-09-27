@@ -203,3 +203,26 @@ export function formatIp(bytes: Uint8Array): string {
   }
   return groups.join(':');
 }
+
+/**
+ * True when the literal `address` falls inside any of `cidrs`, an IPv4-mapped
+ * IPv6 address counting as the IPv4 address it carries. An address or a CIDR
+ * that does not parse matches nothing. For classifying where a name points —
+ * "is this Cloudflare's edge?" — not for deciding whether to connect, which is
+ * the blocked ranges' job.
+ */
+export function addressInCidrs(address: string, cidrs: readonly string[]): boolean {
+  const bytes = parseIp(address);
+  if (bytes === undefined) {
+    return false;
+  }
+  const mapped = unmapIpv4(bytes);
+
+  return cidrs.some((text) => {
+    const cidr = parseCidr(text);
+    return (
+      cidr !== undefined &&
+      (cidrContains(cidr, bytes) || (mapped !== undefined && cidrContains(cidr, mapped)))
+    );
+  });
+}

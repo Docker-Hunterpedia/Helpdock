@@ -238,7 +238,7 @@ packages/ai
 - Cache: rendered HTML per `(brand, locale, path, audience)` in Redis, invalidated on article publish/theme change; ETag. Public pages: `Cache-Control: public, s-maxage=300, stale-while-revalidate=60`. Internal pages and staff sessions: `private, no-store`, never stored in Redis (DOMAIN-RULES §5).
 - SEO: canonical, hreflang for locales, sitemap.xml per brand, OG tags, JSON-LD `FAQPage`/`Article`.
 - Theme tokens → CSS custom properties injected inline; custom CSS sanitized (no `@import`, no `url()` to external hosts except allow-list).
-- Domain onboarding: admin adds `support.brand.com` → shows CNAME target + TXT token → "Verify" → verified → Caddy on-demand TLS starts answering; behind Cloudflare, mark "proxied" to skip ACME.
+- Domain onboarding: admin adds `support.brand.com` → shows CNAME target + TXT token → "Verify" → verified → Caddy on-demand TLS starts answering; behind Cloudflare, mark "proxied" to skip ACME. As built in M5-07: the TXT record is `_helpdock.<domain>` = `helpdock-verify=<token>`; the CNAME target is `HELPCENTER_CNAME_TARGET` or the host of `APP_URL`, and an apex pointed by address, or a name Cloudflare proxies, counts as pointing here. The `domains` queue checks on request and on a schedule, then makes one TLS handshake so the first certificate is issued before a customer asks. `BrandHostResolver` maps a verified host to its brand.
 
 ---
 
@@ -268,6 +268,7 @@ packages/ai
 | `webhooks` | `webhook.deliver` | HMAC, retry, log |
 | `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |
 | `assignment` | `assignment.offline_unassign` (delayed) | M1-07's auto-unassign timer; a no-op if the agent came back or left again later |
+| `domains` | `domain.verify`, `domain.verify.schedule` (every 15 min) | M5-07's custom-domain DNS and TLS check; a request arrives through the `domain.check_requested` outbox event |
 | `maintenance` | `cleanup.tokens`, `maintenance.retention`, `stats.rollup` | cron |
 
 Bull Board (auth-protected) mounted in admin System page for queue inspection.

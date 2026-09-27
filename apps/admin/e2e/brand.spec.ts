@@ -20,6 +20,8 @@ const openBrand = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
   await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
+  // The page opens on General; the retention card is on the last tab.
+  await page.getByRole('tab', { name: t('brand:tabs.danger') }).click();
   await page.getByRole('heading', { name: t('brand:retention.heading') }).waitFor();
 };
 

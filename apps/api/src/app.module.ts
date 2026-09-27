@@ -20,9 +20,11 @@ import { BrandsModule } from './brands/brands.module.js';
 import { ChannelsModule, type ChannelsModuleOverrides } from './channels/channels.module.js';
 import { ContactsModule } from './contacts/contacts.module.js';
 import type { BrandResolver } from './context/brand-resolver.js';
-import { NoopBrandResolver } from './context/brand-resolver.js';
 import { RequestContextMiddleware } from './context/request-context.middleware.js';
 import { CsatModule } from './csat/csat.module.js';
+import { BrandHostResolver } from './domains/brand-host.js';
+import { ownHostsOf } from './domains/domain-config.js';
+import { DomainsModule } from './domains/domains.module.js';
 import { EmailModule } from './email/email.module.js';
 import type { SmtpTransportFactory } from './email/transport.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
@@ -88,7 +90,10 @@ export interface AppModuleOptions {
    * {@link AppModuleOptions.logger}, so a caller only names what is its own.
    */
   readonly realtime: Omit<RealtimeModuleOptions, 'logger'>;
-  /** Defaults to {@link NoopBrandResolver}; M5 supplies the real one. */
+  /**
+   * The `Host` → brand map of the request middleware. Defaults to M5-07's
+   * {@link BrandHostResolver} over `brand_domains`; a suite may pass its own.
+   */
   readonly brandResolver?: BrandResolver;
   /**
    * The bucket M1-10's attachment routes presign against. Boot leaves it out
@@ -128,6 +133,12 @@ export class AppModule implements NestModule {
     // Imported by `AppModule` for its routes and by `RulesModule` for the
     // builder's canned-response picker, one module to Nest.
     const macros = MacrosModule.forRoot({ tickets });
+    // M5-07: one resolver, read by the request middleware as the install's
+    // `BrandResolver` and exported by `DomainsModule` for the help center.
+    const hostResolver = new BrandHostResolver({
+      db: options.db,
+      ownHosts: ownHostsOf(options.env),
+    });
 
     return {
       module: AppModule,
@@ -189,6 +200,8 @@ export class AppModule implements NestModule {
         AuditLogModule.forRoot(),
         // M3-07: the bell's panel and the Notifications tab. Delivery runs in the worker.
         NotificationsModule.forRoot(),
+        // M5-07: Brand › Domains. The DNS and TLS check runs in the worker.
+        DomainsModule.forRoot({ env: options.env, hostResolver }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],
@@ -201,7 +214,7 @@ export class AppModule implements NestModule {
       providers: [
         { provide: LOGGER, useValue: options.logger },
         { provide: PRINCIPAL_RESOLVER, useValue: options.principalResolver },
-        { provide: BRAND_RESOLVER, useValue: options.brandResolver ?? new NoopBrandResolver() },
+        { provide: BRAND_RESOLVER, useValue: options.brandResolver ?? hostResolver },
         DomainCheckService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionGuard },

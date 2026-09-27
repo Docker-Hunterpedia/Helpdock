@@ -18,7 +18,7 @@ Owner: @Docker-Hunterpedia
 | M5-04 | SEO: canonical, hreflang, sitemap per brand, OG, JSON-LD | #120 | not started |
 | M5-05 | Search: tsvector per language (`english`, `arabic`) + trigram fuzzy; semantic merge… | #121 | not started |
 | M5-06 | Theme tokens, logo, favicon, sanitized custom CSS, header/footer links, home layout | #122 | not started |
-| M5-07 | Custom domains: CNAME + TXT verification in admin, `/internal/domain-check` for Caddy… | #123 | not started |
+| M5-07 | Custom domains: CNAME + TXT verification in admin, `/internal/domain-check` for Caddy… | #123 | in review: DNS verification (`domains` queue, `domain.verify` every 15 min), Caddy `/internal/domain-check`, Cloudflare flag, `BrandHostResolver`, Brand › Domains and General tabs; migration 0030; new env `HELPCENTER_CNAME_TARGET` |
 | M5-08 | Article feedback, view counts, "Still need help?" handoff to widget/form with article… | #124 | not started |
 | M5-09 | Visibility model: `public`/`internal` on article versions, internal-only help center… | #125 | not started |
 | M5-10 | Widget "help center" and "chat + articles" modes wired to real content | #126 | not started |
@@ -40,4 +40,4 @@ On the [design canvas](https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ), under
 
 ## Pull requests
 
-- None yet.
+- Custom domains (M5-07): this branch.

@@ -28,6 +28,8 @@ export const QUEUE_NAMES = {
   assignment: 'assignment',
   /** `cleanup.tokens`, `maintenance.retention`, `stats.rollup`. */
   maintenance: 'maintenance',
+  /** `domain.verify` and its schedule (M5-07): custom-domain DNS and TLS checks. */
+  domains: 'domains',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

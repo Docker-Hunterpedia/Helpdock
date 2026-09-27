@@ -2,6 +2,7 @@ import type {
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
+  DomainsRefusal,
   IdentityProblem,
   StaffRefusal,
   TicketingRefusal,
@@ -10,6 +11,7 @@ import type {
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
 import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
+import { DomainsError } from '../domains/api.js';
 import { StaffError } from '../staff/api.js';
 import { TicketingError } from '../ticketing/api.js';
 import { TicketLifecycleError } from '../tickets/api.js';
@@ -194,7 +196,13 @@ export class HttpTransport {
 const toError = async (
   response: Response,
 ): Promise<
-  AuthError | ChannelsError | ContactError | StaffError | TicketingError | TicketLifecycleError
+  | AuthError
+  | ChannelsError
+  | ContactError
+  | DomainsError
+  | StaffError
+  | TicketingError
+  | TicketLifecycleError
 > => {
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
@@ -202,6 +210,7 @@ const toError = async (
   let ticketing: TicketingRefusal | undefined;
   let lifecycle: TicketLifecycleRefusal | undefined;
   let channels: ChannelsRefusal | undefined;
+  let domains: DomainsRefusal | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -211,6 +220,7 @@ const toError = async (
     ticketing = body.ticketing?.reason;
     lifecycle = body.lifecycle?.reason;
     channels = body.channels?.reason;
+    domains = body.domains?.reason;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -234,6 +244,10 @@ const toError = async (
 
   if (channels !== undefined) {
     return new ChannelsError(channels);
+  }
+
+  if (domains !== undefined) {
+    return new DomainsError(domains);
   }
 
   if (auth === undefined) {

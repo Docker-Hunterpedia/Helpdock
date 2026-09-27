@@ -274,6 +274,19 @@ that fired, and a timer that fires early moves itself instead of acting.
 `sla.rebuild` re-plans every running clock's timers; the worker adds it on boot
 and hourly. The consumers are in `apps/api/src/sla/` ([guide](../../docs/guides/slas.md#timers)).
 
+## Custom domains
+
+M5-07 adds the `domains` queue and two jobs on it. `domain.verify` checks a
+brand's custom help center domains: with a `domainId` it checks that one now
+(an Admin added it, pressed "Check now" or changed its Cloudflare flag), without
+one it checks every domain of the brand whose re-check is due. A person's
+request reaches it through the outbox event `domain.check_requested`, whose
+handler adds the job with the id `domainVerifyJobId(payload, { outboxId })`.
+`domain.verify.schedule` runs every fifteen minutes (`DOMAIN_VERIFY_CRON`) and
+adds one `domain.verify` per active brand, with an id per brand per tick. Neither
+takes a receipt: a check reads DNS and writes what it saw. The consumers are in
+`apps/api/src/domains/` ([install guide](../../docs/guides/install.md#custom-domains)).
+
 ## Retention
 
 DOMAIN-RULES §11 keeps outbox rows and receipts for seven days. Both purges

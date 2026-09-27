@@ -6,6 +6,9 @@ import {
   createOutboxEventHandler,
   createQueueConnection,
   createWorker,
+  DOMAIN_VERIFY_CRON,
+  domainVerifyJob,
+  domainVerifyScheduleJob,
   emailPollJob,
   emailSendJob,
   type JobLogger,
@@ -51,6 +54,14 @@ import { MailboxesRepository } from '../channels/mailboxes.repository.js';
 import { CsatRepository } from '../csat/csat.repository.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
 import { CsatTokens } from '../csat/tokens.js';
+import { cnameTargetOf, createDomainProbes } from '../domains/domain-config.js';
+import {
+  createDomainsProcessor,
+  type DomainsQueue,
+  registerDomainEventHandlers,
+} from '../domains/domain-jobs.js';
+import { DomainVerifier } from '../domains/domain-verifier.js';
+import { DomainsRepository } from '../domains/domains.repository.js';
 import { AutoReplyService } from '../email/auto-reply.service.js';
 import { EmailRepository } from '../email/email.repository.js';
 import { registerEmailEventHandlers } from '../email/email-events.js';
@@ -165,6 +176,12 @@ export interface WorkerDependencies {
     env: WorkerEnv;
     settings: WorkerSettings;
   }): Closable;
+  /**
+   * M5-07's `domains` consumer: custom-domain DNS and TLS checks, and the
+   * fifteen-minute re-check schedule, upserted on every boot for the reason
+   * the retention schedule is.
+   */
+  createDomainsWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -198,6 +215,8 @@ export type WorkerEnv = Pick<
   | 'APP_URL'
   // M2-02: an IMAP host is resolved through the same policy.
   | 'OUTBOUND_ALLOW_CIDRS'
+  // M5-07: where a custom domain's CNAME must point.
+  | 'HELPCENTER_CNAME_TARGET'
 >;
 
 /** What the worker reads from settings: the SMTP sender and the VAPID key pair (M3-07). */
@@ -242,6 +261,13 @@ const businessHoursService = (): BusinessHoursService => {
 
   return new BusinessHoursService(repository, new SlaService(repository));
 };
+
+/** M5-07: adds `domain.verify` jobs on the `domains` queue, under the id the caller derived. */
+const domainsQueueOf = (queue: Queue): DomainsQueue => ({
+  add: async (payload, jobId) => {
+    await queue.add(domainVerifyJob.name, payload, { ...domainVerifyJob.options, jobId });
+  },
+});
 
 /** What M3-02's handler and consumer read and write through. */
 const slaDeps = (queue: Queue): SlaWorkerDeps => {
@@ -375,6 +401,11 @@ export const workerDependencies: WorkerDependencies = {
       }),
     );
 
+    // M5-07. "Add", "Check now" and the Cloudflare flag end in a
+    // `domain.verify` job, with a job id derived from the outbox row.
+    const domains = new Queue(QUEUE_NAMES.domains, { connection: redis });
+    registerDomainEventHandlers(domainsQueueOf(domains));
+
     return {
       close: async () => {
         await media.close();
@@ -384,6 +415,7 @@ export const workerDependencies: WorkerDependencies = {
         await sla.close();
         await rules.close();
         await notify.close();
+        await domains.close();
       },
     };
   },
@@ -634,6 +666,49 @@ export const workerDependencies: WorkerDependencies = {
 
     return { close: () => worker.close() };
   },
+  createDomainsWorker: ({ redis, db, log, env }) => {
+    const queue = new Queue(QUEUE_NAMES.domains, { connection: redis });
+    queue
+      .upsertJobScheduler(
+        domainVerifyScheduleJob.name,
+        { pattern: DOMAIN_VERIFY_CRON, tz: 'UTC' },
+        { name: domainVerifyScheduleJob.name, data: {}, opts: domainVerifyScheduleJob.options },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the custom-domain check schedule'),
+      );
+
+    const verifier = new DomainVerifier({
+      db,
+      log,
+      repository: new DomainsRepository(),
+      cnameTarget: cnameTargetOf(env),
+      probes: createDomainProbes({
+        allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+        onBlocked: (event) =>
+          log.warn(
+            { host: event.host, address: event.address },
+            'custom domain resolves to a blocked address (DOMAIN-RULES §13)',
+          ),
+      }),
+    });
+    const worker = new Worker(
+      QUEUE_NAMES.domains,
+      createDomainsProcessor({ db, verifier, queue: domainsQueueOf(queue), log }),
+      // A few at once: each check is mostly waiting on a name server or a handshake.
+      { connection: redis, concurrency: 4 },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'domains job failed'),
+    );
+
+    return {
+      close: async () => {
+        await worker.close();
+        await queue.close();
+      },
+    };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -676,6 +751,7 @@ export const startWorker = ({
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });
   const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
+  const domains = deps.createDomainsWorker({ redis: connection, db, log, env });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -705,6 +781,7 @@ export const startWorker = ({
     await sla.close();
     await rules.close();
     await notify.close();
+    await domains.close();
     await producers.close();
     await connection.quit();
   };

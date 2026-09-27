@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addressInCidrs,
   cidrContains,
   formatIp,
   isIpLiteral,
@@ -133,5 +134,24 @@ describe('formatIp', () => {
   it('round-trips both families', () => {
     expect(formatIp(ip('203.0.113.9'))).toBe('203.0.113.9');
     expect(formatIp(ip('2002:7f00:1::'))).toBe('2002:7f00:1:0:0:0:0:0');
+  });
+});
+
+describe('addressInCidrs', () => {
+  const ranges = ['104.16.0.0/13', '2606:4700::/32'];
+
+  it('matches an IPv4 or IPv6 address inside a range', () => {
+    expect(addressInCidrs('104.21.48.12', ranges)).toBe(true);
+    expect(addressInCidrs('2606:4700:3030::6815:300c', ranges)).toBe(true);
+  });
+
+  it('matches an IPv4-mapped IPv6 address by the IPv4 address it carries', () => {
+    expect(addressInCidrs('::ffff:104.21.48.12', ranges)).toBe(true);
+  });
+
+  it('matches nothing outside the ranges, and nothing that does not parse', () => {
+    expect(addressInCidrs('93.184.216.34', ranges)).toBe(false);
+    expect(addressInCidrs('not an address', ranges)).toBe(false);
+    expect(addressInCidrs('104.21.48.12', ['not a cidr'])).toBe(false);
   });
 });

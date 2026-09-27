@@ -22,8 +22,9 @@ import { createIpRateLimiter } from './ip-rate-limit.js';
 
 /**
  * Caddy's on-demand TLS gate (ARCHITECTURE §3). It answers 200 only for a
- * verified help-center domain; anything else is a 403, and Caddy refuses the
- * handshake rather than asking a certificate authority for a certificate.
+ * verified help-center domain that is not proxied by Cloudflare (M5-07);
+ * anything else is a 403, and Caddy refuses the handshake rather than asking a
+ * certificate authority for a certificate.
  *
  * `@Public()` because Caddy has no session and its `ask` cannot carry a header,
  * which is why the `/internal/*` shared secret of ARCHITECTURE §7 does not apply
@@ -74,7 +75,16 @@ export class DomainCheckController {
       throw new HttpException('Too many domain checks', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    if (!(await this.#domains.isVerifiedHelpcenterDomain(domain))) {
+    const verdict = await this.#domains.verdict(domain);
+    if (verdict === 'proxied') {
+      // Verified, and served: Cloudflare holds the certificate. Saying so is
+      // what an operator reading Caddy's log needs, and tells a caller nothing
+      // the public DNS of the name does not.
+      throw new ForbiddenException(
+        'This domain is proxied by Cloudflare, which serves its certificate; none is issued here',
+      );
+    }
+    if (verdict === 'refuse') {
       // The same answer for a domain nobody added and one that is not verified
       // yet: the caller chose the hostname, so it learns nothing either way.
       throw new ForbiddenException('This domain is not a verified help center domain');

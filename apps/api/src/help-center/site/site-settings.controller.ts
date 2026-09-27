@@ -141,8 +141,8 @@ export class HelpCenterSiteSettingsController {
  * key) has no refresh family for the help center's cookie to follow.
  */
 const refreshFamilyOf = async (request: FastifyRequest, keys: SigningKeys): Promise<string> => {
-  const token = bearerTokenOf(request.headers.authorization);
-  const claims = token === null ? null : await verifyAccessToken(token, keys);
+  // No bearer token verifies as nothing, like a bad one.
+  const claims = await verifyAccessToken(bearerTokenOf(request.headers.authorization) ?? '', keys);
   if (claims === null) {
     throw new ForbiddenException('The help center is opened from a signed-in admin session');
   }

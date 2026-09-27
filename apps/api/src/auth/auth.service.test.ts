@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto';
-import type { EmailMessage, EmailSender } from '@helpdock/channels';
 import {
   createKeyring,
   createSettings,
@@ -7,7 +6,7 @@ import {
   InMemorySettingsStore,
   type Settings,
 } from '@helpdock/config';
-import type { Brand } from '@helpdock/db';
+import type { Brand, DbTransaction } from '@helpdock/db';
 import { uuidv7 } from '@helpdock/db';
 import argon2 from 'argon2';
 import { generateKeyPair } from 'jose';
@@ -17,6 +16,7 @@ import { authRedis } from '../testing/auth-redis.js';
 import type { RedisStub } from '../testing/redis-stub.js';
 import { silentLogger } from '../testing/silent-logger.js';
 import { AuthService } from './auth.service.js';
+import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import type { AuthFailure } from './auth-failure.js';
 import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
@@ -126,12 +126,25 @@ class FakeStaffRepository {
   }
 }
 
-class CollectingEmailSender implements EmailSender {
-  readonly sent: EmailMessage[] = [];
+/**
+ * What the service queued, link in the clear. Sealing it and the outbox row are
+ * `auth-email.test.ts`'s business; this suite follows the link.
+ */
+class CollectingAuthMail implements AuthMail {
+  readonly sent: (AuthEmailRequest & { readonly brandId: string | null })[] = [];
+  /** Whether the account has a brand to route through; false plays an account with no role. */
+  hasBrand = true;
 
-  send(message: EmailMessage): Promise<void> {
-    this.sent.push(message);
+  queue(_tx: DbTransaction, brandId: string, request: AuthEmailRequest): Promise<void> {
+    this.sent.push({ ...request, brandId });
     return Promise.resolve();
+  }
+
+  queueForAccount(request: AuthEmailRequest): Promise<boolean> {
+    if (this.hasBrand) {
+      this.sent.push({ ...request, brandId: null });
+    }
+    return Promise.resolve(this.hasBrand);
   }
 }
 
@@ -162,7 +175,7 @@ class FakeOauthService {
 let stub: RedisStub;
 let staff: FakeStaffRepository;
 let oauth: FakeOauthService;
-let email: CollectingEmailSender;
+let mail: CollectingAuthMail;
 let settings: Settings;
 let service: AuthService;
 let hasher: PasswordHasher;
@@ -217,7 +230,7 @@ beforeEach(async () => {
   stub = created.stub;
   staff = new FakeStaffRepository();
   oauth = new FakeOauthService();
-  email = new CollectingEmailSender();
+  mail = new CollectingAuthMail();
   hasher = new PasswordHasher(MASTER_KEY);
 
   settings = createSettings({
@@ -255,7 +268,7 @@ beforeEach(async () => {
     oauth: oauth as unknown as OauthService,
     settings,
     keyring: createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
-    email,
+    mail,
     logger: silentLogger(),
     appUrl: APP_URL,
   });
@@ -625,22 +638,39 @@ describe('the magic link', () => {
   it('sends nothing for an address nobody has', async () => {
     await service.requestMagicLink({ email: 'nobody@helpdock.com', ip: '203.0.113.5' });
 
-    expect(email.sent).toEqual([]);
+    expect(mail.sent).toEqual([]);
   });
 
-  it('sends a link in the recipient own language', async () => {
-    staff.add(await newUser({ locale: 'ar' }));
+  it('queues one link for the account, lasting the configured minutes', async () => {
+    const user = staff.add(await newUser());
 
     await service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' });
 
-    expect(email.sent[0]?.locale).toBe('ar');
-    expect(email.sent[0]?.text).toContain('/api/auth/magic-link/');
+    expect(mail.sent).toEqual([
+      {
+        kind: 'magicLink',
+        userId: user.id,
+        url: expect.stringContaining(`${APP_URL}/api/auth/magic-link/`),
+        expiresIn: 10,
+        brandId: null,
+      },
+    ]);
+  });
+
+  it('queues nothing, and still resolves, for an account with no brand to work in', async () => {
+    staff.add(await newUser());
+    mail.hasBrand = false;
+
+    await expect(
+      service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' }),
+    ).resolves.toBeUndefined();
+    expect(mail.sent).toEqual([]);
   });
 
   it('signs in once and then the link is spent', async () => {
     staff.add(await newUser());
     await service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' });
-    const token = tokenIn(email.sent[0]?.text ?? '');
+    const token = tokenIn(mail.sent[0]?.url ?? '');
 
     await expect(service.consumeMagicLink(token, 'Firefox')).resolves.toMatchObject({
       kind: 'session',
@@ -654,7 +684,7 @@ describe('the magic link', () => {
     await service.requestMagicLink({ email: user.email, ip: '203.0.113.5' });
 
     await expect(
-      service.consumeMagicLink(tokenIn(email.sent[0]?.text ?? ''), 'Firefox'),
+      service.consumeMagicLink(tokenIn(mail.sent[0]?.url ?? ''), 'Firefox'),
     ).resolves.toMatchObject({ kind: 'totp-required' });
   });
 
@@ -664,7 +694,7 @@ describe('the magic link', () => {
     staff.users.set(user.id, { ...user, status: 'deactivated' });
 
     await expect(
-      service.consumeMagicLink(tokenIn(email.sent[0]?.text ?? ''), 'Firefox'),
+      service.consumeMagicLink(tokenIn(mail.sent[0]?.url ?? ''), 'Firefox'),
     ).resolves.toBeNull();
   });
 
@@ -675,7 +705,34 @@ describe('the magic link', () => {
       await service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' });
     }
 
-    expect(email.sent.length).toBeLessThanOrEqual(5);
+    expect(mail.sent.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('the invitation', () => {
+  it('queues the invite in the caller transaction, for the brand it invites to', async () => {
+    const brandId = uuidv7();
+    const userId = uuidv7();
+
+    await service.queueInvite({} as DbTransaction, brandId, {
+      userId,
+      url: `${APP_URL}/invite/t`,
+      expiresInDays: 7,
+      inviterName: 'Lina',
+      brandName: 'Acme',
+      roleName: 'Agent',
+    });
+
+    expect(mail.sent).toEqual([
+      {
+        kind: 'invite',
+        userId,
+        url: `${APP_URL}/invite/t`,
+        expiresIn: 7,
+        values: { inviter: 'Lina', brandName: 'Acme', role: 'Agent' },
+        brandId,
+      },
+    ]);
   });
 });
 
@@ -683,7 +740,7 @@ describe('the password reset', () => {
   it('sends nothing for an address nobody has', async () => {
     await service.requestPasswordReset({ email: 'nobody@helpdock.com', ip: '203.0.113.5' });
 
-    expect(email.sent).toEqual([]);
+    expect(mail.sent).toEqual([]);
   });
 
   it('changes the password and ends every session', async () => {
@@ -693,7 +750,7 @@ describe('the password reset', () => {
       throw new Error('expected a session');
     }
     await service.requestPasswordReset({ email: user.email, ip: '203.0.113.5' });
-    const token = resetTokenIn(email.sent[0]?.text ?? '');
+    const token = resetTokenIn(mail.sent[0]?.url ?? '');
 
     await service.resetPassword({ token, password: 'a whole new password' });
 
@@ -707,7 +764,7 @@ describe('the password reset', () => {
   it('refuses a token that was already spent', async () => {
     const user = staff.add(await newUser());
     await service.requestPasswordReset({ email: user.email, ip: '203.0.113.5' });
-    const token = resetTokenIn(email.sent[0]?.text ?? '');
+    const token = resetTokenIn(mail.sent[0]?.url ?? '');
     await service.resetPassword({ token, password: 'a whole new password' });
 
     await expect(
@@ -721,7 +778,7 @@ describe('the password reset', () => {
 
     await expect(
       service.resetPassword({
-        token: tokenIn(email.sent[0]?.text ?? ''),
+        token: tokenIn(mail.sent[0]?.url ?? ''),
         password: 'a whole new password',
       }),
     ).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });

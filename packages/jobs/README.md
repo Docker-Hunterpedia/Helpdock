@@ -89,6 +89,7 @@ M1 adds:
 | `rules.time_based` | `rules` | One brand's due time-based rules for one tick; the job id names the brand and the tick, so a tick that fires twice adds nothing. |
 | `notify.email` | `notify` | M3-07: one staff notification email from the install's system sender. Added by the `notification.created` handler; keyed by the notification. |
 | `notify.push` | `notify` | M3-07: one web push to one browser. Keyed by the browser and the notification (or the "Send a test" press), so one event is one push per browser. |
+| `auth.email` | `notify` | A sign-in link, a password reset or a staff invitation, from the install's system sender. Added by the `auth.email_requested` handler with `jobId = auth.email.<outboxId>`, and keyed by the outbox row, so one request is one email. The link travels sealed under `APP_MASTER_KEY` (`urlEncrypted`); three attempts, because a sign-in link lives ten minutes. |
 
 ## Handling an event
 

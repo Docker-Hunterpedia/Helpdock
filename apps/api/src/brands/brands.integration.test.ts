@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { EmailMessage, EmailSender } from '@helpdock/channels';
-import type { Env } from '@helpdock/config';
+import type { EmailMessage } from '@helpdock/channels';
+import { createKeyring, type Env } from '@helpdock/config';
 import {
   auditLog,
   brands,
@@ -25,6 +25,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { QueuedAuthMail } from '../testing/auth-mail.js';
 
 /**
  * The whole of M1-01 over HTTP, against a real Postgres and a real Redis.
@@ -71,24 +72,6 @@ const freshPrefix = (): string => {
   return `NB${String(nextPrefix).padStart(3, '0')}`;
 };
 
-class CollectingEmailSender implements EmailSender {
-  readonly sent: EmailMessage[] = [];
-
-  send(message: EmailMessage): Promise<void> {
-    this.sent.push(message);
-    return Promise.resolve();
-  }
-
-  last(): EmailMessage {
-    const message = this.sent.at(-1);
-    if (message === undefined) {
-      throw new Error('no email was sent');
-    }
-
-    return message;
-  }
-}
-
 /** The link in an invitation, as the person who received it would follow it. */
 const tokenIn = (message: EmailMessage): string => {
   const match = /\/invite\/([A-Za-z0-9_-]+)/.exec(message.text);
@@ -118,7 +101,8 @@ describe.skipIf(!hasDocker)('brands, departments and teams', () => {
   let leaderToken = '';
   /** An Agent in Technical, so eligibility has somebody to refuse. */
   let technicalAgentId = '';
-  const email = new CollectingEmailSender();
+  /** The invitations the api queued, rendered as the worker would send them. */
+  let email: QueuedAuthMail;
 
   const envFor = (): Env =>
     ({
@@ -233,7 +217,8 @@ describe.skipIf(!hasDocker)('brands, departments and teams', () => {
         destination: { write: () => {} },
       }),
     });
-    app = await createApiApp({ runtime, emailSender: email });
+    app = await createApiApp({ runtime });
+    email = new QueuedAuthMail({ db: runtime.db, keyring: createKeyring(env) });
     seeded = await seedDevInstall({ db: runtime.db, env, withTotp: true });
     adminToken = await signIn(seeded.email, seeded.password, seeded.totpSecret ?? '');
 
@@ -253,9 +238,13 @@ describe.skipIf(!hasDocker)('brands, departments and teams', () => {
     });
     expect(invited.statusCode).toBe(201);
 
-    const accepted = await request('POST', `/api/auth/invites/${tokenIn(email.last())}/accept`, {
-      body: { name, password: COLLEAGUE_PASSWORD, locale: 'en' },
-    });
+    const accepted = await request(
+      'POST',
+      `/api/auth/invites/${tokenIn(await email.last())}/accept`,
+      {
+        body: { name, password: COLLEAGUE_PASSWORD, locale: 'en' },
+      },
+    );
     expect(accepted.statusCode).toBe(201);
 
     return (invited.json() as { userId: string }).userId;
@@ -274,7 +263,7 @@ describe.skipIf(!hasDocker)('brands, departments and teams', () => {
    * because most of them change one of the two.
    */
   beforeEach(async () => {
-    email.sent.length = 0;
+    await email.clear();
     // Signing in twice per test is well inside the per-address limit, but the
     // suite as a whole is not, so the buckets are cleared the way the staff
     // suite clears them.

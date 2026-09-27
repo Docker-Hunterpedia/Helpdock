@@ -1,7 +1,6 @@
-import type { EmailSender } from '@helpdock/channels';
 import type { Keyring, Settings } from '@helpdock/config';
 import { decryptSecret, encryptSecret } from '@helpdock/config';
-import type { Locale } from '@helpdock/i18n';
+import type { DbTransaction } from '@helpdock/db';
 import type {
   AuthMethods,
   AuthSessionResponse,
@@ -12,8 +11,8 @@ import type {
 } from '@helpdock/schemas';
 import { OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS } from '@helpdock/schemas';
 import type { Logger } from '../logging/logger.js';
+import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import { AuthFailure } from './auth-failure.js';
-import { renderAuthEmail } from './email-templates.js';
 import type { EmailTokenStore } from './email-token.store.js';
 import type { ExchangeStore } from './exchange.store.js';
 import type { OauthService } from './oauth/oauth.service.js';
@@ -63,9 +62,9 @@ export type SignInOutcome =
 
 /** What one invite message needs beyond the catalogs (M0-06). */
 export interface InviteEmailInput {
-  readonly to: string;
+  /** The invited account. Its address and language are read when the email is sent. */
+  readonly userId: string;
   readonly url: string;
-  readonly locale: Locale;
   readonly expiresInDays: number;
   readonly inviterName: string;
   readonly brandName: string;
@@ -93,7 +92,8 @@ export interface AuthServiceOptions {
   readonly oauth: OauthService;
   readonly settings: Settings;
   readonly keyring: Keyring;
-  readonly email: EmailSender;
+  /** Queues auth email through the outbox; the worker sends it (`auth-email.job.ts`). */
+  readonly mail: AuthMail;
   readonly logger: Logger;
   readonly appUrl: string;
 }
@@ -114,9 +114,10 @@ export class AuthService {
 
     return {
       password: true,
-      // A link nobody can receive is not a way in. Until M2 wires SMTP the
-      // development sender writes to the log, which is a real way in for an
-      // operator reading it, so the method stays on.
+      // On whether or not SMTP is set: the worker reads the system sender when
+      // it sends, so an operator who fills SMTP in later needs no restart, and
+      // an answer that changed with it would tell a stranger how this install
+      // is configured.
       magicLink: true,
       oauth: oauth as AuthMethods['oauth'],
     };
@@ -393,22 +394,23 @@ export class AuthService {
     return this.#afterFirstFactor(user, { userAgent, trustedDeviceCookie: undefined });
   }
 
-  /** Sends one invite message. The staff service owns the token; this owns the envelope. */
-  async sendInvite(input: InviteEmailInput): Promise<void> {
-    await this.#parts.email.send(
-      renderAuthEmail({
-        kind: 'invite',
-        to: input.to,
-        url: input.url,
-        locale: input.locale,
-        expiresIn: input.expiresInDays,
-        values: {
-          inviter: input.inviterName,
-          brandName: input.brandName,
-          role: input.roleName,
-        },
-      }),
-    );
+  /**
+   * Queues one invite message in the staff route's own transaction, so an
+   * invitation that rolls back sends nothing. The staff service owns the
+   * token; this owns the envelope.
+   */
+  async queueInvite(tx: DbTransaction, brandId: string, input: InviteEmailInput): Promise<void> {
+    await this.#parts.mail.queue(tx, brandId, {
+      kind: 'invite',
+      userId: input.userId,
+      url: input.url,
+      expiresIn: input.expiresInDays,
+      values: {
+        inviter: input.inviterName,
+        brandName: input.brandName,
+        role: input.roleName,
+      },
+    });
   }
 
   // ------------------------------------------------------------------
@@ -443,7 +445,7 @@ export class AuthService {
 
     await this.#send({
       kind: 'magicLink',
-      user,
+      userId: user.id,
       url: new URL(`/api/auth/magic-link/${token}`, this.#parts.appUrl).toString(),
       expiresIn: minutes,
     });
@@ -494,7 +496,7 @@ export class AuthService {
 
     await this.#send({
       kind: 'passwordReset',
-      user,
+      userId: user.id,
       url: new URL(
         `/sign-in/reset?token=${encodeURIComponent(token)}`,
         this.#parts.appUrl,
@@ -824,26 +826,17 @@ export class AuthService {
     return user.status !== 'deactivated' && user.deactivatedAt === null;
   }
 
-  async #send({
-    kind,
-    user,
-    url,
-    expiresIn,
-  }: {
-    readonly kind: 'magicLink' | 'passwordReset';
-    readonly user: StaffUser;
-    readonly url: string;
-    readonly expiresIn: number;
-  }): Promise<void> {
-    await this.#parts.email.send(
-      renderAuthEmail({
-        kind,
-        to: user.email,
-        name: user.name,
-        url,
-        locale: user.locale as Locale,
-        expiresIn,
-      }),
-    );
+  /**
+   * The link's token lives in Redis alone, so there is no transaction to join:
+   * `queueForAccount` writes the outbox row in one of its own, after the token
+   * exists (`auth-email.ts` says why that order).
+   */
+  async #send(request: AuthEmailRequest & { readonly kind: 'magicLink' | 'passwordReset' }) {
+    if (!(await this.#parts.mail.queueForAccount(request))) {
+      this.#parts.logger.info(
+        { userId: request.userId, kind: request.kind },
+        'Auth email not queued: the account holds no role in an active brand',
+      );
+    }
   }
 }

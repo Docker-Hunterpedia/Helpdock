@@ -183,18 +183,44 @@ every request passes, rather than in each handler.
 
 ### Sending
 
-The development sender writes one line to the log — the recipient, the
-subject and the locale, never the body, because a sign-in link *is* a
-credential — and the message itself is in the log of the process that made it.
-M2 built SMTP for ticket mail, but this seam is not wired to it yet: nothing
-passes a real `EmailSender` to `createApiApp`, so sign-in links, password resets
-and invitations are only logged ([M2 gaps](../completed/M2-email-channel.md#gaps-and-follow-ups)).
-The interface is
-[`packages/channels/src/email/sender.ts`](../../packages/channels/src/email/sender.ts),
-so a real transport goes behind it without the auth service changing.
+Sign-in links, password resets and staff invitations are sent by the **worker**,
+from the install's system sender: the `smtp.*` settings the first-run wizard
+saves (or `HD_SMTP_*`), the same sender staff notifications use. The api never
+talks to a mail server for them.
 
-The two messages are rendered from the `email` catalogs in `@helpdock/i18n`, in
-the recipient's own language, right to left for Arabic.
+1. The request writes an `auth.email_requested` row to the outbox
+   (DOMAIN-RULES §6). An invitation writes it in the staff route's own
+   transaction, so an invitation that rolls back sends nothing. A sign-in link
+   and a password reset have no transaction to join — their token lives in
+   Redis alone — so the row is written in a transaction of its own *after* the
+   token is stored: if that write fails, nobody gets an email and the token
+   expires unused. It is routed through a brand the account works in; an
+   account with no role in an active brand is sent nothing, and could not have
+   signed in with the link anyway.
+2. The relay publishes the row, and its handler adds one `auth.email` job to the
+   `notify` queue with a job id derived from the row.
+3. The job reads the recipient's address, name and language from `users` at
+   send time — a deactivated account is sent nothing — renders the message and
+   sends it. It claims `auth.email:<outbox id>` in the transaction it runs in,
+   so a redelivered job sends nothing a second time.
+
+**The link is sealed.** The token is a working credential and Redis only holds
+its hash, so the link is encrypted with AES-256-GCM under `APP_MASTER_KEY`
+before it reaches the outbox row, and stays sealed in the job's data in Redis.
+Only the job opens it, to put it in the message. Neither the api nor the worker
+logs a link: the lines name the kind of email and the account id.
+
+**Without SMTP** — a development install that skipped the wizard's SMTP step —
+the job logs, at `warn`, that the email *would* have been sent, with the kind
+and the account id, and finishes. It never logs the link, in any `NODE_ENV`.
+To follow a sign-in link locally, point `smtp.*` at the Mailpit of the dev
+compose file (`localhost:1025`, TLS `none`) and read it at
+<http://localhost:8025>. The worker reads the settings when it sends, so no
+restart is needed. The System page has no slot for this yet: the Channels card
+lists brand channels, not the install's sender.
+
+The three messages are rendered from the `email` catalogs in `@helpdock/i18n`,
+in the recipient's own language, right to left for Arabic.
 
 ## OAuth
 

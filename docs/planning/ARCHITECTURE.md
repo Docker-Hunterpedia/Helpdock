@@ -264,7 +264,7 @@ packages/ai
 | `ai` | `ai.assist`, `ai.autoreply`, `ai.classify`, `ai.transcribe` | per-brand concurrency + budget check |
 | `knowledge` | `ingest.source`, `ingest.chunk_embed`, `crawl.page` | rate-limited crawl |
 | `media` | `media.process`, `media.scan` | |
-| `notify` | `notify.inapp`, `notify.email`, `notify.push` | |
+| `notify` | `notify.inapp`, `notify.email`, `notify.push`, `auth.email` | `auth.email` sends sign-in links, password resets and invitations from the system sender (#104) |
 | `webhooks` | `webhook.deliver` | HMAC, retry, log |
 | `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |
 | `assignment` | `assignment.offline_unassign` (delayed) | M1-07's auto-unassign timer; a no-op if the agent came back or left again later |

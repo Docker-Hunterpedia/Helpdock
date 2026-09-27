@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   assignmentOfflineUnassignJob,
+  authEmailJob,
+  authEmailJobId,
   emailPollJob,
   emailPollSchedulerId,
   emailSendJob,
@@ -345,6 +347,39 @@ describe('the notify jobs (M3-07)', () => {
     ['both', { notificationId, testId: outboxId }],
   ])('refuses a push that names %s of a notification and a test', (_name, extra) => {
     expect(() => parseJobPayload(notifyPushJob, { brandId, subscriptionId, ...extra })).toThrow(
+      PayloadValidationError,
+    );
+  });
+});
+
+describe('the auth email job', () => {
+  const payload = {
+    brandId,
+    sourceOutboxId: outboxId,
+    kind: 'magicLink',
+    userId: '01924f00-0000-7000-8000-0000000000d1',
+    urlEncrypted: 'v1:sealed',
+    expiresIn: 10,
+  };
+
+  it('sends one email per outbox row however often the job runs', () => {
+    const parsed = parseJobPayload(authEmailJob, payload);
+
+    expect(idempotencyKeyFor(authEmailJob, parsed, 'a')).toBe(`auth.email:${outboxId}`);
+    expect(idempotencyKeyFor(authEmailJob, parsed, 'b')).toBe(`auth.email:${outboxId}`);
+    expect(authEmailJobId(outboxId)).toBe(`auth.email.${outboxId}`);
+  });
+
+  it('refuses a payload that carries the link in the clear instead of sealed', () => {
+    const { urlEncrypted: _sealed, ...rest } = payload;
+
+    expect(() =>
+      parseJobPayload(authEmailJob, { ...rest, url: 'https://x.test/magic-link/t' }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('refuses a kind that is not one of the three auth emails', () => {
+    expect(() => parseJobPayload(authEmailJob, { ...payload, kind: 'newsletter' })).toThrow(
       PayloadValidationError,
     );
   });

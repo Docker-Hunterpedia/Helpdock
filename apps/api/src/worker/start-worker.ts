@@ -2,6 +2,7 @@ import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
+  authEmailJob,
   createOutboxEventHandler,
   createQueueConnection,
   createWorker,
@@ -35,6 +36,8 @@ import {
   registerAssignmentEventHandlers,
 } from '../assignment/assignment-events.js';
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
+import { createAuthEmailEventHandler, createAuthEmailProcessor } from '../auth/auth-email.job.js';
+import { AUTH_EMAIL_EVENT } from '../auth/auth-email.js';
 import {
   createEmailPollProcessor,
   createMailboxChangedHandler,
@@ -154,7 +157,7 @@ export interface WorkerDependencies {
    * reason the retention schedule is.
    */
   createRulesWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
-  /** M3-07's `notify` consumer: notification emails and web pushes. */
+  /** M3-07's `notify` consumer: notification emails and web pushes, and the auth emails. */
   createNotifyWorker(options: {
     redis: Redis;
     db: Db;
@@ -360,6 +363,17 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+    // Sign-in links, password resets and invitations: one `auth.email` job per
+    // outbox row, on the `notify` queue beside the other staff email, with a
+    // job id derived from the row under the same rule as above.
+    registerEventHandler(
+      AUTH_EMAIL_EVENT,
+      createAuthEmailEventHandler({
+        add: async (jobId, payload) => {
+          await notify.add(authEmailJob.name, payload, { ...authEmailJob.options, jobId });
+        },
+      }),
+    );
 
     return {
       close: async () => {
@@ -595,17 +609,23 @@ export const workerDependencies: WorkerDependencies = {
     };
   },
   createNotifyWorker: ({ redis, db, log, env, settings }) => {
+    const channels = new InstallChannels(settings);
+    const notify = createNotifyProcessor(
+      {
+        repository: new NotificationsRepository(),
+        settings: channels,
+        push: new WebPushSender({ subject: env.APP_URL, allowCidrs: env.OUTBOUND_ALLOW_CIDRS }),
+        appUrl: env.APP_URL,
+      },
+      { db, log },
+    );
+    const authEmail = createAuthEmailProcessor(
+      { senders: channels, keyring: createKeyring(env) },
+      { db, log },
+    );
     const worker = new Worker(
       QUEUE_NAMES.notify,
-      createNotifyProcessor(
-        {
-          repository: new NotificationsRepository(),
-          settings: new InstallChannels(settings),
-          push: new WebPushSender({ subject: env.APP_URL, allowCidrs: env.OUTBOUND_ALLOW_CIDRS }),
-          appUrl: env.APP_URL,
-        },
-        { db, log },
-      ),
+      (job) => (job.name === authEmailJob.name ? authEmail(job) : notify(job)),
       { connection: redis },
     );
     worker.on('failed', (job, error) =>

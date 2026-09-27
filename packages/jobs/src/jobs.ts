@@ -572,6 +572,54 @@ export const notifyPushJob = defineJob({
     `notify.push:${payload.subscriptionId}:${payload.notificationId ?? payload.testId}`,
 });
 
+export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite'] as const;
+
+export const authEmailPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `auth.email_requested` outbox row. The job id and the receipt are built from it. */
+  sourceOutboxId: z.uuid(),
+  kind: z.enum(AUTH_EMAIL_KINDS),
+  /** The recipient. Address, name and language are read from the row when the job runs. */
+  userId: z.uuid(),
+  /**
+   * The link, sealed with AES-256-GCM under `APP_MASTER_KEY`. It is a working
+   * credential, so neither the outbox row nor this job's data in Redis ever
+   * holds it in the clear.
+   */
+  urlEncrypted: z.string().min(1),
+  /** How long the link lasts, in the unit the kind's catalog key counts in. */
+  expiresIn: z.int().positive(),
+  /** Extra interpolation the invite's sentences need: inviter, brand and role. */
+  values: z.record(z.string(), z.string()).optional(),
+});
+export type AuthEmailPayload = z.infer<typeof authEmailPayloadSchema>;
+
+/**
+ * A sign-in link, a password reset or a staff invitation, sent from the
+ * install's system sender in the recipient's language. Added by the
+ * `auth.email_requested` outbox handler with a job id derived from the outbox
+ * row, so a redelivered event adds nothing, and keyed by that row, so one
+ * request is one email however often the job runs (DOMAIN-RULES §6).
+ *
+ * Few attempts, close together: a sign-in link lives ten minutes, and an email
+ * that arrives after it has expired is worse than one that never came.
+ */
+export const authEmailJob = defineJob({
+  name: 'auth.email',
+  queue: QUEUE_NAMES.notify,
+  schema: authEmailPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `auth.email:${payload.sourceOutboxId}`,
+});
+
+/** The BullMQ job id of the email one outbox row asks for. Dots, because BullMQ refuses colons. */
+export const authEmailJobId = (sourceOutboxId: string): string => `auth.email.${sourceOutboxId}`;
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -589,6 +637,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [rulesTimeBasedScheduleJob.name]: rulesTimeBasedScheduleJob,
   [notifyEmailJob.name]: notifyEmailJob,
   [notifyPushJob.name]: notifyPushJob,
+  [authEmailJob.name]: authEmailJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

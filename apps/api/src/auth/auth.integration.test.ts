@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { EmailMessage, EmailSender } from '@helpdock/channels';
-import type { Env } from '@helpdock/config';
+import type { EmailMessage } from '@helpdock/channels';
+import { createKeyring, type Env } from '@helpdock/config';
 import { createDb, type DbHandle, users } from '@helpdock/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -12,6 +12,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { QueuedAuthMail } from '../testing/auth-mail.js';
 import { PRINCIPAL_REVOKED_CHANNEL } from './redis-keys.js';
 import { REFRESH_COOKIE, TRUSTED_DEVICE_COOKIE } from './session/cookies.js';
 
@@ -52,25 +53,6 @@ if (!hasDocker) {
   );
 }
 
-/** Collects what would have been sent, so a test can follow the link. */
-class CollectingEmailSender implements EmailSender {
-  readonly sent: EmailMessage[] = [];
-
-  send(message: EmailMessage): Promise<void> {
-    this.sent.push(message);
-    return Promise.resolve();
-  }
-
-  last(): EmailMessage {
-    const message = this.sent.at(-1);
-    if (message === undefined) {
-      throw new Error('no email was sent');
-    }
-
-    return message;
-  }
-}
-
 describe.skipIf(!hasDocker)('the auth service', () => {
   let postgres: StartedPostgreSqlContainer;
   let redisContainer: StartedRedisContainer;
@@ -78,7 +60,8 @@ describe.skipIf(!hasDocker)('the auth service', () => {
   let app: ApiApp;
   let owner: DbHandle;
   let seeded: SeededInstall;
-  const email = new CollectingEmailSender();
+  /** What the api queued; a test follows the link out of it. */
+  let email: QueuedAuthMail;
   /**
    * The log lines this run wrote. One test asserts on what a path does *not*
    * contain, which needs a logger that keeps them rather than a silent one.
@@ -185,7 +168,8 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       },
     });
     runtime = await createRuntime({ env, logger });
-    app = await createApiApp({ runtime, emailSender: email });
+    app = await createApiApp({ runtime });
+    email = new QueuedAuthMail({ db: runtime.db, keyring: createKeyring(env) });
     seeded = await seedDevInstall({ db: runtime.db, env, withTotp: true });
   }, 300_000);
 
@@ -471,17 +455,30 @@ describe.skipIf(!hasDocker)('the auth service', () => {
 
   describe('the magic link', () => {
     it('answers 204 for an unknown address and sends nothing', async () => {
-      const before = email.sent.length;
+      const before = await email.count();
 
       const response = await post('/api/auth/magic-link', { email: 'nobody@helpdock.test' });
 
       expect(response.statusCode).toBe(204);
-      expect(email.sent).toHaveLength(before);
+      expect(await email.count()).toBe(before);
+    });
+
+    it('queues the link through the outbox, sealed, and never logs it', async () => {
+      logLines.length = 0;
+
+      expect((await post('/api/auth/magic-link', { email: seeded.email })).statusCode).toBe(204);
+
+      const message = await email.last();
+      const token = linkIn(message).split('/').at(-1) ?? '';
+      expect(token.length).toBeGreaterThan(20);
+      expect(message.locale).toBe('en');
+      expect(JSON.stringify(await email.payloads())).not.toContain(token);
+      expect(logLines.join('\n')).not.toContain(token);
     });
 
     it('keeps the token out of the request log, where a path would otherwise put it', async () => {
       await post('/api/auth/magic-link', { email: seeded.email });
-      const link = linkIn(email.last());
+      const link = linkIn(await email.last());
       const token = link.split('/').at(-1) ?? '';
       logLines.length = 0;
 
@@ -495,7 +492,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     it('sends a link that signs in once and then stops working', async () => {
       expect((await post('/api/auth/magic-link', { email: seeded.email })).statusCode).toBe(204);
 
-      const link = linkIn(email.last());
+      const link = linkIn(await email.last());
       const first = await get(link);
 
       expect(first.statusCode).toBe(302);
@@ -523,7 +520,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect((await post('/api/auth/password/forgot', { email: seeded.email })).statusCode).toBe(
         204,
       );
-      const token = new URL(linkIn(email.last()), APP_URL).searchParams.get('token') ?? '';
+      const token = new URL(linkIn(await email.last()), APP_URL).searchParams.get('token') ?? '';
 
       const reset = await post('/api/auth/password/reset', {
         token,

@@ -1,0 +1,181 @@
+{
+  "window": {
+    "label": "دردشة الدعم",
+    "minimise": "تصغير الدردشة",
+    "poweredBy": "مدعوم من Helpdock"
+  },
+  "launcher": {
+    "open": "فتح محادثة الدعم",
+    "close": "تصغير محادثة الدعم",
+    "text": "تحدث معنا",
+    "unread_zero": "لا رسائل غير مقروءة",
+    "unread_one": "رسالة واحدة غير مقروءة",
+    "unread_two": "رسالتان غير مقروءتين",
+    "unread_few": "{{count}} رسائل غير مقروءة",
+    "unread_many": "{{count}} رسالة غير مقروءة",
+    "unread_other": "{{count}} رسالة غير مقروءة"
+  },
+  "header": {
+    "chatTitle": "دعم {{brand}}",
+    "helpTitle": "مساعدة {{brand}}",
+    "formTitle": "راسل {{brand}}",
+    "agentCaption": "{{department}} · {{team}}",
+    "caption": {
+      "online": "نرد عادةً خلال دقائق",
+      "openOffline": "سنرد عبر البريد الإلكتروني",
+      "closed": "نعود {{day}} الساعة {{time}}",
+      "queued": "نبحث عن موظف لك",
+      "ended": "انتهت المحادثة",
+      "form": "نرد عبر البريد عادةً خلال يوم",
+      "help": "ابحث في مقالاتنا"
+    }
+  },
+  "presence": {
+    "single": "{{names}} متصل الآن",
+    "several": "{{names}} متصلون الآن"
+  },
+  "queue": {
+    "position": "ترتيبك {{position}} في قائمة الانتظار",
+    "eta_zero": "خلال أقل من دقيقة",
+    "eta_one": "نحو دقيقة واحدة",
+    "eta_two": "نحو دقيقتين",
+    "eta_few": "نحو {{count}} دقائق",
+    "eta_many": "نحو {{count}} دقيقة",
+    "eta_other": "نحو {{count}} دقيقة",
+    "ordinal": {
+      "one": "{{n}}",
+      "two": "{{n}}",
+      "few": "{{n}}",
+      "other": "{{n}}"
+    }
+  },
+  "hours": {
+    "closedTitle": "نحن خارج ساعات العمل الآن",
+    "closedBody": "نفتح {{day}} الساعة {{time}} ({{zone}}). اترك رسالة وسنرد عبر البريد الإلكتروني."
+  },
+  "connection": {
+    "reconnectingTitle": "جارٍ إعادة الاتصال…",
+    "reconnectingBody": "يمكنك متابعة الكتابة. تُرسل الرسائل عند عودة الاتصال.",
+    "back": "عاد الاتصال. أنت على اطلاع بكل الرسائل.",
+    "newMessages_zero": "لا رسائل جديدة",
+    "newMessages_one": "رسالة جديدة",
+    "newMessages_two": "رسالتان جديدتان",
+    "newMessages_few": "{{count}} رسائل جديدة",
+    "newMessages_many": "{{count}} رسالة جديدة",
+    "newMessages_other": "{{count}} رسالة جديدة"
+  },
+  "thread": {
+    "label": "الرسائل",
+    "today": "اليوم",
+    "yesterday": "أمس",
+    "agentJoined": "انضم {{name}}",
+    "ended": "أنهى {{name}} المحادثة",
+    "endedAnonymous": "انتهت المحادثة",
+    "talkingTo": "أنت تتحدث مع {{team}}. سنرد هنا وعلى {{email}}.",
+    "replyAfterOpening": "شكراً. سنرد على {{email}} بعد أن نفتح.",
+    "typing": "{{name}} يكتب…"
+  },
+  "message": {
+    "sending": "جارٍ الإرسال…",
+    "sent": "أُرسلت",
+    "seen": "تمت القراءة",
+    "notSent": "لم تُرسل",
+    "retry": "أعد المحاولة"
+  },
+  "composer": {
+    "attach": "إرفاق ملف",
+    "label": "الرسالة",
+    "placeholder": "اكتب رسالة…",
+    "voice": "تسجيل رسالة صوتية",
+    "send": "إرسال"
+  },
+  "voice": {
+    "form": "رسالة صوتية",
+    "cancel": "إلغاء التسجيل",
+    "recording": "جارٍ التسجيل",
+    "timer": "مدة التسجيل {{elapsed}} من {{max}}",
+    "stop": "إيقاف وإرسال الرسالة الصوتية",
+    "play": "تشغيل الرسالة الصوتية، {{duration}}",
+    "pause": "إيقاف الرسالة الصوتية مؤقتاً، {{duration}}",
+    "denied": "اسمح بالوصول إلى الميكروفون لتسجيل رسالة صوتية."
+  },
+  "attachment": {
+    "openImage": "فتح الصورة {{name}}",
+    "openVideo": "فتح الفيديو {{name}}",
+    "download": "تنزيل {{name}}",
+    "tooLarge": {
+      "image": "حجم {{name}} هو {{size}}. الحد {{max}} للصور.",
+      "video": "حجم {{name}} هو {{size}}. الحد {{max}} للفيديو.",
+      "voice": "حجم {{name}} هو {{size}}. الحد {{max}} للرسائل الصوتية.",
+      "file": "حجم {{name}} هو {{size}}. الحد {{max}} للملفات."
+    },
+    "typeRejected": "لا يمكننا قبول نوع الملف {{name}}.",
+    "tooMany": "يمكنك إرسال {{max}} ملفات كحد أقصى في الرسالة الواحدة.",
+    "dismiss": "إغلاق التنبيه",
+    "uploadFailed": "تعذر رفع {{name}}. حاول مرة أخرى."
+  },
+  "prechat": {
+    "title": "ابدأ محادثة",
+    "name": "الاسم",
+    "email": "البريد الإلكتروني",
+    "emailHint": "نرسل الردود إلى هذا العنوان إذا غادرت الدردشة.",
+    "message": "كيف يمكننا المساعدة؟",
+    "optional": "(اختياري)",
+    "submit": "ابدأ الدردشة",
+    "invalidEmail": "أدخل بريداً مثل name@example.com.",
+    "required": "املأ هذا الحقل.",
+    "failed": "تعذر بدء الدردشة. حاول مرة أخرى.",
+    "rateLimited": "محاولات كثيرة. انتظر دقيقة ثم حاول مرة أخرى."
+  },
+  "captcha": {
+    "group": "تحقق أمني",
+    "checking": "جارٍ التحقق من متصفحك…",
+    "verified": "تم التحقق. يمكنك المتابعة.",
+    "failed": "تعذر تحميل التحقق الأمني. أعد تحميل الصفحة وحاول مرة أخرى.",
+    "rejected": "فشل التحقق الأمني. حاول مرة أخرى."
+  },
+  "ended": {
+    "title": "انتهت هذه المحادثة",
+    "transcriptLabel": "أرسل لي نص المحادثة",
+    "transcriptHint": "يُرسل نص هذه المحادثة فقط، والبريد لا يحتوي روابط دخول.",
+    "send": "إرسال",
+    "sent": "أُرسل نص المحادثة إلى {{email}}.",
+    "failed": "تعذر إرسال نص المحادثة. حاول مرة أخرى.",
+    "newConversation": "ابدأ محادثة جديدة"
+  },
+  "articles": {
+    "suggested": "مقالات قد تساعدك",
+    "searchLabel": "ابحث في مقالات المساعدة",
+    "popular": "المقالات الشائعة",
+    "resultsLabel": "نتائج البحث",
+    "results_zero": "لا مقالات عن «{{query}}»",
+    "results_one": "مقالة واحدة عن «{{query}}»",
+    "results_two": "مقالتان عن «{{query}}»",
+    "results_few": "{{count}} مقالات عن «{{query}}»",
+    "results_many": "{{count}} مقالة عن «{{query}}»",
+    "results_other": "{{count}} مقالة عن «{{query}}»",
+    "none": "لا توجد مقالات مطابقة. جرّب كلمات أخرى.",
+    "openHelpCenter": "افتح مركز المساعدة كاملاً",
+    "back": "العودة إلى المقالات",
+    "backToChat": "العودة إلى الدردشة",
+    "updated": "حُدّث في {{date}}",
+    "readingTime_zero": "قراءة أقل من دقيقة",
+    "readingTime_one": "قراءة دقيقة واحدة",
+    "readingTime_two": "قراءة دقيقتين",
+    "readingTime_few": "قراءة {{count}} دقائق",
+    "readingTime_many": "قراءة {{count}} دقيقة",
+    "readingTime_other": "قراءة {{count}} دقيقة",
+    "openInHelpCenter": "افتحه في مركز المساعدة",
+    "loadFailed": "تعذر تحميل هذه المقالة. حاول مرة أخرى."
+  },
+  "form": {
+    "offline": "لا أحد متصل الآن. اترك رسالة وسنرد عبر البريد الإلكتروني.",
+    "message": "الرسالة",
+    "attach": "إرفاق",
+    "submit": "إرسال الرسالة",
+    "sentTitle": "أُرسلت الرسالة",
+    "sentBody": "رقم مرجعك {{ref}}. سنرد على {{email}}.",
+    "another": "إرسال رسالة أخرى",
+    "failed": "تعذر إرسال رسالتك. حاول مرة أخرى."
+  }
+}

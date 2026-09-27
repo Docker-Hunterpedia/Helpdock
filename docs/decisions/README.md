@@ -19,6 +19,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0009](0009-magic-byte-sniffing.md) | Sniff upload MIME types with a table in-house, not with `file-type` | accepted |
 | [0010](0010-csat-page-in-the-admin-bundle.md) | Host the CSAT rating page in the admin bundle until the help center exists | accepted |
 | [0011](0011-ticket-search-token-table.md) | Search tickets through a token table, not through `LEAKPROOF` wrappers | accepted |
+| [0012](0012-widget-bundle-shape.md) | Ship the widget as an ES module with lazy chunks and a catalog-compatible translator | accepted |
 
 ## Template
 

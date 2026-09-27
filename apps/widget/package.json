@@ -3,18 +3,27 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Preact web component embedded on customer sites.",
+  "description": "Preact chat widget in a Shadow DOM, embedded on customer sites with one script tag.",
   "license": "AGPL-3.0-only",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "dev": "vite --config vite.harness.config.ts",
+    "build": "vite build",
+    "size": "vite build && node scripts/size.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/widget"
+    "test": "vitest run --config ../../vitest.config.ts --project @helpdock/widget",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@helpdock/i18n": "workspace:*",
+    "@helpdock/ui": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@testing-library/preact": "3.2.4",
+    "happy-dom": "20.14.5",
+    "vite": "8.3.0"
   }
 }

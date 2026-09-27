@@ -1,3 +1,4 @@
+import type { TicketChannel, TicketPriority } from './ticket.js';
 import {
   type ConditionTrace,
   type GroupTrace,
@@ -7,13 +8,14 @@ import {
   type RuleConditions,
   type RuleMatch,
   ruleDurationMinutes,
-} from '@helpdock/schemas';
-import type { TicketFacts } from './ticket-facts.js';
+} from './workflow-rules.js';
 
 /**
- * REQUIREMENTS §4.3's "IF <conditions>", answered. Pure: the facts and the
- * clock are passed in, so every operator is testable without a database, and
- * the test run evaluates a draft exactly as the engine would.
+ * REQUIREMENTS §4.3's "IF <conditions>", answered (M3-03). Pure: the facts and
+ * the clock are passed in, so every operator is testable without a database,
+ * and the test run evaluates a draft exactly as the engine would. It lives
+ * here rather than in `apps/api` because the admin's mock api evaluates its
+ * fixture rules with the same code the engine runs.
  *
  * Two levels, as the builder draws them: the rule matches **all** or **any**
  * of its groups, and each group **all** or **any** of its conditions. Every
@@ -22,6 +24,25 @@ import type { TicketFacts } from './ticket-facts.js';
  * `not_needed` rather than `failed`, which is the difference between "this
  * rule would not run" and "one match is enough".
  */
+
+/** What a condition may ask about a ticket. The api reads it; a fixture writes it. */
+export interface RuleTicketFacts {
+  readonly subject: string;
+  /** The newest public message from the contact, as text. */
+  readonly body: string;
+  readonly channel: TicketChannel;
+  readonly departmentId: string;
+  readonly teamId: string | null;
+  readonly assigneeId: string | null;
+  readonly priority: TicketPriority;
+  readonly statusId: string;
+  /** When the ticket entered the status it is in. */
+  readonly statusChangedAt: Date;
+  readonly tagIds: readonly string[];
+  readonly contactEmails: readonly string[];
+  readonly accountId: string | null;
+  readonly custom: Readonly<Record<string, unknown>>;
+}
 
 export interface EvaluationContext {
   readonly now: Date;
@@ -51,7 +72,7 @@ const TEXT_FIELDS = new Set(['subject', 'body', 'contact_email', 'custom_field']
 /** What the ticket holds for a field, as strings. */
 const actualOf = (
   condition: RuleCondition,
-  facts: TicketFacts,
+  facts: RuleTicketFacts,
   context: EvaluationContext,
 ): string[] => {
   switch (condition.field) {
@@ -88,7 +109,7 @@ const actualOf = (
   }
 };
 
-export const minutesInStatus = (facts: TicketFacts, now: Date): number =>
+export const minutesInStatus = (facts: RuleTicketFacts, now: Date): number =>
   Math.max(0, Math.floor((now.getTime() - facts.statusChangedAt.getTime()) / 60_000));
 
 const textMatches = (condition: RuleCondition, actual: readonly string[]): boolean => {
@@ -129,7 +150,7 @@ const setMatches = (condition: RuleCondition, actual: readonly string[]): boolea
 /** Whether one condition holds. Exported for the time-based scan's own narrowing. */
 export const conditionHolds = (
   condition: RuleCondition,
-  facts: TicketFacts,
+  facts: RuleTicketFacts,
   context: EvaluationContext,
 ): boolean => {
   const actual = actualOf(condition, facts, context);
@@ -174,7 +195,7 @@ const settle = <T extends { outcome: 'matched' | 'failed' | 'not_needed' }>(
 
 const traceCondition = (
   condition: RuleCondition,
-  facts: TicketFacts,
+  facts: RuleTicketFacts,
   context: EvaluationContext,
 ): ConditionTrace => {
   const actual = actualOf(condition, facts, context);
@@ -188,7 +209,7 @@ const traceCondition = (
 
 const traceGroup = (
   group: RuleConditionGroup,
-  facts: TicketFacts,
+  facts: RuleTicketFacts,
   context: EvaluationContext,
 ): GroupTrace => {
   const { matched, items } = settle(
@@ -201,7 +222,7 @@ const traceGroup = (
 
 export const evaluateConditions = (
   conditions: RuleConditions,
-  facts: TicketFacts,
+  facts: RuleTicketFacts,
   context: EvaluationContext,
 ): ConditionsOutcome => {
   if (conditions.groups.length === 0) {

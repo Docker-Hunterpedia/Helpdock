@@ -2,6 +2,8 @@ import type { DbTransaction, WorkflowRuleRow } from '@helpdock/db';
 import type { JobLogger } from '@helpdock/jobs';
 import {
   type ActionOutcome,
+  evaluateConditions,
+  firstFailedGroup,
   type RuleAction,
   type RuleConditions,
   ruleActionSchema,
@@ -10,7 +12,6 @@ import {
 } from '@helpdock/schemas';
 import { z } from 'zod';
 import { applyRuleActions, type RuleActionDeps } from './actions.js';
-import { evaluateConditions, firstFailedGroup } from './conditions.js';
 import type { BusinessHoursProbe } from './ports.js';
 import { loadTicketFacts, type TicketFacts } from './ticket-facts.js';
 import { guardRun } from './triggers.js';
@@ -155,7 +156,6 @@ export const evaluateEventRules = async (
   }
 
   for (const rule of rules) {
-
     const base = {
       brandId,
       departmentId: ticket.departmentId,

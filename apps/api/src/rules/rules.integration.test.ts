@@ -706,22 +706,26 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.wouldRun).toBe(true);
-    expect(response.body.ticket).toMatchObject({ reference, subject: 'Refund for order 88412' });
-    expect(response.body.groups[0]?.conditions.map((trace) => trace.outcome)).toEqual([
+    const outcome = response.body.outcome;
+    if (outcome === null) {
+      throw new Error('the test run did not find the ticket');
+    }
+    expect(outcome.wouldRun).toBe(true);
+    expect(outcome.ticket).toMatchObject({ reference, subject: 'Refund for order 88412' });
+    expect(outcome.groups[0]?.conditions.map((trace) => trace.outcome)).toEqual([
       'matched',
       'not_needed',
     ]);
     // The reader can see the ticket, so the test run shows what it found.
-    expect(response.body.groups[0]?.conditions[0]?.actual).toEqual(['Refund for order 88412']);
-    expect(response.body.actions.map((outcome) => outcome.effect)).toEqual(['changed', 'changed']);
+    expect(outcome.groups[0]?.conditions[0]?.actual).toEqual(['Refund for order 88412']);
+    expect(outcome.actions.map((outcome) => outcome.effect)).toEqual(['changed', 'changed']);
     // The disabled loop rules from the previous test are not offered as follow-ons.
-    expect(response.body.followOns).toEqual([]);
+    expect(outcome.followOns).toEqual([]);
 
     expect(await counts()).toEqual(before);
     expect((await ticketRow(ticket.id))?.teamId).toBeNull();
 
-    const missing = await call('POST', `${brandPath()}/rules/test-run`, ada, {
+    const missing = await call<RuleTestRunResult>('POST', `${brandPath()}/rules/test-run`, ada, {
       ticket: 'HD-999999',
       rule: {
         name: 'Draft',
@@ -731,7 +735,8 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         actions: [{ type: 'escalate' }],
       },
     });
-    expect(missing.status).toBe(404);
+    expect(missing.status).toBe(200);
+    expect(missing.body).toEqual({ outcome: null });
   });
 
   it('keeps changing rules to ticketing:manage holders whose scope is the whole brand', async () => {

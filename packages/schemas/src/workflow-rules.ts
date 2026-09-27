@@ -527,12 +527,23 @@ export const ruleTestFollowOnSchema = z.object({
 });
 export type RuleTestFollowOn = z.infer<typeof ruleTestFollowOnSchema>;
 
-export const ruleTestRunResultSchema = z.object({
+export const ruleTestRunOutcomeSchema = z.object({
   ticket: ruleTestTicketSchema,
   wouldRun: z.boolean(),
   groups: z.array(groupTraceSchema),
   actions: z.array(actionOutcomeSchema),
   followOns: z.array(ruleTestFollowOnSchema),
+});
+export type RuleTestRunOutcome = z.infer<typeof ruleTestRunOutcomeSchema>;
+
+/**
+ * A reference that names no ticket the reader can see is an answer, not a
+ * failure: the panel says so beside the field, as the artboard draws it. It
+ * does not say which of "no such ticket" and "not yours" it was.
+ */
+export const ruleTestRunResultSchema = z.object({
+  /** Null when the reference names no ticket the reader can see. */
+  outcome: ruleTestRunOutcomeSchema.nullable(),
 });
 export type RuleTestRunResult = z.infer<typeof ruleTestRunResultSchema>;
 

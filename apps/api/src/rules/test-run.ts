@@ -1,12 +1,17 @@
 import type { DbTransaction } from '@helpdock/db';
 import type { ActionOutcome, RuleAction, RuleTestFollowOn, RuleTrigger } from '@helpdock/schemas';
-import { ruleActionSchema, ruleConditionsSchema } from '@helpdock/schemas';
+import {
+  type EvaluationContext,
+  evaluateConditions,
+  firstFailedGroup,
+  ruleActionSchema,
+  ruleConditionsSchema,
+} from '@helpdock/schemas';
 import { z } from 'zod';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { canWorkDepartment } from '../assignment/rotation.js';
 import { routesAutomatically } from '../assignment/ticket-assignment.js';
 import type { TicketChange } from '../tickets/ticket-events.js';
-import { type EvaluationContext, evaluateConditions, firstFailedGroup } from './conditions.js';
 import type { RulesRepository } from './rules.repository.js';
 import type { TicketFacts } from './ticket-facts.js';
 import { guardRun, RULE_SOURCE_EVENTS, triggersFor } from './triggers.js';

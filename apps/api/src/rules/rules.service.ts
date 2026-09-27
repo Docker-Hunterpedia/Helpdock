@@ -11,6 +11,7 @@ import {
   type WorkflowRuleRow,
 } from '@helpdock/db';
 import {
+  evaluateConditions,
   MAX_RULES_PER_BRAND,
   RULE_OPTIONS_ACCOUNTS_MAX,
   RULE_RUNS_PAGE_SIZE,
@@ -42,7 +43,6 @@ import { z } from 'zod';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { writeTicketingAudit } from '../ticketing/audit.js';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
-import { evaluateConditions } from './conditions.js';
 import type { BusinessHoursProbe, CannedResponseCatalog } from './ports.js';
 import type { RulesRepository, RunRow } from './rules.repository.js';
 import { followOnsOf, previewActions, ticketNumberOf } from './test-run.js';
@@ -332,7 +332,7 @@ export class RulesService {
       number === undefined ? undefined : await this.#rules.ticketIdByNumber(tx, brandId, number);
     const facts = ticketId === undefined ? undefined : await loadTicketFacts(tx, ticketId);
     if (facts === undefined) {
-      throw new NotFoundException('No such ticket in this brand, or not one you can see');
+      return { outcome: null };
     }
 
     const now = new Date();
@@ -350,11 +350,13 @@ export class RulesService {
 
     if (!outcome.matched || facts.inert) {
       return {
-        ticket: summary,
-        wouldRun: false,
-        groups: [...outcome.groups],
-        actions: [],
-        followOns: [],
+        outcome: {
+          ticket: summary,
+          wouldRun: false,
+          groups: [...outcome.groups],
+          actions: [],
+          followOns: [],
+        },
       };
     }
 
@@ -367,11 +369,13 @@ export class RulesService {
     );
 
     return {
-      ticket: summary,
-      wouldRun: true,
-      groups: [...outcome.groups],
-      actions: outcomes,
-      followOns: await followOnsOf(tx, this.#deps, simulation, request.ruleId, evaluation),
+      outcome: {
+        ticket: summary,
+        wouldRun: true,
+        groups: [...outcome.groups],
+        actions: outcomes,
+        followOns: await followOnsOf(tx, this.#deps, simulation, request.ruleId, evaluation),
+      },
     };
   }
 

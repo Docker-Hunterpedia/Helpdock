@@ -7,7 +7,7 @@ import {
   tickets,
   ticketTags,
 } from '@helpdock/db';
-import type { TicketChannel, TicketPriority } from '@helpdock/schemas';
+import type { RuleTicketFacts } from '@helpdock/schemas';
 import { and, asc, desc, eq } from 'drizzle-orm';
 
 /**
@@ -16,28 +16,11 @@ import { and, asc, desc, eq } from 'drizzle-orm';
  * the test run can evaluate a draft against the same shape it would be
  * evaluated against for real.
  */
-export interface TicketFacts {
+export interface TicketFacts extends RuleTicketFacts {
   readonly id: string;
   readonly reference: string;
-  readonly subject: string;
-  /**
-   * The newest public message from the contact, as text — what "body
-   * contains" is about. A new ticket's is its first message.
-   */
-  readonly body: string;
-  readonly channel: TicketChannel;
-  readonly departmentId: string;
-  readonly teamId: string | null;
-  readonly assigneeId: string | null;
-  readonly priority: TicketPriority;
-  readonly statusId: string;
-  readonly statusChangedAt: Date;
-  readonly tagIds: readonly string[];
   readonly contactId: string | null;
-  readonly contactEmails: readonly string[];
   readonly contactLocale: 'en' | 'ar' | null;
-  readonly accountId: string | null;
-  readonly custom: Readonly<Record<string, unknown>>;
   /** Spam, merged, soft-deleted: no rule acts on these (DOMAIN-RULES §2.2). */
   readonly inert: boolean;
 }

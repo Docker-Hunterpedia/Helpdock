@@ -59,6 +59,8 @@ describe('the schema', () => {
       'user_brand_roles',
       'users',
       'views',
+      'workflow_rules',
+      'workflow_runs',
     ]);
   });
 

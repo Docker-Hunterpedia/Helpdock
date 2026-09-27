@@ -1,6 +1,5 @@
 import type { Db, DbTransaction } from '@helpdock/db';
 import {
-  type JobLogger,
   type RulesEvaluatePayload,
   rulesTimeBasedJob,
   rulesTimeBasedScheduleJob,
@@ -13,7 +12,8 @@ import type { RulesEngineDeps } from './engine.js';
 import {
   createRulesProcessor,
   createRulesSourceHandler,
-  logRuleNotify,
+  RULES_SUBSCRIBER,
+  registerRulesEventHandlers,
   scheduleTimeBasedRules,
   tickOf,
 } from './rules-jobs.js';
@@ -29,14 +29,6 @@ const readsAs = <T>(rows: T[]) => {
   const where = () => Object.assign(Promise.resolve(rows), { limit: () => Promise.resolve(rows) });
   const query = { from: () => query, where };
   return { select: () => query };
-};
-
-const recordingLog = (): JobLogger & { lines: string[] } => {
-  const lines: string[] = [];
-  const record = (_fields: Record<string, unknown>, message: string) => {
-    lines.push(message);
-  };
-  return { lines, info: record, warn: record, error: record };
 };
 
 const handle = async (
@@ -104,22 +96,17 @@ describe('createRulesSourceHandler', () => {
   });
 });
 
-describe('logRuleNotify', () => {
-  it('logs how many people a notification is for, and never the message', async () => {
-    const log = recordingLog();
-    const info = vi.spyOn(log, 'info');
+describe('registerRulesEventHandlers', () => {
+  it("subscribes as `rules` beside each event's owner, and leaves `rule.notify` to M3-07", () => {
+    const register = vi.fn();
 
-    await logRuleNotify({
-      outboxId: OUTBOX,
-      brandId: BRAND,
-      event: 'rule.notify',
-      payload: { ticketId: TICKET, recipients: [RULE], message: 'secret-ish', ruleId: RULE },
-      tx: {} as DbTransaction,
-      log,
-    });
+    registerRulesEventHandlers({ add: vi.fn() }, { register });
 
-    expect(info.mock.calls[0]?.[0]).toMatchObject({ ticketId: TICKET, recipients: 1 });
-    expect(JSON.stringify(info.mock.calls[0])).not.toContain('secret-ish');
+    expect(register.mock.calls.map(([event]) => event)).toContain('ticket.created');
+    expect(register.mock.calls.map(([event]) => event)).not.toContain('rule.notify');
+    expect(new Set(register.mock.calls.map(([, , subscriber]) => subscriber))).toEqual(
+      new Set([RULES_SUBSCRIBER]),
+    );
   });
 });
 

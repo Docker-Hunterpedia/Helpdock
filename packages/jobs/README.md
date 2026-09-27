@@ -87,6 +87,8 @@ M1 adds:
 | `rules.evaluate` | `rules` | M3-03: one brand's event rules for one ticket after one domain event. Added by the rules module's `outbox.event` handler with `jobId = rules.evaluate.<outboxId>`, and keyed by the outbox row, so an event is evaluated once. The payload carries the rule chain the depth guard counts. |
 | `rules.time_based.schedule` | `rules` | M3-04's five-minute tick (`*/5 * * * *`): one `rules.time_based` job per active brand. |
 | `rules.time_based` | `rules` | One brand's due time-based rules for one tick; the job id names the brand and the tick, so a tick that fires twice adds nothing. |
+| `notify.email` | `notify` | M3-07: one staff notification email from the install's system sender. Added by the `notification.created` handler; keyed by the notification. |
+| `notify.push` | `notify` | M3-07: one web push to one browser. Keyed by the browser and the notification (or the "Send a test" press), so one event is one push per browser. |
 
 ## Handling an event
 
@@ -109,11 +111,26 @@ are registered, retries, and ends in the failed set. `settings.changed` ships
 registered, with a handler that only logs, so a fresh install has one working
 path through the whole chain.
 
-Registering the same event twice throws. The registry is process-wide, so a
-caller that may run more than once in a process — a test that starts several
-workers — registers through a dependency rather than at import time;
-`apps/api/src/worker/start-worker.ts` is the worked example, and the four ticket
-events of M1-02 and M1-03 are registered there.
+One event may have several handlers, one per **subscriber**: the module that
+owns an event registers it as the default subscriber, and any other module that
+reacts to it passes its own name as the third argument —
+`registerEventHandler('ticket.replied', handler, 'notifications')` is how M3-07
+tells an assignee about a reply without touching the tickets module's socket
+frame, and the rules (`'rules'`) subscribe the same way to the ticket, SLA and
+CSAT events. Subscribers run in registration order — the worker's start-up
+order, so the socket frame goes before the rules and the notifications — in the
+same transaction and under the same receipt, so a failure in any of them rolls
+the others back and retries the delivery as a whole; every handler already has
+to survive a redelivery.
+
+Registering the same event twice for the same subscriber throws, and so does
+registering one function twice for one event under another name: either is a
+start-up that ran twice, which would run a side effect twice per delivery. The registry is
+process-wide, so a caller that may run more than once in a process — a test that
+starts several workers — registers through a dependency rather than at import
+time; `apps/api/src/worker/start-worker.ts` is the worked example, and the ticket
+events of M1-02 and M1-03 and the notification events of M3-07 are registered
+there.
 
 ## Writing an idempotent consumer
 
@@ -239,12 +256,8 @@ of a connection a worker blocks on.
 Leaving `status` out is allowed: the relay runs exactly as before and the System
 page says the worker has not reported.
 
-An event may have **several handlers** (M3): a ticket change is a socket
-frame, a reason to evaluate workflow rules and a clock to move, and each module
-registers its own. They run in registration order in the one transaction the
-receipt is claimed in, so a handler that throws rolls the others back and the
-job is retried whole. Registering the same function twice for one event is
-refused.
+An event may have **several handlers**, one per subscriber (see "Handling an
+event" above).
 
 Registering handlers before starting the worker matters: a job that arrives
 before its handler is registered fails as an unknown event and burns attempts.

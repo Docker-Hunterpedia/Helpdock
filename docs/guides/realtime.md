@@ -95,6 +95,7 @@ this order:
 | `brand:<id>` | The principal holds a role in that brand, and the room is the brand the message named. |
 | `department:<id>` | An explicit department list containing the id needs no query: the list is itself per-brand, so membership proves both the brand and the scope. An *unrestricted* scope (`all`) does need one — a room name carries no brand, and `all` means "every department *of that brand*" — so `departments` is read inside a transaction scoped to the brand the join named. |
 | `ticket:<id>` | The ticket exists inside the principal's own scope. The check is the *same* question `GET /api/brands/:brandId/tickets/:ticketId` asks, asked the same way: a transaction carrying the principal's brand and departments, and the policies answering. "No such ticket" and "not in your departments" are therefore one answer, and neither confirms the other. |
+| `user:<id>` | M3-07. That person alone: `id` is the principal's own. Every socket is put in its own on connect, so a client never has to ask; an explicit join of somebody else's is refused. The bell hears `notification:created` here, whichever brand or screen the socket is on. |
 
 `department:` and `ticket:` also re-ask the permission the *route* they mirror
 declares, `ticket:read`, rather than resting on the `brand:read` the join itself
@@ -140,6 +141,7 @@ Server to client:
 | `ticket:changed` | `{ brandId, ticketId, departmentId, event }` where `event` is `ticket.created` or `ticket.updated` | `null` |
 | `ticket:message` | `{ brandId, ticketId, departmentId, messageId, seq, kind, event }` where `event` is `ticket.replied` or `ticket.note_added` | the message's `seq` |
 | `ticket:viewing` | `{ brandId, ticketId, activity, userId }` — relayed to the *rest* of `ticket:<id>` | `null` |
+| `notification:created` | `{ brandId, notificationId }`, to `user:<id>` only (M3-07). Ids, no content: the bell re-reads its list over REST, and a client looking at another brand ignores it | `null` |
 | `revoked` | `{ code: 'session_revoked', message }`, immediately before the socket is closed | — |
 
 The two ticket events carry **ids and no content**. That is what "the REST API
@@ -298,7 +300,7 @@ of meaning (DESIGN §10).
 | Milestone | Adds |
 |---|---|
 | M1-09 | Shipped in branch: `activity` on `ticket:viewing` ("is replying"), and `ticket:changed` in both tickets' rooms on a merge, an unmerge and a split. |
-| M3-07 | In-app notifications, as new server events through `RealtimePublisher`. |
+| M3-07 | Shipped: the `user:<id>` room and `notification:created` (see [notifications](notifications.md)). |
 | M4-03 | The widget handshake's origin allow-list and its per-visitor and per-IP throttles. |
 | M4-04 | The `/widget` namespace and the full delivery contract for conversations: `client_id`, real `seq` values, cursor catch-up and the SSE fallback. |
 

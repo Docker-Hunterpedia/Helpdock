@@ -6,6 +6,7 @@ import {
   type Db,
   type DbHandle,
   departments,
+  notifications,
   outbox,
   tags,
   ticketActivity,
@@ -17,28 +18,39 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import { createQueueConnection, QUEUE_NAMES, silentLogger, slaTimerJobId } from '@helpdock/jobs';
+import {
+  createQueueConnection,
+  outboxEvents,
+  QUEUE_NAMES,
+  silentLogger,
+  slaTimerJobId,
+} from '@helpdock/jobs';
 import {
   type BrandSettings,
   type BusinessHoursOverview,
   type Holiday,
   isWithinBusinessHours,
+  REALTIME_EVENTS,
   type SlaPolicy,
   type SlaPolicyList,
   type TicketDetail,
   type TicketList,
   type TicketStatusList,
+  userRoom,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { Queue } from 'bullmq';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import { registerNotificationHandlers } from '../notifications/notification-events.js';
+import { NotificationsRepository } from '../notifications/notifications.repository.js';
+import type { RealtimeBroadcastInput } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { workerDependencies } from '../worker/start-worker.js';
 import { BusinessHoursService } from './business-hours.service.js';
@@ -52,8 +64,10 @@ import { createSlaScheduleHandler, type SlaWorkerDeps } from './sla-worker.js';
 /**
  * M3-01 and M3-02 against a real Postgres and a real Redis, over real
  * sessions: the two tabs, the clocks as the ticket routes move them, the
- * escalation a timer runs, and the M3 exit criterion — "deleting Redis while
- * tickets are open and restarting the worker recreates every timer".
+ * escalation a timer runs, and two M3 exit criteria — "deleting Redis while
+ * tickets are open and restarting the worker recreates every timer", and "an
+ * SLA breach fires escalation and a notification, and pauses correctly on
+ * Awaiting customer", through M3-07's real handlers.
  */
 
 const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
@@ -819,7 +833,9 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       ).toMatchObject({
         clock: 'resolution',
         stepPercent: 50,
-        notify: { departmentLeads: true, userIds: [], teamIds: [] },
+        departmentLeads: true,
+        userIds: [],
+        teamIds: [],
       });
 
       expect(await fire(100, started + 481 * MINUTE)).toEqual({ kind: 'fired' });
@@ -918,6 +934,158 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
         await worker.close();
         connection.disconnect();
       }
+    });
+  });
+
+  // ------------------------------------------------------------ M3 exit criterion
+
+  describe('a breach, its escalation and the notification (M3 exit criterion)', () => {
+    const frames: RealtimeBroadcastInput[] = [];
+
+    /**
+     * What the relay and the `outbox.event` worker do with this ticket's rows of
+     * these events: each goes through the process-wide dispatcher, where M3-07's
+     * handlers are registered as the worker registers them.
+     */
+    const dispatchRows = async (ticketId: string, events: readonly string[]) => {
+      const rows = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select()
+          .from(outbox)
+          .where(
+            and(
+              inArray(outbox.event, [...events]),
+              sql`(${outbox.payload}->>'ticketId' = ${ticketId} OR ${outbox.event} = 'notification.created')`,
+            ),
+          )
+          .orderBy(asc(outbox.id)),
+      );
+      for (const row of rows.filter((candidate) => !dispatched.has(candidate.id))) {
+        dispatched.add(row.id);
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          outboxEvents.dispatch({
+            outboxId: row.id,
+            brandId: row.brandId,
+            event: row.event,
+            payload: row.payload,
+            tx,
+            log: silentLogger,
+          }),
+        );
+      }
+      return rows;
+    };
+    const dispatched = new Set<string>();
+
+    beforeAll(() => {
+      registerNotificationHandlers({
+        repository: new NotificationsRepository(),
+        broadcast: { emit: async (input) => void frames.push(input) },
+        pushConfigured: async () => false,
+        queue: { addEmail: async () => undefined, addPush: async () => undefined },
+      });
+    });
+
+    it('breaches the first response, escalates to the person the step names, and tells them', async () => {
+      const saved = await call<SlaPolicy>('PUT', `${brandPath()}/sla-policies/${policy.id}`, ada, {
+        ...policyBody(),
+        escalation: [
+          {
+            atPercent: 100,
+            actions: [
+              { type: 'notify', recipient: { kind: 'user', userId: sam.id } },
+              { type: 'set_escalated' },
+            ],
+          },
+        ],
+      });
+      expect(saved.status).toBe(200);
+
+      // 1. A ticket under the policy passes its first-response target.
+      const { ticket } = await createTicket();
+      const clock = await clockOf(ticket.id, 'first_response');
+      expect(clock.policyId).toBe(policy.id);
+      const dueAt = clock.dueAt?.getTime() ?? 0;
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          fireSlaTimer(
+            tx,
+            slaDeps(),
+            {
+              brandId: seeded.brandId,
+              ticketId: ticket.id,
+              clock: 'first_response',
+              stepPercent: 100,
+            },
+            new Date(dueAt + MINUTE),
+          ),
+        ),
+      ).toEqual({ kind: 'fired' });
+
+      // 2. `sla.breached` and the escalation fire, the escalation naming Sam.
+      const written = await dispatchRows(ticket.id, ['sla.breached', 'ticket.escalated']);
+      expect(written.map((row) => row.event).sort()).toEqual(['sla.breached', 'ticket.escalated']);
+      expect(written.find((row) => row.event === 'ticket.escalated')?.payload).toMatchObject({
+        clock: 'first_response',
+        stepPercent: 100,
+        userIds: [sam.id],
+        teamIds: [],
+        departmentLeads: false,
+      });
+      expect((await clockOf(ticket.id, 'first_response')).breachedAt).not.toBeNull();
+
+      // 3. A notification for Sam, and nobody else: nobody holds the ticket, so
+      //    the breach itself has no one to tell.
+      const rows = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(notifications).where(eq(notifications.ticketId, ticket.id)),
+      );
+      expect(rows.map((row) => [row.userId, row.kind])).toEqual([[sam.id, 'escalated']]);
+      expect(rows[0]?.detail).toEqual({ clock: 'first_response', stepPercent: 100 });
+
+      // … and `notification.created`, whose handler tells Sam's open screens.
+      const created = await dispatchRows(ticket.id, ['notification.created']);
+      expect(
+        created.some(
+          (row) =>
+            row.event === 'notification.created' && row.payload.notificationId === rows[0]?.id,
+        ),
+      ).toBe(true);
+      expect(frames).toContainEqual({
+        rooms: [userRoom(sam.id)],
+        event: REALTIME_EVENTS.notificationCreated,
+        data: { brandId: seeded.brandId, notificationId: rows[0]?.id },
+        seq: null,
+      });
+    });
+
+    it('pauses a ticket set to Awaiting customer, so its timer breaches nothing', async () => {
+      const { ticket } = await createTicket();
+      const due = (await clockOf(ticket.id, 'resolution')).dueAt?.getTime() ?? 0;
+
+      const paused = await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, {
+        statusId: awaiting,
+      });
+      expect(paused.status).toBe(200);
+
+      const resolution = await clockOf(ticket.id, 'resolution');
+      expect(resolution.pausedAt).not.toBeNull();
+      expect(resolution.dueAt).toBeNull();
+
+      // Its timer fires on time, and the paused clock ends it without a breach.
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          fireSlaTimer(
+            tx,
+            slaDeps(),
+            { brandId: seeded.brandId, ticketId: ticket.id, clock: 'resolution', stepPercent: 100 },
+            new Date(due + MINUTE),
+          ),
+        ),
+      ).toEqual({ kind: 'done' });
+      expect((await clockOf(ticket.id, 'resolution')).breachedAt).toBeNull();
+      expect(
+        (await outboxOf('sla.breached')).some((payload) => payload.ticketId === ticket.id),
+      ).toBe(false);
     });
   });
 });

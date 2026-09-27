@@ -19,6 +19,7 @@ export * from './install.js';
 export * from './macros.js';
 export * from './media.js';
 export * from './merge.js';
+export * from './notifications.js';
 export * from './participants.js';
 export * from './placeholders.js';
 export * from './principal.js';

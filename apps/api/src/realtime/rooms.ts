@@ -81,6 +81,10 @@ export const authorizeRoom = async ({
       // The guard checked `brand:read` in `brandId`; the room has to be that
       // same brand, or a member of brand A could listen to brand B by naming A.
       return parsed.id === brandId ? ALLOWED : refuse('That room belongs to another brand');
+    case 'user':
+      // M3-07. The gateway already put every socket in its own on connect;
+      // asking again is harmless, and asking for somebody else's is not.
+      return parsed.id === principal.id ? ALLOWED : refuse('That room is somebody else’s');
     case 'department':
     case 'ticket': {
       // "Joining a room runs the same permission check as the corresponding

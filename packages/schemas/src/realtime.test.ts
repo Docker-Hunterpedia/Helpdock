@@ -3,6 +3,7 @@ import {
   attachmentChangedSchema,
   brandRoom,
   departmentRoom,
+  notificationCreatedSchema,
   parseRoom,
   presenceChangedEnvelopeSchema,
   presenceSetSchema,
@@ -14,6 +15,7 @@ import {
   ticketRoom,
   ticketViewingRequestSchema,
   ticketViewingSchema,
+  userRoom,
 } from './realtime.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
@@ -25,6 +27,7 @@ describe('rooms', () => {
     [brandRoom(BRAND), 'brand', BRAND],
     [departmentRoom(DEPARTMENT), 'department', DEPARTMENT],
     [ticketRoom(BRAND), 'ticket', BRAND],
+    [userRoom(USER), 'user', USER],
   ])('parses %s', (room, kind, id) => {
     expect(parseRoom(room)).toEqual({ kind, id });
   });
@@ -61,6 +64,14 @@ describe('the message schemas', () => {
       REALTIME_EVENTS.ticketMessage,
       REALTIME_EVENTS.attachmentChanged,
       REALTIME_EVENTS.ticketViewing,
+      REALTIME_EVENTS.notificationCreated,
+    ]);
+  });
+
+  it('carries ids only on a notification frame, so nothing about the ticket rides a socket', () => {
+    expect(Object.keys(notificationCreatedSchema.shape).sort()).toEqual([
+      'brandId',
+      'notificationId',
     ]);
   });
 

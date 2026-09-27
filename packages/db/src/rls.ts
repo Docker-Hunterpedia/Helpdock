@@ -131,6 +131,10 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // offered in is a service rule, as it is for `views`. The owner rule below
   // keeps a personal one its owner's.
   { name: 'canned_responses', departmentScoped: false },
+  // M3-07. A notification names a ticket but holds none of it: the panel reads
+  // the subject through `tickets`, whose department policy decides. So it is
+  // brand-scoped, and narrowed to its recipient by the owner policy below.
+  { name: 'notifications', departmentScoped: false },
 ];
 
 /**
@@ -146,16 +150,35 @@ export const TENANT_TABLES: readonly TenantTable[] = [
  * Deleting the owner still removes their rows, because a foreign key's cascade
  * is not subject to row-level security.
  */
-export const OWNER_SCOPED_TABLES: readonly { readonly name: string; readonly column: string }[] = [
+export interface OwnerScopedTable {
+  readonly name: string;
+  readonly column: string;
+  /**
+   * Also lets a `system` principal through. For rows the worker writes on
+   * somebody's behalf — a notification is made for its recipient by the job
+   * that noticed the event, not by the recipient.
+   */
+  readonly systemWrites?: boolean;
+}
+
+export const OWNER_SCOPED_TABLES: readonly OwnerScopedTable[] = [
   { name: 'views', column: 'owner_id' },
   { name: 'canned_responses', column: 'owner_id' },
+  { name: 'notifications', column: 'user_id', systemWrites: true },
 ];
 
 /** The restrictive owner policy of {@link OWNER_SCOPED_TABLES}, as one statement. */
-export const ownerPolicy = (name: string, column: string): string => {
+export const ownerPolicy = (
+  name: string,
+  column: string,
+  { systemWrites = false }: { readonly systemWrites?: boolean | undefined } = {},
+): string => {
   const table = assertIdentifier(name);
   const owner = assertIdentifier(column);
-  const predicate = `${owner} IS NULL OR ${owner}::text = current_setting('${SESSION_SETTINGS.principalId}', true)`;
+  const system = systemWrites
+    ? ` OR current_setting('${SESSION_SETTINGS.principalType}', true) = 'system'`
+    : '';
+  const predicate = `${owner} IS NULL OR ${owner}::text = current_setting('${SESSION_SETTINGS.principalId}', true)${system}`;
 
   return `CREATE POLICY "${table}_owner_only" ON "${table}" AS RESTRICTIVE FOR ALL\n  USING (${predicate})\n  WITH CHECK (${predicate});`;
 };
@@ -163,7 +186,8 @@ export const ownerPolicy = (name: string, column: string): string => {
 /** The owner-scoped tables whose policy `committedSql` does not contain. */
 export const missingOwnerPolicies = (committedSql: string): readonly string[] =>
   OWNER_SCOPED_TABLES.filter(
-    ({ name, column }) => !committedSql.includes(ownerPolicy(name, column)),
+    ({ name, column, systemWrites }) =>
+      !committedSql.includes(ownerPolicy(name, column, { systemWrites })),
   ).map(({ name }) => name);
 
 /**
@@ -174,6 +198,14 @@ export const GLOBAL_TABLES: readonly { readonly name: string; readonly reason: s
   { name: 'users', reason: 'sign-in happens before any brand is known' },
   { name: 'brands', reason: 'the tenant itself, managed by audited install-admin paths' },
   { name: 'job_receipts', reason: 'claimed by a worker before it opens a brand transaction' },
+  {
+    name: 'notification_prefs',
+    reason: "a person's own channel choices, the same in every brand they work in (M3-07)",
+  },
+  {
+    name: 'push_subscriptions',
+    reason: 'a browser subscribes once and hears about every brand its owner works in (ADR 0002)',
+  },
 ];
 
 // A policy body is assembled as text, so anything interpolated into it has to be

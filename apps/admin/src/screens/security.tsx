@@ -11,15 +11,13 @@ import { ROUTES } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession, useStaffApi } from '../auth/session.tsx';
-import { PageHeader } from '../shell/page-header.tsx';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { PasswordStrengthBar } from '../ui/password-strength-bar.tsx';
 import { useToast } from '../ui/toasts.tsx';
-import { AccountTabs } from './account/account-tabs.tsx';
 
 /**
- * `/me/security`: a person's own account.
+ * `/me/security`: a person's own account, the first tab of Your account.
  *
  * It reuses the `Admin/Settings` artboard's layout — a page header, then one
  * bordered card per area with its own title, caption and fields — rather than
@@ -212,11 +210,9 @@ export function SecurityScreen(): ReactNode {
     changePassword.mutate();
   };
 
+  // The page header and the tab row are Your account's (`account/account-page.tsx`).
   return (
     <>
-      <PageHeader title={t('me:security.title')} caption={t('me:security.caption')} />
-      <AccountTabs current="security" />
-
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 720 }}>
         <Card title={t('me:details.title')} caption={t('me:details.caption')}>
           <Box

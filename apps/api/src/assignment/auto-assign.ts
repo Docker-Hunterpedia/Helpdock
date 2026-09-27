@@ -1,6 +1,10 @@
 import type { DbTransaction } from '@helpdock/db';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
-import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
+import {
+  enqueueTicketAssigned,
+  enqueueTicketEvent,
+  TICKET_EVENTS,
+} from '../tickets/ticket-events.js';
 import type { AssignedTicket, AssignmentRepository } from './assignment.repository.js';
 import { type PickInput, pickAssignee } from './rotation.js';
 
@@ -149,6 +153,15 @@ export const autoAssign = async (
     departmentId: department.id,
     changes: ['assignee'],
     ...(ruleChain === undefined || ruleChain.length === 0 ? {} : { ruleChain: [...ruleChain] }),
+  });
+  // M3-07: the person picked is told, as they would be by a person's choice.
+  // A pick a workflow rule asked for (M3-03) is the rule's doing.
+  await enqueueTicketAssigned(tx, brandId, {
+    ticketId,
+    departmentId: department.id,
+    assigneeId: picked,
+    assignedBy: ruleChain === undefined || ruleChain.length === 0 ? mode : 'rule',
+    actorId: null,
   });
 
   return { assigned: picked };

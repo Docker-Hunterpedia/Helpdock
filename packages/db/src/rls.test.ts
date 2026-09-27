@@ -96,6 +96,15 @@ describe('ownerPolicy', () => {
     expect(ownerPolicy('views', 'owner_id')).toContain('WITH CHECK');
   });
 
+  it('lets the system principal through only where the table asks for it', () => {
+    const system = `current_setting('${SESSION_SETTINGS.principalType}', true) = 'system'`;
+
+    expect(ownerPolicy('views', 'owner_id')).not.toContain(system);
+    expect(ownerPolicy('notifications', 'user_id', { systemWrites: true })).toContain(
+      `OR ${system}`,
+    );
+  });
+
   it('refuses a column that is not an identifier', () => {
     expect(() => ownerPolicy('views', 'owner_id; drop')).toThrow(TypeError);
   });

@@ -18,7 +18,7 @@ Owner: @Docker-Hunterpedia
 | M3-04 | Time-based rules | #91 | in review: five-minute tick on the `rules` queue, once per match |
 | M3-05 | Rule builder UI with test-run | #92 | in review: `Admin/Automation` Rules and Time-based tabs, builder, test run |
 | M3-06 | Macros and canned responses | #93 | in review: `canned_responses`, Automation › Macros, the composer's macro picker; [guide](../guides/macros.md) |
-| M3-07 | Notifications: in-app, email and web push | #94 | not started |
+| M3-07 | Notifications: in-app, email and web push | #94 | in review: `notifications`, `notification_prefs`, `push_subscriptions`, the bell, Your account › Notifications, the staff email, web push; [guide](../guides/notifications.md) |
 | M3-08 | Admin audit log viewer | #95 | in review: `GET /api/install/audit-log`, System › Audit log; [guide](../guides/audit-log.md) |
 
 ## Artboards
@@ -28,7 +28,7 @@ On the [design canvas](https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ), under
 ## Exit criteria
 
 - [x] A rule "on create, if subject contains X, assign to team Y and reply with canned Z" runs and is logged (`apps/api/src/rules/rules.integration.test.ts`, with a real M3-06 canned response).
-- [ ] An SLA breach fires escalation and a notification, and pauses correctly on Awaiting customer.
+- [x] An SLA breach fires escalation and a notification, and pauses correctly on Awaiting customer (`apps/api/src/sla/sla.integration.test.ts`, "a breach, its escalation and the notification": a first response passes its target, `sla.breached` and `ticket.escalated` fire, the step's named person gets a `notifications` row and `notification.created` through the worker's dispatcher, and a ticket on Awaiting customer pauses and its timer breaches nothing).
 - [x] The four worked examples in DOMAIN-RULES §3.6 pass as unit tests to the minute (`apps/api/src/sla/ticket-clocks.test.ts`).
 - [x] Deleting Redis while tickets are open and restarting the worker recreates every timer (`apps/api/src/sla/sla.integration.test.ts`).
 - [x] Rule loop is prevented by a test (`rules.integration.test.ts`: two rules that reassign each other are stopped at the cycle; `triggers.test.ts` for the guard itself).
@@ -89,9 +89,8 @@ trigger; migration `0027_workflow_rules`. [Guide](../guides/automation.md).
   `ticket.closed`, `ticket.reopened`, `sla.warning`, `sla.breached`,
   `csat.received` (nothing emits the last yet). Rules emit `rule.notify`
   (`{ ticketId, recipients, message, ruleId }`) for M3-07, and ticket events
-  with `ruleChain`. The outbox dispatcher runs every handler registered for an
-  event, in registration order; the worker registers the rules handlers before
-  the SLA ones, so M3-02's log-only fallback now covers `ticket.escalated` only.
+  with `ruleChain`. The rules subscribe to those events as `rules`, beside
+  each event's owner (see M3-07 below for the dispatcher).
 - **Gap:** a Team Leader whose scope is narrower than the brand may read rules
   and the log but not change a rule, because a rule acts on every department.
 
@@ -102,6 +101,45 @@ trigger; migration `0027_workflow_rules`. [Guide](../guides/automation.md).
 - Applying a macro (`POST …/tickets/:ticketId/macro-runs`) sends the reply and the kept actions in one transaction and writes one `ticket.macro_applied` activity row. `TicketsService.update` takes an optional activity bundle for that; lifecycle rows (close, reopen) are still their own.
 - Seam for M3-03: `CannedResponsesService.render(id, { locale, ticket, agent?, tx? })` and `listShared(tx)`, exported from `MacrosModule` and wired into the rules engine (see M3-03 to M3-05 above).
 - Screens: the Macros tab of the rules' Automation page (an Agent sees that tab alone), the composer picker (toolbar button, header Macro button, `/`), staged action chips.
+
+### M3-07 Notifications
+
+- **Built:** the bell and its panel in the sidebar's brand row; Your account
+  (`/me`) as one page with Security, Notifications and M2-05's Email signature
+  tabs (`apps/admin/src/screens/account/`); the staff notification email (en,
+  ar) from the install's system sender; web push (VAPID, ADR 0002) with a
+  service worker at `/sw.js`. [Guide](../guides/notifications.md).
+- **Tables (migration `0029_notifications`):** `notifications` (tenant, brand
+  policy plus a restrictive owner policy that lets the `system` principal write
+  — `OWNER_SCOPED_TABLES` with `systemWrites`), `notification_prefs` and
+  `push_subscriptions` (global, like `users`).
+- **Events consumed:** `ticket.assigned` (new), `ticket.replied`,
+  `ticket.note_added`, `sla.warning`, `sla.breached`, `ticket.escalated` and
+  `rule.notify`. Emitted: `notification.created`, `notification.push_test`.
+  Jobs: `notify.email`, `notify.push` on the `notify` queue.
+- **Dispatcher (`packages/jobs`).** One design for both branches: an event has
+  several handlers, one per named subscriber; the module that owns the event
+  takes the default slot, and the others name themselves (`rules`,
+  `notifications`). They run in registration order, which is the worker's
+  start-up order (tickets, CSAT, media, assignment, email, mailboxes, rules,
+  SLA, notifications). The same subscriber twice for an event, or the same
+  function twice under two names, is refused. M3-02's log-only stand-in for
+  the SLA events and M3-03's for `rule.notify` are gone: notifications consume
+  them.
+- **Seams wired:** `ticket.assigned` is written by `TicketsService` (a person;
+  a macro's assign action goes through it, so it carries the person who ran
+  the macro), `autoAssign` (the rotation, or `'rule'` when a rule asked for the
+  pick) and the rules engine's assign-agent action (`assignedBy: 'rule'`).
+  `rule.notify` is delivered to the resolved recipients as an `escalated`
+  notification whose detail carries the rule and its message. An SLA step's
+  notify actions travel flat on `sla.warning` and `ticket.escalated` as
+  `userIds`, `teamIds` and `departmentLeads` (was a nested `notify`), and reach
+  those people, team members and Team Leaders.
+- **Left open:** the first-run wizard does not generate the VAPID pair (ADR
+  0002 foresees it); keys come from `HD_PUSH_VAPID_*` or the settings table.
+  Notification rows are not purged by retention. A rule's *Notify* shares the
+  Escalation preference row rather than having its own kind: a row of its own
+  would need an artboard.
 
 ### M3-08 Admin audit log viewer
 
@@ -122,3 +160,4 @@ trigger; migration `0027_workflow_rules`. [Guide](../guides/automation.md).
 - `0026_sla_engine`: business hours, holidays, SLA policies and clocks (M3-01, M3-02).
 - `0027_workflow_rules`: `workflow_rules`, `workflow_runs`, `tickets.status_changed_at` and its trigger (M3-03, M3-04).
 - `0028_macros_and_audit_context`: `canned_responses`, `audit_log.ip`, `request_id` and `user_agent`, and `audit_log_created_at_id_idx` (M3-06, M3-08).
+- `0029_notifications`: `notifications`, `notification_prefs`, `push_subscriptions` and the `notification_kind` enum (M3-07).

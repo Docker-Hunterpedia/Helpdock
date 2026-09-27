@@ -533,6 +533,20 @@ describe('SocketRealtimeClient', () => {
       expect(viewings[0]?.userId).toBe(LINA);
     });
 
+    it('hands a notification frame to its listeners without a room to join (M3-07)', async () => {
+      const client = await connected();
+      const created: unknown[] = [];
+      client.subscribe({ notificationCreated: (frame) => created.push(frame) });
+
+      sockets[0]?.fire(
+        REALTIME_EVENTS.notificationCreated,
+        envelope({ brandId: BRAND, notificationId: TICKET }),
+      );
+      sockets[0]?.fire(REALTIME_EVENTS.notificationCreated, envelope({ brandId: 'nope' }));
+
+      expect(created).toEqual([{ brandId: BRAND, notificationId: TICKET }]);
+    });
+
     it('drops a frame that does not match its schema rather than passing it on', async () => {
       const client = await connected();
       client.joinRoom(ticketRoom(TICKET));

@@ -5,6 +5,8 @@ import { MockChannelsApi } from '../channels/mock-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
+import { MockBrowserPush } from '../notifications/browser-push.js';
+import { MockNotificationsApi } from '../notifications/mock-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
@@ -45,5 +47,7 @@ export async function signedInMockApis(): Promise<AdminApis> {
     email: new MockEmailApi(),
     channels: new MockChannelsApi(),
     automation: new MockAutomationApi(),
+    notifications: new MockNotificationsApi(),
+    browserPush: new MockBrowserPush(),
   };
 }

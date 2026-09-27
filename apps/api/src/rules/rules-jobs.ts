@@ -12,7 +12,7 @@ import {
   rulesTimeBasedJobId,
   rulesTimeBasedScheduleJob,
 } from '@helpdock/jobs';
-import { RULE_MAX_DEPTH, RULE_NOTIFY_EVENT, ruleNotifyPayloadSchema } from '@helpdock/schemas';
+import { RULE_MAX_DEPTH } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -94,31 +94,14 @@ export const createRulesSourceHandler =
     });
   };
 
-/**
- * `rule.notify` is M3-07's to deliver. Until its handler is registered beside
- * this one, the event is logged and dropped rather than failing as unknown and
- * filling the dead-letter set: a notification that never arrives is the gap
- * M3-07 closes, a failed job per rule run would be noise on top of it.
- */
-export const logRuleNotify: OutboxEventHandler = ({ brandId, outboxId, payload, log }) => {
-  const parsed = ruleNotifyPayloadSchema.safeParse(payload);
-  log.info(
-    {
-      event: RULE_NOTIFY_EVENT,
-      brandId,
-      outboxId,
-      ticketId: parsed.success ? parsed.data.ticketId : undefined,
-      recipients: parsed.success ? parsed.data.recipients.length : undefined,
-    },
-    'rule notification written',
-  );
-  return Promise.resolve();
-};
+/** What the rules module subscribes as, beside each event's own handler. */
+export const RULES_SUBSCRIBER = 'rules';
 
 /**
- * Called by the worker's start-up, before any consumer exists, and before
- * M3-02's handlers: those log `sla.warning` and `sla.breached` only where
- * nothing has claimed them, and these claim them.
+ * Called by the worker's start-up, before any consumer exists. The rules are a
+ * named subscriber on every event they listen to: the module that writes an
+ * event keeps its default slot. `rule.notify`, which the actions write, is
+ * delivered by M3-07's notifications.
  */
 export const registerRulesEventHandlers = (
   queue: RulesEvaluateQueue,
@@ -126,9 +109,8 @@ export const registerRulesEventHandlers = (
 ): void => {
   const handler = createRulesSourceHandler(queue);
   for (const event of Object.values(RULE_SOURCE_EVENTS)) {
-    dispatcher.register(event, handler);
+    dispatcher.register(event, handler, RULES_SUBSCRIBER);
   }
-  dispatcher.register(RULE_NOTIFY_EVENT, logRuleNotify);
 };
 
 export interface RulesTimeBasedQueue {

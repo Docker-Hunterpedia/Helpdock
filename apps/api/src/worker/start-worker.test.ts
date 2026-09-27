@@ -4,7 +4,12 @@ import { silentLogger } from '@helpdock/jobs';
 import type { Redis } from 'ioredis';
 import { describe, expect, it } from 'vitest';
 import type { InstallSmtp } from '../email/transport.js';
-import { startWorker, type WorkerDependencies, type WorkerEnv } from './start-worker.js';
+import {
+  startWorker,
+  type WorkerDependencies,
+  type WorkerEnv,
+  type WorkerSettings,
+} from './start-worker.js';
 
 const env: WorkerEnv = {
   REDIS_URL: 'redis://redis:6379',
@@ -19,8 +24,11 @@ const env: WorkerEnv = {
   FFPROBE_PATH: 'ffprobe',
   CLAMAV_PORT: 3310,
   APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
+  APP_URL: 'https://support.example.com',
   OUTBOUND_ALLOW_CIDRS: [],
 };
+
+const settings = { get: async () => '' } as unknown as WorkerSettings;
 
 const db = {} as Db;
 
@@ -33,6 +41,7 @@ interface Harness {
     relayRedis?: unknown;
     relayStatus?: unknown;
     installSmtp?: InstallSmtp;
+    notifySettings?: WorkerSettings;
   };
 }
 
@@ -98,6 +107,12 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('rules.close') };
       },
+      createNotifyWorker: ({ redis, settings: given }) => {
+        calls.push('notify.create');
+        started.notifySettings = given;
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('notify.close') };
+      },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
@@ -113,7 +128,7 @@ describe('startWorker', () => {
   it('registers the handlers and every consumer before the relay that feeds them', () => {
     const { deps, calls } = harness();
 
-    startWorker({ env, db, log: silentLogger, deps });
+    startWorker({ env, db, settings, log: silentLogger, deps });
 
     // A job that arrives before its consumer exists burns attempts
     // (packages/jobs/README.md).
@@ -128,14 +143,15 @@ describe('startWorker', () => {
       'inbound.create',
       'sla.create',
       'rules.create',
+      'notify.create',
       'relay.start',
     ]);
   });
 
-  it('sends through no install server when the process has no settings', async () => {
+  it('sends through no install server while the wizard has not set one', async () => {
     const { deps, started } = harness();
 
-    startWorker({ env, db, log: silentLogger, deps });
+    startWorker({ env, db, settings, log: silentLogger, deps });
 
     await expect(started.installSmtp?.read()).resolves.toBeUndefined();
   });
@@ -151,9 +167,9 @@ describe('startWorker', () => {
       'smtp.from': 'support@example.com',
       'smtp.fromName': 'Support',
     };
-    const settings = { get: async (key: string) => values[key] } as unknown as Settings;
+    const smtp = { get: async (key: string) => values[key] } as unknown as Settings;
 
-    startWorker({ env, db, log: silentLogger, deps, settings });
+    startWorker({ env, db, log: silentLogger, deps, settings: smtp });
 
     await expect(started.installSmtp?.read()).resolves.toMatchObject({
       server: { host: 'mailpit', port: 1025 },
@@ -161,10 +177,18 @@ describe('startWorker', () => {
     });
   });
 
+  it('hands the notify worker the install settings its sender and VAPID keys live in', () => {
+    const { deps, started } = harness();
+
+    startWorker({ env, db, settings, log: silentLogger, deps });
+
+    expect(started.notifySettings).toBe(settings);
+  });
+
   it('gives the relay and the workers one connection, and the relay the LISTEN url', () => {
     const { deps, started } = harness();
 
-    startWorker({ env, db, log: silentLogger, deps });
+    startWorker({ env, db, settings, log: silentLogger, deps });
 
     expect(started.redisUrl).toBe(env.REDIS_URL);
     // `LISTEN outbox` needs a connection of its own on the runtime role.
@@ -174,7 +198,7 @@ describe('startWorker', () => {
   it('gives the relay somewhere to report its cycles', () => {
     const { deps, started } = harness();
 
-    startWorker({ env, db, log: silentLogger, deps });
+    startWorker({ env, db, settings, log: silentLogger, deps });
 
     // Without a `status` store the relay never writes `hd:relay:last`, and the
     // System page's Worker card and all three outbox metrics are silently dead
@@ -186,7 +210,7 @@ describe('startWorker', () => {
 
   it('shuts down relay, then workers, then producers, then connection', async () => {
     const { deps, calls } = harness();
-    const host = startWorker({ env, db, log: silentLogger, deps });
+    const host = startWorker({ env, db, settings, log: silentLogger, deps });
 
     calls.length = 0;
     await host.close();
@@ -204,6 +228,7 @@ describe('startWorker', () => {
       'inbound.close',
       'sla.close',
       'rules.close',
+      'notify.close',
       'producers.close',
       'connection.quit',
     ]);
@@ -211,7 +236,7 @@ describe('startWorker', () => {
 
   it('shuts down once, however many signals arrive', async () => {
     const { deps, calls } = harness();
-    const host = startWorker({ env, db, log: silentLogger, deps });
+    const host = startWorker({ env, db, settings, log: silentLogger, deps });
 
     calls.length = 0;
     await Promise.all([host.close(), host.close()]);
@@ -227,6 +252,7 @@ describe('startWorker', () => {
       'inbound.close',
       'sla.close',
       'rules.close',
+      'notify.close',
       'producers.close',
       'connection.quit',
     ]);

@@ -25,7 +25,13 @@ import { classifySmtpError, SmtpTimeoutError } from './smtp-errors.js';
 /** Every timer, so a wrong host cannot hold the wizard's request open. */
 export const SMTP_TIMEOUT_MS = 10_000;
 
-export interface SmtpEmailSenderOptions extends SmtpCredentials {
+export type SmtpEmailSenderOptions = SmtpCredentials;
+
+/**
+ * Kept apart from the credentials on purpose: those arrive from a request body,
+ * and nothing in a request may reach a timer.
+ */
+export interface SmtpTiming {
   /** Overridden by the tests; production uses {@link SMTP_TIMEOUT_MS}. */
   readonly timeoutMs?: number;
 }
@@ -45,14 +51,10 @@ export const smtpDeadlineMs = (timeoutMs: number | undefined): number =>
  * its four timers. Exported because this mapping is the whole of the transport's
  * behaviour that does not need a server to observe.
  */
-export const smtpTransportOptions = ({
-  host,
-  port,
-  tls,
-  user,
-  password,
-  timeoutMs,
-}: SmtpEmailSenderOptions) => {
+export const smtpTransportOptions = (
+  { host, port, tls, user, password }: SmtpEmailSenderOptions,
+  { timeoutMs }: SmtpTiming = {},
+) => {
   const deadlineMs = smtpDeadlineMs(timeoutMs);
 
   return {
@@ -80,11 +82,13 @@ const truncateResponse = (response: string): string =>
 
 export class SmtpEmailSender implements EmailSender {
   readonly #options: SmtpEmailSenderOptions;
+  readonly #deadlineMs: number;
   readonly #transporter: Transporter<SMTPSentMessageInfo>;
 
-  constructor(options: SmtpEmailSenderOptions) {
+  constructor(options: SmtpEmailSenderOptions, timing: SmtpTiming = {}) {
     this.#options = options;
-    this.#transporter = createTransport(smtpTransportOptions(options));
+    this.#deadlineMs = smtpDeadlineMs(timing.timeoutMs);
+    this.#transporter = createTransport(smtpTransportOptions(options, timing));
   }
 
   async send(message: EmailMessage): Promise<void> {
@@ -111,8 +115,7 @@ export class SmtpEmailSender implements EmailSender {
   }
 
   async #deliver(message: EmailMessage): Promise<string | undefined> {
-    const { fromAddress, fromName, timeoutMs } = this.#options;
-    const deadlineMs = smtpDeadlineMs(timeoutMs);
+    const { fromAddress, fromName } = this.#options;
 
     // Nodemailer's own timers cover the connection, the greeting and socket
     // inactivity; this covers the whole conversation, so a relay that answers
@@ -120,7 +123,7 @@ export class SmtpEmailSender implements EmailSender {
     const deadline = new Promise<never>((_resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new SmtpTimeoutError());
-      }, deadlineMs);
+      }, this.#deadlineMs);
       timer.unref?.();
     });
 

@@ -54,7 +54,7 @@ describe('smtpTransportOptions', () => {
   });
 
   it('lets a test shorten the deadline without touching the default', () => {
-    expect(smtpTransportOptions({ ...credentials, timeoutMs: 50 }).socketTimeout).toBe(50);
+    expect(smtpTransportOptions(credentials, { timeoutMs: 50 }).socketTimeout).toBe(50);
     expect(SMTP_TIMEOUT_MS).toBe(10_000);
   });
 });
@@ -79,7 +79,7 @@ describe('smtpDeadlineMs', () => {
   });
 
   it('bounds every Nodemailer timer the same way', () => {
-    expect(smtpTransportOptions({ ...credentials, timeoutMs: 60 * 60_000 })).toMatchObject({
+    expect(smtpTransportOptions(credentials, { timeoutMs: 60 * 60_000 })).toMatchObject({
       connectionTimeout: SMTP_TIMEOUT_MS,
       greetingTimeout: SMTP_TIMEOUT_MS,
       socketTimeout: SMTP_TIMEOUT_MS,

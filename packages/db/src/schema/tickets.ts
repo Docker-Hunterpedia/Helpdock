@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -16,6 +17,7 @@ import { brands } from './brands.js';
 import { contacts } from './contacts.js';
 import { departments } from './departments.js';
 import { ticketChannelEnum, ticketPriorityEnum } from './enums.js';
+import { slaPolicies } from './sla-policies.js';
 import { ticketStatuses } from './ticket-statuses.js';
 import { tsvector } from './tsvector.js';
 import { users } from './users.js';
@@ -36,10 +38,10 @@ import { users } from './users.js';
  * what the rest of M1 hangs off, and a column added in a second migration is a
  * column every row already written has to be backfilled for.
  *
- * `sla_policy_id` is deliberately *not* here. Nothing in M1 reads it and,
- * unlike a contact, it is not something a ticket can be created with; M3-02
- * owns the clocks and adds it with them. The two `*_due_at` columns it fills
- * are here, because they are what a list renders.
+ * `sla_policy_id` arrived with M3-02's clocks: the policy the ticket's
+ * current clocks run under, written by the SLA engine and nothing else. The
+ * two `*_due_at` columns and `sla_breached` are the engine's summary of those
+ * clocks, kept here because they are what a list and a view filter on.
  */
 export const tickets = pgTable(
   'tickets',
@@ -130,7 +132,18 @@ export const tickets = pgTable(
      * same reason.
      */
     mergedMs: bigint('merged_ms', { mode: 'number' }).notNull().default(0),
-    /** Filled by the SLA engine in M3-02; the column is here so it need not backfill. */
+    /** M3-02. Null while no policy applies; `set null` so deleting a policy keeps the history. */
+    slaPolicyId: uuid('sla_policy_id').references((): AnyPgColumn => slaPolicies.id, {
+      onDelete: 'set null',
+    }),
+    /**
+     * M3-02. Which cycle of clocks is current: 0 until the first reopen, one
+     * more for each (DOMAIN-RULES §3.5). On the ticket rather than read off
+     * the clocks, because a reopen under no policy starts no clock and must
+     * still make the next one a next-response clock.
+     */
+    slaCycle: integer('sla_cycle').notNull().default(0),
+    /** Filled by the SLA engine in M3-02: the due time of the response clock while it runs. */
     firstResponseDueAt: timestamp('first_response_due_at', { withTimezone: true }),
     resolutionDueAt: timestamp('resolution_due_at', { withTimezone: true }),
     slaBreached: boolean('sla_breached').notNull().default(false),

@@ -174,7 +174,7 @@ Escalation steps already fired are not re-fired. Steps not yet fired are re-sche
 
 - Breach is recorded once per clock. Reports count a ticket as "first-response breached" or "resolution breached" independently.
 - Escalation steps are defined per policy as `{ at_percent, actions[] }`, `at_percent` may exceed 100 for post-breach steps. Actions: notify users/teams, reassign, raise priority, add tag, set status `escalated`.
-- Timers are BullMQ delayed jobs keyed `sla:<ticket_id>:<clock>:<step>`. Any status, priority, department, or policy change removes and re-adds them. On worker boot, `sla.rebuild` scans open tickets and re-creates missing timers (protects against Redis loss).
+- Timers are BullMQ delayed jobs keyed `sla:<ticket_id>:<clock>:<step>` (written with dots, `sla.<ticket_id>.<clock>.<step>`, because BullMQ refuses a colon in a custom job id). Any status, priority, department, or policy change removes and re-adds them. On worker boot, `sla.rebuild` scans open tickets and re-creates missing timers (protects against Redis loss).
 
 ### 3.5 Reopen
 
@@ -401,3 +401,4 @@ Technical gates alone do not show whether the product works for people. Tracked 
 | Date | Change |
 |---|---|
 | 2026-09-16 | Initial version, written to close the review findings on PRD 1.0. |
+| 2026-09-27 | §3.4: the timer key is spelled with dots, as BullMQ requires (M3-02). |

@@ -8,6 +8,8 @@ import type {
   Brand,
   BrandSettings,
   BrandUpdateRequest,
+  BusinessHoursOverview,
+  BusinessHoursUpdateRequest,
   CustomFieldCreateRequest,
   CustomFieldDef,
   CustomFieldDefList,
@@ -24,9 +26,15 @@ import type {
   EligibleMember,
   EligibleMemberList,
   FeedbackSettingsUpdateRequest,
+  Holiday,
+  HolidayCreateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
+  SlaPolicy,
+  SlaPolicyCreateRequest,
+  SlaPolicyList,
+  SlaSettingsUpdateRequest,
   SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
@@ -60,6 +68,7 @@ import {
   worksIn,
 } from './mock-assignment.js';
 import { MockBlockList } from './mock-block-list.js';
+import { MockSlaSettings } from './mock-sla.js';
 
 /**
  * The fixture the Ticketing settings run against until an install is in front
@@ -460,6 +469,8 @@ export class MockTicketingApi implements TicketingApi {
   /** M1-07. Keyed by department; then `${departmentId}:${userId}` for the per-agent rows. */
   #assignment = seedAssignmentSettings();
   #rotation = new Map<string, boolean>([[`${MOCK_SUPPORT_ID}:${MOCK_OMAR_ID}`, true]]);
+  /** M3-01 and M3-02: hours, holidays and policies. */
+  readonly #sla = new MockSlaSettings();
   #skills = new Map<string, string[]>([
     [`${MOCK_SUPPORT_ID}:${MOCK_YARA_ID}`, ['0192c3f0-1a2b-7c3d-8e4f-000000000101']],
   ]);
@@ -1375,6 +1386,68 @@ export class MockTicketingApi implements TicketingApi {
    */
   #fieldUsage(field: CustomFieldDef): { rows: number; optionRows: Record<string, number> } {
     return SEEDED_FIELD_USAGE[field.key] ?? { rows: 0, optionRows: {} };
+  }
+
+  // ---------------------------------------------------------------- M3-01
+
+  async businessHours(_brandId: string): Promise<BusinessHoursOverview> {
+    return this.#sla.overview(this.#departments);
+  }
+
+  async updateBusinessHours(
+    _brandId: string,
+    request: BusinessHoursUpdateRequest,
+  ): Promise<BusinessHoursOverview> {
+    this.#sla.updateHours(request);
+    this.#brand = { ...this.#brand, timezone: request.brand.timezone };
+
+    return this.#sla.overview(this.#departments);
+  }
+
+  async createHoliday(_brandId: string, request: HolidayCreateRequest): Promise<Holiday> {
+    return this.#sla.createHoliday(request);
+  }
+
+  async deleteHoliday(_brandId: string, holidayId: string): Promise<void> {
+    this.#sla.deleteHoliday(holidayId);
+  }
+
+  // ---------------------------------------------------------------- M3-02
+
+  async slaPolicies(_brandId: string): Promise<SlaPolicyList> {
+    return this.#sla.policies();
+  }
+
+  async createSlaPolicy(_brandId: string, request: SlaPolicyCreateRequest): Promise<SlaPolicy> {
+    return this.#sla.createPolicy(request);
+  }
+
+  async updateSlaPolicy(
+    _brandId: string,
+    policyId: string,
+    request: SlaPolicyCreateRequest,
+  ): Promise<SlaPolicy> {
+    return this.#sla.updatePolicy(policyId, request);
+  }
+
+  async deleteSlaPolicy(_brandId: string, policyId: string): Promise<void> {
+    this.#sla.deletePolicy(policyId);
+  }
+
+  async reorderSlaPolicies(_brandId: string, policyIds: string[]): Promise<SlaPolicyList> {
+    return this.#sla.reorder(policyIds);
+  }
+
+  async updateSlaSettings(
+    _brandId: string,
+    request: SlaSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    const changes = Object.fromEntries(
+      Object.entries(request).filter(([, value]) => value !== undefined),
+    );
+    this.#brand = { ...this.#brand, settings: { ...this.#brand.settings, ...changes } };
+
+    return this.#brand.settings;
   }
 
   #requireTemplate(templateId: string): TicketTemplate {

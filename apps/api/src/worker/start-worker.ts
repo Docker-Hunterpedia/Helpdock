@@ -17,6 +17,7 @@ import {
   RETENTION_CRON,
   type RelayStatusStore,
   registerEventHandler,
+  slaRebuildJob,
   startOutboxRelay,
 } from '@helpdock/jobs';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
@@ -55,6 +56,16 @@ import { createS3Client, S3ObjectStorage } from '../media/storage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
+import { BusinessHoursService } from '../sla/business-hours.service.js';
+import { businessHoursProbe } from '../sla/business-hours-probe.js';
+import { SlaRepository } from '../sla/sla.repository.js';
+import { SlaService } from '../sla/sla.service.js';
+import { bullTimerQueue } from '../sla/sla-timers.js';
+import {
+  createSlaProcessor,
+  registerSlaEventHandlers,
+  type SlaWorkerDeps,
+} from '../sla/sla-worker.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 
 /**
@@ -87,7 +98,12 @@ export interface WorkerDependencies {
    * a second registration of the same event — which is what a test starting
    * several workers in one process would do.
    */
-  registerHandlers(options: { redis: Redis; env: WorkerEnv; installSmtp: InstallSmtp }): Closable;
+  registerHandlers(options: {
+    redis: Redis;
+    env: WorkerEnv;
+    installSmtp: InstallSmtp;
+    log: JobLogger;
+  }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   /** M2-05's `email.send` consumer on the `outbound` queue. */
   createEmailWorker(options: {
@@ -112,6 +128,12 @@ export interface WorkerDependencies {
    * mailbox's scheduler is upserted on boot, as the retention schedule is.
    */
   createInboundWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
+  /**
+   * M3-02's `sla` consumer: the timers of DOMAIN-RULES §3.4 and `sla.rebuild`,
+   * which is added on every boot and hourly after, so a Redis that lost its
+   * timers gets every one of them back (§10).
+   */
+  createSlaWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -177,12 +199,31 @@ const assignmentReads = (redis: Redis) => {
   };
 };
 
+/** M3-01's calendar, for M2-06's out-of-hours reply. */
+const businessHoursService = (): BusinessHoursService => {
+  const repository = new SlaRepository();
+
+  return new BusinessHoursService(repository, new SlaService(repository));
+};
+
+/** What M3-02's handler and consumer read and write through. */
+const slaDeps = (queue: Queue): SlaWorkerDeps => {
+  const repository = new SlaRepository();
+
+  return {
+    repository,
+    sla: new SlaService(repository),
+    assignment: new AssignmentRepository(),
+    timers: bullTimerQueue(queue),
+  };
+};
+
 export const workerDependencies: WorkerDependencies = {
   createConnection: (url) => createQueueConnection(url),
   // The broadcast publishes on the same connection: a ticket event ends in a
   // socket frame, and only an `APP_ROLE=api` replica holds sockets
   // (`realtime/broadcast.ts`).
-  registerHandlers: ({ redis, env, installSmtp }) => {
+  registerHandlers: ({ redis, env, installSmtp, log }) => {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
@@ -227,8 +268,8 @@ export const workerDependencies: WorkerDependencies = {
 
     // M2-05 and M2-06. `email.send` ends in a job on the `outbound` queue, under
     // the same rule as the two above: `jobId` is the outbox row's, so a
-    // redelivered event adds nothing. `email.received` decides the auto-reply
-    // (business hours are M3's; until they are wired every hour is open).
+    // redelivered event adds nothing. `email.received` decides the auto-reply,
+    // reading M3-01's business hours for the out-of-hours one.
     const outbound = new Queue(QUEUE_NAMES.outbound, { connection: redis });
     const emailRepository = new EmailRepository();
     registerEmailEventHandlers({
@@ -240,6 +281,7 @@ export const workerDependencies: WorkerDependencies = {
       autoReplies: new AutoReplyService(
         emailRepository,
         new OutboundEmailService(emailRepository, installSmtp),
+        businessHoursProbe(businessHoursService()),
       ),
     });
     // M2-02. A mailbox created, edited or deleted reschedules its poller.
@@ -248,6 +290,11 @@ export const workerDependencies: WorkerDependencies = {
       MAILBOX_CHANGED_EVENT,
       createMailboxChangedHandler(new MailboxesRepository(), queuePollScheduler(inbound)),
     );
+    // M3-02. `sla.schedule` removes and re-adds a ticket's timers, the same
+    // shape as the two above. Registered last: it also stands in for M3-07's
+    // SLA consumers, and only where none is registered yet.
+    const sla = new Queue(QUEUE_NAMES.sla, { connection: redis });
+    registerSlaEventHandlers(slaDeps(sla), log);
 
     return {
       close: async () => {
@@ -255,6 +302,7 @@ export const workerDependencies: WorkerDependencies = {
         await assignment.close();
         await outbound.close();
         await inbound.close();
+        await sla.close();
       },
     };
   },
@@ -398,6 +446,47 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createSlaWorker: ({ redis, db, log }) => {
+    const queue = new Queue(QUEUE_NAMES.sla, { connection: redis });
+    const addRebuild = async (brandId: string | undefined, jobId: string): Promise<void> => {
+      await queue.add(slaRebuildJob.name, brandId === undefined ? {} : { brandId }, {
+        ...slaRebuildJob.options,
+        jobId,
+      });
+    };
+    // On boot, and hourly after: DOMAIN-RULES §3.4's "on worker boot,
+    // `sla.rebuild` scans open tickets and re-creates missing timers". The
+    // hourly tick also catches a timer lost to a race between a timer running
+    // and its clock being rescheduled.
+    addRebuild(undefined, `${slaRebuildJob.name}.boot.${String(Date.now())}`).catch(
+      (error: unknown) => log.error({ err: error }, 'could not add the boot SLA rebuild'),
+    );
+    queue
+      .upsertJobScheduler(
+        slaRebuildJob.name,
+        { every: 3_600_000 },
+        { name: slaRebuildJob.name, data: {}, opts: slaRebuildJob.options },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the hourly SLA rebuild'),
+      );
+
+    const worker = new Worker(
+      QUEUE_NAMES.sla,
+      createSlaProcessor({ db, deps: slaDeps(queue), log, addRebuild }),
+      { connection: redis, concurrency: 5 },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'sla job failed'),
+    );
+
+    return {
+      close: async () => {
+        await worker.close();
+        await queue.close();
+      },
+    };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -426,13 +515,14 @@ export const startWorker = ({
   const installSmtp = settings === undefined ? NO_INSTALL_SMTP : new SettingsInstallSmtp(settings);
   const connection = deps.createConnection(env.REDIS_URL);
   // Before either worker exists, for the reason at the top of this file.
-  const producers = deps.registerHandlers({ redis: connection, env, installSmtp });
+  const producers = deps.registerHandlers({ redis: connection, env, installSmtp, log });
   const worker = deps.createEventWorker({ redis: connection, db, log });
   const email = deps.createEmailWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
+  const sla = deps.createSlaWorker({ redis: connection, db, log });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -459,6 +549,7 @@ export const startWorker = ({
     await assignment.close();
     await maintenance.close();
     await inbound.close();
+    await sla.close();
     await producers.close();
     await connection.quit();
   };

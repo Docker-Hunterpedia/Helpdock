@@ -588,6 +588,8 @@ export function TicketView({
       }}
       now={now}
       busy={update.isPending}
+      sla={detail.data?.sla}
+      canConfigure={role === 'admin' || role === 'teamLeader'}
       cards={cards}
       brandTags={directory.tags}
       customFields={ticketFieldsFor(

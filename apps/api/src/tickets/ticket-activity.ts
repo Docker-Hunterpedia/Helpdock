@@ -52,7 +52,13 @@ export type TicketActivityAction =
    */
   | 'ticket.merged'
   | 'ticket.unmerged'
-  | 'ticket.split';
+  | 'ticket.split'
+  /**
+   * M3-02. A clock breached — `to.cause` is `timer` or `change` (§3.3) — and an
+   * escalation step ran (`to.percent`). Both name the clock in `to.clock`.
+   */
+  | 'ticket.sla.breached'
+  | 'ticket.sla.step';
 
 /**
  * The actor behind a change, in the three words the activity log records.

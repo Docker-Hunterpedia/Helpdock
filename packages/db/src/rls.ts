@@ -113,6 +113,14 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // M2-02, M2-03. Configuration, not a child of a ticket.
   { name: 'mailboxes', departmentScoped: false },
   { name: 'inbound_parse_settings', departmentScoped: false },
+  // M3-01 and M3-02. Hours, holidays and policies are configuration, the same
+  // for every reader in the brand, like `teams`: which department a Team
+  // Leader may edit is a service rule. A ticket's clocks are the ticket's, so
+  // they follow its department by the same triggers as its other children.
+  { name: 'business_hours', departmentScoped: false },
+  { name: 'holidays', departmentScoped: false },
+  { name: 'sla_policies', departmentScoped: false },
+  { name: 'ticket_sla_clocks', departmentScoped: true },
 ];
 
 /**

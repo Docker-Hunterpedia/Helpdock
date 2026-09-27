@@ -247,6 +247,14 @@ The artboard's "Open the rating page as a customer sees it" preview link is not
 drawn: there is no survey to open until a ticket closes, and a preview needs a
 page of its own.
 
+## Business hours and SLAs
+
+The Business hours tab (M3-01) and the SLAs tab (M3-02) have a guide of their
+own, with the clocks they drive: [Business hours and SLAs](slas.md). Both
+are `ticketing:manage`; the brand's own hours, zone, brand-wide holidays and
+the order of the policies are the Admin's, and a Team Leader works inside the
+departments they lead.
+
 ## Tags
 
 A tag is a label an agent puts on a ticket to find it again. The list is the
@@ -729,6 +737,7 @@ there as well as in the brand it creates.
 | `PATCH/DELETE /api/brands/:brandId/views/:viewId` | `@Requires('ticket:read')` | The owner's own view; a shared one as for `POST`. Built-in views are renamed and hidden only. |
 | `POST /api/brands/:brandId/views/reorder` | `@Requires('ticket:read')` | Some shared views, or some of the reader's own, in a new order. |
 | `GET …/assignment/:departmentId/assignable` | `@Requires('ticket:write')` | The assignee picker: id, name, presence and open count, plus the cap. 404 for a department outside the actor's scope. |
+| `/api/brands/:brandId/{business-hours,holidays,sla-policies}*`, `PATCH …/ticketing/sla-settings` | `@Requires('ticketing:manage')` | M3-01 and M3-02. [The SLA guide](slas.md#endpoints) lists them. |
 
 ### Refusals
 

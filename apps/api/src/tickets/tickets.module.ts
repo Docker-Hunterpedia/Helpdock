@@ -2,7 +2,6 @@ import type { Settings } from '@helpdock/config';
 import { type DynamicModule, Module } from '@nestjs/common';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { CsatService } from '../csat/csat.service.js';
-import { CsatLifecycleHooks } from '../csat/csat-hooks.js';
 import { EmailRepository } from '../email/email.repository.js';
 import { EmailReplyHook } from '../email/email-reply.hook.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
@@ -12,6 +11,8 @@ import { ParticipantsMergeHook } from '../participants/merge-participants.hook.j
 import { ParticipantsRepository } from '../participants/participants.repository.js';
 import { TicketParticipantsService } from '../participants/ticket-participants.service.js';
 import { SETTINGS } from '../runtime/tokens.js';
+import { SlaService } from '../sla/sla.service.js';
+import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
 import { BlockListService } from '../ticketing/block-list.service.js';
 import { TagsService } from '../ticketing/tags.service.js';
 import { TemplatesService } from '../ticketing/templates.service.js';
@@ -60,15 +61,17 @@ export interface TicketsModuleOptions {
   readonly ticketing: DynamicModule;
   /** `CsatModule.forRoot()` (M1-12), built once and imported twice for the same reason. */
   readonly csat: DynamicModule;
+  /** `SlaModule.forRoot()` (M3-02), for the same reason again: it exports the engine. */
+  readonly sla: DynamicModule;
 }
 
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class TicketsModule {
-  static forRoot({ ticketing, csat }: TicketsModuleOptions): DynamicModule {
+  static forRoot({ ticketing, csat, sla }: TicketsModuleOptions): DynamicModule {
     return {
       module: TicketsModule,
-      imports: [ticketing, csat],
+      imports: [ticketing, csat, sla],
       controllers: [
         TicketsController,
         TicketingSettingsController,
@@ -91,6 +94,7 @@ export class TicketsModule {
             CsatService,
             TimeEntriesService,
             ReplyDeliveryHook,
+            SlaService,
           ],
           useFactory: (
             tickets: TicketRepository,
@@ -103,6 +107,7 @@ export class TicketsModule {
             csatSummary: CsatService,
             timeEntries: TimeEntriesService,
             replyDelivery: ReplyDeliveryHook,
+            sla: SlaService,
           ): TicketsService =>
             new TicketsService(
               tickets,
@@ -114,6 +119,7 @@ export class TicketsModule {
               assignment,
               csatSummary,
               timeEntries,
+              sla,
               replyDelivery,
             ),
         },
@@ -132,8 +138,9 @@ export class TicketsModule {
         // M1-08. `TicketLifecycleHooks` is a provider rather than a registry so
         // that M3-02's clocks and M1-12's survey replace one line here instead
         // of editing the service that calls them (`lifecycle/hooks.ts`). This is
-        // M1-12's line: the survey hook, which inherits the other two.
-        { provide: TicketLifecycleHooks, useClass: CsatLifecycleHooks },
+        // M3-02's line: the SLA hooks, which extend M1-12's survey hooks. Their
+        // `SlaService` comes from `SlaModule`.
+        { provide: TicketLifecycleHooks, useClass: SlaLifecycleHooks },
         TicketLifecycleRepository,
         TicketLifecycleService,
         TicketingSettingsService,

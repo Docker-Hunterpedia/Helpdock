@@ -44,6 +44,7 @@ import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
 import { uploaderFor } from '../media/uploader.js';
+import type { SlaService } from '../sla/sla.service.js';
 // M1-06 lives in `ticketing/`; these five are what a ticket needs of it.
 import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
 import type { TagsService } from '../ticketing/tags.service.js';
@@ -126,6 +127,8 @@ export class TicketsService {
   readonly #timeEntries: TimeEntriesService;
   /** M2-05: carries a public reply to the customer on the ticket's channel. */
   readonly #replyDelivery: ReplyDeliveryHook;
+  /** M3-02: the SLA card on a ticket read and the SlaTimer on every list row. */
+  readonly #sla: SlaService;
 
   constructor(
     tickets: TicketRepository,
@@ -137,6 +140,7 @@ export class TicketsService {
     assignment: AssignmentRepository,
     csat: CsatService,
     timeEntries: TimeEntriesService,
+    sla: SlaService,
     replyDelivery: ReplyDeliveryHook = new ReplyDeliveryHook(),
   ) {
     this.#replyDelivery = replyDelivery;
@@ -149,6 +153,7 @@ export class TicketsService {
     this.#assignment = assignment;
     this.#csat = csat;
     this.#timeEntries = timeEntries;
+    this.#sla = sla;
   }
 
   // -------------------------------------------------------------------- reads
@@ -187,6 +192,13 @@ export class TicketsService {
           page.flatMap(({ ticket }) => (ticket.contactId === null ? [] : [ticket.contactId])),
         )
       : undefined;
+    // M3-02: one read of the clocks for the whole page, for the same reason.
+    const sla = await this.#sla.summaries(
+      tx,
+      reader.brandId,
+      page.map(({ ticket }) => ticket),
+      new Date(),
+    );
 
     return {
       tickets: page.map(({ ticket, status }) =>
@@ -195,6 +207,7 @@ export class TicketsService {
           status,
           tags.get(ticket.id) ?? [],
           contactNames === undefined ? undefined : ticketContactOf(ticket.contactId, contactNames),
+          sla.get(ticket.id) ?? null,
         ),
       ),
       nextCursor:
@@ -224,8 +237,20 @@ export class TicketsService {
         )
       : undefined;
 
+    const now = new Date();
+    const sla = await this.#sla.view(tx, found.ticket.brandId, found.ticket, now);
+    const summary = (await this.#sla.summaries(tx, found.ticket.brandId, [found.ticket], now)).get(
+      ticketId,
+    );
+
     return {
-      ticket: toTicket(found.ticket, found.status, await tagsOfTicket(tx, ticketId), contact),
+      ticket: toTicket(
+        found.ticket,
+        found.status,
+        await tagsOfTicket(tx, ticketId),
+        contact,
+        summary ?? null,
+      ),
       // `#messagePage` rather than `messages`, which would re-run the ticket
       // read this method has already done.
       messages: await this.#messagePage(tx, ticketId, {
@@ -234,6 +259,7 @@ export class TicketsService {
       }),
       activity: await this.#activityOf(tx, ticketId),
       csat: await this.#csat.forTicket(tx, found.ticket.brandId, ticketId),
+      sla,
       // M1-09: what was merged into this ticket, where it was merged to, and
       // what a split joined to it (DOMAIN-RULES §2.4).
       ...(await readMergeView(tx, found.ticket, new Date(), this.#attachments)),
@@ -354,6 +380,10 @@ export class TicketsService {
       },
     });
 
+    // M3-02: the clocks start from the moment the ticket was filed (§3.1).
+    await this.#lifecycle.onCreated({ tx, brandId, actor, now: ticket.createdAt }, ticket, status);
+    const filed = (await this.#tickets.findTicket(tx, ticket.id))?.ticket ?? ticket;
+
     await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.created, {
       ticketId: ticket.id,
       departmentId: ticket.departmentId,
@@ -363,7 +393,7 @@ export class TicketsService {
     await this.#routeIfUnassigned(tx, brandId, ticket.id, ticket.departmentId, ticket.assigneeId);
 
     return {
-      ticket: toTicket(ticket, status, await tagsOfTicket(tx, ticket.id)),
+      ticket: toTicket(filed, status, await tagsOfTicket(tx, ticket.id)),
       messages: { messages: [toTicketMessage(message)], nextAfter: null },
       activity: await this.#activityOf(tx, ticket.id),
     };
@@ -504,8 +534,19 @@ export class TicketsService {
       const moveStatus =
         statusResult?.changed === true ? await this.#requireStatus(tx, moved.statusId) : status;
       await this.#afterStatusChange(context, moved, status, moveStatus, statusResult);
+      // M3-02, inside the window for the same reason: the clocks are the
+      // ticket's children and follow it into the new department.
+      await this.#lifecycle.onChanged(
+        context,
+        moved,
+        moveStatus,
+        moved.departmentId === ticket.departmentId ? undefined : ticket.departmentId,
+      );
 
-      return { ticket: moved, status: moveStatus };
+      return {
+        ticket: (await this.#tickets.findTicket(tx, ticketId))?.ticket ?? moved,
+        status: moveStatus,
+      };
     };
 
     const { ticket: updated, status: nextStatus } =
@@ -676,6 +717,9 @@ export class TicketsService {
     // means and a status moved before the message existed would be a lie if the
     // insert then failed.
     if (input.kind === 'public' && authorType === 'staff') {
+      // M3-02: the reply meets the response clock (§3.1) before the status
+      // moves, so the clock ends at the reply rather than at a pause.
+      await this.#lifecycle.onResponded(context, target, landing.status);
       await this.#lifecycle.onAgentPublicReply(context, target, landing.status);
       // M2-05. In this transaction, so the email is queued with the reply or
       // not at all.

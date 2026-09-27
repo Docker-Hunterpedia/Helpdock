@@ -8,6 +8,8 @@ import type {
   Brand,
   BrandSettings,
   BrandUpdateRequest,
+  BusinessHoursOverview,
+  BusinessHoursUpdateRequest,
   CustomFieldCreateRequest,
   CustomFieldDef,
   CustomFieldDefList,
@@ -23,9 +25,15 @@ import type {
   DepartmentUpdateRequest,
   EligibleMemberList,
   FeedbackSettingsUpdateRequest,
+  Holiday,
+  HolidayCreateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
+  SlaPolicy,
+  SlaPolicyCreateRequest,
+  SlaPolicyList,
+  SlaSettingsUpdateRequest,
   SpamSettingsUpdateRequest,
   TagCreateRequest,
   TagList,
@@ -51,6 +59,7 @@ import {
   blockedSenderSchema,
   brandSchema,
   brandSettingsSchema,
+  businessHoursOverviewSchema,
   customFieldDefListSchema,
   customFieldDefSchema,
   customFieldUsageSchema,
@@ -59,7 +68,10 @@ import {
   departmentSummaryListSchema,
   departmentSummarySchema,
   eligibleMemberListSchema,
+  holidaySchema,
   retentionOverviewSchema,
+  slaPolicyListSchema,
+  slaPolicySchema,
   tagListSchema,
   tagSummarySchema,
   tagUsageSchema,
@@ -522,6 +534,92 @@ export class HttpTicketingApi implements TicketingApi {
         request,
       ),
     );
+  }
+
+  // ---------------------------------------------------------------- M3-01
+
+  async businessHours(brandId: string): Promise<BusinessHoursOverview> {
+    return businessHoursOverviewSchema.parse(
+      await this.#transport.request('GET', `${this.#brand(brandId)}/business-hours`),
+    );
+  }
+
+  async updateBusinessHours(
+    brandId: string,
+    request: BusinessHoursUpdateRequest,
+  ): Promise<BusinessHoursOverview> {
+    return businessHoursOverviewSchema.parse(
+      await this.#transport.request('PUT', `${this.#brand(brandId)}/business-hours`, request),
+    );
+  }
+
+  async createHoliday(brandId: string, request: HolidayCreateRequest): Promise<Holiday> {
+    return holidaySchema.parse(
+      await this.#transport.request('POST', `${this.#brand(brandId)}/holidays`, request),
+    );
+  }
+
+  async deleteHoliday(brandId: string, holidayId: string): Promise<void> {
+    await this.#transport.request(
+      'DELETE',
+      `${this.#brand(brandId)}/holidays/${encodeURIComponent(holidayId)}`,
+    );
+  }
+
+  // ---------------------------------------------------------------- M3-02
+
+  async slaPolicies(brandId: string): Promise<SlaPolicyList> {
+    return slaPolicyListSchema.parse(await this.#transport.request('GET', this.#policies(brandId)));
+  }
+
+  async createSlaPolicy(brandId: string, request: SlaPolicyCreateRequest): Promise<SlaPolicy> {
+    return slaPolicySchema.parse(
+      await this.#transport.request('POST', this.#policies(brandId), request),
+    );
+  }
+
+  async updateSlaPolicy(
+    brandId: string,
+    policyId: string,
+    request: SlaPolicyCreateRequest,
+  ): Promise<SlaPolicy> {
+    return slaPolicySchema.parse(
+      await this.#transport.request(
+        'PUT',
+        `${this.#policies(brandId)}/${encodeURIComponent(policyId)}`,
+        request,
+      ),
+    );
+  }
+
+  async deleteSlaPolicy(brandId: string, policyId: string): Promise<void> {
+    await this.#transport.request(
+      'DELETE',
+      `${this.#policies(brandId)}/${encodeURIComponent(policyId)}`,
+    );
+  }
+
+  async reorderSlaPolicies(brandId: string, policyIds: string[]): Promise<SlaPolicyList> {
+    return slaPolicyListSchema.parse(
+      await this.#transport.request('POST', `${this.#policies(brandId)}/reorder`, { policyIds }),
+    );
+  }
+
+  async updateSlaSettings(
+    brandId: string,
+    request: SlaSettingsUpdateRequest,
+  ): Promise<BrandSettings> {
+    return brandSettingsSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#brand(brandId)}/ticketing/sla-settings`,
+        request,
+      ),
+    );
+  }
+
+  #policies(brandId: string): string {
+    return `${this.#brand(brandId)}/sla-policies`;
   }
 
   #assignment(brandId: string): string {

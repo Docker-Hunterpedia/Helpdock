@@ -5,6 +5,8 @@ import {
   type HcCategory,
   type HcCategoryCreateRequest,
   type HcCategoryUpdateRequest,
+  type HcInsights,
+  type HcInsightsQuery,
   type HcLocale,
   type HcMedia,
   type HcMediaPresignRequest,
@@ -20,6 +22,7 @@ import {
   type HcVisibility,
   hcArticleSchema,
   hcCategorySchema,
+  hcInsightsSchema,
   hcMediaPresignResponseSchema,
   hcMediaSchema,
   hcSectionSchema,
@@ -186,5 +189,13 @@ export class HttpHelpCenterApi implements HelpCenterApi {
 
   image(brandId: string, mediaId: string): Promise<HcMedia> {
     return this.#call(hcMediaSchema, 'GET', brandId, `/media/${mediaId}`);
+  }
+
+  insights(brandId: string, query: HcInsightsQuery): Promise<HcInsights> {
+    const params = new URLSearchParams({ days: String(query.days), sort: query.sort });
+    if (query.locale !== undefined) {
+      params.set('locale', query.locale);
+    }
+    return this.#call(hcInsightsSchema, 'GET', brandId, `/insights?${params.toString()}`);
   }
 }

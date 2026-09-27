@@ -325,6 +325,10 @@ export const describeEvent = (
   if (entry.action === 'ticket.macro_applied') {
     return `${t('macros:event.applied', { actor, name: String(entry.to?.macroName ?? '') })} · ${at}`;
   }
+  // M5-08: "Still need help?" from a help center article.
+  if (entry.action === 'ticket.source_article') {
+    return `${t('tickets:event.sourceArticle', { title: String(entry.to?.title ?? '') })} · ${at}`;
+  }
 
   const sentence = (): string => {
     if (entry.action === 'ticket.status.changed' || 'status' in moved) {

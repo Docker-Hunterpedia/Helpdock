@@ -105,6 +105,7 @@ export function ContactForm() {
         fields,
         attachment_ids: uploaded.map((attachment) => attachment.id),
         ...(token ? { captcha_token: token } : {}),
+        ...(controller.articleId ? { article_id: controller.articleId } : {}),
       });
       setSent({ ref: result.ticket_ref, email: email.trim() });
       requestAnimationFrame(() => another.current?.focus());

@@ -11,6 +11,8 @@ A page where customers write to a brand without chat: every submission opens a t
 
 **Channels › Web form** shows the address to copy or open. On a help center host, `/contact` is that brand's form and `/contact/<another brand>` is a 404: one brand's domain never serves another's form. `?lang=en` or `?lang=ar` picks the page's language; otherwise it is the brand's default. The page links to the other language.
 
+`?article=<article id>` is "Still need help?" from a help center article (M5-08): the form carries the id in a hidden field, and the ticket's thread tells the agents which article the customer came from. It is recorded only for a published, public article of the brand; any other value is dropped, never refused.
+
 The page is plain HTML with no script of its own, so it works with JavaScript off. Its CSP allows nothing but its own style, the self-hosted fonts at `/_hd/fonts/`, and — only while CAPTCHA is on — the provider's script and frame.
 
 ## Channels › Web form

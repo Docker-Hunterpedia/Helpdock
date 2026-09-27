@@ -61,6 +61,7 @@ describe('retentionCutoffs', () => {
 
     expect(cutoffs.closedTickets?.toISOString()).toBe('2026-09-14T03:00:00.000Z');
     expect(cutoffs.spamTickets.toISOString()).toBe('2026-08-25T03:00:00.000Z');
+    expect(cutoffs.searchLog.toISOString()).toBe('2026-03-28T03:00:00.000Z');
     expect(cutoffs.auditLog.toISOString()).toBe('2024-09-24T03:00:00.000Z');
   });
 

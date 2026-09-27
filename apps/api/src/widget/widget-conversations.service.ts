@@ -21,6 +21,7 @@ import { routesAutomatically } from '../assignment/ticket-assignment.js';
 import type { CaptchaVerifier } from '../captcha/captcha-keys.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
 import { attachUnverifiedIdentity, findOrCreateContactByIdentity } from '../contacts/identity.js';
+import { recordHandoff } from '../help-center/feedback/handoff.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
@@ -253,6 +254,8 @@ export class WidgetConversationsService {
         action: 'ticket.created',
         to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
       });
+      // M5-08: "Still need help?" from a help center article.
+      await recordHandoff(tx, { brandId, ticket, actor, articleId: body.articleId, locale });
       // M3-02: the clocks start when the conversation opens, as for any ticket.
       await this.#deps.lifecycle.onCreated({ ...context, now: ticket.createdAt }, ticket, status);
       await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.created, {

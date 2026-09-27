@@ -543,16 +543,117 @@ describe('the remote transport', () => {
     expect(api.calls.filter((call) => call.path.endsWith('/attachments'))).toHaveLength(1);
   });
 
-  it('lists the popular articles it was configured with, and has no article reads before M5-10', async () => {
+  it('carries "Still need help?"’s article on the start (M5-08)', async () => {
+    const api = fakeApi({
+      'POST /conversations': () => ({ conversation: conversation(), message: null }),
+    });
     const transport = createRemoteTransport({
       apiOrigin: API,
       brand: BRAND,
-      storage: memoryStore(),
-      fetch: fakeApi({}).fetch,
+      storage: memoryStore({ [secretKeyFor(BRAND)]: SECRET }),
+      fetch: api.fetch,
       network: null,
     });
 
-    await expect(transport.searchArticles('refund', 'en')).resolves.toEqual([]);
-    await expect(transport.getArticle('a1', 'en')).rejects.toMatchObject({ code: 'not_found' });
+    await transport.startConversation({ article_id: ARTICLE });
+
+    expect(api.calls[0]?.body).toMatchObject({ articleId: ARTICLE });
+  });
+});
+
+const ARTICLE = '0192c3f0-1a2b-7c3d-8e4f-0000000000a1';
+const SEARCH = '0192c3f0-1a2b-7c3d-8e4f-0000000000a9';
+
+const hit = (id: string) => ({
+  id,
+  title: 'Refund timelines',
+  excerpt: 'Card refunds land in 3–5 days',
+  section: 'Refunds',
+  url: null,
+});
+
+describe('the help center over the remote transport (M5-10)', () => {
+  const articleTransport = () => {
+    const api = fakeApi({
+      'GET /articles': (_body, url) => ({
+        articles: [hit(ARTICLE)],
+        searchId: url.searchParams.get('purpose') === 'suggest' ? null : SEARCH,
+      }),
+      [`GET /articles/${ARTICLE}`]: () => ({
+        ...hit(ARTICLE),
+        locale: 'ar',
+        updatedAt: '2026-09-12T10:00:00.000Z',
+        readingMinutes: 2,
+        bodyHtml: '<p>We issue your refund…</p>',
+      }),
+    });
+    const transport = createRemoteTransport({
+      apiOrigin: API,
+      brand: BRAND,
+      storage: memoryStore({ [secretKeyFor(BRAND)]: SECRET }),
+      fetch: api.fetch,
+      network: null,
+    });
+    return { api, transport };
+  };
+  const urlOf = (api: ReturnType<typeof fakeApi>, index: number) =>
+    new URL(api.fetch.mock.calls[index]?.[0] ?? '');
+
+  it('searches the api, as the visitor, in the widget’s language', async () => {
+    const { api, transport } = articleTransport();
+
+    await expect(transport.searchArticles('refund & fees', 'ar')).resolves.toEqual([hit(ARTICLE)]);
+
+    const url = urlOf(api, 0);
+    expect(url.pathname).toBe(`/api/widget/${BRAND}/articles`);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: 'refund & fees',
+      locale: 'ar',
+      purpose: 'search',
+    });
+    expect(api.calls[0]?.auth).toBe(`Visitor ${SECRET}`);
+  });
+
+  it('asks for suggestions without logging them', async () => {
+    const { api, transport } = articleTransport();
+
+    await transport.suggestArticles('my refund has not arrived', 'en');
+
+    expect(urlOf(api, 0).searchParams.get('purpose')).toBe('suggest');
+  });
+
+  it('reads an article into the UI’s shape, naming the search it came from', async () => {
+    const { api, transport } = articleTransport();
+    await transport.searchArticles('refund', 'en');
+
+    const article = await transport.getArticle(ARTICLE, 'en');
+
+    expect(article).toEqual({
+      ...hit(ARTICLE),
+      updated_at: '2026-09-12T10:00:00.000Z',
+      reading_minutes: 2,
+      body_html: '<p>We issue your refund…</p>',
+    });
+    expect(Object.fromEntries(urlOf(api, 1).searchParams)).toEqual({
+      locale: 'en',
+      searchId: SEARCH,
+    });
+  });
+
+  it('names no search for an article that was not one of its hits', async () => {
+    const { api, transport } = articleTransport();
+    await transport.suggestArticles('refund', 'en');
+
+    await transport.getArticle(ARTICLE, 'en');
+
+    expect(urlOf(api, 1).searchParams.has('searchId')).toBe(false);
+  });
+
+  it('turns a refused article into not_found', async () => {
+    const { transport } = articleTransport();
+
+    await expect(
+      transport.getArticle('0192c3f0-1a2b-7c3d-8e4f-0000000000ff', 'en'),
+    ).rejects.toMatchObject({ code: 'not_found' });
   });
 });

@@ -63,7 +63,13 @@ export type TicketActivityAction =
    * M3-06. One entry for everything a macro changed, with `to.macroId` and
    * `to.macroName` saying which, and `to.messageId` the reply it ran with.
    */
-  | 'ticket.macro_applied';
+  | 'ticket.macro_applied'
+  /**
+   * M5-08. The help center article a widget conversation or a web form ticket
+   * was opened from ("Still need help?"): `to.articleId`, `to.title`,
+   * `to.locale`. Written once, when the ticket is created.
+   */
+  | 'ticket.source_article';
 
 /**
  * The actor behind a change, in the three words the activity log records.

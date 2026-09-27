@@ -49,6 +49,7 @@ the page defines first. The widget replays it in order when it loads:
 |---|---|
 | `Helpdock('identify', payload)` | Signed identity (M4-02, [DOMAIN-RULES §4.2](../../docs/planning/DOMAIN-RULES.md#42-signed-identity)). `payload` is `{ user_id, email?, name?, ts, signature }`, where `signature` is `HMAC-SHA256(brand_widget_secret, canonical_json)` computed **on your server**; never put the secret in the page. The widget forwards the payload untouched and restarts its session under it. An invalid signature leaves the visitor anonymous. |
 | `Helpdock('open')` | Opens the window. |
+| `Helpdock('open', { article: '<article id>' })` | Opens it from a help center article's "Still need help?" (M5-08). The next conversation or contact form the visitor sends names that article, and the agents see it in the ticket's thread. The api records it only for a published public article of the brand. |
 | `Helpdock('close')` | Minimises it. |
 
 ### Content security policy
@@ -90,9 +91,13 @@ with the original message. `subscribe` delivers `message` and `receipt` events
 (ephemeral, never replayed). The visitor credential of DOMAIN-RULES §4.1 is the
 transport's own business and never reaches the UI.
 
-Until M5-10 the help center modes list the brand's popular articles from the
-config and `searchArticles` filters them; M5-10 swaps in help center search
-behind the same method.
+The help center modes (M5-10) list the brand's popular public articles from
+the config, search with `searchArticles` (logged for Help center › Insights)
+and open an article with `getArticle` (which counts a view, and names the
+search it came from). The chat composer's "Articles that might help" strip in
+`chat_articles` mode calls `suggestArticles`, the same search unlogged, 400 ms
+after the visitor stops typing. An article with no help center address
+(`url: null`, a brand with no help center domain yet) opens in the window only.
 
 ### Size budget
 

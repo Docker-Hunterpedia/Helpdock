@@ -19,6 +19,7 @@ export * from './email-deliveries.js';
 export * from './email-outbound-settings.js';
 export * from './enums.js';
 export * from './help-center.js';
+export * from './help-center-search.js';
 export * from './job-receipts.js';
 export * from './mailboxes.js';
 export * from './notifications.js';

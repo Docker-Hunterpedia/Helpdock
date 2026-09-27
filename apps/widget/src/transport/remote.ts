@@ -1,5 +1,6 @@
 import type {
   AttachmentPresignResponse,
+  WidgetArticleSearch,
   WidgetConversationEvent,
   WidgetConversationList,
   WidgetEnvelope,
@@ -10,6 +11,7 @@ import type {
   WidgetSession,
   WidgetStartResponse,
   WidgetTyping,
+  WidgetArticle as WireArticle,
   WidgetAttachment as WireAttachment,
   WidgetAvailability as WireAvailability,
   WidgetConfig as WireConfig,
@@ -22,6 +24,7 @@ import { type FetchLike, HttpClient } from './http.js';
 import {
   agentOf,
   statusOf,
+  toArticle,
   toAvailability,
   toConfig,
   toConversation,
@@ -30,18 +33,16 @@ import {
 } from './map.js';
 import { EVENTS, NAMESPACE, PAGE_MAX, SOCKET_PATH } from './protocol.js';
 import { openSseStream, type SseFrame } from './sse.js';
-import {
-  type ArticleSummary,
-  type Attachment,
-  type AttachmentKind,
-  type ConnectionState,
-  type ConversationStatus,
-  type ConversationSummary,
-  type StartConversationInput,
-  type Subscription,
-  TransportError,
-  type WidgetEvent,
-  type WidgetTransport,
+import type {
+  Attachment,
+  AttachmentKind,
+  ConnectionState,
+  ConversationStatus,
+  ConversationSummary,
+  StartConversationInput,
+  Subscription,
+  WidgetEvent,
+  WidgetTransport,
 } from './types.js';
 
 /**
@@ -162,7 +163,8 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
 
   let brandName = '';
   let availability: WireAvailability | null = null;
-  let articles: readonly ArticleSummary[] = [];
+  /** The last search's log row and its hits, sent back when the visitor opens one of them. */
+  let lastSearch: { readonly id: string; readonly articleIds: ReadonlySet<string> } | null = null;
   let current: Current | null = null;
   let listener: Subscription | null = null;
   let socket: LiveSocket | null = null;
@@ -395,9 +397,19 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       clientId,
       ...(Object.keys(prechat).length === 0 ? {} : { prechat }),
       ...(input.captcha_token === undefined ? {} : { captchaToken: input.captcha_token }),
+      ...(input.article_id === undefined ? {} : { articleId: input.article_id }),
     });
     return response.conversation;
   };
+
+  const findArticles = async (
+    query: string,
+    locale: string,
+    purpose: 'search' | 'suggest',
+  ): Promise<WidgetArticleSearch> =>
+    http.get<WidgetArticleSearch>(
+      `/articles?q=${encodeURIComponent(query)}&locale=${locale}&purpose=${purpose}`,
+    );
 
   /** Presign, PUT and confirm (ARCHITECTURE §9), once per held file and conversation. */
   const upload = async (conversationId: string, id: string): Promise<string> => {
@@ -453,7 +465,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       const config = await http.get<WireConfig>(`/config?locale=${locale}`);
       brandName = config.brandName;
       availability = config.availability;
-      articles = config.popularArticles;
+
       return toConfig(config);
     },
 
@@ -598,23 +610,32 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
         email: input.email,
         fields: input.fields,
         ...(input.captcha_token === undefined ? {} : { captcha_token: input.captcha_token }),
+        ...(input.article_id === undefined ? {} : { article_id: input.article_id }),
       });
       await send(conversation.id, form.message, input.message, input.attachment_ids);
       pendingForm = null;
       return { ticket_ref: conversation.reference };
     },
 
-    async searchArticles(query) {
-      const needle = query.trim().toLowerCase();
-      return articles.filter((article) =>
-        `${article.title} ${article.excerpt}`.toLowerCase().includes(needle),
-      );
+    async searchArticles(query, locale) {
+      const found = await findArticles(query, locale, 'search');
+      lastSearch =
+        found.searchId === null
+          ? null
+          : { id: found.searchId, articleIds: new Set(found.articles.map(({ id }) => id)) };
+      return found.articles;
     },
 
-    async getArticle() {
-      // The help center's article reads arrive with M5-10; until then the
-      // widget lists articles and opens them on the help center.
-      throw new TransportError('not_found');
+    async suggestArticles(query, locale) {
+      return (await findArticles(query, locale, 'suggest')).articles;
+    },
+
+    async getArticle(id, locale) {
+      const searchId = lastSearch?.articleIds.has(id) ? lastSearch.id : null;
+      const article = await http.get<WireArticle>(
+        `/articles/${encodeURIComponent(id)}?locale=${locale}${searchId === null ? '' : `&searchId=${searchId}`}`,
+      );
+      return toArticle(article);
     },
   };
 }

@@ -2,6 +2,7 @@ import {
   attachments,
   auditLog,
   type DbTransaction,
+  hcSearchLog,
   type RetentionSettingsRow,
   retentionSettings,
   ticketStatuses,
@@ -185,6 +186,56 @@ export class RetentionRepository {
       .delete(tickets)
       .where(inArray(tickets.id, [...ticketIds]))
       .returning({ id: tickets.id });
+
+    return rows.length;
+  }
+
+  /** M5-05: the help center search log, older than the cutoff. */
+  async countSearchLog(tx: DbTransaction, brandId: string, cutoff: Date): Promise<number> {
+    const [row] = await tx
+      .select({ total: count() })
+      .from(hcSearchLog)
+      .where(and(eq(hcSearchLog.brandId, brandId), lt(hcSearchLog.createdAt, cutoff)));
+
+    return row?.total ?? 0;
+  }
+
+  async purgeSearchLogBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = tx
+      .select({ id: hcSearchLog.id })
+      .from(hcSearchLog)
+      .where(and(eq(hcSearchLog.brandId, brandId), lt(hcSearchLog.createdAt, cutoff)))
+      .limit(limit);
+    const rows = await tx
+      .delete(hcSearchLog)
+      .where(inArray(hcSearchLog.id, batch))
+      .returning({ id: hcSearchLog.id });
+
+    return rows.length;
+  }
+
+  /**
+   * M5-08: article view rows of days before the cutoff's, under the search
+   * log's window. One statement a batch: a day's rows for a brand are few.
+   */
+  async purgeArticleViewsBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const rows = await tx.execute<{ article_id: string }>(sql`
+      delete from hc_article_views
+      where ctid in (
+        select ctid from hc_article_views
+        where brand_id = ${brandId} and day < ${cutoff.toISOString().slice(0, 10)}::date
+        limit ${limit})
+      returning article_id`);
 
     return rows.length;
   }

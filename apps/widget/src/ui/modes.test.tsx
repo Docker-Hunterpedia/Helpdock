@@ -120,6 +120,23 @@ describe('help center mode (WidgetModesEN columns 4 and 5)', () => {
     expect(await screen.findByRole('list', { name: 'Popular articles' })).toBeTruthy();
   });
 
+  it('finds an article that is not in the popular list, and offers no link out when it has no address', async () => {
+    const { mock } = await renderWidget({ mode: 'helpcenter' });
+    open();
+    await screen.findByRole('list', { name: 'Popular articles' });
+
+    type('Search help articles', 'gift receipt');
+    const results = await screen.findByRole('list', { name: 'Search results' });
+    expect(mock.calls.find((call) => call.method === 'searchArticles')?.args).toEqual([
+      'gift receipt',
+      'en',
+    ]);
+    fireEvent.click(within(results).getByRole('link', { name: /Exchanging a gift/ }));
+
+    expect(await screen.findByText(/Use the gift receipt number/)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Open in help center' })).toBeNull();
+  });
+
   it('says so when an article cannot load', async () => {
     const { mock } = await renderWidget({ mode: 'helpcenter' });
     vi.spyOn(mock, 'getArticle').mockRejectedValue(new TransportError('network'));
@@ -134,14 +151,23 @@ describe('help center mode (WidgetModesEN columns 4 and 5)', () => {
 });
 
 describe('chat + suggested articles mode (WidgetModesEN column 2)', () => {
-  it('shows popular articles once the visitor types, and opens one in the window', async () => {
-    await renderWidget({ mode: 'chat_articles' });
+  it('suggests help center articles for what is typed, and opens one in the window', async () => {
+    const { mock } = await renderWidget({ mode: 'chat_articles' });
     open();
 
     expect(screen.queryByRole('navigation', { name: 'Articles that might help' })).toBeNull();
     type('Message', 'refund');
-    const strip = screen.getByRole('navigation', { name: 'Articles that might help' });
-    expect(within(strip).getAllByRole('link')).toHaveLength(3);
+    const strip = await screen.findByRole(
+      'navigation',
+      { name: 'Articles that might help' },
+      { timeout: 2_000 },
+    );
+    expect(within(strip).getAllByRole('link')).toHaveLength(1);
+    expect(mock.calls.filter((call) => call.method === 'suggestArticles').at(-1)?.args).toEqual([
+      'refund',
+      'en',
+    ]);
+    expect(mock.calls.some((call) => call.method === 'searchArticles')).toBe(false);
 
     fireEvent.click(within(strip).getByRole('link', { name: /Refund timelines/ }));
     expect(await screen.findByText(/We issue your refund/)).toBeTruthy();

@@ -16,9 +16,15 @@ import {
   type DbHandle,
   departments,
   emailDeliveries,
+  hcArticles,
+  hcArticleVersions,
+  hcCategories,
+  hcSections,
   outbox,
+  ticketActivity,
   ticketMessages,
   tickets,
+  uuidv7,
   webFormSettings,
   withSystem,
 } from '@helpdock/db';
@@ -531,6 +537,71 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
         .where(eq(contactDuplicateSuggestions.contactId, second.contactId ?? '')),
     );
     expect(suggestions).toMatchObject([{ otherContactId: first.contactId, reason: 'email' }]);
+  });
+
+  it('records the help center article "Still need help?" came from, when it is a public one (M5-08)', async () => {
+    const [publicId, internalId] = [uuidv7(), uuidv7()];
+    await withSystem(runtime.db, seeded.brandId, async (tx) => {
+      const [category] = await tx
+        .insert(hcCategories)
+        .values({ brandId: seeded.brandId, slug: 'orders', names: { en: 'Orders' } })
+        .returning();
+      const [section] = await tx
+        .insert(hcSections)
+        .values({
+          brandId: seeded.brandId,
+          categoryId: category?.id ?? '',
+          slug: 'tracking',
+          names: { en: 'Tracking' },
+        })
+        .returning();
+      for (const [id, slug, visibility] of [
+        [publicId, 'where-is-my-order', 'public'],
+        [internalId, 'carrier-escalations', 'internal'],
+      ] as const) {
+        await tx
+          .insert(hcArticles)
+          .values({ id, brandId: seeded.brandId, sectionId: section?.id ?? '', slug });
+        await tx.insert(hcArticleVersions).values({
+          brandId: seeded.brandId,
+          articleId: id,
+          locale: 'en',
+          status: 'published',
+          visibility,
+          title: slug,
+          publishedTitle:
+            slug === 'where-is-my-order' ? 'Where is my order?' : 'Carrier escalations',
+          publishedAt: new Date(),
+        });
+      }
+    });
+    const page = await app.inject({ method: 'GET', url: `${formPath()}?article=${publicId}` });
+    expect(page.body).toContain(`name="hd_article" value="${publicId}"`);
+
+    const fields = {
+      name: 'Lina',
+      email: 'lina@example.com',
+      subject: 'Late',
+      message: 'Still waiting',
+      'custom:product': 'Desk',
+    };
+    const fromPublic = await ticketFor(
+      referenceIn((await post({ ...fields, hd_article: publicId })).html),
+    );
+    const fromInternal = await ticketFor(
+      referenceIn((await post({ ...fields, hd_article: internalId })).html),
+    );
+
+    const lines = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx.select().from(ticketActivity).where(eq(ticketActivity.action, 'ticket.source_article')),
+    );
+    expect(lines.map((line) => line.ticketId)).toEqual([fromPublic.id]);
+    expect(lines[0]?.to).toEqual({
+      articleId: publicId,
+      title: 'Where is my order?',
+      locale: 'en',
+    });
+    expect(lines.map((line) => line.ticketId)).not.toContain(fromInternal.id);
   });
 
   it('names every field that needs attention and files nothing', async () => {

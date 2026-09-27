@@ -130,6 +130,11 @@ export type WebFormPageParam = z.infer<typeof webFormPageParamSchema>;
 export const webFormPageQuerySchema = z.object({
   /** A shipped locale picks the page's language; anything else falls back to the brand's. */
   lang: z.string().max(10).optional(),
+  /**
+   * M5-08: the help center article "Still need help?" came from. Checked as a
+   * uuid by the page, which drops anything else rather than refusing the form.
+   */
+  article: z.string().max(64).optional(),
 });
 export type WebFormPageQuery = z.infer<typeof webFormPageQuerySchema>;
 

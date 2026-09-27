@@ -25,6 +25,7 @@ import {
 } from './page/render.js';
 import {
   maxFilesFor,
+  postedArticleId,
   readSubmission,
   type ShownField,
   type UploadedFile,
@@ -236,6 +237,7 @@ export class WebFormPublicService {
           submissionId,
           submission,
           sink,
+          articleId: postedArticleId(post.fields),
         });
       });
       return filed === null

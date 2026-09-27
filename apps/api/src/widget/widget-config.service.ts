@@ -10,8 +10,10 @@ import {
 } from '@helpdock/schemas';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { CaptchaKeysReader } from '../captcha/captcha-keys.js';
+import type { HelpCenterFeedback } from '../help-center/ports.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import type { BusinessHoursService } from '../sla/business-hours.service.js';
+import { popularSummaries, WIDGET_POPULAR_ARTICLES } from './article-view.js';
 import type { ResolvedWidgetSettings } from './resolved-settings.js';
 import type { WidgetGate, WidgetRequestFacts, WidgetScope } from './widget-gate.js';
 import { greetingIn, widgetThemeOf } from './widget-theme.js';
@@ -39,6 +41,7 @@ export class WidgetConfigService {
   readonly #presence: PresenceReader;
   readonly #captcha: CaptchaKeysReader;
   readonly #assetOrigin: string;
+  readonly #popular: Pick<HelpCenterFeedback, 'popular'>;
 
   constructor(deps: {
     readonly gate: WidgetGate;
@@ -47,19 +50,40 @@ export class WidgetConfigService {
     readonly captcha: CaptchaKeysReader;
     /** `APP_URL`: where the api serves `widget.js` and the widget's fonts. */
     readonly assetOrigin: string;
+    /** M5-10: the help center's popular list. */
+    readonly popular: Pick<HelpCenterFeedback, 'popular'>;
   }) {
     this.#gate = deps.gate;
     this.#businessHours = deps.businessHours;
     this.#presence = deps.presence;
     this.#captcha = deps.captcha;
     this.#assetOrigin = deps.assetOrigin;
+    this.#popular = deps.popular;
   }
 
-  config(
+  async config(
     brandId: string,
     facts: WidgetRequestFacts,
     requestedLocale?: WidgetLocale,
     now: Date = new Date(),
+  ): Promise<WidgetConfig> {
+    const config = await this.#settingsConfig(brandId, facts, requestedLocale, now);
+    // M5-10. After the gate, in the help center's own transaction: the public
+    // audience only, most viewed first.
+    const popular = await this.#popular.popular({
+      brandId,
+      audience: 'public',
+      locale: config.locale,
+      limit: WIDGET_POPULAR_ARTICLES,
+    });
+    return { ...config, popularArticles: popularSummaries(popular, config.helpCenterUrl) };
+  }
+
+  #settingsConfig(
+    brandId: string,
+    facts: WidgetRequestFacts,
+    requestedLocale: WidgetLocale | undefined,
+    now: Date,
   ): Promise<WidgetConfig> {
     return this.#gate.brand(brandId, facts, async (scope) => {
       const { tx, brand, settings } = scope;
@@ -88,8 +112,7 @@ export class WidgetConfigService {
         captcha: keys === null ? null : { provider: keys.provider, siteKey: keys.siteKey },
         signedIdentity: settings.signedIdentityEnabled,
         availability: await this.availabilityIn(scope, now),
-        // M5's help center content is not built yet; until it is there is
-        // nothing public to list, and M5-10 fills this in.
+        // Filled in by `config` once the gate has passed.
         popularArticles: [],
         helpCenterUrl: await helpCenterUrlOf(tx),
         // DESIGN §6.6: "removable per licence terms in the admin", which has
@@ -176,7 +199,7 @@ const prechatFields = async (
  * while it has none. The request's transaction is scoped to the one brand, so
  * row-level security keeps every other brand's domains out of this read.
  */
-const helpCenterUrlOf = async (tx: DbTransaction): Promise<string | null> => {
+export const helpCenterUrlOf = async (tx: DbTransaction): Promise<string | null> => {
   const [primary] = await tx
     .select({ domain: brandDomains.domain })
     .from(brandDomains)

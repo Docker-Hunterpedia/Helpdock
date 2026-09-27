@@ -182,7 +182,8 @@ for (const locale of LOCALES) {
       await openWidget(page, locale, 'mode=chat_articles');
       await page.keyboard.type(locale === 'ar' ? 'استرداد' : 'refund');
       const strip = page.getByRole('navigation', { name: t('articles.suggested') });
-      await expect(strip.getByRole('link')).toHaveCount(3);
+      // M5-10: help center search on the text; the fixture has one article about refunds.
+      await expect(strip.getByRole('link')).toHaveCount(1);
       expect(await violations(page)).toEqual([]);
 
       await strip.getByRole('link').first().focus();

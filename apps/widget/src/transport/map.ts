@@ -1,5 +1,6 @@
 import type {
   MediaPolicy,
+  WidgetArticle as WireArticle,
   WidgetAttachment as WireAttachment,
   WidgetAvailability as WireAvailability,
   WidgetConfig as WireConfig,
@@ -10,6 +11,7 @@ import type {
 } from '@helpdock/schemas';
 import type {
   AgentSummary,
+  ArticleDetail,
   Attachment,
   AttachmentKind,
   Availability,
@@ -104,6 +106,18 @@ export const toConfig = (wire: WireConfig): WidgetConfig => ({
   popular_articles: wire.popularArticles,
   help_center_url: wire.helpCenterUrl,
   show_powered_by: wire.showPoweredBy,
+});
+
+/** M5-10: one help center article, read inside the widget. */
+export const toArticle = (wire: WireArticle): ArticleDetail => ({
+  id: wire.id,
+  title: wire.title,
+  excerpt: wire.excerpt,
+  section: wire.section,
+  url: wire.url,
+  updated_at: wire.updatedAt,
+  reading_minutes: wire.readingMinutes,
+  body_html: wire.bodyHtml,
 });
 
 /** The pipeline calls the bytes audio; the composer calls them a voice message. */

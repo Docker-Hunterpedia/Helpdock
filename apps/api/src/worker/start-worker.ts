@@ -15,6 +15,8 @@ import {
   helpCenterMediaProcessJob,
   helpCenterPublishDueJob,
   helpCenterPublishDueSweepJob,
+  helpCenterSearchReindexJob,
+  helpCenterSearchReindexSweepJob,
   type JobLogger,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
@@ -75,6 +77,10 @@ import { type InstallSmtp, SettingsInstallSmtp, smtpTransportFactory } from '../
 import { registerHelpCenterEventHandlers } from '../help-center/events.js';
 import { createHcMediaProcessor } from '../help-center/media-process.job.js';
 import { createHelpCenterKnowledgeProcessor } from '../help-center/publish-due.job.js';
+import {
+  createSearchKnowledgeProcessor,
+  registerSearchEventHandlers,
+} from '../help-center/search/search-events.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
@@ -442,6 +448,9 @@ export const workerDependencies: WorkerDependencies = {
         });
       },
     });
+    // M5-05. The search index follows the same three events under its own
+    // subscriber name, in the event's transaction.
+    registerSearchEventHandlers();
 
     return {
       close: async () => {
@@ -713,21 +722,50 @@ export const workerDependencies: WorkerDependencies = {
       .catch((error: unknown) =>
         log.error({ err: error }, 'could not register the help center publish sweep'),
       );
+    knowledge
+      .upsertJobScheduler(
+        helpCenterSearchReindexSweepJob.name,
+        { every: 3_600_000 },
+        {
+          name: helpCenterSearchReindexSweepJob.name,
+          data: {},
+          opts: helpCenterSearchReindexSweepJob.options,
+        },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the help center search sweep'),
+      );
 
+    const publishing = createHelpCenterKnowledgeProcessor({
+      db,
+      log,
+      queue: {
+        add: async (payload, jobId) => {
+          await knowledge.add(helpCenterPublishDueJob.name, payload, {
+            ...helpCenterPublishDueJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+    // M5-05's reindex jobs share the queue; anything else goes to M5-01's processor.
+    const search = createSearchKnowledgeProcessor({
+      db,
+      log,
+      queue: {
+        add: async (payload, jobId) => {
+          await knowledge.add(helpCenterSearchReindexJob.name, payload, {
+            ...helpCenterSearchReindexJob.options,
+            jobId,
+          });
+        },
+      },
+    });
     const worker = new Worker(
       QUEUE_NAMES.knowledge,
-      createHelpCenterKnowledgeProcessor({
-        db,
-        log,
-        queue: {
-          add: async (payload, jobId) => {
-            await knowledge.add(helpCenterPublishDueJob.name, payload, {
-              ...helpCenterPublishDueJob.options,
-              jobId,
-            });
-          },
-        },
-      }),
+      async (job) => {
+        await (search(job) ?? publishing(job));
+      },
       { connection: redis },
     );
     worker.on('failed', (job, error) =>

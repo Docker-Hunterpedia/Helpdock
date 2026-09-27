@@ -115,7 +115,8 @@
       "api": "through the API",
       "ai": "by AI",
       "system": "by the system"
-    }
+    },
+    "sourceArticle": "Came from the help center article “{{title}}”"
   },
   "composer": {
     "label": "Reply or internal note",

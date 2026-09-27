@@ -298,6 +298,7 @@ retention purges it with the ticket. `audit_log` stays what an admin reads.
 | `ticket.continued` | A customer reply past the reopen window started a new ticket; written on both (M1-08) |
 | `ticket.deleted` | An Admin soft-deleted it (M1-08) |
 | `ticket.escalated` | Recorded in `audit_log`, not here: the activity row moves with the ticket |
+| `ticket.source_article` | A widget conversation or web form ticket was opened from a help center article's "Still need help?"; `to` holds `articleId`, `title` and `locale`, and the thread shows "Came from the help center article …" (M5-08) |
 
 `ticket.status.changed` is written for **every** status move. A close or a
 reopen writes it *and* the more specific verb beside it, because a reader of the

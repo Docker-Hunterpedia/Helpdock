@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { acceptList, canAttach } from '../state/policy.js';
 import type { ArticleSummary } from '../transport/types.js';
 import { useLazy, useWidget, useWidgetState } from './context.js';
@@ -6,6 +6,8 @@ import { Icon } from './icons.js';
 import { loadRecorder } from './lazy.js';
 
 const SUGGESTIONS = 3;
+/** Longer than the search box's: a message is typed in full, not searched letter by letter. */
+const SUGGEST_DEBOUNCE_MS = 400;
 
 export const canRecord = (): boolean =>
   typeof MediaRecorder !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
@@ -13,26 +15,44 @@ export const canRecord = (): boolean =>
 /**
  * DESIGN §6.6 Composer: attach, a 44 px pill input, voice, send. In
  * `chat_articles` mode the suggestion strip appears above it once the visitor
- * types (`WidgetModesEN` column 2; popular articles until M7).
+ * types (`WidgetModesEN` column 2): help center search on the text (M5-10),
+ * which M7 upgrades with semantic suggestions.
  */
 export function Composer({ onOpenArticle }: { onOpenArticle: (article: ArticleSummary) => void }) {
-  const { controller, t } = useWidget();
+  const { controller, t, locale } = useWidget();
   const { config, attachmentProblem } = useWidgetState();
   const [text, setText] = useState('');
   const [recording, setRecording] = useState(false);
+  const [suggestions, setSuggestions] = useState<readonly ArticleSummary[]>([]);
   const picker = useRef<HTMLInputElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const Recorder = useLazy(loadRecorder, recording);
+  const query = config?.mode === 'chat_articles' ? text.trim() : '';
+
+  // M5-10: help center search on what is being typed, once the typing pauses.
+  useEffect(() => {
+    if (!query) {
+      setSuggestions([]);
+      return;
+    }
+    let live = true;
+    const timer = setTimeout(() => {
+      controller.transport.suggestArticles(query, locale).then(
+        (found) => live && setSuggestions(found.slice(0, SUGGESTIONS)),
+        () => live && setSuggestions([]),
+      );
+    }, SUGGEST_DEBOUNCE_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query, locale, controller]);
 
   if (!config) {
     return null;
   }
   const policy = config.content_policy;
   const showVoice = policy.voice.enabled && canRecord();
-  const suggestions =
-    config.mode === 'chat_articles' && text.trim()
-      ? config.popular_articles.slice(0, SUGGESTIONS)
-      : [];
 
   const submit = (event: Event) => {
     event.preventDefault();
@@ -76,11 +96,11 @@ export function Composer({ onOpenArticle }: { onOpenArticle: (article: ArticleSu
             <a
               key={article.id}
               class="hd-suggestion"
-              href={article.url}
+              href={article.url ?? '#'}
               target="_blank"
               rel="noopener"
               onClick={(event) => {
-                if (!(event.metaKey || event.ctrlKey || event.shiftKey)) {
+                if (!(article.url && (event.metaKey || event.ctrlKey || event.shiftKey))) {
                   event.preventDefault();
                   onOpenArticle(article);
                 }

@@ -78,6 +78,16 @@ const ARTICLES: Record<WidgetLocale, ArticleDetail[]> = {
       reading_minutes: 1,
       body_html: '<p>You can change the address until the order ships.</p>',
     },
+    {
+      id: 'gift-exchange',
+      title: 'Exchanging a gift',
+      excerpt: 'Use the gift receipt number instead of the order number…',
+      section: 'Returns & refunds',
+      url: null,
+      updated_at: '2026-09-01T10:00:00Z',
+      reading_minutes: 1,
+      body_html: '<p>Use the gift receipt number instead of the order number.</p>',
+    },
   ],
   ar: [
     {
@@ -111,8 +121,21 @@ const ARTICLES: Record<WidgetLocale, ArticleDetail[]> = {
       reading_minutes: 1,
       body_html: '<p>يمكنك تغيير العنوان حتى شحن الطلب.</p>',
     },
+    {
+      id: 'gift-exchange',
+      title: 'استبدال هدية',
+      excerpt: 'استخدم رقم إيصال الهدية بدلاً من رقم الطلب…',
+      section: 'الإرجاع والاسترداد',
+      url: null,
+      updated_at: '2026-09-01T10:00:00Z',
+      reading_minutes: 1,
+      body_html: '<p>استخدم رقم إيصال الهدية بدلاً من رقم الطلب.</p>',
+    },
   ],
 };
+
+/** The popular list is the first three; the fourth is found only by searching (M5-10). */
+const POPULAR = 3;
 
 const GREETING: Record<WidgetLocale, string> = {
   en: 'Hi, welcome to Helpdock support. Ask us about orders, returns or your account and someone from the team will answer here.',
@@ -159,9 +182,9 @@ export function sampleConfig(locale: WidgetLocale, options: SampleOptions = {}):
     content_policy: options.policy ?? samplePolicy,
     transcript_enabled: options.transcript ?? true,
     captcha: null,
-    popular_articles: ARTICLES[locale].map(
-      ({ body_html, updated_at, reading_minutes, ...summary }) => summary,
-    ),
+    popular_articles: ARTICLES[locale]
+      .slice(0, POPULAR)
+      .map(({ body_html, updated_at, reading_minutes, ...summary }) => summary),
     help_center_url: `https://help.example.com/${locale}`,
     show_powered_by: true,
   };

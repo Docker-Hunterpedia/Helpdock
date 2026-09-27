@@ -1,5 +1,11 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { autoPlace, defineWidgetElement, ELEMENT_NAME, installCommandApi } from './embed.js';
+import {
+  articleOf,
+  autoPlace,
+  defineWidgetElement,
+  ELEMENT_NAME,
+  installCommandApi,
+} from './embed.js';
 import { sampleMockOptions } from './transport/fixtures.js';
 import { MockTransport } from './transport/mock.js';
 
@@ -72,6 +78,21 @@ describe('the element and the command API', () => {
 
     const sessions = transports[0]?.calls.filter((call) => call.method === 'startSession') ?? [];
     expect(sessions.at(-1)?.args).toEqual([identity]);
+  });
+
+  it('opens with a help center article as the next conversation’s context (M5-08)', async () => {
+    const article = '0192c3f0-1a2b-7c3d-8e4f-0000000000a1';
+    const page: Record<string, unknown> = { Helpdock: { q: [['open', { article }]] } };
+    installCommandApi(page);
+
+    const element = document.createElement(ELEMENT_NAME);
+    element.setAttribute('brand', 'acme');
+    document.body.append(element);
+    await vi.waitFor(() => expect(element.shadowRoot?.querySelector('.hd-launcher')).toBeTruthy());
+
+    expect(articleOf({ article })).toBe(article);
+    expect(articleOf({ article: 'javascript:alert(1)' })).toBeNull();
+    expect(articleOf(undefined)).toBeNull();
   });
 
   it('does not mount without a brand, and unmounts when removed', async () => {

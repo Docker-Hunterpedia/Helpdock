@@ -103,8 +103,12 @@ export interface ArticleSummary {
   readonly title: string;
   readonly excerpt: string;
   readonly section: string | null;
-  /** The article on the brand's help center, for "Open in help center". */
-  readonly url: string;
+  /**
+   * The article on the brand's help center, for "Open in help center"; null
+   * while the brand has no help center domain, and then the widget offers no
+   * link out.
+   */
+  readonly url: string | null;
 }
 
 export interface ArticleDetail extends ArticleSummary {
@@ -137,7 +141,7 @@ export interface WidgetConfig {
   readonly content_policy: ContentPolicy;
   readonly transcript_enabled: boolean;
   readonly captcha: CaptchaConfig | null;
-  /** Until M5-10 the help center modes list these (canvas note, M4-05). */
+  /** M5-10: the brand's most viewed public articles, listed before the visitor searches. */
   readonly popular_articles: readonly ArticleSummary[];
   readonly help_center_url: string | null;
   readonly show_powered_by: boolean;
@@ -216,6 +220,8 @@ export interface StartConversationInput {
   readonly email?: string;
   readonly fields?: Readonly<Record<string, string>>;
   readonly captcha_token?: string;
+  /** M5-08: the help center article "Still need help?" was pressed on. */
+  readonly article_id?: string;
 }
 
 export interface ContactFormInput {
@@ -225,6 +231,7 @@ export interface ContactFormInput {
   readonly fields: Readonly<Record<string, string>>;
   readonly attachment_ids: readonly string[];
   readonly captcha_token?: string;
+  readonly article_id?: string;
 }
 
 export type ConnectionState = 'connecting' | 'online' | 'reconnecting';
@@ -292,7 +299,13 @@ export interface WidgetTransport {
   attachmentUrl(conversationId: string, attachmentId: string): Promise<string>;
   requestTranscript(conversationId: string, email: string): Promise<void>;
   submitContactForm(input: ContactFormInput): Promise<{ readonly ticket_ref: string }>;
-  /** Until M5-10 this filters `popular_articles`; M5-10 swaps in help center search. */
+  /** M5-10: help center search, public articles only; the api logs it for Insights. */
   searchArticles(query: string, locale: WidgetLocale): Promise<readonly ArticleSummary[]>;
+  /**
+   * The chat composer's "Articles that might help" while a message is typed:
+   * the same search, not logged, because a message is not a search.
+   */
+  suggestArticles(query: string, locale: WidgetLocale): Promise<readonly ArticleSummary[]>;
+  /** One public article; counts a view, and marks the search it was opened from. */
   getArticle(id: string, locale: WidgetLocale): Promise<ArticleDetail>;
 }

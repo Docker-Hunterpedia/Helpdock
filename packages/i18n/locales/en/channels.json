@@ -361,7 +361,7 @@
         },
         "chat_articles": {
           "label": "Chat and suggested articles",
-          "hint": "Suggests articles while the visitor types, before they send. Until help center search arrives it offers the most-read articles."
+          "hint": "Suggests help center articles while the visitor types, before they send."
         },
         "helpcenter": {
           "label": "Help center",

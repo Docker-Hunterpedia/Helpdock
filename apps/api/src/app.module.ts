@@ -159,6 +159,12 @@ export class AppModule implements NestModule {
         onViewing: agentTypingRelay(new RedisWidgetBroadcast(options.redis)),
       },
     });
+    // M5: imported by `AppModule` for its routes and by `WidgetModule` for
+    // the search and feedback ports (M5-10), one module to Nest.
+    const helpCenter = HelpCenterModule.forRoot({
+      env: options.env,
+      ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+    });
 
     return {
       module: AppModule,
@@ -226,6 +232,7 @@ export class AppModule implements NestModule {
         // `/widget` namespace.
         WidgetModule.forRoot({
           realtime,
+          helpCenter,
           env: options.env,
           db: options.db,
           logger: options.logger,
@@ -244,10 +251,7 @@ export class AppModule implements NestModule {
         }),
         // M5-01, M5-02, M5-09: help center content, the editor and its images,
         // and the read service the help center pages are built on.
-        HelpCenterModule.forRoot({
-          env: options.env,
-          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
-        }),
+        helpCenter,
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

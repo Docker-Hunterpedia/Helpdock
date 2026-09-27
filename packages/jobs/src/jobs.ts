@@ -731,6 +731,54 @@ export const helpCenterPublishDueSweepJob = defineJob({
   schedule: { everyMs: 3_600_000 },
 });
 
+export const helpCenterSearchReindexPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The hour of the sweep that added it; the job id and the receipt are built from it. */
+  tick: z.iso.datetime(),
+});
+export type HelpCenterSearchReindexPayload = z.infer<typeof helpCenterSearchReindexPayloadSchema>;
+
+/**
+ * M5-05: brings **one** brand's search index in line with its published
+ * articles — a row for every published version whose text changed since it
+ * was indexed, none for a version that is no longer published.
+ *
+ * The events keep the index current within seconds (the `search` subscriber
+ * of `help_center.*`, in the event's own transaction); this is the safety net
+ * behind them, and what fills the index on an install that had published
+ * articles before search existed. Added hourly per active brand by
+ * {@link helpCenterSearchReindexSweepJob}. Idempotent by construction: a row
+ * already current is skipped.
+ */
+export const helpCenterSearchReindexJob = defineJob({
+  name: 'help_center.search_reindex',
+  queue: QUEUE_NAMES.knowledge,
+  schema: helpCenterSearchReindexPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 5_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: (payload) => `help_center.search_reindex:${payload.brandId}:${payload.tick}`,
+});
+
+/** The BullMQ job id of one brand's reindex for one sweep. */
+export const helpCenterSearchReindexJobId = ({
+  brandId,
+  tick,
+}: HelpCenterSearchReindexPayload): string =>
+  `help_center.search_reindex.${brandId}.${Date.parse(tick)}`;
+
+/** The hourly sweep that fans {@link helpCenterSearchReindexJob} out per brand. */
+export const helpCenterSearchReindexSweepJob = defineJob({
+  name: 'help_center.search_reindex.sweep',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 10_000 }, removeOnFail: 100 },
+  schedule: { everyMs: 3_600_000 },
+});
+
 export const helpCenterMediaProcessPayloadSchema = z.object({
   brandId: z.uuid(),
   /** The `hc_media` row, and the key every delivery dedupes on. */
@@ -780,6 +828,8 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterPublishDueJob.name]: helpCenterPublishDueJob,
   [helpCenterPublishDueSweepJob.name]: helpCenterPublishDueSweepJob,
   [helpCenterMediaProcessJob.name]: helpCenterMediaProcessJob,
+  [helpCenterSearchReindexJob.name]: helpCenterSearchReindexJob,
+  [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

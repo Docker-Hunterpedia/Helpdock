@@ -75,6 +75,18 @@ export const runBrandRetention = async ({
     counts.closedTickets = await purgeTickets(purge, 'closed', cutoffs.closedTickets);
   }
   counts.spamTickets = await purgeTickets(purge, 'spam', cutoffs.spamTickets);
+  counts.searchLog = await drainInBatches(
+    () =>
+      inBrand((tx) => repository.purgeSearchLogBatch(tx, brandId, cutoffs.searchLog, batchSize)),
+    batchSize,
+  );
+  // The view dedupe rows share the window and are not a category of the form:
+  // they hold no text, and the count a brand reads is the search log's.
+  await drainInBatches(
+    () =>
+      inBrand((tx) => repository.purgeArticleViewsBatch(tx, brandId, cutoffs.searchLog, batchSize)),
+    batchSize,
+  );
   counts.auditLog = await drainInBatches(
     () => inBrand((tx) => repository.purgeAuditBatch(tx, brandId, cutoffs.auditLog, batchSize)),
     batchSize,

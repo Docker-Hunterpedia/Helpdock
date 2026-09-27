@@ -154,6 +154,13 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'hc_article_versions', departmentScoped: false },
   { name: 'hc_settings', departmentScoped: false },
   { name: 'hc_media', departmentScoped: false },
+  // M5-05, M5-08. The search index, the search log, views and feedback: the
+  // brand's, like the content they describe. Who may match a search is the
+  // live version's visibility, joined at query time (§5).
+  { name: 'hc_search_documents', departmentScoped: false },
+  { name: 'hc_search_log', departmentScoped: false },
+  { name: 'hc_article_views', departmentScoped: false },
+  { name: 'hc_article_feedback', departmentScoped: false },
 ];
 
 /**

@@ -56,12 +56,14 @@ export default function ArticleView({ article }: { article: ArticleSummary }) {
         ) : null}
         <div class="hd-article-body" ref={body} />
       </article>
-      <div class="hd-article-footer">
-        <a class="hd-link" href={article.url} target="_blank" rel="noopener">
-          {t('articles.openInHelpCenter')}
-          <Icon name="external" size={16} />
-        </a>
-      </div>
+      {article.url ? (
+        <div class="hd-article-footer">
+          <a class="hd-link" href={article.url} target="_blank" rel="noopener">
+            {t('articles.openInHelpCenter')}
+            <Icon name="external" size={16} />
+          </a>
+        </div>
+      ) : null}
     </>
   );
 }

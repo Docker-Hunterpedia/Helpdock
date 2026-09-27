@@ -76,6 +76,30 @@ describe('WebFormPage', () => {
     expect(response.contentSecurityPolicy).toContain("form-action 'self'");
   });
 
+  it('carries the article "Still need help?" came from into the form, and drops one that is not an id', async () => {
+    const { page } = pageWith();
+    const article = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+
+    expect((await page.handle(request({ article }))).html).toContain(
+      `<input type="hidden" name="hd_article" value="${article}">`,
+    );
+    expect((await page.handle(request({ article: '"><script>' }))).html).not.toContain(
+      'hd_article',
+    );
+  });
+
+  it('keeps the article on a post that needs correcting', async () => {
+    const { page } = pageWith({
+      result: { kind: 'invalid', errors: new Map([['email', 'email']]) },
+    });
+    const article = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+    const response = await page.handle(
+      request({ body: body({ email: 'a@b', message: 'Hi', hd_article: article }) }),
+    );
+
+    expect(response.html).toContain(`name="hd_article" value="${article}"`);
+  });
+
   it('serves `/contact` on a help center host as that host’s brand', async () => {
     const { page, load } = pageWith({ hostBrand: BRAND });
     const response = await page.handle(request({ brandId: undefined }));

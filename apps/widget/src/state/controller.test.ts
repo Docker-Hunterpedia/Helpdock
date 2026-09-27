@@ -139,6 +139,33 @@ describe('sending (DOMAIN-RULES §7)', () => {
     expect(mock.calls.filter((call) => call.method === 'startConversation')).toHaveLength(1);
   });
 
+  it('opens the next conversation with the article "Still need help?" came from, once (M5-08)', async () => {
+    const { controller, mock } = await setup();
+    controller.setArticleContext('0192c3f0-1a2b-7c3d-8e4f-0000000000a1');
+
+    controller.send('I still need help');
+    await vi.waitFor(() => expect(controller.state.thread.confirmed).toHaveLength(1));
+
+    expect(mock.calls.find((call) => call.method === 'startConversation')?.args).toEqual([
+      { article_id: '0192c3f0-1a2b-7c3d-8e4f-0000000000a1' },
+    ]);
+    expect(controller.articleId).toBeNull();
+  });
+
+  it('carries the article on a pre-chat start too, and nothing without one', async () => {
+    const { controller, mock } = await setup();
+
+    await controller.startConversation({ email: 'omar@example.com' });
+    controller.setArticleContext('0192c3f0-1a2b-7c3d-8e4f-0000000000a1');
+    await controller.startConversation({ email: 'omar@example.com' });
+
+    const starts = mock.calls.filter((call) => call.method === 'startConversation');
+    expect(starts.map((call) => call.args[0])).toEqual([
+      { email: 'omar@example.com' },
+      { email: 'omar@example.com', article_id: '0192c3f0-1a2b-7c3d-8e4f-0000000000a1' },
+    ]);
+  });
+
   it('retries with the same client_id, so a lost answer never makes a second message', async () => {
     vi.useFakeTimers();
     const { controller, mock } = await setup();

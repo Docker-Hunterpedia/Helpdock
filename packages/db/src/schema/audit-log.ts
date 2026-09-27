@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, inet, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { actorTypeEnum } from './enums.js';
 
@@ -28,11 +28,28 @@ export const auditLog = pgTable(
     targetType: text('target_type').notNull(),
     targetId: text('target_id'),
     meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    /**
+     * Where the request that wrote the row came from (M3-08). Filled by the
+     * column defaults from the `app.request_*` settings the tenant interceptor
+     * puts on every request transaction, so no writer has to remember them and
+     * a worker's rows — which have no request — are null. Nothing a writer
+     * passes is trusted here: the interceptor validates the address first.
+     */
+    ip: inet('ip').default(sql`nullif(current_setting('app.request_ip', true), '')::inet`),
+    requestId: text('request_id').default(sql`nullif(current_setting('app.request_id', true), '')`),
+    userAgent: text('user_agent').default(
+      sql`nullif(current_setting('app.request_user_agent', true), '')`,
+    ),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  // The admin activity view and the nightly retention job both read a brand's
-  // rows newest first.
-  (table) => [index('audit_log_brand_created_at_idx').on(table.brandId, table.createdAt)],
+  (table) => [
+    // The nightly retention job and a brand-filtered viewer read a brand's
+    // rows newest first.
+    index('audit_log_brand_created_at_idx').on(table.brandId, table.createdAt),
+    // The install-wide viewer (M3-08) reads every brand's rows newest first,
+    // paging by (created_at, id).
+    index('audit_log_created_at_id_idx').on(table.createdAt, table.id),
+  ],
 );
 
 export type AuditLogEntry = typeof auditLog.$inferSelect;

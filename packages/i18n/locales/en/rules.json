@@ -8,10 +8,6 @@
     "timeBased": "Time-based",
     "macros": "Macros"
   },
-  "macros": {
-    "heading": "Macros arrive with M3-06",
-    "body": "Macros and canned responses are deliverable M3-06. This tab lists them once it lands."
-  },
   "list": {
     "rules": {
       "heading": "Workflow rules",
@@ -258,7 +254,7 @@
     "customField": "Custom field",
     "cannedResponse": "Canned response",
     "onChannel": "on the ticket's channel",
-    "noCanned": "No canned responses yet: they arrive with M3-06.",
+    "noCanned": "No shared canned responses yet: add one under the Macros tab.",
     "countsAsResponse": "Counts as first response",
     "countsHint": "off by default. Off: the first-response clock keeps running until a person replies. Turn it on only when this reply really answers the customer.",
     "note": "Note",

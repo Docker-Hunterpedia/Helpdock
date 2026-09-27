@@ -1,7 +1,11 @@
 import type {
   AssignableAgentList,
+  MacroLocale,
+  MacroRunRequest,
+  MacroRunResponse,
   MarkSpamRequest,
   MessageCreateRequest,
+  RenderedMacro,
   Ticket,
   TicketActivityList,
   TicketCcRequest,
@@ -28,6 +32,8 @@ import type {
 } from '@helpdock/schemas';
 import {
   assignableAgentListSchema,
+  macroRunResponseSchema,
+  renderedMacroSchema,
   ticketActivityListSchema,
   ticketDetailSchema,
   ticketListSchema,
@@ -292,6 +298,38 @@ export class HttpTicketsApi implements TicketsApi {
       await this.#transport.request('POST', `${this.#views(brandId)}/reorder`, {
         viewIds: [...viewIds],
       }),
+    );
+  }
+
+  // ---------------------------------------------------------------- M3-06
+
+  async renderMacro(
+    brandId: string,
+    ticketId: string,
+    macroId: string,
+    locale?: MacroLocale,
+  ): Promise<RenderedMacro> {
+    return renderedMacroSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#ticket(brandId, ticketId)}/macros/${encodeURIComponent(macroId)}/render${
+          locale === undefined ? '' : `?locale=${locale}`
+        }`,
+      ),
+    );
+  }
+
+  async runMacro(
+    brandId: string,
+    ticketId: string,
+    request: MacroRunRequest,
+  ): Promise<MacroRunResponse> {
+    return macroRunResponseSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `${this.#ticket(brandId, ticketId)}/macro-runs`,
+        request,
+      ),
     );
   }
 

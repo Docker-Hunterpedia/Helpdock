@@ -1,5 +1,5 @@
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
-import type { AutoReplyKind, AutoReplyTemplate } from '@helpdock/schemas';
+import { type AutoReplyKind, type AutoReplyTemplate, renderTemplate } from '@helpdock/schemas';
 
 /**
  * Every sentence a customer email carries, from the `email` catalogs in the
@@ -41,14 +41,19 @@ export interface PlaceholderValues {
 /**
  * The four placeholders the editor lists, and nothing else: a brace pair the
  * Admin typed that is not one of them is left as they typed it, so a template
- * never loses text to a guess.
+ * never loses text to a guess. The renderer is the one ticket templates and
+ * canned responses use (`@helpdock/schemas`' `placeholders.ts`).
  */
 export const fillPlaceholders = (template: string, values: PlaceholderValues): string =>
-  template
-    .replaceAll('{{ticket.number}}', values.ticketNumber)
-    .replaceAll('{{contact.first_name}}', values.contactFirstName)
-    .replaceAll('{{department.name}}', values.departmentName)
-    .replaceAll('{{brand.name}}', values.brandName);
+  renderTemplate(
+    template,
+    new Map([
+      ['ticket.number', values.ticketNumber],
+      ['contact.first_name', values.contactFirstName],
+      ['department.name', values.departmentName],
+      ['brand.name', values.brandName],
+    ]),
+  ).text;
 
 /** "Mona Khalil" is addressed as "Mona"; a contact with no name as the catalog's fallback. */
 export const firstNameOf = (name: string | null | undefined, locale: Locale): string => {

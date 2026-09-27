@@ -17,9 +17,9 @@ Owner: @Docker-Hunterpedia
 | M3-03 | Workflow rules engine | #90 | in review: engine, depth guard, execution log, `rule.notify`; [guide](../guides/automation.md) |
 | M3-04 | Time-based rules | #91 | in review: five-minute tick on the `rules` queue, once per match |
 | M3-05 | Rule builder UI with test-run | #92 | in review: `Admin/Automation` Rules and Time-based tabs, builder, test run |
-| M3-06 | Macros and canned responses | #93 | not started |
+| M3-06 | Macros and canned responses | #93 | in review: `canned_responses`, Automation › Macros, the composer's macro picker; [guide](../guides/macros.md) |
 | M3-07 | Notifications: in-app, email and web push | #94 | not started |
-| M3-08 | Admin audit log viewer | #95 | not started |
+| M3-08 | Admin audit log viewer | #95 | in review: `GET /api/install/audit-log`, System › Audit log; [guide](../guides/audit-log.md) |
 
 ## Artboards
 
@@ -27,7 +27,7 @@ On the [design canvas](https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ), under
 
 ## Exit criteria
 
-- [x] A rule "on create, if subject contains X, assign to team Y and reply with canned Z" runs and is logged (`apps/api/src/rules/rules.integration.test.ts`, with a test double for M3-06's canned responses).
+- [x] A rule "on create, if subject contains X, assign to team Y and reply with canned Z" runs and is logged (`apps/api/src/rules/rules.integration.test.ts`, with a real M3-06 canned response).
 - [ ] An SLA breach fires escalation and a notification, and pauses correctly on Awaiting customer.
 - [x] The four worked examples in DOMAIN-RULES §3.6 pass as unit tests to the minute (`apps/api/src/sla/ticket-clocks.test.ts`).
 - [x] Deleting Redis while tickets are open and restarting the worker recreates every timer (`apps/api/src/sla/sla.integration.test.ts`).
@@ -67,16 +67,19 @@ comes back.
 ### M3-03 to M3-05 Workflow rules
 
 Admin › Automation (`Admin/Automation-Rules`, `Admin/Rule-Builder`): the Rules
-and Time-based tabs, the builder and its test run; the Macros tab is M3-06's
-placeholder. Tables `workflow_rules`, `workflow_runs`; `tickets.status_changed_at`
-and its trigger; migration `0027_workflow_rules`. [Guide](../guides/automation.md).
+and Time-based tabs, the builder and its test run; the Macros tab is M3-06's.
+Tables `workflow_rules`, `workflow_runs`; `tickets.status_changed_at` and its
+trigger; migration `0027_workflow_rules`. [Guide](../guides/automation.md).
 
 - **Seams.** `apps/api/src/rules/ports.ts`. `BusinessHoursProbe` is M3-01's
   calendar through `businessHoursProbe` (`apps/api/src/sla/business-hours-probe.ts`),
   wired in `RulesModule.forRoot` and `createRulesEngineDeps`.
-  `CannedResponseRenderer` and `CannedResponseCatalog` stay on their
-  stand-ins until M3-06: a canned reply is recorded as not carried out and the
-  builder lists no canned responses.
+  `CannedResponseRenderer` and `CannedResponseCatalog` are M3-06's
+  `CannedResponsesService` through `cannedResponsePort`
+  (`apps/api/src/macros/canned-response-port.ts`), in both places: a rule
+  reads shared canned responses only, renders in the contact's language with
+  the assignee as `{{agent.first_name}}`, and a missing one is recorded as not
+  carried out.
 - **Clocks.** The engine's lifecycle is the SLA hooks, so a rule's status,
   priority or team move calls `onChanged` and its close and reopen move the
   clocks as an agent's would. A canned reply calls `onResponded` with
@@ -92,6 +95,20 @@ and its trigger; migration `0027_workflow_rules`. [Guide](../guides/automation.m
 - **Gap:** a Team Leader whose scope is narrower than the brand may read rules
   and the log but not change a rule, because a rule acts on every department.
 
+### M3-06 Macros and canned responses
+
+- One table, `canned_responses`, told apart by `kind` (`canned` | `macro`): a macro is a canned response plus actions, and the artboard lists, searches and scopes them together. Bodies are `{ en, ar }` jsonb; actions are `macroActionSchema[]`. Personal items use the restrictive owner policy `views` has (`OWNER_SCOPED_TABLES`); shared items carry `department_id` (null is every department), a service rule (`macros/macro-rules.ts`).
+- Placeholders: M1-06's list plus `{{agent.first_name}}`. The renderer moved to `packages/schemas/src/placeholders.ts` so the admin preview and the api share it.
+- Applying a macro (`POST …/tickets/:ticketId/macro-runs`) sends the reply and the kept actions in one transaction and writes one `ticket.macro_applied` activity row. `TicketsService.update` takes an optional activity bundle for that; lifecycle rows (close, reopen) are still their own.
+- Seam for M3-03: `CannedResponsesService.render(id, { locale, ticket, agent?, tx? })` and `listShared(tx)`, exported from `MacrosModule` and wired into the rules engine (see M3-03 to M3-05 above).
+- Screens: the Macros tab of the rules' Automation page (an Agent sees that tab alone), the composer picker (toolbar button, header Macro button, `/`), staged action chips.
+
+### M3-08 Admin audit log viewer
+
+- `GET /api/install/audit-log` (install:admin): filters, `(created_at, id)` keyset cursor, before/after diff with secrets redacted by name and by the settings registry.
+- Migration 0028 adds `audit_log.ip`, `request_id`, `user_agent`, defaulting to `app.request_*` settings the tenant interceptor sets on every request transaction, and `audit_log_created_at_id_idx`.
+- Page at `/admin/system/audit-log`; the System page's Audit card "Open" links to it.
+
 ## Open questions
 
 - None yet.
@@ -104,3 +121,4 @@ and its trigger; migration `0027_workflow_rules`. [Guide](../guides/automation.m
 
 - `0026_sla_engine`: business hours, holidays, SLA policies and clocks (M3-01, M3-02).
 - `0027_workflow_rules`: `workflow_rules`, `workflow_runs`, `tickets.status_changed_at` and its trigger (M3-03, M3-04).
+- `0028_macros_and_audit_context`: `canned_responses`, `audit_log.ip`, `request_id` and `user_agent`, and `audit_log_created_at_id_idx` (M3-06, M3-08).

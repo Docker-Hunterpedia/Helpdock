@@ -6,7 +6,8 @@ have waited too long, the depth guard that keeps rules from looping, the
 execution log, and the test run. The screen is **Admin → Automation**
 (M3-03, M3-04, M3-05; [REQUIREMENTS §4.3](../planning/REQUIREMENTS.md#43-automation)).
 
-The **Macros** tab belongs to M3-06 and says so until that deliverable lands.
+The **Macros** tab is M3-06's and has its own guide, [macros.md](macros.md).
+An Agent sees that tab alone.
 
 ## Who may do what
 
@@ -74,9 +75,12 @@ send a canned response, add an internal note, notify, escalate, close.
   or department moves the [SLA clocks](slas.md) as an agent's change would.
 - A canned reply is a public message written by the system. It **does not stop
   the first-response clock** unless the action's *Counts as first response* box
-  is ticked (`counts_as_response`, DOMAIN-RULES §3.1). Canned responses are
-  M3-06's; until they are wired, the action is recorded as not carried out and
-  the rest of the rule still runs.
+  is ticked (`counts_as_response`, DOMAIN-RULES §3.1). The builder offers the
+  brand's **shared** canned responses ([macros.md](macros.md)); the reply is
+  written in the contact's language, else the brand's, with the assignee as
+  `{{agent.first_name}}`. A canned response deleted since the rule was saved,
+  or a personal one, is recorded as not carried out and the rest of the rule
+  still runs.
 - *Notify* resolves who — the department's team leads, the assignee, a team, a
   person — and writes a `rule.notify` outbox event; M3-07 decides how each of
   them hears.

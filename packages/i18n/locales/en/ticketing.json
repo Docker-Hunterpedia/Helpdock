@@ -152,7 +152,8 @@
     "policySaved": "Policy {{name}} saved. Open tickets were recomputed.",
     "policyDeleted": "Policy {{name}} deleted",
     "policiesReordered": "Policy order saved",
-    "slaSettingsSaved": "SLA settings saved"
+    "slaSettingsSaved": "SLA settings saved",
+    "macroChanged": "That macro changed after you applied it. Apply it again."
   },
   "statuses": {
     "add": "Add status",

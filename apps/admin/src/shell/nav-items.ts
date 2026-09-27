@@ -91,10 +91,11 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   ticketing: item('ticketing', ROUTES.ticketing, SlidersHorizontal, {
     roles: ['admin', 'teamLeader'],
   }),
-  // M3-03 to M3-06: workflow rules, time-based rules and macros. The same two
-  // roles as Ticketing: DOMAIN-RULES §1.2 gives a Team Leader "rules, macros".
+  // M3-03 to M3-06. Rules are an Admin's and a Team Leader's (DOMAIN-RULES
+  // §1.2); an Agent comes here only for the Macros tab, because anybody who
+  // replies may keep personal macros.
   automation: item('automation', ROUTES.automation, Workflow, {
-    roles: ['admin', 'teamLeader'],
+    roles: ['admin', 'teamLeader', 'agent'],
   }),
   // How customers reach the brand (M2-08): its mail server and mailboxes are
   // brand-wide configuration, which DOMAIN-RULES §1.2 keeps with the Admin.

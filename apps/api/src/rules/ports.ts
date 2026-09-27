@@ -3,8 +3,10 @@ import type { Locale } from '@helpdock/i18n';
 
 /**
  * What the rules engine needs from two other M3 deliverables, as interfaces,
- * so M3-03 is buildable and testable before they land and each is wired in one
- * place (`worker/start-worker.ts`, `rules.module.ts`) when they do.
+ * so the engine is testable without them. Both are wired in two places,
+ * `engine-deps.ts` for the worker and `rules.module.ts` for the builder: the
+ * calendar through `sla/business-hours-probe.ts`, canned responses through
+ * `macros/canned-response-port.ts`.
  */
 
 /** What rendering a canned response gives back: sanitised by the owner, sanitised again here. */
@@ -29,14 +31,6 @@ export interface CannedResponseRenderer {
 }
 
 /**
- * Until M3-06 is wired, every canned response is unavailable: a rule that
- * sends one records the action as not carried out and does the rest.
- */
-export const noCannedResponses: CannedResponseRenderer = {
-  render: () => Promise.resolve(null),
-};
-
-/**
  * M3-01's calendar, asked through `BusinessHoursService.calendarFor(brandId,
  * departmentId)` and `isWithinBusinessHours(calendar, at)`. The rules engine
  * needs one answer for one department at one moment. `businessHoursProbe` in
@@ -54,8 +48,3 @@ export interface BusinessHoursProbe {
 export interface CannedResponseCatalog {
   list(tx: DbTransaction): Promise<{ readonly id: string; readonly name: string }[]>;
 }
-
-/** Until M3-06 is wired, the builder offers no canned responses. */
-export const noCannedResponseCatalog: CannedResponseCatalog = {
-  list: () => Promise.resolve([]),
-};

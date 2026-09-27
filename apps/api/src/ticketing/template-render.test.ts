@@ -124,6 +124,20 @@ describe('renderTemplate', () => {
   });
 });
 
+describe('the sender (M3-06)', () => {
+  it('fills {{agent.first_name}} with the first word of the sender’s name', () => {
+    const signed = templateValues({ brand: { name: 'Helpdock' }, agent: { name: 'Lina Haddad' } });
+
+    expect(renderTemplate('{{agent.first_name}}, {{brand.name}}', signed).text).toBe(
+      'Lina, Helpdock',
+    );
+  });
+
+  it('leaves it spelled out when nobody is sending', () => {
+    expect(renderTemplate('{{agent.first_name}}', values).unknown).toEqual(['agent.first_name']);
+  });
+});
+
 describe('isTemplatePlaceholder', () => {
   it('knows the six names the renderer fills', () => {
     expect(isTemplatePlaceholder('brand.name')).toBe(true);

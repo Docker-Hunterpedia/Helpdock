@@ -126,6 +126,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // ticket's department like the ticket's other children.
   { name: 'workflow_rules', departmentScoped: false },
   { name: 'workflow_runs', departmentScoped: true },
+  // M3-06. A canned response grants nothing — a reply sent with it runs under
+  // the sender's own ticket policies — so which departments a shared one is
+  // offered in is a service rule, as it is for `views`. The owner rule below
+  // keeps a personal one its owner's.
+  { name: 'canned_responses', departmentScoped: false },
 ];
 
 /**
@@ -143,6 +148,7 @@ export const TENANT_TABLES: readonly TenantTable[] = [
  */
 export const OWNER_SCOPED_TABLES: readonly { readonly name: string; readonly column: string }[] = [
   { name: 'views', column: 'owner_id' },
+  { name: 'canned_responses', column: 'owner_id' },
 ];
 
 /** The restrictive owner policy of {@link OWNER_SCOPED_TABLES}, as one statement. */

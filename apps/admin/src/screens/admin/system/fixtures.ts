@@ -1,4 +1,4 @@
-import type { SystemQueuePage, SystemStatus } from '@helpdock/schemas';
+import type { AuditLogPage, AuditRecord, SystemQueuePage, SystemStatus } from '@helpdock/schemas';
 import type { SystemApi } from './system-api.js';
 
 /**
@@ -109,6 +109,7 @@ export const fullQueuePage = (): SystemQueuePage => ({
 export const fakeSystemApi = (overrides: Partial<SystemApi> = {}): SystemApi => ({
   status: async () => healthySystemStatus(),
   queues: async () => fullQueuePage(),
+  auditLog: async () => auditLogPage(),
   ...overrides,
 });
 
@@ -133,3 +134,109 @@ function queue(
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------- M3-08
+
+const HELPDOCK_BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+const ACME_BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b2';
+
+const record = (
+  overrides: Partial<AuditRecord> & Pick<AuditRecord, 'id' | 'action'>,
+): AuditRecord => ({
+  brandId: HELPDOCK_BRAND,
+  brandName: 'Helpdock',
+  actorType: 'staff',
+  actorId: '0192c3f0-1a2b-7c3d-8e4f-00000000000a',
+  actorName: 'Lina Haddad',
+  targetType: 'settings',
+  targetId: null,
+  ip: '10.0.4.17',
+  requestId: '0192a4c1-7f3e-7b21-9c1d-2f0e5a6b7c8d',
+  userAgent: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0',
+  createdAt: '2026-09-27T11:22:08.000Z',
+  changes: [],
+  details: [],
+  ...overrides,
+});
+
+/**
+ * The rows of the artboard `AdminAuditLog`, as `GET /api/install/audit-log`
+ * answers them: already redacted, which is the api's job, so the page only
+ * ever draws a `[redacted]` it was handed.
+ */
+export const auditLogPage = (overrides: Partial<AuditLogPage> = {}): AuditLogPage => ({
+  entries: [
+    record({
+      id: '0192c3f0-1a2b-7c3d-8e4f-0000000a0001',
+      brandId: null,
+      brandName: null,
+      action: 'settings.updated',
+      targetId: 'smtp',
+      changes: [
+        {
+          field: 'smtp.host',
+          before: 'mail.old-host.net',
+          after: 'smtp.helpdock.com',
+          secret: false,
+        },
+        { field: 'smtp.port', before: '587', after: '465', secret: false },
+        { field: 'smtp.secure', before: 'false', after: 'true', secret: false },
+        { field: 'smtp.password', before: '[redacted]', after: '[redacted]', secret: true },
+      ],
+    }),
+    record({
+      id: '0192c3f0-1a2b-7c3d-8e4f-0000000a0002',
+      brandId: null,
+      brandName: null,
+      action: 'install.scope.access',
+      targetType: 'route',
+      targetId: 'GET /api/brands',
+      createdAt: '2026-09-27T11:20:51.000Z',
+    }),
+    record({
+      id: '0192c3f0-1a2b-7c3d-8e4f-0000000a0003',
+      actorType: 'system',
+      actorId: 'rule:refund-7-days',
+      actorName: null,
+      action: 'ticket.updated',
+      targetType: 'ticket',
+      targetId: 'HD-1042',
+      ip: null,
+      requestId: null,
+      userAgent: null,
+      createdAt: '2026-09-27T11:02:13.000Z',
+    }),
+    record({
+      id: '0192c3f0-1a2b-7c3d-8e4f-0000000a0004',
+      actorId: '0192c3f0-1a2b-7c3d-8e4f-00000000000b',
+      actorName: 'Omar Nasser',
+      action: 'macro.updated',
+      targetType: 'macro',
+      targetId: '0192c3f0-1a2b-7c3d-8e4f-000000000701',
+      ip: '10.0.4.22',
+      createdAt: '2026-09-27T10:41:09.000Z',
+      changes: [{ field: 'name', before: 'Refund sent', after: 'Refund issued', secret: false }],
+      details: [{ field: 'kind', value: 'macro', secret: false }],
+    }),
+    record({
+      id: '0192c3f0-1a2b-7c3d-8e4f-0000000a0005',
+      brandId: ACME_BRAND,
+      brandName: 'Acme Store',
+      actorType: 'apikey',
+      actorId: 'zapier-sync',
+      actorName: null,
+      action: 'ticket.created',
+      targetType: 'ticket',
+      targetId: 'HD-1047',
+      ip: '34.201.18.7',
+      userAgent: null,
+      createdAt: '2026-09-27T09:15:02.000Z',
+    }),
+  ],
+  nextCursor: 'older-page',
+  brands: [
+    { id: ACME_BRAND, name: 'Acme Store' },
+    { id: HELPDOCK_BRAND, name: 'Helpdock' },
+  ],
+  ...overrides,
+});

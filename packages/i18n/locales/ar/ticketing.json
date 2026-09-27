@@ -152,7 +152,8 @@
     "policySaved": "حُفظت السياسة {{name}} وأُعيد حساب التذاكر المفتوحة.",
     "policyDeleted": "حُذفت السياسة {{name}}",
     "policiesReordered": "حُفظ ترتيب السياسات",
-    "slaSettingsSaved": "حُفظت إعدادات مستوى الخدمة"
+    "slaSettingsSaved": "حُفظت إعدادات مستوى الخدمة",
+    "macroChanged": "تغيّر هذا الماكرو بعد أن طبّقته. طبّقه مرة أخرى."
   },
   "statuses": {
     "add": "إضافة حالة",

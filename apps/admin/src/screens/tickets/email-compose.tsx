@@ -334,6 +334,7 @@ export function DeliveryFailure({
         disabled={busy}
         startIcon={<RotateCw size={12} aria-hidden="true" />}
         onClick={onRetry}
+        aria-label={t('tickets:email.retryLabel')}
         sx={{ color: 'inherit' }}
       >
         {t('tickets:email.retry')}

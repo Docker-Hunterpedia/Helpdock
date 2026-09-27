@@ -498,6 +498,7 @@
     "notDeliveredDetail": "{{error}} · بعد {{attempts}} محاولات",
     "discarded": "تجاهله أحد المشرفين",
     "retry": "إعادة المحاولة",
+    "retryLabel": "إعادة محاولة إرسال هذه الرسالة",
     "retried": "أُعيد إلى الطابور.",
     "retryFailed": "لم ينجح ذلك. حاول مرة أخرى."
   }

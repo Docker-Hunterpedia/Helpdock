@@ -494,6 +494,7 @@
     "notDeliveredDetail": "{{error}} · after {{attempts}} attempts",
     "discarded": "discarded by an admin",
     "retry": "Retry",
+    "retryLabel": "Retry sending this email",
     "retried": "Sent back to the queue.",
     "retryFailed": "That did not work. Try again."
   }

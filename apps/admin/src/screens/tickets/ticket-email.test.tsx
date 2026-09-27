@@ -136,7 +136,7 @@ describe('a reply that was not delivered', () => {
     expect(state.parentElement).toHaveTextContent('mailbox full');
     expect(state.parentElement).toHaveTextContent('after 5 attempts');
 
-    await user.click(within(thread).getByRole('button', { name: 'Retry' }));
+    await user.click(within(thread).getByRole('button', { name: 'Retry sending this email' }));
 
     expect(await screen.findByText('Sent back to the queue.')).toBeVisible();
     expect(retry).toHaveBeenCalledWith(
@@ -159,7 +159,7 @@ describe('a reply that was not delivered', () => {
     const thread = screen.getByRole('list', { name: 'Conversation' });
 
     await within(thread).findByText('Not delivered');
-    await user.click(within(thread).getByRole('button', { name: 'Retry' }));
+    await user.click(within(thread).getByRole('button', { name: 'Retry sending this email' }));
 
     expect(await screen.findByText('That did not work. Try again.')).toBeVisible();
   });

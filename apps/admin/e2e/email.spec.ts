@@ -186,7 +186,7 @@ test.describe('the ticket view by email', () => {
     await expect(thread.getByText(t('tickets:email.notDelivered'))).toBeVisible();
     expect(await violations(page)).toEqual([]);
 
-    await thread.getByRole('button', { name: t('tickets:email.retry') }).click();
+    await thread.getByRole('button', { name: t('tickets:email.retryLabel') }).click();
     await expect(page.getByText(t('tickets:email.retried'))).toBeVisible();
     await expect(thread.getByText(t('tickets:email.notDelivered'))).toHaveCount(0);
   });

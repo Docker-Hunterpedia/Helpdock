@@ -6,6 +6,7 @@ import arCommon from '../locales/ar/common.json' with { type: 'json' };
 import arContacts from '../locales/ar/contacts.json' with { type: 'json' };
 import arCsat from '../locales/ar/csat.json' with { type: 'json' };
 import arEmail from '../locales/ar/email.json' with { type: 'json' };
+import arMacros from '../locales/ar/macros.json' with { type: 'json' };
 import arMe from '../locales/ar/me.json' with { type: 'json' };
 import arRules from '../locales/ar/rules.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
@@ -23,6 +24,7 @@ import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enContacts from '../locales/en/contacts.json' with { type: 'json' };
 import enCsat from '../locales/en/csat.json' with { type: 'json' };
 import enEmail from '../locales/en/email.json' with { type: 'json' };
+import enMacros from '../locales/en/macros.json' with { type: 'json' };
 import enMe from '../locales/en/me.json' with { type: 'json' };
 import enRules from '../locales/en/rules.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
@@ -64,6 +66,8 @@ export const NAMESPACES = [
   'channels',
   // `Admin/Automation` (M3-03 to M3-05): workflow rules, their log and the test run.
   'rules',
+  // M3-06: the Macros tab of Automation and the composer's macro picker.
+  'macros',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -88,6 +92,7 @@ export const resources = {
     csat: enCsat,
     channels: enChannels,
     rules: enRules,
+    macros: enMacros,
   },
   ar: {
     common: arCommon,
@@ -107,6 +112,7 @@ export const resources = {
     csat: arCsat,
     channels: arChannels,
     rules: arRules,
+    macros: arMacros,
   },
 };
 

@@ -33,6 +33,7 @@ describe('the schema', () => {
       'brand_domains',
       'brands',
       'business_hours',
+      'canned_responses',
       'contact_duplicate_suggestions',
       'contact_identities',
       'contact_merges',

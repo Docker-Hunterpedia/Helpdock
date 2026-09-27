@@ -76,9 +76,83 @@
   },
   "audit": {
     "title": "Audit log",
-    "showAll": "Show all",
-    "showFewer": "Show fewer",
     "empty": "Nothing has been recorded yet.",
-    "entry": "{{action}} · {{target}}"
+    "entry": "{{action}} · {{target}}",
+    "open": "Open"
+  },
+  "auditLog": {
+    "title": "Audit log",
+    "caption": "Install-wide · who changed what, newest first · each brand keeps its rows for its audit retention (2 years by default)",
+    "back": "Back to System",
+    "loading": "Reading the audit log…",
+    "install": "Install",
+    "filters": {
+      "label": "Filter the audit log",
+      "actor": "Actor",
+      "anyone": "Anyone",
+      "action": "Action",
+      "anyAction": "Any action",
+      "target": "Target type",
+      "anyTarget": "Any target",
+      "brand": "Brand",
+      "allBrands": "All brands",
+      "range": "Date range",
+      "from": "From",
+      "to": "to",
+      "toLabel": "To",
+      "clear": "Clear filters"
+    },
+    "targets": {
+      "settings": "Settings",
+      "ticket": "Ticket",
+      "contact": "Contact",
+      "user": "Staff",
+      "macro": "Macro",
+      "tag": "Tag"
+    },
+    "actorTypes": {
+      "staff": "staff",
+      "visitor": "visitor",
+      "apikey": "api key",
+      "system": "system"
+    },
+    "entries": "Audit entries",
+    "columns": {
+      "details": "Details",
+      "time": "Time ({{zone}})",
+      "actor": "Actor",
+      "action": "Action",
+      "target": "Target",
+      "brand": "Brand",
+      "ip": "IP"
+    },
+    "expand": "Details for {{action}} at {{time}}",
+    "region": "Changes in {{action}} at {{time}}",
+    "changed_one": "{{count}} field changed",
+    "changed_other": "{{count}} fields changed",
+    "request": "Request",
+    "target": "Target",
+    "via": {
+      "staff": "via admin UI",
+      "visitor": "via the widget",
+      "apikey": "via the API",
+      "system": "via the worker"
+    },
+    "viaBrowser": "{{via}} · {{browser}} on {{system}}",
+    "diff": {
+      "field": "Field",
+      "before": "Before",
+      "after": "After",
+      "note": "Note",
+      "secret": "Secret: changed, value never recorded"
+    },
+    "perPage": "{{shown}} shown · 50 per page",
+    "newer": "Newer",
+    "older": "Older",
+    "empty": {
+      "heading": "No matches",
+      "body": "Nothing was recorded for these filters."
+    },
+    "readOnly": "Read only: no row can be edited or deleted here; retention removes them. Secrets are never shown, so a secret field shows that it changed and nothing else. Opening this page writes its own install.scope.access row."
   }
 }

@@ -27,6 +27,11 @@ import type {
   FeedbackSettingsUpdateRequest,
   Holiday,
   HolidayCreateRequest,
+  Macro,
+  MacroCreateRequest,
+  MacroList,
+  MacroListQuery,
+  MacroUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -69,6 +74,8 @@ import {
   departmentSummarySchema,
   eligibleMemberListSchema,
   holidaySchema,
+  macroListSchema,
+  macroSchema,
   retentionOverviewSchema,
   slaPolicyListSchema,
   slaPolicySchema,
@@ -632,6 +639,50 @@ export class HttpTicketingApi implements TicketingApi {
 
   #field(brandId: string, fieldId: string): string {
     return `${this.#fields(brandId)}/${encodeURIComponent(fieldId)}`;
+  }
+
+  // ---------------------------------------------------------------- M3-06
+
+  async macros(brandId: string, query: MacroListQuery = {}): Promise<MacroList> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== '') {
+        params.set(key, String(value));
+      }
+    }
+    const search = params.toString();
+
+    return macroListSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#macros(brandId)}${search === '' ? '' : `?${search}`}`,
+      ),
+    );
+  }
+
+  async createMacro(brandId: string, request: MacroCreateRequest): Promise<Macro> {
+    return macroSchema.parse(await this.#transport.request('POST', this.#macros(brandId), request));
+  }
+
+  async updateMacro(brandId: string, macroId: string, request: MacroUpdateRequest): Promise<Macro> {
+    return macroSchema.parse(
+      await this.#transport.request(
+        'PATCH',
+        `${this.#macros(brandId)}/${encodeURIComponent(macroId)}`,
+        request,
+      ),
+    );
+  }
+
+  async deleteMacro(brandId: string, macroId: string): Promise<void> {
+    await this.#transport.request(
+      'DELETE',
+      `${this.#macros(brandId)}/${encodeURIComponent(macroId)}`,
+    );
+  }
+
+  #macros(brandId: string): string {
+    return `${this.#brand(brandId)}/macros`;
   }
 
   #templates(brandId: string): string {

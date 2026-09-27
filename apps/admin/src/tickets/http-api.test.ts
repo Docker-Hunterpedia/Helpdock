@@ -474,3 +474,40 @@ describe('views (M1-05)', () => {
     );
   });
 });
+
+describe('macros (M3-06)', () => {
+  const MACRO = '0192c3f0-1a2b-7c3d-8e4f-000000000701';
+
+  it('renders one for the ticket, in the language asked for', async () => {
+    fetchMock.mockImplementation(async () =>
+      json({
+        locale: 'ar',
+        fellBack: false,
+        text: 'مرحباً Mona',
+        segments: [
+          { text: 'مرحباً ', placeholder: null },
+          { text: 'Mona', placeholder: 'contact.first_name' },
+        ],
+        unknownPlaceholders: [],
+      }),
+    );
+
+    expect((await api.renderMacro(BRAND, TICKET, MACRO, 'ar')).text).toBe('مرحباً Mona');
+    expect(lastUrl()).toBe(
+      `/api/brands/${BRAND}/tickets/${TICKET}/macros/${MACRO}/render?locale=ar`,
+    );
+
+    await api.renderMacro(BRAND, TICKET, MACRO);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/macros/${MACRO}/render`);
+  });
+
+  it('runs one with its reply', async () => {
+    fetchMock.mockResolvedValue(json({ message: testMessage({ seq: 6 }) }, 201));
+
+    const result = await api.runMacro(BRAND, TICKET, { macroId: MACRO, actions: [] });
+
+    expect(result.message).not.toBeNull();
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/macro-runs`);
+    expect(lastInit().method).toBe('POST');
+  });
+});

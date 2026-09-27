@@ -17,6 +17,7 @@ import {
   brandDomains,
   brands,
   businessHours,
+  cannedResponses,
   contactDuplicateSuggestions,
   contactIdentities,
   contactMerges,
@@ -575,6 +576,18 @@ const fixtures = [
         depth: 1,
       }),
   },
+  {
+    name: 'canned_responses',
+    // M3-06. A shared one, for the reason the `views` row above is shared; the
+    // owner rule is the same restrictive policy and is tested below.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(cannedResponses).values({
+        brandId,
+        kind: 'canned',
+        name: 'Shipping fees explained',
+        bodies: { en: 'Hi {{contact.first_name}}', ar: '' },
+      }),
+  },
 ] as const;
 
 const brandIdsIn = async (tx: DbTransaction, table: string): Promise<string[]> => {
@@ -880,6 +893,106 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       );
 
       expect([...rows].map((row) => row.permissive)).toEqual(['RESTRICTIVE']);
+    });
+  });
+
+  describe('a personal canned response (M3-06)', () => {
+    const colleagueId = uuidv7();
+    const personal = uuidv7();
+    const as = (principalId: string) =>
+      ({
+        brandIds: [brandA],
+        departmentIds: 'all',
+        principalType: 'staff',
+        principalId,
+      }) as const;
+    const idsIn = async (tx: DbTransaction): Promise<string[]> => {
+      const rows = await tx.select({ id: cannedResponses.id }).from(cannedResponses);
+      return rows.map((row) => row.id);
+    };
+
+    beforeAll(async () => {
+      await db
+        .insert(users)
+        .values({ id: colleagueId, email: 'colleague-canned@example.com', name: 'Colleague' });
+      await withTenant(db, as(userId), (tx) =>
+        tx.insert(cannedResponses).values({
+          id: personal,
+          brandId: brandA,
+          ownerId: userId,
+          kind: 'canned',
+          name: 'My follow-up line',
+          bodies: { en: 'Talk soon', ar: '' },
+        }),
+      );
+    });
+
+    it('is visible to its owner and to nobody else, an Admin or a worker included', async () => {
+      expect(await withTenant(db, as(userId), idsIn)).toContain(personal);
+      expect(await withTenant(db, as(colleagueId), idsIn)).not.toContain(personal);
+      expect(await withSystem(db, brandA, idsIn)).not.toContain(personal);
+    });
+
+    it('cannot be written for somebody else', async () => {
+      const rejection = await withTenant(db, as(colleagueId), (tx) =>
+        tx.insert(cannedResponses).values({
+          brandId: brandA,
+          ownerId: userId,
+          kind: 'canned',
+          name: 'Planted',
+          bodies: { en: 'x', ar: '' },
+        }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+    });
+  });
+
+  describe('the audit trail of a request (M3-08)', () => {
+    const readBack = (request?: {
+      requestId: string;
+      ip: string | null;
+      userAgent: string | null;
+    }) =>
+      withTenant(
+        db,
+        {
+          brandIds: [brandA],
+          departmentIds: 'all',
+          principalType: 'staff',
+          principalId: userId,
+          request,
+        },
+        async (tx) => {
+          const [row] = await tx
+            .insert(auditLog)
+            .values({
+              brandId: brandA,
+              actorType: 'staff',
+              actorId: userId,
+              action: 'probe.audit_context',
+              targetType: 'probe',
+            })
+            .returning({
+              ip: auditLog.ip,
+              requestId: auditLog.requestId,
+              userAgent: auditLog.userAgent,
+            });
+          return row;
+        },
+      );
+
+    it('fills where it came from without the writer passing anything', async () => {
+      expect(
+        await readBack({ requestId: 'req-42', ip: '10.0.4.17', userAgent: 'Firefox/130' }),
+      ).toEqual({ ip: '10.0.4.17', requestId: 'req-42', userAgent: 'Firefox/130' });
+    });
+
+    it('leaves all three null for a transaction that serves no request', async () => {
+      expect(await readBack()).toEqual({ ip: null, requestId: null, userAgent: null });
     });
   });
 

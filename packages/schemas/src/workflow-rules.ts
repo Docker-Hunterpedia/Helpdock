@@ -566,7 +566,7 @@ export const ruleBuilderOptionsSchema = z.object({
   customFields: z.array(
     z.object({ key: z.string(), label: z.string(), labelAr: z.string().nullable() }),
   ),
-  /** Empty until M3-06's canned responses are wired in. */
+  /** M3-06's shared canned responses: a rule runs as nobody, so never a personal one. */
   cannedResponses: z.array(z.object({ id: z.uuid(), name: z.string() })),
 });
 export type RuleBuilderOptions = z.infer<typeof ruleBuilderOptionsSchema>;

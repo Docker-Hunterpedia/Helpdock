@@ -13,6 +13,15 @@ import { DB } from '../runtime/tokens.js';
 import { auditInstallScopeAccess } from './install-scope.js';
 import { tenantScopeFor } from './tenant-scope.js';
 
+/** What the interceptor reads of the Fastify request; a test double supplies less. */
+interface IncomingRequest {
+  readonly ip?: string;
+  readonly headers?: Readonly<Record<string, string | string[] | undefined>>;
+}
+
+const headerValue = (value: string | string[] | undefined): string | null =>
+  (Array.isArray(value) ? value[0] : value) ?? null;
+
 /**
  * Step 3 of ARCHITECTURE §6: open the transaction the whole request runs in and
  * put the `app.*` settings on it, so every query the handler makes is subject to
@@ -42,15 +51,28 @@ export class TenantInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const tenantContext = tenantScopeFor({
+    const scope = tenantScopeFor({
       principal: context.principal,
       scopeKind: context.scopeKind,
       targetBrandId: context.targetBrandId,
     });
 
-    if (tenantContext === null) {
+    if (scope === null) {
       return next.handle();
     }
+
+    // M3-08: where the request came from, for `audit_log`'s column defaults.
+    // `request.ip` follows `TRUST_PROXY` (bootstrap), and `withTenant` drops
+    // anything that does not parse as an address.
+    const request = executionContext.switchToHttp().getRequest<IncomingRequest>();
+    const tenantContext: TenantContext = {
+      ...scope,
+      request: {
+        requestId: context.requestId,
+        ip: request.ip ?? null,
+        userAgent: headerValue(request.headers?.['user-agent']),
+      },
+    };
 
     return from(
       this.#runInTransaction({

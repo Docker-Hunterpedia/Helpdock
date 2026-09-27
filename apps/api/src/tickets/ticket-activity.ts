@@ -58,7 +58,12 @@ export type TicketActivityAction =
    * escalation step ran (`to.percent`). Both name the clock in `to.clock`.
    */
   | 'ticket.sla.breached'
-  | 'ticket.sla.step';
+  | 'ticket.sla.step'
+  /**
+   * M3-06. One entry for everything a macro changed, with `to.macroId` and
+   * `to.macroName` saying which, and `to.messageId` the reply it ran with.
+   */
+  | 'ticket.macro_applied';
 
 /**
  * The actor behind a change, in the three words the activity log records.

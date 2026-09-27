@@ -46,7 +46,12 @@ export type TicketingAuditAction =
   | 'workflow_rule.created'
   | 'workflow_rule.updated'
   | 'workflow_rule.deleted'
-  | 'workflow_rule.reordered';
+  | 'workflow_rule.reordered'
+  // M3-06. Shared macros and canned responses only, for the reason views are:
+  // a personal one is its owner's working habit.
+  | 'macro.created'
+  | 'macro.updated'
+  | 'macro.deleted';
 
 export type TicketingAuditTarget =
   | 'tag'
@@ -56,7 +61,8 @@ export type TicketingAuditTarget =
   | 'brand'
   | 'department'
   | 'view'
-  | 'workflow_rule';
+  | 'workflow_rule'
+  | 'macro';
 
 export interface TicketingAuditEntry {
   readonly brandId: string;

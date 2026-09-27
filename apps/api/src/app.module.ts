@@ -11,6 +11,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { AssignmentModule } from './assignment/assignment.module.js';
+import { AuditLogModule } from './audit/audit-log.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
@@ -27,6 +28,7 @@ import type { SmtpTransportFactory } from './email/transport.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
+import { MacrosModule } from './macros/macros.module.js';
 import { MediaModule } from './media/media.module.js';
 import type { ObjectStorage } from './media/storage.js';
 import type { BootFacts } from './observability/boot-facts.js';
@@ -119,6 +121,12 @@ export class AppModule implements NestModule {
     // M3-01 and M3-02, the same pattern again: the Business hours and SLAs
     // tabs here, the clocks in `TicketsModule`'s lifecycle hooks.
     const sla = SlaModule.forRoot();
+    // M3-06, the same pattern: the ticket routes here, and applying a macro
+    // through the same `TicketsService` in `MacrosModule`.
+    const tickets = TicketsModule.forRoot({ ticketing, csat, sla });
+    // Imported by `AppModule` for its routes and by `RulesModule` for the
+    // builder's canned-response picker, one module to Nest.
+    const macros = MacrosModule.forRoot({ tickets });
 
     return {
       module: AppModule,
@@ -144,7 +152,7 @@ export class AppModule implements NestModule {
         ticketing,
         csat,
         sla,
-        TicketsModule.forRoot({ ticketing, csat, sla }),
+        tickets,
         // M1-07's tab and picker. The rotation itself runs in the worker.
         AssignmentModule.forRoot({ ticketing }),
         // M1-13: a ticket's CCs. Its service is exported for M1-09's merge.
@@ -174,7 +182,10 @@ export class AppModule implements NestModule {
         }),
         // M3-03 to M3-05: workflow rules, their log and the test run. The
         // engine runs in the worker.
-        RulesModule.forRoot({ sla }),
+        RulesModule.forRoot({ sla, macros }),
+        // M3-06: macros and canned responses. M3-08: the audit log viewer.
+        macros,
+        AuditLogModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

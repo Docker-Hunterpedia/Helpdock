@@ -160,10 +160,12 @@ describe('the Time-based and Macros tabs', () => {
     expect(within(list).getByText('15 minutes')).toBeInTheDocument();
   });
 
-  it('says macros are M3-06’s', async () => {
+  it('lists macros and canned responses under Macros, with no New rule', async () => {
     await renderAt('/admin/automation/macros');
 
-    expect(await screen.findByText('Macros arrive with M3-06', {}, LOAD)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Refund issued/ }, LOAD)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Macros', selected: true })).toBeInTheDocument();
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
     expect(screen.queryByRole('button', { name: 'New rule' })).not.toBeInTheDocument();
   });
 });

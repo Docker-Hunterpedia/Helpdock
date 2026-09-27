@@ -61,6 +61,7 @@ describe('@helpdock/db', () => {
       'brand-domains.ts',
       'brands.ts',
       'business-hours.ts',
+      'canned-responses.ts',
       'contact-duplicate-suggestions.ts',
       'contact-identities.ts',
       'contact-merges.ts',

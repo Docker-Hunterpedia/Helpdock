@@ -1,7 +1,11 @@
 import type {
   AssignableAgentList,
+  MacroLocale,
+  MacroRunRequest,
+  MacroRunResponse,
   MarkSpamRequest,
   MessageCreateRequest,
+  RenderedMacro,
   Ticket,
   TicketActivityList,
   TicketCcRequest,
@@ -124,6 +128,18 @@ export interface TicketsApi {
   deleteView(brandId: string, viewId: string): Promise<void>;
   /** Some views in a new order: all shared, or all the reader's own. */
   reorderViews(brandId: string, viewIds: readonly string[]): Promise<TicketViewList>;
+
+  // ---------------------------------------------------------------- M3-06
+
+  /** A macro or canned response filled in for this ticket, signed by the reader. */
+  renderMacro(
+    brandId: string,
+    ticketId: string,
+    macroId: string,
+    locale?: MacroLocale,
+  ): Promise<RenderedMacro>;
+  /** The reply and the kept actions, in one request and one activity entry. */
+  runMacro(brandId: string, ticketId: string, request: MacroRunRequest): Promise<MacroRunResponse>;
 }
 
 /**

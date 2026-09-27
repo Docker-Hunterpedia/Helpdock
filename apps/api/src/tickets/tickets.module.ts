@@ -179,6 +179,8 @@ export class TicketsModule {
         },
         MergeService,
       ],
+      // M3-06: applying a macro replies and edits through this very service.
+      exports: [TicketsService],
     };
   }
 }

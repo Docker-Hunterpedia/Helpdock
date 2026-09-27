@@ -104,7 +104,7 @@ describe('AuditCard', () => {
     expect(screen.getByText('Nothing has been recorded yet.')).toBeVisible();
   });
 
-  it('shows three rows and the rest on request', async () => {
+  it('shows the newest three rows and opens the full audit log', () => {
     const entry = healthySystemStatus().audit[0];
     if (entry === undefined) {
       throw new Error('the fixture carries an audit row');
@@ -116,12 +116,12 @@ describe('AuditCard', () => {
       action: `install.scope.access.${index}`,
     }));
 
-    const { user } = renderApp(<AuditCard audit={audit} />);
+    renderApp(<AuditCard audit={audit} />);
 
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
-
-    await user.click(screen.getByRole('button', { name: 'Show all' }));
-
-    expect(screen.getAllByRole('listitem')).toHaveLength(5);
+    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
+      'href',
+      '/admin/system/audit-log',
+    );
   });
 });

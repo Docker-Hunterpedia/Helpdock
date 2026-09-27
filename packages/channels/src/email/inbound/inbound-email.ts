@@ -48,8 +48,18 @@ export interface InboundEnvelope {
 }
 
 /** `<abc@host>` → `abc@host`. Whitespace and folding are dropped too. */
-export const bareMessageId = (value: string): string =>
-  value.trim().replace(/^<+/, '').replace(/>+$/, '').replace(/\s+/g, '');
+export const bareMessageId = (value: string): string => {
+  // Plain loops, not `/>+$/`: that pattern backtracks on a header of many `>`.
+  let start = 0;
+  let end = value.length;
+  while (start < end && (value[start] === '<' || /\s/.test(value[start] ?? ''))) {
+    start += 1;
+  }
+  while (end > start && (value[end - 1] === '>' || /\s/.test(value[end - 1] ?? ''))) {
+    end -= 1;
+  }
+  return value.slice(start, end).replace(/\s+/g, '');
+};
 
 /** Every `<…>` id in a `References` or `In-Reply-To` value, in order. */
 export const messageIdsIn = (value: string | null | undefined): string[] => {

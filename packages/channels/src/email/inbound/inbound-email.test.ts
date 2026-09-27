@@ -29,6 +29,15 @@ describe('message ids', () => {
     expect(bareMessageId('  <abc@host.example>\r\n')).toBe('abc@host.example');
   });
 
+  it('strips a hostile run of brackets in linear time', () => {
+    const started = performance.now();
+    expect(bareMessageId(`<${'<'.repeat(50_000)}x@y${'>'.repeat(50_000)}!`)).toBe(
+      `x@y${'>'.repeat(50_000)}!`,
+    );
+    expect(bareMessageId(`<x@y${'>'.repeat(100_000)}`)).toBe('x@y');
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it('reads every bracketed id of a References header in order', () => {
     expect(messageIdsIn('<one@a> <two@b>\r\n <three@c>')).toEqual(['one@a', 'two@b', 'three@c']);
   });

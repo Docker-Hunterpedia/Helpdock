@@ -321,3 +321,11 @@ describe('generic JSON', () => {
     );
   });
 });
+
+describe('parseInboundPayload', () => {
+  it('refuses a provider it does not know, including prototype names', async () => {
+    await expect(parseInboundPayload('constructor' as never, json({}))).rejects.toThrow(
+      'Unknown inbound-parse provider',
+    );
+  });
+});

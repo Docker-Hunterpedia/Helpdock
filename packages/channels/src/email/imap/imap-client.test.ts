@@ -36,6 +36,13 @@ describe('classifyImapError', () => {
     expect(classifyImapError(new Error("Mailbox doesn't exist: Nope")).kind).toBe('folder');
   });
 
+  it('reads a server reply that repeats "mailbox" without slowing down', () => {
+    const started = performance.now();
+    expect(classifyImapError(new Error('mailbox'.repeat(50_000))).kind).toBe('connect');
+    expect(classifyImapError(new Error('No such mailbox')).kind).toBe('folder');
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it('calls everything else a connection failure', () => {
     expect(classifyImapError(new Error('getaddrinfo ENOTFOUND imap.invalid'))).toMatchObject({
       kind: 'connect',

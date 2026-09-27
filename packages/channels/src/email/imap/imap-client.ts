@@ -86,14 +86,25 @@ export const classifyImapError = (error: unknown): ImapFailure => {
   ) {
     return new ImapFailure('timeout', null, error);
   }
-  if (
-    shape.serverResponseCode === 'NONEXISTENT' ||
-    /mailbox.*(?:not|doesn)|no such mailbox/i.test(response ?? '')
-  ) {
+  if (shape.serverResponseCode === 'NONEXISTENT' || mentionsMissingMailbox(response)) {
     return new ImapFailure('folder', response, error);
   }
 
   return new ImapFailure('connect', response, error);
+};
+
+/**
+ * "Mailbox … not found" in whatever words the server used. Found with
+ * `indexOf` rather than one `mailbox.*not` pattern, which backtracks badly on a
+ * hostile reply that repeats "mailbox".
+ */
+const mentionsMissingMailbox = (response: string | null | undefined): boolean => {
+  const text = (response ?? '').toLowerCase();
+  if (text.includes('no such mailbox')) {
+    return true;
+  }
+  const at = text.indexOf('mailbox');
+  return at !== -1 && /\b(?:not|doesn)/.test(text.slice(at));
 };
 
 const addressFor = async (settings: ImapSettings, options: ImapConnectOptions): Promise<string> => {

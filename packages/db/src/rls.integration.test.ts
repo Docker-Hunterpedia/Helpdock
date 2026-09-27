@@ -50,6 +50,8 @@ import {
   userBrandRoles,
   users,
   views,
+  workflowRules,
+  workflowRuns,
 } from './schema/index.js';
 import { withSystem, withTenant } from './tenant.js';
 import { uuidv7 } from './uuid.js';
@@ -102,6 +104,7 @@ const teamId = perBrand();
 const statusId = perBrand();
 const ticketId = perBrand();
 const tagId = perBrand();
+const ruleId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -539,6 +542,37 @@ const fixtures = [
         timeMode: 'business',
         startedAt: new Date(),
         checkpointAt: new Date(),
+      }),
+  },
+  {
+    name: 'workflow_rules',
+    // M3-03. Brand-scoped configuration, like a tag.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(workflowRules).values({
+        id: ruleId[brandId] ?? '',
+        brandId,
+        name: 'Refunds to Billing',
+        kind: 'event',
+        trigger: 'ticket_created',
+        conditions: { match: 'all', groups: [] },
+        actions: [{ type: 'escalate' }],
+        position: 1,
+      }),
+  },
+  {
+    name: 'workflow_runs',
+    // M3-03's execution log: a child of the ticket, department-scoped, written
+    // with the department explicitly rather than by a trigger.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(workflowRuns).values({
+        brandId,
+        departmentId: departmentId[brandId] ?? '',
+        ruleId: ruleId[brandId] ?? '',
+        ruleName: 'Refunds to Billing',
+        ticketId: ticketId[brandId] ?? '',
+        trigger: 'ticket_created',
+        result: 'applied',
+        depth: 1,
       }),
   },
 ] as const;

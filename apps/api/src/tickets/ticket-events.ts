@@ -8,6 +8,7 @@ import {
 import {
   departmentRoom,
   REALTIME_EVENTS,
+  RULE_MAX_DEPTH,
   ticketChangedSchema,
   ticketMessageEventSchema,
   ticketRoom,
@@ -71,6 +72,23 @@ const TICKET_CHANGE_EVENTS = new Set<string>([
   TICKET_EVENTS.spam,
 ]);
 
+/** The parts of a ticket an update can move, as `changes` names them (M3-03). */
+export const TICKET_CHANGES = [
+  'subject',
+  'status',
+  'priority',
+  'department',
+  'team',
+  'assignee',
+  'tags',
+  /** Beside `tags` when the change put at least one tag on, which "tag added" rules wait for. */
+  'tag_added',
+  'custom',
+  'participants',
+] as const;
+export const ticketChangeSchema = z.enum(TICKET_CHANGES);
+export type TicketChange = z.infer<typeof ticketChangeSchema>;
+
 /**
  * What an outbox row for a ticket carries. Ids and the department, never a
  * body: the payload is stored in `outbox.payload` and read by a worker, and a
@@ -90,6 +108,24 @@ export const ticketEventPayloadSchema = z.object({
   messageId: z.uuid().optional(),
   seq: z.int().positive().optional(),
   kind: z.enum(['public', 'note', 'system', 'ai']).optional(),
+  /**
+   * M3-03. What an update moved, so a workflow rule can be started by
+   * "status changed", "assigned" or "tag added" rather than by every update.
+   * Absent means "something about the ticket", which is still `ticket_updated`.
+   */
+  changes: z.array(ticketChangeSchema).max(TICKET_CHANGES.length).optional(),
+  /**
+   * M3-03. The workflow rules whose actions made this change, oldest first. It
+   * is how the depth guard follows a chain from one rule to the next through
+   * the outbox: absent when a person, a channel or a timer made the change.
+   */
+  ruleChain: z.array(z.uuid()).min(1).max(RULE_MAX_DEPTH).optional(),
+  /**
+   * M3-03, for M3-02. On `ticket.replied` written by a rule's canned reply:
+   * whether the rule says the reply answers the customer (DOMAIN-RULES §3.1,
+   * `counts_as_response`, default false). Absent on every other reply.
+   */
+  countsAsResponse: z.boolean().optional(),
 });
 export type TicketEventPayload = z.infer<typeof ticketEventPayloadSchema>;
 

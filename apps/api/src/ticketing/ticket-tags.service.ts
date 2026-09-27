@@ -83,6 +83,9 @@ export class TicketTagsService {
       await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.updated, {
         ticketId,
         departmentId: ticket.departmentId,
+        changes: change.after.some((id) => !change.before.includes(id))
+          ? ['tags', 'tag_added']
+          : ['tags'],
       });
     }
 

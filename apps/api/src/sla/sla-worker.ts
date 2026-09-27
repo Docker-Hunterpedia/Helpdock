@@ -1,10 +1,10 @@
 import { brands, type Db, type DbTransaction } from '@helpdock/db';
 import {
   type JobLogger,
+  type OutboxDispatcher,
   type OutboxEventHandler,
   outboxEvents,
   parseJobPayload,
-  registerEventHandler,
   slaRebuildJob,
   slaTimerJob,
 } from '@helpdock/jobs';
@@ -93,12 +93,16 @@ export const createSlaScheduleHandler =
  * attempts. Call this **after** every other milestone's registration, so a real
  * consumer always wins.
  */
-export const registerSlaEventHandlers = (deps: SlaWorkerDeps, log: JobLogger): void => {
-  registerEventHandler(SLA_SCHEDULE_EVENT, createSlaScheduleHandler(deps));
+export const registerSlaEventHandlers = (
+  deps: SlaWorkerDeps,
+  log: JobLogger,
+  dispatcher: Pick<OutboxDispatcher, 'register' | 'events'> = outboxEvents,
+): void => {
+  dispatcher.register(SLA_SCHEDULE_EVENT, createSlaScheduleHandler(deps));
 
   for (const event of Object.values(SLA_EVENTS)) {
-    if (!outboxEvents.events.includes(event)) {
-      registerEventHandler(event, async ({ brandId, outboxId, payload }) => {
+    if (!dispatcher.events.includes(event)) {
+      dispatcher.register(event, async ({ brandId, outboxId, payload }) => {
         log.info(
           { event, brandId, outboxId, ticketId: payload.ticketId },
           'SLA event recorded; no consumer registered for it yet',

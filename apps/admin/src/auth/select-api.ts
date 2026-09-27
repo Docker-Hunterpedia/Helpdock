@@ -1,3 +1,6 @@
+import type { AutomationApi } from '../automation/api.js';
+import { HttpAutomationApi } from '../automation/http-api.js';
+import { MockAutomationApi } from '../automation/mock-api.js';
 import type { ChannelsApi } from '../channels/api.js';
 import { HttpChannelsApi } from '../channels/http-api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
@@ -41,6 +44,8 @@ export interface AdminApis {
   readonly email: EmailApi;
   /** M2: Channels › Mailboxes and the email card's remote images. */
   readonly channels: ChannelsApi;
+  /** M3-03 to M3-05: `Admin/Automation`. */
+  readonly automation: AutomationApi;
 }
 
 /**
@@ -82,6 +87,7 @@ export function createApis(
       uploader: new HttpAttachmentUploader(transport),
       email: new HttpEmailApi(transport),
       channels: new HttpChannelsApi(transport),
+      automation: new HttpAutomationApi(transport),
     };
   }
 
@@ -113,5 +119,6 @@ export function createApis(
     uploader: uploads,
     email: new MockEmailApi(),
     channels: new MockChannelsApi(),
+    automation: new MockAutomationApi(),
   };
 }

@@ -3,12 +3,16 @@ import { Info, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useSemanticTokens } from '../app/tokens.js';
 
-export type AlertTone = 'danger' | 'info';
+export type AlertTone = 'danger' | 'warning' | 'info';
 
 /**
  * DESIGN §6.4 Banner: status tint, border, icon, text. The icon carries the
  * tone alongside the colour so nothing depends on colour alone (DESIGN §10),
  * and `role="alert"` announces the message the moment it appears.
+ *
+ * `warning` (M3-03) is a standing state rather than an event — the depth guard
+ * stopped a loop today — so it is a `status`, read when reached, not announced
+ * over whatever the person was doing.
  */
 export function AlertBanner({
   tone,
@@ -18,23 +22,16 @@ export function AlertBanner({
   readonly children: ReactNode;
 }): ReactNode {
   const tokens = useSemanticTokens();
-  const Icon = tone === 'danger' ? TriangleAlert : Info;
-  const palette =
-    tone === 'danger'
-      ? {
-          background: tokens['status.danger.tint'],
-          border: tokens['status.danger'],
-          text: tokens['status.danger.text'],
-        }
-      : {
-          background: tokens['status.info.tint'],
-          border: tokens['status.info'],
-          text: tokens['status.info.text'],
-        };
+  const Icon = tone === 'info' ? Info : TriangleAlert;
+  const palette = {
+    background: tokens[`status.${tone}.tint`],
+    border: tokens[`status.${tone}`],
+    text: tokens[`status.${tone}.text`],
+  };
 
   return (
     <Box
-      role="alert"
+      role={tone === 'warning' ? 'status' : 'alert'}
       sx={{
         display: 'flex',
         gap: 2,

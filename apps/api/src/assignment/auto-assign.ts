@@ -58,6 +58,11 @@ export interface AutoAssignRequest {
   readonly ticketId: string;
   readonly trigger: AssignmentTrigger;
   readonly now: Date;
+  /**
+   * M3-03. The workflow rules that asked for this assignment, when one did, so
+   * the `assigned` event it leads to carries the chain the depth guard counts.
+   */
+  readonly ruleChain?: readonly string[] | undefined;
 }
 
 /** The rotation a department runs for this trigger, or null for "leave it alone". */
@@ -79,7 +84,7 @@ const rotationFor = (
 export const autoAssign = async (
   { repository, presence }: AutoAssignDeps,
   tx: DbTransaction,
-  { brandId, ticketId, trigger, now }: AutoAssignRequest,
+  { brandId, ticketId, trigger, now, ruleChain }: AutoAssignRequest,
 ): Promise<AutoAssignOutcome> => {
   await repository.lockBrandRotation(tx, brandId);
 
@@ -142,6 +147,8 @@ export const autoAssign = async (
   await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.updated, {
     ticketId,
     departmentId: department.id,
+    changes: ['assignee'],
+    ...(ruleChain === undefined || ruleChain.length === 0 ? {} : { ruleChain: [...ruleChain] }),
   });
 
   return { assigned: picked };
@@ -173,5 +180,6 @@ export const unassignTicket = async (
   await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.updated, {
     ticketId: ticket.id,
     departmentId: ticket.departmentId,
+    changes: ['assignee'],
   });
 };

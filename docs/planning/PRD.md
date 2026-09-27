@@ -89,8 +89,8 @@ Update this table in the same PR that changes a milestone's status.
 | 1 Core desk | M1 Ticketing core | M0 | 6–8 | shipped | 2026-09-19 | 2026-09-25 |
 | 1 Core desk | M2 Email channel | M1 | 3–4 | shipped | 2026-09-27 | 2026-09-27 |
 | 1 Core desk | M3 Automation and SLAs | M1 | 4–5 | shipped | 2026-09-27 | 2026-09-27 |
-| 2 Customer surfaces | M4 Widget and realtime | M1, M3 | 5–6 | planned | | |
-| 2 Customer surfaces | M5 Help center | M1 | 5–6 | planned | | |
+| 2 Customer surfaces | M4 Widget and realtime | M1, M3 | 5–6 | in progress | 2026-09-27 | |
+| 2 Customer surfaces | M5 Help center | M1 | 5–6 | in progress | 2026-09-27 | |
 | 2 Customer surfaces | M6 Telegram | M2 | 2 | planned | | |
 | 3 Intelligence | M7 AI | M3, M4, M5, M6 | 7–9 | planned | | |
 | 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | planned | | |
@@ -441,3 +441,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-09-25 | M1 shipped. All fifteen deliverables merged (#63, #64, #66, #69, #70, #71, #72, #73, #74); all five exit criteria met: the first ([create, assign, reply, note, tag, merge, split and close in en and ar](#m1-ticketing-core)) was met for seven of eight verbs at close-out, and the eighth the same day, when the details panel gained its tags row and editable custom fields (M1-15, artboard `Admin/Ticket-Tags`). Actual effort seven days against an estimate of 6–8 weeks. What was built, and the accepted gaps, are in [docs/completed/M1-ticketing-core.md](../completed/M1-ticketing-core.md#gaps-accepted). M2 Email channel, M3 Automation and SLAs and M5 Help center depend only on M1 and may start. |
 | 2026-09-27 | Version 0.1.0 (M0 and M1) prepared for release. M2 and M3 started in parallel; issues #80–#95, artboards on the design canvas. |
 | 2026-09-27 | M2 and M3 shipped. All sixteen deliverables merged (M2: #97, #99; M3: #100, #101, #102, #103) and all nine exit criteria met, each proved by a named test in [docs/completed/M2-email-channel.md](../completed/M2-email-channel.md#exit-criteria) and [docs/completed/M3-automation-and-slas.md](../completed/M3-automation-and-slas.md#exit-criteria). Actual effort one day for both, run in parallel, against estimates of 3–4 and 4–5 weeks. The gaps carried forward are in each doc; the M2 external dependency on a real SMTP provider and IMAP mailbox stays `needed`, as CI uses Mailpit and GreenMail. M4 Widget and realtime (M1, M3), M5 Help center (M1), M6 Telegram (M2) and M8 API, webhooks, reports (M1, M3) may now start. |
+| 2026-09-27 | M4 and M5 started in parallel; issues #106–#126, artboards on the design canvas. |

@@ -10,6 +10,10 @@ import {
   emailPollJob,
   emailPollSchedulerId,
   emailSendJob,
+  helpCenterMediaProcessJob,
+  helpCenterPublishDueJob,
+  helpCenterPublishDueJobId,
+  helpCenterPublishDueSweepJob,
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   maintenanceRetentionJob,
@@ -412,5 +416,37 @@ describe('the domain jobs (M5-07)', () => {
   it('re-checks every fifteen minutes', () => {
     expect(domainVerifyScheduleJob.schedule).toEqual({ cron: DOMAIN_VERIFY_CRON });
     expect(DOMAIN_VERIFY_CRON).toBe('*/15 * * * *');
+  });
+});
+
+describe('the help center jobs (M5-01, M5-02)', () => {
+  it('sweeps for due publishes hourly and leaves the per-brand job to that sweep', () => {
+    expect(helpCenterPublishDueSweepJob.schedule).toEqual({ everyMs: 3_600_000 });
+    expect(helpCenterPublishDueJob.schedule).toBeUndefined();
+  });
+
+  it('keys one brand’s publish run by its tick, with a job id BullMQ accepts', () => {
+    const payload = parseJobPayload(helpCenterPublishDueJob, {
+      brandId,
+      tick: '2026-10-01T06:00:00.000Z',
+    });
+
+    expect(helpCenterPublishDueJobId(payload)).toBe(
+      `help_center.publish_due.${brandId}.${Date.parse('2026-10-01T06:00:00.000Z')}`,
+    );
+    expect(idempotencyKeyFor(helpCenterPublishDueJob, payload, 'job-1')).toBe(
+      `help_center.publish_due:${brandId}:2026-10-01T06:00:00.000Z`,
+    );
+  });
+
+  it('converts one image once, however often the job is delivered', () => {
+    const payload = parseJobPayload(helpCenterMediaProcessJob, { brandId, mediaId: outboxId });
+
+    expect(idempotencyKeyFor(helpCenterMediaProcessJob, payload, 'job-1')).toBe(
+      `help_center.media_process:${outboxId}`,
+    );
+    expect(() => parseJobPayload(helpCenterMediaProcessJob, { brandId })).toThrow(
+      PayloadValidationError,
+    );
   });
 });

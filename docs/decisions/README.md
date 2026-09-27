@@ -21,6 +21,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0011](0011-ticket-search-token-table.md) | Search tickets through a token table, not through `LEAKPROOF` wrappers | accepted |
 | [0012](0012-widget-bundle-shape.md) | Ship the widget as an ES module with lazy chunks and a catalog-compatible translator | accepted |
 | [0013](0013-web-form-page-rendered-by-the-api.md) | Render the hosted web form as plain HTML from the api until the help center exists | accepted |
+| [0014](0014-markdown-through-tiptap.md) | Markdown import and export through `@tiptap/markdown`, in the browser | accepted |
 
 ## Template
 

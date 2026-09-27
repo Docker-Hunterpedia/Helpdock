@@ -35,6 +35,8 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'settings:write': true,
     'system:read': true,
     'install:admin': false,
+    'help_center:read': true,
+    'help_center:manage': true,
   },
   team_leader: {
     'ticket:read': true,
@@ -53,6 +55,9 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'settings:write': true,
     'system:read': false,
     'install:admin': false,
+    // DOMAIN-RULES §1.2: a Team Leader manages "help center" content.
+    'help_center:read': true,
+    'help_center:manage': true,
   },
   agent: {
     'ticket:read': true,
@@ -68,6 +73,9 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'settings:write': false,
     'system:read': false,
     'install:admin': false,
+    // Reads articles to answer with them; changes none.
+    'help_center:read': true,
+    'help_center:manage': false,
   },
   viewer: {
     'ticket:read': true,
@@ -83,6 +91,9 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'settings:write': false,
     'system:read': false,
     'install:admin': false,
+    // §1.2: a Viewer "may read … help center content".
+    'help_center:read': true,
+    'help_center:manage': false,
   },
 };
 

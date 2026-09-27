@@ -36,6 +36,10 @@ export const ROUTES = {
   /** Nested under contacts because an account is a group of them, not a peer. */
   account: '/contacts/accounts/:accountId',
   helpCenter: '/help-center',
+  /** One tab of it: Articles, Settings, Insights. `/help-center` alone opens Articles. */
+  helpCenterTab: '/help-center/:tab',
+  /** The article editor (M5-02). Deeper than a tab, so the two never compete. */
+  helpCenterArticle: '/help-center/articles/:articleId',
   reports: '/reports',
   settings: '/admin/settings',
   /** How this brand's tickets are shaped and routed (M1-01). */
@@ -148,6 +152,13 @@ export const automationRoute = (tab: string): string => `${ROUTES.automation}/${
 /** The builder for one rule, or for a new one of a kind. */
 export const ruleRoute = (ruleId: string): string =>
   `${ROUTES.automation}/rules/${encodeURIComponent(ruleId)}`;
+
+/** One tab of the Help center page, by its url segment. */
+export const helpCenterRoute = (tab: string): string => `${ROUTES.helpCenter}/${tab}`;
+
+/** One article in the editor. */
+export const articleRoute = (articleId: string): string =>
+  `${ROUTES.helpCenter}/articles/${encodeURIComponent(articleId)}`;
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;

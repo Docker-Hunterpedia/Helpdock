@@ -37,7 +37,15 @@ export const ACTION_OPTIONS = [
 ] as const;
 
 /** The artboard's Target type options, as the `target_type` the rows carry (Staff is `user`). */
-export const TARGET_OPTIONS = ['settings', 'ticket', 'contact', 'user', 'macro', 'tag'] as const;
+export const TARGET_OPTIONS = [
+  'settings',
+  'ticket',
+  'contact',
+  'user',
+  'macro',
+  'tag',
+  'hc_article',
+] as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -15,6 +15,8 @@ import type { DomainsApi } from '../domains/api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
 import type { EmailApi } from '../email/api.js';
 import { MockEmailApi } from '../email/mock-api.js';
+import type { HelpCenterApi } from '../help-center/api.js';
+import { MockHelpCenterApi } from '../help-center/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
@@ -41,6 +43,7 @@ export interface RenderAppOptions {
   /** Defaults to a fresh fixture, for `Admin/Automation`. */
   readonly automationApi?: AutomationApi;
   readonly notificationsApi?: NotificationsApi;
+  readonly helpCenterApi?: HelpCenterApi;
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
   readonly initialEntries?: readonly string[];
@@ -58,6 +61,7 @@ export interface RenderedApp extends RenderResult {
   readonly channelsApi: ChannelsApi;
   readonly automationApi: AutomationApi;
   readonly notificationsApi: NotificationsApi;
+  readonly helpCenterApi: HelpCenterApi;
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
 }
@@ -79,6 +83,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const channelsApi = options.channelsApi ?? new MockChannelsApi();
   const automationApi = options.automationApi ?? new MockAutomationApi();
   const notificationsApi = options.notificationsApi ?? new MockNotificationsApi();
+  const helpCenterApi = options.helpCenterApi ?? new MockHelpCenterApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
@@ -96,6 +101,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       channelsApi={channelsApi}
       automationApi={automationApi}
       notificationsApi={notificationsApi}
+      helpCenterApi={helpCenterApi}
       browserPush={browserPush}
       domainsApi={domainsApi}
       queryClient={queryClient}
@@ -120,6 +126,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     channelsApi,
     automationApi,
     notificationsApi,
+    helpCenterApi,
     browserPush,
     domainsApi,
   };

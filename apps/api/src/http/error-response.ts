@@ -7,6 +7,7 @@ import type {
   ErrorCode,
   ErrorResponse,
   FieldError,
+  HcRefusal,
   IdentityProblem,
   SetupRefusal,
   StaffRefusal,
@@ -22,6 +23,7 @@ import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ChannelsFailure } from '../channels/channels-failure.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
+import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
@@ -61,6 +63,8 @@ export interface MappedError {
   readonly domains?: DomainsRefusal;
   /** Only on a refused widget request; see `widget/widget-failure.ts`. */
   readonly widget?: WidgetErrorCode;
+  /** Only on a refused help center change; see `help-center/help-center-failure.ts`. */
+  readonly helpCenter?: HcRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -208,6 +212,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M5-01. Before the generic branch, for the reason the ones above give.
+  if (error instanceof HelpCenterFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      helpCenter: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -258,5 +273,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
     ...(mapped.domains === undefined ? {} : { domains: { reason: mapped.domains } }),
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
+    ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
   },
 });

@@ -108,7 +108,8 @@
       "contact": "Contact",
       "user": "Staff",
       "macro": "Macro",
-      "tag": "Tag"
+      "tag": "Tag",
+      "hc_article": "Help center article"
     },
     "actorTypes": {
       "staff": "staff",

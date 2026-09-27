@@ -3,6 +3,7 @@ import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
   authEmailJob,
+  createJobProcessor,
   createOutboxEventHandler,
   createQueueConnection,
   createWorker,
@@ -11,6 +12,9 @@ import {
   domainVerifyScheduleJob,
   emailPollJob,
   emailSendJob,
+  helpCenterMediaProcessJob,
+  helpCenterPublishDueJob,
+  helpCenterPublishDueSweepJob,
   type JobLogger,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
@@ -68,6 +72,9 @@ import { registerEmailEventHandlers } from '../email/email-events.js';
 import { createEmailSendHandler, createEmailSendProcessor } from '../email/email-send.job.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { type InstallSmtp, SettingsInstallSmtp, smtpTransportFactory } from '../email/transport.js';
+import { registerHelpCenterEventHandlers } from '../help-center/events.js';
+import { createHcMediaProcessor } from '../help-center/media-process.job.js';
+import { createHelpCenterKnowledgeProcessor } from '../help-center/publish-due.job.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
@@ -170,6 +177,12 @@ export interface WorkerDependencies {
    * reason the retention schedule is.
    */
   createRulesWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /**
+   * M5-01's `knowledge` consumer: the scheduled publish, and the hourly sweep
+   * that re-adds it per brand, whose schedule is upserted on every boot for
+   * the reason the retention schedule is.
+   */
+  createHelpCenterWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   /** M3-07's `notify` consumer: notification emails and web pushes, and the auth emails. */
   createNotifyWorker(options: {
     redis: Redis;
@@ -410,9 +423,30 @@ export const workerDependencies: WorkerDependencies = {
     const domains = new Queue(QUEUE_NAMES.domains, { connection: redis });
     registerDomainEventHandlers(domainsQueueOf(domains));
 
+    // M5-01, M5-02. A scheduled article adds a delayed publish on the
+    // `knowledge` queue, and a confirmed article image adds its conversion on
+    // `media`, both with ids derived from the rows, under the rule above.
+    const knowledge = new Queue(QUEUE_NAMES.knowledge, { connection: redis });
+    registerHelpCenterEventHandlers({
+      addMediaProcess: async (payload) => {
+        await media.add(helpCenterMediaProcessJob.name, payload, {
+          ...helpCenterMediaProcessJob.options,
+          jobId: `${helpCenterMediaProcessJob.name}.${payload.mediaId}`,
+        });
+      },
+      addPublishDue: async (payload, jobId, delayMs) => {
+        await knowledge.add(helpCenterPublishDueJob.name, payload, {
+          ...helpCenterPublishDueJob.options,
+          jobId,
+          delay: delayMs,
+        });
+      },
+    });
+
     return {
       close: async () => {
         await media.close();
+        await knowledge.close();
         await assignment.close();
         await outbound.close();
         await inbound.close();
@@ -450,24 +484,44 @@ export const workerDependencies: WorkerDependencies = {
     );
     return worker;
   },
-  createMediaWorker: ({ redis, db, log, env }) =>
-    createWorker(
+  createMediaWorker: ({ redis, db, log, env }) => {
+    const storage = storageFor(env);
+    const attachments = createJobProcessor(
       mediaProcessJob,
       createMediaProcessor({
-        storage: storageFor(env),
+        storage,
         tools: createMediaTools({ ffmpeg: env.FFMPEG_PATH, ffprobe: env.FFPROBE_PATH }),
         scanner: scannerFor(env),
       }),
-      {
-        redis,
-        db,
-        log,
-        // One at a time. sharp and ffmpeg are CPU-bound and a worker that runs
-        // four conversions at once on a small VPS starves everything else on
-        // it; more replicas is the way to scale this, not more concurrency.
-        concurrency: 1,
+      { db, log },
+    );
+    // M5-02: article images share the queue and its budget.
+    const articleImages = createJobProcessor(
+      helpCenterMediaProcessJob,
+      createHcMediaProcessor(storage),
+      { db, log },
+    );
+    const worker = new Worker(
+      QUEUE_NAMES.media,
+      async (job) => {
+        if (job.name === helpCenterMediaProcessJob.name) {
+          return articleImages(job);
+        }
+        return attachments(job);
       },
-    ),
+      // One at a time. sharp and ffmpeg are CPU-bound and a worker that runs
+      // four conversions at once on a small VPS starves everything else on
+      // it; more replicas is the way to scale this, not more concurrency.
+      { connection: redis, concurrency: 1 },
+    );
+    worker.on('failed', (job, error) =>
+      log.error(
+        { job: job?.name, jobId: job?.id, attemptsMade: job?.attemptsMade, err: error },
+        'media job failed',
+      ),
+    );
+    return worker;
+  },
   createAssignmentWorker: ({ redis, db, log }) =>
     createWorker(
       assignmentOfflineUnassignJob,
@@ -644,6 +698,49 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createHelpCenterWorker: ({ redis, db, log }) => {
+    const knowledge = new Queue(QUEUE_NAMES.knowledge, { connection: redis });
+    knowledge
+      .upsertJobScheduler(
+        helpCenterPublishDueSweepJob.name,
+        { every: 3_600_000 },
+        {
+          name: helpCenterPublishDueSweepJob.name,
+          data: {},
+          opts: helpCenterPublishDueSweepJob.options,
+        },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the help center publish sweep'),
+      );
+
+    const worker = new Worker(
+      QUEUE_NAMES.knowledge,
+      createHelpCenterKnowledgeProcessor({
+        db,
+        log,
+        queue: {
+          add: async (payload, jobId) => {
+            await knowledge.add(helpCenterPublishDueJob.name, payload, {
+              ...helpCenterPublishDueJob.options,
+              jobId,
+            });
+          },
+        },
+      }),
+      { connection: redis },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'knowledge job failed'),
+    );
+
+    return {
+      close: async () => {
+        await worker.close();
+        await knowledge.close();
+      },
+    };
+  },
   createNotifyWorker: ({ redis, db, log, env, settings }) => {
     const channels = new InstallChannels(settings);
     const notify = createNotifyProcessor(
@@ -754,6 +851,7 @@ export const startWorker = ({
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });
+  const helpCenter = deps.createHelpCenterWorker({ redis: connection, db, log });
   const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   const domains = deps.createDomainsWorker({ redis: connection, db, log, env });
   // `status` is the same connection. The relay reports each cycle under
@@ -784,6 +882,7 @@ export const startWorker = ({
     await inbound.close();
     await sla.close();
     await rules.close();
+    await helpCenter.close();
     await notify.close();
     await domains.close();
     await producers.close();

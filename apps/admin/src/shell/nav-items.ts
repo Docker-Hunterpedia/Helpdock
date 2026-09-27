@@ -79,7 +79,9 @@ const item = (
 export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   tickets: item('tickets', ROUTES.tickets, Ticket),
   contacts: item('contacts', ROUTES.contacts, Users),
-  helpCenter: item('helpCenter', ROUTES.helpCenter, BookOpen, { placeholder: true }),
+  // M5-01, M5-02: every role reads the brand's articles; the api decides who
+  // may change them (DOMAIN-RULES §1.2).
+  helpCenter: item('helpCenter', ROUTES.helpCenter, BookOpen),
   reports: item('reports', ROUTES.reports, ChartColumn, { placeholder: true }),
   settings: item('settings', ROUTES.settings, Settings, { placeholder: true }),
   // The brand's own settings. Admin only: DOMAIN-RULES §1.2 keeps brand-wide

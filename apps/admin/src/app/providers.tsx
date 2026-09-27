@@ -18,6 +18,8 @@ import type { ContactsApi } from '../contacts/api.js';
 import type { DomainsApi } from '../domains/api.js';
 import { DomainsApiProvider } from '../domains/context.tsx';
 import type { EmailApi } from '../email/api.js';
+import type { HelpCenterApi } from '../help-center/api.js';
+import { HelpCenterApiProvider } from '../help-center/context.tsx';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import type { BrowserPush } from '../notifications/browser-push.js';
@@ -108,6 +110,8 @@ export interface AppProvidersProps {
   readonly channelsApi?: ChannelsApi;
   /** Defaults to the matching adapter. Only `Admin/Automation` reads it. */
   readonly automationApi?: AutomationApi;
+  /** Defaults to the matching adapter. Only the Help center screens read it (M5). */
+  readonly helpCenterApi?: HelpCenterApi;
   /** Defaults to the matching adapter. The bell and the Notifications tab need it. */
   readonly notificationsApi?: NotificationsApi;
   /** Defaults to the matching adapter: this browser's push half. */
@@ -143,6 +147,7 @@ export function AppProviders({
   emailApi,
   channelsApi,
   automationApi,
+  helpCenterApi,
   notificationsApi,
   browserPush,
   domainsApi,
@@ -169,6 +174,7 @@ export function AppProviders({
   const email = emailApi ?? fallback.email;
   const channels = channelsApi ?? fallback.channels;
   const automation = automationApi ?? fallback.automation;
+  const helpCenter = helpCenterApi ?? fallback.helpCenter;
   const notifications = notificationsApi ?? fallback.notifications;
   const push = browserPush ?? fallback.browserPush;
   const domains = domainsApi ?? fallback.domains;
@@ -238,11 +244,13 @@ export function AppProviders({
               >
                 <AutomationApiProvider api={automation}>
                   <DomainsApiProvider api={domains}>
-                    <NotificationsProvider api={notifications} push={push}>
-                      <ToastProvider>
-                        <Router>{children}</Router>
-                      </ToastProvider>
-                    </NotificationsProvider>
+                    <HelpCenterApiProvider api={helpCenter}>
+                      <NotificationsProvider api={notifications} push={push}>
+                        <ToastProvider>
+                          <Router>{children}</Router>
+                        </ToastProvider>
+                      </NotificationsProvider>
+                    </HelpCenterApiProvider>
                   </DomainsApiProvider>
                 </AutomationApiProvider>
               </AuthApiProvider>

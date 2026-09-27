@@ -28,6 +28,12 @@ import {
   departments,
   emailDeliveries,
   emailOutboundSettings,
+  hcArticles,
+  hcArticleVersions,
+  hcCategories,
+  hcMedia,
+  hcSections,
+  hcSettings,
   holidays,
   inboundParseSettings,
   mailboxes,
@@ -110,6 +116,9 @@ const statusId = perBrand();
 const ticketId = perBrand();
 const tagId = perBrand();
 const ruleId = perBrand();
+const hcCategoryId = perBrand();
+const hcSectionId = perBrand();
+const hcArticleId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -625,6 +634,65 @@ const fixtures = [
     name: 'web_form_settings',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(webFormSettings).values({ brandId, enabled: true }),
+  },
+  // M5-01, M5-02, M5-09. Help center content: brand-scoped, never
+  // department-scoped. Visibility is a read-service filter, not a tenant rule.
+  {
+    name: 'hc_categories',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcCategories).values({
+        id: hcCategoryId[brandId] ?? '',
+        brandId,
+        slug: 'returns',
+        names: { en: 'Returns', ar: '' },
+      }),
+  },
+  {
+    name: 'hc_sections',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcSections).values({
+        id: hcSectionId[brandId] ?? '',
+        brandId,
+        categoryId: hcCategoryId[brandId] ?? '',
+        slug: 'refunds',
+        names: { en: 'Refunds', ar: '' },
+      }),
+  },
+  {
+    name: 'hc_articles',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcArticles).values({
+        id: hcArticleId[brandId] ?? '',
+        brandId,
+        sectionId: hcSectionId[brandId] ?? '',
+        slug: 'refund-timelines',
+      }),
+  },
+  {
+    name: 'hc_article_versions',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcArticleVersions).values({
+        brandId,
+        articleId: hcArticleId[brandId] ?? '',
+        locale: 'en',
+        title: 'Refund timelines',
+      }),
+  },
+  {
+    name: 'hc_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcSettings).values({ brandId, access: 'public' }),
+  },
+  {
+    name: 'hc_media',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcMedia).values({
+        brandId,
+        s3Key: `hc/${brandId}/${uuidv7()}/original`,
+        originalName: 'screenshot.png',
+        mime: 'image/png',
+        size: 1024,
+      }),
   },
 ] as const;
 

@@ -3,6 +3,7 @@ import type {
   ChannelsRefusal,
   ContactRefusal,
   DomainsRefusal,
+  HcRefusal,
   IdentityProblem,
   StaffRefusal,
   TicketingRefusal,
@@ -12,6 +13,7 @@ import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schema
 import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
 import { DomainsError } from '../domains/api.js';
+import { HelpCenterError } from '../help-center/api.js';
 import { StaffError } from '../staff/api.js';
 import { TicketingError } from '../ticketing/api.js';
 import { TicketLifecycleError } from '../tickets/api.js';
@@ -200,6 +202,7 @@ const toError = async (
   | ChannelsError
   | ContactError
   | DomainsError
+  | HelpCenterError
   | StaffError
   | TicketingError
   | TicketLifecycleError
@@ -211,6 +214,7 @@ const toError = async (
   let lifecycle: TicketLifecycleRefusal | undefined;
   let channels: ChannelsRefusal | undefined;
   let domains: DomainsRefusal | undefined;
+  let helpCenter: HcRefusal | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -221,6 +225,7 @@ const toError = async (
     lifecycle = body.lifecycle?.reason;
     channels = body.channels?.reason;
     domains = body.domains?.reason;
+    helpCenter = body.helpCenter?.reason;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -248,6 +253,10 @@ const toError = async (
 
   if (domains !== undefined) {
     return new DomainsError(domains);
+  }
+
+  if (helpCenter !== undefined) {
+    return new HelpCenterError(helpCenter);
   }
 
   if (auth === undefined) {

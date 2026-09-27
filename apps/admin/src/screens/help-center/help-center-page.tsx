@@ -1,0 +1,107 @@
+import type { StaffRole } from '@helpdock/schemas';
+import { Box, Tab, Tabs, Typography } from '@mui/material';
+import { BarChart3, FileText, Settings } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link, Navigate, useParams } from 'react-router';
+import { useT } from '../../app/i18n.js';
+import { helpCenterRoute } from '../../app/route-paths.js';
+import { useSemanticTokens } from '../../app/tokens.js';
+import { currentBrand, useSession } from '../../auth/session.tsx';
+import { PageHeader } from '../../shell/page-header.tsx';
+import { ArticlesTab } from './articles-tab.tsx';
+import { NewArticleButton } from './new-article-button.tsx';
+import { SettingsTab } from './settings-tab.tsx';
+
+/**
+ * `Admin/HelpCenter` (M5-01, M5-09): the page header, the tab row, and the
+ * Articles tab. Settings holds "Who can read it" (M5-09); the theme, home
+ * page and links below it arrive with M5-06, and Insights with M5-08, which
+ * is what that tab says until then.
+ *
+ * An Agent sees Articles alone (the artboard's footnote); a Viewer sees every
+ * tab read-only; changing anything is an Admin's or a Team Leader's.
+ */
+
+const TABS = [
+  { key: 'articles', icon: FileText, roles: ['admin', 'teamLeader', 'agent', 'viewer'] },
+  { key: 'settings', icon: Settings, roles: ['admin', 'teamLeader', 'viewer'] },
+  { key: 'insights', icon: BarChart3, roles: ['admin', 'teamLeader', 'viewer'] },
+] as const satisfies readonly { key: string; icon: unknown; roles: readonly StaffRole[] }[];
+
+export type HelpCenterTab = (typeof TABS)[number]['key'];
+
+export const helpCenterTabsFor = (role: StaffRole) =>
+  TABS.filter((tab) => (tab.roles as readonly StaffRole[]).includes(role));
+
+/** Whether this role may change the help center (DOMAIN-RULES §1.2). */
+export const managesHelpCenter = (role: StaffRole): boolean =>
+  role === 'admin' || role === 'teamLeader';
+
+export function HelpCenterPage(): ReactNode {
+  const t = useT();
+  const tokens = useSemanticTokens();
+  const session = useSession();
+  const brand = currentBrand(session);
+  const { tab: segment } = useParams();
+  const tabs = helpCenterTabsFor(session.user.role);
+  const tab = tabs.find((candidate) => candidate.key === segment);
+
+  if (tab === undefined) {
+    return <Navigate to={helpCenterRoute('articles')} replace />;
+  }
+
+  const canManage = managesHelpCenter(session.user.role);
+
+  return (
+    <>
+      <PageHeader
+        title={t('helpCenter:title')}
+        caption={`${brand.name} · ${brand.domain}`}
+        action={tab.key === 'articles' && canManage ? <NewArticleButton /> : undefined}
+      />
+
+      <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
+        <Tabs value={tab.key} aria-label={t('helpCenter:tabs.label')}>
+          {tabs.map((candidate) => {
+            const Icon = candidate.icon;
+            return (
+              <Tab
+                key={candidate.key}
+                value={candidate.key}
+                icon={<Icon size={16} aria-hidden="true" />}
+                iconPosition="start"
+                label={t(`helpCenter:tabs.${candidate.key}`)}
+                component={Link}
+                to={helpCenterRoute(candidate.key)}
+              />
+            );
+          })}
+        </Tabs>
+      </Box>
+
+      {tab.key === 'articles' ? (
+        <ArticlesTab canManage={canManage} />
+      ) : tab.key === 'settings' ? (
+        <SettingsTab canManage={canManage} />
+      ) : (
+        <Box
+          component="section"
+          aria-labelledby="hc-insights"
+          sx={{
+            borderRadius: '10px',
+            border: `1px solid ${tokens['border.default']}`,
+            backgroundColor: tokens['bg.surface'],
+            padding: 6,
+          }}
+        >
+          <Typography variant="h3" component="h2" id="hc-insights">
+            {t('helpCenter:insights.heading')}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {t('helpCenter:insights.body')}
+          </Typography>
+        </Box>
+      )}
+    </>
+  );
+}

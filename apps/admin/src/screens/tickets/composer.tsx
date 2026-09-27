@@ -337,7 +337,9 @@ function Unavailable({
   }
 
   return (
-    <Tooltip title={reason}>
+    // Non-interactive and above the toolbar: an open tooltip must never sit on
+    // the Send button below it and swallow the click.
+    <Tooltip title={reason} placement="top" disableInteractive>
       <Box component="span" sx={{ display: 'inline-flex' }}>
         {children}
         <Box component="span" sx={visuallyHidden}>

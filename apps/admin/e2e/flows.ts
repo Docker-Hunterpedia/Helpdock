@@ -166,5 +166,5 @@ export async function openSecurity(
 
   await page.getByRole('button', { name: t('admin:currentUser.menuLabel', { name }) }).click();
   await page.getByRole('menuitem', { name: t('me:security.title') }).click();
-  await page.getByRole('heading', { name: t('me:security.title'), level: 1 }).waitFor();
+  await page.getByRole('heading', { name: t('me:account.title'), level: 1 }).waitFor();
 }

@@ -1,6 +1,7 @@
 import { Avatar, Box, Divider, ListItemIcon, Menu, MenuItem, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import {
+  Bell,
   Check,
   Circle,
   Clock,
@@ -132,6 +133,18 @@ export function UserMenu(): ReactNode {
             <ShieldCheck size={16} aria-hidden="true" />
           </ListItemIcon>
           {t('me:security.title')}
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            close();
+            void navigate(ROUTES.meNotifications);
+          }}
+        >
+          <ListItemIcon>
+            <Bell size={16} aria-hidden="true" />
+          </ListItemIcon>
+          {t('me:account.tabs.notifications')}
         </MenuItem>
 
         <Divider />

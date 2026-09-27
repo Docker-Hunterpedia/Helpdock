@@ -15,6 +15,9 @@ import type { EmailApi } from '../email/api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
+import type { NotificationsApi } from '../notifications/api.js';
+import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push.js';
+import { MockNotificationsApi } from '../notifications/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
@@ -35,6 +38,8 @@ export interface RenderAppOptions {
   readonly channelsApi?: ChannelsApi;
   /** Defaults to a fresh fixture, for `Admin/Automation`. */
   readonly automationApi?: AutomationApi;
+  readonly notificationsApi?: NotificationsApi;
+  readonly browserPush?: BrowserPush;
   readonly initialEntries?: readonly string[];
 }
 
@@ -49,6 +54,8 @@ export interface RenderedApp extends RenderResult {
   readonly emailApi: EmailApi;
   readonly channelsApi: ChannelsApi;
   readonly automationApi: AutomationApi;
+  readonly notificationsApi: NotificationsApi;
+  readonly browserPush: BrowserPush;
 }
 
 /**
@@ -67,6 +74,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const emailApi = options.emailApi ?? new MockEmailApi();
   const channelsApi = options.channelsApi ?? new MockChannelsApi();
   const automationApi = options.automationApi ?? new MockAutomationApi();
+  const notificationsApi = options.notificationsApi ?? new MockNotificationsApi();
+  const browserPush = options.browserPush ?? new MockBrowserPush();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -81,6 +90,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       emailApi={emailApi}
       channelsApi={channelsApi}
       automationApi={automationApi}
+      notificationsApi={notificationsApi}
+      browserPush={browserPush}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -102,5 +113,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     emailApi,
     channelsApi,
     automationApi,
+    notificationsApi,
+    browserPush,
   };
 }

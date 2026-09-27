@@ -8,7 +8,6 @@ import {
   slaRebuildJob,
   slaTimerJob,
 } from '@helpdock/jobs';
-import { SLA_EVENTS } from '@helpdock/schemas';
 import { DelayedError, type Job, UnrecoverableError } from 'bullmq';
 import { ne } from 'drizzle-orm';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
@@ -86,31 +85,15 @@ export const createSlaScheduleHandler =
   };
 
 /**
- * Registers `sla.schedule`, and — only where nothing else has claimed them yet
- * — a handler that logs `sla.warning`, `sla.breached` and `ticket.escalated`.
- * Those three are M3-07's to consume; until its handlers are registered, a
- * logged event is better than a job that fails as unknown and burns its
- * attempts. Call this **after** every other milestone's registration, so a real
- * consumer always wins.
+ * Registers `sla.schedule`. The events the engine writes — `sla.warning`,
+ * `sla.breached` and `ticket.escalated` — are consumed by M3-07's
+ * notifications and M3-03's rules, which register their own subscribers.
  */
 export const registerSlaEventHandlers = (
   deps: SlaWorkerDeps,
-  log: JobLogger,
-  dispatcher: Pick<OutboxDispatcher, 'register' | 'events'> = outboxEvents,
+  dispatcher: Pick<OutboxDispatcher, 'register'> = outboxEvents,
 ): void => {
   dispatcher.register(SLA_SCHEDULE_EVENT, createSlaScheduleHandler(deps));
-
-  for (const event of Object.values(SLA_EVENTS)) {
-    if (!dispatcher.events.includes(event)) {
-      dispatcher.register(event, async ({ brandId, outboxId, payload }) => {
-        log.info(
-          { event, brandId, outboxId, ticketId: payload.ticketId },
-          'SLA event recorded; no consumer registered for it yet',
-        );
-        await Promise.resolve();
-      });
-    }
-  }
 };
 
 export interface SlaProcessorOptions {

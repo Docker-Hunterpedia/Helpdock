@@ -144,6 +144,44 @@ export const enqueueTicketEvent = (
   enqueueOutbox(tx, { brandId, event, payload: ticketEventPayloadSchema.parse(payload) });
 
 /**
+ * M3-07. Somebody was given the ticket. Its own event rather than a reading of
+ * `ticket.updated`, whose payload carries ids and not what changed: the
+ * notification has to say who was assigned and by what — a person, a rule, or
+ * the rotation — and diffing the row a worker reads later would race the next
+ * change.
+ *
+ * Not in {@link TICKET_EVENTS}: nothing about it is a socket frame, since the
+ * `ticket.updated` beside it already tells every open screen.
+ *
+ * Written by `TicketsService.create` and `update` for a person's choice (a
+ * macro's assign action included), by `autoAssign` for the rotation's, and by
+ * the rules engine's actions (M3-03) with `assignedBy: 'rule'` — also when the
+ * rotation picks on a rule's behalf.
+ */
+export const TICKET_ASSIGNED_EVENT = 'ticket.assigned';
+
+export const ticketAssignedPayloadSchema = z.object({
+  ticketId: z.uuid(),
+  departmentId: z.uuid(),
+  assigneeId: z.uuid(),
+  assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based']),
+  /** The person who chose, when a person did. */
+  actorId: z.uuid().nullable(),
+});
+export type TicketAssignedPayload = z.infer<typeof ticketAssignedPayloadSchema>;
+
+export const enqueueTicketAssigned = (
+  tx: DbTransaction,
+  brandId: string,
+  payload: TicketAssignedPayload,
+): Promise<string> =>
+  enqueueOutbox(tx, {
+    brandId,
+    event: TICKET_ASSIGNED_EVENT,
+    payload: ticketAssignedPayloadSchema.parse(payload),
+  });
+
+/**
  * Which rooms hear about a change. Two, and on a department move three:
  *
  * - `ticket:<id>` is whoever has the ticket open, for the thread and for

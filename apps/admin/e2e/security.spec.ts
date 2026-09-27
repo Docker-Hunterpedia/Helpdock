@@ -16,7 +16,7 @@ test.describe('the security page', () => {
     await openSecurity(page, locale);
 
     await expect(
-      page.getByRole('heading', { name: t('me:security.title'), level: 1 }),
+      page.getByRole('heading', { name: t('me:account.title'), level: 1 }),
     ).toBeVisible();
   });
 

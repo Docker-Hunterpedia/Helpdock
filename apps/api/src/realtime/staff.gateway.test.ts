@@ -4,6 +4,7 @@ import {
   type Principal,
   STAFF_NAMESPACE,
   ticketRoom,
+  userRoom,
 } from '@helpdock/schemas';
 import type { Namespace } from 'socket.io';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -288,6 +289,14 @@ describe('StaffGateway', () => {
   });
 
   describe('connections', () => {
+    it('puts every socket in its own person room, where the bell hears (M3-07)', () => {
+      const socket = socketOf('s1');
+
+      harnessed.gateway.handleConnection(socket);
+
+      expect(socket.rooms).toContain(userRoom(LINA));
+    });
+
     it('keeps the socket_connections gauge honest across connect and disconnect', async () => {
       const first = socketOf('s1');
       const second = socketOf('s2');

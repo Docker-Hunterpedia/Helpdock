@@ -64,40 +64,60 @@ describe('createOutboxDispatcher', () => {
     );
   });
 
-  it('runs every handler registered for an event, in registration order', async () => {
-    const dispatcher = createOutboxDispatcher();
-    const calls: string[] = [];
-    dispatcher.register('ticket.replied', async () => {
-      calls.push('realtime');
-    });
-    dispatcher.register('ticket.replied', async () => {
-      calls.push('rules');
-    });
-
-    await dispatcher.dispatch(contextFor('ticket.replied', recordingLogger()));
-
-    expect(calls).toEqual(['realtime', 'rules']);
-    expect(dispatcher.events).toEqual([SETTINGS_CHANGED_EVENT, 'ticket.replied']);
-  });
-
-  it('refuses the same handler twice for one event', () => {
+  it('refuses the same handler twice for one event, even under another name', () => {
     const dispatcher = createOutboxDispatcher();
     const handler = () => Promise.resolve();
     dispatcher.register('ticket.replied', handler);
 
-    expect(() => dispatcher.register('ticket.replied', handler)).toThrow(/already registered/);
+    expect(() => dispatcher.register('ticket.replied', handler, 'rules')).toThrow(
+      /already registered/,
+    );
+  });
+
+  it('refuses a second handler in the default slot', () => {
+    const dispatcher = createOutboxDispatcher();
+    dispatcher.register('ticket.replied', () => Promise.resolve());
+
+    expect(() => dispatcher.register('ticket.replied', () => Promise.resolve())).toThrow(
+      /An outbox handler for ticket\.replied is already registered\./,
+    );
   });
 
   it('stops at the first handler that throws, so the whole job is retried', async () => {
     const dispatcher = createOutboxDispatcher();
     const later = vi.fn().mockResolvedValue(undefined);
     dispatcher.register('ticket.replied', () => Promise.reject(new Error('redis is down')));
-    dispatcher.register('ticket.replied', later);
+    dispatcher.register('ticket.replied', later, 'rules');
 
     await expect(
       dispatcher.dispatch(contextFor('ticket.replied', recordingLogger())),
     ).rejects.toThrow('redis is down');
     expect(later).not.toHaveBeenCalled();
+  });
+
+  it('refuses a second handler from the same named subscriber', () => {
+    const dispatcher = createOutboxDispatcher();
+    dispatcher.register('ticket.replied', () => Promise.resolve(), 'notifications');
+
+    expect(() =>
+      dispatcher.register('ticket.replied', () => Promise.resolve(), 'notifications'),
+    ).toThrow(/already registered by notifications/);
+  });
+
+  it('runs every subscriber of an event, in the order they registered', async () => {
+    const dispatcher = createOutboxDispatcher();
+    const calls: string[] = [];
+    const recordAs = (name: string) => async () => {
+      calls.push(name);
+    };
+    dispatcher.register('ticket.replied', recordAs('rules'), 'rules');
+    dispatcher.register('ticket.replied', recordAs('sockets'));
+    dispatcher.register('ticket.replied', recordAs('notifications'), 'notifications');
+
+    await dispatcher.dispatch(contextFor('ticket.replied', recordingLogger()));
+
+    expect(calls).toEqual(['rules', 'sockets', 'notifications']);
+    expect(dispatcher.events).toEqual([SETTINGS_CHANGED_EVENT, 'ticket.replied']);
   });
 
   it('refuses an event name the outbox could never hold', () => {

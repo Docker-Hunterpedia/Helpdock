@@ -26,6 +26,7 @@ import type {
 import { applyStatusChange } from '../tickets/status-change.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import {
+  enqueueTicketAssigned,
   enqueueTicketEvent,
   TICKET_EVENTS,
   type TicketChange,
@@ -631,6 +632,18 @@ export const applyRuleActions = async (
         ruleChain: [...context.chain],
       },
     );
+  }
+
+  // M3-07. The new assignee is told, as after a person's choice. A rule that
+  // hands the ticket to the rotation is told about below, by the pick.
+  if (state.ticket.assigneeId !== null && state.ticket.assigneeId !== target.ticket.assigneeId) {
+    await enqueueTicketAssigned(context.tx, context.brandId, {
+      ticketId: state.ticket.id,
+      departmentId: state.ticket.departmentId,
+      assigneeId: state.ticket.assigneeId,
+      assignedBy: 'rule',
+      actorId: null,
+    });
   }
 
   // After the event, as a person's move does it (M1-07): the rotation picks in

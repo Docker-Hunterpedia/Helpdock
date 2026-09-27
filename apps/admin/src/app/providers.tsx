@@ -17,6 +17,9 @@ import type { ChannelsApi } from '../channels/api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import type { EmailApi } from '../email/api.js';
 import type { AttachmentUploader } from '../media/upload.js';
+import type { NotificationsApi } from '../notifications/api.js';
+import type { BrowserPush } from '../notifications/browser-push.js';
+import { NotificationsProvider } from '../notifications/context.tsx';
 import type { StaffApi } from '../staff/api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import type { TicketsApi } from '../tickets/api.js';
@@ -103,6 +106,10 @@ export interface AppProvidersProps {
   readonly channelsApi?: ChannelsApi;
   /** Defaults to the matching adapter. Only `Admin/Automation` reads it. */
   readonly automationApi?: AutomationApi;
+  /** Defaults to the matching adapter. The bell and the Notifications tab need it. */
+  readonly notificationsApi?: NotificationsApi;
+  /** Defaults to the matching adapter: this browser's push half. */
+  readonly browserPush?: BrowserPush;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -132,6 +139,8 @@ export function AppProviders({
   emailApi,
   channelsApi,
   automationApi,
+  notificationsApi,
+  browserPush,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -155,6 +164,8 @@ export function AppProviders({
   const email = emailApi ?? fallback.email;
   const channels = channelsApi ?? fallback.channels;
   const automation = automationApi ?? fallback.automation;
+  const notifications = notificationsApi ?? fallback.notifications;
+  const push = browserPush ?? fallback.browserPush;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -220,9 +231,11 @@ export function AppProviders({
                 channelsApi={channels}
               >
                 <AutomationApiProvider api={automation}>
-                  <ToastProvider>
-                    <Router>{children}</Router>
-                  </ToastProvider>
+                  <NotificationsProvider api={notifications} push={push}>
+                    <ToastProvider>
+                      <Router>{children}</Router>
+                    </ToastProvider>
+                  </NotificationsProvider>
                 </AutomationApiProvider>
               </AuthApiProvider>
             </QueryClientProvider>

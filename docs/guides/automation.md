@@ -82,8 +82,13 @@ send a canned response, add an internal note, notify, escalate, close.
   or a personal one, is recorded as not carried out and the rest of the rule
   still runs.
 - *Notify* resolves who — the department's team leads, the assignee, a team, a
-  person — and writes a `rule.notify` outbox event; M3-07 decides how each of
-  them hears.
+  person — and writes a `rule.notify` outbox event; M3-07 delivers it as an
+  escalation notification, under the same scope and deactivation rules as
+  every other ([the notifications guide](notifications.md)), with the rule's
+  message quoted.
+- *Assign* to an agent tells them as a person's choice would, with
+  `ticket.assigned` naming a rule; assigning to a team or to round-robin tells
+  whoever the rotation then picks.
 - An action that cannot be done — a team that was deleted since the rule was
   saved, an agent who cannot work the department — is logged as *not carried
   out* and the others still run. An action that would change nothing writes

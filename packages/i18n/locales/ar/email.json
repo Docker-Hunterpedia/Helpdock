@@ -72,5 +72,89 @@
       "body": "مرحباً {{contact.first_name}}،\n\nشكراً لتواصلك مع {{brand.name}}. رقم طلبك {{ticket.number}}. فريق {{department.name}} خارج ساعات العمل الآن، وسيردّ عليك عبر البريد الإلكتروني فور عودته.\n\nلإضافة أي تفاصيل، أجب على هذه الرسالة وستُضاف إلى الطلب نفسه."
     },
     "fallbackName": "بك"
+  },
+  "staffNotification": {
+    "brand": "Helpdock",
+    "kicker": {
+      "assigned": "إسناد",
+      "replied": "رد",
+      "mentioned": "إشارة",
+      "sla_warning": "تنبيه اتفاقية مستوى الخدمة · {{clock}}",
+      "sla_breached": "تجاوز اتفاقية مستوى الخدمة · {{clock}}",
+      "escalated": "تصعيد"
+    },
+    "subject": {
+      "assigned": "[{{reference}}] أُسند إليك: {{subject}}",
+      "replied": "[{{reference}}] ردّ {{contact}}",
+      "mentioned": "[{{reference}}] أشار إليك {{actor}}",
+      "sla_warning": "[{{reference}}] تنبيه: استُهلك {{percent}} % من مهلة {{clock}}",
+      "sla_breached": "[{{reference}}] تجاوز مهلة {{clock}}",
+      "escalated": "[{{reference}}] تصعيد: {{subject}}"
+    },
+    "heading": {
+      "assigned": "أصبح الطلب {{reference}} مسندًا إليك",
+      "replied": "ردّ {{contact}} على الطلب {{reference}}",
+      "mentioned": "أشار إليك {{actor}} في الطلب {{reference}}",
+      "sla_warning": "اقترب الطلب {{reference}} من مهلة {{clock}}",
+      "sla_breached": "تجاوز الطلب {{reference}} مهلة {{clock}}",
+      "escalated": "صُعّد الطلب {{reference}}"
+    },
+    "body": {
+      "assigned": {
+        "person": "أسنده إليك {{actor}}.",
+        "rule": "أسندته إليك قاعدة سير عمل.",
+        "round_robin": "أسنده إليك التوزيع الدوري.",
+        "skill_based": "أسنده إليك التوزيع حسب المهارات."
+      },
+      "replied": "أجابت جهة الاتصال على طلب مسند إليك.",
+      "mentioned": "في ملاحظة داخلية على طلب «{{subject}}». لا يرى العملاء الملاحظات.",
+      "sla_warning": "استُهلك {{percent}} % من مهلة {{clock}} ولا يزال الطلب بحاجة إلى رد.",
+      "sla_breached": "انقضت مهلة {{clock}} ولا يزال الطلب بحاجة إلى رد.",
+      "escalated": "صعّدت خطوةٌ من اتفاقية مستوى الخدمة أو قاعدةٌ هذا الطلب إليك أو إلى فريقك."
+    },
+    "clock": {
+      "first_response": "الرد الأول",
+      "next_response": "الرد التالي",
+      "resolution": "الحل",
+      "unknown": "اتفاقية مستوى الخدمة"
+    },
+    "someone": "أحدهم",
+    "aContact": "جهة الاتصال",
+    "noteLabel": "ملاحظة داخلية · {{actor}}",
+    "replyLabel": "رد · {{contact}}",
+    "ruleLabel": "رسالة من قاعدة سير عمل",
+    "rows": {
+      "ticket": "الطلب",
+      "contact": "جهة الاتصال",
+      "department": "القسم",
+      "priority": "الأولوية",
+      "assignee": "مسند إلى",
+      "you": "أنت",
+      "nobody": "لا أحد"
+    },
+    "priority": {
+      "low": "منخفضة",
+      "medium": "متوسطة",
+      "high": "مرتفعة",
+      "urgent": "عاجل"
+    },
+    "action": {
+      "open": "فتح {{reference}}",
+      "reply": "الرد في Helpdock"
+    },
+    "why": {
+      "assigned": "تصلك هذه الرسالة لأن رسائل الإسناد مفعّلة لديك.",
+      "replied": "تصلك هذه الرسالة لأن رسائل الردود مفعّلة لديك.",
+      "mentioned": "تصلك هذه الرسالة لأن رسائل الإشارة مفعّلة لديك.",
+      "sla_warning": "تصلك هذه الرسالة لأن رسائل تنبيه مستوى الخدمة مفعّلة لديك.",
+      "sla_breached": "تصلك هذه الرسالة لأن رسائل تجاوز مستوى الخدمة مفعّلة لديك.",
+      "escalated": "تصلك هذه الرسالة لأن رسائل التصعيد مفعّلة لديك."
+    },
+    "settings": "تغيير إعدادات الإشعارات",
+    "sentTo": "Helpdock · أُرسلت إلى {{email}}",
+    "push": {
+      "testTitle": "إشعار تجريبي من Helpdock",
+      "testBody": "الإشعارات الفورية تعمل على هذا المتصفح."
+    }
   }
 }

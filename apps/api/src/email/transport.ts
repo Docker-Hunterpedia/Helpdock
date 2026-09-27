@@ -41,9 +41,9 @@ export interface InstallSmtp {
 }
 
 export class SettingsInstallSmtp implements InstallSmtp {
-  readonly #settings: Settings;
+  readonly #settings: Pick<Settings, 'get'>;
 
-  constructor(settings: Settings) {
+  constructor(settings: Pick<Settings, 'get'>) {
     this.#settings = settings;
   }
 

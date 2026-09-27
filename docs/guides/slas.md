@@ -173,15 +173,19 @@ finds every timer back at its time.
 | Outbox event | Payload | Written when |
 |---|---|---|
 | `sla.schedule` | `{ ticketIds }` | any clock of these tickets changed |
-| `sla.warning` | `{ ticketId, departmentId, clock, stepPercent, notify? }` | a step below 100 % ran |
+| `sla.warning` | `{ ticketId, departmentId, clock, stepPercent, userIds?, teamIds?, departmentLeads? }` | a step below 100 % ran |
 | `sla.breached` | `{ ticketId, departmentId, clock, cause: 'timer' \| 'change' }` | a clock breached |
 | `ticket.escalated` | as `sla.warning` | a step at or past 100 % ran, or a step set status Escalated |
 
-`notify` is `{ userIds, teamIds, departmentLeads }`, from the step's notify
-actions. M3-07's notifications consume the last three. Workflow rules consume
-`sla.warning` and `sla.breached` as their SLA warning and SLA breach triggers
-([the automation guide](automation.md)); for an event nobody else has claimed —
-today `ticket.escalated` — the worker registers a handler that logs it. A step also writes `ticket.sla.step` to the activity
+`userIds`, `teamIds` and `departmentLeads` are who the step's notify actions
+named, carried flat on the event; all three are absent when the step named
+nobody. M3-07's notifications consume the last three events: a warning or an
+escalation goes to the people, team members and department Team Leaders it
+names, or — when it names nobody — to the assignee (and, for an escalation,
+the ticket's team); a breach goes to the assignee, or the team when nobody
+holds the ticket ([the notifications guide](notifications.md)). Workflow rules
+consume `sla.warning` and `sla.breached` as their SLA warning and SLA breach
+triggers ([the automation guide](automation.md)). A step also writes `ticket.sla.step` to the activity
 log and `ticket.updated` to the outbox, so open screens refresh.
 
 ## What a ticket read carries

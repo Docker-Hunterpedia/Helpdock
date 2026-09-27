@@ -49,7 +49,10 @@ if (missing.length === 0 && missingOwners.length === 0) {
   const existing = await readFile(target, 'utf8');
   const tenant = missing.length === 0 ? '' : renderTenantPolicyStatements(missing);
   const owners = missingOwners
-    .map(({ name, column }) => `--> statement-breakpoint\n${ownerPolicy(name, column)}\n`)
+    .map(
+      ({ name, column, systemWrites }) =>
+        `--> statement-breakpoint\n${ownerPolicy(name, column, { systemWrites })}\n`,
+    )
     .join('');
   await writeFile(target, `${existing.trimEnd()}\n${tenant}${owners}`, 'utf8');
   process.stdout.write(

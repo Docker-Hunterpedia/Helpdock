@@ -27,15 +27,16 @@ export const WIDGET_NAMESPACE = '/widget';
 // ----------------------------------------------------------------- rooms
 
 /**
- * A room is `<kind>:<uuid>`. Three kinds exist in v1:
+ * A room is `<kind>:<uuid>`. Four kinds exist in v1:
  *
  * | Kind | Who may join |
  * |---|---|
  * | `brand` | anyone holding a role in that brand |
  * | `department` | anyone whose department scope in that brand covers it |
  * | `ticket` | M1 decides; the shape exists so M1 has nothing to invent |
+ * | `user` | that person alone; every socket joins its own on connect (M3-07) |
  */
-export const ROOM_KINDS = ['brand', 'department', 'ticket'] as const;
+export const ROOM_KINDS = ['brand', 'department', 'ticket', 'user'] as const;
 export type RoomKind = (typeof ROOM_KINDS)[number];
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
@@ -63,6 +64,7 @@ export const roomOf = (kind: RoomKind, id: string): string => `${kind}:${id}`;
 export const brandRoom = (brandId: string): string => roomOf('brand', brandId);
 export const departmentRoom = (departmentId: string): string => roomOf('department', departmentId);
 export const ticketRoom = (ticketId: string): string => roomOf('ticket', ticketId);
+export const userRoom = (userId: string): string => roomOf('user', userId);
 
 // -------------------------------------------------------------- presence
 
@@ -108,6 +110,7 @@ export const REALTIME_EVENTS = {
   ticketChanged: 'ticket:changed',
   ticketMessage: 'ticket:message',
   attachmentChanged: 'attachment:changed',
+  notificationCreated: 'notification:created',
 } as const;
 
 export const roomJoinSchema = z.object({
@@ -241,6 +244,18 @@ export const ticketViewingSchema = ticketViewingRequestSchema.extend({
 });
 export type TicketViewing = z.infer<typeof ticketViewingSchema>;
 
+/**
+ * Somebody has a new notification (M3-07). Sent to `user:<id>`, so only its
+ * recipient hears it; ids only, like every frame here, and the bell re-reads
+ * its list over REST. `brandId` lets a client that is looking at another brand
+ * ignore it.
+ */
+export const notificationCreatedSchema = z.object({
+  brandId: z.uuid(),
+  notificationId: z.uuid(),
+});
+export type NotificationCreated = z.infer<typeof notificationCreatedSchema>;
+
 /** Every server → client event and the payload it carries. M4 extends it again. */
 export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.presenceChanged]: presenceChangedSchema,
@@ -248,6 +263,7 @@ export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.ticketMessage]: ticketMessageEventSchema,
   [REALTIME_EVENTS.attachmentChanged]: attachmentChangedSchema,
   [REALTIME_EVENTS.ticketViewing]: ticketViewingSchema,
+  [REALTIME_EVENTS.notificationCreated]: notificationCreatedSchema,
 } as const;
 
 export type ServerEvent = keyof typeof REALTIME_EVENT_PAYLOADS;
@@ -284,6 +300,7 @@ export const attachmentChangedEnvelopeSchema = realtimeEnvelopeSchema(attachment
 export const ticketChangedEnvelopeSchema = realtimeEnvelopeSchema(ticketChangedSchema);
 export const ticketMessageEnvelopeSchema = realtimeEnvelopeSchema(ticketMessageEventSchema);
 export const ticketViewingEnvelopeSchema = realtimeEnvelopeSchema(ticketViewingSchema);
+export const notificationCreatedEnvelopeSchema = realtimeEnvelopeSchema(notificationCreatedSchema);
 
 // ------------------------------------------------------------------ acks
 

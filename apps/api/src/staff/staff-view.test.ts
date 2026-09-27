@@ -35,6 +35,8 @@ const user = (overrides: Partial<User> = {}): User => ({
   createdAt: new Date('2026-09-01T00:00:00.000Z'),
   updatedAt: new Date('2026-09-01T00:00:00.000Z'),
   deactivatedAt: null,
+  signatureEn: null,
+  signatureAr: null,
   ...overrides,
 });
 

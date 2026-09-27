@@ -6,6 +6,7 @@ import { MessageCircle, Minus } from 'lucide-react';
 import { type ReactNode, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useT } from '../../../../app/i18n.js';
+import { usePreferences } from '../../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { checkAccent } from './widget-draft.js';
 
@@ -34,7 +35,9 @@ export function WidgetPreview({
   const t = useT();
   const admin = useSemanticTokens();
   const headingId = useId();
-  const [locale, setLocale] = useState<'en' | 'ar'>('en');
+  const { locale: adminLocale } = usePreferences();
+  // It opens in the admin's own language; the toggle shows the other one.
+  const [locale, setLocale] = useState<'en' | 'ar'>(adminLocale);
   const [mode, setMode] = useState<'light' | 'dark'>('light');
   const surface = useMemo(() => resolveSemanticTokens(mode), [mode]);
   const { i18n } = useTranslation(NAMESPACES);
@@ -179,7 +182,7 @@ export function WidgetPreview({
               <Typography sx={{ fontSize: 14, fontWeight: 600, color: 'inherit' }}>
                 {w('widget.preview.team', { brand: brandName })}
               </Typography>
-              <Typography sx={{ fontSize: 12, color: 'inherit', opacity: 0.85 }}>
+              <Typography sx={{ fontSize: 12, color: 'inherit' }}>
                 {w('widget.preview.replies')}
               </Typography>
             </Box>

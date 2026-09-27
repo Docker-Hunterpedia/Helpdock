@@ -242,6 +242,7 @@ export function ConversationCard({
                 displayEmpty
                 value={adding}
                 onChange={(event) => setAdding(event.target.value)}
+                inputProps={{ 'aria-label': t('channels:widget.conversation.addLabel') }}
                 sx={{ minWidth: 240 }}
               >
                 <MenuItem value="">{t('channels:widget.conversation.addPlaceholder')}</MenuItem>
@@ -294,7 +295,10 @@ export function ConversationCard({
           size="small"
           value={draft.whenUnavailable}
           onChange={(event) => set('whenUnavailable', event.target.value as 'form' | 'keep_chat')}
-          inputProps={{ 'aria-describedby': `${id}-unavailable-hint` }}
+          inputProps={{
+            'aria-label': t('channels:widget.conversation.unavailable'),
+            'aria-describedby': `${id}-unavailable-hint`,
+          }}
           sx={{ maxWidth: 360 }}
         >
           <MenuItem value="form">{t('channels:widget.conversation.unavailableForm')}</MenuItem>

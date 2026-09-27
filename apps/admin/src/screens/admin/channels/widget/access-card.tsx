@@ -266,6 +266,7 @@ export function AccessCard({
             <Select
               id={`${id}-provider`}
               size="small"
+              inputProps={{ 'aria-label': t('channels:widget.access.provider') }}
               value={draft.captchaProvider}
               onChange={(event) =>
                 setDraft((held) => ({

@@ -80,7 +80,11 @@ describe('Channels › Widget', () => {
     await user.paste('#1D4ED8');
     await user.click(within(appearance).getByRole('radio', { name: /Contact form/ }));
     await user.click(within(appearance).getByRole('button', { name: 'Icon and text' }));
-    expect(within(screen.getByRole('complementary', { name: 'Live preview' })).getAllByText('Chat with us').length).toBeGreaterThan(0);
+    expect(
+      within(screen.getByRole('complementary', { name: 'Live preview' })).getAllByText(
+        'Chat with us',
+      ).length,
+    ).toBeGreaterThan(0);
     await user.click(within(appearance).getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('Appearance saved')).toBeVisible();

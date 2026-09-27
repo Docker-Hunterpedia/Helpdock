@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import type { CaptchaTransport } from '@helpdock/channels';
 import { decodeMasterKey, type Env } from '@helpdock/config';
@@ -41,6 +44,7 @@ import {
   type WidgetSession,
   type WidgetSettings,
   type WidgetSigningSecret,
+  type WidgetStartResponse,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -85,6 +89,12 @@ const CONTAINER_STARTUP_MS = 120_000;
 const APP_URL = 'https://support.example.com';
 const SHOP = 'https://shop.example.com';
 const STRANGER = 'https://evil.example.net';
+
+/** A stand-in widget build, so the routes that serve `apps/widget/dist` have files to serve. */
+const WIDGET_DIST = mkdtempSync(path.join(tmpdir(), 'helpdock-widget-it-'));
+mkdirSync(path.join(WIDGET_DIST, 'chunks'));
+writeFileSync(path.join(WIDGET_DIST, 'widget.js'), 'import("./chunks/remote-abc.js");');
+writeFileSync(path.join(WIDGET_DIST, 'chunks', 'remote-abc.js'), 'export {};');
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
   timeout: 10_000,
@@ -163,6 +173,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       FFPROBE_PATH: 'ffprobe',
       CLAMAV_PORT: 3310,
       ADMIN_DIST_DIR: 'apps/admin/dist',
+      WIDGET_DIST_DIR: WIDGET_DIST,
       OUTBOUND_ALLOW_CIDRS: [],
     }) as Env;
 
@@ -1079,6 +1090,124 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       );
       expect(availability.status).toBe(200);
       expect(typeof availability.body.open).toBe('boolean');
+    });
+  });
+  // ------------------------------------------------ what the widget loads
+
+  describe('the config the widget paints from (M4-06, M4-08)', () => {
+    it('resolves the theme, and words the greeting and the fields in the language asked', async () => {
+      await staff('PUT', `/api/brands/${seeded.brandId}/widget/appearance`, tia, {
+        mode: 'chat',
+        accent: '#1D4ED8',
+        colorScheme: 'auto',
+        position: 'start',
+        launcher: 'icon_text',
+        greetingEn: 'Hi, how can we help?',
+        greetingAr: 'مرحباً، كيف نساعدك؟',
+      });
+
+      const english = await widget<WidgetConfig>('GET', '/config?locale=en');
+      const arabic = await widget<WidgetConfig>('GET', '/config?locale=ar');
+
+      expect(english.status).toBe(200);
+      expect(english.body).toMatchObject({
+        locale: 'en',
+        mode: 'chat',
+        greeting: 'Hi, how can we help?',
+        popularArticles: [],
+        helpCenterUrl: null,
+        showPoweredBy: true,
+        theme: {
+          colorScheme: 'auto',
+          launcher: { style: 'icon_text', label: null, position: 'start' },
+        },
+      });
+      expect(english.body.theme.tokens.light['action.primary']).toBe('#1D4ED8');
+      expect(english.body.theme.tokens.dark['action.primary']).not.toBe('#1D4ED8');
+      expect(english.body.theme.fonts[0]?.url).toMatch(`${APP_URL}/widget-fonts/`);
+      expect(arabic.body.greeting).toBe('مرحباً، كيف نساعدك؟');
+      expect(arabic.headers.etag).not.toBe(english.headers.etag);
+
+      const refused = await widget('GET', '/config?locale=fr');
+      expect(refused.status).toBe(400);
+    });
+  });
+
+  describe('starting a conversation before its first message (M4-04)', () => {
+    it('opens it empty, answers a retried start with the same conversation, and names it from the first message', async () => {
+      const visitor = await newVisitor();
+      const clientId = uuidv7();
+      const body = {
+        clientId,
+        prechat: { name: 'Omar', email: 'omar@example.com' },
+      };
+
+      const [first, second] = await Promise.all([
+        widget<WidgetStartResponse>('POST', '/conversations', { visitor, payload: body }),
+        widget<WidgetStartResponse>('POST', '/conversations', { visitor, payload: body }),
+      ]);
+      const retried = await widget<WidgetStartResponse>('POST', '/conversations', {
+        visitor,
+        payload: body,
+      });
+
+      expect([first.status, second.status, retried.status]).toEqual([201, 201, 201]);
+      expect(first.body.message).toBeNull();
+      const conversationId = first.body.conversation.id;
+      expect(second.body.conversation.id).toBe(conversationId);
+      expect(retried.body.conversation.id).toBe(conversationId);
+      const opened = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(tickets).where(eq(tickets.visitorId, visitor.id)),
+      );
+      expect(opened).toEqual([
+        expect.objectContaining({ subject: 'Chat conversation', visitorClientId: clientId }),
+      ]);
+
+      const sent = await send(visitor, conversationId, {
+        clientId: uuidv7(),
+        text: 'My parcel never arrived',
+      });
+      expect(sent.status).toBe(201);
+      expect(sent.body.message.seq).toBe(1);
+      const named = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(tickets).where(eq(tickets.id, conversationId)),
+      );
+      expect(named[0]?.subject).toBe('My parcel never arrived');
+
+      const later = await send(visitor, conversationId, { clientId: uuidv7(), text: 'Any news?' });
+      expect(later.status).toBe(201);
+      const kept = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(tickets).where(eq(tickets.id, conversationId)),
+      );
+      expect(kept[0]?.subject).toBe('My parcel never arrived');
+    });
+  });
+
+  describe('the widget bundle (M4-01)', () => {
+    it('serves widget.js and its chunks to any site, and keeps the hashed chunks for a year', async () => {
+      const entry = await app.inject({ method: 'GET', url: '/widget.js' });
+      const chunk = await app.inject({ method: 'GET', url: '/chunks/remote-abc.js' });
+
+      expect(entry.statusCode).toBe(200);
+      expect(entry.body).toContain('remote-abc.js');
+      expect(entry.headers).toMatchObject({
+        'access-control-allow-origin': '*',
+        'cross-origin-resource-policy': 'cross-origin',
+        'cache-control': 'public, max-age=300',
+      });
+      expect(String(entry.headers['content-type'])).toContain('text/javascript');
+      expect(chunk.statusCode).toBe(200);
+      expect(chunk.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    });
+
+    it('answers 404 for a file the build does not have, and refuses a path out of it', async () => {
+      const missing = await app.inject({ method: 'GET', url: '/chunks/nope.js' });
+      const font = await app.inject({ method: 'GET', url: '/widget-fonts/nope.woff2' });
+      const climbing = await app.inject({ method: 'GET', url: '/chunks/..%2Fwidget.js' });
+
+      expect(missing.statusCode).toBe(404);
+      expect(font.statusCode).toBe(404);
+      expect(climbing.statusCode).toBe(400);
     });
   });
 });

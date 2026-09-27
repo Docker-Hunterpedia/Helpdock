@@ -27,9 +27,13 @@ import { ConversationCard } from './conversation-card.tsx';
 import { PROTOCOL_GUIDE_URL, SignedIdentityCard } from './signed-identity-card.tsx';
 import { WidgetPreview } from './widget-preview.tsx';
 
-/** The two lines a site pastes (DESIGN §6.3 EmbedCode). The widget is served by this install. */
+/**
+ * The one tag a site pastes (DESIGN §6.3 EmbedCode). The widget is served by
+ * this install as an ES module (ADR 0012), and places itself for the brand in
+ * `data-brand`.
+ */
 export const embedSnippet = (origin: string, brandId: string): string =>
-  `<script src="${origin}/widget.js" async></script>\n<helpdock-widget brand="${brandId}"></helpdock-widget>`;
+  `<script type="module" src="${origin}/widget.js" data-brand="${brandId}"></script>`;
 
 /**
  * Channels › Widget (artboard `AdminWidget`; M4-02, M4-03, M4-05 to M4-08).

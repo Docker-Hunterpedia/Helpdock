@@ -21,6 +21,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@helpdock/i18n": "workspace:*",
+    "@helpdock/schemas": "workspace:*",
     "@helpdock/ui": "workspace:*",
     "@playwright/test": "1.63.0",
     "@testing-library/preact": "3.2.4",

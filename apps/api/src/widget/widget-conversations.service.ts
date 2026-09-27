@@ -9,6 +9,7 @@ import {
   type WidgetPrechatAnswers,
   type WidgetQueue,
   type WidgetSendResponse,
+  type WidgetStartResponse,
   widgetPrechatAnswersSchema,
   widgetSendRequestSchema,
   widgetStartRequestSchema,
@@ -153,19 +154,24 @@ export class WidgetConversationsService {
     };
   }
 
-  /** `POST …/conversations`: the first message opens a `chat` ticket. */
+  /**
+   * `POST …/conversations`: opens a `chat` ticket, with the visitor's first
+   * message when the call carries text and empty when it does not — the
+   * widget opens the conversation before the first message is sent, and the
+   * pre-chat form opens it with the answers alone.
+   */
   async start(
     brandId: string,
     facts: WidgetRequestFacts,
     input: StartInput,
     now: Date = new Date(),
-  ): Promise<WidgetSendResponse> {
+  ): Promise<WidgetStartResponse> {
     const body = widgetStartRequestSchema.parse(input);
 
     // Once outside the write transaction, so a retry of a start that already
     // committed is answered without spending the CAPTCHA token again.
     const existing = await this.#deps.gate.visitor(brandId, facts, { write: false }, (scope) =>
-      this.#replayed(scope, body.clientId),
+      this.#startReplayed(scope, body.clientId),
     );
     if (existing !== undefined) {
       return existing;
@@ -174,7 +180,7 @@ export class WidgetConversationsService {
     return this.#deps.gate.visitor(brandId, facts, { write: true }, async (scope) => {
       const { tx, visitor, settings } = scope;
       await this.#deps.widget.lockClientId(tx, visitor.id, body.clientId);
-      const replay = await this.#replayed(scope, body.clientId);
+      const replay = await this.#startReplayed(scope, body.clientId);
       if (replay !== undefined) {
         return replay;
       }
@@ -193,9 +199,10 @@ export class WidgetConversationsService {
       }
       this.#checkText(scope, body.text);
 
-      const prechat = settings.conversation.prechatEnabled
-        ? widgetPrechatAnswersSchema.parse(body.prechat ?? {})
-        : undefined;
+      // The pre-chat form's answers, or the contact form's, which asks the
+      // same fields: both are unverified (§4.1), whichever form sent them.
+      const prechat =
+        body.prechat === undefined ? undefined : widgetPrechatAnswersSchema.parse(body.prechat);
       const contactId = await this.#contactFor(scope, prechat);
       const actor = actorFor(visitor);
       const context: LifecycleContext = { tx, brandId, actor, now };
@@ -222,17 +229,21 @@ export class WidgetConversationsService {
         channel: 'chat',
         contactId,
         visitorId: visitor.id,
+        visitorClientId: body.clientId,
         ...(custom === undefined ? {} : { custom }),
       });
 
-      const message = await this.#insertVisitorMessage(tx, {
-        brandId,
-        ticket,
-        seq: await repository.nextSeq(tx, ticket.id),
-        clientId: body.clientId,
-        text: body.text,
-        contactId,
-      });
+      const message =
+        body.text === ''
+          ? null
+          : await this.#insertVisitorMessage(tx, {
+              brandId,
+              ticket,
+              seq: await repository.nextSeq(tx, ticket.id),
+              clientId: body.clientId,
+              text: body.text,
+              contactId,
+            });
 
       await writeTicketActivity(tx, {
         brandId,
@@ -248,18 +259,20 @@ export class WidgetConversationsService {
         ticketId: ticket.id,
         departmentId: ticket.departmentId,
       });
-      await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.replied, {
-        ticketId: ticket.id,
-        departmentId: ticket.departmentId,
-        messageId: message.id,
-        seq: message.seq,
-        kind: 'public',
-      });
+      if (message !== null) {
+        await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.replied, {
+          ticketId: ticket.id,
+          departmentId: ticket.departmentId,
+          messageId: message.id,
+          seq: message.seq,
+          kind: 'public',
+        });
+      }
       if (await routesAutomatically(this.#deps.assignment, tx, ticket.departmentId)) {
         await requestAutoAssign(tx, brandId, { ticketId: ticket.id, trigger: 'routed' });
       }
 
-      return this.#response(scope, { ticket, status }, message);
+      return this.#startResponse(scope, { ticket, status }, message);
     });
   }
 
@@ -320,6 +333,7 @@ export class WidgetConversationsService {
       }
 
       const contactId = target.contactId ?? visitor.contactId;
+      const subject = await this.#subjectOnFirstMessage(scope, target, body.text);
       const message = await this.#insertVisitorMessage(tx, {
         brandId,
         ticket: target,
@@ -343,7 +357,7 @@ export class WidgetConversationsService {
         action: 'ticket.replied',
         to: { messageId: message.id, seq },
       });
-      await repository.updateTicket(tx, target.id, {});
+      await repository.updateTicket(tx, target.id, subject === undefined ? {} : { subject });
       await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.replied, {
         ticketId: target.id,
         departmentId: target.departmentId,
@@ -401,17 +415,66 @@ export class WidgetConversationsService {
     return entry;
   }
 
-  async #replayed(scope: VisitorScope, clientId: string): Promise<WidgetSendResponse | undefined> {
-    const message = await this.#deps.widget.messageByVisitorClientId(
+  /** A start already made with this `clientId`: the conversation, and its first message if it had one. */
+  async #startReplayed(
+    scope: VisitorScope,
+    clientId: string,
+  ): Promise<WidgetStartResponse | undefined> {
+    const entry = await this.#deps.widget.conversationStartedWith(
       scope.tx,
       scope.visitor.id,
       clientId,
     );
-    if (message === undefined) {
+    if (entry === undefined) {
       return undefined;
     }
-    const entry = await this.#deps.widget.conversation(scope.tx, message.ticketId);
-    return entry === undefined ? undefined : this.#response(scope, entry, message);
+    const message = await this.#deps.tickets.findMessageByClientId(
+      scope.tx,
+      entry.ticket.id,
+      clientId,
+    );
+    return this.#startResponse(scope, entry, message ?? null);
+  }
+
+  /**
+   * A conversation opened without text is named "Chat conversation" until
+   * the visitor writes; their first message names it as it would have named
+   * a conversation it opened.
+   */
+  async #subjectOnFirstMessage(
+    scope: VisitorScope,
+    ticket: TicketWithStatus['ticket'],
+    text: string,
+  ): Promise<string | undefined> {
+    if (ticket.visitorClientId === null || text === '') {
+      return undefined;
+    }
+    const earlier = await this.#deps.widget.visibleMessagesAfter(scope.tx, ticket.id, 0, 1);
+    if (earlier.length > 0) {
+      return undefined;
+    }
+    const locale = await this.#deps.lifecycleReads.localeForContact(
+      scope.tx,
+      scope.brand.id,
+      ticket.contactId,
+    );
+    return subjectFrom(text, locale);
+  }
+
+  async #startResponse(
+    scope: VisitorScope,
+    entry: TicketWithStatus,
+    message: TicketMessageRow | null,
+  ): Promise<WidgetStartResponse> {
+    if (message !== null) {
+      return this.#response(scope, entry, message);
+    }
+    const [conversation] = await this.#views(scope.tx, [entry]);
+    /* c8 ignore next 3 -- one in, one out. */
+    if (conversation === undefined) {
+      throw new WidgetFailure('not_found');
+    }
+    return { conversation, message: null };
   }
 
   #checkText(scope: VisitorScope, text: string): void {

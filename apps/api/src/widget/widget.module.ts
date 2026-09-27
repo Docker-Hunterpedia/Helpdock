@@ -1,5 +1,5 @@
 import type { CaptchaTransport } from '@helpdock/channels';
-import { createKeyring, type Env, type Settings } from '@helpdock/config';
+import { createKeyring, DEFAULT_WIDGET_DIST_DIR, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { WIDGET_EVENTS } from '@helpdock/schemas';
 import {
@@ -34,6 +34,8 @@ import { WidgetController } from './widget.controller.js';
 import { WidgetGateway } from './widget.gateway.js';
 import { WidgetRepository } from './widget.repository.js';
 import { WidgetActivityService } from './widget-activity.service.js';
+import { WIDGET_DIST, WidgetBundleController } from './widget-bundle.controller.js';
+import { resolveWidgetDist } from './widget-bundle.js';
 import { WidgetConfigService } from './widget-config.service.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
 import { WidgetGate } from './widget-gate.js';
@@ -148,8 +150,17 @@ export class WidgetModule {
     return {
       module: WidgetModule,
       imports: [options.realtime],
-      controllers: [WidgetSettingsController, WidgetController, WidgetStreamController],
+      controllers: [
+        WidgetSettingsController,
+        WidgetController,
+        WidgetStreamController,
+        WidgetBundleController,
+      ],
       providers: [
+        {
+          provide: WIDGET_DIST,
+          useValue: resolveWidgetDist(env.WIDGET_DIST_DIR ?? DEFAULT_WIDGET_DIST_DIR),
+        },
         {
           provide: WidgetSettingsService,
           useFactory: () => new WidgetSettingsService(settingsRepository, keyring),
@@ -179,6 +190,7 @@ export class WidgetModule {
               businessHours: new BusinessHoursService(slaRepository, new SlaService(slaRepository)),
               presence,
               captcha: captchaKeys,
+              assetOrigin: env.APP_URL,
             }),
         },
         {

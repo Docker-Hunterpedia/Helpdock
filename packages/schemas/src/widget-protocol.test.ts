@@ -4,6 +4,7 @@ import {
   signedIdentitySchema,
   WIDGET_EVENT_PAYLOADS,
   WIDGET_EVENTS,
+  widgetConfigQuerySchema,
   widgetMessagesQuerySchema,
   widgetPrechatAnswersSchema,
   widgetSendRequestSchema,
@@ -35,14 +36,21 @@ describe('signedIdentitySchema', () => {
 });
 
 describe('the send requests', () => {
-  it('needs text or an attachment for a message, and text for the first one', () => {
+  it('needs text or an attachment for a message, and opens a conversation with or without text', () => {
     expect(widgetSendRequestSchema.safeParse({ clientId: CLIENT, text: ' ' }).success).toBe(false);
     expect(
       widgetSendRequestSchema.safeParse({ clientId: CLIENT, text: '', attachmentIds: [CLIENT] })
         .success,
     ).toBe(true);
-    expect(widgetStartRequestSchema.safeParse({ clientId: CLIENT, text: '' }).success).toBe(false);
+    expect(widgetStartRequestSchema.parse({ clientId: CLIENT }).text).toBe('');
     expect(widgetStartRequestSchema.parse({ clientId: CLIENT, text: ' hi ' }).text).toBe('hi');
+    expect(widgetStartRequestSchema.safeParse({ text: 'hi' }).success).toBe(false);
+  });
+
+  it('asks the config in a language the widget speaks', () => {
+    expect(widgetConfigQuerySchema.parse({ locale: 'ar' })).toEqual({ locale: 'ar' });
+    expect(widgetConfigQuerySchema.parse({})).toEqual({});
+    expect(widgetConfigQuerySchema.safeParse({ locale: 'fr' }).success).toBe(false);
   });
 
   it('defaults a catch-up to the whole thread, a hundred at a time', () => {

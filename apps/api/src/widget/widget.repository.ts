@@ -133,6 +133,27 @@ export class WidgetRepository {
     return row === undefined ? undefined : { ticket: row.tickets, status: row.ticket_statuses };
   }
 
+  /** The conversation this visitor opened with `clientId` (M4-04), if they did. */
+  async conversationStartedWith(
+    tx: DbTransaction,
+    visitorId: string,
+    clientId: string,
+  ): Promise<TicketWithStatus | undefined> {
+    const [row] = await tx
+      .select()
+      .from(tickets)
+      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+      .where(
+        and(
+          eq(tickets.visitorId, visitorId),
+          eq(tickets.visitorClientId, clientId),
+          isNull(tickets.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row === undefined ? undefined : { ticket: row.tickets, status: row.ticket_statuses };
+  }
+
   /** The newest ticket continuing each of these (§2.3), if any. */
   async continuations(
     tx: DbTransaction,
@@ -168,21 +189,6 @@ export class WidgetRepository {
       .groupBy(ticketMessages.ticketId);
 
     return new Map(rows.map((row) => [row.ticketId, row.seq ?? 0]));
-  }
-
-  /** A visitor's own earlier attempt at a message, on any of their conversations (§7). */
-  async messageByVisitorClientId(
-    tx: DbTransaction,
-    visitorId: string,
-    clientId: string,
-  ): Promise<TicketMessageRow | undefined> {
-    const [row] = await tx
-      .select({ message: ticketMessages })
-      .from(ticketMessages)
-      .innerJoin(tickets, eq(tickets.id, ticketMessages.ticketId))
-      .where(and(eq(tickets.visitorId, visitorId), eq(ticketMessages.clientId, clientId)))
-      .limit(1);
-    return row?.message;
   }
 
   /**

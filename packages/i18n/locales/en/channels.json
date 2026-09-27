@@ -345,7 +345,7 @@
       "label": "Embed code",
       "copy": "Copy code",
       "copied": "Embed code copied",
-      "hint": "The widget follows the page's lang; add locale=\"ar\" to force Arabic.",
+      "hint": "The widget follows the page's lang; add data-locale=\"ar\" to force Arabic.",
       "protocol": "Native apps use the same protocol:",
       "protocolLink": "widget protocol guide"
     },

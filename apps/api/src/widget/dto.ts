@@ -10,6 +10,7 @@ import {
   widgetAttachmentSchema,
   widgetAvailabilitySchema,
   widgetBrandParamSchema,
+  widgetConfigQuerySchema,
   widgetConfigSchema,
   widgetConversationListSchema,
   widgetConversationParamSchema,
@@ -27,12 +28,14 @@ import {
   widgetSignedIdentitySchema,
   widgetSigningSecretSchema,
   widgetStartRequestSchema,
+  widgetStartResponseSchema,
   widgetStreamQuerySchema,
   widgetTranscriptRequestSchema,
   widgetTypingRequestSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { widgetFileParamSchema } from './widget-bundle.js';
 
 /** The widget schemas as Nest DTOs, for the reason `brands/dto.ts` gives. */
 
@@ -46,17 +49,22 @@ export class WidgetAccessUpdateDto extends createZodDto(widgetAccessUpdateSchema
 export class WidgetSignedIdentityDto extends createZodDto(widgetSignedIdentitySchema) {}
 export class WidgetSigningSecretDto extends createZodDto(widgetSigningSecretSchema) {}
 
+// ------------------------------------------------------------ bundle (M4-01)
+export class WidgetFileParamDto extends createZodDto(widgetFileParamSchema) {}
+
 // ------------------------------------------------------- visitor (M4-02..04)
 export class WidgetBrandParamDto extends createZodDto(widgetBrandParamSchema) {}
 export class WidgetConversationParamDto extends createZodDto(widgetConversationParamSchema) {}
 export class WidgetAttachmentParamDto extends createZodDto(widgetAttachmentParamSchema) {}
 export class WidgetConfigDto extends createZodDto(widgetConfigSchema) {}
+export class WidgetConfigQueryDto extends createZodDto(widgetConfigQuerySchema) {}
 export class WidgetAvailabilityDto extends createZodDto(widgetAvailabilitySchema) {}
 export class WidgetSessionRequestDto extends createZodDto(widgetSessionRequestSchema) {}
 export class WidgetSessionDto extends createZodDto(widgetSessionSchema) {}
 export class WidgetConversationDto extends createZodDto(widgetConversationSchema) {}
 export class WidgetConversationListDto extends createZodDto(widgetConversationListSchema) {}
 export class WidgetStartRequestDto extends createZodDto(widgetStartRequestSchema) {}
+export class WidgetStartResponseDto extends createZodDto(widgetStartResponseSchema) {}
 export class WidgetSendRequestDto extends createZodDto(widgetSendRequestSchema) {}
 export class WidgetSendResponseDto extends createZodDto(widgetSendResponseSchema) {}
 export class WidgetMessagesQueryDto extends createZodDto(widgetMessagesQuerySchema) {}

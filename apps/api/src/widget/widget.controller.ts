@@ -10,6 +10,7 @@ import type {
   WidgetQueue,
   WidgetSendResponse,
   WidgetSession,
+  WidgetStartResponse,
 } from '@helpdock/schemas';
 import {
   Body,
@@ -33,6 +34,7 @@ import {
   WidgetAvailabilityDto,
   WidgetBrandParamDto,
   WidgetConfigDto,
+  WidgetConfigQueryDto,
   WidgetConversationDto,
   WidgetConversationListDto,
   WidgetConversationParamDto,
@@ -47,6 +49,7 @@ import {
   WidgetSessionDto,
   WidgetSessionRequestDto,
   WidgetStartRequestDto,
+  WidgetStartResponseDto,
   WidgetTranscriptRequestDto,
   WidgetTypingRequestDto,
   WidgetUploadRequestDto,
@@ -98,16 +101,20 @@ export class WidgetController {
     this.#uploads = uploads;
   }
 
-  /** The first paint's everything, with an `ETag` so a reload costs a 304 (ARCHITECTURE §12). */
+  /**
+   * The first paint's everything, in `?locale=`, with an `ETag` so a reload
+   * costs a 304 (ARCHITECTURE §12).
+   */
   @Get('config')
   @Public()
   async config(
     @Param(new ZodValidationPipe(WidgetBrandParamDto)) { brandId }: WidgetBrandParamDto,
+    @Query(new ZodValidationPipe(WidgetConfigQueryDto)) { locale }: WidgetConfigQueryDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<WidgetConfig | undefined> {
     const config = WidgetConfigDto.schema.parse(
-      await this.#config.config(brandId, factsOf(request)),
+      await this.#config.config(brandId, factsOf(request), locale),
     ) as WidgetConfig;
     const etag = `"${createHash('sha256').update(JSON.stringify(config)).digest('base64url').slice(0, 27)}"`;
     void reply.header('etag', etag).header('cache-control', 'no-cache');
@@ -152,12 +159,12 @@ export class WidgetController {
 
   @Post('conversations')
   @Public()
-  @ZodSerializerDto(WidgetSendResponseDto)
+  @ZodSerializerDto(WidgetStartResponseDto)
   start(
     @Param(new ZodValidationPipe(WidgetBrandParamDto)) { brandId }: WidgetBrandParamDto,
     @Body(new ZodValidationPipe(WidgetStartRequestDto)) body: WidgetStartRequestDto,
     @Req() request: FastifyRequest,
-  ): Promise<WidgetSendResponse> {
+  ): Promise<WidgetStartResponse> {
     return this.#conversations.start(brandId, factsOf(request), body);
   }
 

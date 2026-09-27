@@ -42,6 +42,7 @@ const row = (contactId: string | null): TicketRow => ({
   parentId: null,
   mergedIntoId: null,
   visitorId: null,
+  visitorClientId: null,
   mergedAt: null,
   mergedById: null,
   preMergeStatusId: null,

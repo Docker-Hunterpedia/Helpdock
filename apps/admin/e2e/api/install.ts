@@ -67,6 +67,8 @@ export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(here, '../../../api');
 const adminDist = path.resolve(here, '../../dist');
+/** The widget build the seeded api serves at `/widget.js` (M4-01), for the live widget spec. */
+const widgetDist = path.resolve(here, '../../../widget/dist');
 
 export interface RunningInstall {
   stop(): Promise<void>;
@@ -126,9 +128,13 @@ const waitForHealth = async (origin: string, timeoutMs = 60_000): Promise<void> 
 
 export const startInstall = async (): Promise<RunningInstall> => {
   const entry = path.join(apiRoot, 'dist/main.js');
-  if (!existsSync(entry) || !existsSync(path.join(adminDist, 'index.html'))) {
+  if (
+    !existsSync(entry) ||
+    !existsSync(path.join(adminDist, 'index.html')) ||
+    !existsSync(path.join(widgetDist, 'widget.js'))
+  ) {
     throw new Error(
-      'apps/api or apps/admin is not built. Run `pnpm build` before `pnpm --filter @helpdock/admin e2e:api`.',
+      'apps/api, apps/admin or apps/widget is not built. Run `pnpm build` before `pnpm --filter @helpdock/admin e2e:api`.',
     );
   }
 
@@ -175,6 +181,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
     S3_ACCESS_KEY_ID: 'access',
     S3_SECRET_ACCESS_KEY: 'secret',
     ...(servesAdmin ? { ADMIN_DIST_DIR: adminDist } : {}),
+    WIDGET_DIST_DIR: widgetDist,
     ...(setupKey === undefined ? {} : { HD_SETUP_TOKEN: setupKey }),
   });
 
@@ -212,7 +219,12 @@ export const startInstall = async (): Promise<RunningInstall> => {
     ]),
   ) as { email: string; password: string; totpSecret: string; inviteToken: string };
 
-  const processes = [env, setupEnv].map((processEnv) =>
+  // A worker beside the seeded api, as in production: the outbox relay and
+  // the event handlers are what carry an agent's reply to the widget's socket
+  // (M4-04), and a notification to a desk.
+  const workerEnv = { ...env, APP_ROLE: 'worker' };
+
+  const processes = [env, workerEnv, setupEnv].map((processEnv) =>
     spawn(process.execPath, [entry], {
       cwd: apiRoot,
       env: { ...process.env, ...processEnv },
@@ -220,10 +232,27 @@ export const startInstall = async (): Promise<RunningInstall> => {
     }),
   );
 
+  // The processes first, and only then their containers: a worker still
+  // draining its queues would otherwise spend its shutdown reconnecting to a
+  // Redis that is already gone.
   const stopEverything = async (signal: NodeJS.Signals): Promise<void> => {
-    for (const child of processes) {
-      child.kill(signal);
-    }
+    await Promise.all(
+      processes.map(
+        (child) =>
+          new Promise<void>((resolve) => {
+            if (child.exitCode !== null || child.signalCode !== null) {
+              resolve();
+              return;
+            }
+            const force = setTimeout(() => child.kill('SIGKILL'), 10_000);
+            child.once('exit', () => {
+              clearTimeout(force);
+              resolve();
+            });
+            child.kill(signal);
+          }),
+      ),
+    );
     await Promise.all([postgres.stop(), redis.stop()]);
   };
 

@@ -10,6 +10,10 @@ import { WIDGET_NAMESPACE } from './realtime.js';
 import {
   captchaProviderSchema,
   widgetAppearanceSchema,
+  widgetColorSchemeSchema,
+  widgetLauncherSchema,
+  widgetModeSchema,
+  widgetPositionSchema,
   widgetWhenUnavailableSchema,
 } from './widget-settings.js';
 
@@ -101,8 +105,11 @@ export const widgetPrechatFieldViewSchema = z.object({
   key: z.string(),
   kind: z.enum(['name', 'email', 'custom']),
   required: z.boolean(),
-  /** Null for the built-in two, which the widget labels itself. */
-  label: z.object({ en: z.string(), ar: z.string().nullable() }).nullable(),
+  /**
+   * In the `?locale=` asked for, the Arabic falling back to the English. Null
+   * for the built-in two, which the widget labels itself.
+   */
+  label: z.string().nullable(),
   type: z.union([customFieldTypeSchema, z.literal('email')]),
   options: z.array(z.string()),
 });
@@ -120,20 +127,82 @@ export const widgetAvailabilitySchema = z.object({
 });
 export type WidgetAvailability = z.infer<typeof widgetAvailabilitySchema>;
 
+export const widgetLocaleSchema = z.enum(['en', 'ar']);
+export type WidgetLocale = z.infer<typeof widgetLocaleSchema>;
+
+/** `?locale=`: the language the greeting and the field labels come back in. */
+export const widgetConfigQuerySchema = z.object({
+  locale: widgetLocaleSchema.optional(),
+});
+export type WidgetConfigQuery = z.infer<typeof widgetConfigQuerySchema>;
+
+/** A self-hosted font file the widget registers with the FontFace API (DESIGN §8). */
+export const widgetFontFileSchema = z.object({
+  family: z.string(),
+  weight: z.union([z.literal(400), z.literal(500), z.literal(600)]),
+  /** On the Helpdock origin, under `/widget-fonts/`. */
+  url: z.string(),
+  unicodeRange: z.string().nullable(),
+});
+export type WidgetFontFile = z.infer<typeof widgetFontFileSchema>;
+
 /**
- * `GET /api/widget/:brandId/config`. Everything the widget needs for its first
- * paint, and nothing secret: served to any page on an allowed origin, cached
- * with an `ETag`.
+ * The brand's theme, resolved on the server with `@helpdock/ui` so the widget
+ * ships no colour maths: DESIGN §2.2 semantic tokens for each scheme, keyed by
+ * token name (`bg.canvas`, `action.primary`, …).
+ */
+export const widgetThemeSchema = z.object({
+  colorScheme: widgetColorSchemeSchema,
+  tokens: z.object({
+    light: z.record(z.string(), z.string()),
+    dark: z.record(z.string(), z.string()),
+  }),
+  /** DESIGN §4: a brand moves `md` and `lg` only. */
+  radius: z.object({ md: z.int().nonnegative(), lg: z.int().nonnegative() }),
+  fontFamily: z.object({ sans: z.string(), arabic: z.string(), mono: z.string() }),
+  fonts: z.array(widgetFontFileSchema),
+  launcher: z.object({
+    style: widgetLauncherSchema,
+    /** Null: the widget's own "Chat with us" in the visitor's language. */
+    label: z.string().nullable(),
+    position: widgetPositionSchema,
+  }),
+});
+export type WidgetTheme = z.infer<typeof widgetThemeSchema>;
+
+/** A public help center article the widget lists (M4-05; M5-10 swaps in search). */
+export const widgetArticleSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  excerpt: z.string(),
+  section: z.string().nullable(),
+  url: z.string(),
+});
+export type WidgetArticleSummary = z.infer<typeof widgetArticleSummarySchema>;
+
+/**
+ * `GET /api/widget/:brandId/config?locale=`. Everything the widget needs for
+ * its first paint, and nothing secret: served to any page on an allowed
+ * origin, cached with an `ETag`.
  */
 export const widgetConfigSchema = z.object({
   brandId: z.uuid(),
   brandName: z.string(),
-  defaultLocale: z.enum(['en', 'ar']),
+  defaultLocale: widgetLocaleSchema,
+  /** The language the strings below are in: `?locale=`, or the brand's default. */
+  locale: widgetLocaleSchema,
+  mode: widgetModeSchema,
+  /** The admin's stored choices, as the Widget tab saved them. */
   appearance: widgetAppearanceSchema,
+  theme: widgetThemeSchema,
+  /** The welcome bubble in `locale`; null when the brand left it empty. */
+  greeting: z.string().nullable(),
   prechat: z.object({
     enabled: z.boolean(),
     fields: z.array(widgetPrechatFieldViewSchema),
   }),
+  /** The contact form's fields beyond name, email and message: the pre-chat's custom fields. */
+  contactForm: z.object({ fields: z.array(widgetPrechatFieldViewSchema) }),
   showAgentIdentity: z.boolean(),
   whenUnavailable: widgetWhenUnavailableSchema,
   transcriptEnabled: z.boolean(),
@@ -144,6 +213,12 @@ export const widgetConfigSchema = z.object({
   /** Whether the brand accepts a signed identity from its site (§4.2). */
   signedIdentity: z.boolean(),
   availability: widgetAvailabilitySchema,
+  /** The brand's popular public articles; empty until the help center has content (M5). */
+  popularArticles: z.array(widgetArticleSummarySchema),
+  /** The brand's help center on its primary verified domain, or null. */
+  helpCenterUrl: z.string().nullable(),
+  /** "Powered by Helpdock" under the window (DESIGN §6.6). */
+  showPoweredBy: z.boolean(),
 });
 export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
 
@@ -195,7 +270,7 @@ export const canonicalIdentityJson = (payload: SignedIdentityPayload): string =>
 export const widgetSessionRequestSchema = z.object({
   identity: signedIdentitySchema.optional(),
   /** The page's language, remembered on the visitor's contact for replies. */
-  locale: z.enum(['en', 'ar']).optional(),
+  locale: widgetLocaleSchema.optional(),
 });
 export type WidgetSessionRequest = z.infer<typeof widgetSessionRequestSchema>;
 
@@ -320,16 +395,19 @@ export const widgetPrechatAnswersSchema = z.object({
 });
 export type WidgetPrechatAnswers = z.input<typeof widgetPrechatAnswersSchema>;
 
-/** `POST …/conversations`: the first message opens the conversation. */
-export const widgetStartRequestSchema = z
-  .object({
-    clientId: clientIdSchema,
-    text: z.string().trim().max(WIDGET_MESSAGE_TEXT_MAX),
-    prechat: widgetPrechatAnswersSchema.optional(),
-    /** The CAPTCHA token, when the config asks for one (ADR 0003). */
-    captchaToken: z.string().max(4096).optional(),
-  })
-  .refine((body) => body.text !== '', { message: 'the first message needs text', path: ['text'] });
+/**
+ * `POST …/conversations`. With text, that text is the first message; without,
+ * the conversation opens empty, as the widget does before the visitor's first
+ * message or from the pre-chat form. `clientId` makes the call idempotent: a
+ * retry with the same one answers the conversation it opened.
+ */
+export const widgetStartRequestSchema = z.object({
+  clientId: clientIdSchema,
+  text: z.string().trim().max(WIDGET_MESSAGE_TEXT_MAX).default(''),
+  prechat: widgetPrechatAnswersSchema.optional(),
+  /** The CAPTCHA token, when the config asks for one (ADR 0003). */
+  captchaToken: z.string().max(4096).optional(),
+});
 export type WidgetStartRequest = z.input<typeof widgetStartRequestSchema>;
 
 export const widgetSendResponseSchema = z.object({
@@ -338,6 +416,13 @@ export const widgetSendResponseSchema = z.object({
   message: widgetMessageSchema,
 });
 export type WidgetSendResponse = z.infer<typeof widgetSendResponseSchema>;
+
+/** The start's answer: the message is null when the conversation opened without text. */
+export const widgetStartResponseSchema = z.object({
+  conversation: widgetConversationSchema,
+  message: widgetMessageSchema.nullable(),
+});
+export type WidgetStartResponse = z.infer<typeof widgetStartResponseSchema>;
 
 export const widgetMessagesQuerySchema = z.object({
   /** The last `seq` the client holds; 0 for the whole thread. */

@@ -43,8 +43,8 @@ FROM deps AS build
 WORKDIR /repo
 
 # `apps/helpcenter` is still a placeholder whose `build` is a `tsc` over one
-# file; `apps/widget` builds `dist/widget.js` with Vite. Serving that from the
-# api lands with the widget routes (M4-04).
+# file; `apps/widget` builds `dist/widget.js`, its lazy chunks and its fonts
+# with Vite, and the api serves them (M4-01).
 RUN pnpm build
 
 # `pnpm deploy` writes a self-contained tree: the api's own files plus the
@@ -72,9 +72,12 @@ WORKDIR /app
 COPY --from=build /out ./
 # The admin SPA the api serves at `/` on the admin host (ARCHITECTURE §3).
 COPY --from=build /repo/apps/admin/dist ./admin
+# The chat widget the api serves at `/widget.js` to customers' sites (M4-01).
+COPY --from=build /repo/apps/widget/dist ./widget
 
 ENV NODE_ENV=production \
     ADMIN_DIST_DIR=/app/admin \
+    WIDGET_DIST_DIR=/app/widget \
     PORT=3000
 # `APP_ROLE` is deliberately not defaulted: Compose sets it per service, and a
 # worker that silently started an HTTP listener would be a hard thing to notice.

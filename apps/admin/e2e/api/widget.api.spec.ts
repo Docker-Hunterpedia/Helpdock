@@ -69,7 +69,7 @@ test.describe('the widget origin allow-list against the real api', () => {
       .getByRole('region', { name: t('channels:widget.embed.heading') })
       .locator('pre')
       .textContent();
-    const brandId = /brand="([^"]+)"/.exec(snippet ?? '')?.[1] ?? '';
+    const brandId = /data-brand="([^"]+)"/.exec(snippet ?? '')?.[1] ?? '';
     expect(brandId).not.toBe('');
 
     for (const [path, method] of [

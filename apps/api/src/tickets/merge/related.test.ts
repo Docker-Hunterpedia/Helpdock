@@ -42,6 +42,7 @@ const ticket = (n: number, links: Partial<TicketRow> = {}): TicketRow => ({
   parentId: null,
   mergedIntoId: null,
   visitorId: null,
+  visitorClientId: null,
   mergedAt: null,
   mergedById: null,
   preMergeStatusId: null,

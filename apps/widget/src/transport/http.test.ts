@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WidgetTransportError } from './contract.js';
-import { HttpClient, isRetryable, refusalOf } from './http.js';
+import { ApiRefusal, HttpClient, refusalOf } from './http.js';
 
 const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
 
@@ -41,7 +40,7 @@ describe('HttpClient', () => {
     expect(fetch.mock.calls[0]?.[1]?.headers).toEqual({ accept: 'application/json' });
   });
 
-  it("turns the api's refusal into its widget code", async () => {
+  it("turns the api's refusal into the code the UI words, keeping the api's reason", async () => {
     const fetch = vi.fn(
       async () =>
         new Response(
@@ -57,7 +56,8 @@ describe('HttpClient', () => {
     });
 
     await expect(http.post('/conversations', {})).rejects.toMatchObject({
-      code: 'captcha_required',
+      code: 'captcha_failed',
+      reason: 'captcha_required',
       status: 403,
       message: 'no',
     });
@@ -73,23 +73,73 @@ describe('HttpClient', () => {
 
     await expect(http.get('/config')).rejects.toMatchObject({ code: 'network' });
   });
+
+  it('reports a body the connection cut off as a network failure', async () => {
+    const http = new HttpClient({
+      apiUrl: 'https://api.example.com',
+      brandId: BRAND,
+      secret: () => 's',
+      fetch: async () => new Response('{"cut', { status: 200 }),
+    });
+
+    await expect(http.get('/config')).rejects.toMatchObject({ code: 'network' });
+  });
+});
+
+describe('HttpClient.put', () => {
+  const blob = new Blob(['x'], { type: 'image/png' });
+
+  it('uploads with exactly the headers the URL was signed with', async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 200 }));
+    const http = new HttpClient({ apiUrl: 'https://a', brandId: BRAND, secret: () => 's', fetch });
+
+    await http.put('https://bucket/object', { 'content-type': 'image/png' }, blob);
+
+    expect(fetch).toHaveBeenCalledWith('https://bucket/object', {
+      method: 'PUT',
+      headers: { 'content-type': 'image/png' },
+      body: blob,
+    });
+  });
+
+  it('reports a refused or unreachable upload as a network failure', async () => {
+    const refused = new HttpClient({
+      apiUrl: 'https://a',
+      brandId: BRAND,
+      secret: () => 's',
+      fetch: async () => new Response(null, { status: 403 }),
+    });
+    const offline = new HttpClient({
+      apiUrl: 'https://a',
+      brandId: BRAND,
+      secret: () => 's',
+      fetch: () => Promise.reject(new TypeError('Failed to fetch')),
+    });
+
+    await expect(refused.put('https://bucket/object', {}, blob)).rejects.toBeInstanceOf(ApiRefusal);
+    await expect(offline.put('https://bucket/object', {}, blob)).rejects.toMatchObject({
+      code: 'network',
+    });
+  });
 });
 
 describe('refusalOf', () => {
   it('falls back to the status when the body names no widget code', () => {
-    expect(refusalOf(429, {}).code).toBe('rate_limited');
-    expect(refusalOf(503, undefined).code).toBe('internal');
-    expect(refusalOf(418, { error: { widget: { reason: 'nonsense' } } }).code).toBe(
-      'invalid_payload',
-    );
+    expect(refusalOf(429, {})).toMatchObject({ code: 'rate_limited', reason: 'rate_limited' });
+    expect(refusalOf(503, undefined)).toMatchObject({ code: 'unavailable', reason: 'internal' });
+    expect(refusalOf(418, { error: { widget: { reason: 'nonsense' } } })).toMatchObject({
+      code: 'policy_rejected',
+      reason: 'invalid_payload',
+    });
   });
-});
 
-describe('isRetryable', () => {
-  it('retries the network and a server error, never a refusal', () => {
-    expect(isRetryable(new WidgetTransportError('network', 'x'))).toBe(true);
-    expect(isRetryable(new WidgetTransportError('internal', 'x', 502))).toBe(true);
-    expect(isRetryable(new WidgetTransportError('not_found', 'x', 404))).toBe(false);
-    expect(isRetryable(new Error('x'))).toBe(false);
+  it('words what a retry cannot fix as final, and an origin problem as unavailable', () => {
+    const codeOf = (reason: string) => refusalOf(400, { error: { widget: { reason } } }).code;
+
+    expect(codeOf('content_policy')).toBe('policy_rejected');
+    expect(codeOf('read_only')).toBe('policy_rejected');
+    expect(codeOf('not_found')).toBe('not_found');
+    expect(codeOf('origin_not_allowed')).toBe('unavailable');
+    expect(codeOf('unauthenticated')).toBe('unavailable');
   });
 });

@@ -191,7 +191,7 @@ describe('Channels › Widget', () => {
 describe('embedSnippet', () => {
   it('loads the widget from this install for this brand', () => {
     expect(embedSnippet('https://support.example.com', BRAND)).toBe(
-      `<script src="https://support.example.com/widget.js" async></script>\n<helpdock-widget brand="${BRAND}"></helpdock-widget>`,
+      `<script type="module" src="https://support.example.com/widget.js" data-brand="${BRAND}"></script>`,
     );
   });
 });

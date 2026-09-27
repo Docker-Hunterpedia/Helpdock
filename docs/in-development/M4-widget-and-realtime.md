@@ -12,17 +12,17 @@ Owner: @Docker-Hunterpedia
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M4-01 | Widget build: Preact + Shadow DOM, Vite lib mode, single `widget.js`, size check in CI… | #106 | not started |
+| M4-01 | Widget build: Preact + Shadow DOM, Vite lib mode, single `widget.js`, size check in CI… | #106 | in review: Preact widget in a Shadow DOM, ES-module `widget.js` 25 KB gzipped with lazy chunks, size gate in the unit job (ADR 0012) |
 | M4-02 | Visitor identity per D §4.1–4.2: server-issued `visitor_id` + `visitor_secret` (hashed… | #107 | not started |
 | M4-03 | Origin allow-list on config, token and Socket.IO handshake; per-visitor and per-IP… | #108 | not started |
 | M4-04 | Realtime delivery contract per D §7: `client_id` + per-conversation `seq`, dedupe on… | #109 | not started |
-| M4-05 | Four modes: chat, chat + suggested articles (stub until M7), help center only (stub… | #110 | not started |
-| M4-06 | Theme tokens with live preview in admin; dark/light/auto; RTL by locale | #111 | not started |
-| M4-07 | Rich content policy per brand: text, emoji, images, video, voice, files with size and… | #112 | not started |
-| M4-08 | Pre-chat form, business-hours awareness, transcript by email, agent avatar/name | #113 | not started |
+| M4-05 | Four modes: chat, chat + suggested articles (stub until M7), help center only (stub… | #110 | widget side in review; server side in progress |
+| M4-06 | Theme tokens with live preview in admin; dark/light/auto; RTL by locale | #111 | widget side in review; server side in progress |
+| M4-07 | Rich content policy per brand: text, emoji, images, video, voice, files with size and… | #112 | widget side in review; server side in progress |
+| M4-08 | Pre-chat form, business-hours awareness, transcript by email, agent avatar/name | #113 | widget side in review; server side in progress |
 | M4-09 | Hosted web form per brand with custom fields and CAPTCHA toggle | #114 | not started |
 | M4-10 | Widget protocol documented in `docs/guides/widget-protocol.md` for native apps | #115 | not started |
-| M4-11 | Accessibility: keyboard, focus, contrast, ARIA live regions | #116 | not started |
+| M4-11 | Accessibility: keyboard, focus, contrast, ARIA live regions | #116 | in review: keyboard, focus return, polite `role="log"`, 44 px targets; axe clean in en and ar |
 
 ## Artboards
 
@@ -42,4 +42,4 @@ On the [design canvas](https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ), under
 
 ## Pull requests
 
-- None yet.
+- Widget UI (M4-01, M4-11 and the widget side of M4-05 to M4-08): this branch.

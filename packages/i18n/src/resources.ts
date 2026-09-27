@@ -15,6 +15,7 @@ import arSystem from '../locales/ar/system.json' with { type: 'json' };
 import arTicket from '../locales/ar/ticket.json' with { type: 'json' };
 import arTicketing from '../locales/ar/ticketing.json' with { type: 'json' };
 import arTickets from '../locales/ar/tickets.json' with { type: 'json' };
+import arWidget from '../locales/ar/widget.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
@@ -33,6 +34,7 @@ import enSystem from '../locales/en/system.json' with { type: 'json' };
 import enTicket from '../locales/en/ticket.json' with { type: 'json' };
 import enTicketing from '../locales/en/ticketing.json' with { type: 'json' };
 import enTickets from '../locales/en/tickets.json' with { type: 'json' };
+import enWidget from '../locales/en/widget.json' with { type: 'json' };
 import enWizard from '../locales/en/wizard.json' with { type: 'json' };
 
 /** DESIGN §7 and REQUIREMENTS: English and Modern Standard Arabic in v1. */
@@ -68,6 +70,8 @@ export const NAMESPACES = [
   'rules',
   // M3-06: the Macros tab of Automation and the composer's macro picker.
   'macros',
+  // M4: the chat widget on customer sites (`apps/widget`), read by the visitor.
+  'widget',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -93,6 +97,7 @@ export const resources = {
     channels: enChannels,
     rules: enRules,
     macros: enMacros,
+    widget: enWidget,
   },
   ar: {
     common: arCommon,
@@ -113,6 +118,7 @@ export const resources = {
     channels: arChannels,
     rules: arRules,
     macros: arMacros,
+    widget: arWidget,
   },
 };
 

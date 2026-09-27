@@ -33,3 +33,12 @@ Three choices follow from that budget and were not settled anywhere:
 - **A classic loader script that imports the module.** Rejected: two requests before first paint for no gain, since the loader could do nothing the module cannot.
 - **i18next in the widget.** Rejected on size alone; it would be the largest dependency in the bundle while the widget uses none of what distinguishes it.
 - **Inline `style` attributes or a `<style>` element.** Rejected: both are subject to the host page's CSP, and the widget must work on a page that forbids inline styles.
+
+## Amendment: the transport is a lazy chunk (2026-09-27)
+
+Integrating the real transport (M4-04) showed that socket.io-client, the SSE reader and the REST calls come to about 17 KB gzipped on their own. Folded into the 25 KB entry they would take it to about 42 KB, over the 40 KB cap, so the transport is a lazy chunk of its own, `chunks/remote-*.js`, like the recorder and the help center:
+
+- `src/transport/create.ts` stays in `widget.js` as a thin shell with the `WidgetTransport` interface; the first call fetches `remote.ts` and hands every call to it. A chunk that cannot be fetched is reported as a network failure, which the widget already words.
+- The entry is about 25 KB gzipped and the transport chunk about 17 KB. `scripts/budget.ts` fails the build when the transport is not a chunk of its own or is over the 20 KB every lazy chunk is held to, and `scripts/size.test.ts` checks that no socket.io-client code reaches `widget.js`.
+- First paint now waits for one chunk as well as the config, fetched in parallel from the same origin. That departs from D §14's "the initial `widget.js` contains everything needed for the chat mode's first paint"; keeping to it would have broken the 40 KB cap instead. A reviewer decides whether D §14 is reworded or the entry is trimmed instead.
+- The widget build also copies the design system's woff2 files to `dist/widget-fonts/`, which the api serves and the config lists with their URLs.

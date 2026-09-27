@@ -32,7 +32,19 @@ These rules follow from it:
 ## Base URL and headers
 
 Every route lives under `/api/widget/:brandId`, where `brandId` is the brand's
-UUID. The admin shows it in the embed snippet under **Channels › Widget**.
+UUID. The admin shows it in the embed tag under **Channels › Widget**:
+
+```html
+<script type="module" src="https://support.example.com/widget.js" data-brand="0192c3f0-…"></script>
+```
+
+The api serves the bundled widget itself, from `WIDGET_DIST_DIR`:
+`GET /widget.js`, its lazy `GET /chunks/:file` and its fonts under
+`GET /widget-fonts/:file`. Those three answer any origin
+(`Access-Control-Allow-Origin: *`, `Cross-Origin-Resource-Policy:
+cross-origin`); the brand's allowed origins are checked by the `/api/widget`
+calls the script then makes. The hashed chunks are cached for a year,
+`widget.js` for five minutes, because its name survives a deploy.
 
 | Header | When | Value |
 |---|---|---|
@@ -187,12 +199,29 @@ a page can no longer be trusted.
 
 ## Configuration
 
-`GET /config` needs no visitor. It returns `widgetConfigSchema`: brand name,
-default locale, appearance, the pre-chat form, whether agents are named, what
-happens out of hours, whether transcripts are on, the content policy, the
-CAPTCHA site key (or `null`), whether signed identity is on, and
-`availability`. The response carries an `ETag` and `Cache-Control: no-cache`.
-Send `If-None-Match` to get a `304`.
+`GET /config?locale=en|ar` needs no visitor. It returns `widgetConfigSchema`,
+everything the first paint needs:
+
+| Field | What it holds |
+|---|---|
+| `brandName`, `defaultLocale`, `locale` | the brand, and the language the strings below are in: `?locale=`, or the brand's default |
+| `mode`, `appearance` | the widget mode and the Widget tab's stored choices |
+| `theme` | the brand theme, resolved on the server: `tokens.light` and `tokens.dark` (DESIGN §2.2 semantic token names to colours), `radius.md` and `radius.lg`, `fontFamily`, the self-hosted `fonts` with their URLs and unicode ranges, and the `launcher` (style, label, `end` or `start`) |
+| `greeting` | the welcome line in `locale`, the Arabic falling back to the English; `null` when empty |
+| `prechat` | whether the form is on and its fields; a custom field's `label` is in `locale` |
+| `contactForm` | the contact form's fields beyond name, email and message: the pre-chat's custom fields |
+| `showAgentIdentity`, `whenUnavailable`, `transcriptEnabled` | the conversation card's switches |
+| `contentPolicy` | what the composer may send; the api enforces the same policy on upload |
+| `captcha` | the provider and site key, or `null` |
+| `signedIdentity` | whether the brand accepts a signed identity |
+| `availability` | as below |
+| `popularArticles` | the brand's popular public articles; empty until the help center has content (M5) |
+| `helpCenterUrl` | the help center on the brand's primary verified domain, or `null` |
+| `showPoweredBy` | whether to draw "Powered by Helpdock" |
+
+The response carries an `ETag`, which differs per locale, and
+`Cache-Control: no-cache`. Send `If-None-Match` to get a `304`. A locale other
+than `en` or `ar` is refused with `400`.
 
 `GET /availability` returns `widgetAvailabilitySchema` on its own:
 
@@ -208,7 +237,7 @@ business hours.
 | Method and path | Body / query | Response |
 |---|---|---|
 | `GET /conversations` | | `widgetConversationListSchema` |
-| `POST /conversations` | `widgetStartRequestSchema` | `widgetSendResponseSchema` |
+| `POST /conversations` | `widgetStartRequestSchema` | `widgetStartResponseSchema` |
 | `GET /conversations/:id` | | `widgetConversationSchema` |
 | `GET /conversations/:id/messages` | `?after=<seq>&limit=<1–200>` | `widgetMessagePageSchema` |
 | `POST /conversations/:id/messages` | `widgetSendRequestSchema` | `widgetSendResponseSchema` |
@@ -222,7 +251,7 @@ started, plus any their verified contact may see.
 
 ### Starting
 
-The first message opens the conversation:
+A start opens the conversation, with or without its first message:
 
 ```json
 {
@@ -233,11 +262,22 @@ The first message opens the conversation:
 }
 ```
 
+- `text` is optional. With it, the response's `message` is that first message;
+  without it, the conversation opens empty, `message` is `null`, and the
+  visitor's first `POST …/messages` names the conversation for the agents. The
+  bundled widget opens the conversation this way, just before the first
+  message, and from the pre-chat and contact forms.
+- `clientId` makes the start idempotent: a start repeated with the same
+  `clientId` (a retry, or two sent together) answers the conversation the
+  first one opened. Choose a new one for a new conversation.
+
 - Send `captchaToken` when `config.captcha` is not null. Without a valid token
   the api answers `captcha_required`.
-- `prechat.custom` is keyed by ticket custom field keys. The api checks the
-  values against the field definitions. It enforces only the fields the brand
-  asks for (`config.prechat.fields`).
+- `prechat` carries the pre-chat form's answers, or the contact form's, which
+  asks the same fields. `prechat.custom` is keyed by ticket custom field keys.
+  The api checks the values against the field definitions and keeps only the
+  fields the brand asks for (`config.prechat.fields`). An email given here is
+  unverified (DOMAIN-RULES §4.1).
 - The api validates a retry's `clientId` before it verifies the CAPTCHA, so a
   retried start does not need a fresh token.
 
@@ -376,6 +416,14 @@ On a `message` event:
   old cursor.
 
 After every reconnect, catch up over REST before you trust the socket.
+
+The bundled widget
+([`apps/widget/src/transport/remote.ts`](../../apps/widget/src/transport/remote.ts))
+is a reference client for all of this. It also treats the browser's `offline`
+event as a disconnect and its `online` event as a reconnect, so a dropped
+network is noticed at once rather than after the socket's ping timeout, and
+messages written meanwhile go out, with their `clientId`, as soon as it is
+back.
 
 ## Realtime fallback: SSE
 

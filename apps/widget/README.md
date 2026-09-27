@@ -11,12 +11,15 @@ the canvas artboards `Widget/States-EN`, `Widget/States-AR`, `Widget/Modes-EN`,
 ## Embedding it
 
 ```html
-<script type="module" src="https://support.example.com/widget.js" data-brand="acme"></script>
+<script type="module" src="https://support.example.com/widget.js" data-brand="0192c3f0-…"></script>
 ```
+
+Channels › Widget in the admin shows this tag with the brand's id filled in.
+The page's origin must be one of the brand's allowed origins on that tab.
 
 - `type="module"` is required: the build is an ES module so it can load its
   lazy chunks.
-- `data-brand` is the brand's public widget key. The script adds one
+- `data-brand` is the brand's id. The script adds one
   `<helpdock-widget>` to the page when the page has none.
 - `data-locale="ar"` or `data-locale="en"` forces a language. Without it the
   widget uses the page's `<html lang>`, then the browser's language, when either
@@ -26,7 +29,7 @@ To choose where the element sits in the DOM, place it yourself and leave
 `data-brand` off the script:
 
 ```html
-<helpdock-widget brand="acme" locale="ar"></helpdock-widget>
+<helpdock-widget brand="0192c3f0-…" locale="ar"></helpdock-widget>
 <script type="module" src="https://support.example.com/widget.js"></script>
 ```
 
@@ -63,7 +66,10 @@ hosts ([ADR 0003](../../docs/decisions/0003-turnstile-default-captcha.md)).
 | `src/embed.ts` | The custom element, the command queue and auto-placement. |
 | `src/mount.tsx` | Shadow root, stylesheet, theme (`--hd-*` from the config, light/dark/auto), fonts, and the Preact render. |
 | `src/transport/types.ts` | **`WidgetTransport`**, the only seam between the UI and the server. |
-| `src/transport/create.ts` | The production transport. M4-04 fills it in; until then every call reports `unavailable` and the widget stays hidden. |
+| `src/transport/create.ts` | The production transport's shell in `widget.js`: the first call fetches `remote.ts` (its own lazy chunk) and hands every call to it. |
+| `src/transport/remote.ts` | The real transport (M4-04): REST under `/api/widget/:brandId`, the `/widget` socket, the SSE fallback, the visitor secret in `localStorage`, idempotent starts, uploads held until their message is sent. |
+| `src/transport/map.ts` | The api's camelCase wire ([widget protocol](../../docs/guides/widget-protocol.md)) as the UI's types. |
+| `src/transport/http.ts`, `sse.ts`, `protocol.ts` | The REST client and its refusals, the SSE reader, the protocol's constants. |
 | `src/transport/mock.ts`, `fixtures.ts` | An in-memory server for tests and the harness, with levers to play the agent and the network. |
 | `src/state/thread.ts` | The delivery contract of [DOMAIN-RULES §7](../../docs/planning/DOMAIN-RULES.md#7-realtime-delivery-contract) as a pure reducer: dedupe by `seq` and `client_id`, the `lastSeq` cursor, gap detection, catch-up, read receipts. |
 | `src/state/send.ts` | Retries within the 10 s window with the same `client_id`; UUIDv7. |
@@ -91,7 +97,9 @@ behind the same method.
 ### Size budget
 
 DOMAIN-RULES §14: `widget.js` ≤ 40 KB gzipped; each lazy chunk ≤ 20 KB and all
-of them ≤ 100 KB.
+of them ≤ 100 KB. The transport must be a lazy chunk of its own
+(`chunks/remote-*.js`, ADR 0012's amendment); today the entry is about 25 KB
+and the transport about 17 KB.
 
 ```bash
 pnpm --filter @helpdock/widget size    # build, then print every file's gzipped size
@@ -108,6 +116,12 @@ pnpm --filter @helpdock/widget dev     # the harness page on http://localhost:52
 pnpm --filter @helpdock/widget test    # unit and component tests (Vitest, happy-dom)
 pnpm --filter @helpdock/widget e2e     # Playwright on the harness, en and ar, with axe
 ```
+
+The api serves the build at `/widget.js`, `/chunks/:file` and
+`/widget-fonts/:file` from `WIDGET_DIST_DIR` (the image puts it at
+`/app/widget`). The end-to-end test against a real api, with a customer page
+on its own origin, is `apps/admin/e2e/api/widget-live.api.spec.ts`
+(`pnpm --filter @helpdock/admin e2e:api`, after `pnpm build`).
 
 The harness (`harness/`) is an empty host page with the widget on the mock
 transport, configured from the query string: `?locale=ar`,

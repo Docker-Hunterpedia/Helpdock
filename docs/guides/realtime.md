@@ -308,7 +308,7 @@ of meaning (DESIGN §10).
 | M1-09 | Shipped in branch: `activity` on `ticket:viewing` ("is replying"), and `ticket:changed` in both tickets' rooms on a merge, an unmerge and a split. |
 | M3-07 | Shipped: the `user:<id>` room and `notification:created` (see [notifications](notifications.md)). |
 | M4-03 | Shipped in branch: the origin check moved from the engine into each namespace's handshake; the widget handshake's origin allow-list and its per-address throttle. |
-| M4-04 | Shipped in branch: the `/widget` namespace and the full delivery contract for conversations — `clientId`, `seq`, cursor catch-up and the SSE fallback ([widget protocol](widget-protocol.md)); `ticket:visitor_typing` and `ticket:visitor_read` on `/staff`. |
+| M4-04 | Shipped in branch: the `/widget` namespace and the full delivery contract for conversations — `clientId`, `seq`, cursor catch-up and the SSE fallback ([widget protocol](widget-protocol.md)); `ticket:visitor_typing` and `ticket:visitor_read` on `/staff`. The widget's client is `apps/widget/src/transport/remote.ts`. |
 
 Adding an event is three steps: a schema and a name in
 `packages/schemas/src/realtime.ts`, an `emitToRoom` call through

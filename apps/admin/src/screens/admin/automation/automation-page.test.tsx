@@ -214,7 +214,7 @@ describe('the builder', () => {
           actions: [{ type: 'assign_team', teamId: MOCK_AUTOMATION.teams.technical }],
         }),
       );
-    });
+    }, LOAD);
   });
 
   it('turns an event rule into a scheduled one', async () => {

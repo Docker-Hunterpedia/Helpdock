@@ -72,6 +72,16 @@ export const helpcenterDomainSchema = z
 // Step 1 — the admin account
 // --------------------------------------------------------------------------
 
+/** Far above any key worth typing, and low enough that hashing one costs nothing. */
+export const SETUP_KEY_MAX_LENGTH = 1024;
+
+/**
+ * Why step 1 was refused when the status alone is too coarse. The only one so
+ * far: the install set `HD_SETUP_TOKEN` and the request did not carry it.
+ */
+export const setupRefusalSchema = z.enum(['setup-key-invalid']);
+export type SetupRefusal = z.infer<typeof setupRefusalSchema>;
+
 export const setupAdminRequestSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.email().max(320),
@@ -80,6 +90,13 @@ export const setupAdminRequestSchema = z.object({
   // bar on the step is a hint, not a second policy.
   password: passwordSchema,
   locale: localeSchema,
+  /**
+   * The value of `HD_SETUP_TOKEN`, when the operator set one (#43). A body
+   * field rather than a header because a person types it into the form, and
+   * optional because an install without the variable asks for nothing. The
+   * api decides whether it is required, so the schema only bounds its size.
+   */
+  setupKey: z.string().trim().max(SETUP_KEY_MAX_LENGTH).optional(),
 });
 export type SetupAdminRequest = z.infer<typeof setupAdminRequestSchema>;
 

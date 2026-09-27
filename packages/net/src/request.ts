@@ -68,14 +68,19 @@ function pinnedLookup(destination: Destination): LookupFunction {
   };
 }
 
-function toResponseHeaders(headers: IncomingHttpHeaders): ResponseHeaders {
-  const result: Record<string, string | string[]> = {};
+/**
+ * Header names come from the remote server, so they are never used as property
+ * keys on a plain object: a `__proto__` header would otherwise reach the
+ * prototype. `Object.fromEntries` defines own properties only.
+ */
+export function toResponseHeaders(headers: IncomingHttpHeaders): ResponseHeaders {
+  const entries = new Map<string, string | string[]>();
   for (const [name, value] of Object.entries(headers)) {
     if (value !== undefined) {
-      result[name] = value;
+      entries.set(name, value);
     }
   }
-  return result;
+  return Object.fromEntries(entries);
 }
 
 function errorDetails(request: HopRequest): Partial<SafeFetchErrorDetails> {

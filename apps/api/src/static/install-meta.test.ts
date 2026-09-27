@@ -7,7 +7,8 @@ const fixture = page(
   '<meta name="helpdock:primary-domain" content="support.helpdock.com" />' +
     '<meta name="helpdock:brand-count" content="3" />' +
     '<meta name="helpdock:install-state" content="configured" />' +
-    '<meta name="helpdock:version" content="0.1.0" />',
+    '<meta name="helpdock:version" content="0.1.0" />' +
+    '<meta name="helpdock:setup-key-required" content="false" />',
 );
 
 const meta = (overrides: Partial<InstallMeta> = {}): InstallMeta => ({
@@ -15,6 +16,7 @@ const meta = (overrides: Partial<InstallMeta> = {}): InstallMeta => ({
   brandCount: 1,
   installState: 'configured',
   version: '1.2.3',
+  setupKeyRequired: false,
   ...overrides,
 });
 
@@ -27,6 +29,12 @@ describe('rewriteInstallMeta', () => {
     expect(html).toContain('<meta name="helpdock:install-state" content="fresh" />');
     expect(html).toContain('<meta name="helpdock:version" content="1.2.3" />');
     expect(html).not.toContain('support.helpdock.com');
+  });
+
+  it('says whether step 1 asks for a setup key, as a boolean and nothing more', () => {
+    const html = rewriteInstallMeta(fixture, meta({ setupKeyRequired: true }));
+
+    expect(html).toContain('<meta name="helpdock:setup-key-required" content="true" />');
   });
 
   it('leaves the rest of the document alone', () => {

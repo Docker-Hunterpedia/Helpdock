@@ -46,6 +46,11 @@ const REDACTED = [
   '*.password',
   '*.token',
   '*.secret',
+  // The first-run wizard's bootstrap key, as step 1's body and as the env key.
+  'setupKey',
+  '*.setupKey',
+  'HD_SETUP_TOKEN',
+  '*.HD_SETUP_TOKEN',
   // A driver error carries the statement and the values it was given. Those
   // values are the row: an email address, a ticket body, a password hash.
   // Logging an error must not become a way to log a body (ARCHITECTURE §14).

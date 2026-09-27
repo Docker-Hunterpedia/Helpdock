@@ -130,6 +130,21 @@ describe('loadEnv', () => {
     expect(failure.message).not.toContain('secret');
   });
 
+  it('leaves HD_SETUP_TOKEN unset unless an install chose one', () => {
+    expect(loadEnv(completeEnv).HD_SETUP_TOKEN).toBeUndefined();
+    expect(loadEnv(envWith({ HD_SETUP_TOKEN: '  ' })).HD_SETUP_TOKEN).toBeUndefined();
+  });
+
+  it('refuses a setup token shorter than 32 characters and quotes none of it', () => {
+    const short = 's'.repeat(31);
+    const failure = expectInvalidKeys(envWith({ HD_SETUP_TOKEN: short }), ['HD_SETUP_TOKEN']);
+
+    expect(failure.message).not.toContain(short);
+    expect(loadEnv(envWith({ HD_SETUP_TOKEN: 's'.repeat(32) })).HD_SETUP_TOKEN).toBe(
+      's'.repeat(32),
+    );
+  });
+
   it('parses the port and the outbound allow-list', () => {
     const env = loadEnv(
       envWith({ PORT: '8080', OUTBOUND_ALLOW_CIDRS: '10.0.0.0/8, fd00::/8 ,192.168.1.1/32' }),

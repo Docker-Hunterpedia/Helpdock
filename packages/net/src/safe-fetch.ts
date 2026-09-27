@@ -73,17 +73,18 @@ function normalizeMethod(method: string): string {
   return normalized;
 }
 
+/** Built through a `Map`, so a header named `__proto__` stays an ordinary entry. */
 function normalizeHeaders(headers: Readonly<Record<string, string>> = {}): Record<string, string> {
-  const normalized: Record<string, string> = {};
+  const normalized = new Map<string, string>();
   for (const [name, value] of Object.entries(headers)) {
     const lower = name.toLowerCase();
     // The Host header is derived from the URL; letting a caller set it would
     // point a pinned connection at a different virtual host.
     if (lower !== 'host') {
-      normalized[lower] = value;
+      normalized.set(lower, value);
     }
   }
-  return normalized;
+  return Object.fromEntries(normalized);
 }
 
 function toBuffer(body: string | Uint8Array | undefined): Buffer | undefined {

@@ -13,12 +13,18 @@ export interface PublicInstallInfo {
   readonly installState: InstallState;
   /** What the wizard's caption prints, because nobody is signed in to ask. */
   readonly version: string;
+  /**
+   * Whether step 1 asks for `HD_SETUP_TOKEN` (#43). Only whether: the key
+   * itself never reaches a browser.
+   */
+  readonly setupKeyRequired: boolean;
 }
 
 const DOMAIN_META = 'helpdock:primary-domain';
 const BRAND_COUNT_META = 'helpdock:brand-count';
 const INSTALL_STATE_META = 'helpdock:install-state';
 const VERSION_META = 'helpdock:version';
+const SETUP_KEY_META = 'helpdock:setup-key-required';
 
 const metaContent = (doc: Document, name: string): string | undefined =>
   doc.querySelector(`meta[name="${name}"]`)?.getAttribute('content')?.trim() || undefined;
@@ -32,6 +38,8 @@ const metaContent = (doc: Document, name: string): string | undefined =>
  * Anything missing or unreadable falls back to the safe answer. For the install
  * state that is `configured`: a build served from somewhere else, or a tag a
  * proxy stripped, must land on sign-in rather than offer to create an owner.
+ * For the setup key it is "not asked": the api still refuses step 1 without
+ * one, and the wizard draws the field as soon as it does.
  */
 export function readPublicInstallInfo(doc: Document = document): PublicInstallInfo {
   const parsed = Number.parseInt(metaContent(doc, BRAND_COUNT_META) ?? '', 10);
@@ -42,5 +50,6 @@ export function readPublicInstallInfo(doc: Document = document): PublicInstallIn
     brandCount: Number.isInteger(parsed) && parsed > 0 ? parsed : 1,
     installState: state.success ? state.data : 'configured',
     version: metaContent(doc, VERSION_META) ?? '',
+    setupKeyRequired: metaContent(doc, SETUP_KEY_META) === 'true',
   };
 }

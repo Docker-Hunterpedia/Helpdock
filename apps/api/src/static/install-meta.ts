@@ -7,10 +7,11 @@ import type { InstallState } from '@helpdock/schemas';
  * install on the way out, so no endpoint has to answer questions about an
  * install to an anonymous visitor (DOMAIN-RULES §1.1).
  *
- * There are four. The first two are what the sign-in card says; the third
+ * There are five. The first two are what the sign-in card says; the third
  * decides whether the app is a wizard or an admin at all, which has to be known
  * before the first route renders; the fourth is the version in the wizard's
- * caption, which the System page cannot supply because nobody is signed in yet.
+ * caption, which the System page cannot supply because nobody is signed in yet;
+ * the fifth says whether step 1 asks for `HD_SETUP_TOKEN` — whether, never what.
  */
 
 export interface InstallMeta {
@@ -22,12 +23,15 @@ export interface InstallMeta {
   readonly installState: InstallState;
   /** The api's own version, as the wizard's `v0.1.0 · …` caption prints it. */
   readonly version: string;
+  /** Whether `HD_SETUP_TOKEN` is set, so step 1 draws the setup key field (#43). */
+  readonly setupKeyRequired: boolean;
 }
 
 export const PRIMARY_DOMAIN_META = 'helpdock:primary-domain';
 export const BRAND_COUNT_META = 'helpdock:brand-count';
 export const INSTALL_STATE_META = 'helpdock:install-state';
 export const VERSION_META = 'helpdock:version';
+export const SETUP_KEY_META = 'helpdock:setup-key-required';
 
 /** Escapes a value for a double-quoted HTML attribute. */
 const escapeAttribute = (value: string): string =>
@@ -56,6 +60,7 @@ export const rewriteInstallMeta = (html: string, meta: InstallMeta): string => {
     [BRAND_COUNT_META, String(meta.brandCount)],
     [INSTALL_STATE_META, meta.installState],
     [VERSION_META, meta.version],
+    [SETUP_KEY_META, String(meta.setupKeyRequired)],
   ];
 
   return replacements.reduce(

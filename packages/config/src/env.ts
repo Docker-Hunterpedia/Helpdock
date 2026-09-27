@@ -43,6 +43,13 @@ const DEFAULT_LOG_LEVEL: LogLevel = 'info';
 const MIN_METRICS_TOKEN_LENGTH = 16;
 
 /**
+ * The first-run wizard's bootstrap key (#43). Typed by a person, but it stands
+ * between a stranger and the install administrator's account, so it is held to
+ * the floor of a random 32-byte value in base64 rather than a password's.
+ */
+export const MIN_SETUP_TOKEN_LENGTH = 32;
+
+/**
  * The process environment as Node hands it over: string values, or absent. An
  * empty or whitespace-only value counts as absent, so a key left blank in
  * `.env.example` behaves like one that was never set.
@@ -142,6 +149,13 @@ export const envSchema = z.object({
     .optional()
     .describe(
       `optional; at least ${MIN_METRICS_TOKEN_LENGTH} characters. A bearer token that lets a scraper outside the private network read /metrics; without it only private and loopback addresses may`,
+    ),
+  HD_SETUP_TOKEN: z
+    .string()
+    .min(MIN_SETUP_TOKEN_LENGTH)
+    .optional()
+    .describe(
+      `optional; at least ${MIN_SETUP_TOKEN_LENGTH} characters (openssl rand -base64 32). When set, step 1 of the first-run wizard asks for it, so only someone who can read this file can create the install administrator`,
     ),
   PORT: z.coerce
     .number()

@@ -34,7 +34,11 @@
     "emailRequired": "Enter an email address.",
     "emailInvalid": "Enter a valid email address.",
     "passwordRequired": "Choose a password.",
-    "passwordTooShort": "Use at least {{count}} characters."
+    "passwordTooShort": "Use at least {{count}} characters.",
+    "setupKeyLabel": "Setup key",
+    "setupKeyHint": "This install asks for the value of HD_SETUP_TOKEN, so only someone with access to the server can create the admin.",
+    "setupKeyRequired": "Enter the setup key.",
+    "setupKeyInvalid": "That setup key is not right. Check HD_SETUP_TOKEN in the server's .env."
   },
   "brand": {
     "title": "Your first brand",

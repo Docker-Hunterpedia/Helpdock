@@ -49,12 +49,23 @@ const decodePathname = (pathname: string): string | undefined => {
   }
 };
 
-/** True when `target` is still under `root` once every symbolic link is followed. */
-const isInside = (root: string, target: string): boolean => {
+/**
+ * True when `target` is under `root` as a string. Decided before the file
+ * system is consulted at all, so a path that climbs out never reaches a syscall.
+ */
+const isLexicallyInside = (root: string, target: string): boolean =>
+  target.startsWith(path.resolve(root) + path.sep);
+
+/**
+ * `target` with every symbolic link followed, or `undefined` when it does not
+ * exist or resolves out of `root`.
+ */
+const realPathInside = (root: string, target: string): string | undefined => {
   try {
-    return realpathSync(target).startsWith(realpathSync(root) + path.sep);
+    const real = realpathSync(target);
+    return real.startsWith(realpathSync(root) + path.sep) ? real : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 };
 
@@ -64,7 +75,8 @@ const isInside = (root: string, target: string): boolean => {
  * `/tickets/42` is a client-side route, not a missing file.
  *
  * Two ways out of the build are closed here: a `..` segment, which normalises
- * to a path outside the root, and a symbolic link that resolves outside it.
+ * to a path outside the root and is refused before any file system call, and a
+ * symbolic link that resolves outside it.
  */
 export const resolveAssetPath = (root: string, pathname: string): string | undefined => {
   const decoded = decodePathname(pathname);
@@ -76,15 +88,20 @@ export const resolveAssetPath = (root: string, pathname: string): string | undef
   const absolute = path.resolve(root, relative);
   // `path.join` re-normalises, so a `relative` that climbed out of the root no
   // longer matches what `resolve` produced from it.
-  if (relative === '' || absolute !== path.join(root, relative)) {
+  if (
+    relative === '' ||
+    absolute !== path.join(root, relative) ||
+    !isLexicallyInside(root, absolute)
+  ) {
     return undefined;
   }
 
-  if (statSync(absolute, { throwIfNoEntry: false })?.isFile() !== true) {
+  const real = realPathInside(root, absolute);
+  if (real === undefined || statSync(real, { throwIfNoEntry: false })?.isFile() !== true) {
     return undefined;
   }
 
-  return isInside(root, absolute) ? relative : undefined;
+  return path.relative(root, absolute);
 };
 
 /**

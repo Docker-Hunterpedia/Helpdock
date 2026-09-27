@@ -5,6 +5,7 @@ import { isSupportedTimeZone, timezoneSchema } from './brand.js';
 import {
   helpcenterDomainSchema,
   installStateSchema,
+  SETUP_KEY_MAX_LENGTH,
   setupAdminRequestSchema,
   setupBrandRequestSchema,
   setupSmtpRequestSchema,
@@ -99,6 +100,19 @@ describe('setupAdminRequestSchema', () => {
     expect(setupAdminRequestSchema.safeParse({ ...valid, password: 'twelveletter' }).success).toBe(
       true,
     );
+  });
+
+  it('takes the setup key as optional, because only some installs ask for it', () => {
+    expect(setupAdminRequestSchema.parse(valid).setupKey).toBeUndefined();
+    expect(setupAdminRequestSchema.parse({ ...valid, setupKey: ' pasted-key ' }).setupKey).toBe(
+      'pasted-key',
+    );
+  });
+
+  it('bounds the setup key, so a huge body costs nothing to hash', () => {
+    const tooLong = 'k'.repeat(SETUP_KEY_MAX_LENGTH + 1);
+
+    expect(setupAdminRequestSchema.safeParse({ ...valid, setupKey: tooLong }).success).toBe(false);
   });
 });
 

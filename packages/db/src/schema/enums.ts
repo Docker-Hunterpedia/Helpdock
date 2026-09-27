@@ -270,3 +270,16 @@ export const ticketViewBuiltInEnum = pgEnum('ticket_view_built_in', [
   'department_open',
   'escalated',
 ]);
+
+/**
+ * The six things staff are told about (REQUIREMENTS §4.9, M3-07). The same
+ * list keys the preference matrix on `notification_prefs`.
+ */
+export const notificationKindEnum = pgEnum('notification_kind', [
+  'assigned',
+  'replied',
+  'mentioned',
+  'sla_warning',
+  'sla_breached',
+  'escalated',
+]);

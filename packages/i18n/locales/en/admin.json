@@ -64,5 +64,69 @@
         "brand": "Brand settings arrive with milestone M1."
       }
     }
+  },
+  "notifications": {
+    "bell": {
+      "label": "Notifications",
+      "labelUnread_one": "Notifications, {{count}} unread",
+      "labelUnread_other": "Notifications, {{count}} unread"
+    },
+    "panel": {
+      "title": "Notifications",
+      "unread_one": "{{count}} unread",
+      "unread_other": "{{count}} unread",
+      "markAllRead": "Mark all read",
+      "show": "Show",
+      "all": "All",
+      "unreadFilter": "Unread",
+      "list": "Notifications",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "earlier": "Earlier",
+      "unreadDot": "Unread",
+      "window": "Last 30 days",
+      "settings": "Notification settings",
+      "loadFailed": "Notifications could not be loaded. Try again in a moment.",
+      "emptyHeading": "You are all caught up",
+      "emptyBody": "Nothing in the last 30 days. What you are told about is set in notification settings.",
+      "emptyUnread": "Nothing unread."
+    },
+    "title": {
+      "assigned": {
+        "person": "Assigned to you by {{actor}}",
+        "rule": "Assigned to you by a rule",
+        "round_robin": "Assigned to you by round-robin",
+        "skill_based": "Assigned to you by skill"
+      },
+      "replied": "The contact replied",
+      "mentioned": "{{actor}} mentioned you",
+      "sla_warning": "SLA warning · {{clock}}",
+      "sla_breached": "SLA breach · {{clock}}",
+      "escalated": "Escalated to you or your team"
+    },
+    "clock": {
+      "first_response": "first response",
+      "next_response": "next response",
+      "resolution": "resolution",
+      "unknown": "SLA"
+    },
+    "someone": "Someone",
+    "warningLine": "{{percent}} % of the target used",
+    "escalatedLine": "SLA step at {{percent}} %",
+    "caption": {
+      "note": "Internal note · {{time}}",
+      "department": "{{department}} · {{time}}",
+      "channel": "{{channel}} · {{time}}",
+      "time": "{{time}}"
+    },
+    "ago": {
+      "now": "just now",
+      "minutes_one": "{{count}} min ago",
+      "minutes_other": "{{count}} min ago",
+      "hours_one": "{{count}} h ago",
+      "hours_other": "{{count}} h ago",
+      "days_one": "{{count}} day ago",
+      "days_other": "{{count}} days ago"
+    }
   }
 }

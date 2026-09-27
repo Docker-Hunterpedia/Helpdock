@@ -1,5 +1,6 @@
 import type {
   AttachmentChanged,
+  NotificationCreated,
   PresenceChanged,
   PresenceMap,
   SettablePresenceStatus,
@@ -30,6 +31,8 @@ export interface RealtimeListener {
    * (DOMAIN-RULES §7).
    */
   attachmentChanged?(change: AttachmentChanged): void;
+  /** M3-07: something new for the bell, on this person's own room. */
+  notificationCreated?(created: NotificationCreated): void;
   /** A ticket was created or something about it moved. Ids only; a screen re-reads. */
   ticketChanged?(change: TicketChanged): void;
   /** A message was added. Its `seq` is what a thread catches up from (§7). */
@@ -97,6 +100,10 @@ export class RealtimeListeners {
     for (const listener of [...this.#listeners]) {
       deliver(listener);
     }
+  }
+
+  notificationCreated(created: NotificationCreated): void {
+    this.#each((listener) => listener.notificationCreated?.(created));
   }
 
   attachmentChanged(change: AttachmentChanged): void {

@@ -2,6 +2,8 @@ import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE, MockAuthApi } from '../auth/
 import type { AdminApis } from '../auth/select-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
+import { MockBrowserPush } from '../notifications/browser-push.js';
+import { MockNotificationsApi } from '../notifications/mock-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
@@ -39,5 +41,7 @@ export async function signedInMockApis(): Promise<AdminApis> {
     ticketing,
     tickets: new MockTicketsApi(undefined, Date.now(), blockList, undefined, ticketing),
     uploader: new MockAttachmentUploader(),
+    notifications: new MockNotificationsApi(),
+    browserPush: new MockBrowserPush(),
   };
 }

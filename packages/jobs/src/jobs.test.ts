@@ -6,6 +6,8 @@ import {
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
+  notifyEmailJob,
+  notifyPushJob,
   OUTBOX_RELAY_INTERVAL_MS,
   outboxEventJob,
   outboxRelayJob,
@@ -179,5 +181,48 @@ describe('assignment.offline_unassign', () => {
 
   it('runs on a queue of its own', () => {
     expect(assignmentOfflineUnassignJob.queue).toBe('assignment');
+  });
+});
+
+describe('the notify jobs (M3-07)', () => {
+  const notificationId = '01924f00-0000-7000-8000-0000000000b1';
+  const subscriptionId = '01924f00-0000-7000-8000-0000000000c1';
+
+  it('sends one email per notification however often the job runs', () => {
+    const payload = parseJobPayload(notifyEmailJob, { brandId, notificationId });
+
+    expect(idempotencyKeyFor(notifyEmailJob, payload, 'a')).toBe(
+      idempotencyKeyFor(notifyEmailJob, payload, 'b'),
+    );
+    expect(idempotencyKeyFor(notifyEmailJob, payload, 'a')).toBe(`notify.email:${notificationId}`);
+  });
+
+  it('keys a push by browser and notification, so each browser hears once', () => {
+    const payload = parseJobPayload(notifyPushJob, { brandId, subscriptionId, notificationId });
+
+    expect(idempotencyKeyFor(notifyPushJob, payload, 'a')).toBe(
+      `notify.push:${subscriptionId}:${notificationId}`,
+    );
+  });
+
+  it('keys a test push by the press that asked for it', () => {
+    const payload = parseJobPayload(notifyPushJob, {
+      brandId,
+      subscriptionId,
+      testId: outboxId,
+    });
+
+    expect(idempotencyKeyFor(notifyPushJob, payload, 'a')).toBe(
+      `notify.push:${subscriptionId}:${outboxId}`,
+    );
+  });
+
+  it.each([
+    ['neither', {}],
+    ['both', { notificationId, testId: outboxId }],
+  ])('refuses a push that names %s of a notification and a test', (_name, extra) => {
+    expect(() => parseJobPayload(notifyPushJob, { brandId, subscriptionId, ...extra })).toThrow(
+      PayloadValidationError,
+    );
   });
 });

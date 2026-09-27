@@ -13,9 +13,9 @@ import { ContactPage } from '../screens/contacts/contact-page.tsx';
 import { ContactsPage } from '../screens/contacts/contacts-page.tsx';
 import { NewContactPage } from '../screens/contacts/new-contact-page.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
+import { YourAccountPage } from '../screens/me/account-page.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
-import { SecurityScreen } from '../screens/security.tsx';
 import { SetupPage } from '../screens/setup/setup-page.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
 import { StaffScreen } from '../screens/staff.tsx';
@@ -97,7 +97,10 @@ export function AppRoutes(): ReactNode {
               tab redirects to it, as `/admin/ticketing` does to its first. */}
           <Route path={ROUTES.brand} element={<BrandPage />} />
           <Route path={ROUTES.brandTab} element={<BrandPage />} />
-          <Route path={ROUTES.security} element={<SecurityScreen />} />
+          {/* M3-07. Your account: Security, Notifications and Email signature
+              are tabs of one page, and `/me` alone opens the first. */}
+          <Route path={ROUTES.me} element={<Navigate to={ROUTES.security} replace />} />
+          <Route path={ROUTES.meTab} element={<YourAccountPage />} />
         </Route>
 
         {/* M1-15. Its own shell, without the page padding: the workspace is

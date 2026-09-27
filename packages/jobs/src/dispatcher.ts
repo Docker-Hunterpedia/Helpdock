@@ -10,6 +10,13 @@ import { parsePayload } from './validation.js';
  * effect registers a handler for its event name, and the consumer looks it up
  * inside the brand's transaction. Adding a side effect is a handler, never a new
  * queue and never a `queue.add` in a service.
+ *
+ * One event may have several handlers, one per **subscriber** (M3-07): the
+ * socket frame of `ticket.replied` is the tickets module's, and telling the
+ * assignee about it is the notifications module's. They run in registration
+ * order, in the same transaction under the same receipt, so a failure in any
+ * of them retries the delivery as a whole — which every handler already has to
+ * survive, because delivery is at least once (DOMAIN-RULES §6).
  */
 
 export interface OutboxEventContext {
@@ -38,8 +45,11 @@ export class UnknownOutboxEventError extends Error {
   }
 }
 
+/** Who a handler belongs to. One handler per event per subscriber. */
+export const DEFAULT_SUBSCRIBER = 'default';
+
 export interface OutboxDispatcher {
-  register(event: string, handler: OutboxEventHandler): void;
+  register(event: string, handler: OutboxEventHandler, subscriber?: string): void;
   /** Registered event names, sorted. The System page lists them. */
   readonly events: readonly string[];
   dispatch(context: OutboxEventContext): Promise<void>;
@@ -71,14 +81,22 @@ const logSettingsChanged: OutboxEventHandler = ({ brandId, outboxId, payload, lo
  * rather than mutating a shared one.
  */
 export const createOutboxDispatcher = (): OutboxDispatcher => {
-  const handlers = new Map<string, OutboxEventHandler>();
+  const handlers = new Map<string, Map<string, OutboxEventHandler>>();
 
-  const register = (event: string, handler: OutboxEventHandler): void => {
+  const register = (
+    event: string,
+    handler: OutboxEventHandler,
+    subscriber = DEFAULT_SUBSCRIBER,
+  ): void => {
     parsePayload('outbox event name', OUTBOX_EVENT_NAME, event);
-    if (handlers.has(event)) {
-      throw new Error(`An outbox handler for ${event} is already registered.`);
+    const subscribers = handlers.get(event) ?? new Map<string, OutboxEventHandler>();
+    if (subscribers.has(subscriber)) {
+      throw new Error(
+        `An outbox handler for ${event} is already registered${subscriber === DEFAULT_SUBSCRIBER ? '' : ` by ${subscriber}`}.`,
+      );
     }
-    handlers.set(event, handler);
+    subscribers.set(subscriber, handler);
+    handlers.set(event, subscribers);
   };
 
   register(SETTINGS_CHANGED_EVENT, logSettingsChanged);
@@ -89,11 +107,13 @@ export const createOutboxDispatcher = (): OutboxDispatcher => {
       return [...handlers.keys()].sort();
     },
     dispatch: async (context) => {
-      const handler = handlers.get(context.event);
-      if (handler === undefined) {
+      const subscribers = handlers.get(context.event);
+      if (subscribers === undefined) {
         throw new UnknownOutboxEventError(context.event, [...handlers.keys()]);
       }
-      await handler(context);
+      for (const handler of subscribers.values()) {
+        await handler(context);
+      }
     },
   };
 };
@@ -101,8 +121,12 @@ export const createOutboxDispatcher = (): OutboxDispatcher => {
 /** The registry the worker uses. Modules register into it as they are imported. */
 export const outboxEvents = createOutboxDispatcher();
 
-export const registerEventHandler = (event: string, handler: OutboxEventHandler): void => {
-  outboxEvents.register(event, handler);
+export const registerEventHandler = (
+  event: string,
+  handler: OutboxEventHandler,
+  subscriber?: string,
+): void => {
+  outboxEvents.register(event, handler, subscriber);
 };
 
 /** The `outbox.event` handler to hand {@link ./consumer.js createWorker}. */

@@ -26,6 +26,7 @@ import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
 import { MediaModule } from './media/media.module.js';
 import type { ObjectStorage } from './media/storage.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { ParticipantsModule } from './participants/participants.module.js';
@@ -146,6 +147,8 @@ export class AppModule implements NestModule {
         RetentionModule.forRoot(),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
+        // M3-07: the bell's panel and the Notifications tab. Delivery runs in the worker.
+        NotificationsModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

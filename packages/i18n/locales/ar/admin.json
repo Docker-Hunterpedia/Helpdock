@@ -64,5 +64,89 @@
         "brand": "تصل إعدادات العلامة مع المرحلة M1."
       }
     }
+  },
+  "notifications": {
+    "bell": {
+      "label": "الإشعارات",
+      "labelUnread_zero": "الإشعارات، لا شيء غير مقروء",
+      "labelUnread_one": "الإشعارات، {{count}} غير مقروء",
+      "labelUnread_two": "الإشعارات، {{count}} غير مقروءين",
+      "labelUnread_few": "الإشعارات، {{count}} غير مقروءة",
+      "labelUnread_many": "الإشعارات، {{count}} غير مقروء",
+      "labelUnread_other": "الإشعارات، {{count}} غير مقروء"
+    },
+    "panel": {
+      "title": "الإشعارات",
+      "unread_zero": "لا شيء غير مقروء",
+      "unread_one": "{{count}} غير مقروء",
+      "unread_two": "{{count}} غير مقروءين",
+      "unread_few": "{{count}} غير مقروءة",
+      "unread_many": "{{count}} غير مقروء",
+      "unread_other": "{{count}} غير مقروء",
+      "markAllRead": "تعليم الكل كمقروء",
+      "show": "عرض",
+      "all": "الكل",
+      "unreadFilter": "غير المقروءة",
+      "list": "الإشعارات",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "earlier": "في وقت سابق",
+      "unreadDot": "غير مقروء",
+      "window": "آخر 30 يومًا",
+      "settings": "إعدادات الإشعارات",
+      "loadFailed": "تعذّر تحميل الإشعارات. حاول مجددًا بعد قليل.",
+      "emptyHeading": "لا جديد لديك",
+      "emptyBody": "لا شيء خلال آخر 30 يومًا. تختار ما يصلك من إعدادات الإشعارات.",
+      "emptyUnread": "لا شيء غير مقروء."
+    },
+    "title": {
+      "assigned": {
+        "person": "أسنده إليك {{actor}}",
+        "rule": "أسندته إليك قاعدة",
+        "round_robin": "أسنده إليك التوزيع الدوري",
+        "skill_based": "أسنده إليك التوزيع حسب المهارات"
+      },
+      "replied": "ردّت جهة الاتصال",
+      "mentioned": "أشار إليك {{actor}}",
+      "sla_warning": "تنبيه اتفاقية مستوى الخدمة · {{clock}}",
+      "sla_breached": "تجاوز اتفاقية مستوى الخدمة · {{clock}}",
+      "escalated": "صُعّد إليك أو إلى فريقك"
+    },
+    "clock": {
+      "first_response": "الرد الأول",
+      "next_response": "الرد التالي",
+      "resolution": "الحل",
+      "unknown": "اتفاقية مستوى الخدمة"
+    },
+    "someone": "أحدهم",
+    "warningLine": "استُهلك {{percent}} % من المهلة",
+    "escalatedLine": "خطوة مستوى الخدمة عند {{percent}} %",
+    "caption": {
+      "note": "ملاحظة داخلية · {{time}}",
+      "department": "{{department}} · {{time}}",
+      "channel": "{{channel}} · {{time}}",
+      "time": "{{time}}"
+    },
+    "ago": {
+      "now": "الآن",
+      "minutes_zero": "قبل {{count}} دقيقة",
+      "minutes_one": "قبل دقيقة",
+      "minutes_two": "قبل دقيقتين",
+      "minutes_few": "قبل {{count}} دقائق",
+      "minutes_many": "قبل {{count}} دقيقة",
+      "minutes_other": "قبل {{count}} دقيقة",
+      "hours_zero": "قبل {{count}} ساعة",
+      "hours_one": "قبل ساعة",
+      "hours_two": "قبل ساعتين",
+      "hours_few": "قبل {{count}} ساعات",
+      "hours_many": "قبل {{count}} ساعة",
+      "hours_other": "قبل {{count}} ساعة",
+      "days_zero": "قبل {{count}} يوم",
+      "days_one": "قبل يوم",
+      "days_two": "قبل يومين",
+      "days_few": "قبل {{count}} أيام",
+      "days_many": "قبل {{count}} يومًا",
+      "days_other": "قبل {{count}} يوم"
+    }
   }
 }

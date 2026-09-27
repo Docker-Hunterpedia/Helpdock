@@ -9,6 +9,9 @@ import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
+import type { NotificationsApi } from '../notifications/api.js';
+import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push.js';
+import { MockNotificationsApi } from '../notifications/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
@@ -25,6 +28,8 @@ export interface RenderAppOptions {
   readonly ticketingApi?: TicketingApi;
   readonly ticketsApi?: TicketsApi;
   readonly uploader?: AttachmentUploader;
+  readonly notificationsApi?: NotificationsApi;
+  readonly browserPush?: BrowserPush;
   readonly initialEntries?: readonly string[];
 }
 
@@ -36,6 +41,8 @@ export interface RenderedApp extends RenderResult {
   readonly ticketingApi: TicketingApi;
   readonly ticketsApi: TicketsApi;
   readonly uploader: AttachmentUploader;
+  readonly notificationsApi: NotificationsApi;
+  readonly browserPush: BrowserPush;
 }
 
 /**
@@ -51,6 +58,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
   const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
   const uploader = options.uploader ?? new MockAttachmentUploader();
+  const notificationsApi = options.notificationsApi ?? new MockNotificationsApi();
+  const browserPush = options.browserPush ?? new MockBrowserPush();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -62,6 +71,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       ticketingApi={ticketingApi}
       ticketsApi={ticketsApi}
       uploader={uploader}
+      notificationsApi={notificationsApi}
+      browserPush={browserPush}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -80,5 +91,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     ticketingApi,
     ticketsApi,
     uploader,
+    notificationsApi,
+    browserPush,
   };
 }

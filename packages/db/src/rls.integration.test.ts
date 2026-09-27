@@ -24,6 +24,7 @@ import {
   csatResponses,
   customFieldDefs,
   departments,
+  notifications,
   outbox,
   retentionSettings,
   settings,
@@ -451,6 +452,22 @@ const fixtures = [
         token: 'fixture',
       }),
   },
+  {
+    name: 'notifications',
+    // M3-07. Written by the system principal, as the worker writes them; the
+    // owner rule that keeps one person's rows from another has its tests below.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(notifications).values({
+        brandId,
+        userId,
+        ticketId: ticketId[brandId] ?? '',
+        kind: 'assigned',
+        sourceEventId: uuidv7(),
+        inApp: true,
+        email: false,
+        push: false,
+      }),
+  },
 ] as const;
 
 const brandIdsIn = async (tx: DbTransaction, table: string): Promise<string[]> => {
@@ -756,6 +773,79 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       );
 
       expect([...rows].map((row) => row.permissive)).toEqual(['RESTRICTIVE']);
+    });
+  });
+
+  describe("a person's notifications (M3-07)", () => {
+    const readerId = uuidv7();
+    const mine = uuidv7();
+    const as = (principalId: string) =>
+      ({
+        brandIds: [brandA],
+        departmentIds: 'all',
+        principalType: 'staff',
+        principalId,
+      }) as const;
+    const idsIn = async (tx: DbTransaction): Promise<string[]> => {
+      const rows = await tx.select({ id: notifications.id }).from(notifications);
+      return rows.map((row) => row.id);
+    };
+
+    beforeAll(async () => {
+      await db.insert(users).values({ id: readerId, email: 'reader@example.com', name: 'Reader' });
+      // The worker writes a row for somebody else: allowed for `system` alone.
+      await withSystem(db, brandA, (tx) =>
+        tx.insert(notifications).values({
+          id: mine,
+          brandId: brandA,
+          userId: readerId,
+          ticketId: ticketId[brandA] ?? '',
+          kind: 'mentioned',
+          sourceEventId: uuidv7(),
+          inApp: true,
+          email: false,
+          push: false,
+        }),
+      );
+    });
+
+    it('is visible to its recipient and to the worker', async () => {
+      expect(await withTenant(db, as(readerId), idsIn)).toContain(mine);
+      expect(await withSystem(db, brandA, idsIn)).toContain(mine);
+    });
+
+    it('is invisible to anyone else in the brand, an Admin included', async () => {
+      expect(await withTenant(db, as(userId), idsIn)).not.toContain(mine);
+    });
+
+    it('cannot be marked read or deleted by somebody else', async () => {
+      const [updated, deleted] = await withTenant(db, as(userId), async (tx) => [
+        (await tx.execute(sql`UPDATE notifications SET read_at = now() WHERE id = ${mine}::uuid`))
+          .count,
+        (await tx.execute(sql`DELETE FROM notifications WHERE id = ${mine}::uuid`)).count,
+      ]);
+
+      expect([updated, deleted]).toEqual([0, 0]);
+    });
+
+    it('cannot be written for somebody else by a member of staff', async () => {
+      const rejection = await withTenant(db, as(userId), (tx) =>
+        tx.insert(notifications).values({
+          brandId: brandA,
+          userId: readerId,
+          ticketId: ticketId[brandA] ?? '',
+          kind: 'mentioned',
+          sourceEventId: uuidv7(),
+          inApp: true,
+          email: false,
+          push: false,
+        }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
     });
   });
 

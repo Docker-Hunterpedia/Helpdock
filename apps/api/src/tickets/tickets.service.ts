@@ -61,7 +61,12 @@ import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 import { readMergeView } from './merge/merge-view.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
-import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
+import {
+  enqueueTicketAssigned,
+  enqueueTicketEvent,
+  TICKET_EVENTS,
+  type TicketEvent,
+} from './ticket-events.js';
 import { cursorAfter, sortValueOf } from './ticket-query.js';
 import {
   ticketContactOf,
@@ -353,6 +358,15 @@ export class TicketsService {
       ticketId: ticket.id,
       departmentId: ticket.departmentId,
     });
+    if (ticket.assigneeId !== null) {
+      await enqueueTicketAssigned(tx, brandId, {
+        ticketId: ticket.id,
+        departmentId: ticket.departmentId,
+        assigneeId: ticket.assigneeId,
+        assignedBy: 'person',
+        actorId: staffActorId(principal),
+      });
+    }
     // M1-07. Through the outbox, so the rotation runs in the worker after this
     // commits and never inside somebody's request (DOMAIN-RULES §6).
     await this.#routeIfUnassigned(tx, brandId, ticket.id, ticket.departmentId, ticket.assigneeId);
@@ -521,6 +535,16 @@ export class TicketsService {
         ? {}
         : { previousDepartmentId: ticket.departmentId }),
     });
+    // M3-07. Only a change of hands: the same assignee saved again is no news.
+    if (typeof to.assigneeId === 'string' && updated.assigneeId !== null) {
+      await enqueueTicketAssigned(tx, brandId, {
+        ticketId,
+        departmentId: updated.departmentId,
+        assigneeId: updated.assigneeId,
+        assignedBy: 'person',
+        actorId: staffActorId(principal),
+      });
+    }
     // M1-07. A ticket arriving unassigned in a department that routes by itself
     // is routed; a manual unassignment in place is somebody's choice and is not.
     if (updated.departmentId !== ticket.departmentId) {
@@ -1215,3 +1239,7 @@ const plainChanges = (
 
   return { values, from, to };
 };
+
+/** The person behind a request, for "assigned by"; an api key or the system is nobody. */
+const staffActorId = (principal: Principal): string | null =>
+  principal.type === 'staff' ? principal.id : null;

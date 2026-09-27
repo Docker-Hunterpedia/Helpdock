@@ -273,6 +273,65 @@ export const assignmentOfflineUnassignJob = defineJob({
     `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
 });
 
+export const notifyEmailPayloadSchema = z.object({
+  brandId: z.uuid(),
+  notificationId: z.uuid(),
+});
+export type NotifyEmailPayload = z.infer<typeof notifyEmailPayloadSchema>;
+
+/**
+ * M3-07: one staff notification email, from the install's system sender.
+ * Added by the `notification.created` handler after the notification row has
+ * committed, with a job id derived from the row, so a redelivered event adds
+ * nothing (DOMAIN-RULES §6). Keyed by the notification: one email per
+ * notification however often the job runs.
+ */
+export const notifyEmailJob = defineJob({
+  name: 'notify.email',
+  queue: QUEUE_NAMES.notify,
+  schema: notifyEmailPayloadSchema,
+  options: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `notify.email:${payload.notificationId}`,
+});
+
+export const notifyPushPayloadSchema = z
+  .object({
+    brandId: z.uuid(),
+    subscriptionId: z.uuid(),
+    /** The notification to push. Absent on a test push. */
+    notificationId: z.uuid().optional(),
+    /** The outbox row of a "Send a test" press. Absent on a real push. */
+    testId: z.uuid().optional(),
+  })
+  .refine((payload) => (payload.notificationId === undefined) !== (payload.testId === undefined), {
+    message: 'must name exactly one of notificationId and testId',
+  });
+export type NotifyPushPayload = z.infer<typeof notifyPushPayloadSchema>;
+
+/**
+ * M3-07: one web push to one browser (ADR 0002). One job per subscription, so
+ * a dead browser's `410` fails nothing but itself, and "one push per browser"
+ * is the idempotency key rather than a hope.
+ */
+export const notifyPushJob = defineJob({
+  name: 'notify.push',
+  queue: QUEUE_NAMES.notify,
+  schema: notifyPushPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) =>
+    `notify.push:${payload.subscriptionId}:${payload.notificationId ?? payload.testId}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -281,6 +340,8 @@ export const JOB_DEFINITIONS = Object.freeze({
   [maintenanceRetentionScheduleJob.name]: maintenanceRetentionScheduleJob,
   [mediaProcessJob.name]: mediaProcessJob,
   [assignmentOfflineUnassignJob.name]: assignmentOfflineUnassignJob,
+  [notifyEmailJob.name]: notifyEmailJob,
+  [notifyPushJob.name]: notifyPushJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

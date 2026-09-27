@@ -1,4 +1,4 @@
-import { brandRoom, departmentRoom, ticketRoom } from '@helpdock/schemas';
+import { brandRoom, departmentRoom, ticketRoom, userRoom } from '@helpdock/schemas';
 import { describe, expect, it, vi } from 'vitest';
 import type { BrandMembership } from '../auth/principal.js';
 import type { RoomScopeReader } from './room-reader.js';
@@ -31,6 +31,22 @@ const reader = (answers: Partial<Record<'ticket' | 'department', boolean>> = {})
   }) satisfies RoomScopeReader & Record<string, unknown>;
 
 describe('authorizeRoom', () => {
+  describe('person rooms (M3-07)', () => {
+    const principal = staff({ [BRAND_A]: { role: 'agent', departmentIds: [DEPARTMENT_1] } });
+
+    it('lets a person into their own room', async () => {
+      await expect(
+        authorizeRoom({ principal, brandId: BRAND_A, room: userRoom(USER), reader: reader() }),
+      ).resolves.toEqual({ ok: true });
+    });
+
+    it('refuses somebody else’s', async () => {
+      await expect(
+        authorizeRoom({ principal, brandId: BRAND_A, room: userRoom(TICKET), reader: reader() }),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'forbidden' } });
+    });
+  });
+
   describe('brand rooms', () => {
     it.each(['admin', 'team_leader', 'agent', 'viewer'] as const)(
       'lets a %s into the brand they hold a role in',

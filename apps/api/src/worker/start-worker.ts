@@ -1,4 +1,4 @@
-import { createKeyring, type Env } from '@helpdock/config';
+import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
@@ -9,6 +9,8 @@ import {
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
+  notifyEmailJob,
+  notifyPushJob,
   type OutboxRelay,
   outboxEventJob,
   QUEUE_NAMES,
@@ -33,6 +35,11 @@ import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
+import { createNotifyProcessor } from '../notifications/delivery.js';
+import { InstallChannels } from '../notifications/install-channels.js';
+import { registerNotificationHandlers } from '../notifications/notification-events.js';
+import { NotificationsRepository } from '../notifications/notifications.repository.js';
+import { WebPushSender } from '../notifications/push.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
@@ -68,7 +75,7 @@ export interface WorkerDependencies {
    * a second registration of the same event — which is what a test starting
    * several workers in one process would do.
    */
-  registerHandlers(options: { redis: Redis; env: WorkerEnv }): Closable;
+  registerHandlers(options: { redis: Redis; env: WorkerEnv; settings: WorkerSettings }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   /** M1-10's `media.process` consumer: sharp, ffmpeg and the optional scanner. */
   createMediaWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
@@ -80,6 +87,14 @@ export interface WorkerDependencies {
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
    */
   createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /** M3-07's `notify` consumer: notification emails and web pushes. */
+  createNotifyWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+    settings: WorkerSettings;
+  }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -108,7 +123,14 @@ export type WorkerEnv = Pick<
   // verifies it with.
   | 'APP_MASTER_KEY'
   | 'APP_MASTER_KEY_PREVIOUS'
+  // M3-07: links in notification emails, the VAPID subject, and the private
+  // ranges a push endpoint may be in (DOMAIN-RULES §13).
+  | 'APP_URL'
+  | 'OUTBOUND_ALLOW_CIDRS'
 >;
+
+/** What the worker reads from settings: the SMTP sender and the VAPID key pair (M3-07). */
+export type WorkerSettings = Pick<Settings, 'get'>;
 
 /**
  * The scanner, or nothing. ARCHITECTURE §17 makes ClamAV optional and
@@ -148,7 +170,7 @@ export const workerDependencies: WorkerDependencies = {
   // The broadcast publishes on the same connection: a ticket event ends in a
   // socket frame, and only an `APP_ROLE=api` replica holds sockets
   // (`realtime/broadcast.ts`).
-  registerHandlers: ({ redis, env }) => {
+  registerHandlers: ({ redis, env, settings }) => {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
@@ -191,10 +213,30 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
 
+    // M3-07. After the ticket handlers, so on the events both handle the
+    // socket frame goes first; `notification.created` adds `notify` jobs under
+    // the same rule as the two above, with ids derived from the row.
+    const notify = new Queue(QUEUE_NAMES.notify, { connection: redis });
+    const channels = new InstallChannels(settings);
+    registerNotificationHandlers({
+      repository: new NotificationsRepository(),
+      broadcast,
+      pushConfigured: async () => (await channels.vapidKeys()) !== null,
+      queue: {
+        addEmail: async (jobId, payload) => {
+          await notify.add(notifyEmailJob.name, payload, { ...notifyEmailJob.options, jobId });
+        },
+        addPush: async (jobId, payload) => {
+          await notify.add(notifyPushJob.name, payload, { ...notifyPushJob.options, jobId });
+        },
+      },
+    });
+
     return {
       close: async () => {
         await media.close();
         await assignment.close();
+        await notify.close();
       },
     };
   },
@@ -268,6 +310,26 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createNotifyWorker: ({ redis, db, log, env, settings }) => {
+    const worker = new Worker(
+      QUEUE_NAMES.notify,
+      createNotifyProcessor(
+        {
+          repository: new NotificationsRepository(),
+          settings: new InstallChannels(settings),
+          push: new WebPushSender({ subject: env.APP_URL, allowCidrs: env.OUTBOUND_ALLOW_CIDRS }),
+          appUrl: env.APP_URL,
+        },
+        { db, log },
+      ),
+      { connection: redis },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'notify job failed'),
+    );
+
+    return { close: () => worker.close() };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -275,6 +337,7 @@ export const workerDependencies: WorkerDependencies = {
 export interface StartWorkerOptions {
   readonly env: WorkerEnv;
   readonly db: Db;
+  readonly settings: WorkerSettings;
   readonly log: JobLogger;
   readonly deps?: WorkerDependencies;
 }
@@ -282,16 +345,18 @@ export interface StartWorkerOptions {
 export const startWorker = ({
   env,
   db,
+  settings,
   log,
   deps = workerDependencies,
 }: StartWorkerOptions): Closable => {
   const connection = deps.createConnection(env.REDIS_URL);
   // Before either worker exists, for the reason at the top of this file.
-  const producers = deps.registerHandlers({ redis: connection, env });
+  const producers = deps.registerHandlers({ redis: connection, env, settings });
   const worker = deps.createEventWorker({ redis: connection, db, log });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
+  const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -315,6 +380,7 @@ export const startWorker = ({
     await media.close();
     await assignment.close();
     await maintenance.close();
+    await notify.close();
     await producers.close();
     await connection.quit();
   };

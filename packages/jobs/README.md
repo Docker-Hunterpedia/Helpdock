@@ -84,6 +84,8 @@ M1 adds:
 |---|---|---|
 | `media.process` | `media` | M1-10's sniff, re-encode and scan of one attachment. |
 | `assignment.offline_unassign` | `assignment` | M1-07's auto-unassign timer, added delayed by the `assignment.staff_offline` handler. Keyed by the departure (`userId`, `departmentId`, `since`), so coming back and leaving again is a new job. |
+| `notify.email` | `notify` | M3-07: one staff notification email from the install's system sender. Added by the `notification.created` handler; keyed by the notification. |
+| `notify.push` | `notify` | M3-07: one web push to one browser. Keyed by the browser and the notification (or the "Send a test" press), so one event is one push per browser. |
 
 ## Handling an event
 
@@ -106,11 +108,21 @@ are registered, retries, and ends in the failed set. `settings.changed` ships
 registered, with a handler that only logs, so a fresh install has one working
 path through the whole chain.
 
-Registering the same event twice throws. The registry is process-wide, so a
-caller that may run more than once in a process — a test that starts several
-workers — registers through a dependency rather than at import time;
-`apps/api/src/worker/start-worker.ts` is the worked example, and the four ticket
-events of M1-02 and M1-03 are registered there.
+One event may have several handlers, one per **subscriber**: the module that
+owns an event registers it as the default subscriber, and any other module that
+reacts to it passes its own name as the third argument —
+`registerEventHandler('ticket.replied', handler, 'notifications')` is how M3-07
+tells an assignee about a reply without touching the tickets module's socket
+frame. Subscribers run in registration order, in the same transaction and under
+the same receipt, so a failure in any of them retries the delivery as a whole;
+every handler already has to survive a redelivery.
+
+Registering the same event twice for the same subscriber throws. The registry is
+process-wide, so a caller that may run more than once in a process — a test that
+starts several workers — registers through a dependency rather than at import
+time; `apps/api/src/worker/start-worker.ts` is the worked example, and the ticket
+events of M1-02 and M1-03 and the notification events of M3-07 are registered
+there.
 
 ## Writing an idempotent consumer
 

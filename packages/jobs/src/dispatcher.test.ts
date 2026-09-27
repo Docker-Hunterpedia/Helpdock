@@ -73,6 +73,35 @@ describe('createOutboxDispatcher', () => {
     );
   });
 
+  it('refuses a second handler from the same named subscriber', () => {
+    const dispatcher = createOutboxDispatcher();
+    dispatcher.register('ticket.replied', () => Promise.resolve(), 'notifications');
+
+    expect(() =>
+      dispatcher.register('ticket.replied', () => Promise.resolve(), 'notifications'),
+    ).toThrow(/already registered by notifications/);
+  });
+
+  it('runs every subscriber of an event, in the order they registered', async () => {
+    const dispatcher = createOutboxDispatcher();
+    const calls: string[] = [];
+    dispatcher.register('ticket.replied', async () => {
+      calls.push('sockets');
+    });
+    dispatcher.register(
+      'ticket.replied',
+      async () => {
+        calls.push('notifications');
+      },
+      'notifications',
+    );
+
+    await dispatcher.dispatch(contextFor('ticket.replied', recordingLogger()));
+
+    expect(calls).toEqual(['sockets', 'notifications']);
+    expect(dispatcher.events).toEqual(['settings.changed', 'ticket.replied']);
+  });
+
   it('refuses an event name the outbox could never hold', () => {
     expect(() =>
       createOutboxDispatcher().register('TicketReplied', () => Promise.resolve()),

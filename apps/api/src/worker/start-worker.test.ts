@@ -2,7 +2,12 @@ import type { Db } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
 import type { Redis } from 'ioredis';
 import { describe, expect, it } from 'vitest';
-import { startWorker, type WorkerDependencies, type WorkerEnv } from './start-worker.js';
+import {
+  startWorker,
+  type WorkerDependencies,
+  type WorkerEnv,
+  type WorkerSettings,
+} from './start-worker.js';
 
 const env: WorkerEnv = {
   REDIS_URL: 'redis://redis:6379',
@@ -17,7 +22,11 @@ const env: WorkerEnv = {
   FFPROBE_PATH: 'ffprobe',
   CLAMAV_PORT: 3310,
   APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
+  APP_URL: 'https://support.example.com',
+  OUTBOUND_ALLOW_CIDRS: [],
 };
+
+const settings = { get: async () => '' } as unknown as WorkerSettings;
 
 const db = {} as Db;
 
@@ -73,6 +82,12 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('maintenance.close') };
       },
+      createNotifyWorker: ({ redis, settings: given }) => {
+        calls.push('notify.create');
+        expect(redis).toBe(connection);
+        expect(given).toBe(settings);
+        return { close: async () => void calls.push('notify.close') };
+      },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
@@ -88,7 +103,7 @@ describe('startWorker', () => {
   it('registers the handlers and every consumer before the relay that feeds them', () => {
     const { deps, calls } = harness();
 
-    startWorker({ env, db, log: silentLogger, deps });
+    startWorker({ env, db, settings, log: silentLogger, deps });
 
     // A job that arrives before its consumer exists burns attempts
     // (packages/jobs/README.md).
@@ -99,6 +114,7 @@ describe('startWorker', () => {
       'media.create',
       'assignment.create',
       'maintenance.create',
+      'notify.create',
       'relay.start',
     ]);
   });
@@ -106,7 +122,7 @@ describe('startWorker', () => {
   it('gives the relay and the workers one connection, and the relay the LISTEN url', () => {
     const { deps, started } = harness();
 
-    startWorker({ env, db, log: silentLogger, deps });
+    startWorker({ env, db, settings, log: silentLogger, deps });
 
     expect(started.redisUrl).toBe(env.REDIS_URL);
     // `LISTEN outbox` needs a connection of its own on the runtime role.
@@ -116,7 +132,7 @@ describe('startWorker', () => {
   it('gives the relay somewhere to report its cycles', () => {
     const { deps, started } = harness();
 
-    startWorker({ env, db, log: silentLogger, deps });
+    startWorker({ env, db, settings, log: silentLogger, deps });
 
     // Without a `status` store the relay never writes `hd:relay:last`, and the
     // System page's Worker card and all three outbox metrics are silently dead
@@ -128,7 +144,7 @@ describe('startWorker', () => {
 
   it('shuts down relay, then workers, then producers, then connection', async () => {
     const { deps, calls } = harness();
-    const host = startWorker({ env, db, log: silentLogger, deps });
+    const host = startWorker({ env, db, settings, log: silentLogger, deps });
 
     calls.length = 0;
     await host.close();
@@ -142,6 +158,7 @@ describe('startWorker', () => {
       'media.close',
       'assignment.close',
       'maintenance.close',
+      'notify.close',
       'producers.close',
       'connection.quit',
     ]);
@@ -149,7 +166,7 @@ describe('startWorker', () => {
 
   it('shuts down once, however many signals arrive', async () => {
     const { deps, calls } = harness();
-    const host = startWorker({ env, db, log: silentLogger, deps });
+    const host = startWorker({ env, db, settings, log: silentLogger, deps });
 
     calls.length = 0;
     await Promise.all([host.close(), host.close()]);
@@ -161,6 +178,7 @@ describe('startWorker', () => {
       'media.close',
       'assignment.close',
       'maintenance.close',
+      'notify.close',
       'producers.close',
       'connection.quit',
     ]);

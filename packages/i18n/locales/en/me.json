@@ -66,5 +66,86 @@
     "signOutEverywhere": "Sign out everywhere",
     "signedOut": "That browser was signed out.",
     "empty": "No other browser is signed in."
+  },
+  "account": {
+    "title": "Your account",
+    "caption": "Only you see these settings",
+    "tabList": "Your account",
+    "tabs": {
+      "security": "Security",
+      "notifications": "Notifications",
+      "signature": "Email signature"
+    },
+    "signaturePending": "Your email signature arrives with the email channel."
+  },
+  "notifications": {
+    "heading": "What you are told about, and where",
+    "caption": "Only about tickets you can see. Emails go to {{email}} in {{language}}, your app language.",
+    "event": "Event",
+    "channels": {
+      "inApp": "In-app",
+      "email": "Email",
+      "push": "Browser push"
+    },
+    "cell": "{{event}}, {{channel}}",
+    "kinds": {
+      "assigned": {
+        "label": "Assigned to me",
+        "hint": "By a person, a rule or round-robin"
+      },
+      "replied": {
+        "label": "Reply on my tickets",
+        "hint": "The contact answers on a ticket assigned to you"
+      },
+      "mentioned": {
+        "label": "Mentioned in a note",
+        "hint": "Someone writes @{{name}} in an internal note"
+      },
+      "sla_warning": {
+        "label": "SLA warning",
+        "hint": "A ticket of yours reaches a warning step before its target"
+      },
+      "sla_breached": {
+        "label": "SLA breach",
+        "hint": "A ticket of yours misses its first-response or resolution target"
+      },
+      "escalated": {
+        "label": "Escalation",
+        "hint": "An SLA step or a rule escalates a ticket to you or your team"
+      }
+    },
+    "footer": "Browser push reaches every browser where you turned it on.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "saved": "Notification settings saved.",
+    "failed": "That did not work. Nothing was changed.",
+    "loadFailed": "Your notification settings could not be loaded. Try again in a moment.",
+    "note": "An SLA breach or escalation sent to a team reaches each member by their own settings. Deactivated staff get nothing. Every send goes through the outbox, so one event gives one email and one push per browser.",
+    "push": {
+      "heading": "Browser push on this browser",
+      "notEnabled": "Not enabled",
+      "enabled": "Enabled",
+      "since": "since {{date}}",
+      "device": "{{browser}} on {{os}}",
+      "askOnce": "Your browser asks for permission once. Push works while this browser is running, even with Helpdock closed.",
+      "turnOn": "Turn on for this browser",
+      "test": "Send a test",
+      "testSent": "A test notification is on its way to this browser.",
+      "turnOff": "Turn off",
+      "turnedOn": "Browser push is on for this browser.",
+      "turnedOff": "Browser push is off for this browser.",
+      "failed": "Browser push could not be turned on. Try again in a moment.",
+      "blockedHeading": "Blocked by the browser",
+      "blockedBody": "Helpdock cannot ask again. Allow notifications for {{host}} in the browser's site settings, then reload.",
+      "unsupportedHeading": "Not available in this browser",
+      "unsupportedBody": "This browser cannot receive push notifications. In-app and email still reach you.",
+      "notSetUpHeading": "Not set up on this install",
+      "notSetUpBody": "Browser push needs VAPID keys. An install admin adds them to the install's configuration. Until then the push column is disabled."
+    },
+    "channelNames": {
+      "inApp": "in-app",
+      "email": "email",
+      "push": "browser push"
+    }
   }
 }

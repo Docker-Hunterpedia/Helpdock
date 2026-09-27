@@ -8,6 +8,7 @@ import { useSession } from '../auth/session.tsx';
 import { TicketViewsNav } from '../screens/tickets/views-nav.tsx';
 import { BrandSwitcher } from './brand-switcher.tsx';
 import { ADMIN_NAV, type NavItem, navFor, PRIMARY_NAV } from './nav-items.js';
+import { NotificationBell } from './notification-bell.tsx';
 import { UserMenu } from './user-menu.tsx';
 
 export const SIDEBAR_WIDTH = 220;
@@ -102,7 +103,13 @@ export function Sidebar({
         borderInlineEnd: `1px solid ${tokens['border.default']}`,
       }}
     >
-      <BrandSwitcher />
+      {/* The brand row: the switcher, and the bell at its inline end (M3-07). */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <BrandSwitcher />
+        </Box>
+        <NotificationBell />
+      </Box>
 
       {/* Scrolls on its own: a brand's views (M1-05) can make the groups taller
           than the window, and the Admin group must stay reachable under them. */}

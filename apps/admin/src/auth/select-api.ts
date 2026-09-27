@@ -4,6 +4,14 @@ import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import { HttpAttachmentUploader } from '../media/upload.js';
+import type { NotificationsApi } from '../notifications/api.js';
+import {
+  type BrowserPush,
+  MockBrowserPush,
+  NavigatorBrowserPush,
+} from '../notifications/browser-push.js';
+import { HttpNotificationsApi } from '../notifications/http-api.js';
+import { MockNotificationsApi } from '../notifications/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
@@ -31,6 +39,10 @@ export interface AdminApis {
   readonly tickets: TicketsApi;
   /** M1-10's client half; the composer and the thread are its only callers. */
   readonly uploader: AttachmentUploader;
+  /** M3-07: the bell, its panel and the Notifications tab. */
+  readonly notifications: NotificationsApi;
+  /** M3-07: this browser's push half, which the mock replaces with a fixture too. */
+  readonly browserPush: BrowserPush;
 }
 
 /**
@@ -70,6 +82,8 @@ export function createApis(
       ticketing: new HttpTicketingApi(transport),
       tickets: new HttpTicketsApi(transport),
       uploader: new HttpAttachmentUploader(transport),
+      notifications: new HttpNotificationsApi(transport),
+      browserPush: new NavigatorBrowserPush(),
     };
   }
 
@@ -99,5 +113,7 @@ export function createApis(
       ticketing,
     ),
     uploader: uploads,
+    notifications: new MockNotificationsApi(),
+    browserPush: new MockBrowserPush(),
   };
 }

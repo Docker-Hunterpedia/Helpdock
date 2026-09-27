@@ -50,8 +50,18 @@ export const ROUTES = {
   system: '/admin/system',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
+  /**
+   * Your account (M3-07): one page, three tabs. `/me` alone redirects to the
+   * first; Security keeps the path it always had.
+   */
+  me: '/me',
+  meTab: '/me/:tab',
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
+  /** What they are told about, and where (M3-07). */
+  meNotifications: '/me/notifications',
+  /** Their email signature. The tab is M2's; the route exists so the tab has a place. */
+  meSignature: '/me/signature',
   /**
    * The public rating page (M1-12). Not a route of the admin router: `main.tsx`
    * mounts the page on its own for this prefix, without the staff providers.

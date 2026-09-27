@@ -1,14 +1,7 @@
-import { expect, type Page, test } from '@playwright/test';
-import { generate } from 'otplib';
+import type { Page } from '@playwright/test';
 import { strings } from '../strings.js';
-import {
-  ACCOUNT_EMAIL_ENV,
-  ACCOUNT_PASSWORD_ENV,
-  E2E_API_ORIGIN,
-  E2E_WEB_ORIGIN,
-  SKIP_ENV,
-  TOTP_SECRET_ENV,
-} from './install.js';
+import { E2E_API_ORIGIN, E2E_WEB_ORIGIN, SKIP_ENV } from './install.js';
+import { expect, openAdmin, test } from './widget-helpers.js';
 
 /**
  * M4-03's exit criterion against the real api: "requests from a non-allowed
@@ -29,20 +22,6 @@ test.skip(
 
 const t = strings('en');
 
-const signInAsAdmin = async (page: Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
 /** Called from the page, so the browser sets `Origin` itself: this page's origin. */
 const fromThePage = (page: Page, path: string, method: 'GET' | 'POST') =>
   page.evaluate(
@@ -60,9 +39,9 @@ const fromThePage = (page: Page, path: string, method: 'GET' | 'POST') =>
 
 test.describe('the widget origin allow-list against the real api', () => {
   test('refuses a page on an origin the brand has not allowed, and serves it once allowed', async ({
-    page,
+    admin: page,
   }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
     await page.getByRole('tab', { name: t('channels:tabs.widget') }).click();
     const snippet = await page

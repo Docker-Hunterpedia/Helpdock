@@ -31,6 +31,16 @@ export interface SmtpEmailSenderOptions extends SmtpCredentials {
 }
 
 /**
+ * The deadline every timer uses: a caller may shorten it, never lengthen it or
+ * make it non-finite, so no option can hold a request open past
+ * {@link SMTP_TIMEOUT_MS}.
+ */
+export const smtpDeadlineMs = (timeoutMs: number | undefined): number =>
+  timeoutMs === undefined || !Number.isFinite(timeoutMs)
+    ? SMTP_TIMEOUT_MS
+    : Math.min(Math.max(Math.trunc(timeoutMs), 1), SMTP_TIMEOUT_MS);
+
+/**
  * How a TLS mode becomes Nodemailer's three flags, and how the deadline becomes
  * its four timers. Exported because this mapping is the whole of the transport's
  * behaviour that does not need a server to observe.
@@ -41,24 +51,28 @@ export const smtpTransportOptions = ({
   tls,
   user,
   password,
-  timeoutMs = SMTP_TIMEOUT_MS,
-}: SmtpEmailSenderOptions) => ({
-  host,
-  port,
-  // Implicit TLS from the first byte. `starttls` and `none` both open in the
-  // clear; `requireTLS` is what makes the first of them refuse to continue on a
-  // server that will not upgrade, rather than sending the password anyway.
-  secure: tls === 'tls',
-  requireTLS: tls === 'starttls',
-  ignoreTLS: tls === 'none',
-  ...(user === '' ? {} : { auth: { user, pass: password } }),
-  connectionTimeout: timeoutMs,
-  greetingTimeout: timeoutMs,
-  socketTimeout: timeoutMs,
-  dnsTimeout: timeoutMs,
-  // Nodemailer's defaults are minutes long, which is the right answer for a
-  // queued send and the wrong one for a person waiting on a form.
-});
+  timeoutMs,
+}: SmtpEmailSenderOptions) => {
+  const deadlineMs = smtpDeadlineMs(timeoutMs);
+
+  return {
+    host,
+    port,
+    // Implicit TLS from the first byte. `starttls` and `none` both open in the
+    // clear; `requireTLS` is what makes the first of them refuse to continue on a
+    // server that will not upgrade, rather than sending the password anyway.
+    secure: tls === 'tls',
+    requireTLS: tls === 'starttls',
+    ignoreTLS: tls === 'none',
+    ...(user === '' ? {} : { auth: { user, pass: password } }),
+    connectionTimeout: deadlineMs,
+    greetingTimeout: deadlineMs,
+    socketTimeout: deadlineMs,
+    dnsTimeout: deadlineMs,
+    // Nodemailer's defaults are minutes long, which is the right answer for a
+    // queued send and the wrong one for a person waiting on a form.
+  };
+};
 
 /** A relay's reply is arbitrary text; it is shown, so it is bounded. */
 const truncateResponse = (response: string): string =>
@@ -97,7 +111,8 @@ export class SmtpEmailSender implements EmailSender {
   }
 
   async #deliver(message: EmailMessage): Promise<string | undefined> {
-    const { fromAddress, fromName, timeoutMs = SMTP_TIMEOUT_MS } = this.#options;
+    const { fromAddress, fromName, timeoutMs } = this.#options;
+    const deadlineMs = smtpDeadlineMs(timeoutMs);
 
     // Nodemailer's own timers cover the connection, the greeting and socket
     // inactivity; this covers the whole conversation, so a relay that answers
@@ -105,7 +120,7 @@ export class SmtpEmailSender implements EmailSender {
     const deadline = new Promise<never>((_resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new SmtpTimeoutError());
-      }, timeoutMs);
+      }, deadlineMs);
       timer.unref?.();
     });
 

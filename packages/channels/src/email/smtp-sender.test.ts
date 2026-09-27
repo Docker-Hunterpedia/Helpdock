@@ -1,6 +1,6 @@
 import type { SmtpCredentials } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { SMTP_TIMEOUT_MS, smtpTransportOptions } from './smtp-sender.js';
+import { SMTP_TIMEOUT_MS, smtpDeadlineMs, smtpTransportOptions } from './smtp-sender.js';
 
 const credentials: SmtpCredentials = {
   host: 'smtp.example.com',
@@ -56,5 +56,34 @@ describe('smtpTransportOptions', () => {
   it('lets a test shorten the deadline without touching the default', () => {
     expect(smtpTransportOptions({ ...credentials, timeoutMs: 50 }).socketTimeout).toBe(50);
     expect(SMTP_TIMEOUT_MS).toBe(10_000);
+  });
+});
+
+describe('smtpDeadlineMs', () => {
+  it('uses the default deadline when no override is given', () => {
+    expect(smtpDeadlineMs(undefined)).toBe(SMTP_TIMEOUT_MS);
+  });
+
+  it('keeps a shorter override as it is', () => {
+    expect(smtpDeadlineMs(50)).toBe(50);
+  });
+
+  it.each([
+    { timeoutMs: 60 * 60_000, expected: SMTP_TIMEOUT_MS },
+    { timeoutMs: Number.POSITIVE_INFINITY, expected: SMTP_TIMEOUT_MS },
+    { timeoutMs: Number.NaN, expected: SMTP_TIMEOUT_MS },
+    { timeoutMs: 0, expected: 1 },
+    { timeoutMs: -5, expected: 1 },
+  ])('clamps $timeoutMs into [1, SMTP_TIMEOUT_MS]', ({ timeoutMs, expected }) => {
+    expect(smtpDeadlineMs(timeoutMs)).toBe(expected);
+  });
+
+  it('bounds every Nodemailer timer the same way', () => {
+    expect(smtpTransportOptions({ ...credentials, timeoutMs: 60 * 60_000 })).toMatchObject({
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
+      dnsTimeout: SMTP_TIMEOUT_MS,
+    });
   });
 });

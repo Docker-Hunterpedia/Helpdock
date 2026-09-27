@@ -32,6 +32,13 @@ const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 11).toString('base64');
 const APP_URL = 'https://support.example.com';
 
+/**
+ * The origin a redirect lands on. Compared as a parsed origin, not a prefix:
+ * `https://support.example.com.evil.test` starts with the app URL too.
+ */
+const originOf = (location: unknown): string | undefined =>
+  location === undefined ? undefined : new URL(String(location)).origin;
+
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
   timeout: 10_000,
 }).then(
@@ -495,7 +502,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       // This account has a second factor, so the link hands over to the code
       // screen rather than signing in outright.
       expect(first.headers.location).toContain('challenge=');
-      expect(first.headers.location?.toString().startsWith(APP_URL)).toBe(true);
+      expect(originOf(first.headers.location)).toBe(new URL(APP_URL).origin);
 
       const second = await get(link);
       expect(second.headers.location).toContain('error=challenge-expired');
@@ -569,7 +576,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       const response = await get('/api/auth/oauth/github/callback?code=c&state=s');
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location?.toString().startsWith(APP_URL)).toBe(true);
+      expect(originOf(response.headers.location)).toBe(new URL(APP_URL).origin);
     });
 
     it('refuses a provider it does not have', async () => {

@@ -1,8 +1,21 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cacheControlFor, isApiPath, resolveAdminDist, resolveAssetPath } from './admin-assets.js';
+
+// Pass-through spies, so a test can prove a path never reached the file system.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, statSync: vi.fn(actual.statSync), realpathSync: vi.fn(actual.realpathSync) };
+});
 
 const root = mkdtempSync(path.join(tmpdir(), 'helpdock-assets-'));
 mkdirSync(path.join(root, 'assets'));
@@ -67,6 +80,37 @@ describe('resolveAssetPath', () => {
     'refuses %s rather than reading outside the build',
     (pathname) => {
       expect(resolveAssetPath(root, pathname)).toBeUndefined();
+    },
+  );
+
+  const fsCalls = (): string[] =>
+    [...vi.mocked(statSync).mock.calls, ...vi.mocked(realpathSync).mock.calls].map(([target]) =>
+      String(target),
+    );
+
+  it.each([
+    '/../../etc/passwd',
+    '/..%2f..%2fetc%2fpasswd',
+    '/%2e%2e/%2e%2e/etc/passwd',
+    '/..%5c..%5cetc%5cpasswd',
+  ])('refuses %s without the file system seeing a path outside the build', (pathname) => {
+    vi.mocked(statSync).mockClear();
+    vi.mocked(realpathSync).mockClear();
+
+    expect(resolveAssetPath(root, pathname)).toBeUndefined();
+    for (const target of fsCalls()) {
+      expect(target === root || target.startsWith(root + path.sep)).toBe(true);
+    }
+  });
+
+  it.each(['../secret.txt', '..%2f..%2fetc%2fpasswd', 'assets/../../secret.txt'])(
+    'refuses the relative traversal %s before any file system call',
+    (pathname) => {
+      vi.mocked(statSync).mockClear();
+      vi.mocked(realpathSync).mockClear();
+
+      expect(resolveAssetPath(root, pathname)).toBeUndefined();
+      expect(fsCalls()).toEqual([]);
     },
   );
 

@@ -10,6 +10,14 @@ import { parsePayload } from './validation.js';
  * effect registers a handler for its event name, and the consumer looks it up
  * inside the brand's transaction. Adding a side effect is a handler, never a new
  * queue and never a `queue.add` in a service.
+ *
+ * **An event may have several handlers** (M3). A ticket change is a socket
+ * frame (M1), a reason to evaluate workflow rules (M3-03), and a clock to move
+ * (M3-02); each module registers its own handler rather than one module
+ * calling the others. They run in registration order inside the one
+ * transaction the job's receipt is claimed in, so one handler that throws rolls
+ * back what the others wrote and the job is retried whole — which every
+ * handler already tolerates, because every delivery is at-least-once.
  */
 
 export interface OutboxEventContext {
@@ -71,14 +79,17 @@ const logSettingsChanged: OutboxEventHandler = ({ brandId, outboxId, payload, lo
  * rather than mutating a shared one.
  */
 export const createOutboxDispatcher = (): OutboxDispatcher => {
-  const handlers = new Map<string, OutboxEventHandler>();
+  const handlers = new Map<string, OutboxEventHandler[]>();
 
   const register = (event: string, handler: OutboxEventHandler): void => {
     parsePayload('outbox event name', OUTBOX_EVENT_NAME, event);
-    if (handlers.has(event)) {
-      throw new Error(`An outbox handler for ${event} is already registered.`);
+    const registered = handlers.get(event) ?? [];
+    // The same function twice is a start-up that ran twice, which would run
+    // every side effect twice per delivery.
+    if (registered.includes(handler)) {
+      throw new Error(`This outbox handler for ${event} is already registered.`);
     }
-    handlers.set(event, handler);
+    handlers.set(event, [...registered, handler]);
   };
 
   register(SETTINGS_CHANGED_EVENT, logSettingsChanged);
@@ -89,11 +100,13 @@ export const createOutboxDispatcher = (): OutboxDispatcher => {
       return [...handlers.keys()].sort();
     },
     dispatch: async (context) => {
-      const handler = handlers.get(context.event);
-      if (handler === undefined) {
+      const registered = handlers.get(context.event);
+      if (registered === undefined) {
         throw new UnknownOutboxEventError(context.event, [...handlers.keys()]);
       }
-      await handler(context);
+      for (const handler of registered) {
+        await handler(context);
+      }
     },
   };
 };

@@ -14,6 +14,11 @@ import {
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
+  RULES_TIME_BASED_CRON,
+  rulesEvaluateJob,
+  rulesEvaluateJobId,
+  rulesTimeBasedJob,
+  rulesTimeBasedScheduleJob,
   startOutboxRelay,
 } from '@helpdock/jobs';
 import { Queue, Worker } from 'bullmq';
@@ -36,6 +41,8 @@ import { createS3Client, S3ObjectStorage } from '../media/storage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
+import { createRulesEngineDeps } from '../rules/engine-deps.js';
+import { createRulesProcessor, registerRulesEventHandlers } from '../rules/rules-jobs.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 
 /**
@@ -80,6 +87,12 @@ export interface WorkerDependencies {
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
    */
   createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /**
+   * M3-03 and M3-04's `rules` consumer: event rules, and the five-minute tick
+   * for time-based rules, whose schedule is upserted on every boot for the
+   * reason the retention schedule is.
+   */
+  createRulesWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -191,10 +204,23 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
 
+    // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
+    // with a job id derived from the outbox row, so a redelivery adds nothing.
+    const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
+    registerRulesEventHandlers({
+      add: async (payload) => {
+        await rules.add(rulesEvaluateJob.name, payload, {
+          ...rulesEvaluateJob.options,
+          jobId: rulesEvaluateJobId(payload),
+        });
+      },
+    });
+
     return {
       close: async () => {
         await media.close();
         await assignment.close();
+        await rules.close();
       },
     };
   },
@@ -268,6 +294,46 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createRulesWorker: ({ redis, db, log }) => {
+    const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
+    rules
+      .upsertJobScheduler(
+        rulesTimeBasedScheduleJob.name,
+        { pattern: RULES_TIME_BASED_CRON, tz: 'UTC' },
+        { name: rulesTimeBasedScheduleJob.name, data: {}, opts: rulesTimeBasedScheduleJob.options },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the time-based rules schedule'),
+      );
+
+    const worker = new Worker(
+      QUEUE_NAMES.rules,
+      createRulesProcessor({
+        db,
+        log,
+        engine: createRulesEngineDeps({ log }),
+        queue: {
+          add: async (payload, jobId) => {
+            await rules.add(rulesTimeBasedJob.name, payload, {
+              ...rulesTimeBasedJob.options,
+              jobId,
+            });
+          },
+        },
+      }),
+      { connection: redis },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'rules job failed'),
+    );
+
+    return {
+      close: async () => {
+        await worker.close();
+        await rules.close();
+      },
+    };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -292,6 +358,7 @@ export const startWorker = ({
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
+  const rules = deps.createRulesWorker({ redis: connection, db, log });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -315,6 +382,7 @@ export const startWorker = ({
     await media.close();
     await assignment.close();
     await maintenance.close();
+    await rules.close();
     await producers.close();
     await connection.quit();
   };

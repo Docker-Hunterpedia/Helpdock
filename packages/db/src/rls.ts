@@ -105,6 +105,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // M1-15 part 2 (ADR 0011). The words of a ticket are the ticket's, so they
   // follow its department by the same triggers as its other children.
   { name: 'ticket_search_tokens', departmentScoped: true },
+  // M3-03. A rule is configuration, like a tag; its execution log is a child
+  // of the ticket it ran on, and says what it found there, so it follows the
+  // ticket's department like the ticket's other children.
+  { name: 'workflow_rules', departmentScoped: false },
+  { name: 'workflow_runs', departmentScoped: true },
 ];
 
 /**

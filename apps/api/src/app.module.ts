@@ -36,6 +36,7 @@ import { DomainCheckController } from './routes/domain-check.controller.js';
 import { DomainCheckService } from './routes/domain-check.service.js';
 import { HealthController } from './routes/health.controller.js';
 import { MeController } from './routes/me.controller.js';
+import { RulesModule } from './rules/rules.module.js';
 import { ConfigModule } from './runtime/config.module.js';
 import { DbModule } from './runtime/db.module.js';
 import { SettingsModule } from './runtime/settings.module.js';
@@ -146,6 +147,9 @@ export class AppModule implements NestModule {
         RetentionModule.forRoot(),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
+        // M3-03 to M3-05: workflow rules, their log and the test run. The
+        // engine runs in the worker.
+        RulesModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

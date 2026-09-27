@@ -27,3 +27,4 @@ export * from './ticket-templates.js';
 export * from './ticketing.js';
 export * from './time-entries.js';
 export * from './views.js';
+export * from './workflow-rules.js';

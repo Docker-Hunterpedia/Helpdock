@@ -7,7 +7,7 @@ import {
   type OutboxEventHandler,
   registerEventHandler,
 } from '@helpdock/jobs';
-import type { PresenceStatus } from '@helpdock/schemas';
+import { type PresenceStatus, RULE_MAX_DEPTH } from '@helpdock/schemas';
 import { z } from 'zod';
 import { type AutoAssignDeps, autoAssign, unassignTicket } from './auto-assign.js';
 import { canWorkDepartment } from './rotation.js';
@@ -38,6 +38,11 @@ export const ASSIGNMENT_EVENTS = {
 export const assignmentRequestedPayloadSchema = z.object({
   ticketId: z.uuid(),
   trigger: z.enum(['routed', 'on_unassign']),
+  /**
+   * M3-03. Set when a workflow rule asked for the rotation, so the chain the
+   * depth guard follows survives the hop through this handler.
+   */
+  ruleChain: z.array(z.uuid()).min(1).max(RULE_MAX_DEPTH).optional(),
 });
 export type AssignmentRequestedPayload = z.infer<typeof assignmentRequestedPayloadSchema>;
 
@@ -123,8 +128,14 @@ const clock = (deps: { now?: () => Date }): Date => deps.now?.() ?? new Date();
 export const createAssignmentRequestedHandler =
   (deps: AutoAssignDeps & { now?: () => Date }): OutboxEventHandler =>
   async ({ brandId, payload, tx, log }: OutboxEventContext): Promise<void> => {
-    const { ticketId, trigger } = assignmentRequestedPayloadSchema.parse(payload);
-    const outcome = await autoAssign(deps, tx, { brandId, ticketId, trigger, now: clock(deps) });
+    const { ticketId, trigger, ruleChain } = assignmentRequestedPayloadSchema.parse(payload);
+    const outcome = await autoAssign(deps, tx, {
+      brandId,
+      ticketId,
+      trigger,
+      now: clock(deps),
+      ruleChain,
+    });
 
     log.info({ brandId, ticketId, trigger, ...outcome }, 'assignment requested');
   };

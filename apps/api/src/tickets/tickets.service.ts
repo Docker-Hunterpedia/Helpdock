@@ -61,7 +61,12 @@ import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 import { readMergeView } from './merge/merge-view.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
-import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
+import {
+  enqueueTicketEvent,
+  TICKET_EVENTS,
+  type TicketChange,
+  type TicketEvent,
+} from './ticket-events.js';
 import { cursorAfter, sortValueOf } from './ticket-query.js';
 import {
   ticketContactOf,
@@ -515,6 +520,7 @@ export class TicketsService {
     await enqueueTicketEvent(tx, brandId, ticketEventFor(statusResult, nextStatus), {
       ticketId,
       departmentId: updated.departmentId,
+      changes: changesOf(to, statusResult),
       // On a move, whoever is watching the queue the ticket has just left is in
       // no other room this event reaches.
       ...(updated.departmentId === ticket.departmentId
@@ -1175,6 +1181,29 @@ const authorTypeFor = (principal: Principal): 'staff' | 'contact' | 'system' | '
     case 'system':
       return 'system';
   }
+};
+
+/** The activity row's field names, as the outbox event's `changes` name them (M3-03). */
+const CHANGE_OF_FIELD: Readonly<Record<string, TicketChange>> = {
+  subject: 'subject',
+  priority: 'priority',
+  departmentId: 'department',
+  teamId: 'team',
+  assigneeId: 'assignee',
+  custom: 'custom',
+};
+
+/** What a `PATCH` moved, so a workflow rule can be started by the part it cares about. */
+const changesOf = (
+  to: Record<string, unknown>,
+  statusResult: StatusChangeResult | undefined,
+): TicketChange[] => {
+  const changes = Object.keys(to).flatMap((field) => {
+    const change = CHANGE_OF_FIELD[field];
+    return change === undefined ? [] : [change];
+  });
+
+  return statusResult?.changed === true ? [...changes, 'status'] : changes;
 };
 
 /**

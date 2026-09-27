@@ -1,7 +1,9 @@
+import type { Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
 import type { Redis } from 'ioredis';
 import { describe, expect, it } from 'vitest';
+import type { InstallSmtp } from '../email/transport.js';
 import { startWorker, type WorkerDependencies, type WorkerEnv } from './start-worker.js';
 
 const env: WorkerEnv = {
@@ -29,6 +31,7 @@ interface Harness {
     listenUrl?: string;
     relayRedis?: unknown;
     relayStatus?: unknown;
+    installSmtp?: InstallSmtp;
   };
 }
 
@@ -57,6 +60,12 @@ const harness = (): Harness => {
         calls.push('worker.create');
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('worker.close') };
+      },
+      createEmailWorker: ({ redis, installSmtp }) => {
+        calls.push('email.create');
+        expect(redis).toBe(connection);
+        started.installSmtp = installSmtp;
+        return { close: async () => void calls.push('email.close') };
       },
       createMediaWorker: ({ redis }) => {
         calls.push('media.create');
@@ -96,11 +105,41 @@ describe('startWorker', () => {
       'connection.create',
       'handlers.register',
       'worker.create',
+      'email.create',
       'media.create',
       'assignment.create',
       'maintenance.create',
       'relay.start',
     ]);
+  });
+
+  it('sends through no install server when the process has no settings', async () => {
+    const { deps, started } = harness();
+
+    startWorker({ env, db, log: silentLogger, deps });
+
+    await expect(started.installSmtp?.read()).resolves.toBeUndefined();
+  });
+
+  it("reads the install's smtp settings when it has them", async () => {
+    const { deps, started } = harness();
+    const values: Record<string, unknown> = {
+      'smtp.host': 'mailpit',
+      'smtp.port': 1025,
+      'smtp.tls': 'none',
+      'smtp.user': '',
+      'smtp.password': '',
+      'smtp.from': 'support@example.com',
+      'smtp.fromName': 'Support',
+    };
+    const settings = { get: async (key: string) => values[key] } as unknown as Settings;
+
+    startWorker({ env, db, log: silentLogger, deps, settings });
+
+    await expect(started.installSmtp?.read()).resolves.toMatchObject({
+      server: { host: 'mailpit', port: 1025 },
+      from: { address: 'support@example.com', name: 'Support' },
+    });
   });
 
   it('gives the relay and the workers one connection, and the relay the LISTEN url', () => {
@@ -134,11 +173,12 @@ describe('startWorker', () => {
     await host.close();
 
     // The relay stops adding jobs first; the event worker drains before the
-    // media worker, because it is what adds media jobs; the connection closes
-    // last so an in-flight job still has Redis to report to.
+    // email and media workers, because it is what adds their jobs; the
+    // connection closes last so an in-flight job still has Redis to report to.
     expect(calls).toEqual([
       'relay.stop',
       'worker.close',
+      'email.close',
       'media.close',
       'assignment.close',
       'maintenance.close',
@@ -158,6 +198,7 @@ describe('startWorker', () => {
     expect(calls).toEqual([
       'relay.stop',
       'worker.close',
+      'email.close',
       'media.close',
       'assignment.close',
       'maintenance.close',

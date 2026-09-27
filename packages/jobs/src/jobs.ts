@@ -273,6 +273,46 @@ export const assignmentOfflineUnassignJob = defineJob({
     `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
 });
 
+export const emailSendPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `email_deliveries` row: the whole job is about it, and it is the natural key. */
+  deliveryId: z.uuid(),
+});
+
+export type EmailSendPayload = z.infer<typeof emailSendPayloadSchema>;
+
+/** Attempts per round before a send is dead-lettered (M2-05). */
+export const EMAIL_SEND_JOB_ATTEMPTS = 5;
+
+/**
+ * M2-05's outbound email (ARCHITECTURE §13, `outbound` queue). The request for
+ * it goes through the outbox — the `email.send` event, written beside the
+ * `email_deliveries` row in the transaction of the reply or the inbound mail —
+ * and that event's handler adds this job, as `attachment.uploaded` adds
+ * `media.process`.
+ *
+ * **Idempotent by delivery** (DOMAIN-RULES §6): the receipt key is the
+ * delivery id, claimed in the transaction that marks the row sent, so a second
+ * delivery of the job finds the receipt and sends nothing. The consumer also
+ * skips a row that is already `sent`, which holds after receipts are purged.
+ *
+ * Five attempts over about eight minutes; a send that exhausts them stays in
+ * the failed set — the dead-letter queue — and its row becomes `failed`, which
+ * is what Channels › Outgoing email › Failed sends lists.
+ */
+export const emailSendJob = defineJob({
+  name: 'email.send',
+  queue: QUEUE_NAMES.outbound,
+  schema: emailSendPayloadSchema,
+  options: {
+    attempts: EMAIL_SEND_JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `email.send:${payload.deliveryId}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -281,6 +321,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [maintenanceRetentionScheduleJob.name]: maintenanceRetentionScheduleJob,
   [mediaProcessJob.name]: mediaProcessJob,
   [assignmentOfflineUnassignJob.name]: assignmentOfflineUnassignJob,
+  [emailSendJob.name]: emailSendJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

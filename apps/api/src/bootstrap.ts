@@ -274,7 +274,12 @@ export const start = async (env: Env): Promise<{ close: () => Promise<void> }> =
   const runtime = await createRuntime({ env });
 
   if (env.APP_ROLE === 'worker') {
-    const worker = startWorker({ env, db: runtime.db, log: runtime.logger });
+    const worker = startWorker({
+      env,
+      db: runtime.db,
+      log: runtime.logger,
+      settings: runtime.settings,
+    });
     runtime.logger.info('Worker ready: outbox relay running and outbox.event consumed.');
 
     return {

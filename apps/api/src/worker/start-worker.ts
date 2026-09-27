@@ -1,10 +1,11 @@
-import { createKeyring, type Env } from '@helpdock/config';
+import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
   createOutboxEventHandler,
   createQueueConnection,
   createWorker,
+  emailSendJob,
   type JobLogger,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
@@ -27,6 +28,12 @@ import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/prese
 import { CsatRepository } from '../csat/csat.repository.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
 import { CsatTokens } from '../csat/tokens.js';
+import { AutoReplyService } from '../email/auto-reply.service.js';
+import { EmailRepository } from '../email/email.repository.js';
+import { registerEmailEventHandlers } from '../email/email-events.js';
+import { createEmailSendHandler, createEmailSendProcessor } from '../email/email-send.job.js';
+import { OutboundEmailService } from '../email/outbound-email.service.js';
+import { type InstallSmtp, SettingsInstallSmtp, smtpTransportFactory } from '../email/transport.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
@@ -68,8 +75,16 @@ export interface WorkerDependencies {
    * a second registration of the same event — which is what a test starting
    * several workers in one process would do.
    */
-  registerHandlers(options: { redis: Redis; env: WorkerEnv }): Closable;
+  registerHandlers(options: { redis: Redis; env: WorkerEnv; installSmtp: InstallSmtp }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /** M2-05's `email.send` consumer on the `outbound` queue. */
+  createEmailWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+    installSmtp: InstallSmtp;
+  }): Closable;
   /** M1-10's `media.process` consumer: sharp, ffmpeg and the optional scanner. */
   createMediaWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** M1-07's `assignment.offline_unassign` consumer: the auto-unassign timer firing. */
@@ -148,7 +163,7 @@ export const workerDependencies: WorkerDependencies = {
   // The broadcast publishes on the same connection: a ticket event ends in a
   // socket frame, and only an `APP_ROLE=api` replica holds sockets
   // (`realtime/broadcast.ts`).
-  registerHandlers: ({ redis, env }) => {
+  registerHandlers: ({ redis, env, installSmtp }) => {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
@@ -191,15 +206,59 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
 
+    // M2-05 and M2-06. `email.send` ends in a job on the `outbound` queue, under
+    // the same rule as the two above: `jobId` is the outbox row's, so a
+    // redelivered event adds nothing. `email.received` decides the auto-reply
+    // (business hours are M3's; until they are wired every hour is open).
+    const outbound = new Queue(QUEUE_NAMES.outbound, { connection: redis });
+    const emailRepository = new EmailRepository();
+    registerEmailEventHandlers({
+      queue: {
+        add: async ({ jobId, payload }) => {
+          await outbound.add(emailSendJob.name, payload, { ...emailSendJob.options, jobId });
+        },
+      },
+      autoReplies: new AutoReplyService(
+        emailRepository,
+        new OutboundEmailService(emailRepository, installSmtp),
+      ),
+    });
+
     return {
       close: async () => {
         await media.close();
         await assignment.close();
+        await outbound.close();
       },
     };
   },
   createEventWorker: ({ redis, db, log }) =>
     createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
+  createEmailWorker: ({ redis, db, log, env, installSmtp }) => {
+    const repository = new EmailRepository();
+    const worker = new Worker(
+      QUEUE_NAMES.outbound,
+      createEmailSendProcessor({
+        db,
+        log,
+        repository,
+        handler: createEmailSendHandler({
+          repository,
+          keyring: createKeyring(env),
+          installSmtp,
+          transports: smtpTransportFactory,
+        }),
+      }),
+      { connection: redis },
+    );
+    worker.on('failed', (job, error) =>
+      log.error(
+        { job: job?.name, jobId: job?.id, attemptsMade: job?.attemptsMade, err: error },
+        'email.send failed',
+      ),
+    );
+    return worker;
+  },
   createMediaWorker: ({ redis, db, log, env }) =>
     createWorker(
       mediaProcessJob,
@@ -277,18 +336,28 @@ export interface StartWorkerOptions {
   readonly db: Db;
   readonly log: JobLogger;
   readonly deps?: WorkerDependencies;
+  /**
+   * M2-05: the install's `smtp.*` settings, the server a brand without its own
+   * sends through. Left out, only brands with a server of their own can send.
+   */
+  readonly settings?: Settings;
 }
+
+const NO_INSTALL_SMTP: InstallSmtp = { read: () => Promise.resolve(undefined) };
 
 export const startWorker = ({
   env,
   db,
   log,
   deps = workerDependencies,
+  settings,
 }: StartWorkerOptions): Closable => {
+  const installSmtp = settings === undefined ? NO_INSTALL_SMTP : new SettingsInstallSmtp(settings);
   const connection = deps.createConnection(env.REDIS_URL);
   // Before either worker exists, for the reason at the top of this file.
-  const producers = deps.registerHandlers({ redis: connection, env });
+  const producers = deps.registerHandlers({ redis: connection, env, installSmtp });
   const worker = deps.createEventWorker({ redis: connection, db, log });
+  const email = deps.createEmailWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
@@ -309,6 +378,8 @@ export const startWorker = ({
   const shutDown = async (): Promise<void> => {
     await relay.stop();
     await worker.close();
+    // After the event worker, which adds its jobs, like the media worker below.
+    await email.close();
     // After the event worker, because that is what adds media jobs: closing the
     // media worker first would leave a job queued with nothing draining it,
     // which is harmless but slower to notice than the other order's bug.

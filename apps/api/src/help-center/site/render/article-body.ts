@@ -23,7 +23,8 @@ const VIDEO = /<div data-video="([^"]*)"><\/div>/g;
 const PATH_HREF = /<a href="(\/[^"]*)"/g;
 
 const decode = (value: string): string =>
-  value.replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#x27;', "'");
+  // `&amp;` last, so an escaped entity (`&amp;quot;`) stays the text it was.
+  value.replaceAll('&quot;', '"').replaceAll('&#x27;', "'").replaceAll('&amp;', '&');
 
 export const articleBodyHtml = (
   html: string,

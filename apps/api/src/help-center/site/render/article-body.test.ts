@@ -27,6 +27,12 @@ describe('articleBodyHtml', () => {
       '<a href="/hc/b/en/articles/x?a=1&amp;b=2">x</a><a href="https://acme.test">y</a><a href="#top">z</a>',
     );
   });
+
+  it('decodes an escaped entity in a link once, not twice', () => {
+    expect(render('<a href="/en/articles/x?q=&amp;quot;">x</a>')).toBe(
+      '<a href="/hc/b/en/articles/x?q=&amp;quot;">x</a>',
+    );
+  });
 });
 
 describe('text helpers', () => {

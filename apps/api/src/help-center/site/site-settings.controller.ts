@@ -129,13 +129,22 @@ export class HelpCenterSiteSettingsController {
     @Body(new ZodValidationPipe(HcStaffPassRequestDto)) body: HcStaffPassRequestDto,
     @Req() request: FastifyRequest,
   ): Promise<HcStaffPassResponse> {
-    const token = bearerTokenOf(request.headers.authorization);
-    const claims = token === null ? null : await verifyAccessToken(token, this.#keys);
-    if (claims === null) {
-      // A principal that is not a browser session (the dev header, an api key)
-      // has no refresh family for the help center's cookie to follow.
-      throw new ForbiddenException('The help center is opened from a signed-in admin session');
-    }
-    return this.#passes.issue(context(), claims.fam, body);
+    const familyId = await refreshFamilyOf(request, this.#keys);
+    return this.#passes.issue(context(), familyId, body);
   }
 }
+
+/**
+ * The refresh family of the admin session behind this request. The route is
+ * already authorised by `@Requires`; this only reads which browser it came
+ * from. A principal that is not a browser session (the dev header, an api
+ * key) has no refresh family for the help center's cookie to follow.
+ */
+const refreshFamilyOf = async (request: FastifyRequest, keys: SigningKeys): Promise<string> => {
+  const token = bearerTokenOf(request.headers.authorization);
+  const claims = token === null ? null : await verifyAccessToken(token, keys);
+  if (claims === null) {
+    throw new ForbiddenException('The help center is opened from a signed-in admin session');
+  }
+  return claims.fam;
+};

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { healthySystemStatus } from './fixtures.js';
+import { auditLogPage, healthySystemStatus } from './fixtures.js';
 import { HttpSystemApi, NotAllowedError, SystemApiError } from './system-api.js';
 
 const respondWith = (body: unknown, status = 200): void => {
@@ -38,5 +38,21 @@ describe('HttpSystemApi', () => {
     respondWith({ ...healthySystemStatus(), redis: { status: 'ok' } });
 
     await expect(new HttpSystemApi().status()).rejects.toBeInstanceOf(SystemApiError);
+  });
+});
+
+describe('HttpSystemApi.auditLog (M3-08)', () => {
+  it('asks with only the filters that are set, and parses the page', async () => {
+    const page = auditLogPage();
+    respondWith(page);
+
+    expect(await new HttpSystemApi().auditLog({})).toEqual(page);
+    expect(fetch).toHaveBeenLastCalledWith('/api/install/audit-log', expect.anything());
+
+    await new HttpSystemApi().auditLog({ action: 'ticket.*', cursor: 'abc' });
+    expect(fetch).toHaveBeenLastCalledWith(
+      '/api/install/audit-log?action=ticket.*&cursor=abc',
+      expect.anything(),
+    );
   });
 });

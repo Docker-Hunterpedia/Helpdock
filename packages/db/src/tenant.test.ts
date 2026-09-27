@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { DbTransaction } from './client.js';
 import { SESSION_SETTINGS } from './rls.js';
 import {
+  cleanIp,
   currentDepartmentScope,
   INSTALL_SCOPE_BRAND_ID,
+  REQUEST_SETTINGS,
   systemContext,
   type TenantContext,
   TenantContextError,
@@ -28,6 +30,37 @@ const settingsOf = (ctx: TenantContext): Record<string, string> =>
   Object.fromEntries(tenantSessionSettings(ctx));
 
 describe('tenantSessionSettings', () => {
+  describe('with the request it serves (M3-08)', () => {
+    const request = { requestId: 'req-1', ip: '10.0.4.17', userAgent: 'Firefox/130' };
+
+    it('adds the three settings the audit columns default to', () => {
+      const settings = settingsOf(context({ request }));
+
+      expect(settings[REQUEST_SETTINGS.requestId]).toBe('req-1');
+      expect(settings[REQUEST_SETTINGS.ip]).toBe('10.0.4.17');
+      expect(settings[REQUEST_SETTINGS.userAgent]).toBe('Firefox/130');
+    });
+
+    it('drops an address Postgres would refuse, rather than failing the audit insert', () => {
+      const settings = settingsOf(context({ request: { ...request, ip: '10.0.4.17, 1.2.3.4' } }));
+
+      expect(settings[REQUEST_SETTINGS.ip]).toBe('');
+    });
+
+    it('keeps the user agent printable and short', () => {
+      const settings = settingsOf(
+        context({ request: { ...request, userAgent: `bad\u0000${'x'.repeat(400)}` } }),
+      );
+
+      expect(settings[REQUEST_SETTINGS.userAgent]).toMatch(/^badx+$/);
+      expect(settings[REQUEST_SETTINGS.userAgent]).toHaveLength(256);
+    });
+
+    it('sets nothing about a request when there is none', () => {
+      expect(Object.keys(settingsOf(context()))).not.toContain(REQUEST_SETTINGS.ip);
+    });
+  });
+
   it('sets the five settings the policies read', () => {
     expect(Object.keys(settingsOf(context()))).toEqual(Object.values(SESSION_SETTINGS));
   });
@@ -163,4 +196,23 @@ describe('currentDepartmentScope', () => {
       currentDepartmentScope(txReturning({ all_departments: null, department_ids: null })),
     ).resolves.toEqual([]);
   });
+});
+
+describe('cleanIp', () => {
+  it.each([
+    ['10.0.4.17', '10.0.4.17'],
+    ['::1', '::1'],
+    ['::ffff:10.0.0.1', '::ffff:10.0.0.1'],
+    ['fe80::1%eth0', 'fe80::1'],
+    [' 34.201.18.7 ', '34.201.18.7'],
+  ])('keeps %s as %s', (value, expected) => {
+    expect(cleanIp(value)).toBe(expected);
+  });
+
+  it.each(['', 'localhost', '999.1.1.1', "1.2.3.4'; DROP TABLE x", null, undefined])(
+    'drops %s',
+    (value) => {
+      expect(cleanIp(value)).toBeNull();
+    },
+  );
 });

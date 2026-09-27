@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { sql } from 'drizzle-orm';
 import type { Db, DbTransaction } from './client.js';
 import { SESSION_SETTINGS } from './rls.js';
@@ -35,7 +36,52 @@ export interface TenantContext {
   readonly principalType: PrincipalType;
   /** User id, visitor id, api key id, or a job id for a system principal. */
   readonly principalId: string;
+  /**
+   * The request this transaction serves, when it serves one (M3-08). Not read
+   * by any policy: `audit_log`'s column defaults read it, so every audit row a
+   * request writes says where it came from without its writer passing anything.
+   */
+  readonly request?: RequestFacts | undefined;
 }
+
+export interface RequestFacts {
+  readonly requestId: string;
+  /** The client's address as the HTTP layer resolved it; dropped unless it parses as one. */
+  readonly ip: string | null;
+  readonly userAgent: string | null;
+}
+
+/** The settings {@link RequestFacts} travel in, read by `audit_log`'s column defaults. */
+export const REQUEST_SETTINGS = {
+  requestId: 'app.request_id',
+  ip: 'app.request_ip',
+  userAgent: 'app.request_user_agent',
+} as const;
+
+const MAX_REQUEST_ID_LENGTH = 128;
+const MAX_USER_AGENT_LENGTH = 256;
+
+/**
+ * The address when it is one, else null. The value is cast to `inet` inside
+ * every audit insert, and a string Postgres refuses would fail the write the
+ * audit row belongs to — so anything `isIP` does not accept is dropped, and an
+ * IPv6 zone (`fe80::1%eth0`), which `inet` does not take, is cut off.
+ */
+export const cleanIp = (value: string | null | undefined): string | null => {
+  const address = (value ?? '').trim().split('%')[0] ?? '';
+
+  return isIP(address) === 0 ? null : address;
+};
+
+/** Printable characters only, and short: a header is the caller's to fill with anything. */
+const cleanText = (value: string | null, max: number): string =>
+  (value ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, max);
+
+const requestSettings = (request: RequestFacts): readonly (readonly [string, string])[] => [
+  [REQUEST_SETTINGS.requestId, cleanText(request.requestId, MAX_REQUEST_ID_LENGTH)],
+  [REQUEST_SETTINGS.ip, cleanIp(request.ip) ?? ''],
+  [REQUEST_SETTINGS.userAgent, cleanText(request.userAgent, MAX_USER_AGENT_LENGTH)],
+];
 
 /** Thrown before anything reaches the database, naming the field at fault but never its value. */
 export class TenantContextError extends Error {
@@ -101,6 +147,7 @@ export const tenantSessionSettings = (
     [SESSION_SETTINGS.allDepartments, String(allDepartments)],
     [SESSION_SETTINGS.principalType, context.principalType],
     [SESSION_SETTINGS.principalId, context.principalId],
+    ...(context.request === undefined ? [] : requestSettings(context.request)),
   ];
 };
 

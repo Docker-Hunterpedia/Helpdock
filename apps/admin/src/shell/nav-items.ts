@@ -10,6 +10,7 @@ import {
   SlidersHorizontal,
   Ticket,
   Users,
+  Workflow,
 } from 'lucide-react';
 import { ROUTES } from '../app/route-paths.js';
 
@@ -22,6 +23,7 @@ export type NavKey =
   | 'reports'
   | 'settings'
   | 'ticketing'
+  | 'automation'
   | 'staff'
   | 'system';
 
@@ -87,6 +89,11 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   ticketing: item('ticketing', ROUTES.ticketing, SlidersHorizontal, {
     roles: ['admin', 'teamLeader'],
   }),
+  // M3. Rules are an Admin's and a Team Leader's; an Agent comes here only for
+  // the Macros tab, because anybody who replies may keep personal macros.
+  automation: item('automation', ROUTES.automation, Workflow, {
+    roles: ['admin', 'teamLeader', 'agent'],
+  }),
   // "Staff and roles" is the Admin and Team Leader screen: they are the two
   // roles that hold `staff:manage` (DOMAIN-RULES §1.2).
   staff: item('staff', ROUTES.staff, ShieldUser, { roles: ['admin', 'teamLeader'] }),
@@ -107,6 +114,7 @@ export const ADMIN_NAV: readonly NavItem[] = [
   NAV_BY_KEY.brand,
   NAV_BY_KEY.settings,
   NAV_BY_KEY.ticketing,
+  NAV_BY_KEY.automation,
   NAV_BY_KEY.staff,
   NAV_BY_KEY.system,
 ];

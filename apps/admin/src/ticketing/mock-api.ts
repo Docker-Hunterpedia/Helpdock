@@ -24,6 +24,11 @@ import type {
   EligibleMember,
   EligibleMemberList,
   FeedbackSettingsUpdateRequest,
+  Macro,
+  MacroCreateRequest,
+  MacroList,
+  MacroListQuery,
+  MacroUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -60,6 +65,7 @@ import {
   worksIn,
 } from './mock-assignment.js';
 import { MockBlockList } from './mock-block-list.js';
+import { MockMacros } from './mock-macros.js';
 
 /**
  * The fixture the Ticketing settings run against until an install is in front
@@ -464,8 +470,36 @@ export class MockTicketingApi implements TicketingApi {
     [`${MOCK_SUPPORT_ID}:${MOCK_YARA_ID}`, ['0192c3f0-1a2b-7c3d-8e4f-000000000101']],
   ]);
 
+  /**
+   * M3-06. Public so `MockTicketsApi` can fill one in and apply it, as the api
+   * reads the same table for both.
+   */
+  readonly macroStore = new MockMacros();
+
   constructor(blockList: MockBlockList = new MockBlockList()) {
     this.#blockList = blockList;
+  }
+
+  // ---------------------------------------------------------------- M3-06
+
+  async macros(_brandId: string, query?: MacroListQuery): Promise<MacroList> {
+    return this.macroStore.list(query);
+  }
+
+  async createMacro(_brandId: string, request: MacroCreateRequest): Promise<Macro> {
+    return this.macroStore.create(request);
+  }
+
+  async updateMacro(
+    _brandId: string,
+    macroId: string,
+    request: MacroUpdateRequest,
+  ): Promise<Macro> {
+    return this.macroStore.update(macroId, request);
+  }
+
+  async deleteMacro(_brandId: string, macroId: string): Promise<void> {
+    this.macroStore.remove(macroId);
   }
 
   async departments(_brandId: string): Promise<DepartmentSummaryList> {

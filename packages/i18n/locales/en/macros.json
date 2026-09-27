@@ -1,0 +1,203 @@
+{
+  "shell": {
+    "title": "Automation",
+    "subtitle": "{{brand}} brand · rules, timers and the one-click bundles agents use",
+    "tabList": "Automation sections",
+    "tabs": {
+      "rules": "Rules",
+      "timeBased": "Time-based",
+      "macros": "Macros"
+    },
+    "soon": {
+      "heading": "Not built yet",
+      "body": "{{tab}} arrives with deliverable {{milestone}}."
+    }
+  },
+  "kind": {
+    "macro": "Macro",
+    "canned": "Canned response"
+  },
+  "scope": {
+    "shared": "Shared",
+    "personal": "Personal",
+    "personalOnlyMe": "Personal · only me"
+  },
+  "list": {
+    "heading": "Macros and canned responses",
+    "caption": "Shared ones for your departments, and your own.",
+    "new": "New",
+    "newKind": {
+      "macro": "Macro",
+      "canned": "Canned response"
+    },
+    "search": "Search by name or text",
+    "searchLabel": "Search macros and canned responses",
+    "filter": {
+      "label": "Show",
+      "all": "All",
+      "macro": "Macros",
+      "canned": "Canned"
+    },
+    "table": "Macros and canned responses of {{brand}}",
+    "columns": {
+      "name": "Name",
+      "scope": "Scope",
+      "department": "Department",
+      "lastUsed": "Last used"
+    },
+    "allDepartments": "All",
+    "actionCount_one": "{{count}} action",
+    "actionCount_other": "{{count}} actions",
+    "bothLanguages": "EN AR",
+    "englishOnly": "EN only",
+    "noReply": "no reply",
+    "never": "Never",
+    "justNow": "Just now",
+    "footer": "{{shown}} of {{total}} · Personal items are visible to their owner only.",
+    "empty": {
+      "heading": "No macros yet",
+      "body": "Create a canned response for a reply you write often, or a macro that also sets status, tags and the assignee."
+    }
+  },
+  "editor": {
+    "new": {
+      "macro": "New macro",
+      "canned": "New canned response"
+    },
+    "editedBy": "Edited by {{name}} · {{date}}",
+    "editedOn": "Edited {{date}}",
+    "duplicate": "Duplicate",
+    "copyName": "{{name}} (copy)",
+    "delete": "Delete {{name}}",
+    "name": "Name",
+    "required": "required",
+    "scope": "Scope",
+    "department": "Department",
+    "allDepartments": "All departments",
+    "scopeNote": "Shared items are edited by Admins and by Team Leaders of the department. Every agent in it can use them. Anyone can keep personal ones.",
+    "reply": {
+      "heading": "Reply",
+      "caption": "The contact's language picks the variant; an empty Arabic variant falls back to English.",
+      "captionMacro": "Optional for a macro. The contact's language picks the variant; an empty Arabic variant falls back to English.",
+      "en": "English",
+      "enCaption": "default",
+      "ar": "Arabic",
+      "arCaption": "العربية"
+    },
+    "placeholders": {
+      "open": "Placeholder",
+      "search": "Find a placeholder",
+      "list": "Placeholders",
+      "groups": {
+        "contact": "Contact",
+        "ticket": "Ticket, brand and you"
+      },
+      "hint": "Inserted at the cursor. Sample values shown."
+    },
+    "preview": {
+      "en": "Preview · English:",
+      "ar": "Preview · Arabic:"
+    },
+    "problems": {
+      "nameRequired": "Give it a name.",
+      "englishRequired": "A canned response needs its English text.",
+      "nothingToDo": "A macro needs a reply, an action, or both.",
+      "actionIncomplete": "Choose a value for every action, or remove it.",
+      "arabicWithoutEnglish": "English is the default variant; write it before the Arabic one."
+    },
+    "cannedNote": "A canned response has the same editor without Actions.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "create": "Create",
+    "nothing": {
+      "heading": "Nothing selected",
+      "body": "Choose a macro or canned response to edit it, or create a new one."
+    }
+  },
+  "actions": {
+    "legend": "Actions",
+    "caption": "Staged when the macro is applied and run in this order when the reply is sent; at once if there is no reply.",
+    "type": "Action {{position}}",
+    "types": {
+      "set_status": "Set status",
+      "set_priority": "Set priority",
+      "add_tag": "Add tag",
+      "remove_tag": "Remove tag",
+      "assign": "Assign to"
+    },
+    "value": {
+      "set_status": "Status for action {{position}}",
+      "set_priority": "Priority for action {{position}}",
+      "add_tag": "Tag for action {{position}}",
+      "remove_tag": "Tag for action {{position}}",
+      "assign": "Assignee for action {{position}}"
+    },
+    "assignee": {
+      "self": "The agent applying it",
+      "team": "{{team}} team · round-robin",
+      "unassigned": "Unassigned"
+    },
+    "remove": "Remove action {{position}}",
+    "add": "Add action"
+  },
+  "confirm": {
+    "title": "Delete {{name}}?",
+    "body": "Agents can no longer apply it. Replies already sent with it stay as they are.",
+    "submit": "Delete"
+  },
+  "toast": {
+    "created": "{{name}} created.",
+    "updated": "{{name}} saved.",
+    "deleted": "{{name}} deleted.",
+    "applied": "Applied {{name}}."
+  },
+  "picker": {
+    "label": "Insert a macro or canned response",
+    "search": "Search macros and canned responses",
+    "results": "Results",
+    "none": "Nothing matches.",
+    "scopeNote": "Only items shared with {{department}}, shared with all departments, or your own.",
+    "optionMacro_one": "Macro · reply and {{count}} action",
+    "optionMacro_other": "Macro · reply and {{count}} actions",
+    "optionMacroNoReply_one": "Macro · {{count}} action, no reply",
+    "optionMacroNoReply_other": "Macro · {{count}} actions, no reply",
+    "optionCanned": "Canned · {{text}}",
+    "optionPersonal": "Canned · personal · {{text}}",
+    "variant": {
+      "en": "English variant",
+      "ar": "Arabic variant"
+    },
+    "contactLanguage": {
+      "en": "{{name}}'s language is English",
+      "ar": "{{name}}'s language is Arabic"
+    },
+    "fellBack": "The Arabic variant is empty, so English is used",
+    "useEnglish": "Use English",
+    "useArabic": "Use Arabic",
+    "highlightNote": "Highlighted text came from placeholders. It is inserted as plain text you can edit.",
+    "noReply": "This macro has no reply. Its actions run as soon as you apply it.",
+    "whenSent": "When you send the reply",
+    "atOnce": "When you apply it",
+    "keys": "↑ ↓ move · Enter apply · Esc close",
+    "cancel": "Cancel",
+    "apply": "Apply macro",
+    "insert": "Insert"
+  },
+  "staged": {
+    "label": "Staged by macro {{name}}",
+    "via": "Via macro {{name}}:",
+    "status": "Status {{from}} → {{to}}",
+    "priority": "Priority {{from}} → {{to}}",
+    "tagAdd": "Tag + {{name}}",
+    "tagRemove": "Tag − {{name}}",
+    "assignee": "Assignee → {{name}}",
+    "assigneeStays": "Assignee stays {{name}}",
+    "unassign": "Assignee → nobody",
+    "aTeam": "a team",
+    "remove": "Remove: {{action}}",
+    "clear": "Clear the staged macro"
+  },
+  "event": {
+    "applied": "{{actor}} applied macro {{name}}"
+  }
+}

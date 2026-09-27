@@ -47,7 +47,13 @@ export const ROUTES = {
   /** One tab of it. `/admin/brand` alone redirects to the first built one. */
   brandTab: '/admin/brand/:tab',
   staff: '/admin/staff',
+  /** Rules, time-based rules and macros (M3). */
+  automation: '/admin/automation',
+  /** One tab of it. `/admin/automation` alone redirects to the first the reader has. */
+  automationTab: '/admin/automation/:tab',
   system: '/admin/system',
+  /** The install-wide audit log (M3-08), reached from System. */
+  systemAuditLog: '/admin/system/audit-log',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
   /** A person's own account: password, second factor, signed-in browsers. */
@@ -108,6 +114,9 @@ export const csatPreviewRoute = (locale: string): string =>
 
 /** One tab of the Ticketing settings, by its url segment. */
 export const ticketingRoute = (tab: string): string => `${ROUTES.ticketing}/${tab}`;
+
+/** One tab of Automation, by its url segment. */
+export const automationRoute = (tab: string): string => `${ROUTES.automation}/${tab}`;
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;

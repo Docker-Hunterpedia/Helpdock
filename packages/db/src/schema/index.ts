@@ -5,6 +5,7 @@ export * from './audit-log.js';
 export * from './blocked-senders.js';
 export * from './brand-domains.js';
 export * from './brands.js';
+export * from './canned-responses.js';
 export * from './contact-duplicate-suggestions.js';
 export * from './contact-identities.js';
 export * from './contact-merges.js';

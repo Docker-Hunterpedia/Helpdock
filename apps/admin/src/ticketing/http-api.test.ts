@@ -569,3 +569,51 @@ describe('the Feedback tab (M1-12)', () => {
     });
   });
 });
+
+describe('macros (M3-06)', () => {
+  const MACRO = '0192c3f0-1a2b-7c3d-8e4f-000000000701';
+  const macro = {
+    id: MACRO,
+    kind: 'canned',
+    name: 'Shipping fees explained',
+    scope: 'shared',
+    departmentId: null,
+    bodies: { en: 'Hi', ar: '' },
+    actions: [],
+    lastUsedAt: null,
+    updatedAt: '2026-09-24T10:00:00.000Z',
+    updatedById: null,
+    canEdit: true,
+  };
+
+  it('lists with only the filters that are set', async () => {
+    fetchMock.mockImplementation(async () => json({ macros: [macro] }));
+
+    expect((await api.macros(BRAND)).macros[0]?.name).toBe('Shipping fees explained');
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/macros`);
+
+    await api.macros(BRAND, { departmentId: DEPARTMENT, q: '' });
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/macros?departmentId=${DEPARTMENT}`);
+  });
+
+  it('creates, updates and deletes', async () => {
+    fetchMock.mockResolvedValueOnce(json(macro, 201));
+    await api.createMacro(BRAND, {
+      kind: 'canned',
+      name: 'Shipping fees explained',
+      scope: 'shared',
+      departmentId: null,
+      bodies: { en: 'Hi', ar: '' },
+      actions: [],
+    });
+    expect(lastCall().init.method).toBe('POST');
+
+    fetchMock.mockResolvedValueOnce(json({ ...macro, name: 'Shipping' }));
+    expect((await api.updateMacro(BRAND, MACRO, { name: 'Shipping' })).name).toBe('Shipping');
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/macros/${MACRO}`);
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await api.deleteMacro(BRAND, MACRO);
+    expect(lastCall().init.method).toBe('DELETE');
+  });
+});

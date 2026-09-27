@@ -26,11 +26,14 @@ import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
  * recipient caption, the textarea, and a toolbar with attach, canned response,
  * translate, "then set status" and the primary send.
  *
- * Two of those five do nothing yet and say so on the control itself rather than
- * only in a tooltip: canned responses are M3 and translation is M7. A disabled
- * control whose only explanation is a hover is invisible to a keyboard and to a
- * screen reader (DESIGN §10), so each carries its sentence in text only a
- * screen reader reads.
+ * Translation does nothing yet and says so on the control itself rather than
+ * only in a tooltip: it is M7. A disabled control whose only explanation is a
+ * hover is invisible to a keyboard and to a screen reader (DESIGN §10), so it
+ * carries its sentence in text only a screen reader reads.
+ *
+ * **Macros and canned responses are M3-06.** The button opens the picker
+ * (`macro-picker.tsx`), and so does `/` typed into an empty reply; what a macro
+ * stages is drawn above the composer by the ticket view.
  *
  * **Attach is real from M1-10.** A file goes up as soon as it is chosen and the
  * message may be sent while the pipeline is still working on it: `upload`
@@ -75,6 +78,10 @@ export interface ComposerProps {
   onSend(): void;
   /** The caret entered the body: M1-12's timer may start here. */
   onBodyFocus?(): void;
+  /** M3-06: opens the macro picker. Absent for a reader who cannot reply. */
+  onOpenMacros?: (() => void) | undefined;
+  /** Whether the picker is open, for the button's `aria-expanded`. */
+  readonly macrosOpen?: boolean | undefined;
 }
 
 export function Composer({
@@ -95,6 +102,8 @@ export function Composer({
   onRemoveAttachment,
   onSend,
   onBodyFocus,
+  onOpenMacros,
+  macrosOpen = false,
 }: ComposerProps): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -166,6 +175,11 @@ export function Composer({
         minRows={3}
         value={body}
         onChange={(event) => {
+          // `/` typed into an empty reply opens the picker instead of being text.
+          if (body === '' && event.target.value === '/' && onOpenMacros !== undefined) {
+            onOpenMacros();
+            return;
+          }
           onBodyChange(event.target.value);
         }}
         onFocus={onBodyFocus}
@@ -222,16 +236,17 @@ export function Composer({
           <Paperclip size={16} aria-hidden="true" />
         </IconButton>
 
-        <Unavailable available={false} reason={t('tickets:composer.cannedUnavailable')}>
-          <Button
-            variant="text"
-            size="small"
-            disabled
-            startIcon={<Zap size={14} aria-hidden="true" />}
-          >
-            {t('tickets:composer.canned')}
-          </Button>
-        </Unavailable>
+        <Button
+          variant="text"
+          size="small"
+          disabled={onOpenMacros === undefined}
+          aria-haspopup="dialog"
+          aria-expanded={macrosOpen}
+          startIcon={<Zap size={14} aria-hidden="true" />}
+          onClick={onOpenMacros}
+        >
+          {t('tickets:composer.canned')}
+        </Button>
 
         <Unavailable available={false} reason={t('tickets:composer.translateUnavailable')}>
           <Button

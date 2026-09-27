@@ -1,4 +1,7 @@
 import {
+  type AuditLogPage,
+  type AuditLogQuery,
+  auditLogPageSchema,
   type SystemQueuePage,
   type SystemQueuesQuery,
   type SystemStatus,
@@ -34,6 +37,8 @@ export interface SystemApi {
   status(): Promise<SystemStatus>;
   /** Every queue, paginated. What "All queues" asks for. */
   queues(query: SystemQueuesQuery): Promise<SystemQueuePage>;
+  /** M3-08: one page of the install-wide audit log, newest first. */
+  auditLog(query: Partial<Omit<AuditLogQuery, 'limit'>>): Promise<AuditLogPage>;
 }
 
 export class HttpSystemApi implements SystemApi {
@@ -51,6 +56,18 @@ export class HttpSystemApi implements SystemApi {
     const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 
     return this.#read(`/install/system/queues?${query.toString()}`, systemQueuePageSchema);
+  }
+
+  async auditLog(query: Partial<Omit<AuditLogQuery, 'limit'>>): Promise<AuditLogPage> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined) {
+        params.set(key, String(value));
+      }
+    }
+    const search = params.toString();
+
+    return this.#read(`/install/audit-log${search === '' ? '' : `?${search}`}`, auditLogPageSchema);
   }
 
   async #read<T>(path: string, schema: ZodType<T>): Promise<T> {
@@ -80,6 +97,7 @@ export const SYSTEM_REFETCH_MS = 10_000;
 
 export const SYSTEM_QUERY_KEY = ['install', 'system'] as const;
 export const SYSTEM_QUEUES_QUERY_KEY = ['install', 'system', 'queues'] as const;
+export const AUDIT_LOG_QUERY_KEY = ['install', 'audit-log'] as const;
 
 /**
  * One page big enough for every queue ARCHITECTURE §13 declares, so "All

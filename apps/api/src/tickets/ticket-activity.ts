@@ -52,7 +52,12 @@ export type TicketActivityAction =
    */
   | 'ticket.merged'
   | 'ticket.unmerged'
-  | 'ticket.split';
+  | 'ticket.split'
+  /**
+   * M3-06. One entry for everything a macro changed, with `to.macroId` and
+   * `to.macroName` saying which, and `to.messageId` the reply it ran with.
+   */
+  | 'ticket.macro_applied';
 
 /**
  * The actor behind a change, in the three words the activity log records.

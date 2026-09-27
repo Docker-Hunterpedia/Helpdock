@@ -23,6 +23,11 @@ import type {
   DepartmentUpdateRequest,
   EligibleMemberList,
   FeedbackSettingsUpdateRequest,
+  Macro,
+  MacroCreateRequest,
+  MacroList,
+  MacroListQuery,
+  MacroUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -200,6 +205,14 @@ export interface TicketingApi {
     userId: string,
     request: AssignmentAgentUpdateRequest,
   ): Promise<AssignmentAgent>;
+
+  // ---------------------------------------------------------------- M3-06
+
+  /** The macros and canned responses the reader may see: shared with them, and their own. */
+  macros(brandId: string, query?: MacroListQuery): Promise<MacroList>;
+  createMacro(brandId: string, request: MacroCreateRequest): Promise<Macro>;
+  updateMacro(brandId: string, macroId: string, request: MacroUpdateRequest): Promise<Macro>;
+  deleteMacro(brandId: string, macroId: string): Promise<void>;
 }
 
 /**

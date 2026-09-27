@@ -296,6 +296,11 @@ export const describeEvent = (
   const at = messageTime(entry.createdAt, locale, now);
   const via = t(`tickets:event.via.${entry.via}`);
 
+  // M3-06: one entry for everything a macro did, "via macro Shipping delay".
+  if (entry.action === 'ticket.macro_applied') {
+    return `${t('macros:event.applied', { actor, name: String(entry.to?.macroName ?? '') })} · ${at}`;
+  }
+
   const sentence = (): string => {
     if (entry.action === 'ticket.status.changed' || 'status' in moved) {
       return t('tickets:event.status', {

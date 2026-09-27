@@ -32,6 +32,7 @@ describe('the schema', () => {
       'blocked_senders',
       'brand_domains',
       'brands',
+      'canned_responses',
       'contact_duplicate_suggestions',
       'contact_identities',
       'contact_merges',

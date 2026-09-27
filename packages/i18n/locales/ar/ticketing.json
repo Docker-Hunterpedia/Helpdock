@@ -143,7 +143,8 @@
     "viewUpdated": "تم حفظ {{name}}",
     "viewDeleted": "تم حذف {{name}}",
     "viewShown": "ظهر {{name}} في الشريط الجانبي",
-    "viewHidden": "أُخفي {{name}} من الشريط الجانبي"
+    "viewHidden": "أُخفي {{name}} من الشريط الجانبي",
+    "macroChanged": "تغيّر هذا الماكرو بعد أن طبّقته. طبّقه مرة أخرى."
   },
   "statuses": {
     "add": "إضافة حالة",

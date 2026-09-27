@@ -96,6 +96,17 @@ import type { TimeEntriesService } from './time/time-entries.service.js';
  * (REQUIREMENTS §5.1).
  */
 
+/**
+ * Where an update records what moved instead of writing its own activity rows
+ * (M3-06): a macro applies several changes and the thread shows them as one
+ * entry, "via macro Refund issued". The lifecycle's own rows — a close, a
+ * reopen — are still written, because they are transitions and not edits.
+ */
+export interface ActivityBundle {
+  readonly from: Record<string, unknown>;
+  readonly to: Record<string, unknown>;
+}
+
 /** How many activity rows a ticket read returns. The thread pages; this does not yet. */
 const ACTIVITY_PAGE = 100;
 
@@ -374,6 +385,7 @@ export class TicketsService {
     principal: Principal,
     ticketId: string,
     input: TicketUpdateRequest,
+    options: { readonly bundle?: ActivityBundle } = {},
   ): Promise<Ticket> {
     if (Object.keys(input).length === 0) {
       throw new BadRequestException('That request changes nothing');
@@ -468,7 +480,15 @@ export class TicketsService {
         throw new NotFoundException('No such ticket');
       }
 
-      if (Object.keys(to).length > 0) {
+      if (options.bundle !== undefined) {
+        // M3-06: a macro records its whole effect as one entry of its own.
+        Object.assign(options.bundle.from, from);
+        Object.assign(options.bundle.to, to);
+        if (statusResult?.changed === true) {
+          options.bundle.from.statusId = status.id;
+          options.bundle.to.statusId = statusResult.statusId;
+        }
+      } else if (Object.keys(to).length > 0) {
         await writeTicketActivity(tx, {
           brandId,
           ticketId,
@@ -480,7 +500,7 @@ export class TicketsService {
         });
       }
 
-      if (statusResult?.changed === true) {
+      if (statusResult?.changed === true && options.bundle === undefined) {
         await writeTicketActivity(tx, {
           brandId,
           ticketId,

@@ -51,6 +51,15 @@ const codeOf = (error: unknown): string => {
   return typeof code === 'string' ? code : 'network-error';
 };
 
+/**
+ * The codes Node gives a handshake the certificate check refused: OpenSSL's
+ * verification errors (`CERT_HAS_EXPIRED`, `DEPTH_ZERO_SELF_SIGNED_CERT`,
+ * `UNABLE_TO_VERIFY_LEAF_SIGNATURE`…) and Node's own host-name mismatch.
+ */
+const CERTIFICATE_ERROR = /CERT|SELF_SIGNED|UNABLE_TO_(?:GET|VERIFY)|ERR_TLS_CERT_ALTNAME_INVALID/;
+
+export const isCertificateError = (code: string): boolean => CERTIFICATE_ERROR.test(code);
+
 const validToOf = (certificate: PeerCertificate): Date => new Date(certificate.valid_to);
 
 export async function probeTls(
@@ -72,13 +81,14 @@ export async function probeTls(
 
   return new Promise<TlsProbeResult>((resolve) => {
     let settled = false;
-    // Not verified by the socket itself, so an untrusted certificate is an
-    // answer to report rather than an error that hides which check failed.
+    // Verified by the socket: a certificate the chain check refuses fails the
+    // handshake with a certificate error code, which is reported as `invalid`
+    // with that code. Nothing ever talks to an unverified peer.
     const socket = open({
       host: address,
       port: options.port ?? HTTPS_PORT,
       servername: hostname,
-      rejectUnauthorized: false,
+      rejectUnauthorized: true,
       ALPNProtocols: ['http/1.1'],
     });
 
@@ -104,7 +114,10 @@ export async function probeTls(
       finish({ status: 'valid', validTo: validToOf(socket.getPeerCertificate()) });
     });
     socket.once('error', (error: unknown) => {
-      finish({ status: 'unreachable', code: codeOf(error) });
+      const code = codeOf(error);
+      finish(
+        isCertificateError(code) ? { status: 'invalid', code } : { status: 'unreachable', code },
+      );
     });
   });
 }

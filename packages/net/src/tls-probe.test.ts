@@ -157,3 +157,40 @@ describe('probeTls', () => {
     expect(result).toEqual({ status: 'unreachable', code: 'dns-failure' });
   });
 });
+
+describe('probeTls with the certificate check on', () => {
+  it('asks the socket to verify the chain and the name', async () => {
+    let seen: ConnectionOptions | undefined;
+    const socket = fakeSocket({ authorized: true, validTo: 'Dec 20 10:00:00 2026 GMT' });
+
+    await probeTls('help.acme.com', {
+      lookup: PUBLIC,
+      connect: (options) => {
+        seen = options;
+        queueMicrotask(() => socket.emit('secureConnect'));
+        return socket;
+      },
+    });
+
+    expect(seen?.rejectUnauthorized).toBe(true);
+  });
+
+  it.each([
+    'CERT_HAS_EXPIRED',
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+  ])('reports a handshake refused with %s as an invalid certificate', async (code) => {
+    const socket = fakeSocket({});
+
+    const result = await probeTls('help.acme.com', {
+      lookup: PUBLIC,
+      connect: () => {
+        queueMicrotask(() => socket.emit('error', Object.assign(new Error(code), { code })));
+        return socket;
+      },
+    });
+
+    expect(result).toEqual({ status: 'invalid', code });
+  });
+});

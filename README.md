@@ -27,8 +27,8 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 | M1 | Ticketing core | [shipped](docs/completed/M1-ticketing-core.md) |
 | M2 | Email channel | [shipped](docs/completed/M2-email-channel.md) |
 | M3 | Automation and SLAs | [shipped](docs/completed/M3-automation-and-slas.md) |
-| M4 | Widget and realtime | planned |
-| M5 | Help center | planned |
+| M4 | Widget and realtime | [shipped](docs/completed/M4-widget-and-realtime.md) |
+| M5 | Help center | [shipped](docs/completed/M5-help-center.md) |
 | M6 | Telegram | planned |
 | M7 | AI | planned |
 | M8 | API, webhooks, reports | planned |

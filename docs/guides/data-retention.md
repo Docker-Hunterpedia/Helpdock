@@ -17,7 +17,7 @@ retention card. Only an Admin sees the page and only an Admin may change it
 | AI call logs | **90 days** | 1 to 3650 | Stored only. `ai_calls` arrives with M7, which adds the purge |
 | Help center search log | **180 days** | 1 to 3650 | Hard-deletes the search log (M5-05) and, in the same window, the article view rows that dedupe view counts (M5-08). The count is the search log's |
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
-| Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Stored only. Visitor sessions arrive with M4 |
+| Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Stored only. The widget's visitors (`widget_visitors`, M4) are not purged yet |
 | Outbox rows and job receipts | 7 days | fixed | Hard delete, 7 days after publish or completion |
 
 A brand that never saves the form is kept under the defaults. The form sends

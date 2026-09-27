@@ -1,6 +1,6 @@
 # Help center
 
-The published help center: the pages customers read on a brand's own domain, what search engines are told about them, and how they look (M5-03, M5-04, M5-06; [ADR 0015](../decisions/0015-help-center-pages-rendered-by-the-api.md)). Writing articles is **Help center › Articles**; who may read them is **Help center › Settings › Who can read it** ([M5 doc](../in-development/M5-help-center.md)).
+The published help center: the pages customers read on a brand's own domain, what search engines are told about them, and how they look (M5-03, M5-04, M5-06; [ADR 0015](../decisions/0015-help-center-pages-rendered-by-the-api.md)). Writing articles is **Help center › Articles**; who may read them is **Help center › Settings › Who can read it** ([M5 doc](../completed/M5-help-center.md)).
 
 ## Where it is served
 

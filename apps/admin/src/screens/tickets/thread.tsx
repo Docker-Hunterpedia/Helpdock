@@ -14,6 +14,7 @@ import { linkReferences } from '../../tickets/merge.js';
 import type { PendingMessage } from '../../tickets/pending.js';
 import type { ThreadItem } from '../../tickets/thread.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
+import { EmailMessageCard, ThreadMismatch } from './email-message-card.tsx';
 import { messageTime, ticketReference } from './format.js';
 import { MergedBlock } from './merged-block.tsx';
 import {
@@ -67,6 +68,8 @@ export interface ThreadMerges {
   readonly links: readonly TicketLink[];
   readonly busy: boolean;
   onUnmerge(ticketId: string): void;
+  /** M2-04: opens the merge dialog searching for the ticket a stranger referenced. */
+  onMergeInto?(reference: string): void;
 }
 
 export function Thread({
@@ -130,7 +133,14 @@ export function Thread({
             ) : item.kind === 'event' ? (
               <SystemEvent>{describeEvent(item.entry, names, translate, locale, now)}</SystemEvent>
             ) : item.kind === 'message' ? (
-              item.message.kind === 'system' ? (
+              item.message.kind === 'system' && item.message.email?.mismatch != null ? (
+                <ThreadMismatch
+                  message={item.message}
+                  mismatch={item.message.email.mismatch}
+                  now={now}
+                  {...(merges?.onMergeInto === undefined ? {} : { onMerge: merges.onMergeInto })}
+                />
+              ) : item.message.kind === 'system' ? (
                 <SystemEvent>
                   <SystemText
                     message={item.message}
@@ -139,6 +149,17 @@ export function Thread({
                     now={now}
                   />
                 </SystemEvent>
+              ) : item.message.email !== undefined && item.message.authorType === 'contact' ? (
+                <EmailMessageCard
+                  message={item.message}
+                  email={item.message.email}
+                  author={
+                    names.nameFor(item.message.authorType, item.message.authorId) ??
+                    item.message.email.from.name ??
+                    item.message.email.from.address
+                  }
+                  time={messageTime(item.message.createdAt, locale, now)}
+                />
               ) : (
                 <MessageBubble
                   kind={bubbleKindOf(item.message)}

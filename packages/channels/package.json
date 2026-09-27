@@ -19,10 +19,15 @@
   },
   "dependencies": {
     "@helpdock/schemas": "workspace:*",
+    "imapflow": "2.0.7",
+    "mailparser": "3.9.28",
     "nodemailer": "10.0.10",
-    "sanitize-html": "2.17.7"
+    "sanitize-html": "2.17.7",
+    "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/sanitize-html": "2.16.1"
+    "@types/mailparser": "3.4.6",
+    "@types/sanitize-html": "2.16.1",
+    "testcontainers": "12.1.0"
   }
 }

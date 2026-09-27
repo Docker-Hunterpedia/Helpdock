@@ -273,6 +273,39 @@ export const assignmentOfflineUnassignJob = defineJob({
     `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
 });
 
+export const emailPollPayloadSchema = z.object({
+  brandId: z.uuid(),
+  mailboxId: z.uuid(),
+});
+
+export type EmailPollPayload = z.infer<typeof emailPollPayloadSchema>;
+
+/**
+ * M2-02: one IMAP mailbox, polled (ARCHITECTURE §13: "`email.poll` (per
+ * mailbox, repeatable)"). One BullMQ job scheduler per mailbox, every
+ * `poll_interval_seconds`, id {@link emailPollSchedulerId}; the worker
+ * upserts them on boot and whenever `mailbox.changed` says a mailbox was
+ * created, edited or deleted (DOMAIN-RULES §10: "repeatable pollers are
+ * re-registered on worker boot").
+ *
+ * One attempt and no receipt: the next tick *is* the retry, and a poll is
+ * idempotent without one because each message dedupes by its `Message-ID`
+ * (DOMAIN-RULES §6). A receipt per tick would be a row per mailbox per minute.
+ */
+export const emailPollJob = defineJob({
+  name: 'email.poll',
+  queue: QUEUE_NAMES.inbound,
+  schema: emailPollPayloadSchema,
+  options: {
+    attempts: 1,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { age: 7 * 86_400, count: 1_000 },
+  },
+});
+
+/** The scheduler id of one mailbox's poller. Dots, not colons, for the reason {@link retentionJobId} gives. */
+export const emailPollSchedulerId = (mailboxId: string): string => `email.poll.${mailboxId}`;
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -281,6 +314,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [maintenanceRetentionScheduleJob.name]: maintenanceRetentionScheduleJob,
   [mediaProcessJob.name]: mediaProcessJob,
   [assignmentOfflineUnassignJob.name]: assignmentOfflineUnassignJob,
+  [emailPollJob.name]: emailPollJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

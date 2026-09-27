@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   assignmentOfflineUnassignJob,
+  emailPollJob,
+  emailPollSchedulerId,
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   maintenanceRetentionJob,
@@ -145,6 +147,22 @@ describe('media.process payloads', () => {
 
   it('runs on the media queue of ARCHITECTURE §13', () => {
     expect(mediaProcessJob.queue).toBe('media');
+  });
+});
+
+describe('email.poll (M2-02)', () => {
+  const payload = { brandId, mailboxId: '01924f00-0000-7000-8000-0000000000e1' };
+
+  it('accepts one mailbox of one brand and refuses one without a mailbox', () => {
+    expect(parseJobPayload(emailPollJob, payload)).toEqual(payload);
+    expect(() => parseJobPayload(emailPollJob, { brandId })).toThrow(PayloadValidationError);
+  });
+
+  it('runs once per tick on the inbound queue, with a scheduler id per mailbox', () => {
+    expect(emailPollJob.queue).toBe('inbound');
+    expect(emailPollJob.options.attempts).toBe(1);
+    expect(emailPollSchedulerId(payload.mailboxId)).toBe(`email.poll.${payload.mailboxId}`);
+    expect(emailPollSchedulerId(payload.mailboxId)).not.toContain(':');
   });
 });
 

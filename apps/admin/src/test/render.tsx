@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
+import type { ChannelsApi } from '../channels/api.js';
+import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
@@ -25,6 +27,7 @@ export interface RenderAppOptions {
   readonly ticketingApi?: TicketingApi;
   readonly ticketsApi?: TicketsApi;
   readonly uploader?: AttachmentUploader;
+  readonly channelsApi?: ChannelsApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -36,6 +39,7 @@ export interface RenderedApp extends RenderResult {
   readonly ticketingApi: TicketingApi;
   readonly ticketsApi: TicketsApi;
   readonly uploader: AttachmentUploader;
+  readonly channelsApi: ChannelsApi;
 }
 
 /**
@@ -51,6 +55,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
   const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
   const uploader = options.uploader ?? new MockAttachmentUploader();
+  const channelsApi = options.channelsApi ?? new MockChannelsApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -62,6 +67,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       ticketingApi={ticketingApi}
       ticketsApi={ticketsApi}
       uploader={uploader}
+      channelsApi={channelsApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -80,5 +86,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     ticketingApi,
     ticketsApi,
     uploader,
+    channelsApi,
   };
 }

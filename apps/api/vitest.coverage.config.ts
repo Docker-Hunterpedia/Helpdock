@@ -26,6 +26,9 @@ export default defineConfig({
     // run only, which is the worst place for a difference to live.
     dedupe: ['zod', 'nestjs-zod'],
     alias: {
+      '@helpdock/channels': fileURLToPath(
+        new URL('../../packages/channels/src/index.ts', import.meta.url),
+      ),
       '@helpdock/config': fileURLToPath(
         new URL('../../packages/config/src/index.ts', import.meta.url),
       ),

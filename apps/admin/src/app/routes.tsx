@@ -4,6 +4,8 @@ import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
+import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
+import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
 import { TicketingPage } from '../screens/admin/ticketing/ticketing-page.tsx';
@@ -95,6 +97,12 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.ticketingTab} element={<TicketingPage />} />
           {/* M1-14. Only the Danger zone tab is built; `/admin/brand` with no
               tab redirects to it, as `/admin/ticketing` does to its first. */}
+          {/* M2-08. The mailbox form is static-first (`new`) and deeper than
+              the tab route, so neither shadows the other. */}
+          <Route path={ROUTES.channels} element={<ChannelsPage />} />
+          <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
+          <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
+          <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
           <Route path={ROUTES.brand} element={<BrandPage />} />
           <Route path={ROUTES.brandTab} element={<BrandPage />} />
           <Route path={ROUTES.security} element={<SecurityScreen />} />

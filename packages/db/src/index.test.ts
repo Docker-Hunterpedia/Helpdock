@@ -70,6 +70,7 @@ describe('@helpdock/db', () => {
       'departments.ts',
       'enums.ts',
       'job-receipts.ts',
+      'mailboxes.ts',
       'outbox.ts',
       'retention-settings.ts',
       'settings.ts',

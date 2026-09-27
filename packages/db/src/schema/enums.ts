@@ -270,3 +270,18 @@ export const ticketViewBuiltInEnum = pgEnum('ticket_view_built_in', [
   'department_open',
   'escalated',
 ]);
+
+/**
+ * How a mailbox collects its mail (M2-02, M2-03): Helpdock signs in and polls,
+ * or a provider posts each message to `/internal/inbound-parse/*`.
+ */
+export const mailboxMethodEnum = pgEnum('mailbox_method', ['imap', 'inbound_parse']);
+
+/** `tls` is implicit TLS (port 993); `starttls` upgrades a plain connection (143). */
+export const mailboxSecurityEnum = pgEnum('mailbox_security', ['tls', 'starttls']);
+
+/**
+ * What an agent sees of a remote `<img>` in customer mail (M2-07, REQUIREMENTS
+ * §5.1): nothing until they ask, or everything at once through the image proxy.
+ */
+export const remoteImagePolicyEnum = pgEnum('remote_image_policy', ['block', 'proxy']);

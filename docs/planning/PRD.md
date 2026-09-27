@@ -87,7 +87,7 @@ Update this table in the same PR that changes a milestone's status.
 |---|---|---|---|---|---|---|
 | 0 Foundation | M0 Skeleton | — | 5–7 | shipped | 2026-09-18 | 2026-09-19 |
 | 1 Core desk | M1 Ticketing core | M0 | 6–8 | shipped | 2026-09-19 | 2026-09-25 |
-| 1 Core desk | M2 Email channel | M1 | 3–4 | planned | | |
+| 1 Core desk | M2 Email channel | M1 | 3–4 | in progress | 2026-09-27 | |
 | 1 Core desk | M3 Automation and SLAs | M1 | 4–5 | planned | | |
 | 2 Customer surfaces | M4 Widget and realtime | M1, M3 | 5–6 | planned | | |
 | 2 Customer surfaces | M5 Help center | M1 | 5–6 | planned | | |

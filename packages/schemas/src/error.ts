@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
+import { channelsRefusalSchema } from './email.js';
 import { setupRefusalSchema } from './install.js';
 import { staffRefusalSchema } from './staff.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
@@ -77,6 +78,8 @@ export const errorResponseSchema = z.object({
      * key's error line on this rather than a generic failure banner.
      */
     setup: z.object({ reason: setupRefusalSchema }).optional(),
+    /** Only on a refused mailbox action (M2-08). */
+    channels: z.object({ reason: channelsRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

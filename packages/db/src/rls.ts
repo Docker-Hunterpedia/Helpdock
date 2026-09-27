@@ -105,6 +105,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // M1-15 part 2 (ADR 0011). The words of a ticket are the ticket's, so they
   // follow its department by the same triggers as its other children.
   { name: 'ticket_search_tokens', departmentScoped: true },
+  // M2-02, M2-03. Configuration, not a child of a ticket.
+  { name: 'mailboxes', departmentScoped: false },
+  { name: 'inbound_parse_settings', departmentScoped: false },
 ];
 
 /**

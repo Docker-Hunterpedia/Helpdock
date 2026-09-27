@@ -89,6 +89,14 @@ export const ticketMessages = pgTable(
     ),
     /** Model, tokens, cost and the sources an AI answer cited (DOMAIN-RULES §9). */
     aiMeta: jsonb('ai_meta').$type<Record<string, unknown>>(),
+    /**
+     * M2. What the thread's email card draws besides the body: the header
+     * strip (from, to, cc), the quoted text stripped from the body, the remote
+     * images the body no longer contains, which attachments were inline, and a
+     * threading mismatch. Parsed by `emailMessageMetaSchema` in
+     * `@helpdock/schemas` on the way in and out. Null for every other channel.
+     */
+    email: jsonb('email').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

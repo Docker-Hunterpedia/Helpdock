@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ticketCsatSchema } from './csat.js';
+import { emailMessageViewSchema } from './email.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
 import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
 import { timeEntrySecondsSchema } from './time-entries.js';
@@ -294,6 +295,11 @@ export const ticketMessageSchema = z.object({
    * any. Empty for every message that carries none.
    */
   attachments: z.array(attachmentSchema).default([]),
+  /**
+   * M2: the email card's header strip, quoted text, remote images and inline
+   * figures. Absent on every message that did not arrive by email.
+   */
+  email: emailMessageViewSchema.optional(),
   createdAt: z.iso.datetime(),
 });
 export type TicketMessage = z.infer<typeof ticketMessageSchema>;

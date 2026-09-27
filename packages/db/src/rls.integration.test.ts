@@ -24,6 +24,8 @@ import {
   csatResponses,
   customFieldDefs,
   departments,
+  inboundParseSettings,
+  mailboxes,
   outbox,
   retentionSettings,
   settings,
@@ -436,6 +438,23 @@ const fixtures = [
     // personal views, and the owner rule has its own tests below.
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(views).values({ brandId, name: 'VIP refunds', filters: { priority: ['urgent'] } }),
+  },
+  {
+    name: 'mailboxes',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(mailboxes).values({
+        brandId,
+        // Unique across the install, so each brand's fixture needs its own.
+        address: `support@${brandId}.example`,
+        displayName: 'Support',
+        departmentId: departmentId[brandId] ?? '',
+        method: 'inbound_parse',
+      }),
+  },
+  {
+    name: 'inbound_parse_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(inboundParseSettings).values({ brandId, lastRequestOutcome: 'accepted' }),
   },
   {
     name: 'ticket_search_tokens',

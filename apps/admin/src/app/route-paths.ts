@@ -46,6 +46,14 @@ export const ROUTES = {
   brand: '/admin/brand',
   /** One tab of it. `/admin/brand` alone redirects to the first built one. */
   brandTab: '/admin/brand/:tab',
+  /** How customers reach the brand (M2-08): Mailboxes, then M2-05's Outgoing email. */
+  channels: '/admin/channels',
+  /** One tab of it. `/admin/channels` alone redirects to Mailboxes. */
+  channelsTab: '/admin/channels/:tab',
+  /** "Add mailbox" (`Admin/Email-Mailbox` in add mode). */
+  mailboxNew: '/admin/channels/mailboxes/new',
+  /** One mailbox's form. */
+  mailbox: '/admin/channels/mailboxes/:mailboxId',
   staff: '/admin/staff',
   system: '/admin/system',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
@@ -108,6 +116,13 @@ export const csatPreviewRoute = (locale: string): string =>
 
 /** One tab of the Ticketing settings, by its url segment. */
 export const ticketingRoute = (tab: string): string => `${ROUTES.ticketing}/${tab}`;
+
+/** One tab of Channels, by its url segment. */
+export const channelsRoute = (tab: string): string => `${ROUTES.channels}/${tab}`;
+
+/** One mailbox's form. */
+export const mailboxRoute = (mailboxId: string): string =>
+  `${ROUTES.channels}/mailboxes/${encodeURIComponent(mailboxId)}`;
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;

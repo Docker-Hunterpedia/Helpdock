@@ -16,6 +16,7 @@ import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
 import type { PrincipalResolver } from './auth/principal-resolver.js';
 import { BrandsModule } from './brands/brands.module.js';
+import { ChannelsModule, type ChannelsModuleOverrides } from './channels/channels.module.js';
 import { ContactsModule } from './contacts/contacts.module.js';
 import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
@@ -88,6 +89,8 @@ export interface AppModuleOptions {
    * passes a double so the routes can be exercised without one.
    */
   readonly objectStorage?: ObjectStorage;
+  /** M2: the IMAP connection and the image proxy's fetcher, which suites replace. */
+  readonly channels?: ChannelsModuleOverrides;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -146,6 +149,14 @@ export class AppModule implements NestModule {
         RetentionModule.forRoot(),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
+        // M2 inbound: Channels › Mailboxes, inbound parse and the image proxy.
+        ChannelsModule.forRoot({
+          env: options.env,
+          db: options.db,
+          logger: options.logger,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...(options.channels === undefined ? {} : { overrides: options.channels }),
+        }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

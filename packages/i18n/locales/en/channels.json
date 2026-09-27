@@ -1,0 +1,220 @@
+{
+  "title": "Channels",
+  "subtitle": "{{brand}} brand · how customers reach this brand",
+  "tabList": "Channel sections",
+  "tabs": {
+    "mailboxes": "Mailboxes",
+    "outgoing": "Outgoing email"
+  },
+  "soon": {
+    "heading": "Not built yet",
+    "body": "{{tab}} arrives with deliverable {{milestone}}."
+  },
+  "addMailbox": "Add mailbox",
+  "mailboxes": {
+    "heading": "Mailboxes",
+    "caption_one": "{{count}} address · incoming only; mail to it opens tickets in its department",
+    "caption_other": "{{count}} addresses · incoming only; mail to each opens tickets in its department",
+    "columns": {
+      "address": "Address",
+      "routesTo": "Routes to",
+      "incoming": "Incoming",
+      "health": "Health",
+      "actions": "Actions"
+    },
+    "incoming": {
+      "imap": "IMAP",
+      "inbound_parse": "Inbound parse"
+    },
+    "providers": {
+      "postmark": "Postmark",
+      "sendgrid": "SendGrid",
+      "mailgun": "Mailgun",
+      "resend": "Resend",
+      "generic": "Generic JSON"
+    },
+    "noProvider": "no mail yet",
+    "actionsFor": "Actions for {{address}}",
+    "edit": "Edit",
+    "delete": "Delete",
+    "empty": {
+      "heading": "No mailboxes yet",
+      "body": "Add the address customers write to, and mail sent to it opens tickets."
+    }
+  },
+  "health": {
+    "healthy": "Healthy",
+    "behind": "Behind",
+    "failing": "Failing",
+    "waiting": "Waiting",
+    "auth": "IMAP sign-in failed",
+    "connect": "Cannot reach the server",
+    "folder": "Folder not found",
+    "polled": "polled {{ago}}",
+    "lastMail": "last mail {{ago}}",
+    "since": "{{problem}} since {{time}}",
+    "fix": "Fix",
+    "fixFor": "Fix {{address}}"
+  },
+  "replies": {
+    "heading": "Replies go out once per brand",
+    "body": "A mailbox only receives. The SMTP server, the From and Reply-To for each department, auto-replies and failed sends are on",
+    "link": "Outgoing email"
+  },
+  "legend": {
+    "heading": "Health",
+    "healthy": "Healthy: the last poll or delivery worked.",
+    "behind": "Behind: no successful poll for 3 intervals.",
+    "failing": "Failing: the server refused sign-in or cannot be reached.",
+    "waiting": "Waiting: an inbound-parse mailbox that has not received mail yet."
+  },
+  "inboundParse": {
+    "heading": "Inbound parse endpoints",
+    "caption": "For providers that post incoming mail to Helpdock instead of being polled. The recipient address picks the mailbox.",
+    "base": "Base {{url}}",
+    "copy": "Copy the {{provider}} URL",
+    "copied": "{{provider}} URL copied",
+    "secret": "Shared secret",
+    "replace": "Replace",
+    "hint": "Requests without it are refused. Shown once when replaced, never again.",
+    "noSecret": "No secret is set, so every request is refused until you set one.",
+    "lastRequest": "Last request: {{provider}} · {{ago}} · {{outcome}}.",
+    "outcomes": {
+      "accepted": "accepted",
+      "duplicate": "a duplicate, ignored",
+      "ignored": "dropped",
+      "refused": "refused"
+    },
+    "confirm": {
+      "title": "Replace the shared secret?",
+      "body": "Providers still using the current secret are refused from the moment you replace it. Update each provider with the new one straight away.",
+      "action": "Replace secret"
+    },
+    "reveal": {
+      "title": "Copy the new secret",
+      "body": "This is the only time it is shown. Give it to each provider as the X-Helpdock-Inbound-Secret header, or as the password in the endpoint URL.",
+      "label": "New shared secret",
+      "copy": "Copy secret",
+      "done": "Done"
+    }
+  },
+  "form": {
+    "addTitle": "Add mailbox",
+    "back": "Back to Channels › Mailboxes",
+    "captionAdd": "Mailbox · Channels › Mailboxes",
+    "captionEdit": "Mailbox · Channels › Mailboxes · routes to {{department}}",
+    "delete": "Delete mailbox",
+    "deleteConfirm": {
+      "title": "Delete {{address}}?",
+      "body": "Mail sent to this address stops opening tickets. Tickets it already opened stay where they are.",
+      "action": "Delete mailbox"
+    },
+    "address": {
+      "heading": "Address and routing",
+      "caption": "Where mail sent to this address lands. Replies go out through the brand’s outgoing mail, not this mailbox.",
+      "email": "Email address",
+      "displayName": "Display name",
+      "displayNameHint": "Shown to customers as the sender name.",
+      "department": "New tickets go to",
+      "departmentHint": "Replies to an existing ticket stay in that ticket’s department."
+    },
+    "incoming": {
+      "heading": "Incoming mail",
+      "caption": "How Helpdock collects mail sent to this address.",
+      "method": "Method",
+      "imap": "IMAP polling",
+      "imapHint": "Helpdock signs in and fetches new mail.",
+      "parse": "Inbound parse webhook",
+      "parseHint": "Your provider posts mail to an endpoint listed on Channels › Mailboxes.",
+      "host": "IMAP host",
+      "port": "Port",
+      "security": "Security",
+      "securities": {
+        "tls": "TLS",
+        "starttls": "STARTTLS"
+      },
+      "username": "Username",
+      "password": "Password",
+      "replacePassword": "Replace",
+      "passwordSaved": "Saved {{date}} by {{name}}. Never shown again after saving.",
+      "passwordSavedBySomeone": "Saved {{date}}. Never shown again after saving.",
+      "folder": "Folder",
+      "pollEvery": "Check every",
+      "intervals": {
+        "30": "30 seconds",
+        "60": "60 seconds",
+        "120": "2 minutes",
+        "300": "5 minutes"
+      }
+    },
+    "test": {
+      "button": "Test IMAP",
+      "hint": "Signs in with the values on screen, saved or not. Nothing is imported.",
+      "running": "Testing…",
+      "ok": {
+        "title": "Connected to {{host}}:{{port}}",
+        "body": "{{folder}} has {{messages}} messages, {{unseen}} unread. Nothing was imported."
+      },
+      "auth": {
+        "title": "IMAP refused the sign-in",
+        "replied": "{{host}}:{{port}} replied:",
+        "hint": "Check the username and the password; many providers need an app password, not the account password."
+      },
+      "connect": {
+        "title": "Could not reach {{host}}:{{port}}",
+        "body": "Check the host, the port and that the server accepts connections from this install."
+      },
+      "timeout": {
+        "title": "Could not reach {{host}}:{{port}}",
+        "body": "No answer within 15 s. Check the host, the port and that the server accepts connections from this install."
+      },
+      "folder": {
+        "title": "No folder called {{folder}} on {{host}}",
+        "body": "Check the folder name; most servers treat it as case-sensitive."
+      }
+    },
+    "security": {
+      "heading": "Security",
+      "caption": "Applies to mail received by this mailbox. Scripts, forms and styles outside the allowlist are always removed.",
+      "images": "Remote images in customer mail",
+      "block": "Block until an agent loads them",
+      "blockHint": "Agents see a “Remote images blocked” bar with Load images. Tracking pixels never fire on their own.",
+      "proxy": "Load through the Helpdock image proxy",
+      "proxyHint": "Shown at once, fetched by the server, so the sender never sees an agent’s address or browser.",
+      "spf": "Treat SPF or DKIM failures as possible spam",
+      "spfHint": "The ticket opens in the Spam view instead of the queue.",
+      "allowlist": "Automated senders that may open tickets",
+      "allowlistHint": "One address per line. Other automated mail (Auto-Submitted, bulk, noreply@) is logged and never opens a ticket.",
+      "allowlistInvalid": "{{value}} is not an email address"
+    },
+    "footer": {
+      "unsaved": "Unsaved changes · the mailbox keeps polling with its saved settings until you save.",
+      "discard": "Discard",
+      "save": "Save mailbox",
+      "create": "Add mailbox"
+    },
+    "errors": {
+      "required": "Required",
+      "email": "Enter an email address",
+      "port": "Enter a port from 1 to 65535",
+      "password": "An IMAP mailbox needs a password"
+    },
+    "notFound": {
+      "heading": "No such mailbox",
+      "body": "It may have been deleted. Go back to the list and pick another."
+    }
+  },
+  "refusal": {
+    "address-taken": "Another mailbox already receives mail for that address.",
+    "password-required": "Enter the IMAP password: none is stored for this mailbox yet.",
+    "department-not-found": "That department no longer exists. Pick another."
+  },
+  "toast": {
+    "created": "Mailbox {{address}} added",
+    "saved": "Mailbox {{address}} saved",
+    "deleted": "Mailbox {{address}} deleted",
+    "secretReplaced": "Shared secret replaced",
+    "copied": "Copied",
+    "failed": "That did not work. Try again."
+  }
+}

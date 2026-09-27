@@ -13,6 +13,7 @@ import type {
   TicketMessage,
   TicketStatus,
 } from '@helpdock/schemas';
+import { toEmailView } from '../channels/email-view.js';
 import { toAttachment } from '../media/attachment-view.js';
 
 /**
@@ -126,8 +127,16 @@ export const toTicketMessage = (
   bodyText: row.bodyText,
   channel: row.channel,
   attachments: attachments.map(toAttachment),
+  ...emailOf(row),
   createdAt: row.createdAt.toISOString(),
 });
+
+/** M2: the email card's part, when the message arrived by email. */
+const emailOf = (row: TicketMessageRow): Pick<TicketMessage, 'email'> => {
+  const view = row.email === null ? undefined : toEmailView(row.email);
+
+  return view === undefined ? {} : { email: view };
+};
 
 export const toTicketActivity = (row: TicketActivityRow): TicketActivityEntry => ({
   id: row.id,

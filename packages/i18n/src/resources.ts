@@ -1,6 +1,7 @@
 import arAdmin from '../locales/ar/admin.json' with { type: 'json' };
 import arAuth from '../locales/ar/auth.json' with { type: 'json' };
 import arBrand from '../locales/ar/brand.json' with { type: 'json' };
+import arChannels from '../locales/ar/channels.json' with { type: 'json' };
 import arCommon from '../locales/ar/common.json' with { type: 'json' };
 import arContacts from '../locales/ar/contacts.json' with { type: 'json' };
 import arCsat from '../locales/ar/csat.json' with { type: 'json' };
@@ -16,6 +17,7 @@ import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
 import enBrand from '../locales/en/brand.json' with { type: 'json' };
+import enChannels from '../locales/en/channels.json' with { type: 'json' };
 import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enContacts from '../locales/en/contacts.json' with { type: 'json' };
 import enCsat from '../locales/en/csat.json' with { type: 'json' };
@@ -56,6 +58,8 @@ export const NAMESPACES = [
   'ticket',
   // The public rating page (M1-12): read by the customer, not by staff.
   'csat',
+  // `Admin/Channels` (M2-08): mailboxes and the inbound-parse endpoints.
+  'channels',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -78,6 +82,7 @@ export const resources = {
     brand: enBrand,
     ticket: enTicket,
     csat: enCsat,
+    channels: enChannels,
   },
   ar: {
     common: arCommon,
@@ -95,6 +100,7 @@ export const resources = {
     brand: arBrand,
     ticket: arTicket,
     csat: arCsat,
+    channels: arChannels,
   },
 };
 

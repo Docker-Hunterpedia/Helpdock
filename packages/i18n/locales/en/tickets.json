@@ -476,5 +476,24 @@
     "deleteTitle": "Delete {{name}}?",
     "deleteBody": "The view goes from the sidebar. No ticket changes.",
     "deleteSubmit": "Delete view"
+  },
+  "email": {
+    "label": "Email from {{name}}",
+    "to": "To {{addresses}}",
+    "cc": "Cc {{addresses}}",
+    "remoteBlocked_one": "Remote images blocked · {{count}} from {{hosts}}",
+    "remoteBlocked_other": "Remote images blocked · {{count}} from {{hosts}}",
+    "loadImages": "Load images",
+    "loadingImages": "Loading images…",
+    "imagesFailed": "Some images could not be loaded.",
+    "remoteImage": "Image from {{host}}",
+    "showQuoted": "Show quoted text",
+    "hideQuoted": "Hide quoted text",
+    "inline": "{{name}} · inline",
+    "authFailed": "SPF or DKIM failed for this message",
+    "mismatch": {
+      "open": "Open {{ticket}}",
+      "merge": "Merge into {{ticket}}…"
+    }
   }
 }

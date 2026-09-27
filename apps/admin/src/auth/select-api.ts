@@ -1,3 +1,6 @@
+import type { ChannelsApi } from '../channels/api.js';
+import { HttpChannelsApi } from '../channels/http-api.js';
+import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
@@ -31,6 +34,8 @@ export interface AdminApis {
   readonly tickets: TicketsApi;
   /** M1-10's client half; the composer and the thread are its only callers. */
   readonly uploader: AttachmentUploader;
+  /** M2: Channels › Mailboxes and the email card's remote images. */
+  readonly channels: ChannelsApi;
 }
 
 /**
@@ -70,6 +75,7 @@ export function createApis(
       ticketing: new HttpTicketingApi(transport),
       tickets: new HttpTicketsApi(transport),
       uploader: new HttpAttachmentUploader(transport),
+      channels: new HttpChannelsApi(transport),
     };
   }
 
@@ -99,5 +105,6 @@ export function createApis(
       ticketing,
     ),
     uploader: uploads,
+    channels: new MockChannelsApi(),
   };
 }

@@ -1,0 +1,69 @@
+{
+  "title": "Contact support · {{brand}}",
+  "heading": "Contact support",
+  "intro": "Tell us what you need and we will reply by email.",
+  "nav": {
+    "label": "Site",
+    "helpCenter": "Help center",
+    "contact": "Contact support"
+  },
+  "otherLanguage": "العربية",
+  "required": "required",
+  "optional": "(optional)",
+  "fields": {
+    "name": "Name",
+    "email": "Email",
+    "subject": "Subject",
+    "message": "Message",
+    "attachments": "Attachments"
+  },
+  "choose": "Choose an option",
+  "attachments": {
+    "hint_one": "One file. {{sizes}} {{types}}",
+    "hint_other": "Up to {{count}} files. {{sizes}} {{types}}",
+    "sizeBoth": "Images up to {{image}}, other files up to {{file}}.",
+    "sizeOne": "Up to {{size}} each.",
+    "types": "{{list}}."
+  },
+  "captcha": {
+    "label": "Security check"
+  },
+  "submit": "Send message",
+  "summary_one": "1 field needs attention",
+  "summary_other": "{{count}} fields need attention",
+  "errors": {
+    "required": "Fill in this field.",
+    "email": "Enter an email like name@example.com.",
+    "too_long": "This is too long.",
+    "invalid": "Choose one of the options given.",
+    "too_many_files": "Attach no more than the number of files allowed.",
+    "file_too_large": "One of the files is larger than allowed.",
+    "file_type": "One of the files is a type we cannot accept."
+  },
+  "formErrors": {
+    "captcha": "The security check did not pass. Try it again, then send.",
+    "rate_limited": "Too many messages from here. Wait a few minutes and try again.",
+    "rejected": "Your message could not be sent.",
+    "failed": "Something went wrong and your message was not sent. Try again."
+  },
+  "success": {
+    "status": "We got it. Thanks for writing to us.",
+    "heading": "Your reference is {{reference}}",
+    "defaultThankYou": "Thanks, we have your message. Your reference is {{ticket.number}}; we reply by email, usually within a day.",
+    "another": "Send another message",
+    "helpCenter": "Browse the help center"
+  },
+  "closed": {
+    "heading": "This form is closed",
+    "body": "{{brand}} is not taking messages through this page right now."
+  },
+  "unavailable": {
+    "heading": "This form is not available",
+    "body": "{{brand}} cannot take messages through this page right now. Try again later."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "heading": "There is no form here",
+    "body": "Check the address, or go back to the page that sent you here."
+  }
+}

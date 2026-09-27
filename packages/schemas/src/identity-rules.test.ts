@@ -15,6 +15,7 @@ describe('isVerifiedIdentity (DOMAIN-RULES §4.4)', () => {
     ['visitor', 'widget.visitor', true],
     ['email', 'widget.form', false],
     ['phone', 'widget.form', false],
+    ['email', 'web.form', false],
     ['email', 'email.cc', false],
     ['email', 'agent', false],
     ['phone', 'import', false],

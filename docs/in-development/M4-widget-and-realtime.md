@@ -20,7 +20,7 @@ Owner: @Docker-Hunterpedia
 | M4-06 | Theme tokens with live preview in admin; dark/light/auto; RTL by locale | #111 | in review: the widget's theming from the config's resolved tokens (`@helpdock/ui/resolve`), and the Channels › Widget appearance card with a live preview; accent contrast enforced server-side |
 | M4-07 | Rich content policy per brand: text, emoji, images, video, voice, files with size and… | #112 | in review: the widget's composer, attachments and voice messages, and the per-brand content policy enforced at presign, at confirm and in the worker |
 | M4-08 | Pre-chat form, business-hours awareness, transcript by email, agent avatar/name | #113 | in review: pre-chat form, `availability` with the next opening, transcript by email through the outbox from the brand's sender, agent name and avatar toggle |
-| M4-09 | Hosted web form per brand with custom fields and CAPTCHA toggle | #114 | not started |
+| M4-09 | Hosted web form per brand with custom fields and CAPTCHA toggle | #114 | in review: `/contact` rendered by the api (ADR 0013), Channels › Web form, `form` tickets through the inbound pipeline, CAPTCHA with the brand's keys from Channels › Widget (the widget's verifier and key reader), per-IP and per-address limits, honeypot. [Guide](../guides/web-form.md) |
 | M4-10 | Widget protocol documented in `docs/guides/widget-protocol.md` for native apps | #115 | in review: [widget-protocol.md](../guides/widget-protocol.md) |
 | M4-11 | Accessibility: keyboard, focus, contrast, ARIA live regions | #116 | in review: keyboard, focus return, polite `role="log"`, 44 px targets; axe clean in en and ar |
 
@@ -38,7 +38,7 @@ On the [design canvas](https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ), under
 
 ## Open questions
 
-- None yet.
+- M4-09: a form submission from an address another contact already holds makes a second contact and a duplicate suggestion (DOMAIN-RULES §4.4). Until an agent merges them, agent replies on that ticket are not emailed, because the new contact holds no address. Should a form ticket remember its typed address for replies?
 
 ## Pull requests
 

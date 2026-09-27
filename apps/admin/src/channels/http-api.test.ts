@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpTransport } from '../auth/http-transport.js';
 import { isChannelsError } from './api.js';
 import { HttpChannelsApi } from './http-api.js';
+import { MOCK_WEB_FORM } from './mock-api.js';
 
 /**
  * The Channels adapter against a stubbed `fetch`: the paths and bodies it
@@ -64,6 +65,27 @@ const lastCall = (): { url: string; method: string; body: unknown } => {
 };
 
 describe('HttpChannelsApi', () => {
+  it('reads and saves the web form (M4-09)', async () => {
+    fetchMock.mockResolvedValueOnce(json(MOCK_WEB_FORM));
+    expect((await api.webForm(BRAND)).publicUrl).toBe(MOCK_WEB_FORM.publicUrl);
+    expect(lastCall()).toMatchObject({ url: `/api/brands/${BRAND}/web-form`, method: 'GET' });
+
+    const request = {
+      enabled: false,
+      departmentId: null,
+      captchaEnabled: false,
+      thankYou: MOCK_WEB_FORM.thankYou,
+      fields: MOCK_WEB_FORM.fields.map(({ field, shown, required }) => ({
+        field,
+        shown,
+        required,
+      })),
+    };
+    fetchMock.mockResolvedValueOnce(json({ ...MOCK_WEB_FORM, enabled: false }));
+    expect((await api.saveWebForm(BRAND, request)).enabled).toBe(false);
+    expect(lastCall()).toMatchObject({ method: 'PUT', body: request });
+  });
+
   it('lists, reads, creates, updates and deletes mailboxes', async () => {
     fetchMock.mockResolvedValueOnce(json({ mailboxes: [mailbox] }));
     expect((await api.mailboxes(BRAND)).mailboxes).toHaveLength(1);

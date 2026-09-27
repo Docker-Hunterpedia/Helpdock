@@ -37,6 +37,7 @@ export * from './ticket-templates.js';
 export * from './ticketing.js';
 export * from './time-entries.js';
 export * from './views.js';
+export * from './web-form.js';
 export * from './widget-protocol.js';
 export * from './widget-settings.js';
 export * from './workflow-rules.js';

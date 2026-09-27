@@ -37,7 +37,6 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       remoteip: '203.0.113.9',
       idempotency_key: 'client-1',
     });
-    expect(turnstile.renderConfig('site')).toEqual({ provider: 'turnstile', siteKey: 'site' });
   });
 
   it('verifies an hCaptcha token without Turnstile’s idempotency key', async () => {
@@ -57,15 +56,14 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
     expect(calls[0]?.form.has('idempotency_key')).toBe(false);
   });
 
-  it('fails closed on an empty token, an error status and an answer it cannot read', async () => {
+  it('fails closed on an error status, an answer it cannot read and a network failure', async () => {
     const provider = (status: number, body: unknown) =>
       createCaptchaProvider('turnstile', recorder(status, body).transport);
-
-    expect(await provider(200, {}).verify({ secret: 's', token: ' ' })).toEqual({
-      success: false,
-      errorCodes: ['missing-input-response'],
+    const unreachable = createCaptchaProvider('turnstile', {
+      postForm: () => Promise.reject(new Error('reset')),
     });
-    expect(await provider(500, {}).verify({ secret: 's', token: 't' })).toEqual({
+
+    expect(await provider(500, { success: true }).verify({ secret: 's', token: 't' })).toEqual({
       success: false,
       errorCodes: ['http-500'],
     });
@@ -77,5 +75,50 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       success: false,
       errorCodes: ['invalid-response'],
     });
+    expect(await unreachable.verify({ secret: 's', token: 't' })).toEqual({
+      success: false,
+      errorCodes: ['network-error'],
+    });
+  });
+
+  it.each([
+    ['no secret', { secret: '', token: 't' }, 'missing-input-secret'],
+    ['a blank token', { secret: 's', token: ' ' }, 'missing-input-response'],
+    ['an oversized token', { secret: 's', token: 'x'.repeat(5000) }, 'invalid-input-response'],
+  ] as const)('refuses %s without calling out', async (_label, input, code) => {
+    const { calls, transport } = recorder(200, { success: true });
+
+    expect(await createCaptchaProvider('hcaptcha', transport).verify(input)).toEqual({
+      success: false,
+      errorCodes: [code],
+    });
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('the challenge a page draws', () => {
+  it('draws Turnstile from Cloudflare and allows only that origin', () => {
+    const config = createCaptchaProvider('turnstile', recorder(200, {}).transport).renderConfig(
+      'site',
+      'ar',
+    );
+
+    expect(config).toMatchObject({
+      provider: 'turnstile',
+      siteKey: 'site',
+      widgetClass: 'cf-turnstile',
+      responseField: 'cf-turnstile-response',
+      csp: { scriptSrc: ['https://challenges.cloudflare.com'] },
+    });
+  });
+
+  it('asks hCaptcha for the challenge in the page language', () => {
+    const config = createCaptchaProvider('hcaptcha', recorder(200, {}).transport).renderConfig(
+      'site',
+      'ar',
+    );
+
+    expect(config.scriptUrl).toContain('hl=ar');
+    expect(config.responseField).toBe('h-captcha-response');
   });
 });

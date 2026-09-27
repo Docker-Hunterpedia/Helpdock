@@ -24,7 +24,7 @@ import { createPrincipalResolver } from './auth/principal-resolver.js';
 import { RefreshStore } from './auth/session/refresh-store.js';
 import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
-import { registerInboundParseBody } from './channels/inbound/inbound-parse-body.js';
+import { INBOUND_PARSE_ROUTE, registerFormBodies } from './channels/inbound/inbound-parse-body.js';
 import { securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
@@ -34,6 +34,7 @@ import { METRICS } from './observability/tokens.js';
 import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
 import { resolveAdminDist } from './static/admin-assets.js';
+import { WEB_FORM_ROUTE } from './web-form/web-form-page.controller.js';
 import { registerWidgetCors } from './widget/widget-cors.js';
 import { startWorker } from './worker/start-worker.js';
 
@@ -181,6 +182,8 @@ export interface CreateApiAppOptions {
   readonly channels?: AppModuleOptions['channels'];
   /** M4's siteverify call and SSE timings, for suites. */
   readonly widget?: AppModuleOptions['widget'];
+  /** M4-09's siteverify call, for suites. */
+  readonly webForm?: AppModuleOptions['webForm'];
 }
 
 export const createApiApp = async ({
@@ -190,6 +193,7 @@ export const createApiApp = async ({
   objectStorage,
   channels,
   widget,
+  webForm,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -218,6 +222,7 @@ export const createApiApp = async ({
       ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(channels === undefined ? {} : { channels }),
       ...(widget === undefined ? {} : { widget }),
+      ...(webForm === undefined ? {} : { webForm }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
@@ -265,9 +270,9 @@ export const createApiApp = async ({
   // that 401s, 403s and 404s are counted too (see `http-metrics.ts`).
   registerHttpMetrics(app.getHttpAdapter().getInstance(), app.get<Metrics>(METRICS));
 
-  // M2-03. Before `init()`, which is when Nest adds its routes: the `onRoute`
-  // hook that raises the inbound-parse body limit only sees routes added after it.
-  registerInboundParseBody(app.getHttpAdapter().getInstance());
+  // M2-03 and M4-09. Before `init()`, which is when Nest adds its routes: the
+  // `onRoute` hook that raises their body limit only sees routes added after it.
+  registerFormBodies(app.getHttpAdapter().getInstance(), [INBOUND_PARSE_ROUTE, WEB_FORM_ROUTE]);
 
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

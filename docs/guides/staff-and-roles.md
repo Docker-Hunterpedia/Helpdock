@@ -306,8 +306,9 @@ No new `.env` key.
 
 The invitation goes out through the same seam as the sign-in link and the
 password reset: `EmailSender` in
-[`packages/channels`](../../packages/channels/src/email/sender.ts). Until M2
-brings SMTP, the development sender writes one line to the log — the recipient,
+[`packages/channels`](../../packages/channels/src/email/sender.ts). That seam is
+not wired to M2's SMTP yet ([authentication › Sending](authentication.md#sending)),
+so the development sender writes one line to the log — the recipient,
 the subject and the locale, never the body, because an invitation's body
 contains a working credential.
 
@@ -327,9 +328,6 @@ Redis token expires.
 
 ## Known gaps
 
-- **A department has no business hours or SLA policy yet.** Business hours and
-  the SLA policy are M3. `on_unassign` is M1-07's
-  ([Assignment](ticketing-settings.md#assignment)).
 - **Deactivation unassigns in one brand.** The hook fires for the brand the
   action was taken in; an account deactivated there keeps its tickets in other
   brands assigned until somebody moves them, though the rotation never picks it
@@ -344,4 +342,4 @@ Redis token expires.
   decision nobody has taken.
 - **An account added to a second brand is not emailed about it.** The role is
   created and nothing is sent; there is no "you were added to a brand" message
-  until M2 brings a real transport and a template for it.
+  or template.

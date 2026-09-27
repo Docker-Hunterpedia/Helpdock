@@ -506,9 +506,10 @@ block had been doing. The audit log names the kind, never the value: an address
 is personal data and the audit log outlives the block.
 
 > **What a brand "sends from" today** is the install-wide `smtp.from` and the
-> brand's `brand_domains` hostnames. Per-brand mailboxes arrive with M2-08; the
-> check reads them from then on. `smtp.from` is read install-wide until
-> per-brand settings resolve, as `contacts.defaultCallingCode` already is.
+> brand's `brand_domains` hostnames. It does not read M2's mailboxes or
+> department senders yet, so a brand's own mailbox address can be blocked
+> ([M2 gaps](../completed/M2-email-channel.md#gaps-and-follow-ups)). `smtp.from`
+> is read install-wide, as `contacts.defaultCallingCode` is.
 
 ### The Spam status card
 
@@ -605,8 +606,9 @@ department has turned the timer off since. Otherwise it unassigns their open
 tickets there and routes each again.
 
 DOMAIN-RULES §12 says the timer never fires "during business hours closed
-periods". Departments have no business hours until M3, so every period is open;
-M3 adds the check to the job and reschedules it to the next opening.
+periods". Departments have business hours since M3-01, but the job does not
+read them yet, so every period counts as open
+([M3 gaps](../completed/M3-automation-and-slas.md#gaps-and-follow-ups)).
 
 ### Agents in a department
 

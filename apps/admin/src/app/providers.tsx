@@ -12,6 +12,7 @@ import type { AuthApi } from '../auth/api.js';
 import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
 import type { ContactsApi } from '../contacts/api.js';
+import type { EmailApi } from '../email/api.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { StaffApi } from '../staff/api.js';
 import type { TicketingApi } from '../ticketing/api.js';
@@ -93,6 +94,8 @@ export interface AppProvidersProps {
   readonly ticketsApi?: TicketsApi;
   /** Defaults to the matching adapter. The composer and the thread need it. */
   readonly uploader?: AttachmentUploader;
+  /** Defaults to the matching adapter. The outbound email screens need it (M2-05). */
+  readonly emailApi?: EmailApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -119,6 +122,7 @@ export function AppProviders({
   ticketingApi,
   ticketsApi,
   uploader,
+  emailApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -139,6 +143,7 @@ export function AppProviders({
   const ticketing = ticketingApi ?? fallback.ticketing;
   const tickets = ticketsApi ?? fallback.tickets;
   const attachments = uploader ?? fallback.uploader;
+  const email = emailApi ?? fallback.email;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -200,6 +205,7 @@ export function AppProviders({
                 ticketingApi={ticketing}
                 ticketsApi={tickets}
                 uploader={attachments}
+                emailApi={email}
               >
                 <ToastProvider>
                   <Router>{children}</Router>

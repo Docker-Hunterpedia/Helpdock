@@ -1,6 +1,9 @@
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { EmailApi } from '../email/api.js';
+import { HttpEmailApi } from '../email/http-api.js';
+import { MockEmailApi } from '../email/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import { HttpAttachmentUploader } from '../media/upload.js';
@@ -31,6 +34,8 @@ export interface AdminApis {
   readonly tickets: TicketsApi;
   /** M1-10's client half; the composer and the thread are its only callers. */
   readonly uploader: AttachmentUploader;
+  /** M2-05's outbound email screens. */
+  readonly email: EmailApi;
 }
 
 /**
@@ -70,6 +75,7 @@ export function createApis(
       ticketing: new HttpTicketingApi(transport),
       tickets: new HttpTicketsApi(transport),
       uploader: new HttpAttachmentUploader(transport),
+      email: new HttpEmailApi(transport),
     };
   }
 
@@ -99,5 +105,6 @@ export function createApis(
       ticketing,
     ),
     uploader: uploads,
+    email: new MockEmailApi(),
   };
 }

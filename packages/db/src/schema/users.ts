@@ -35,6 +35,13 @@ export const users = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    /**
+     * M2-05. The lines added under this person's public email replies, in each
+     * language a customer may read them in. Plain text; null when unset, and an
+     * Arabic reply with no Arabic signature falls back to the English one.
+     */
+    signatureEn: text('signature_en'),
+    signatureAr: text('signature_ar'),
   },
   (table) => [
     // Addresses are compared case-insensitively. A unique index on `lower(email)`

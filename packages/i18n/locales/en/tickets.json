@@ -476,5 +476,26 @@
     "deleteTitle": "Delete {{name}}?",
     "deleteBody": "The view goes from the sidebar. No ticket changes.",
     "deleteSubmit": "Delete view"
+  },
+  "email": {
+    "from": "From",
+    "to": "To",
+    "cc": "Cc",
+    "addCc": "Add Cc",
+    "removeCc": "Remove {{address}}",
+    "signatureCaption": "Signature · added when sent",
+    "editSignature": "Edit",
+    "noSignature": "No signature yet.",
+    "addSignature": "Add one",
+    "send": "Send email",
+    "noAddress": "This contact has no email address, so the reply stays on the ticket and is not emailed.",
+    "noSender": "No sender is set up for this brand, so the reply will not be emailed.",
+    "notDelivered": "Not delivered",
+    "notDeliveredDetail": "{{error}} · after {{attempts}} attempts",
+    "discarded": "discarded by an admin",
+    "retry": "Retry",
+    "retryLabel": "Retry sending this email",
+    "retried": "Sent back to the queue.",
+    "retryFailed": "That did not work. Try again."
   }
 }

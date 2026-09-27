@@ -13,6 +13,8 @@ export * from './contacts.js';
 export * from './csat-responses.js';
 export * from './custom-field-defs.js';
 export * from './departments.js';
+export * from './email-deliveries.js';
+export * from './email-outbound-settings.js';
 export * from './enums.js';
 export * from './job-receipts.js';
 export * from './outbox.js';

@@ -23,6 +23,8 @@ const user: StaffUser = {
   createdAt: new Date(),
   updatedAt: new Date(),
   deactivatedAt: null,
+  signatureEn: null,
+  signatureAr: null,
 };
 
 const brand = (id: string, name: string, prefix: string): Brand => ({

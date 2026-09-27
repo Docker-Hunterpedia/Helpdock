@@ -18,6 +18,12 @@ import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
+import {
+  type ComposerEmail,
+  FromSelect,
+  RecipientLines,
+  SignaturePreview,
+} from './email-compose.tsx';
 import { statusName } from './format.js';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 
@@ -75,6 +81,11 @@ export interface ComposerProps {
   onSend(): void;
   /** The caret entered the body: M1-12's timer may start here. */
   onBodyFocus?(): void;
+  /**
+   * M2-05: a ticket that answers by email. A reply then shows its From, its
+   * To and Cc, and the signature it will carry; a note is unchanged.
+   */
+  readonly email?: ComposerEmail | undefined;
 }
 
 export function Composer({
@@ -95,6 +106,7 @@ export function Composer({
   onRemoveAttachment,
   onSend,
   onBodyFocus,
+  email,
 }: ComposerProps): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -104,6 +116,7 @@ export function Composer({
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const note = mode === 'note';
+  const emailReply = email !== undefined && !note;
 
   // A layout effect: refs are attached and the caret moves before the browser
   // paints, so `r` never shows a frame of the composer without a caret in it.
@@ -150,14 +163,20 @@ export function Composer({
           <ToggleButton value="note">{t('tickets:composer.note')}</ToggleButton>
         </ToggleButtonGroup>
 
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {note
-            ? t('tickets:composer.noteRecipient')
-            : recipient === null
-              ? t('tickets:composer.recipientUnknown')
-              : t('tickets:composer.recipient', { name: recipient })}
-        </Typography>
+        {emailReply ? (
+          <FromSelect email={email} />
+        ) : (
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {note
+              ? t('tickets:composer.noteRecipient')
+              : recipient === null
+                ? t('tickets:composer.recipientUnknown')
+                : t('tickets:composer.recipient', { name: recipient })}
+          </Typography>
+        )}
       </Box>
+
+      {emailReply ? <RecipientLines email={email} /> : null}
 
       <TextField
         id={bodyId}
@@ -174,6 +193,8 @@ export function Composer({
         )}
         slotProps={{ htmlInput: { 'aria-label': t('tickets:composer.bodyLabel') } }}
       />
+
+      {emailReply ? <SignaturePreview signature={email.signature} /> : null}
 
       {attachments.length === 0 ? null : (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
@@ -268,7 +289,13 @@ export function Composer({
           variant="contained"
           disabled={busy || uploading || body.trim() === ''}
         >
-          {t(note ? 'tickets:composer.sendNote' : 'tickets:composer.send')}
+          {t(
+            note
+              ? 'tickets:composer.sendNote'
+              : emailReply
+                ? 'tickets:email.send'
+                : 'tickets:composer.send',
+          )}
         </Button>
       </Box>
     </Paper>

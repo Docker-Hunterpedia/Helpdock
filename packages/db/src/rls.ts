@@ -105,6 +105,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // M1-15 part 2 (ADR 0011). The words of a ticket are the ticket's, so they
   // follow its department by the same triggers as its other children.
   { name: 'ticket_search_tokens', departmentScoped: true },
+  // M2-05. A brand's outbound mail configuration is the Admin's, like
+  // `retention_settings`; each outbound email is a child of its ticket and
+  // follows the ticket's department like the thread it sends.
+  { name: 'email_outbound_settings', departmentScoped: false },
+  { name: 'email_deliveries', departmentScoped: true },
 ];
 
 /**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assignmentOfflineUnassignJob,
+  emailSendJob,
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   maintenanceRetentionJob,
@@ -129,6 +130,29 @@ describe('idempotencyKeyFor', () => {
     expect(idempotencyKeyFor(mediaProcessJob, { brandId, attachmentId }, 'first')).toBe(
       idempotencyKeyFor(mediaProcessJob, { brandId, attachmentId }, 'second'),
     );
+  });
+});
+
+describe('email.send', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000cc';
+
+  it('keys every delivery of a send by its row, so the same job twice sends once', () => {
+    expect(idempotencyKeyFor(emailSendJob, { brandId, deliveryId }, 'first')).toBe(
+      `email.send:${deliveryId}`,
+    );
+    expect(idempotencyKeyFor(emailSendJob, { brandId, deliveryId }, 'second')).toBe(
+      `email.send:${deliveryId}`,
+    );
+  });
+
+  it('runs on the outbound queue and keeps what fails for the dead-letter view', () => {
+    expect(emailSendJob.queue).toBe('outbound');
+    expect(emailSendJob.options.attempts).toBe(5);
+    expect(emailSendJob.options.removeOnFail).toBe(false);
+  });
+
+  it('refuses a payload with no delivery', () => {
+    expect(() => parseJobPayload(emailSendJob, { brandId })).toThrow(PayloadValidationError);
   });
 });
 

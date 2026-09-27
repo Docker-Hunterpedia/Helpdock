@@ -34,5 +34,31 @@
     "subject": "{{appName}} test message",
     "heading": "Your mail server works",
     "body": "This message was sent through {{host}} by the Helpdock setup wizard. Receiving it means outgoing email is configured correctly."
+  },
+  "outgoingTest": {
+    "subject": "{{brandName}} test message",
+    "heading": "Your mail server works",
+    "body": "This message was sent through {{host}} from Channels, Outgoing email, in {{brandName}}. Receiving it means replies to customers can go out."
+  },
+  "customer": {
+    "replyMarker": "##- Please type your reply above this line -##",
+    "replySubject": "Re: [{{reference}}] {{subject}}",
+    "fromVia": "{{agent}} via {{sender}}",
+    "referenceLabel": "Request",
+    "replyHint": "Reply to this email to add to your request. Keep the reference in the subject.",
+    "autoReplyHint": "Reply to this email to add to your request.",
+    "autoReplyNote": "This is an automatic reply. You receive at most one per request.",
+    "footer": "You are receiving this because you contacted {{brandName}} support."
+  },
+  "autoReply": {
+    "acknowledgment": {
+      "subject": "[{{ticket.number}}] We received your message",
+      "body": "Hi {{contact.first_name}},\n\nThanks for writing to {{brand.name}}. Your request is {{ticket.number}} and a member of the {{department.name}} team will reply by email.\n\nTo add anything, reply to this email and it joins the same request."
+    },
+    "outOfHours": {
+      "subject": "[{{ticket.number}}] We received your message",
+      "body": "Hi {{contact.first_name}},\n\nThanks for writing to {{brand.name}}. Your request is {{ticket.number}}. The {{department.name}} team is away right now and will reply by email as soon as they are back.\n\nTo add anything, reply to this email and it joins the same request."
+    },
+    "fallbackName": "there"
   }
 }

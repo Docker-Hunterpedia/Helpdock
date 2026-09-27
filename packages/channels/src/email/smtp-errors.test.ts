@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { classifySmtpError, SmtpTimeoutError } from './smtp-errors.js';
+import { classifySmtpError, describeSmtpError, SmtpTimeoutError } from './smtp-errors.js';
+
+describe('describeSmtpError', () => {
+  it("prefers the relay's own reply, on one line", () => {
+    const error = Object.assign(new Error('Message failed'), {
+      response: '550 5.1.1 <mona@example.com>:\r\n  mailbox full',
+    });
+
+    expect(describeSmtpError(error, 300)).toBe('550 5.1.1 <mona@example.com>: mailbox full');
+  });
+
+  it('falls back to the message of a socket error and bounds the length', () => {
+    expect(describeSmtpError(new Error('connect ECONNREFUSED 10.0.0.1:465'), 14)).toBe(
+      'connect ECONNR',
+    );
+    expect(describeSmtpError('plain', 300)).toBe('plain');
+  });
+});
 
 /** What Nodemailer raises: an `Error` with a `code` from its own catalogue. */
 const nodemailerError = (code: string): Error => Object.assign(new Error('refused'), { code });

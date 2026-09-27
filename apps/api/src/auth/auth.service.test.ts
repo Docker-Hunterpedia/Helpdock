@@ -181,6 +181,8 @@ const newUser = async (overrides: Partial<StaffUser> = {}): Promise<StaffUser> =
   createdAt: new Date(),
   updatedAt: new Date(),
   deactivatedAt: null,
+  signatureEn: null,
+  signatureAr: null,
   ...overrides,
 });
 

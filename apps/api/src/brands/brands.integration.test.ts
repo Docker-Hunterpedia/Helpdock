@@ -4,8 +4,8 @@ import type { EmailMessage } from '@helpdock/channels';
 import { createKeyring, type Env } from '@helpdock/config';
 import {
   auditLog,
-  brands,
   BUILT_IN_TICKET_STATUSES,
+  brands,
   brandTicketSequenceName,
   createDb,
   type DbHandle,

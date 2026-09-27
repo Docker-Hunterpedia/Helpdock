@@ -1,0 +1,6 @@
+host dir: rtl
+window on the page: left
+window direction: rtl
+composer direction: rtl
+send button in the window: left
+minimise button in the window: left

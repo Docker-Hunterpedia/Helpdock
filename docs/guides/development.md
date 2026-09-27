@@ -440,6 +440,21 @@ through `mcr.microsoft.com/playwright`; the admin README explains why the dev
 server stays outside that container, and why the workflow is the answer that
 does not depend on a 2 GB pull.
 
+The help center and the widget have RTL snapshots of their own, in text rather
+than pixels, so they read the same on every machine:
+`apps/api/e2e/help-center-rtl.spec.ts` (the Arabic article page) and
+`apps/widget/e2e/rtl-snapshot.spec.ts` (the Arabic chat window). Each compares
+an aria snapshot and a list of layout facts (which column a region is in, which
+side a line of text starts from, which icons are mirrored) against the
+baselines in that app's `e2e/__snapshots__/`. After a deliberate layout change,
+regenerate them with `--update-snapshots` and review the diff:
+
+```bash
+pnpm --filter @helpdock/api build
+pnpm --filter @helpdock/api e2e e2e/help-center-rtl.spec.ts --update-snapshots
+pnpm --filter @helpdock/widget e2e e2e/rtl-snapshot.spec.ts --update-snapshots
+```
+
 `e2e:api` is a second config: it starts Postgres and Redis with Testcontainers,
 runs the built api as its own process, seeds a known account, and drives the
 same screens with `VITE_AUTH_API=http`. It needs a `pnpm build` first, and it

@@ -50,7 +50,7 @@ describe('Channels › Widget', () => {
     ]) {
       expect(screen.getByRole('heading', { name: heading })).toBeVisible();
     }
-    expect(within(card('Embed code')).getByText(/<helpdock-widget brand=/)).toBeVisible();
+    expect(within(card('Embed code')).getByText(/data-brand=/)).toBeVisible();
   });
 
   it('shows a Team Leader the widget alone, without the Admin cards or the email tabs', async () => {

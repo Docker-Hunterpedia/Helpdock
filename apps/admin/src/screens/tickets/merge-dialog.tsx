@@ -35,6 +35,7 @@ export function MergeDialog({
   departments,
   contactName,
   busy,
+  initialTerm = '',
   onTermChange,
   onSubmit,
   onClose,
@@ -48,6 +49,11 @@ export function MergeDialog({
   /** A contact's display name, or null when the directory does not know it. */
   contactName(contactId: string | null): string | null;
   readonly busy: boolean;
+  /**
+   * What the search starts with. M2-04's mismatch line opens the dialog with
+   * the ticket the stranger referenced already typed.
+   */
+  readonly initialTerm?: string;
   onTermChange(term: string): void;
   onSubmit(primaryTicketId: string): void;
   onClose(): void;
@@ -65,11 +71,11 @@ export function MergeDialog({
   // the wrong ticket on a mis-click.
   useEffect(() => {
     if (open) {
-      setTerm('');
+      setTerm(initialTerm);
       setPrimaryId(null);
       setProblem(null);
     }
-  }, [open]);
+  }, [open, initialTerm]);
 
   const primary = candidates.find((candidate) => candidate.id === primaryId) ?? null;
   const secondaryReference = ticketReference(ticket);

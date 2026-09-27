@@ -5,6 +5,8 @@
     "mergedFrom": "دُمجت {{ticket}} في هذه التذكرة",
     "unmerged": "أُلغي دمج {{ticket}} من هذه التذكرة",
     "splitTo": "نُقلت نسخة من الرسائل إلى {{ticket}}",
-    "splitFrom": "مفصولة من {{ticket}}"
+    "splitFrom": "مفصولة من {{ticket}}",
+    "threadMismatch": "أشار إلى {{ticket}} لكن المرسل ليس مشاركًا فيها",
+    "noSubject": "(بلا موضوع)"
   }
 }

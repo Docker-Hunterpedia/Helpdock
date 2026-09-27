@@ -1,3 +1,6 @@
+import type { ChannelsApi } from '../channels/api.js';
+import { HttpChannelsApi } from '../channels/http-api.js';
+import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
@@ -36,6 +39,8 @@ export interface AdminApis {
   readonly uploader: AttachmentUploader;
   /** M2-05's outbound email screens. */
   readonly email: EmailApi;
+  /** M2: Channels › Mailboxes and the email card's remote images. */
+  readonly channels: ChannelsApi;
 }
 
 /**
@@ -76,6 +81,7 @@ export function createApis(
       tickets: new HttpTicketsApi(transport),
       uploader: new HttpAttachmentUploader(transport),
       email: new HttpEmailApi(transport),
+      channels: new HttpChannelsApi(transport),
     };
   }
 
@@ -106,5 +112,6 @@ export function createApis(
     ),
     uploader: uploads,
     email: new MockEmailApi(),
+    channels: new MockChannelsApi(),
   };
 }

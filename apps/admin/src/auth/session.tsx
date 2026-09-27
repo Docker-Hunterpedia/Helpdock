@@ -1,6 +1,7 @@
 import type { Session, SessionBrand } from '@helpdock/schemas';
 import { type UseQueryResult, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext } from 'react';
+import type { ChannelsApi } from '../channels/api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import type { EmailApi } from '../email/api.js';
 import type { AttachmentUploader } from '../media/upload.js';
@@ -19,6 +20,7 @@ const TicketingApiContext = createContext<TicketingApi | null>(null);
 const TicketsApiContext = createContext<TicketsApi | null>(null);
 const UploaderContext = createContext<AttachmentUploader | null>(null);
 const EmailApiContext = createContext<EmailApi | null>(null);
+const ChannelsApiContext = createContext<ChannelsApi | null>(null);
 const SessionContext = createContext<Session | null>(null);
 
 export function AuthApiProvider({
@@ -29,6 +31,7 @@ export function AuthApiProvider({
   ticketsApi,
   uploader,
   emailApi,
+  channelsApi,
   children,
 }: {
   readonly api: AuthApi;
@@ -41,6 +44,8 @@ export function AuthApiProvider({
   readonly uploader?: AttachmentUploader | undefined;
   /** M2-05: Channels › Outgoing email, the signature tab, the composer's email mode. */
   readonly emailApi?: EmailApi | undefined;
+  /** M2: Channels › Mailboxes and the email card's remote images. */
+  readonly channelsApi?: ChannelsApi | undefined;
   readonly children: ReactNode;
 }): ReactNode {
   return (
@@ -51,7 +56,9 @@ export function AuthApiProvider({
             <TicketsApiContext.Provider value={ticketsApi ?? null}>
               <UploaderContext.Provider value={uploader ?? null}>
                 <EmailApiContext.Provider value={emailApi ?? null}>
-                  {children}
+                  <ChannelsApiContext.Provider value={channelsApi ?? null}>
+                    {children}
+                  </ChannelsApiContext.Provider>
                 </EmailApiContext.Provider>
               </UploaderContext.Provider>
             </TicketsApiContext.Provider>
@@ -75,6 +82,15 @@ export function useStaffApi(): StaffApi {
   const api = useContext(StaffApiContext);
   if (!api) {
     throw new Error('useStaffApi needs an <AuthApiProvider> with a staffApi above it');
+  }
+
+  return api;
+}
+
+export function useChannelsApi(): ChannelsApi {
+  const api = useContext(ChannelsApiContext);
+  if (!api) {
+    throw new Error('useChannelsApi needs an <AuthApiProvider> with a channelsApi above it');
   }
 
   return api;

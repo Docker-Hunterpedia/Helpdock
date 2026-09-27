@@ -9,6 +9,7 @@ export * from './csat.js';
 export * from './custom-fields.js';
 export * from './domain-check.js';
 export * from './email.js';
+export * from './email-inbound.js';
 export * from './error.js';
 export * from './health.js';
 export * from './identity-rules.js';

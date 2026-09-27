@@ -5,6 +5,7 @@ import {
   createOutboxEventHandler,
   createQueueConnection,
   createWorker,
+  emailPollJob,
   emailSendJob,
   type JobLogger,
   maintenanceRetentionJob,
@@ -15,9 +16,10 @@ import {
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
+  registerEventHandler,
   startOutboxRelay,
 } from '@helpdock/jobs';
-import { Queue, Worker } from 'bullmq';
+import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import {
@@ -25,6 +27,16 @@ import {
   registerAssignmentEventHandlers,
 } from '../assignment/assignment-events.js';
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
+import {
+  createEmailPollProcessor,
+  createMailboxChangedHandler,
+  MAILBOX_CHANGED_EVENT,
+  queuePollScheduler,
+  scheduleAllPollers,
+} from '../channels/email-poll.job.js';
+import { imapConnectOptions } from '../channels/imap-connector.js';
+import { createInboundEmailService } from '../channels/inbound/factory.js';
+import { MailboxesRepository } from '../channels/mailboxes.repository.js';
 import { CsatRepository } from '../csat/csat.repository.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
 import { CsatTokens } from '../csat/tokens.js';
@@ -95,6 +107,11 @@ export interface WorkerDependencies {
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
    */
   createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /**
+   * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox. Every
+   * mailbox's scheduler is upserted on boot, as the retention schedule is.
+   */
+  createInboundWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -123,6 +140,8 @@ export type WorkerEnv = Pick<
   // verifies it with.
   | 'APP_MASTER_KEY'
   | 'APP_MASTER_KEY_PREVIOUS'
+  // M2-02: an IMAP host is resolved through the SSRF policy (DOMAIN-RULES §13).
+  | 'OUTBOUND_ALLOW_CIDRS'
 >;
 
 /**
@@ -223,12 +242,19 @@ export const workerDependencies: WorkerDependencies = {
         new OutboundEmailService(emailRepository, installSmtp),
       ),
     });
+    // M2-02. A mailbox created, edited or deleted reschedules its poller.
+    const inbound = new Queue(QUEUE_NAMES.inbound, { connection: redis });
+    registerEventHandler(
+      MAILBOX_CHANGED_EVENT,
+      createMailboxChangedHandler(new MailboxesRepository(), queuePollScheduler(inbound)),
+    );
 
     return {
       close: async () => {
         await media.close();
         await assignment.close();
         await outbound.close();
+        await inbound.close();
       },
     };
   },
@@ -327,6 +353,51 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createInboundWorker: ({ redis, db, log, env }) => {
+    const inbound = new Queue(QUEUE_NAMES.inbound, { connection: redis });
+    const repository = new MailboxesRepository();
+    scheduleAllPollers(db, repository, queuePollScheduler(inbound)).catch((error: unknown) =>
+      log.error({ err: error }, 'could not register the IMAP pollers'),
+    );
+
+    const poll = createEmailPollProcessor({
+      db,
+      log,
+      keyring: createKeyring(env),
+      repository,
+      inbound: createInboundEmailService({ db, storage: storageFor(env), log }),
+      imap: imapConnectOptions({
+        allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+        onBlocked: (event) =>
+          log.warn(
+            { host: event.host, address: event.address },
+            'IMAP host blocked (DOMAIN-RULES §13)',
+          ),
+      }),
+    });
+    const worker = new Worker(
+      QUEUE_NAMES.inbound,
+      async (job) => {
+        // `telegram.update` and `form.submit` share this queue from M4 and M6.
+        if (job.name !== emailPollJob.name) {
+          throw new UnrecoverableError(`No consumer for ${job.name} on the inbound queue`);
+        }
+        await poll(job);
+      },
+      // A few mailboxes at once: each tick is mostly waiting on a mail server.
+      { connection: redis, concurrency: 4 },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'inbound job failed'),
+    );
+
+    return {
+      close: async () => {
+        await worker.close();
+        await inbound.close();
+      },
+    };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -361,6 +432,7 @@ export const startWorker = ({
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
+  const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -386,6 +458,7 @@ export const startWorker = ({
     await media.close();
     await assignment.close();
     await maintenance.close();
+    await inbound.close();
     await producers.close();
     await connection.quit();
   };

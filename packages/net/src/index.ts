@@ -14,5 +14,7 @@ export { SafeFetchError } from './errors.js';
 export type { BlockedEvent, LookupAddress, LookupFunction, SafeFetchPolicy } from './policy.js';
 export { policies } from './policy.js';
 export type { ResponseHeaders } from './request.js';
+export type { ResolvedHost, ResolveHostPolicy } from './resolve-host.js';
+export { resolvePublicHost } from './resolve-host.js';
 export type { SafeFetchInit, SafeFetchResponse } from './safe-fetch.js';
 export { safeFetch } from './safe-fetch.js';

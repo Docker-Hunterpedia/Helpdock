@@ -16,6 +16,7 @@ import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
 import type { PrincipalResolver } from './auth/principal-resolver.js';
 import { BrandsModule } from './brands/brands.module.js';
+import { ChannelsModule, type ChannelsModuleOverrides } from './channels/channels.module.js';
 import { ContactsModule } from './contacts/contacts.module.js';
 import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
@@ -92,6 +93,8 @@ export interface AppModuleOptions {
   readonly objectStorage?: ObjectStorage;
   /** "Test SMTP"'s transport (M2-05). Boot leaves it out; a suite passes a double or Mailpit. */
   readonly smtpTransports?: SmtpTransportFactory;
+  /** M2: the IMAP connection and the image proxy's fetcher, which suites replace. */
+  readonly channels?: ChannelsModuleOverrides;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -155,6 +158,14 @@ export class AppModule implements NestModule {
         EmailModule.forRoot(
           options.smtpTransports === undefined ? {} : { transports: options.smtpTransports },
         ),
+        // M2 inbound: Channels › Mailboxes, inbound parse and the image proxy.
+        ChannelsModule.forRoot({
+          env: options.env,
+          db: options.db,
+          logger: options.logger,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...(options.channels === undefined ? {} : { overrides: options.channels }),
+        }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

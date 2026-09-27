@@ -17,6 +17,7 @@ export * from './email-deliveries.js';
 export * from './email-outbound-settings.js';
 export * from './enums.js';
 export * from './job-receipts.js';
+export * from './mailboxes.js';
 export * from './outbox.js';
 export * from './retention-settings.js';
 export * from './settings.js';

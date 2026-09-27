@@ -36,25 +36,15 @@ const renderOutgoing = async (
 const section = (name: string): HTMLElement => screen.getByRole('region', { name });
 
 describe('Channels', () => {
-  it('opens on Outgoing email, with Mailboxes beside it', async () => {
-    await renderOutgoing(new MockEmailApi(), '/admin/channels');
+  it('opens the Outgoing email tab by its url, beside Mailboxes, without "Add mailbox"', async () => {
+    await renderOutgoing();
 
     expect(screen.getByRole('tab', { name: 'Outgoing email' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
     expect(screen.getByRole('tab', { name: 'Mailboxes' })).toBeVisible();
-  });
-
-  it('draws the Mailboxes placeholder until inbound mail lands', async () => {
-    const apis = await signedInMockApis();
-    renderApp(<AppRoutes />, {
-      authApi: apis.auth,
-      staffApi: apis.staff,
-      initialEntries: ['/admin/channels/mailboxes'],
-    });
-
-    expect(await screen.findByText(/arrive with the rest of milestone M2/)).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Add mailbox' })).toBeNull();
   });
 });
 

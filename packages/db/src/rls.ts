@@ -110,6 +110,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // follows the ticket's department like the thread it sends.
   { name: 'email_outbound_settings', departmentScoped: false },
   { name: 'email_deliveries', departmentScoped: true },
+  // M2-02, M2-03. Configuration, not a child of a ticket.
+  { name: 'mailboxes', departmentScoped: false },
+  { name: 'inbound_parse_settings', departmentScoped: false },
 ];
 
 /**

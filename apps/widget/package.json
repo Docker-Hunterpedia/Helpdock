@@ -16,5 +16,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/widget"
+  },
+  "dependencies": {
+    "@helpdock/schemas": "workspace:*",
+    "socket.io-client": "4.8.3"
   }
 }

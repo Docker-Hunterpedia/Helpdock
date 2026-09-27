@@ -435,7 +435,14 @@ importers:
 
   apps/helpcenter: {}
 
-  apps/widget: {}
+  apps/widget:
+    dependencies:
+      '@helpdock/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
+      socket.io-client:
+        specifier: 4.8.3
+        version: 4.8.3
 
   packages/ai: {}
 

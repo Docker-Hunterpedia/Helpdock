@@ -16,7 +16,7 @@ import { RealtimePublisher } from './publisher.js';
 import { RevocationSubscriber } from './revocation.subscriber.js';
 import { DbRoomScopeReader, type RoomScopeReader } from './room-reader.js';
 import { SocketRegistry } from './socket-registry.js';
-import { type SessionRevocations, StaffGateway } from './staff.gateway.js';
+import { type SessionRevocations, StaffGateway, type StaffSocketOptions } from './staff.gateway.js';
 import type { StaffOfflineHook } from './staff-offline.hook.js';
 import {
   ROOM_SCOPE_READER,
@@ -24,6 +24,7 @@ import {
   SOCKET_CONNECTIONS_GAUGE,
   SOCKET_SESSION_RESOLVER,
   STAFF_OFFLINE_HOOK,
+  STAFF_SOCKET_OPTIONS,
 } from './tokens.js';
 
 export interface RealtimeModuleOptions {
@@ -43,6 +44,8 @@ export interface RealtimeModuleOptions {
   readonly staffOfflineHook?: StaffOfflineHook;
   /** Defaults to the real one over `DB`. The unit tests pass a fake. */
   readonly roomScopeReader?: RoomScopeReader;
+  /** The `/staff` handshake's origin and M4-04's agent-typing relay. */
+  readonly staffSocket?: StaffSocketOptions;
 }
 
 /**
@@ -66,6 +69,7 @@ export class RealtimeModule {
         { provide: LOGGER, useValue: options.logger },
         { provide: SOCKET_SESSION_RESOLVER, useValue: options.sessionResolver },
         { provide: SESSION_REVOCATIONS, useValue: options.revocations },
+        { provide: STAFF_SOCKET_OPTIONS, useValue: options.staffSocket ?? null },
         options.connectionsGauge === undefined
           ? {
               provide: SOCKET_CONNECTIONS_GAUGE,

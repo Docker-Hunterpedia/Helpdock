@@ -6,6 +6,7 @@ import { setupRefusalSchema } from './install.js';
 import { staffRefusalSchema } from './staff.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
 import { ticketingRefusalSchema } from './ticketing.js';
+import { widgetErrorCodeSchema } from './widget-protocol.js';
 
 /**
  * The one body shape every failed request answers with. The api's exception
@@ -80,6 +81,8 @@ export const errorResponseSchema = z.object({
     setup: z.object({ reason: setupRefusalSchema }).optional(),
     /** Only on a refused mailbox action (M2-08). */
     channels: z.object({ reason: channelsRefusalSchema }).optional(),
+    /** Only on a refused widget request (M4-02 to M4-04); the widget translates it. */
+    widget: z.object({ reason: widgetErrorCodeSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

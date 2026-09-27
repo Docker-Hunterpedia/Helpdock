@@ -144,5 +144,12 @@
       "testTitle": "Helpdock test notification",
       "testBody": "Browser push works on this browser."
     }
+  },
+  "transcript": {
+    "subject": "Your chat with {{brandName}} [{{reference}}]",
+    "intro": "Here is a copy of your chat with {{brandName}}, as you asked.",
+    "you": "You",
+    "agent": "{{brandName}} support",
+    "note": "This email holds this conversation only. Nothing in it opens your chat."
   }
 }

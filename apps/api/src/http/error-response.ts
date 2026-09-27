@@ -11,6 +11,7 @@ import type {
   StaffRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
+  WidgetErrorCode,
 } from '@helpdock/schemas';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
@@ -23,6 +24,7 @@ import { SetupFailure } from '../install/setup-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
+import { WidgetFailure } from '../widget/widget-failure.js';
 
 /**
  * How a thrown thing becomes a response. Split from the filter so it can be
@@ -53,6 +55,8 @@ export interface MappedError {
   readonly setup?: SetupRefusal;
   /** Only on a refused mailbox action; see `channels/channels-failure.ts`. */
   readonly channels?: ChannelsRefusal;
+  /** Only on a refused widget request; see `widget/widget-failure.ts`. */
+  readonly widget?: WidgetErrorCode;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -178,6 +182,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M4. Before the generic branch, for the reason the ones above give.
+  if (error instanceof WidgetFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'forbidden',
+      message: error.message,
+      widget: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -226,5 +241,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.lifecycle === undefined ? {} : { lifecycle: { reason: mapped.lifecycle } }),
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
+    ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
   },
 });

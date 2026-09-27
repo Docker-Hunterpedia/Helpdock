@@ -28,6 +28,7 @@ import { STAFF_OFFLINE_HOOK } from './tokens.js';
  */
 @Injectable()
 export class PresenceService implements OnModuleInit, OnModuleDestroy {
+  readonly #listeners = new Set<(brandId: string) => void>();
   readonly #store: PresenceStore;
   readonly #publisher: RealtimePublisher;
   readonly #offline: StaffOfflineHook;
@@ -139,11 +140,26 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * M4-04. Tells `listener` whenever somebody's presence in a brand changes,
+   * on the replica that saw the change. The widget uses it to tell visitors
+   * whether anybody is there. Returns the unsubscribe.
+   */
+  onChange(listener: (brandId: string) => void): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+
   #announce(brandId: string, userId: string, status: PresenceStatus): void {
     this.#publisher.emitToRoom(brandRoom(brandId), REALTIME_EVENTS.presenceChanged, {
       userId,
       brandId,
       status,
     });
+    for (const listener of this.#listeners) {
+      listener(brandId);
+    }
   }
 }

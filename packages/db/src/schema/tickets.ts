@@ -21,6 +21,7 @@ import { slaPolicies } from './sla-policies.js';
 import { ticketStatuses } from './ticket-statuses.js';
 import { tsvector } from './tsvector.js';
 import { users } from './users.js';
+import { widgetVisitors } from './widget-visitors.js';
 
 /**
  * The ticket (ARCHITECTURE §5, REQUIREMENTS §4.1). **Department-scoped**: the
@@ -86,6 +87,15 @@ export const tickets = pgTable(
      * work and the SLA history outlive the person's record.
      */
     contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    /**
+     * M4-02. The widget visitor whose conversation this is (DOMAIN-RULES
+     * §4.1): "a visitor may read and write only conversations created with
+     * their `visitor_id`". Null for every other channel. `set null`, because
+     * retention may forget a visitor long before the ticket goes.
+     */
+    visitorId: uuid('visitor_id').references((): AnyPgColumn => widgetVisitors.id, {
+      onDelete: 'set null',
+    }),
     /** The closed ticket this one continues, set by the reopen policy (§2.3). */
     parentId: uuid('parent_id').references((): AnyPgColumn => tickets.id, {
       onDelete: 'set null',
@@ -202,6 +212,8 @@ export const tickets = pgTable(
     // Numbers are per brand, and the unique index is also what catches a
     // duplicate if two requests ever read the same value from the sequence.
     unique('tickets_brand_number_key').on(table.brandId, table.number),
+    // M4-02: a visitor's conversation list, and the ownership check on each.
+    index('tickets_visitor_idx').on(table.visitorId).where(sql`${table.visitorId} is not null`),
     // The ticket list's index set (PRD M1-15, REQUIREMENTS §5.2). Which query
     // each one serves, and the plan that proves it, is in docs/guides/tickets.md
     // under "Performance".

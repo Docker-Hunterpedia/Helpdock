@@ -43,16 +43,18 @@ export const identityView = (row: ContactIdentityRow): ContactIdentity => ({
 });
 
 /**
- * The identifier a row is headed by: a verified email first, then any verified
- * identifier, then whatever there is. An anonymous visitor has only a visitor
- * id, and that is what the row shows — which is how the "anonymous" style on
- * the artboard knows it is one.
+ * The identifier a row is headed by: a verified email first, then any other
+ * verified identifier a person could use, then any email, then whatever there
+ * is. A widget visitor id is verified but means nothing to an agent, so it
+ * heads a row only when it is all there is — an anonymous visitor, which is
+ * how the "anonymous" style on the artboard knows it is one — and a pre-chat
+ * email beside it heads the row with its "unverified" caption (M4-02).
  */
 export const primaryIdentityOf = (
   identities: readonly ContactIdentityRow[],
 ): ContactIdentityRow | null => {
   const verifiedEmail = identities.find((row) => row.kind === 'email' && row.verified);
-  const anyVerified = identities.find((row) => row.verified);
+  const anyVerified = identities.find((row) => row.verified && row.kind !== 'visitor');
   const anyEmail = identities.find((row) => row.kind === 'email');
 
   return verifiedEmail ?? anyVerified ?? anyEmail ?? identities[0] ?? null;

@@ -52,6 +52,8 @@ import {
   userBrandRoles,
   users,
   views,
+  widgetSettings,
+  widgetVisitors,
   workflowRules,
   workflowRuns,
 } from './schema/index.js';
@@ -604,6 +606,18 @@ const fixtures = [
         email: false,
         push: false,
       }),
+  },
+  {
+    name: 'widget_settings',
+    // M4-03. One row per brand, keyed by it.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(widgetSettings).values({ brandId, allowedOrigins: ['https://shop.example.com'] }),
+  },
+  {
+    name: 'widget_visitors',
+    // M4-02. The hash is unique across the install, so each brand's needs its own.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(widgetVisitors).values({ brandId, secretHash: `fixture-${brandId}` }),
   },
 ] as const;
 

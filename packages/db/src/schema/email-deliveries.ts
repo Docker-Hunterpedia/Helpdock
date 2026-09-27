@@ -73,10 +73,11 @@ export const emailDeliveries = pgTable(
     uniqueIndex('email_deliveries_message_key')
       .on(table.ticketMessageId)
       .where(sql`${table.ticketMessageId} is not null`),
-    // "You receive at most one per request" (artboard `EmailCustomer`).
+    // "You receive at most one per request" (artboard `EmailCustomer`). A
+    // transcript (M4-08) is not an auto-reply: a visitor may ask again.
     uniqueIndex('email_deliveries_auto_reply_key')
       .on(table.ticketId, table.kind)
-      .where(sql`${table.kind} <> 'reply'`),
+      .where(sql`${table.kind} in ('acknowledgment', 'out_of_hours')`),
     uniqueIndex('email_deliveries_brand_message_id_key').on(table.brandId, table.messageId),
     index('email_deliveries_brand_status_idx').on(table.brandId, table.status),
     // The per-sender cap counts auto-replies to one address in the last hour.

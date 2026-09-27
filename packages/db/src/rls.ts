@@ -135,6 +135,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // the subject through `tickets`, whose department policy decides. So it is
   // brand-scoped, and narrowed to its recipient by the owner policy below.
   { name: 'notifications', departmentScoped: false },
+  // M4-02, M4-03. A brand's widget configuration, like `mailboxes`, and its
+  // visitors, who are brand-scoped like the contacts they become: a visitor
+  // reaches a department only through a ticket, whose own policy decides.
+  { name: 'widget_settings', departmentScoped: false },
+  { name: 'widget_visitors', departmentScoped: false },
 ];
 
 /**

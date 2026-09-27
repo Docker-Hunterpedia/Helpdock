@@ -84,6 +84,8 @@ import {
   type SlaWorkerDeps,
 } from '../sla/sla-worker.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { registerWidgetEventHandlers } from '../widget/widget-events.js';
+import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
 
 /**
  * What `APP_ROLE=worker` runs, in the order and with the shutdown order
@@ -263,6 +265,8 @@ export const workerDependencies: WorkerDependencies = {
   registerHandlers: ({ redis, env, settings, installSmtp }) => {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
+    // M4-04: the same ticket events as widget frames, on the widget's channel.
+    registerWidgetEventHandlers(new RedisWidgetBroadcast(redis));
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
     registerObjectPurgeHandler(storageFor(env));
     registerCsatEventHandlers({

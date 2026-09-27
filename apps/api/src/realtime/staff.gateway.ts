@@ -13,7 +13,7 @@ import {
   ticketViewingRequestSchema,
   userRoom,
 } from '@helpdock/schemas';
-import { Inject, UseFilters } from '@nestjs/common';
+import { Inject, Optional, UseFilters } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -33,6 +33,7 @@ import { parseMessage, socketRefusal } from './messages.js';
 import type { SocketConnectionsGauge } from './metrics.js';
 import { PresenceService } from './presence.service.js';
 import { RealtimePublisher } from './publisher.js';
+import { isStaffOrigin } from './redis-io.adapter.js';
 import type { RoomScopeReader } from './room-reader.js';
 import { authorizeRoom } from './rooms.js';
 import { HandshakeRefusal, type StaffSocket, userIdOf } from './socket.js';
@@ -42,6 +43,7 @@ import {
   SESSION_REVOCATIONS,
   SOCKET_CONNECTIONS_GAUGE,
   SOCKET_SESSION_RESOLVER,
+  STAFF_SOCKET_OPTIONS,
 } from './tokens.js';
 
 /**
@@ -64,6 +66,26 @@ import {
  * gateway, its own visitor credential and its own rooms.
  */
 
+/**
+ * What `/staff` is told about the rest of the install. Optional, so the unit
+ * tests build a gateway without it.
+ *
+ * - `appUrl`: the one origin a staff page is served from (see
+ *   `isStaffOrigin`); null skips the check.
+ * - `onViewing`: M4-04. A widget conversation's visitor sees "typing" while
+ *   an agent has the composer open, which is exactly what this announcement
+ *   already says; the widget module relays it (`widget/agent-typing.ts`).
+ */
+export interface StaffSocketOptions {
+  readonly appUrl: string | null;
+  readonly onViewing?: (event: {
+    readonly brandId: string;
+    readonly ticketId: string;
+    readonly userId: string;
+    readonly activity: 'viewing' | 'replying';
+  }) => void;
+}
+
 /** The narrow half of `RefreshStore` a join needs. */
 export interface SessionRevocations {
   isSessionRevoked(sessionId: string): Promise<boolean>;
@@ -85,6 +107,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   readonly #gauge: SocketConnectionsGauge;
   readonly #rooms: RoomScopeReader;
   readonly #logger: Logger;
+  readonly #options: StaffSocketOptions;
 
   constructor(
     @Inject(SOCKET_SESSION_RESOLVER) resolver: SocketSessionResolver,
@@ -95,7 +118,9 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     @Inject(SOCKET_CONNECTIONS_GAUGE) gauge: SocketConnectionsGauge,
     @Inject(ROOM_SCOPE_READER) rooms: RoomScopeReader,
     @Inject(LOGGER) logger: Logger,
+    @Optional() @Inject(STAFF_SOCKET_OPTIONS) options: StaffSocketOptions | null = null,
   ) {
+    this.#options = options ?? { appUrl: null };
     this.#resolver = resolver;
     this.#revocations = revocations;
     this.#presence = presence;
@@ -114,6 +139,11 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     // the client is connected and can emit, and it would have to be
     // disconnected after the fact.
     namespace.use((socket, next) => {
+      const { appUrl } = this.#options;
+      if (appUrl !== null && !isStaffOrigin(socket.handshake.headers.origin, appUrl)) {
+        next(new HandshakeRefusal('forbidden', 'This origin may not open a staff socket'));
+        return;
+      }
       void authenticateHandshake({ auth: socket.handshake.auth, resolver: this.#resolver }).then(
         (data) => {
           Object.assign(socket.data, data);
@@ -292,6 +322,8 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     if (!authorization.ok) {
       return { ok: false, error: authorization.error };
     }
+
+    this.#options.onViewing?.({ brandId, ticketId, userId: userIdOf(socket.data), activity });
 
     socket.to(room).emit(
       REALTIME_EVENTS.ticketViewing,

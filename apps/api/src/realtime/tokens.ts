@@ -11,3 +11,5 @@ export const SOCKET_CONNECTIONS_GAUGE = Symbol('helpdock.socket-connections-gaug
 export const STAFF_OFFLINE_HOOK = Symbol('helpdock.staff-offline-hook');
 /** The reads a `ticket:` or unrestricted `department:` join needs (M1-02). */
 export const ROOM_SCOPE_READER = Symbol('helpdock.room-scope-reader');
+/** The `/staff` handshake's origin rule and M4-04's agent-typing relay; see `staff.gateway.ts`. */
+export const STAFF_SOCKET_OPTIONS = Symbol('helpdock.staff-socket-options');

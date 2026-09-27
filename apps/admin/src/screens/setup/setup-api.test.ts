@@ -4,6 +4,7 @@ import {
   HttpSetupApi,
   SetupApiError,
   SetupClosedError,
+  SetupKeyInvalidError,
   SetupThrottledError,
   SetupValidationError,
 } from './setup-api.js';
@@ -165,6 +166,38 @@ describe('HttpSetupApi', () => {
 
     expect(error).toBeInstanceOf(SetupValidationError);
     expect((error as SetupValidationError).paths).toEqual([]);
+  });
+
+  it('reads a refused setup key as its own error, so step 1 can draw it on the field', async () => {
+    stubFetch(
+      json(
+        {
+          error: {
+            code: 'forbidden',
+            message: 'This install asks for its setup key',
+            requestId: 'r2',
+            setup: { reason: 'setup-key-invalid' },
+          },
+        },
+        403,
+      ),
+    );
+
+    await expect(
+      new HttpSetupApi().createAdmin({
+        name: 'Lina',
+        email: 'lina@example.com',
+        password: 'a very long passphrase',
+        locale: 'en',
+        setupKey: 'wrong',
+      }),
+    ).rejects.toBeInstanceOf(SetupKeyInvalidError);
+  });
+
+  it('reads any other 403, such as the cross-site refusal, as a plain failure', async () => {
+    stubFetch(json({ error: { code: 'forbidden', message: 'no', requestId: 'r3' } }, 403));
+
+    await expect(new HttpSetupApi().complete()).rejects.toBeInstanceOf(SetupApiError);
   });
 
   it('has one sentence for everything else', async () => {

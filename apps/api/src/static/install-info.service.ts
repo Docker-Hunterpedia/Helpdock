@@ -11,7 +11,8 @@ import type { InstallMeta } from './install-meta.js';
 /**
  * What the admin may know before anyone has signed in: the install's first
  * help-center host, how many brands it serves, whether it has been set up at
- * all, and which version is serving it. Nothing else — an anonymous caller may
+ * all, which version is serving it, and whether step 1 of the wizard asks for
+ * a setup key. Nothing else — an anonymous caller may
  * not enumerate brands (DOMAIN-RULES §1.1) — and all of it is rendered into
  * `index.html` rather than exposed as an endpoint.
  *
@@ -39,6 +40,7 @@ export class InstallInfoService {
 
   async read(): Promise<InstallMeta> {
     const version = buildInfo().version;
+    const setupKeyRequired = this.#env.HD_SETUP_TOKEN !== undefined;
 
     try {
       // Derived rather than stored, so there is no flag to get out of step
@@ -55,7 +57,13 @@ export class InstallInfoService {
 
       const first = rows[0];
       if (first === undefined) {
-        return { primaryDomain: this.#fallbackDomain, brandCount: 1, installState, version };
+        return {
+          primaryDomain: this.#fallbackDomain,
+          brandCount: 1,
+          installState,
+          version,
+          setupKeyRequired,
+        };
       }
 
       return {
@@ -63,6 +71,7 @@ export class InstallInfoService {
         brandCount: rows.length,
         installState,
         version,
+        setupKeyRequired,
       };
     } catch (error) {
       // The page must still render when the database is unreachable: an
@@ -79,6 +88,7 @@ export class InstallInfoService {
         brandCount: 1,
         installState: INSTALL_STATE_WHEN_UNKNOWN,
         version,
+        setupKeyRequired,
       };
     }
   }

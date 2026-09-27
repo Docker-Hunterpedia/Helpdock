@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
+import { setupRefusalSchema } from './install.js';
 import { staffRefusalSchema } from './staff.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
 import { ticketingRefusalSchema } from './ticketing.js';
@@ -71,6 +72,11 @@ export const errorResponseSchema = z.object({
      * the ticket is merged, deleted, or was never closed.
      */
     lifecycle: z.object({ reason: ticketLifecycleRefusalSchema }).optional(),
+    /**
+     * Only on a refused first-run wizard step (#43). The wizard shows the setup
+     * key's error line on this rather than a generic failure banner.
+     */
+    setup: z.object({ reason: setupRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

@@ -22,12 +22,19 @@ export const SMTP_HOST = 'smtp.example.com';
 export const SMTP_FROM = 'support@acme.test';
 export const SMTP_FROM_NAME = 'Acme Support';
 export const SMTP_RESPONSE = '250 2.0.0 Ok: queued';
+export const SETUP_KEY = 'q6c2mW1zXk9vT3yRb0nLd8sF4hJ7pA5e';
 
 export interface FreshInstallOptions {
   /** What `POST /api/install/setup/smtp/test` answers. */
   readonly testResult?: SmtpTestResult;
   /** Whether the finished install demands a second factor before the shell. */
   readonly require2fa?: boolean;
+  /**
+   * Plays an install that set `HD_SETUP_TOKEN` to {@link SETUP_KEY}: the page
+   * says a key is required, and step 1 is refused as the api refuses it
+   * unless the body carries that key.
+   */
+  readonly setupKey?: boolean;
 }
 
 const json = (route: Route, body: unknown, status = 200): Promise<void> =>
@@ -38,13 +45,18 @@ const json = (route: Route, body: unknown, status = 200): Promise<void> =>
  * serves. Registered before the endpoint routes, because Playwright gives the
  * most recently registered handler the first look.
  */
-const serveFreshDocument = async (page: Page): Promise<void> => {
+const serveFreshDocument = async (page: Page, setupKey: boolean): Promise<void> => {
   await page.route('**/setup', async (route) => {
     const response = await route.fetch();
-    const body = (await response.text()).replace(
-      /<meta name="helpdock:install-state" content="[^"]*" \/>/,
-      '<meta name="helpdock:install-state" content="fresh" />',
-    );
+    const body = (await response.text())
+      .replace(
+        /<meta name="helpdock:install-state" content="[^"]*" \/>/,
+        '<meta name="helpdock:install-state" content="fresh" />',
+      )
+      .replace(
+        /<meta name="helpdock:setup-key-required" content="[^"]*" \/>/,
+        `<meta name="helpdock:setup-key-required" content="${String(setupKey)}" />`,
+      );
 
     await route.fulfill({ response, body });
   });
@@ -55,16 +67,33 @@ export const freshInstall = async (
   {
     testResult = { delivered: true, response: SMTP_RESPONSE },
     require2fa = false,
+    setupKey = false,
   }: FreshInstallOptions = {},
 ): Promise<void> => {
-  await serveFreshDocument(page);
+  await serveFreshDocument(page, setupKey);
 
   await page.route('**/ready', (route) =>
     json(route, { status: 'ready', checks: [{ name: 'database', status: 'up' }] }),
   );
 
-  await page.route('**/api/install/setup/admin', (route) =>
-    json(route, {
+  await page.route('**/api/install/setup/admin', (route) => {
+    const request = route.request().postDataJSON() as { setupKey?: string };
+    if (setupKey && request.setupKey !== SETUP_KEY) {
+      return json(
+        route,
+        {
+          error: {
+            code: 'forbidden',
+            message: 'This install asks for its setup key (HD_SETUP_TOKEN) to create the admin',
+            requestId: 'mock',
+            setup: { reason: 'setup-key-invalid' },
+          },
+        },
+        403,
+      );
+    }
+
+    return json(route, {
       setupToken: 'wizard-token',
       expiresInSeconds: 1800,
       admin: {
@@ -72,8 +101,8 @@ export const freshInstall = async (
         name: ADMIN_NAME,
         email: ADMIN_EMAIL,
       },
-    }),
-  );
+    });
+  });
 
   await page.route('**/api/install/setup/brand', async (route) => {
     const request = route.request().postDataJSON() as { name: string; prefix: string };

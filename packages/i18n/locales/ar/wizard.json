@@ -38,7 +38,11 @@
     "emailRequired": "أدخل عنوان بريد إلكتروني.",
     "emailInvalid": "أدخل عنوان بريد إلكتروني صالحًا.",
     "passwordRequired": "اختر كلمة مرور.",
-    "passwordTooShort": "استخدم {{count}} حرفًا على الأقل."
+    "passwordTooShort": "استخدم {{count}} حرفًا على الأقل.",
+    "setupKeyLabel": "مفتاح الإعداد",
+    "setupKeyHint": "يطلب هذا التثبيت قيمة HD_SETUP_TOKEN، حتى لا يستطيع إنشاء حساب المدير إلا من يملك وصولًا إلى الخادم.",
+    "setupKeyRequired": "أدخل مفتاح الإعداد.",
+    "setupKeyInvalid": "مفتاح الإعداد هذا غير صحيح. تحقّق من HD_SETUP_TOKEN في ملف .env على الخادم."
   },
   "brand": {
     "title": "علامتك التجارية الأولى",

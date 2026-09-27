@@ -6,6 +6,7 @@ import type {
   ErrorResponse,
   FieldError,
   IdentityProblem,
+  SetupRefusal,
   StaffRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
@@ -16,6 +17,7 @@ import { ZodError } from 'zod';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
+import { SetupFailure } from '../install/setup-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
@@ -45,6 +47,8 @@ export interface MappedError {
   readonly ticketing?: TicketingRefusal;
   /** Only on a transition §2.2 has no row for; see `tickets/lifecycle/lifecycle-failure.ts`. */
   readonly lifecycle?: TicketLifecycleRefusal;
+  /** Only on a refused wizard step; see `install/setup-failure.ts`. */
+  readonly setup?: SetupRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -148,6 +152,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // Before the generic branch, for the reason the ones above give.
+  if (error instanceof SetupFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'forbidden',
+      message: error.message,
+      setup: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -194,5 +209,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.contact === undefined ? {} : { contact: mapped.contact }),
     ...(mapped.ticketing === undefined ? {} : { ticketing: { reason: mapped.ticketing } }),
     ...(mapped.lifecycle === undefined ? {} : { lifecycle: { reason: mapped.lifecycle } }),
+    ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
   },
 });

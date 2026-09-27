@@ -116,21 +116,46 @@ listening. The worker waits for it and then starts the outbox relay.
 Open `https://admin.example.com`. An install with no accounts in it has exactly
 one screen — the setup wizard — and every other path goes there.
 
-> **Finish the wizard before anyone else can reach the host.** Until it is
-> finished there is nobody to check a visitor against, so whoever completes the
-> first step becomes the install administrator. That is true of every
-> self-hosted first-run wizard; what makes it small is doing it straight away.
-> If the DNS records are already public, bring the stack up with the firewall
-> closed, or run `docker compose up -d` and open the wizard through an SSH
-> tunnel first. The api counts setup attempts per source address, and refuses a
-> setup request a browser made from another site, which together slow a stranger
-> down but do not replace being quick.
+> **Finish the wizard before anyone else can reach the host, or set a setup
+> key.** Until the wizard is finished there is nobody to check a visitor
+> against, so whoever completes the first step becomes the install
+> administrator. That is true of every self-hosted first-run wizard. The api
+> counts setup attempts per source address, and refuses a setup request a
+> browser made from another site, which together slow a stranger down but do
+> not stop one.
+
+### The setup key
+
+If the host is reachable from anywhere before you finish the wizard — the DNS
+records are public, the firewall is open — set `HD_SETUP_TOKEN` in `.env`
+before the first `docker compose up -d`. It is optional, and recommended for
+any such host:
+
+```bash
+openssl rand -base64 32
+```
+
+Paste the output as `HD_SETUP_TOKEN=…` (at least 32 characters; the api refuses
+to start with a shorter one). Step 1 of the wizard then shows a **Setup key**
+field, and the admin account is created only when it matches, so only someone
+who can read the server's `.env` can claim the install. A wrong or missing key
+is refused, creates nothing, and counts against the same per-address limit as
+every other setup attempt.
+
+The key is compared in constant time, never logged, never sent to the browser
+(the page is told only *that* a key is required), and it stops mattering once
+the administrator exists: every setup request is refused from then on,
+whatever it carries. You can remove it from `.env` after setup.
+
+Without it, the wizard asks for nothing more — so either set it, or keep the
+host closed (the firewall shut, or the wizard opened through an SSH tunnel)
+until step 1 is done.
 
 Four steps, none of which can be got wrong permanently except one:
 
 | Step | What it asks for |
 |---|---|
-| **1 Admin account** | Your name, email, a password of at least twelve characters, and your language. This account is the *install administrator*: the only one that reaches every brand and every setting. The language you pick here is the one the rest of the wizard, and your admin, are shown in — pick العربية and the whole thing turns around. |
+| **1 Admin account** | The setup key, when `HD_SETUP_TOKEN` is set. Your name, email, a password of at least twelve characters, and your language. This account is the *install administrator*: the only one that reaches every brand and every setting. The language you pick here is the one the rest of the wizard, and your admin, are shown in — pick العربية and the whole thing turns around. |
 | **2 First brand** | The brand's name, a **ticket prefix**, its default language, its timezone, and optionally the hostname its help center will answer on. The brand is created with one department, **General**; rename it or add more in admin. |
 | **3 Outgoing email** | Your SMTP server, port, encryption, credentials and the address mail comes from. **Send a test email** delivers one to the address from step 1 and shows you what the server said. You may skip this and set it up later in admin. |
 | **4 Done** | What was created, and the way in. |
@@ -288,6 +313,10 @@ docker compose exec api node -e "fetch('http://127.0.0.1:3000/ready').then(r=>r.
   or a tab was left open for more than thirty minutes and its setup token
   expired. If the account is yours, sign in; if it is not, the install was
   claimed and the only honest recovery is to restore or recreate the database.
+- **The wizard says the setup key is not right.** Compare what you typed with
+  `HD_SETUP_TOKEN` in the `.env` the api container was started with; a change
+  to `.env` needs `docker compose up -d` to reach the container. Too many wrong
+  attempts from one address are refused for fifteen minutes.
 - **The browser shows the sign-in screen on a brand-new install.** The api could
   not read the database when it served the page, so it reported the install as
   configured rather than offering it to a stranger. `docker compose logs api`

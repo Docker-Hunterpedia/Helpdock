@@ -48,6 +48,11 @@ export const E2E_WEB_ORIGIN = `http://localhost:${String(E2E_WEB_PORT)}`;
 export const E2E_SETUP_API_PORT = Number(process.env.HD_E2E_SETUP_API_PORT ?? 3098);
 export const E2E_SETUP_ORIGIN = `http://localhost:${String(E2E_SETUP_API_PORT)}`;
 const SETUP_DATABASE = 'helpdock_setup';
+/**
+ * The second install sets `HD_SETUP_TOKEN` (#43), so the wizard spec proves the
+ * key end to end: the meta tag that draws the field, and the api that checks it.
+ */
+export const E2E_SETUP_KEY = 'e2e-setup-key-that-is-at-least-32-chars';
 
 /** How the seeded account reaches the spec, which runs in another process. */
 export const TOTP_SECRET_ENV = 'HD_E2E_TOTP_SECRET';
@@ -142,12 +147,14 @@ export const startInstall = async (): Promise<RunningInstall> => {
     database,
     redisDb,
     servesAdmin = false,
+    setupKey,
   }: {
     appUrl: string;
     apiPort: number;
     database: string;
     redisDb: number;
     servesAdmin?: boolean;
+    setupKey?: string;
   }): NodeJS.ProcessEnv => ({
     // The browser talks to Vite, which proxies `/api` here, so as far as the
     // cookie is concerned there is one origin. `APP_URL` is the web origin
@@ -168,6 +175,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
     S3_ACCESS_KEY_ID: 'access',
     S3_SECRET_ACCESS_KEY: 'secret',
     ...(servesAdmin ? { ADMIN_DIST_DIR: adminDist } : {}),
+    ...(setupKey === undefined ? {} : { HD_SETUP_TOKEN: setupKey }),
   });
 
   const env = envFor({
@@ -183,6 +191,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
     database: SETUP_DATABASE,
     redisDb: 1,
     servesAdmin: true,
+    setupKey: E2E_SETUP_KEY,
   });
 
   await postgres.exec([

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { strings } from '../strings.js';
-import { SKIP_ENV } from './install.js';
+import { E2E_SETUP_KEY, SKIP_ENV } from './install.js';
 
 /**
  * The exit criterion of M0-08: an install nobody has touched, opened in a
@@ -37,9 +37,17 @@ test.describe('the first-run wizard against the real api', () => {
     await expect(page).toHaveURL(/\/setup$/);
     await expect(page.getByRole('heading', { name: t('wizard:title'), level: 1 })).toBeVisible();
 
+    // This install set `HD_SETUP_TOKEN`, so step 1 asks for it and the api
+    // refuses a wrong one before anything is written.
+    const key = page.getByLabel(t('wizard:account.setupKeyLabel'));
+    await key.fill('not-the-setup-key');
     await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
     await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
     await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: t('wizard:account.submit') }).click();
+    await expect(page.getByRole('alert')).toHaveText(t('wizard:account.setupKeyInvalid'));
+
+    await key.fill(E2E_SETUP_KEY);
     await page.getByRole('button', { name: t('wizard:account.submit') }).click();
 
     await expect(page.getByRole('heading', { name: t('wizard:brand.title') })).toBeVisible();
@@ -88,7 +96,10 @@ test.describe('the first-run wizard against the real api', () => {
     ).toBeVisible();
   });
 
-  test('refuses a second admin over the wire', async ({ request, baseURL }) => {
+  test('refuses a second admin with 409, before the setup key is even looked at', async ({
+    request,
+    baseURL,
+  }) => {
     const response = await request.post(`${String(baseURL)}/api/install/setup/admin`, {
       data: {
         name: 'Someone Else',

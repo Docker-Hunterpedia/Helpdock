@@ -8,6 +8,7 @@ import { useT } from '../../app/i18n.js';
 import { Field, fieldDescribedBy } from '../../ui/field.tsx';
 import { passwordStrength } from '../../ui/password-strength.js';
 import { PasswordStrengthBar } from '../../ui/password-strength-bar.tsx';
+import { SetupKeyField } from './setup-key-field.tsx';
 import { StepFrame } from './setup-layout.tsx';
 
 /**
@@ -17,6 +18,10 @@ import { StepFrame } from './setup-layout.tsx';
  * submit, so an operator who picks Arabic sees the rest of the wizard in Arabic
  * and right to left immediately (DESIGN §7). It is also what the new account's
  * `locale` column is set to.
+ *
+ * When the install set `HD_SETUP_TOKEN`, the step opens with a "Setup key"
+ * block (`Admin/Wizard-SetupKey`, #43); without it the step asks for nothing
+ * more than it always did.
  */
 
 /** The same shape as `sign-in-form.ts`: one issue per field, the first one wins. */
@@ -24,19 +29,28 @@ export interface AccountStepErrors {
   name?: 'required';
   email?: 'required' | 'invalid';
   password?: 'required' | 'short';
+  setupKey?: 'required';
 }
 
 export interface AccountDraft {
   readonly name: string;
   readonly email: string;
   readonly password: string;
+  /** Only looked at when the install asks for one. */
+  readonly setupKey?: string;
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validateAccount({ name, email, password }: AccountDraft): AccountStepErrors {
+export function validateAccount(
+  { name, email, password, setupKey = '' }: AccountDraft,
+  { setupKeyRequired = false }: { readonly setupKeyRequired?: boolean } = {},
+): AccountStepErrors {
   const errors: AccountStepErrors = {};
 
+  if (setupKeyRequired && setupKey.trim() === '') {
+    errors.setupKey = 'required';
+  }
   if (name.trim() === '') {
     errors.name = 'required';
   }
@@ -63,6 +77,10 @@ export interface AccountStepProps {
   readonly onLocaleChange: (locale: Locale) => void;
   readonly onSubmit: (request: SetupAdminRequest) => void;
   readonly pending: boolean;
+  /** Whether this install set `HD_SETUP_TOKEN`, so the step asks for it. */
+  readonly setupKeyRequired?: boolean;
+  /** The api refused the key that was sent; drawn under the field. */
+  readonly setupKeyRefused?: boolean;
 }
 
 export function AccountStep({
@@ -70,20 +88,29 @@ export function AccountStep({
   onLocaleChange,
   onSubmit,
   pending,
+  setupKeyRequired = false,
+  setupKeyRefused = false,
 }: AccountStepProps): ReactNode {
   const t = useT();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [setupKey, setSetupKey] = useState('');
   const [errors, setErrors] = useState<AccountStepErrors>({});
   const strength = passwordStrength(password);
 
   const submit = (): void => {
-    const found = validateAccount({ name, email, password });
+    const found = validateAccount({ name, email, password, setupKey }, { setupKeyRequired });
     setErrors(found);
 
     if (Object.keys(found).length === 0) {
-      onSubmit({ name: name.trim(), email: email.trim(), password, locale });
+      onSubmit({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        locale,
+        ...(setupKeyRequired ? { setupKey: setupKey.trim() } : {}),
+      });
     }
   };
 
@@ -118,6 +145,14 @@ export function AccountStep({
         </Button>
       }
     >
+      {setupKeyRequired ? (
+        <SetupKeyField
+          value={setupKey}
+          onChange={setSetupKey}
+          error={errors.setupKey ?? (setupKeyRefused ? 'invalid' : undefined)}
+        />
+      ) : null}
+
       <Field id="setup-name" label={t('wizard:account.nameLabel')} error={nameError}>
         <OutlinedInput
           id="setup-name"

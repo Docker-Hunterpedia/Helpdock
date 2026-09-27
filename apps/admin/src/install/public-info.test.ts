@@ -10,7 +10,8 @@ describe('readPublicInstallInfo', () => {
       '<meta name="helpdock:primary-domain" content="support.helpdock.com" />' +
         '<meta name="helpdock:brand-count" content="3" />' +
         '<meta name="helpdock:install-state" content="fresh" />' +
-        '<meta name="helpdock:version" content="1.2.3" />',
+        '<meta name="helpdock:version" content="1.2.3" />' +
+        '<meta name="helpdock:setup-key-required" content="true" />',
     );
 
     expect(readPublicInstallInfo(doc)).toEqual({
@@ -18,6 +19,7 @@ describe('readPublicInstallInfo', () => {
       brandCount: 3,
       installState: 'fresh',
       version: '1.2.3',
+      setupKeyRequired: true,
     });
   });
 
@@ -42,6 +44,15 @@ describe('readPublicInstallInfo', () => {
       // A build served from somewhere else, or a tag a proxy stripped, must
       // land on sign-in rather than offer to create an owner.
       expect(readPublicInstallInfo(doc).installState).toBe('configured');
+    },
+  );
+
+  it.each(['', 'false', 'TRUE', 'yes'])(
+    'treats a setup-key tag of %j as not asking for one',
+    (content) => {
+      const doc = documentWith(`<meta name="helpdock:setup-key-required" content="${content}" />`);
+
+      expect(readPublicInstallInfo(doc).setupKeyRequired).toBe(false);
     },
   );
 

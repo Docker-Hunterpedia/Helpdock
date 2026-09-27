@@ -1,4 +1,4 @@
-import type { Settings } from '@helpdock/config';
+import type { Env, Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
@@ -6,7 +6,7 @@ import { PasswordHasher } from '../auth/password.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { SessionService } from '../auth/session/session.service.js';
 import type { Logger } from '../logging/logger.js';
-import { DB, REDIS, SETTINGS } from '../runtime/tokens.js';
+import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
 import { SetupController } from './setup.controller.js';
 import { SetupService } from './setup.service.js';
 import { SetupTokenStore } from './setup-token.store.js';
@@ -45,13 +45,14 @@ export class InstallModule {
       providers: [
         {
           provide: SetupService,
-          inject: [DB, SETTINGS, REDIS, SessionService, PasswordHasher],
+          inject: [DB, SETTINGS, REDIS, SessionService, PasswordHasher, ENV],
           useFactory: (
             db: Db,
             settings: Settings,
             redis: Redis,
             sessions: SessionService,
             hasher: PasswordHasher,
+            env: Env,
           ): SetupService =>
             new SetupService({
               db,
@@ -61,6 +62,7 @@ export class InstallModule {
               tokens: new SetupTokenStore(redis),
               limiter: new RateLimiter(redis),
               logger,
+              setupKey: env.HD_SETUP_TOKEN,
             }),
         },
       ],

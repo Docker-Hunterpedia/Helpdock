@@ -200,7 +200,7 @@ logs one warning at boot and serves `/api` alone.
 | `/`, or any path that is not a file | `index.html`, `Cache-Control: no-store`, with the install meta tags rewritten |
 | `/api/…` with no matching route | the JSON 404 every other failure uses |
 
-The four `helpdock:*` meta tags are rewritten per request by
+The five `helpdock:*` meta tags are rewritten per request by
 `InstallInfoService`, because they are everything the app may know before anyone
 has signed in and no endpoint may enumerate an install to an anonymous visitor.
 
@@ -210,6 +210,7 @@ has signed in and no endpoint may enumerate an install to an anonymous visitor.
 | `helpdock:brand-count` | How many brands this install serves |
 | `helpdock:install-state` | `fresh` while the `users` table is empty, `configured` afterwards (M0-08) |
 | `helpdock:version` | The api's own version, for the wizard's caption |
+| `helpdock:setup-key-required` | `true` when `HD_SETUP_TOKEN` is set, so step 1 of the wizard draws the setup key field. Whether, never what |
 
 A database that is down falls back to the `APP_URL` host rather than failing the
 page, and to `configured`: the state tag decides whether the app offers to
@@ -244,6 +245,17 @@ What stands in for authorisation:
   table is empty (`install-state.ts`). The check is repeated inside the
   transaction, behind `pg_advisory_xact_lock`, so two browsers posting at the
   same instant produce one admin and one 409.
+- **Step 1 also needs the setup key** when the operator set `HD_SETUP_TOKEN`
+  (#43). The body's `setupKey` is compared with it in constant time
+  (`setup-key.ts`: `timingSafeEqual` over the SHA-256 of each, so the length of
+  the real key does not leak), after the fresh check — a configured install
+  answers 409 whatever the key — and after the rate limit, so every guess is
+  counted. A missing or wrong key is a 403 with
+  `error.setup.reason = "setup-key-invalid"` (`setup-failure.ts`) and nothing is
+  written. Without the variable, step 1 asks for nothing more. The key is never
+  logged (pino redacts `setupKey` and `HD_SETUP_TOKEN`) and never sent to a
+  browser: the admin app learns only whether one is required, from the
+  `helpdock:setup-key-required` meta tag.
 - **Steps 2 to 4** are refused unless they present the token step 1 issued, in
   the `x-helpdock-setup` header. It lives in Redis for thirty minutes under the
   SHA-256 of its value, carries no claims, and is spent when the wizard
@@ -470,7 +482,7 @@ routes answers 401 without a valid bearer token.
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
 | `GET /api/install/system` | `@Requires('install:admin')` | The System page's read. Audited. |
 | `GET /api/install/system/queues` | `@Requires('install:admin')` | Every queue, paginated. Audited. |
-| `POST /api/install/setup/admin` | `@Public()` | [The first-run wizard](#the-first-run-wizard). 409 once the install has an account. |
+| `POST /api/install/setup/admin` | `@Public()` | [The first-run wizard](#the-first-run-wizard). 409 once the install has an account; 403 `setup-key-invalid` without `HD_SETUP_TOKEN` when one is set. |
 | `POST /api/install/setup/brand` | `@Public()` | 409 without the wizard token. Sets the refresh cookie. |
 | `POST /api/install/setup/smtp` | `@Public()` | Saves or skips the `smtp.*` settings. |
 | `POST /api/install/setup/smtp/test` | `@Public()` | Sends one message with the credentials in the body. |

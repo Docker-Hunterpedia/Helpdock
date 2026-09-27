@@ -23,6 +23,7 @@ import {
   HttpSetupApi,
   type SetupApi,
   SetupClosedError,
+  SetupKeyInvalidError,
   SetupThrottledError,
   SetupValidationError,
 } from './setup-api.js';
@@ -74,6 +75,7 @@ export function SetupPage({ api, onFinished = leaveTo }: SetupPageProps): ReactN
   const [state, dispatch] = useReducer(setupReducer, locale, initialSetupState);
   const [failure, setFailure] = useState<'closed' | 'throttled' | 'failed' | null>(null);
   const [prefixTaken, setPrefixTaken] = useState(false);
+  const [setupKeyRefused, setSetupKeyRefused] = useState(false);
   const [testResult, setTestResult] = useState<SmtpTestResult | null>(null);
   const [require2fa, setRequire2fa] = useState(false);
 
@@ -103,6 +105,7 @@ export function SetupPage({ api, onFinished = leaveTo }: SetupPageProps): ReactN
     mutationFn: (request: SetupAdminRequest) => client.createAdmin(request),
     onMutate: () => {
       setFailure(null);
+      setSetupKeyRefused(false);
     },
     onSuccess: (response) => {
       dispatch({
@@ -111,7 +114,15 @@ export function SetupPage({ api, onFinished = leaveTo }: SetupPageProps): ReactN
         email: response.admin.email,
       });
     },
-    onError: fail,
+    onError: (error: unknown) => {
+      // Drawn under the field it is about, not as the banner: the operator's
+      // next move is to fix one value, not to retry.
+      if (error instanceof SetupKeyInvalidError) {
+        setSetupKeyRefused(true);
+        return;
+      }
+      fail(error);
+    },
   });
 
   const createBrand = useMutation({
@@ -203,6 +214,10 @@ export function SetupPage({ api, onFinished = leaveTo }: SetupPageProps): ReactN
             onLocaleChange={chooseLocale}
             onSubmit={createAdmin.mutate}
             pending={createAdmin.isPending}
+            // A refusal draws the field even when the meta tag did not ask for
+            // it, so a page served by some other process still has a way on.
+            setupKeyRequired={install.setupKeyRequired || setupKeyRefused}
+            setupKeyRefused={setupKeyRefused}
           />
         ) : null}
 

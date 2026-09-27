@@ -46,4 +46,24 @@ describe('InstallInfoService', () => {
     );
     warn.mockRestore();
   });
+
+  it('tells the wizard a setup key is required without ever carrying the key', async () => {
+    const unreachable = {
+      select: () => {
+        throw new Error('connection refused');
+      },
+    } as unknown as Db;
+    const key = 'q6c2mW1zXk9vT3yRb0nLd8sF4hJ7pA5e';
+
+    const withKey = await new InstallInfoService(
+      unreachable,
+      { ...env, HD_SETUP_TOKEN: key },
+      logger,
+    ).read();
+    const withoutKey = await new InstallInfoService(unreachable, env, logger).read();
+
+    expect(withKey.setupKeyRequired).toBe(true);
+    expect(JSON.stringify(withKey)).not.toContain(key);
+    expect(withoutKey.setupKeyRequired).toBe(false);
+  });
 });

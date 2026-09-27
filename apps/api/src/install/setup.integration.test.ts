@@ -24,8 +24,9 @@ import { eq, sql } from 'drizzle-orm';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
-import { INSTALL_STATE_META } from '../static/install-meta.js';
+import { INSTALL_STATE_META, SETUP_KEY_META } from '../static/install-meta.js';
 import { silentLogger } from '../testing/silent-logger.js';
+import { SETUP_IP_RULE } from './setup.service.js';
 
 /**
  * The whole of M0-08 over HTTP, against a real Postgres, a real Redis and a
@@ -90,6 +91,7 @@ writeFileSync(
     '<meta name="helpdock:brand-count" content="3" />' +
     `<meta name="${INSTALL_STATE_META}" content="configured" />` +
     '<meta name="helpdock:version" content="0.0.0" />' +
+    `<meta name="${SETUP_KEY_META}" content="false" />` +
     '</head><body><div id="root"></div></body></html>',
   'utf8',
 );
@@ -475,6 +477,82 @@ describe.skipIf(!hasDocker)('the first-run wizard', () => {
     expect((weak.json() as { error: { code: string } }).error.code).toBe('validation_failed');
     await expect(owner.db.select({ id: users.id }).from(users)).resolves.toEqual([]);
   }, 120_000);
+
+  describe('with HD_SETUP_TOKEN set', () => {
+    const SETUP_KEY = 'q6c2mW1zXk9vT3yRb0nLd8sF4hJ7pA5e';
+    let keyedRuntime: Runtime;
+    let keyed: ApiApp;
+
+    const postAdmin = (body: unknown) =>
+      keyed.inject({
+        method: 'POST',
+        url: '/api/install/setup/admin',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify(body),
+      });
+
+    beforeAll(async () => {
+      // A second api process over the same database and Redis, differing only
+      // in the key, which is how an operator would turn it on.
+      keyedRuntime = await createRuntime({
+        env: { ...envFor(), HD_SETUP_TOKEN: SETUP_KEY },
+        logger: silentLogger(),
+      });
+      keyed = await createApiApp({ runtime: keyedRuntime });
+    }, 120_000);
+
+    afterAll(async () => {
+      await keyed?.close();
+      await keyedRuntime?.close();
+    });
+
+    it.each([
+      ['no key', ADMIN],
+      ['a wrong key', { ...ADMIN, setupKey: 'not-the-key-not-the-key-not-the-key' }],
+    ])(
+      'refuses step 1 with %s, naming the reason and creating nothing',
+      async (_name, body) => {
+        const refused = await postAdmin(body);
+
+        expect(refused.statusCode).toBe(403);
+        expect(refused.json()).toMatchObject({
+          error: { code: 'forbidden', setup: { reason: 'setup-key-invalid' } },
+        });
+        expect(refused.body).not.toContain(SETUP_KEY);
+        await expect(owner.db.select({ id: users.id }).from(users)).resolves.toEqual([]);
+        await expect(owner.db.select({ id: auditLog.id }).from(auditLog)).resolves.toEqual([]);
+      },
+      120_000,
+    );
+
+    it('creates the admin with the right key', async () => {
+      const created = await postAdmin({ ...ADMIN, setupKey: SETUP_KEY });
+
+      expect(created.statusCode).toBe(201);
+      await expect(owner.db.select({ email: users.email }).from(users)).resolves.toEqual([
+        { email: ADMIN.email },
+      ]);
+    }, 120_000);
+
+    it('tells the admin app a key is required, and never what it is', async () => {
+      const page = await keyed.inject({ method: 'GET', url: '/' });
+
+      expect(page.body).toContain(`<meta name="${SETUP_KEY_META}" content="true" />`);
+      expect(page.body).not.toContain(SETUP_KEY);
+
+      const unkeyed = await app.inject({ method: 'GET', url: '/' });
+      expect(unkeyed.body).toContain(`<meta name="${SETUP_KEY_META}" content="false" />`);
+    }, 120_000);
+
+    it('counts wrong keys against the per-address budget', async () => {
+      for (let attempt = 0; attempt < SETUP_IP_RULE.limit; attempt += 1) {
+        await postAdmin({ ...ADMIN, setupKey: `guess-${String(attempt)}` });
+      }
+
+      const throttled = await postAdmin({ ...ADMIN, setupKey: SETUP_KEY });
+      expect(throttled.statusCode).toBe(429);
+    }, 120_000);
+  });
 
   async function createAdmin(): Promise<{ setupToken: string }> {
     const response = await post('/api/install/setup/admin', ADMIN);

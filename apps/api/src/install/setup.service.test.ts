@@ -18,6 +18,7 @@ import type { SessionService } from '../auth/session/session.service.js';
 import { authRedis } from '../testing/auth-redis.js';
 import { silentLogger } from '../testing/silent-logger.js';
 import { SETUP_IP_RULE, SETUP_SMTP_TEST_IP_RULE, SetupService } from './setup.service.js';
+import { SetupFailure } from './setup-failure.js';
 import { SetupTokenStore } from './setup-token.store.js';
 
 /**
@@ -132,9 +133,11 @@ interface Harness {
 const harness = ({
   users = [ADMIN],
   env = {},
+  setupKey,
 }: {
   users?: readonly Record<string, unknown>[];
   env?: Record<string, string>;
+  setupKey?: string;
 } = {}): Harness => {
   const { redis } = authRedis();
   const { db, inserts } = fakeDb(users);
@@ -160,6 +163,7 @@ const harness = ({
       tokens,
       limiter: new RateLimiter(redis),
       logger: silentLogger(),
+      setupKey,
       smtp: (options) => {
         smtpOptions.push(options);
         return {
@@ -233,6 +237,81 @@ describe('the wizard once the install is configured', () => {
     await expect(state.service.complete({ ip: IP, token })).rejects.toThrow(
       'This install has already been set up',
     );
+  });
+});
+
+describe('the setup key', () => {
+  const SETUP_KEY = 'q6c2mW1zXk9vT3yRb0nLd8sF4hJ7pA5e';
+  const request = {
+    name: 'Lina',
+    email: 'lina@example.com',
+    password: 'a very long passphrase',
+    locale: 'en' as const,
+  };
+
+  const refusalOf = (promise: Promise<unknown>): Promise<unknown> =>
+    promise.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+  it.each([
+    ['missing', undefined],
+    ['wrong', 'not-the-key-not-the-key-not-the-key'],
+  ])('refuses a %s key with its own reason, and writes nothing', async (_name, setupKey) => {
+    const state = harness({ users: [], setupKey: SETUP_KEY });
+
+    const refusal = await refusalOf(
+      state.service.createAdmin(setupKey === undefined ? request : { ...request, setupKey }, {
+        ip: IP,
+      }),
+    );
+
+    expect(refusal).toBeInstanceOf(SetupFailure);
+    expect((refusal as SetupFailure).getStatus()).toBe(403);
+    expect((refusal as SetupFailure).reason).toBe('setup-key-invalid');
+    expect(state.inserts).toEqual([]);
+  });
+
+  it('creates the admin when the key matches', async () => {
+    const state = harness({ users: [], setupKey: SETUP_KEY });
+
+    const created = await state.service.createAdmin(
+      { ...request, setupKey: SETUP_KEY },
+      { ip: IP },
+    );
+
+    expect(created.admin.email).toBe(request.email);
+    expect(state.inserts.map((insert) => insert.table)).toContain('users');
+  });
+
+  it('asks for nothing when the install set no key', async () => {
+    const state = harness({ users: [] });
+
+    await expect(state.service.createAdmin(request, { ip: IP })).resolves.toMatchObject({
+      admin: { email: request.email },
+    });
+  });
+
+  it('answers 409, not a key refusal, once the install has an admin', async () => {
+    const state = harness({ setupKey: SETUP_KEY });
+
+    await expect(state.service.createAdmin(request, { ip: IP })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it('counts every wrong key against the wizard budget', async () => {
+    const state = harness({ users: [], setupKey: SETUP_KEY });
+
+    for (let attempt = 0; attempt < SETUP_IP_RULE.limit; attempt += 1) {
+      await refusalOf(state.service.createAdmin({ ...request, setupKey: 'guess' }, { ip: IP }));
+    }
+
+    const refusal = await refusalOf(
+      state.service.createAdmin({ ...request, setupKey: SETUP_KEY }, { ip: IP }),
+    );
+    expect((refusal as HttpException).getStatus()).toBe(429);
   });
 });
 

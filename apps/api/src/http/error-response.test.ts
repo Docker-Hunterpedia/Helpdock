@@ -9,6 +9,7 @@ import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { SetupFailure } from '../install/setup-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { errorBody, mapError } from './error-response.js';
 
@@ -102,6 +103,16 @@ describe('errorBody', () => {
       code: 'conflict',
       requestId: 'req-9',
       ticketing: { reason: 'last-department' },
+    });
+  });
+
+  it('carries the wizard refusal, which is what step 1 draws under the setup key', () => {
+    const body = errorBody(mapError(new SetupFailure('setup-key-invalid')), 'req-10');
+
+    expect(body.error).toMatchObject({
+      code: 'forbidden',
+      requestId: 'req-10',
+      setup: { reason: 'setup-key-invalid' },
     });
   });
 });

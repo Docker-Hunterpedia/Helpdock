@@ -40,6 +40,14 @@ export class SetupClosedError extends Error {
   }
 }
 
+/** Step 1 was refused because the install asks for `HD_SETUP_TOKEN` and this was not it. */
+export class SetupKeyInvalidError extends Error {
+  constructor() {
+    super('setup: setup key refused');
+    this.name = 'SetupKeyInvalidError';
+  }
+}
+
 export class SetupThrottledError extends Error {
   constructor() {
     super('setup: throttled');
@@ -131,8 +139,9 @@ export class HttpSetupApi implements SetupApi {
 }
 
 /**
- * The three refusals the screens draw differently — closed, throttled, a field
- * the server would not take — and one sentence for everything else.
+ * The four refusals the screens draw differently — closed, throttled, a field
+ * the server would not take, a setup key it would not take — and one sentence
+ * for everything else.
  */
 const toSetupError = async (response: Response): Promise<Error> => {
   if (response.status === 429) {
@@ -148,6 +157,13 @@ const toSetupError = async (response: Response): Promise<Error> => {
       return new SetupValidationError((body.error.fields ?? []).map((field) => field.path));
     } catch {
       return new SetupValidationError([]);
+    }
+  }
+
+  if (response.status === 403) {
+    const body = errorResponseSchema.safeParse(await response.json().catch(() => null));
+    if (body.success && body.data.error.setup?.reason === 'setup-key-invalid') {
+      return new SetupKeyInvalidError();
     }
   }
 

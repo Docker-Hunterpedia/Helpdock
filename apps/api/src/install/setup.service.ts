@@ -38,6 +38,8 @@ import { fieldAlreadyTaken, isUniqueViolation } from '../http/unique-violation.j
 import type { Logger } from '../logging/logger.js';
 import { readInstallState } from './install-state.js';
 import { renderSmtpTestEmail } from './setup-email.js';
+import { SetupFailure } from './setup-failure.js';
+import { setupKeyMatches } from './setup-key.js';
 import type { SetupRecord, SetupTokenStore } from './setup-token.store.js';
 
 /**
@@ -56,7 +58,9 @@ import type { SetupRecord, SetupTokenStore } from './setup-token.store.js';
  * reaches it, because there is nobody yet to check against — the shape every
  * self-hosted first-run wizard has. It is kept as small as it can be: the
  * per-address limits below, and an install guide that tells operators to finish
- * the wizard before the host is reachable from anywhere else.
+ * the wizard before the host is reachable from anywhere else — and, when the
+ * operator sets `HD_SETUP_TOKEN`, a key step 1 must present (#43), which closes
+ * the window to anybody who cannot read the server's `.env`.
  */
 
 /** Recorded in `app.principal_id`, so the audit trail names this path. */
@@ -122,6 +126,11 @@ export interface SetupServiceOptions {
   readonly tokens: SetupTokenStore;
   readonly limiter: RateLimiter;
   readonly logger: Logger;
+  /**
+   * `HD_SETUP_TOKEN`. When set, step 1 is refused without it; when undefined,
+   * step 1 asks for nothing, as it did before the key existed.
+   */
+  readonly setupKey?: string | undefined;
   /** Replaced by the unit suite, which has no relay to talk to. */
   readonly smtp?: SmtpTesterFactory;
 }
@@ -151,6 +160,7 @@ export class SetupService {
   readonly #limiter: RateLimiter;
   readonly #logger: Logger;
   readonly #smtp: SmtpTesterFactory;
+  readonly #setupKey: string | undefined;
 
   constructor({
     db,
@@ -160,6 +170,7 @@ export class SetupService {
     tokens,
     limiter,
     logger,
+    setupKey,
     smtp = (options) => new SmtpEmailSender(options),
   }: SetupServiceOptions) {
     this.#db = db;
@@ -170,6 +181,7 @@ export class SetupService {
     this.#limiter = limiter;
     this.#logger = logger;
     this.#smtp = smtp;
+    this.#setupKey = setupKey;
   }
 
   // ------------------------------------------------------------------
@@ -183,6 +195,13 @@ export class SetupService {
     await this.#throttle(SETUP_IP_RULE, ip);
     if ((await readInstallState(this.#db)) !== 'fresh') {
       throw wizardClosed();
+    }
+    // After the fresh check, so a configured install answers 409 whatever the
+    // key: once the admin exists the key protects nothing. After the throttle,
+    // so every guess is one of the thirty.
+    if (this.#setupKey !== undefined && !setupKeyMatches(this.#setupKey, input.setupKey)) {
+      this.#logger.warn('First-run wizard: step 1 refused without the setup key');
+      throw new SetupFailure('setup-key-invalid');
     }
 
     // Outside the transaction: argon2 spends 19 MiB and two passes, and a

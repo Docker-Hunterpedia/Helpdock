@@ -191,7 +191,9 @@ Arabic install never paints a left-to-right frame first. A unit test asserts the
 script and `src/app/preferences.ts` still agree on those keys.
 
 `index.html` also carries two meta tags — `helpdock:primary-domain` and
-`helpdock:brand-count` — that the sign-in caption reads. The api rewrites them
+`helpdock:brand-count` — that the sign-in caption reads (and three more the
+wizard reads: `helpdock:install-state`, `helpdock:version` and
+`helpdock:setup-key-required`, see `src/install/public-info.ts`). The api rewrites them
 per install when it serves the file (`apps/api/src/static/`), from the install's
 brands and their verified help-center domains; the checked-in values are the dev
 fixture, and they are what a `vite preview` or a build served by anything else

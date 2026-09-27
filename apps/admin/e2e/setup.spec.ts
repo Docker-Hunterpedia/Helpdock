@@ -3,12 +3,15 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
 import {
   ADMIN_EMAIL,
+  ADMIN_NAME,
+  ADMIN_PASSWORD,
   BRAND_NAME,
   BRAND_PREFIX,
   completeAccountStep,
   completeBrandStep,
   fillSmtp,
   freshInstall,
+  SETUP_KEY,
   SMTP_HOST,
   SMTP_RESPONSE,
 } from './setup-install.js';
@@ -147,6 +150,49 @@ test.describe('the first-run wizard', () => {
   });
 });
 
+test.describe('the setup key on step 1', () => {
+  test('is not asked for on an install that did not set one', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await freshInstall(page);
+
+    await page.goto('/setup');
+    await page.getByRole('heading', { name: t('wizard:account.title') }).waitFor();
+
+    await expect(page.getByLabel(t('wizard:account.setupKeyLabel'))).toHaveCount(0);
+  });
+
+  test('refuses a wrong key on the field, then takes the right one', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await freshInstall(page, { setupKey: true });
+
+    await page.goto('/setup');
+    const key = page.getByLabel(t('wizard:account.setupKeyLabel'));
+    await expect(key).toHaveAttribute('type', 'password');
+    await expect(key).toHaveAttribute('autocomplete', 'off');
+
+    await key.fill('not-the-key');
+    await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
+    await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
+    await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: t('wizard:account.submit') }).click();
+
+    await expect(page.getByRole('alert')).toHaveText(t('wizard:account.setupKeyInvalid'));
+    await expect(key).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByRole('heading', { name: t('wizard:account.title') })).toBeVisible();
+
+    await key.fill(SETUP_KEY);
+    await page.getByRole('button', { name: t('wizard:account.submit') }).click();
+
+    await expect(page.getByRole('heading', { name: t('wizard:brand.title') })).toBeVisible();
+  });
+});
+
 test.describe('the language picker on step 1', () => {
   /**
    * The picker changes the app as it is chosen, not on submit: an operator who
@@ -219,6 +265,26 @@ test.describe('accessibility', () => {
     await page.getByRole('button', { name: t('wizard:email.skip') }).click();
     await page.getByRole('heading', { name: t('wizard:done.title') }).waitFor();
     expect(await violations(page), 'done step').toEqual([]);
+  });
+
+  test('the setup key field and its error have no violations', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await freshInstall(page, { setupKey: true });
+
+    await page.goto('/setup');
+    await page.getByLabel(t('wizard:account.setupKeyLabel')).waitFor();
+    expect(await violations(page), 'setup key field').toEqual([]);
+
+    await page.getByLabel(t('wizard:account.setupKeyLabel')).fill('not-the-key');
+    await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
+    await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
+    await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: t('wizard:account.submit') }).click();
+    await page.getByRole('alert').waitFor();
+    expect(await violations(page), 'setup key refused').toEqual([]);
   });
 
   test('the SMTP failure banner has no violations either', async ({ page, appLocale: locale }) => {

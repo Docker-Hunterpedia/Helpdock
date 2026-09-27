@@ -122,7 +122,7 @@ export function AppearanceCard({
                 sx={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: '10px',
+                  gap: 2,
                   padding: 3,
                   borderRadius: '6px',
                   border: `1px solid ${checked ? tokens['action.primary'] : tokens['border.strong']}`,

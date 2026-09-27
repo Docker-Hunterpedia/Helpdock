@@ -9,7 +9,9 @@ happens when a session is revoked. Specified by [ARCHITECTURE
 [§7](../planning/DOMAIN-RULES.md#7-realtime-delivery-contract) and
 [§12](../planning/DOMAIN-RULES.md#12-staff-lifecycle). Implemented by M0-13.
 
-The widget's own namespace is M4 and is not covered here.
+The widget's own namespace, `/widget`, is described with the rest of the
+widget protocol in [widget-protocol.md](widget-protocol.md); what the two share
+is below.
 
 ## The one rule
 
@@ -30,7 +32,7 @@ four settings that are not the defaults:
 |---|---|---|
 | `path` | `/socket.io` | What Caddy proxies and what the client asks for. |
 | `transports` | `['websocket']` | No long-polling (ARCHITECTURE §12). Polling would also make sticky sessions a deployment requirement. |
-| `allowRequest` | `Origin` is `APP_URL`, or absent | A WebSocket handshake is not covered by the same-origin policy, so a page anywhere could otherwise open one. Defence in depth rather than the control: the credential is the bearer token in `auth.token` and never a cookie, so a cross-origin page has nothing to present. A request with no `Origin` is a server-to-server client, not a page, and is allowed. |
+| origin check | per namespace (below) | A WebSocket handshake is not covered by the same-origin policy, so a page anywhere could otherwise open one. The engine cannot tell which namespace a connection is for — that arrives in the first packet, after the upgrade — so each namespace's handshake middleware checks `Origin` itself: `/staff` accepts `APP_URL`, or no `Origin` at all (a server-to-server client, not a page); `/widget` accepts the brand's allowed origins (M4-03). For `/staff` it is defence in depth rather than the control: the credential is the bearer token in `auth.token` and never a cookie, so a cross-origin page has nothing to present. |
 | `adapter` | Redis, two connections | A room has to mean "everyone, on every replica". A subscribed ioredis client accepts no other command, so the publisher cannot be the subscriber. |
 
 It lives in `apps/api/src/realtime/redis-io.adapter.ts` and is installed on the
@@ -44,10 +46,14 @@ whatever adapter is in force.
 | `/staff` | `staff` | M0-13 |
 | `/widget` | `visitor` | M4-04 |
 
-`/staff` refuses anything but a staff principal. M4 adds `/widget` as its own
-gateway with its own credential (the visitor secret of ARCHITECTURE §7) and its
-own origin allow-list; the server, the adapter and the publisher below are
-shared.
+`/staff` refuses anything but a staff principal, and a page on any origin but
+`APP_URL`. `/widget` (M4-04) is its own gateway with its own credential (the
+visitor secret of DOMAIN-RULES §4.1), its own origin allow-list and its own
+Redis channel, `helpdock:realtime:widget`; the server and the adapter are
+shared. Two things cross between them: an agent's `ticket:viewing` with
+`activity: 'replying'` becomes the visitor's typing indicator, and a visitor's
+typing and read receipts reach `ticket:<id>` as `ticket:visitor_typing` and
+`ticket:visitor_read`.
 
 ## The handshake
 
@@ -301,8 +307,8 @@ of meaning (DESIGN §10).
 |---|---|
 | M1-09 | Shipped in branch: `activity` on `ticket:viewing` ("is replying"), and `ticket:changed` in both tickets' rooms on a merge, an unmerge and a split. |
 | M3-07 | Shipped: the `user:<id>` room and `notification:created` (see [notifications](notifications.md)). |
-| M4-03 | The widget handshake's origin allow-list and its per-visitor and per-IP throttles. |
-| M4-04 | The `/widget` namespace and the full delivery contract for conversations: `client_id`, real `seq` values, cursor catch-up and the SSE fallback. |
+| M4-03 | Shipped in branch: the origin check moved from the engine into each namespace's handshake; the widget handshake's origin allow-list and its per-address throttle. |
+| M4-04 | Shipped in branch: the `/widget` namespace and the full delivery contract for conversations — `clientId`, `seq`, cursor catch-up and the SSE fallback ([widget protocol](widget-protocol.md)); `ticket:visitor_typing` and `ticket:visitor_read` on `/staff`. |
 
 Adding an event is three steps: a schema and a name in
 `packages/schemas/src/realtime.ts`, an `emitToRoom` call through

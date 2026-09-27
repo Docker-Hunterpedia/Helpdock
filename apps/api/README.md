@@ -513,7 +513,7 @@ routes answers 401 without a valid bearer token.
 | `POST /api/install/setup/smtp` | `@Public()` | Saves or skips the `smtp.*` settings. |
 | `POST /api/install/setup/smtp/test` | `@Public()` | Sends one message with the credentials in the body. |
 | `POST /api/install/setup/complete` | `@Public()` | Spends the wizard token. |
-| `GET /internal/domain-check` | `@Public()` | Caddy's on-demand TLS gate. 200 for a verified help-center domain, 403 otherwise. |
+| `GET /internal/domain-check` | `@Public()` | Caddy's on-demand TLS gate. 200 for a verified help-center domain that Cloudflare does not proxy, 403 otherwise (M5-07). |
 | `/api/auth/*` | mostly `@Public()` | Signing in. [The authentication guide](../../docs/guides/authentication.md#endpoints) lists them. |
 | `GET /socket.io` | handshake | The `/staff` namespace. [The realtime guide](../../docs/guides/realtime.md). |
 | `GET /*` | `@Public()` | The admin SPA, above. |
@@ -525,8 +525,11 @@ issuing a certificate for a hostname this install does not serve
 (ARCHITECTURE §3).
 
 It reads `brand_domains` on an install-scope path — every brand id named
-explicitly, one statement, that table only — because the brand is exactly what
-the question is asking. The answer is logged at `debug` as `domain.check` and
+explicitly, that table only — because the brand is exactly what the question is
+asking. The lookup is `domains/brand-host.ts`'s `findHelpcenterHost`, uncached
+here: a domain the worker verified a moment ago must get its certificate on the
+next handshake. A verified domain flagged "proxied by Cloudflare" is a 403 whose
+message says so, because Cloudflare holds its certificate. The answer is logged at `debug` as `domain.check` and
 not written to `audit_log`: Caddy asks on every handshake for an unknown host,
 so a row per call would be a way for a stranger to fill the table.
 
@@ -851,10 +854,13 @@ only when a test passes it as an extra controller.
 - **Own-account actions write no `audit_log` row.** `audit_log` is keyed on
   `brand_id` and a password change belongs to a person; the reasoning is at the
   top of `staff/account.service.ts` and in the guide. They are logged instead.
-- `NoopBrandResolver` resolves every host to nothing. `brand_domains` exists
-  from M0-09, for the on-demand TLS check; M5 adds the rows, their verification,
-  and the resolver that turns a `Host` header into a brand. Until it does, every
-  brand in a session is shown with the install's own host.
+- The `Host` → brand map is M5-07's `BrandHostResolver`
+  (`domains/brand-host.ts`): a verified `helpcenter` row names its brand, with
+  the brand's primary host for canonical links, behind a 30-second in-process
+  cache that also remembers misses. Adding, verifying or removing a domain
+  therefore reaches routing up to 30 seconds later on each replica. The
+  install's own hosts (`APP_URL`, `HELPCENTER_CNAME_TARGET`) are never looked
+  up.
 - Input validation no longer depends on `emitDecoratorMetadata` (M0-11, issue
   #36): every `@Param`, `@Query` and `@Body` names its schema on the parameter,
   so the routes validate under `tsc` and under esbuild alike, and

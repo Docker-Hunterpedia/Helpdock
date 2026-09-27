@@ -9,7 +9,7 @@ import { signedInMockApis } from '../../../test/signed-in.js';
  * and what it refuses to send.
  */
 
-const renderBrand = async (path = '/admin/brand') => {
+const renderBrand = async (path = '/admin/brand/danger') => {
   const { auth, staff, ticketing } = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
     authApi: auth,
@@ -36,7 +36,7 @@ const rowFor = (label: string): HTMLElement => {
 };
 
 describe('the Brand page', () => {
-  it('opens on the Danger zone tab', async () => {
+  it('opens the Danger zone tab by its path', async () => {
     await renderBrand();
 
     expect(screen.getByRole('tab', { name: 'Danger zone' })).toHaveAttribute(

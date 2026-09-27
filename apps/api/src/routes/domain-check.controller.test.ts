@@ -5,9 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { DomainCheckController } from './domain-check.controller.js';
 import type { DomainCheckService } from './domain-check.service.js';
 
-const controllerFor = (verified: readonly string[]): DomainCheckController => {
+const controllerFor = (
+  verified: readonly string[],
+  proxied: readonly string[] = [],
+): DomainCheckController => {
   const service = {
-    isVerifiedHelpcenterDomain: (domain: string) => Promise.resolve(verified.includes(domain)),
+    verdict: (domain: string) =>
+      Promise.resolve(
+        proxied.includes(domain) ? 'proxied' : verified.includes(domain) ? 'issue' : 'refuse',
+      ),
   } as DomainCheckService;
 
   return new DomainCheckController(service);
@@ -33,6 +39,17 @@ describe('DomainCheckController', () => {
     await expect(
       controller.check(query('nope.example'), requestFrom('10.0.0.1')),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('refuses a domain Cloudflare proxies, and says that is why', async () => {
+    const controller = controllerFor([], ['help.acme.test']);
+
+    const rejection = await controller
+      .check(query('help.acme.test'), requestFrom('10.0.0.2'))
+      .catch((error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(ForbiddenException);
+    expect((rejection as ForbiddenException).message).toMatch(/Cloudflare/);
   });
 
   it('refuses once an address has spent its budget, before it reaches the database', async () => {

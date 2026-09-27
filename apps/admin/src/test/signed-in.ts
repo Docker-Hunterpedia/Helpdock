@@ -3,6 +3,7 @@ import type { AdminApis } from '../auth/select-api.js';
 import { MockAutomationApi } from '../automation/mock-api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import { MockDomainsApi } from '../domains/mock-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockBrowserPush } from '../notifications/browser-push.js';
@@ -49,5 +50,6 @@ export async function signedInMockApis(): Promise<AdminApis> {
     automation: new MockAutomationApi(),
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
+    domains: new MockDomainsApi(),
   };
 }

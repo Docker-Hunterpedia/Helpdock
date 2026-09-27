@@ -48,7 +48,7 @@ export const ROUTES = {
   automationTab: '/admin/automation/:tab',
   /** The rule builder (M3-05): a saved rule, or `new` with `?kind=`. */
   automationRule: '/admin/automation/rules/:ruleId',
-  /** The brand's own settings (M1-14 ships the Danger zone tab). */
+  /** The brand's own settings: General, Domains (M5-07) and Danger zone (M1-14). */
   brand: '/admin/brand',
   /** One tab of it. `/admin/brand` alone redirects to the first built one. */
   brandTab: '/admin/brand/:tab',

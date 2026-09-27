@@ -23,6 +23,8 @@ const DEFAULT_CLAMAV_PORT = 3310;
 const IPV4_BITS = 32;
 const IPV6_BITS = 128;
 const NO_CIDRS: readonly string[] = [];
+/** Two or more labels of letters, digits and hyphens: a DNS name, not a URL. */
+const HOSTNAME = /^(?!-)[a-z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
 
 /**
  * pino's levels, lowest first, plus `silent`. Declared here rather than
@@ -227,6 +229,15 @@ export const envSchema = z.object({
     .default(NO_CIDRS)
     .describe(
       'optional; comma-separated CIDRs the SSRF-safe client may reach, for example 10.0.0.0/8',
+    ),
+  HELPCENTER_CNAME_TARGET: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(HOSTNAME)
+    .optional()
+    .describe(
+      'optional; the hostname a brand points its help center domain at with a CNAME record, for example edge.example.com. Defaults to the host of APP_URL (M5-07)',
     ),
 });
 

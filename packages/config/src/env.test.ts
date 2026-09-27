@@ -154,6 +154,16 @@ describe('loadEnv', () => {
     expect(env.OUTBOUND_ALLOW_CIDRS).toEqual(['10.0.0.0/8', 'fd00::/8', '192.168.1.1/32']);
   });
 
+  it('takes a CNAME target as a lower-case host name, and nothing else', () => {
+    expect(loadEnv(completeEnv).HELPCENTER_CNAME_TARGET).toBeUndefined();
+    expect(
+      loadEnv(envWith({ HELPCENTER_CNAME_TARGET: ' Edge.Example.com ' })).HELPCENTER_CNAME_TARGET,
+    ).toBe('edge.example.com');
+    for (const value of ['https://edge.example.com', 'edge', 'edge.example.com/path']) {
+      expectInvalidKeys(envWith({ HELPCENTER_CNAME_TARGET: value }), ['HELPCENTER_CNAME_TARGET']);
+    }
+  });
+
   it('treats a blank value as unset so a template key can stay empty', () => {
     const env = loadEnv(
       envWith({ PORT: '', APP_MASTER_KEY_PREVIOUS: '   ', OUTBOUND_ALLOW_CIDRS: '' }),

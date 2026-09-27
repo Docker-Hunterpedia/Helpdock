@@ -7,6 +7,9 @@ import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DomainsApi } from '../domains/api.js';
+import { HttpDomainsApi } from '../domains/http-api.js';
+import { MockDomainsApi } from '../domains/mock-api.js';
 import type { EmailApi } from '../email/api.js';
 import { HttpEmailApi } from '../email/http-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
@@ -58,6 +61,8 @@ export interface AdminApis {
   readonly notifications: NotificationsApi;
   /** M3-07: this browser's push half, which the mock replaces with a fixture too. */
   readonly browserPush: BrowserPush;
+  /** M5-07: Brand › Domains. */
+  readonly domains: DomainsApi;
 }
 
 /**
@@ -102,6 +107,7 @@ export function createApis(
       automation: new HttpAutomationApi(transport),
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
+      domains: new HttpDomainsApi(transport),
     };
   }
 
@@ -136,5 +142,6 @@ export function createApis(
     automation: new MockAutomationApi(),
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
+    domains: new MockDomainsApi(),
   };
 }

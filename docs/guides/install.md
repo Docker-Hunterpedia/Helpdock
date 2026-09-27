@@ -166,8 +166,8 @@ every subject line and every email reference for the life of the brand, so
 field previews a ticket number as you type.
 
 **The help center domain is stored unverified.** Nothing happens to it until you
-publish the DNS records and verify it in admin (see
-[Custom domains](#custom-domains)); Caddy issues no certificate for an
+publish the DNS records Brand › Domains shows for it and the check sees them
+(see [Custom domains](#custom-domains)); Caddy issues no certificate for an
 unverified hostname.
 
 Step 2 is where you are signed in, because that is the first moment there is a
@@ -206,28 +206,92 @@ none.
 
 ## Custom domains
 
-A brand's help center runs on the brand's own hostname, and Caddy gets a
-certificate for it without you editing anything:
+A brand's help center runs on the brand's own hostname, such as
+`support.acme.com`, and Caddy gets a certificate for it without you editing
+anything. An Admin of the brand sets it up in **Brand › Domains**.
 
-1. In admin, add the domain to the brand. Helpdock shows a `CNAME` and a `TXT`
-   record to publish.
-2. Publish them. Helpdock verifies the `TXT` record and marks the domain
-   verified. (Adding and verifying domains is M5; the table that holds them
-   ships now.)
-3. The first browser to open the domain makes Caddy ask the api
-   `GET /internal/domain-check?domain=…`. The api answers 200 only for a
-   verified help-center domain, and Caddy issues a certificate.
+1. **Add the domain.** Type the host name only, without `https://` or a path.
+   A name in another script is stored as the punycode DNS uses. Refused: IP
+   addresses, single labels, names that can never be public (`.local`,
+   `.internal`, `.test` and the like), the install's own hosts, and a name
+   another brand already has. A brand may have up to ten.
+2. **Create the two records** the tab shows, at your DNS provider:
+
+   | Type | Name | Value |
+   |---|---|---|
+   | `CNAME` | `support.acme.com` | the CNAME target: `HELPCENTER_CNAME_TARGET`, or the host of `APP_URL` |
+   | `TXT` | `_helpdock.support.acme.com` | `helpdock-verify=` followed by a token only this domain has |
+
+   The TXT record proves you control the zone. The CNAME sends visitors to this
+   server. An apex domain (`acme.com`) cannot have a CNAME: give it `A`/`AAAA`
+   records with the same addresses as the CNAME target instead, which the check
+   accepts.
+3. **Helpdock checks.** The worker looks up both records every fifteen minutes
+   for the first two days, then every six hours; **Check now** looks at once.
+   The tab shows which record it has seen. When it has seen both, the domain is
+   verified, the brand's first verified domain becomes its primary one (the
+   host in the help center's links, sitemap and canonical tags; **Make
+   primary** moves it), and the change is written to the audit log.
+4. **The certificate.** Right after verifying, the worker makes one TLS
+   handshake to the name. That handshake makes Caddy ask the api
+   `GET /internal/domain-check?domain=…`, which answers 200 for a verified
+   help center domain, and Caddy obtains the certificate. The tab then says
+   "certificate issued"; if the handshake does not end with a valid
+   certificate, it says "Certificate failed" and why.
+
+A verified domain is checked again every day (every hour until its certificate
+is confirmed). **If its TXT record disappears, it is un-verified**: the help
+center stops answering on it and Caddy stops issuing for it, and the tab says
+"Verification lost". A DNS lookup that times out or fails never un-verifies a
+domain; only an answer that the record does not exist does. Removing a domain
+in the tab stops routing at once (within 30 seconds on every api replica).
 
 An unverified hostname gets a 403 and no certificate, which is what keeps a
 stranger pointing DNS at your server from spending your certificate authority's
 rate limits. `/internal/*` is not reachable from outside: Caddy answers 404 for
 it, and the check travels over the Compose network.
 
+| The tab says | What it means |
+|---|---|
+| Waiting for DNS | A record is missing or not visible yet. DNS changes can take up to 48 hours. |
+| CNAME points elsewhere | The name has a CNAME, but not to the target shown. Change it. |
+| Certificate failed, "resolves to Cloudflare" | The name is proxied by Cloudflare (orange cloud) but the domain is not flagged. See [Behind Cloudflare](#behind-cloudflare). |
+| Certificate failed, with a TLS error | DNS is verified but HTTPS did not work. Ports 80 and 443 must reach Caddy, and nothing else may answer for the name. |
+| Verification lost | The TXT record is gone. Publish it again and press Check now. |
+
+`HELPCENTER_CNAME_TARGET` in `.env` changes the CNAME target shown to every
+brand; set it before brands publish their records, because changing it later
+breaks the CNAMEs already created. The worker's lookups use the system
+resolver with a five-second deadline, and the handshake goes through the same
+outbound safety rules as every other connection to a user-supplied host
+([DOMAIN-RULES §13](../planning/DOMAIN-RULES.md#13-outbound-network-safety)): a
+name that resolves to a private address is not probed unless
+`OUTBOUND_ALLOW_CIDRS` allows it.
+
 ## Behind Cloudflare
 
-If your hostnames are proxied by Cloudflare (the orange cloud), Cloudflare
-terminates TLS and Caddy must not try to issue certificates on demand. Switch
-the Caddy configuration in `.env`:
+There are two cases.
+
+**Some brand domains are proxied by Cloudflare, the install is not.** Tick
+**Proxied by Cloudflare** on the domain in Brand › Domains. Cloudflare flattens a
+proxied CNAME, so the check accepts a name that resolves to Cloudflare's edge in
+place of the CNAME; the TXT record is still required. A flagged domain gets no
+certificate from this server (`/internal/domain-check` answers 403 and says it
+is proxied), and Cloudflare serves HTTPS. Set Cloudflare's SSL mode for the
+zone to **Full (strict)** and give Caddy a certificate for the name that
+Cloudflare trusts, such as a Cloudflare Origin CA certificate mounted into the
+`caddy` container, in a site block of its own in the Caddyfile:
+
+```caddyfile
+support.acme.com {
+	tls /etc/caddy/certs/acme-origin.pem /etc/caddy/certs/acme-origin.key
+	import helpdock_upstream
+}
+```
+
+**Every hostname is proxied by Cloudflare**, the install's own included.
+Cloudflare terminates TLS and Caddy must not try to issue certificates on
+demand. Switch the Caddy configuration in `.env`:
 
 ```bash
 CADDYFILE=./caddy/Caddyfile.cloudflare
@@ -235,9 +299,10 @@ CADDYFILE=./caddy/Caddyfile.cloudflare
 
 then `docker compose up -d caddy`. That configuration serves `ADMIN_HOST` and
 `API_HOST` and has no catch-all site; each verified brand domain is added to it
-by hand, as the comment in the file shows. Set Cloudflare's SSL mode to **Full
-(strict)** with an origin certificate, or the hop between Cloudflare and your
-server is unauthenticated.
+by hand, as the comment in the file shows. Flag those domains as proxied in
+Brand › Domains too. Set Cloudflare's SSL mode to **Full (strict)** with an
+origin certificate, or the hop between Cloudflare and your server is
+unauthenticated.
 
 ## Upgrading
 
@@ -302,10 +367,13 @@ docker compose exec api node -e "fetch('http://127.0.0.1:3000/ready').then(r=>r.
   password inside `DATABASE_URL` have drifted apart. The role is created once,
   on the first boot, and is left alone afterwards; change the password with
   `ALTER ROLE helpdock_app PASSWORD …` and update both.
-- **No certificate for a brand domain.** Ask the api directly:
+- **No certificate for a brand domain.** Brand › Domains says why first. Then
+  ask the api directly:
   `docker compose exec caddy wget -qSO- 'http://api:3000/internal/domain-check?domain=help.brand.example'`.
-  A 403 means the domain is not verified; a 200 means Caddy should be able to
-  issue, so look at `docker compose logs caddy` for the issuance attempt.
+  A 403 means the domain is not verified, or is flagged as proxied by
+  Cloudflare (the message says which); a 200 means Caddy should be able to
+  issue, so look at `docker compose logs caddy` for the issuance attempt, and
+  `docker compose logs worker | grep 'domain checked'` for what the check saw.
 - **Two api containers.** That is the default (`deploy.replicas: 2`). They
   serialise on the migration advisory lock at boot. Run
   `docker compose up -d --scale api=1` for one.

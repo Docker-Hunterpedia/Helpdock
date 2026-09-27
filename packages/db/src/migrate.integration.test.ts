@@ -42,6 +42,7 @@ const MIGRATION_TAGS = [
   '0027_workflow_rules',
   '0028_macros_and_audit_context',
   '0029_notifications',
+  '0030_brand_domain_verification',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

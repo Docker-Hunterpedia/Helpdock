@@ -620,6 +620,67 @@ export const authEmailJob = defineJob({
 /** The BullMQ job id of the email one outbox row asks for. Dots, because BullMQ refuses colons. */
 export const authEmailJobId = (sourceOutboxId: string): string => `auth.email.${sourceOutboxId}`;
 
+export const domainVerifyPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /**
+   * The one domain to check now, whatever its schedule says: an Admin added
+   * it, pressed "Check now" or changed its Cloudflare flag. Absent on the
+   * scheduled run, which checks every domain of the brand that is due.
+   */
+  domainId: z.uuid().optional(),
+});
+export type DomainVerifyPayload = z.infer<typeof domainVerifyPayloadSchema>;
+
+/**
+ * M5-07: check a brand's custom help center domains — the CNAME, the TXT
+ * record, where the name points, and a TLS handshake once DNS is verified.
+ *
+ * A check requested by a person goes through the outbox
+ * (`domain.check_requested`), whose handler adds this job with an id derived
+ * from the outbox row, so a redelivered event adds nothing (DOMAIN-RULES §6).
+ * The periodic re-check is {@link domainVerifyScheduleJob}, which adds one job
+ * per brand.
+ *
+ * No receipt: a check reads DNS and writes what it saw, so running it twice is
+ * two observations, not two side effects. One retry, because the failures worth
+ * retrying are the database blinking; a DNS timeout is recorded, not thrown.
+ */
+export const domainVerifyJob = defineJob({
+  name: 'domain.verify',
+  queue: QUEUE_NAMES.domains,
+  schema: domainVerifyPayloadSchema,
+  options: {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: { age: 7 * 86_400, count: 1_000 },
+  },
+});
+
+/**
+ * The job id of one requested check, or of one brand's run for one tick.
+ * Dots, because BullMQ refuses colons (see {@link retentionJobId}).
+ */
+export const domainVerifyJobId = (
+  payload: DomainVerifyPayload,
+  source: { readonly outboxId: string } | { readonly tick: Date },
+): string =>
+  'outboxId' in source
+    ? `domain.verify.${source.outboxId}`
+    : `domain.verify.${payload.brandId}.${String(source.tick.getTime())}`;
+
+/** Every fifteen minutes: the shortest re-check interval a pending domain has. */
+export const DOMAIN_VERIFY_CRON = '*/15 * * * *';
+
+/** The tick that adds one {@link domainVerifyJob} per brand (M5-07). */
+export const domainVerifyScheduleJob = defineJob({
+  name: 'domain.verify.schedule',
+  queue: QUEUE_NAMES.domains,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 30_000 }, removeOnFail: 100 },
+  schedule: { cron: DOMAIN_VERIFY_CRON },
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -638,6 +699,8 @@ export const JOB_DEFINITIONS = Object.freeze({
   [notifyEmailJob.name]: notifyEmailJob,
   [notifyPushJob.name]: notifyPushJob,
   [authEmailJob.name]: authEmailJob,
+  [domainVerifyJob.name]: domainVerifyJob,
+  [domainVerifyScheduleJob.name]: domainVerifyScheduleJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

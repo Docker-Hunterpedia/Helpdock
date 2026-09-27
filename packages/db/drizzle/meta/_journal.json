@@ -197,6 +197,13 @@
       "when": 1790493592081,
       "tag": "0029_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790505113705,
+      "tag": "0034_brand_domain_verification",
+      "breakpoints": true
     }
   ]
 }

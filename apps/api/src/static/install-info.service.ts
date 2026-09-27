@@ -1,7 +1,7 @@
 import type { Env } from '@helpdock/config';
 import { brandDomains, brands, type Db, withTenant } from '@helpdock/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
 import { INSTALL_STATE_WHEN_UNKNOWN, readInstallState } from '../install/install-state.js';
 import type { Logger } from '../logging/logger.js';
 import { buildInfo } from '../observability/build-info.js';
@@ -113,7 +113,8 @@ export class InstallInfoService {
               isNotNull(brandDomains.verifiedAt),
             ),
           )
-          .orderBy(asc(brandDomains.createdAt))
+          // The brand's primary host (M5-07), or its oldest verified one.
+          .orderBy(desc(brandDomains.isPrimary), asc(brandDomains.createdAt))
           .limit(1),
     );
 

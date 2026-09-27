@@ -13,10 +13,12 @@
 	email "{$ACME_EMAIL}"
 
 	on_demand_tls {
-		# Answers 200 only for a verified `helpcenter` row in `brand_domains`,
-		# so a stranger pointing DNS at this server cannot make Caddy ask a
-		# certificate authority for a certificate in their name — which is both
-		# an abuse vector and the fastest way to hit the issuance limits.
+		# Answers 200 only for a verified `helpcenter` row in `brand_domains`
+		# that is not flagged as proxied by Cloudflare (M5-07; Cloudflare holds
+		# that one's certificate), so a stranger pointing DNS at this server
+		# cannot make Caddy ask a certificate authority for a certificate in
+		# their name — which is both an abuse vector and the fastest way to hit
+		# the issuance limits.
 		#
 		# `ask` is the whole gate: Caddy removed the `interval`/`burst` options
 		# it used to pair with it, so the api's own rate limit on that route is

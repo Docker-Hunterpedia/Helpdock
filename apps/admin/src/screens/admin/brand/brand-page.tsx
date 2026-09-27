@@ -11,20 +11,25 @@ import { currentBrand, useSession, useTicketingApi } from '../../../auth/session
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
+import { DomainsTab } from './domains-tab.tsx';
+import { GeneralTab } from './general-tab.tsx';
 import { RetentionCard } from './retention-card.tsx';
 
 /**
- * `Admin/Brand` (artboard `AdminBrandDanger`), with the one tab M1-14 builds:
- * **Danger zone**, holding the Data retention card.
+ * `Admin/Brand`: **General** (artboard `AdminBrand`, the Identity card),
+ * **Domains** (`AdminBrandDomains`, M5-07) and **Danger zone**
+ * (`AdminBrandDanger`, M1-14's Data retention card).
  *
- * The artboard also draws General, Domains and Theme tabs and a "Delete this
- * brand" section. None of them has a deliverable in M1 — brand deletion is its
- * own path in DOMAIN-RULES §11 — so they are not drawn at all rather than drawn
- * as controls that do nothing. The tab row stays, so the next tab has a place
- * to land.
+ * There is no Theme tab: theming lives on Channels › Widget and on the help
+ * center's own settings. "Delete this brand" is its own path in DOMAIN-RULES
+ * §11 and is not drawn until it has a deliverable.
  */
 
-const BRAND_TABS = [{ key: 'danger', segment: 'danger' }] as const;
+const BRAND_TABS = [
+  { key: 'general', segment: 'general' },
+  { key: 'domains', segment: 'domains' },
+  { key: 'danger', segment: 'danger' },
+] as const;
 const DEFAULT_BRAND_TAB = BRAND_TABS[0];
 
 export function BrandPage(): ReactNode {
@@ -47,7 +52,11 @@ export function BrandPage(): ReactNode {
         <Tabs
           value={tab.key}
           aria-label={t('brand:tabList')}
-          slotProps={{ indicator: { sx: { backgroundColor: tokens['status.danger'] } } }}
+          slotProps={{
+            indicator: {
+              sx: tab.key === 'danger' ? { backgroundColor: tokens['status.danger'] } : {},
+            },
+          }}
         >
           {BRAND_TABS.map((candidate) => (
             <Tab
@@ -56,13 +65,19 @@ export function BrandPage(): ReactNode {
               label={t(`brand:tabs.${candidate.key}`)}
               component={Link}
               to={brandRoute(candidate.segment)}
-              sx={{ '&.Mui-selected': { color: tokens['status.danger.text'] } }}
+              sx={
+                candidate.key === 'danger'
+                  ? { '&.Mui-selected': { color: tokens['status.danger.text'] } }
+                  : {}
+              }
             />
           ))}
         </Tabs>
       </Box>
 
-      <DangerZone brandId={brand.id} />
+      {tab.key === 'general' ? <GeneralTab /> : null}
+      {tab.key === 'domains' ? <DomainsTab /> : null}
+      {tab.key === 'danger' ? <DangerZone brandId={brand.id} /> : null}
     </>
   );
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
+import { domainsRefusalSchema } from './domains.js';
 import { channelsRefusalSchema } from './email-inbound.js';
 import { setupRefusalSchema } from './install.js';
 import { staffRefusalSchema } from './staff.js';
@@ -80,6 +81,8 @@ export const errorResponseSchema = z.object({
     setup: z.object({ reason: setupRefusalSchema }).optional(),
     /** Only on a refused mailbox action (M2-08). */
     channels: z.object({ reason: channelsRefusalSchema }).optional(),
+    /** Only on a refused custom-domain action (M5-07). */
+    domains: z.object({ reason: domainsRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

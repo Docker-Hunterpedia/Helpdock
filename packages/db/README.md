@@ -52,7 +52,7 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `contact_notes` | tenant | Internal notes on a contact (M1-04). |
 | `contact_duplicate_suggestions` | tenant | Pairs that look like one person (M1-04). Acting on one is M1-13. |
 | `accounts` | tenant | The customer company a contact belongs to (M1-04). `domain` is unique per brand, not per install. |
-| `brand_domains` | tenant | Hostnames a brand owns. `domain` is unique install-wide. M0 reads it for Caddy's on-demand TLS check; M5 creates and verifies rows. |
+| `brand_domains` | tenant | Hostnames a brand owns. `domain` is unique install-wide. A `helpcenter` row carries its DNS and TLS check state (M5-07, migration 0034): what the last check saw, `verified_at`, `tls_issued_at`, the failure reason, the "proxied by Cloudflare" flag, and `is_primary` (at most one per brand). Caddy's on-demand TLS check and host routing read verified rows only. |
 | `settings` | tenant | Primary key `(key, brand_id)`. `value` is JSON, or the `v1.…` envelope for a secret. |
 | `audit_log` | tenant | Who did what. `actor_id` is text: a system actor is a job id. |
 | `outbox` | tenant | The transactional outbox of DOMAIN-RULES §6. Partial index on the unpublished backlog. |

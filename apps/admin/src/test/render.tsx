@@ -11,6 +11,8 @@ import type { ChannelsApi } from '../channels/api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DomainsApi } from '../domains/api.js';
+import { MockDomainsApi } from '../domains/mock-api.js';
 import type { EmailApi } from '../email/api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
@@ -40,6 +42,7 @@ export interface RenderAppOptions {
   readonly automationApi?: AutomationApi;
   readonly notificationsApi?: NotificationsApi;
   readonly browserPush?: BrowserPush;
+  readonly domainsApi?: DomainsApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -56,6 +59,7 @@ export interface RenderedApp extends RenderResult {
   readonly automationApi: AutomationApi;
   readonly notificationsApi: NotificationsApi;
   readonly browserPush: BrowserPush;
+  readonly domainsApi: DomainsApi;
 }
 
 /**
@@ -76,6 +80,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const automationApi = options.automationApi ?? new MockAutomationApi();
   const notificationsApi = options.notificationsApi ?? new MockNotificationsApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
+  const domainsApi = options.domainsApi ?? new MockDomainsApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -92,6 +97,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       automationApi={automationApi}
       notificationsApi={notificationsApi}
       browserPush={browserPush}
+      domainsApi={domainsApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -115,5 +121,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     automationApi,
     notificationsApi,
     browserPush,
+    domainsApi,
   };
 }

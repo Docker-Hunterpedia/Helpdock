@@ -105,14 +105,15 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.automation} element={<AutomationPage />} />
           <Route path={ROUTES.automationTab} element={<AutomationPage />} />
           <Route path={ROUTES.automationRule} element={<AutomationPage />} />
-          {/* M1-14. Only the Danger zone tab is built; `/admin/brand` with no
-              tab redirects to it, as `/admin/ticketing` does to its first. */}
           {/* M2-08. The mailbox form is static-first (`new`) and deeper than
               the tab route, so neither shadows the other. */}
           <Route path={ROUTES.channels} element={<ChannelsPage />} />
           <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
           <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
           <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
+          {/* General, Domains (M5-07) and Danger zone (M1-14); `/admin/brand`
+              with no tab redirects to General, as `/admin/ticketing` does to
+              its first. */}
           <Route path={ROUTES.brand} element={<BrandPage />} />
           <Route path={ROUTES.brandTab} element={<BrandPage />} />
           {/* Your account: Security (M0-06), Notifications (M3-07) and Email

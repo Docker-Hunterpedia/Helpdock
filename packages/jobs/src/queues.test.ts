@@ -6,6 +6,7 @@ describe('queue names', () => {
     expect([...QUEUE_NAME_LIST].sort()).toEqual([
       'ai',
       'assignment',
+      'domains',
       'inbound',
       'knowledge',
       'maintenance',

@@ -3,6 +3,7 @@ import type {
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
+  DomainsRefusal,
   ErrorCode,
   ErrorResponse,
   FieldError,
@@ -19,6 +20,7 @@ import { AuthFailure } from '../auth/auth-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ChannelsFailure } from '../channels/channels-failure.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
+import { DomainsFailure } from '../domains/domains-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
@@ -53,6 +55,8 @@ export interface MappedError {
   readonly setup?: SetupRefusal;
   /** Only on a refused mailbox action; see `channels/channels-failure.ts`. */
   readonly channels?: ChannelsRefusal;
+  /** Only on a refused custom-domain action; see `domains/domains-failure.ts`. */
+  readonly domains?: DomainsRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -178,6 +182,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M5-07. Before the generic branch, for the reason the ones above give.
+  if (error instanceof DomainsFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      domains: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -226,5 +241,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.lifecycle === undefined ? {} : { lifecycle: { reason: mapped.lifecycle } }),
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
+    ...(mapped.domains === undefined ? {} : { domains: { reason: mapped.domains } }),
   },
 });

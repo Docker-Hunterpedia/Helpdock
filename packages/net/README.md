@@ -155,6 +155,18 @@ and `redirect-blocked` — the refusals, not the network failures. A hook that
 throws is swallowed: a broken logger must not mask the decision that triggered
 it.
 
+## Beyond HTTP: hostnames, DNS records and TLS
+
+The custom-domain check of M5-07 needs three things that are not a fetch. They
+live here so that the same rules apply to them.
+
+| Export | What it does |
+|---|---|
+| `parsePublicHostname(input)` | Normalises a typed hostname (trim, lower case, one trailing dot) and says whether it can be public: `{ ok: true, hostname }`, or `{ ok: false, problem }` with `empty`, `too-long`, `ip-address`, `malformed` or `not-public`. Special-use and private suffixes (`.local`, `.localhost`, `.internal`, `.test`, `.example`, `.invalid`, `.onion`, `.arpa`, `.lan`, `.home`, `.corp`, `.intranet`, `.localdomain`) are `not-public`. It resolves nothing; convert a Unicode name with `domainToASCII` first. |
+| `createDnsResolver(options?)` | Reads `cname`, `txt` and `addresses` (A and AAAA) with a per-query timeout (default 5 s) and retry budget (default 2). Every answer is `found` with its records, `absent` (`ENOTFOUND`, `ENODATA`) or `failed` with the resolver's code: a caller can tell "the record is gone" from "the lookup did not work", and must never act on the second as if it were the first. Answers are normalised (CNAME targets lower-cased, TXT strings joined) and capped at 50 records and 1 024 characters. It never connects to the name. Tests pass `backend`, a double of `dns.promises.Resolver`. |
+| `probeTls(hostname, policy?)` | One TLS handshake to port 443 (or `port`) and nothing else: `valid` with the certificate's expiry, `invalid` with the verification error (`SELF_SIGNED_CERT_IN_CHAIN`, `ERR_TLS_CERT_ALTNAME_INVALID`, …), or `unreachable` with a code (`destination-blocked`, `dns-failure`, `ECONNREFUSED`, `timeout`). The name goes through `resolvePublicHost`, so the blocked ranges and `allowCidrs` apply, and the socket goes to that one address with the name kept for SNI. Default budget 30 s, because the first handshake to a Caddy on-demand host waits for the certificate to be issued. |
+| `addressInCidrs(address, cidrs)` | Whether a literal address falls in any of the CIDRs, an IPv4-mapped IPv6 address counting as its IPv4 address. For classifying where a name points (M5-07 uses it to recognise Cloudflare's edge), never for deciding whether to connect. |
+
 ## Tests
 
 `pnpm --filter @helpdock/net test`. The behavioural tests run against a real

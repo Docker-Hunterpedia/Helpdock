@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   assignmentOfflineUnassignJob,
+  DOMAIN_VERIFY_CRON,
+  domainVerifyJob,
+  domainVerifyJobId,
+  domainVerifyScheduleJob,
   emailPollJob,
   emailPollSchedulerId,
   emailSendJob,
@@ -347,5 +351,31 @@ describe('the notify jobs (M3-07)', () => {
     expect(() => parseJobPayload(notifyPushJob, { brandId, subscriptionId, ...extra })).toThrow(
       PayloadValidationError,
     );
+  });
+});
+
+describe('the domain jobs (M5-07)', () => {
+  const domainId = '01924f00-0000-7000-8000-0000000000dd';
+
+  it('checks one domain when a person asked, and the whole brand on the schedule', () => {
+    expect(parseJobPayload(domainVerifyJob, { brandId, domainId })).toEqual({ brandId, domainId });
+    expect(parseJobPayload(domainVerifyJob, { brandId })).toEqual({ brandId });
+    expect(() => parseJobPayload(domainVerifyJob, { brandId, domainId: 'nope' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('derives the job id from the outbox row, or from the brand and the tick', () => {
+    expect(domainVerifyJobId({ brandId, domainId }, { outboxId })).toBe(
+      `domain.verify.${outboxId}`,
+    );
+    expect(domainVerifyJobId({ brandId }, { tick: new Date('2026-09-27T10:15:00Z') })).toBe(
+      `domain.verify.${brandId}.${String(Date.parse('2026-09-27T10:15:00Z'))}`,
+    );
+  });
+
+  it('re-checks every fifteen minutes', () => {
+    expect(domainVerifyScheduleJob.schedule).toEqual({ cron: DOMAIN_VERIFY_CRON });
+    expect(DOMAIN_VERIFY_CRON).toBe('*/15 * * * *');
   });
 });

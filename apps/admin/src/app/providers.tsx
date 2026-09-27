@@ -15,6 +15,8 @@ import type { AutomationApi } from '../automation/api.js';
 import { AutomationApiProvider } from '../automation/context.tsx';
 import type { ChannelsApi } from '../channels/api.js';
 import type { ContactsApi } from '../contacts/api.js';
+import type { DomainsApi } from '../domains/api.js';
+import { DomainsApiProvider } from '../domains/context.tsx';
 import type { EmailApi } from '../email/api.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
@@ -110,6 +112,8 @@ export interface AppProvidersProps {
   readonly notificationsApi?: NotificationsApi;
   /** Defaults to the matching adapter: this browser's push half. */
   readonly browserPush?: BrowserPush;
+  /** Defaults to the matching adapter. Only Brand › Domains reads it (M5-07). */
+  readonly domainsApi?: DomainsApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -141,6 +145,7 @@ export function AppProviders({
   automationApi,
   notificationsApi,
   browserPush,
+  domainsApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -166,6 +171,7 @@ export function AppProviders({
   const automation = automationApi ?? fallback.automation;
   const notifications = notificationsApi ?? fallback.notifications;
   const push = browserPush ?? fallback.browserPush;
+  const domains = domainsApi ?? fallback.domains;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -231,11 +237,13 @@ export function AppProviders({
                 channelsApi={channels}
               >
                 <AutomationApiProvider api={automation}>
-                  <NotificationsProvider api={notifications} push={push}>
-                    <ToastProvider>
-                      <Router>{children}</Router>
-                    </ToastProvider>
-                  </NotificationsProvider>
+                  <DomainsApiProvider api={domains}>
+                    <NotificationsProvider api={notifications} push={push}>
+                      <ToastProvider>
+                        <Router>{children}</Router>
+                      </ToastProvider>
+                    </NotificationsProvider>
+                  </DomainsApiProvider>
                 </AutomationApiProvider>
               </AuthApiProvider>
             </QueryClientProvider>

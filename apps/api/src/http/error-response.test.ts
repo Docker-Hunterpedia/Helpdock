@@ -9,6 +9,7 @@ import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { DomainsFailure } from '../domains/domains-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { errorBody, mapError } from './error-response.js';
@@ -113,6 +114,16 @@ describe('errorBody', () => {
       code: 'forbidden',
       requestId: 'req-10',
       setup: { reason: 'setup-key-invalid' },
+    });
+  });
+
+  it('carries the custom-domain refusal, which the Domains tab turns into a sentence', () => {
+    const body = errorBody(mapError(new DomainsFailure('domain-taken')), 'req-11');
+
+    expect(body.error).toMatchObject({
+      code: 'conflict',
+      requestId: 'req-11',
+      domains: { reason: 'domain-taken' },
     });
   });
 });

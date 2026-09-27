@@ -183,6 +183,12 @@ receipt-claiming transaction, which is why it does not go through
 `createWorker`: see `src/retention/retention.job.ts` and [the data retention
 guide](../../docs/guides/data-retention.md#the-nightly-run).
 
+The `rules` worker (M3-03, M3-04) consumes `rules.evaluate`, which the rules
+module's `outbox.event` handler adds for every ticket, SLA and CSAT event, and
+the five-minute `rules.time_based.schedule` tick with the per-brand
+`rules.time_based` runs it adds; `createRulesWorker` upserts that schedule on
+every boot. See [Workflow rules](#workflow-rules).
+
 The media worker runs at concurrency 1. sharp and ffmpeg are CPU-bound, and four
 conversions at once on a small VPS starve everything else on it; more replicas
 is how this scales, not more concurrency.
@@ -476,6 +482,7 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/{tags,custom-fields,ticket-templates}*` | `ticket:read` or `ticket:write` to read, `ticketing:manage` to change | The brand's tags, custom field definitions and ticket templates. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `/api/brands/:brandId/blocked-senders*`, `PATCH …/ticketing/spam-settings` | `@Requires('ticketing:manage')` | M1-11's Spam tab: the sender block list and `offerBlockSender`. [The settings guide](../../docs/guides/ticketing-settings.md#spam). |
 | `/api/brands/:brandId/tickets/:ticketId/{spam,spam-sender}` | `ticket:write` to mark or unmark, `ticket:read` for what the dialog offers | "Mark as spam" and "Not spam". [The ticket guide](../../docs/guides/tickets.md#spam). |
+| `/api/brands/:brandId/rules*` | `@Requires('ticketing:manage')`; changing a rule also needs a brand-wide scope | M3-03 to M3-05: workflow and time-based rules, their order, the execution log, the builder's options and the test run. [The automation guide](../../docs/guides/automation.md#api) lists them. |
 | `/api/brands/:brandId/assignment*` | `ticketing:manage` for the settings and the agents, `ticket:write` for `…/:departmentId/assignable` | M1-07's Assignment tab and the assignee picker. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `/api/brands/:brandId/{business-hours,holidays,sla-policies}*`, `PATCH …/ticketing/sla-settings` | `@Requires('ticketing:manage')` | M3-01's Business hours tab and M3-02's SLAs tab; every save recomputes the clocks. [The SLA guide](../../docs/guides/slas.md#endpoints) lists them. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
@@ -636,6 +643,37 @@ Two things are easy to get wrong here:
   assignment is one short transaction, so a brand-wide queue costs milliseconds.
   `assignment.integration.test.ts` proves that six concurrent picks never put a
   second ticket on an agent with a cap of one.
+
+## Workflow rules
+
+`src/rules/` holds M3-03 to M3-05. What a brand configures is
+[the automation guide](../../docs/guides/automation.md); what follows is for
+somebody reading the code.
+
+| File | |
+|---|---|
+| `triggers.ts` | Which rule events an outbox event stands for, and `guardRun`, the depth guard: a rule already in the chain is a cycle, a fourth rule is too deep. Pure. |
+| `ticket-facts.ts` | What conditions are asked about, read once per ticket. The evaluator itself is `evaluateConditions` in `@helpdock/schemas`, shared with the admin's mock. |
+| `engine.ts` | `evaluateEventRules` and `runScheduledRules`: which rules run, each rule's actions in a savepoint, and the log. |
+| `actions.ts` | The actions, carried out as a person's change is: the column, a `ticket_activity` row as `rule:<id>`, and one outbox event carrying the rule chain. |
+| `rules-jobs.ts` | The `outbox.event` handler that adds `rules.evaluate`, the `rule.notify` placeholder, and the `rules` queue's processor. Registered by `worker/start-worker.ts`. |
+| `engine-deps.ts` | What the engine acts with outside Nest: the repositories, M1's lifecycle with M3-02's SLA hooks (which extend the survey hook), and M3-01's calendar. |
+| `ports.ts` | The two seams: M3-06's `CannedResponsesService.render`, still a stand-in (a canned reply is unavailable), and M3-01's business hours, filled by `sla/business-hours-probe.ts` in `engine-deps.ts` and `RulesModule.forRoot({ sla })`. |
+| `test-run.ts` | M3-05's preview: what the actions would do and what they could set off. Reads only. |
+| `rules.service.ts`, `.controller.ts`, `.repository.ts` | The builder's routes. |
+
+Three things are easy to get wrong here:
+
+- **Rules never run from a request.** A ticket change writes its outbox row; the
+  rules handler turns it into a `rules.evaluate` job with an id derived from the
+  outbox row, so a redelivered event is evaluated once.
+- **The chain travels with the event.** `ticket.*` payloads carry `ruleChain`
+  (and `assignment.requested` forwards it), which is the only way the depth
+  guard can see a loop that goes through the outbox. Anything that writes a
+  ticket event on a rule's behalf must pass it on.
+- **`changes` says what an update moved.** "Assigned", "Status changed" and "Tag
+  added" are read off it; an emitter that leaves it out still starts "Ticket
+  updated" rules, and nothing else.
 
 ## Attachments
 

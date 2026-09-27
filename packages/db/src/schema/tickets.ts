@@ -149,6 +149,13 @@ export const tickets = pgTable(
     slaBreached: boolean('sla_breached').notNull().default(false),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     /**
+     * M3-04. When the ticket entered the status it is in: what "time in status"
+     * is measured from, for time-based rules such as "Awaiting customer for more
+     * than 3 days". Kept by the `tickets_status_changed_at` trigger on every
+     * change of `status_id`, so no code path can forget it.
+     */
+    statusChangedAt: timestamp('status_changed_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
      * Soft deletion by an Admin (DOMAIN-RULES §2.2): the row stays, every view
      * stops showing it, and M1-14's retention job is what finally removes it.
      *
@@ -248,6 +255,12 @@ export const tickets = pgTable(
     // ticket, and what the contact screen's counts read.
     index('tickets_brand_contact_idx').on(table.brandId, table.contactId),
     index('tickets_search_idx').using('gin', table.search),
+    // M3-04: a time-based rule's read, "in this status since before then".
+    index('tickets_brand_status_changed_idx').on(
+      table.brandId,
+      table.statusId,
+      table.statusChangedAt,
+    ),
   ],
 );
 

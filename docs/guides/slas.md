@@ -178,9 +178,10 @@ finds every timer back at its time.
 | `ticket.escalated` | as `sla.warning` | a step at or past 100 % ran, or a step set status Escalated |
 
 `notify` is `{ userIds, teamIds, departmentLeads }`, from the step's notify
-actions. M3-07's notifications consume the last three; until they are
-registered, the worker registers a handler that logs them, only for events
-nobody else has claimed. A step also writes `ticket.sla.step` to the activity
+actions. M3-07's notifications consume the last three. Workflow rules consume
+`sla.warning` and `sla.breached` as their SLA warning and SLA breach triggers
+([the automation guide](automation.md)); for an event nobody else has claimed —
+today `ticket.escalated` — the worker registers a handler that logs it. A step also writes `ticket.sla.step` to the activity
 log and `ticket.updated` to the outbox, so open screens refresh.
 
 ## What a ticket read carries

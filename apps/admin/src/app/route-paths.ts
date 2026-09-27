@@ -42,6 +42,12 @@ export const ROUTES = {
   ticketing: '/admin/ticketing',
   /** One tab of it. `/admin/ticketing` alone redirects to the first. */
   ticketingTab: '/admin/ticketing/:tab',
+  /** Workflow rules, time-based rules and macros (M3-03 to M3-06). */
+  automation: '/admin/automation',
+  /** One tab of it. `/admin/automation` alone redirects to Rules. */
+  automationTab: '/admin/automation/:tab',
+  /** The rule builder (M3-05): a saved rule, or `new` with `?kind=`. */
+  automationRule: '/admin/automation/rules/:ruleId',
   /** The brand's own settings (M1-14 ships the Danger zone tab). */
   brand: '/admin/brand',
   /** One tab of it. `/admin/brand` alone redirects to the first built one. */
@@ -125,6 +131,13 @@ export const channelsRoute = (tab: string): string => `${ROUTES.channels}/${tab}
 /** One mailbox's form. */
 export const mailboxRoute = (mailboxId: string): string =>
   `${ROUTES.channels}/mailboxes/${encodeURIComponent(mailboxId)}`;
+
+/** One tab of `Admin/Automation`, by its url segment. */
+export const automationRoute = (tab: string): string => `${ROUTES.automation}/${tab}`;
+
+/** The builder for one rule, or for a new one of a kind. */
+export const ruleRoute = (ruleId: string): string =>
+  `${ROUTES.automation}/rules/${encodeURIComponent(ruleId)}`;
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;

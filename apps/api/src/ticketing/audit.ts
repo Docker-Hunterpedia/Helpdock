@@ -41,7 +41,12 @@ export type TicketingAuditAction =
   | 'view.created'
   | 'view.updated'
   | 'view.deleted'
-  | 'view.reordered';
+  | 'view.reordered'
+  // M3-03, M3-04: a brand's workflow rules.
+  | 'workflow_rule.created'
+  | 'workflow_rule.updated'
+  | 'workflow_rule.deleted'
+  | 'workflow_rule.reordered';
 
 export type TicketingAuditTarget =
   | 'tag'
@@ -50,7 +55,8 @@ export type TicketingAuditTarget =
   | 'blocked_sender'
   | 'brand'
   | 'department'
-  | 'view';
+  | 'view'
+  | 'workflow_rule';
 
 export interface TicketingAuditEntry {
   readonly brandId: string;

@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
   Ticket,
   Users,
+  Workflow,
 } from 'lucide-react';
 import { ROUTES } from '../app/route-paths.js';
 
@@ -23,6 +24,7 @@ export type NavKey =
   | 'reports'
   | 'settings'
   | 'ticketing'
+  | 'automation'
   | 'channels'
   | 'staff'
   | 'system';
@@ -89,6 +91,11 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   ticketing: item('ticketing', ROUTES.ticketing, SlidersHorizontal, {
     roles: ['admin', 'teamLeader'],
   }),
+  // M3-03 to M3-06: workflow rules, time-based rules and macros. The same two
+  // roles as Ticketing: DOMAIN-RULES §1.2 gives a Team Leader "rules, macros".
+  automation: item('automation', ROUTES.automation, Workflow, {
+    roles: ['admin', 'teamLeader'],
+  }),
   // How customers reach the brand (M2-08): its mail server and mailboxes are
   // brand-wide configuration, which DOMAIN-RULES §1.2 keeps with the Admin.
   channels: item('channels', ROUTES.channels, Mail, { roles: ['admin'] }),
@@ -112,6 +119,7 @@ export const ADMIN_NAV: readonly NavItem[] = [
   NAV_BY_KEY.brand,
   NAV_BY_KEY.settings,
   NAV_BY_KEY.ticketing,
+  NAV_BY_KEY.automation,
   NAV_BY_KEY.channels,
   NAV_BY_KEY.staff,
   NAV_BY_KEY.system,

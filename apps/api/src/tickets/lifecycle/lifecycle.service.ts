@@ -11,7 +11,7 @@ import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
 import { TicketRepository } from '../tickets.repository.js';
-import { TicketLifecycleHooks } from './hooks.js';
+import { type LifecycleResponseEvent, TicketLifecycleHooks } from './hooks.js';
 import { TicketLifecycleRepository } from './lifecycle.repository.js';
 import { TicketLifecycleFailure } from './lifecycle-failure.js';
 import { decideReopen } from './reopen-policy.js';
@@ -244,18 +244,23 @@ export class TicketLifecycleService {
     });
   }
 
-  /** M3-02: a staff member's public reply, which may meet the response clock (§3.1). */
+  /**
+   * M3-02: a public reply, which may meet the response clock (§3.1). A staff
+   * member's by default; M3-03's canned-reply action passes `by: 'rule'` with
+   * the action's `counts_as_response`.
+   */
   async onResponded(
     context: LifecycleContext,
     ticket: TicketRow,
     status: TicketStatusRow,
+    response: Pick<LifecycleResponseEvent, 'by' | 'countsAsResponse'> = { by: 'staff' },
   ): Promise<void> {
     await this.#hooks.onResponded(context.tx, {
       brandId: context.brandId,
       ticket,
       status,
       at: context.now,
-      by: 'staff',
+      ...response,
     });
   }
 

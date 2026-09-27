@@ -345,6 +345,7 @@ export const emailPollJob = defineJob({
 
 /** The scheduler id of one mailbox's poller. Dots, not colons, for the reason {@link retentionJobId} gives. */
 export const emailPollSchedulerId = (mailboxId: string): string => `email.poll.${mailboxId}`;
+
 export const slaTimerPayloadSchema = z.object({
   brandId: z.uuid(),
   ticketId: z.uuid(),
@@ -419,6 +420,99 @@ export const slaRebuildJob = defineJob({
   schedule: { everyMs: 3_600_000 },
 });
 
+/** A rule chain carries at most this many rule ids; see `RULE_MAX_DEPTH` in `@helpdock/schemas`. */
+const RULE_CHAIN_MAX = 3;
+
+export const rulesEvaluatePayloadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  /** The rule events this domain event stands for, e.g. `ticket_updated` and `assigned`. */
+  triggers: z
+    .array(z.string().regex(/^[a-z_]+$/))
+    .min(1)
+    .max(10),
+  /** The outbox row the event came from. Also what the job id and the receipt are built from. */
+  sourceOutboxId: z.uuid(),
+  /**
+   * The rules whose actions led to this event, oldest first: empty when a
+   * person, a channel or a timer started it. Its length is the depth the
+   * guard counts from (REQUIREMENTS §4.3).
+   */
+  chain: z.array(z.uuid()).max(RULE_CHAIN_MAX),
+});
+
+export type RulesEvaluatePayload = z.infer<typeof rulesEvaluatePayloadSchema>;
+
+/**
+ * M3-03: evaluate a brand's event rules for one ticket after one domain event.
+ *
+ * Rules run from the outbox relay's domain events, never from a request: the
+ * rules module registers an `outbox.event` handler for the ticket, SLA and
+ * CSAT events, and that handler adds this job with a job id derived from the
+ * outbox row (as `attachment.uploaded` does for `media.process`), so a
+ * redelivered event adds nothing new and a failing rule never holds up the
+ * socket frame the same event carries. Keyed by the outbox row, so one event
+ * is evaluated once.
+ */
+export const rulesEvaluateJob = defineJob({
+  name: 'rules.evaluate',
+  queue: QUEUE_NAMES.rules,
+  schema: rulesEvaluatePayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `rules.evaluate:${payload.sourceOutboxId}`,
+});
+
+/** The BullMQ job id of the evaluation one outbox row asks for. */
+export const rulesEvaluateJobId = ({ sourceOutboxId }: RulesEvaluatePayload): string =>
+  `rules.evaluate.${sourceOutboxId}`;
+
+export const rulesTimeBasedPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The tick this run belongs to, as an ISO instant rounded down to the tick. */
+  tick: z.iso.datetime(),
+});
+
+export type RulesTimeBasedPayload = z.infer<typeof rulesTimeBasedPayloadSchema>;
+
+/**
+ * M3-04: one brand's time-based rules, for one tick. Added by
+ * {@link rulesTimeBasedScheduleJob}, one per brand, because a job that needs
+ * several brands enqueues one child per brand (DOMAIN-RULES §1.4).
+ */
+export const rulesTimeBasedJob = defineJob({
+  name: 'rules.time_based',
+  queue: QUEUE_NAMES.rules,
+  schema: rulesTimeBasedPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 5_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: (payload) => `rules.time_based:${payload.brandId}:${payload.tick}`,
+});
+
+/** The BullMQ job id of one brand's run for one tick. Dots, because BullMQ refuses colons. */
+export const rulesTimeBasedJobId = ({ brandId, tick }: RulesTimeBasedPayload): string =>
+  `rules.time_based.${brandId}.${Date.parse(tick)}`;
+
+/** Every five minutes: the shortest interval a rule may ask for is fifteen. */
+export const RULES_TIME_BASED_CRON = '*/5 * * * *';
+
+/** The cron tick that fans {@link rulesTimeBasedJob} out per brand (M3-04). */
+export const rulesTimeBasedScheduleJob = defineJob({
+  name: 'rules.time_based.schedule',
+  queue: QUEUE_NAMES.rules,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 30_000 }, removeOnFail: 100 },
+  schedule: { cron: RULES_TIME_BASED_CRON },
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -431,6 +525,9 @@ export const JOB_DEFINITIONS = Object.freeze({
   [emailPollJob.name]: emailPollJob,
   [slaTimerJob.name]: slaTimerJob,
   [slaRebuildJob.name]: slaRebuildJob,
+  [rulesEvaluateJob.name]: rulesEvaluateJob,
+  [rulesTimeBasedJob.name]: rulesTimeBasedJob,
+  [rulesTimeBasedScheduleJob.name]: rulesTimeBasedScheduleJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

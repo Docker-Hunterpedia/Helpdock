@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
+import type { AutomationApi } from '../automation/api.js';
+import { MockAutomationApi } from '../automation/mock-api.js';
 import type { ChannelsApi } from '../channels/api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
@@ -31,6 +33,8 @@ export interface RenderAppOptions {
   readonly uploader?: AttachmentUploader;
   readonly emailApi?: EmailApi;
   readonly channelsApi?: ChannelsApi;
+  /** Defaults to a fresh fixture, for `Admin/Automation`. */
+  readonly automationApi?: AutomationApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -44,6 +48,7 @@ export interface RenderedApp extends RenderResult {
   readonly uploader: AttachmentUploader;
   readonly emailApi: EmailApi;
   readonly channelsApi: ChannelsApi;
+  readonly automationApi: AutomationApi;
 }
 
 /**
@@ -61,6 +66,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const uploader = options.uploader ?? new MockAttachmentUploader();
   const emailApi = options.emailApi ?? new MockEmailApi();
   const channelsApi = options.channelsApi ?? new MockChannelsApi();
+  const automationApi = options.automationApi ?? new MockAutomationApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -74,6 +80,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       uploader={uploader}
       emailApi={emailApi}
       channelsApi={channelsApi}
+      automationApi={automationApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -94,5 +101,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     uploader,
     emailApi,
     channelsApi,
+    automationApi,
   };
 }

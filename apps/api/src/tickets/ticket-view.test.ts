@@ -54,6 +54,7 @@ const row = (contactId: string | null): TicketRow => ({
   resolutionDueAt: null,
   slaBreached: false,
   closedAt: null,
+  statusChangedAt: AT,
   custom: {},
   search: null,
   deletedAt: null,

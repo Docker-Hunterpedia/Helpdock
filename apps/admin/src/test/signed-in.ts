@@ -1,5 +1,6 @@
 import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE, MockAuthApi } from '../auth/mock-api.js';
 import type { AdminApis } from '../auth/select-api.js';
+import { MockAutomationApi } from '../automation/mock-api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
@@ -43,5 +44,6 @@ export async function signedInMockApis(): Promise<AdminApis> {
     uploader: new MockAttachmentUploader(),
     email: new MockEmailApi(),
     channels: new MockChannelsApi(),
+    automation: new MockAutomationApi(),
   };
 }

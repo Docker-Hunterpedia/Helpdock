@@ -174,8 +174,6 @@ export interface CreateApiAppOptions {
   readonly runtime: Runtime;
   readonly extraControllers?: AppModuleOptions['extraControllers'];
   readonly brandResolver?: AppModuleOptions['brandResolver'];
-  /** Tests substitute a sender they can read the magic link back out of. */
-  readonly emailSender?: AppModuleOptions['auth']['emailSender'];
   /** M1-10's bucket. Boot leaves it out and the module builds one from `S3_*`. */
   readonly objectStorage?: AppModuleOptions['objectStorage'];
   /** M2's IMAP connection and image fetcher, for suites. */
@@ -186,7 +184,6 @@ export const createApiApp = async ({
   runtime,
   extraControllers,
   brandResolver,
-  emailSender,
   objectStorage,
   channels,
 }: CreateApiAppOptions): Promise<ApiApp> => {
@@ -210,11 +207,7 @@ export const createApiApp = async ({
       redis: runtime.redis,
       logger,
       bootFacts: runtime.bootFacts,
-      auth: {
-        signingKeys: runtime.signingKeys,
-        logger,
-        ...(emailSender === undefined ? {} : { emailSender }),
-      },
+      auth: { signingKeys: runtime.signingKeys, logger },
       realtime: { sessionResolver, revocations: refreshStore },
       principalResolver: createPrincipalResolver({ env, logger, session: sessionResolver }),
       ...(brandResolver === undefined ? {} : { brandResolver }),

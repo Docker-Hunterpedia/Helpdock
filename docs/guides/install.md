@@ -157,7 +157,7 @@ Four steps, none of which can be got wrong permanently except one:
 |---|---|
 | **1 Admin account** | The setup key, when `HD_SETUP_TOKEN` is set. Your name, email, a password of at least twelve characters, and your language. This account is the *install administrator*: the only one that reaches every brand and every setting. The language you pick here is the one the rest of the wizard, and your admin, are shown in — pick العربية and the whole thing turns around. |
 | **2 First brand** | The brand's name, a **ticket prefix**, its default language, its timezone, and optionally the hostname its help center will answer on. The brand is created with one department, **General**; rename it or add more in admin. |
-| **3 Outgoing email** | Your SMTP server, port, encryption, credentials and the address mail comes from. **Send a test email** delivers one to the address from step 1 and shows you what the server said. You may skip this and set it up later in admin. |
+| **3 Outgoing email** | Your SMTP server, port, encryption, credentials and the address mail comes from. **Send a test email** delivers one to the address from step 1 and shows you what the server said. This is the install's system sender: sign-in links, password resets, staff invitations and staff notifications all go from it, sent by the worker. You may skip this, but until it is set none of those are delivered — the worker only logs that they would have been ([authentication › Sending](authentication.md#sending)). |
 | **4 Done** | What was created, and the way in. |
 
 **The ticket prefix cannot be changed.** It is printed in every ticket number,

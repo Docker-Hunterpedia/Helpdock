@@ -497,15 +497,13 @@ export class StaffService {
       INVITE_TTL_SECONDS,
     );
 
-    const locale = user.locale as Locale;
-    await this.#parts.auth.sendInvite({
-      to: user.email,
+    await this.#parts.auth.queueInvite(context.tx, context.brandId, {
+      userId: user.id,
       url: new URL(`/invite/${encodeURIComponent(token)}`, this.#parts.appUrl).toString(),
-      locale,
       expiresInDays: INVITE_TTL_DAYS,
       inviterName: await this.#inviterName(context),
       brandName: brand.name,
-      roleName: roleNameIn(locale, role),
+      roleName: roleNameIn(user.locale, role),
     });
   }
 

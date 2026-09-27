@@ -13,6 +13,12 @@ import { PUSH_SUBSCRIPTION_STORAGE } from './notifications-tab.tsx';
  * through its four states.
  */
 
+/**
+ * The first screen a file draws pays for loading the shell, the session and a
+ * redirect; on a loaded CI runner that is more than the default second.
+ */
+const FIRST_PAINT_MS = 5_000;
+
 const renderTab = async ({
   api = new MockNotificationsApi({ pushConfigured: true }),
   push = new MockBrowserPush(),
@@ -26,7 +32,11 @@ const renderTab = async ({
     browserPush: push,
     initialEntries: [path],
   });
-  await screen.findByRole('heading', { name: 'What you are told about, and where' });
+  await screen.findByRole(
+    'heading',
+    { name: 'What you are told about, and where' },
+    { timeout: FIRST_PAINT_MS },
+  );
 
   return { ...rendered, api, push };
 };
@@ -40,7 +50,11 @@ describe('Your account', () => {
     const { auth, staff } = await signedInMockApis();
     renderApp(<AppRoutes />, { authApi: auth, staffApi: staff, initialEntries: ['/me'] });
 
-    await screen.findByRole('heading', { name: 'Your account', level: 1 });
+    await screen.findByRole(
+      'heading',
+      { name: 'Your account', level: 1 },
+      { timeout: FIRST_PAINT_MS },
+    );
     const tabs = within(screen.getByRole('tablist', { name: 'Your account' })).getAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Security',
@@ -67,10 +81,9 @@ describe('Your account', () => {
     const { auth, staff } = await signedInMockApis();
     renderApp(<AppRoutes />, { authApi: auth, staffApi: staff, initialEntries: ['/me/nothing'] });
 
-    expect(await screen.findByRole('tab', { name: 'Security' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    expect(
+      await screen.findByRole('tab', { name: 'Security' }, { timeout: FIRST_PAINT_MS }),
+    ).toHaveAttribute('aria-selected', 'true');
   });
 });
 

@@ -5,6 +5,7 @@ import {
   departments,
   INSTALL_SCOPE_BRAND_ID,
   isUuid,
+  seedBrandStatuses,
   seedBrandViews,
   userBrandRoles,
   uuidv7,
@@ -26,14 +27,16 @@ import { writeBrandAudit } from './audit.js';
  * an `install.scope.access` row into this very transaction, and the creation
  * writes a `brand.created` row of its own.
  *
- * Four things happen together or not at all:
+ * Five things happen together or not at all:
  *
  * 1. the brand row, whose insert trigger creates its ticket sequence;
  * 2. an `admin` role in it for whoever asked, so the brand is reachable;
  * 3. one department, so the first screen that asks for one is not empty;
- * 4. the audit row.
+ * 4. the six built-in statuses, without which no ticket can be filed in it
+ *    (DOMAIN-RULES §2.1), as the wizard writes them for the first brand;
+ * 5. the audit row.
  *
- * All four are in the request's own transaction. A second transaction for the
+ * All five are in the request's own transaction. A second transaction for the
  * tenant rows — which is what the wizard has to do, because it runs before
  * there is a principal — would be able to commit the departments of a brand
  * whose own row then rolled back.
@@ -88,6 +91,7 @@ export class InstallBrandsService {
       name: request.firstDepartmentName,
       sortOrder: 0,
     });
+    await seedBrandStatuses(tx, brandId);
     // M1-05: the default views, including the first department's "All open".
     await seedBrandViews(tx, brandId);
 

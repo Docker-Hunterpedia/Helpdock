@@ -142,12 +142,16 @@ export const widgetOriginSchema = z
       context.addIssue({ code: 'custom', message: 'must be an origin like https://example.com' });
       return z.NEVER;
     }
-    const bare = `${url.protocol}//${url.host}`;
     if (
       (url.protocol !== 'https:' && url.protocol !== 'http:') ||
       url.username !== '' ||
       url.password !== '' ||
-      value.replace(/\/$/, '').toLowerCase() !== bare.toLowerCase()
+      url.pathname !== '/' ||
+      url.search !== '' ||
+      url.hash !== '' ||
+      // `new URL` reads "https://x.com?" as having no query; the text must not either.
+      /[?#]/.test(value) ||
+      !value.toLowerCase().startsWith(`${url.protocol}//`)
     ) {
       context.addIssue({ code: 'custom', message: 'must be an origin like https://example.com' });
       return z.NEVER;

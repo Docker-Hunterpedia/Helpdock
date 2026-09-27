@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
+import { WidgetFailure } from '../widget/widget-failure.js';
 import { errorBody, mapError } from './error-response.js';
 
 const zodErrorFor = (value: unknown) => {
@@ -134,5 +135,18 @@ describe('a refused ticketing action', () => {
     ] as const) {
       expect(mapError(new TicketingFailure(reason)).status).toBe(409);
     }
+  });
+});
+
+describe('a refused widget request (M4)', () => {
+  it('keeps its reason for the widget to translate', () => {
+    const mapped = mapError(new WidgetFailure('origin_not_allowed'));
+
+    expect(mapped).toMatchObject({ status: 403, code: 'forbidden', widget: 'origin_not_allowed' });
+    expect(errorBody(mapped, 'req-1').error.widget).toEqual({ reason: 'origin_not_allowed' });
+    expect(mapError(new WidgetFailure('rate_limited'))).toMatchObject({
+      status: 429,
+      code: 'rate_limited',
+    });
   });
 });

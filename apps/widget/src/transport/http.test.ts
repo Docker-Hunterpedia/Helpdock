@@ -27,7 +27,9 @@ describe('HttpClient', () => {
   });
 
   it('sends no credential before one is issued, and answers nothing for a 202', async () => {
-    const fetch = vi.fn(async () => new Response(null, { status: 202 }));
+    const fetch = vi.fn(
+      async (_url: string, _init?: RequestInit) => new Response(null, { status: 202 }),
+    );
     const http = new HttpClient({
       apiUrl: 'https://api.example.com',
       brandId: BRAND,

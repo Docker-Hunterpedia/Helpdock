@@ -507,7 +507,7 @@
       "captchaHint": "يجتاز الزائر تحديًا واحدًا لكل محادثة. لا يُحمَّل سكربت المزود إلا أثناء تفعيل هذا الخيار.",
       "provider": "المزود",
       "providers": {
-        "turnstile": "Cloudflare Turnstile",
+        "turnstile": "Turnstile من Cloudflare",
         "hcaptcha": "hCaptcha"
       },
       "siteKey": "مفتاح الموقع",

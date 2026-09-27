@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
+import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
@@ -126,6 +127,17 @@ describe('errorBody', () => {
       requestId: 'req-11',
       domains: { reason: 'domain-taken' },
     });
+  });
+
+  it('carries the help center refusal, with the status its rule answers', () => {
+    const conflict = errorBody(mapError(new HelpCenterFailure('slug-taken')), 'req-11');
+    const invalid = mapError(new HelpCenterFailure('schedule-in-past'));
+
+    expect(conflict.error).toMatchObject({
+      code: 'conflict',
+      helpCenter: { reason: 'slug-taken' },
+    });
+    expect(invalid).toMatchObject({ status: 400, code: 'validation_failed' });
   });
 });
 

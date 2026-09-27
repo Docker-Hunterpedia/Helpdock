@@ -15,6 +15,7 @@ export * from './email.js';
 export * from './email-inbound.js';
 export * from './error.js';
 export * from './health.js';
+export * from './help-center.js';
 export * from './identity-rules.js';
 export * from './install.js';
 export * from './macros.js';

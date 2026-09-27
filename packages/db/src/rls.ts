@@ -144,6 +144,16 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // `email_outbound_settings`: it names a department to file into, which is
   // where tickets go, not who may read the row.
   { name: 'web_form_settings', departmentScoped: false },
+  // M5-01, M5-02, M5-09. Help center content belongs to the brand, not to a
+  // department: a Team Leader manages the brand's knowledge (DOMAIN-RULES
+  // §1.2), and who may *read* an article is its visibility, which the read
+  // service filters on in SQL (§5) — not a tenant rule.
+  { name: 'hc_categories', departmentScoped: false },
+  { name: 'hc_sections', departmentScoped: false },
+  { name: 'hc_articles', departmentScoped: false },
+  { name: 'hc_article_versions', departmentScoped: false },
+  { name: 'hc_settings', departmentScoped: false },
+  { name: 'hc_media', departmentScoped: false },
 ];
 
 /**

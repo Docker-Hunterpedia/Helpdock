@@ -13,6 +13,9 @@ import { MockDomainsApi } from '../domains/mock-api.js';
 import type { EmailApi } from '../email/api.js';
 import { HttpEmailApi } from '../email/http-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
+import type { HelpCenterApi } from '../help-center/api.js';
+import { HttpHelpCenterApi } from '../help-center/http-api.js';
+import { MockHelpCenterApi } from '../help-center/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import { HttpAttachmentUploader } from '../media/upload.js';
@@ -57,6 +60,8 @@ export interface AdminApis {
   readonly channels: ChannelsApi;
   /** M3-03 to M3-05: `Admin/Automation`. */
   readonly automation: AutomationApi;
+  /** M5-01, M5-02, M5-09: the Help center screens. */
+  readonly helpCenter: HelpCenterApi;
   /** M3-07: the bell, its panel and the Notifications tab. */
   readonly notifications: NotificationsApi;
   /** M3-07: this browser's push half, which the mock replaces with a fixture too. */
@@ -105,6 +110,7 @@ export function createApis(
       email: new HttpEmailApi(transport),
       channels: new HttpChannelsApi(transport),
       automation: new HttpAutomationApi(transport),
+      helpCenter: new HttpHelpCenterApi(transport),
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
       domains: new HttpDomainsApi(transport),
@@ -140,6 +146,7 @@ export function createApis(
     email: new MockEmailApi(),
     channels: new MockChannelsApi(),
     automation: new MockAutomationApi(),
+    helpCenter: new MockHelpCenterApi(),
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),

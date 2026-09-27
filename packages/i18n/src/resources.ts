@@ -6,6 +6,7 @@ import arCommon from '../locales/ar/common.json' with { type: 'json' };
 import arContacts from '../locales/ar/contacts.json' with { type: 'json' };
 import arCsat from '../locales/ar/csat.json' with { type: 'json' };
 import arEmail from '../locales/ar/email.json' with { type: 'json' };
+import arHelpCenter from '../locales/ar/helpCenter.json' with { type: 'json' };
 import arMacros from '../locales/ar/macros.json' with { type: 'json' };
 import arMe from '../locales/ar/me.json' with { type: 'json' };
 import arRules from '../locales/ar/rules.json' with { type: 'json' };
@@ -26,6 +27,7 @@ import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enContacts from '../locales/en/contacts.json' with { type: 'json' };
 import enCsat from '../locales/en/csat.json' with { type: 'json' };
 import enEmail from '../locales/en/email.json' with { type: 'json' };
+import enHelpCenter from '../locales/en/helpCenter.json' with { type: 'json' };
 import enMacros from '../locales/en/macros.json' with { type: 'json' };
 import enMe from '../locales/en/me.json' with { type: 'json' };
 import enRules from '../locales/en/rules.json' with { type: 'json' };
@@ -76,6 +78,8 @@ export const NAMESPACES = [
   'widget',
   // The hosted web form (M4-09): read by the customer, not by staff.
   'webform',
+  // `Admin/HelpCenter` and its editor (M5-01, M5-02, M5-09).
+  'helpCenter',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -103,6 +107,7 @@ export const resources = {
     macros: enMacros,
     widget: enWidget,
     webform: enWebform,
+    helpCenter: enHelpCenter,
   },
   ar: {
     common: arCommon,
@@ -125,6 +130,7 @@ export const resources = {
     macros: arMacros,
     widget: arWidget,
     webform: arWebform,
+    helpCenter: arHelpCenter,
   },
 };
 

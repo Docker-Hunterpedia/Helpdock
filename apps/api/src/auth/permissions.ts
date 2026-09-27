@@ -59,6 +59,12 @@ export const PERMISSIONS = [
   'settings:write',
   'system:read',
   'install:admin',
+  // M5: reading the brand's help center content in the admin is every role's
+  // (a Viewer "may read … help center content", DOMAIN-RULES §1.2; an Agent
+  // looks articles up to answer with them). Changing it is an Admin's and a
+  // Team Leader's ("Manages config … help center").
+  'help_center:read',
+  'help_center:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -85,6 +91,8 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'settings:read',
     'settings:write',
     'system:read',
+    'help_center:read',
+    'help_center:manage',
   ],
   // "Departments they lead: agents, SLAs, rules, macros, canned responses, help
   // center, widget theme, content policy, reopen policy" — brand-level
@@ -101,6 +109,8 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'staff:manage',
     'settings:read',
     'settings:write',
+    'help_center:read',
+    'help_center:manage',
   ],
   agent: [
     'ticket:read',
@@ -109,8 +119,9 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'contact:write',
     'brand:read',
     'staff:read',
+    'help_center:read',
   ],
-  viewer: ['ticket:read', 'contact:read', 'brand:read', 'staff:read'],
+  viewer: ['ticket:read', 'contact:read', 'brand:read', 'staff:read', 'help_center:read'],
 });
 
 export const roleHasPermission = (role: BrandRole, permission: Permission): boolean =>

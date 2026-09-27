@@ -262,8 +262,8 @@ packages/ai
 | `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02) |
 | `rules` | `rules.evaluate`, `rules.time_based` (cron) | depth guard |
 | `ai` | `ai.assist`, `ai.autoreply`, `ai.classify`, `ai.transcribe` | per-brand concurrency + budget check |
-| `knowledge` | `ingest.source`, `ingest.chunk_embed`, `crawl.page` | rate-limited crawl |
-| `media` | `media.process`, `media.scan` | |
+| `knowledge` | `ingest.source`, `ingest.chunk_embed`, `crawl.page`; `help_center.publish_due` (delayed, one per brand and scheduled minute) and `help_center.publish_due.sweep` (hourly) | rate-limited crawl; the scheduled publish of M5-01 |
+| `media` | `media.process`, `media.scan`, `help_center.media_process` | article images of M5-02 share the queue and its budget |
 | `notify` | `notify.inapp`, `notify.email`, `notify.push`, `auth.email` | `auth.email` sends sign-in links, password resets and invitations from the system sender (#104) |
 | `webhooks` | `webhook.deliver` | HMAC, retry, log |
 | `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |

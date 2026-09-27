@@ -1,0 +1,251 @@
+{
+  "title": "Help center",
+  "tabs": {
+    "label": "Help center sections",
+    "articles": "Articles",
+    "settings": "Settings",
+    "insights": "Insights"
+  },
+  "insights": {
+    "heading": "Insights",
+    "body": "Views, feedback and searches with no results arrive with article feedback and view counts (M5-08)."
+  },
+  "newArticle": {
+    "label": "New article",
+    "untitled": "Untitled article {{n}}"
+  },
+  "tree": {
+    "heading": "Structure",
+    "addCategory": "Category",
+    "addSection": "Section",
+    "move": "Move {{name}}",
+    "expand": "Expand {{name}}",
+    "collapse": "Collapse {{name}}",
+    "footnote": "Drag a handle, or focus it and press Arrow up or Arrow down. The order here is the order on the help center.",
+    "readOnly": "The order here is the order on the help center.",
+    "dialog": {
+      "category": "New category",
+      "section": "New section",
+      "body": "Name it in one language or both. A missing name shows the other language's.",
+      "english": "English name",
+      "arabic": "Arabic name",
+      "create": "Create"
+    }
+  },
+  "toast": {
+    "reordered": "Order saved",
+    "categoryCreated": "Category \"{{name}}\" created",
+    "sectionCreated": "Section \"{{name}}\" created",
+    "deleted": "\"{{title}}\" deleted",
+    "failed": "That did not work. Try again.",
+    "status": {
+      "draft": "Unpublished. It stays a draft.",
+      "published": "Published",
+      "scheduled": "Scheduled",
+      "archived": "Archived. Visitors see that it is gone."
+    },
+    "visibility": {
+      "public": "Now public. Search and sitemap update within 60 s.",
+      "internal": "Now internal. Search and sitemap update within 60 s."
+    },
+    "slug": "Address saved",
+    "imported": "Markdown imported. It saves in a moment."
+  },
+  "refusals": {
+    "slug-taken": "Another article already uses that address.",
+    "not-empty": "Move or delete what is inside it first.",
+    "was-published": "This article has been published. Archive it instead.",
+    "schedule-in-past": "Choose a time in the future.",
+    "limit-reached": "This help center already has as many of these as it can keep."
+  },
+  "filters": {
+    "label": "Filter articles",
+    "search": "Search titles",
+    "status": "Status",
+    "anyStatus": "Any status",
+    "visibility": "Visibility",
+    "anyVisibility": "Public and internal",
+    "language": "Language",
+    "anyLanguage": "Any language",
+    "missing_ar": "Missing Arabic",
+    "missing_en": "Missing English",
+    "section": "Section: {{name}}",
+    "clearSection": "Clear the section filter",
+    "count": "{{shown}} of {{total}} articles"
+  },
+  "status": {
+    "draft": "Draft",
+    "published": "Published",
+    "scheduled": "Scheduled",
+    "archived": "Archived",
+    "scheduledAt": "Scheduled · {{when}}"
+  },
+  "visibility": {
+    "public": "Public",
+    "internal": "Internal"
+  },
+  "languages": {
+    "en": "English",
+    "ar": "Arabic",
+    "missing": {
+      "en": "English missing",
+      "ar": "Arabic missing"
+    },
+    "native": {
+      "en": "English",
+      "ar": "العربية"
+    }
+  },
+  "empty": {
+    "heading": "No articles here yet",
+    "body": "Write the first article for this section. It stays a draft until you publish it."
+  },
+  "list": {
+    "label": "Articles",
+    "all": "All articles",
+    "inSection": "Articles in {{name}}",
+    "columns": {
+      "article": "Article",
+      "status": "Status",
+      "visibility": "Visibility",
+      "languages": "Languages",
+      "updated": "Updated",
+      "actions": "Actions"
+    },
+    "noMatch": "No article matches these filters.",
+    "actions": "Actions for {{title}}",
+    "footnote": "A dashed language chip means that translation does not exist; visitors in that language get the brand's default language. Internal articles show only to signed-in staff and never reach public search, the sitemap or the widget.",
+    "menu": {
+      "edit": "Edit",
+      "open": "Open",
+      "delete": "Delete"
+    },
+    "confirm": {
+      "title": "Delete \"{{title}}\"?",
+      "body": "Only an article that was never published can be deleted. A published one is archived instead.",
+      "submit": "Delete article"
+    }
+  },
+  "settings": {
+    "heading": "Who can read it",
+    "body": "Applies to every article in this help center.",
+    "access": {
+      "public": {
+        "label": "Public",
+        "hint": "Anyone can read public articles. Each article can still be marked internal."
+      },
+      "internal_only": {
+        "label": "Internal only",
+        "hint": "Signed-in staff only. Every article becomes internal, the sitemap is emptied, pages are never cached publicly and the widget cannot show articles. Takes effect within 60 s."
+      }
+    },
+    "discard": "Discard",
+    "save": "Save changes",
+    "saved": "Saved. It takes effect within 60 s."
+  },
+  "editor": {
+    "notFound": "This article could not be opened.",
+    "back": "Articles",
+    "saving": "Saving…",
+    "saved": "Saved {{time}}",
+    "saveFailed": "Not saved",
+    "schedule": "Schedule",
+    "publishChanges": "Publish changes",
+    "publish": "Publish",
+    "toolbar": "Formatting",
+    "textStyle": "Text style",
+    "paragraph": "Paragraph",
+    "heading2": "Heading 2",
+    "heading3": "Heading 3",
+    "bold": "Bold",
+    "italic": "Italic",
+    "bullets": "Bulleted list",
+    "numbers": "Numbered list",
+    "link": "Link",
+    "anchor": "Anchor",
+    "image": "Image",
+    "table": "Table",
+    "code": "Code block",
+    "direction": "Text direction for this block",
+    "pasteHint": "Paste an image: saved as WebP",
+    "uploading": "Converting the image…",
+    "imageRejected": "That image could not be used. Try a PNG, JPEG, WebP or GIF.",
+    "title": "Title",
+    "titlePlaceholder": "Title",
+    "body": "Article body",
+    "url": "Address",
+    "linkTitle": "Add a link",
+    "linkBody": "A web address, an email or phone link, a #anchor in this article or a path on this help center.",
+    "linkHint": "For example https://example.com or #how-long",
+    "linkInvalid": "That is not an address a link can use.",
+    "linkInsert": "Add link",
+    "callout": {
+      "button": "Callout",
+      "style": "Callout style",
+      "tip": "Tip",
+      "caution": "Caution"
+    },
+    "video": {
+      "button": "Video embed",
+      "label": "Video:",
+      "title": "Embed a video",
+      "body": "Paste a YouTube or Vimeo address. The help center shows the player.",
+      "hint": "For example https://youtu.be/…",
+      "invalid": "Only YouTube and Vimeo videos can be embedded.",
+      "insert": "Embed video"
+    }
+  },
+  "panel": {
+    "label": "Article settings",
+    "language": {
+      "heading": "Language",
+      "group": "Article language",
+      "missing": "There is no {{language}} version yet. Type a title to start one; until it is published, {{language}} visitors get {{fallback}}.",
+      "fallback": "{{language}} visitors get {{fallback}} until {{language}} is published.",
+      "rtl": "Editing Arabic, right to left.",
+      "notWritten": "Not written"
+    },
+    "status": {
+      "heading": "Status",
+      "published": "Published {{when}} by {{who}}.",
+      "date": "Date",
+      "time": "Time",
+      "timezone": "{{zone}}, the brand time zone."
+    },
+    "visibility": {
+      "heading": "Visibility",
+      "public": "Public",
+      "internal": "Internal: signed-in staff only",
+      "note": "Search and sitemap update within 60 s."
+    },
+    "address": {
+      "heading": "Address and search",
+      "slug": "Slug",
+      "slugInvalid": "Use lower-case letters, digits and single hyphens.",
+      "description": "Search description"
+    },
+    "markdown": {
+      "heading": "Markdown",
+      "import": "Import .md",
+      "export": "Export .md",
+      "note": "Import replaces this language's text."
+    },
+    "activity": {
+      "heading": "Activity",
+      "system": "Scheduled publish",
+      "auditLog": "All changes in the audit log",
+      "scheduledFor": "Scheduled for {{when}}",
+      "actions": {
+        "created": "Created",
+        "edited": "Edited",
+        "published": "Published",
+        "scheduled": "Scheduled",
+        "unpublished": "Unpublished",
+        "archived": "Archived",
+        "visibility_changed": "Visibility changed",
+        "moved": "Moved",
+        "slug_changed": "Address changed"
+      }
+    }
+  }
+}

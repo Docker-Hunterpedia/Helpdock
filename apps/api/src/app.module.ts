@@ -27,6 +27,7 @@ import { ownHostsOf } from './domains/domain-config.js';
 import { DomainsModule } from './domains/domains.module.js';
 import { EmailModule } from './email/email.module.js';
 import type { SmtpTransportFactory } from './email/transport.js';
+import { HelpCenterModule } from './help-center/help-center.module.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
@@ -240,6 +241,12 @@ export class AppModule implements NestModule {
           brandResolver: options.brandResolver ?? hostResolver,
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...options.webForm,
+        }),
+        // M5-01, M5-02, M5-09: help center content, the editor and its images,
+        // and the read service the help center pages are built on.
+        HelpCenterModule.forRoot({
+          env: options.env,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
         }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),

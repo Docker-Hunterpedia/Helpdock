@@ -17,6 +17,8 @@ import { AccountPage } from '../screens/contacts/account-page.tsx';
 import { ContactPage } from '../screens/contacts/contact-page.tsx';
 import { ContactsPage } from '../screens/contacts/contacts-page.tsx';
 import { NewContactPage } from '../screens/contacts/new-contact-page.tsx';
+import { ArticleEditorRoute } from '../screens/help-center/article-editor-route.tsx';
+import { HelpCenterPage } from '../screens/help-center/help-center-page.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
@@ -111,6 +113,9 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
           <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
           <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
+          {/* M5-01, M5-02, M5-09. `/help-center` alone opens Articles. */}
+          <Route path={ROUTES.helpCenter} element={<HelpCenterPage />} />
+          <Route path={ROUTES.helpCenterTab} element={<HelpCenterPage />} />
           {/* General, Domains (M5-07) and Danger zone (M1-14); `/admin/brand`
               with no tab redirects to General, as `/admin/ticketing` does to
               its first. */}
@@ -128,6 +133,10 @@ export function AppRoutes(): ReactNode {
             route for the list and the ticket, because they are one screen. */}
         <Route element={<AppShell flush />}>
           <Route path={ROUTES.ticketWorkspace} element={<TicketsPage />} />
+          {/* M5-02. The editor fills the frame as the workspace does: a top
+              bar, the page and the settings panel (\`Admin/HelpCenter-Editor\`).
+              Its path is deeper than a tab's, so the two never compete. */}
+          <Route path={ROUTES.helpCenterArticle} element={<ArticleEditorRoute />} />
         </Route>
       </Route>
 

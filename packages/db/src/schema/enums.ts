@@ -349,3 +349,25 @@ export const notificationKindEnum = pgEnum('notification_kind', [
   'sla_breached',
   'escalated',
 ]);
+
+/** M5-01. Where one language of an article is in its life (REQUIREMENTS §4.5). */
+export const hcArticleStatusEnum = pgEnum('hc_article_status', [
+  'draft',
+  'scheduled',
+  'published',
+  'archived',
+]);
+
+/** M5-09. Who may read one language of an article (DOMAIN-RULES §5). */
+export const hcVisibilityEnum = pgEnum('hc_visibility', ['public', 'internal']);
+
+/** M5-09. Who may read a brand's help center at all. */
+export const hcAccessEnum = pgEnum('hc_access', ['public', 'internal_only']);
+
+/** M5-02. An article image's way through the media pipeline. */
+export const hcMediaStatusEnum = pgEnum('hc_media_status', [
+  'pending',
+  'processing',
+  'ready',
+  'rejected',
+]);

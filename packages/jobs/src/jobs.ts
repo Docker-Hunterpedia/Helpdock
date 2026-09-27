@@ -681,6 +681,82 @@ export const domainVerifyScheduleJob = defineJob({
   schedule: { cron: DOMAIN_VERIFY_CRON },
 });
 
+export const helpCenterPublishDuePayloadSchema = z.object({
+  brandId: z.uuid(),
+  /**
+   * The instant this run is for: a version's `scheduled_at`, or the hour of
+   * the sweep. The job id and the receipt are built from it.
+   */
+  tick: z.iso.datetime(),
+});
+export type HelpCenterPublishDuePayload = z.infer<typeof helpCenterPublishDuePayloadSchema>;
+
+/**
+ * M5-01's scheduled publish for **one** brand: every article version whose
+ * `scheduled_at` has passed is published, with its outbox event, in the job's
+ * transaction.
+ *
+ * Added two ways, the shape `sla.timer` and `sla.rebuild` already have: as a
+ * **delayed** job for the scheduled instant, by the handler of the
+ * `help_center.article_changed` event that scheduling writes, so an article
+ * goes live on its minute; and by {@link helpCenterPublishDueSweepJob} every
+ * hour for every brand, so a Redis that lost the delayed job still publishes
+ * within the hour (DOMAIN-RULES §10). Keyed by brand and tick, and idempotent
+ * without the key anyway: a version already published is no longer
+ * `scheduled`, so a second run finds nothing.
+ */
+export const helpCenterPublishDueJob = defineJob({
+  name: 'help_center.publish_due',
+  queue: QUEUE_NAMES.knowledge,
+  schema: helpCenterPublishDuePayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 5_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: (payload) => `help_center.publish_due:${payload.brandId}:${payload.tick}`,
+});
+
+/** The BullMQ job id of one brand's run for one tick. Dots, because BullMQ refuses colons. */
+export const helpCenterPublishDueJobId = ({ brandId, tick }: HelpCenterPublishDuePayload): string =>
+  `help_center.publish_due.${brandId}.${Date.parse(tick)}`;
+
+/** The hourly safety net that fans {@link helpCenterPublishDueJob} out per brand. */
+export const helpCenterPublishDueSweepJob = defineJob({
+  name: 'help_center.publish_due.sweep',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 10_000 }, removeOnFail: 100 },
+  schedule: { everyMs: 3_600_000 },
+});
+
+export const helpCenterMediaProcessPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `hc_media` row, and the key every delivery dedupes on. */
+  mediaId: z.uuid(),
+});
+export type HelpCenterMediaProcessPayload = z.infer<typeof helpCenterMediaProcessPayloadSchema>;
+
+/**
+ * M5-02: an article image through the media pipeline of ARCHITECTURE §9 —
+ * sniff the magic bytes, re-encode to WebP with sharp, strip metadata. Added
+ * by the `help_center.media_uploaded` outbox handler after the confirm
+ * committed, with `jobId = mediaId`, as `media.process` is for attachments.
+ */
+export const helpCenterMediaProcessJob = defineJob({
+  name: 'help_center.media_process',
+  queue: QUEUE_NAMES.media,
+  schema: helpCenterMediaProcessPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `help_center.media_process:${payload.mediaId}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -701,6 +777,9 @@ export const JOB_DEFINITIONS = Object.freeze({
   [authEmailJob.name]: authEmailJob,
   [domainVerifyJob.name]: domainVerifyJob,
   [domainVerifyScheduleJob.name]: domainVerifyScheduleJob,
+  [helpCenterPublishDueJob.name]: helpCenterPublishDueJob,
+  [helpCenterPublishDueSweepJob.name]: helpCenterPublishDueSweepJob,
+  [helpCenterMediaProcessJob.name]: helpCenterMediaProcessJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

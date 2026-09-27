@@ -3,6 +3,7 @@ import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { domainsRefusalSchema } from './domains.js';
 import { channelsRefusalSchema } from './email-inbound.js';
+import { hcRefusalSchema } from './help-center.js';
 import { setupRefusalSchema } from './install.js';
 import { staffRefusalSchema } from './staff.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
@@ -86,6 +87,8 @@ export const errorResponseSchema = z.object({
     domains: z.object({ reason: domainsRefusalSchema }).optional(),
     /** Only on a refused widget request (M4-02 to M4-04); the widget translates it. */
     widget: z.object({ reason: widgetErrorCodeSchema }).optional(),
+    /** Only on a refused help center change (M5-01). */
+    helpCenter: z.object({ reason: hcRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

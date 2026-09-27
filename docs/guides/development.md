@@ -446,8 +446,9 @@ same screens with `VITE_AUTH_API=http`. It needs a `pnpm build` first, and it
 skips itself with a message when Docker is not running.
 
 CI installs Chromium with `pnpm exec playwright install --with-deps chromium`,
-caches it by the Playwright version in the lockfile, and runs both suites as
-steps of the `ci` job after the build.
+caches it by the Playwright version in the lockfile. The fixture suite runs in
+two shards (`e2e (1/2)` and `e2e (2/2)`); the screenshot comparison and
+`e2e:api` run together in `browser-api`, after `pnpm build`.
 
 ## Docker
 
@@ -737,11 +738,12 @@ Unit tests are Vitest, colocated as `src/**/*.test.ts`. `pnpm test` runs one Vit
 ### Coverage gates
 
 Coverage uses `@vitest/coverage-v8`. There are three gates, all on lines, all
-run as their own step of the `ci` job — a drop below any of them fails the job:
+run by their own CI job — a drop below any of them fails that job, and with it
+the required `ci` check:
 
 | What it measures | Gate | Command | Configured in |
 |---|---|---|---|
-| `packages/*/src` | **80 %** | `pnpm test` | [`vitest.config.ts`](../../vitest.config.ts) |
+| `packages/*/src` | **80 %** | `pnpm test` (CI leaves out the two app projects, whose own gates run them) | [`vitest.config.ts`](../../vitest.config.ts) |
 | `apps/api/src`, unit **and** integration suites together | **90 %** | `pnpm --filter @helpdock/api test:coverage` | [`apps/api/vitest.coverage.config.ts`](../../apps/api/vitest.coverage.config.ts) |
 | `apps/admin/src` | **85 %** | `pnpm --filter @helpdock/admin test:coverage` | [`apps/admin/vitest.config.ts`](../../apps/admin/vitest.config.ts) |
 
@@ -801,35 +803,34 @@ nobody reviews; Renovate proposes the bumps.
 
 | Workflow | Runs on | What it is for |
 |---|---|---|
-| [`ci.yml`](../../.github/workflows/ci.yml) | every pull request, pushes to `main` | The required check. One job named `ci`. |
+| [`ci.yml`](../../.github/workflows/ci.yml) | every pull request, pushes to `main` | The required check: parallel jobs, gathered by one named `ci`. |
 | [`screenshots.yml`](../../.github/workflows/screenshots.yml) | manually, and pull requests touching `apps/admin/src/**` | Renders the Linux screenshot baselines and uploads them. |
 | [`codeql.yml`](../../.github/workflows/codeql.yml) | pull requests, pushes to `main`, Mondays | Static analysis into the security tab. |
 | [`changesets.yml`](../../.github/workflows/changesets.yml) | pushes to `main` | Keeps the "version packages" pull request open. |
 | [`release.yml`](../../.github/workflows/release.yml) | a `v*` tag | Publishes the image and the GitHub Release. |
 
-### The `ci` job
+### The `ci` workflow
 
-One job, named `ci` so it can be the required status check on the `main`
-ruleset. Every step is a command you can run locally, in the order you would run
-them:
+The jobs run in parallel, each on its own runner, and a last job named `ci`
+passes only when all of them did. That job is the required status check on the
+`main` ruleset, so adding a job never needs a settings change. Every step is a
+command you can run locally:
 
-| Step | Command |
+| Job | Steps |
 |---|---|
-| Lint and format | `pnpm lint` |
-| App import boundaries | `pnpm check:boundaries` |
-| Route permission declarations | `pnpm check:routes` |
-| Route input validation | `pnpm check:validation` |
-| Typecheck | `pnpm typecheck` |
-| Unit tests + the `packages/*` 80 % gate | `pnpm test` |
-| Integration tests (Testcontainers) | `pnpm test:integration` |
-| Api coverage gate, 90 % | `pnpm --filter @helpdock/api test:coverage` |
-| Admin coverage gate, 85 % | `pnpm --filter @helpdock/admin test:coverage` |
-| Build every workspace | `pnpm build` |
-| Browser tests, `en` and `ar`, against the fixture | `pnpm --filter @helpdock/admin e2e` |
-| Screenshot comparison, when the baselines are committed | `pnpm --filter @helpdock/admin e2e:screenshots` |
-| Browser tests against a real api, Postgres and Redis | `pnpm --filter @helpdock/admin e2e:api` |
-| Build the image for `linux/amd64`, loaded not pushed | `docker/build-push-action` |
-| Compose smoke test against that image | [`scripts/compose-smoke.sh`](#the-whole-stack-from-your-working-copy) |
+| `checks` | `pnpm lint`, `pnpm check:boundaries`, `pnpm check:routes`, `pnpm check:validation`, `pnpm typecheck` |
+| `unit` | `vitest run --coverage --project='!integration' --project='!@helpdock/api' --project='!@helpdock/admin'`: the `packages/*` 80 % gate |
+| `admin-unit` | `pnpm --filter @helpdock/admin test:coverage`: the admin's 85 % gate |
+| `api` | `pnpm --filter @helpdock/api test:coverage`: the api's unit and integration suites and its 90 % gate (Testcontainers) |
+| `integration` | `vitest run --project=integration packages/`: the packages' integration suites (Testcontainers) |
+| `e2e (1/2)`, `e2e (2/2)` | `pnpm --filter @helpdock/admin e2e --shard=<n>/2`: browser tests, `en` and `ar`, against the fixture |
+| `browser-api` | `pnpm build`, then `e2e:screenshots` when the baselines are committed, then `e2e:api` against a real api, Postgres and Redis |
+| `image` | the image for `linux/amd64`, loaded not pushed, then [`scripts/compose-smoke.sh`](#the-whole-stack-from-your-working-copy) against it |
+
+Each suite runs once. The test jobs build the workspace packages first
+(`turbo run build --filter='./packages/*'`, a few seconds), because the suites
+import them through their `dist/` exports. A run takes about as long as its
+slowest job, roughly ten minutes, instead of the sum of every step.
 
 Install is `pnpm install --frozen-lockfile`; a `package.json` changed without
 its lockfile fails there. GitHub-hosted runners ship a Docker daemon, so
@@ -837,25 +838,27 @@ Testcontainers starts its own containers and no service container is declared.
 The image build uses a BuildKit cache in GitHub Actions and is never pushed —
 [`release.yml`](#releases) is the only workflow that publishes anything.
 
-On a failure the Playwright report is uploaded as an artifact for seven days.
+On a failure the browser jobs upload their Playwright report as an artifact for
+seven days.
 
 ### Docker Hub rate limits
 
 Anonymous pulls from Docker Hub are rate limited per IP address, and a
-GitHub-hosted runner shares its address with everybody else's. The `ci` job
-pulls `node` for the image build, `pgvector/pgvector:pg17` and `redis:7-alpine`
+GitHub-hosted runner shares its address with everybody else's. The CI jobs
+pull `node` for the image build, `pgvector/pgvector:pg17` and `redis:7-alpine`
 for both Testcontainers and the Compose smoke test, and Testcontainers' own
 `ryuk` reaper — so a busy hour could fail a run for a reason that had nothing to
 do with the code.
 
-The job therefore logs in first, **when a Docker Hub account is configured**:
+Every job that uses Docker therefore logs in first, **when a Docker Hub account
+is configured**:
 
 > **For the repository owner.** Add two repository secrets, `DOCKERHUB_USERNAME`
 > and `DOCKERHUB_TOKEN` (a Docker Hub access token with the *Public Repo Read-only*
 > scope — it never needs write). Until they exist, the login step is skipped and
 > runs stay anonymous, which is also what happens for a pull request from a fork.
 
-`secrets` is not a context an `if:` can read, on a step or on a job, so the job
+`secrets` is not a context an `if:` can read, on a step or on a job, so each job
 turns the two secrets into one boolean in its `env:` — which *can* read them —
 and the step is conditioned on that. The token itself never appears in an
 expression or in a log.

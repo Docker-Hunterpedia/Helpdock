@@ -11,6 +11,7 @@ import type {
   TicketActivityEntry,
   TicketContact,
   TicketMessage,
+  TicketSlaSummary,
   TicketStatus,
 } from '@helpdock/schemas';
 import { toAttachment } from '../media/attachment-view.js';
@@ -74,12 +75,14 @@ export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
  * M1-15: `contact` likewise, and for the same reason. `undefined` leaves the
  * field off — the response did not resolve it, or the caller may not read
  * contacts — which is different from `null`, "this ticket names nobody".
+ * M3-02's `sla` follows the same rule: `null` is "no policy applies".
  */
 export const toTicket = (
   ticket: TicketRow,
   status: TicketStatusRow,
   tags: readonly Tag[] = [],
   contact?: TicketContact | null,
+  sla?: TicketSlaSummary | null,
 ): Ticket => ({
   id: ticket.id,
   number: ticket.number,
@@ -102,6 +105,8 @@ export const toTicket = (
   custom: ticket.custom,
   tags: [...tags],
   ...(contact === undefined ? {} : { contact }),
+  // M3-02: the list's SlaTimer, judged by the api against the brand's hours.
+  ...(sla === undefined ? {} : { sla }),
   createdAt: ticket.createdAt.toISOString(),
   updatedAt: ticket.updatedAt.toISOString(),
 });

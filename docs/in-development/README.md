@@ -1,6 +1,6 @@
 # In development
 
-Active milestones: none.
+Active milestones: [M3 Automation and SLAs](M3-automation-and-slas.md).
 
 M0 Skeleton shipped on 2026-09-19 and M1 Ticketing core on 2026-09-25; their
 documents are in [`../completed/`](../completed/README.md). M2 Email channel,

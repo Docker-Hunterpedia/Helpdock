@@ -64,6 +64,10 @@ Tables live in `src/schema/`, one file each, re-exported from
 | `ticket_activity` | tenant, **department** | Who changed what, and how. Part of the ticket rather than the brand's administrative trail, which stays `audit_log`. |
 | `ticket_time_entries` | tenant, **department** | Time spent on a ticket (M1-12): seconds, an optional note, and the reply it came with. `user_id` restricts deletion, so logged time outlives nothing it should. |
 | `csat_responses` | tenant, **department** | One satisfaction survey per close (M1-12), unique on `(ticket_id, closed_at)`, with the answer on the same row. Stores a hash of the link's token, never the token. |
+| `business_hours` | tenant | M3-01. One brand row (`department_id` null) and one per department that overrides it; `NULLS NOT DISTINCT` keeps the brand row unique. The brand row's `timezone` is null — the brand's zone is `brands.timezone`. |
+| `holidays` | tenant | M3-01. Closed days, inclusive; `department_id` null closes every department. |
+| `sla_policies` | tenant | M3-02. Conditions, targets and escalation steps as JSON validated by `@helpdock/schemas`, tried in `position` order. |
+| `ticket_sla_clocks` | tenant, **department** | M3-02. One row per clock per cycle (`is_current` marks the cycle in force), with the elapsed-time accounting of DOMAIN-RULES §3. Its department is copied from the ticket and follows it, by the triggers of `0008`. |
 | `ticket_search_tokens` | tenant, **department** | The words the ticket list's search reads (M1-15 part 2, [ADR 0011](../../docs/decisions/0011-ticket-search-token-table.md)): one row per distinct lexeme of a ticket's subject and first message, keyed by `(ticket_id, token)`. Written only by triggers (`helpdock_ticket_search_refresh`), in the same transaction as the ticket or message write. `token` is `COLLATE "C"` so a prefix is a range of `ticket_search_tokens_brand_token_idx`. |
 
 Ids are **UUIDv7**, generated in `src/uuid.ts`: a 48-bit millisecond timestamp,

@@ -63,6 +63,7 @@ import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
+import { mockSlaOf, mockSlaSummaryOf } from './mock-sla.js';
 import { MockViews } from './mock-views.js';
 
 /**
@@ -663,6 +664,7 @@ export class MockTicketsApi implements TicketsApi {
       messages: this.#page(ticketId, 0),
       activity: this.#activityOf(ticketId),
       csat: this.#csat.get(ticketId) ?? null,
+      sla: mockSlaOf(ticket, this.#now),
       ...this.#mergeView(ticket),
     });
   }
@@ -1404,6 +1406,8 @@ export class MockTicketsApi implements TicketsApi {
       ...ticket,
       contact:
         ticket.contactId === null || name === undefined ? null : { id: ticket.contactId, name },
+      // M3-02: the SlaTimer the api judges, drawn from the fixture's due dates.
+      sla: mockSlaSummaryOf(ticket, this.#now),
     };
   }
 

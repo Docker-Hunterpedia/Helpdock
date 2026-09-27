@@ -40,8 +40,50 @@ export interface LifecycleHookEvent {
   readonly at: Date;
 }
 
+/** M3-02: a change that may move the clocks, and where the ticket was before it. */
+export interface LifecycleChangeEvent extends LifecycleHookEvent {
+  /** Set when the change moved the ticket to another department. */
+  readonly previousDepartmentId?: string | undefined;
+}
+
+/** M3-02: a public reply went out, and who sent it (§3.1). */
+export interface LifecycleResponseEvent extends LifecycleHookEvent {
+  readonly by: 'staff' | 'ai' | 'rule';
+  /** A rule action's `counts_as_response`; ignored for any other sender. */
+  readonly countsAsResponse?: boolean;
+}
+
 @Injectable()
 export class TicketLifecycleHooks {
+  /**
+   * M3-02. A ticket was filed — created, continued from a closed one (§2.3) or
+   * split from another (§2.4). The SLA engine starts its clocks here. Every
+   * path that inserts a ticket calls it, M2's inbound email included.
+   */
+  async onCreated(_tx: DbTransaction, _event: LifecycleHookEvent): Promise<void> {
+    await Promise.resolve();
+  }
+
+  /**
+   * M3-02. The status, priority or department may have moved (§3.2, §3.3). It
+   * is called after every such write, whether or not anything the clocks read
+   * changed; the SLA engine works out which, and does nothing when nothing did.
+   */
+  async onChanged(_tx: DbTransaction, _event: LifecycleChangeEvent): Promise<void> {
+    await Promise.resolve();
+  }
+
+  /**
+   * M3-02. A public reply that may satisfy the response clock (§3.1). Staff
+   * replies call it from `TicketsService.addMessage`; M3-03's "send canned
+   * response" action calls it with `by: 'rule'`, and M7's auto-reply with
+   * `by: 'ai'`. Auto-acknowledgments, out-of-hours notices, notes and CSAT
+   * messages never do.
+   */
+  async onResponded(_tx: DbTransaction, _event: LifecycleResponseEvent): Promise<void> {
+    await Promise.resolve();
+  }
+
   /**
    * A ticket reached a closed state (§2.2, §3.1). **M3-02** stops the
    * resolution clock here and records whether it was met.

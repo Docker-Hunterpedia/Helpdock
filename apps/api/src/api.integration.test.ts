@@ -530,6 +530,8 @@ describe.skipIf(!hasDocker)('the api', () => {
           csatEnabled: true,
           timeTrackingEnabled: false,
           timerStartsWithComposer: false,
+          aiCountsAsFirstResponse: true,
+          slaCountReopens: false,
         },
       });
     });

@@ -22,6 +22,8 @@ const settings = {
   csatEnabled: true,
   timeTrackingEnabled: false,
   timerStartsWithComposer: false,
+  aiCountsAsFirstResponse: true,
+  slaCountReopens: false,
 };
 
 const row = {
@@ -66,6 +68,8 @@ describe('brandSettingsSchema', () => {
       csatEnabled: true,
       timeTrackingEnabled: false,
       timerStartsWithComposer: false,
+      aiCountsAsFirstResponse: true,
+      slaCountReopens: false,
     });
   });
 
@@ -116,6 +120,8 @@ describe('parseBrandSettings', () => {
       csatEnabled: true,
       timeTrackingEnabled: false,
       timerStartsWithComposer: false,
+      aiCountsAsFirstResponse: true,
+      slaCountReopens: false,
     });
   });
 

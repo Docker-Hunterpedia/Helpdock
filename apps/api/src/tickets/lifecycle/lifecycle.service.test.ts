@@ -110,6 +110,8 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
   csatEnabled: true,
   timeTrackingEnabled: false,
   timerStartsWithComposer: false,
+  aiCountsAsFirstResponse: true,
+  slaCountReopens: false,
 });
 
 const harness = (options: {

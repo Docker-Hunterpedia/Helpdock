@@ -16,6 +16,7 @@ import {
   blockedSenders,
   brandDomains,
   brands,
+  businessHours,
   contactDuplicateSuggestions,
   contactIdentities,
   contactMerges,
@@ -24,9 +25,11 @@ import {
   csatResponses,
   customFieldDefs,
   departments,
+  holidays,
   outbox,
   retentionSettings,
   settings,
+  slaPolicies,
   tags,
   teamMembers,
   teams,
@@ -34,6 +37,7 @@ import {
   ticketMessages,
   ticketParticipants,
   ticketSearchTokens,
+  ticketSlaClocks,
   ticketStatuses,
   tickets,
   ticketTags,
@@ -449,6 +453,48 @@ const fixtures = [
         ticketId: ticketId[brandId] ?? '',
         departmentId: departmentId[brandId] ?? '',
         token: 'fixture',
+      }),
+  },
+  // M3-01 and M3-02.
+  {
+    name: 'business_hours',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(businessHours).values({
+        brandId,
+        weekly: [[], [{ start: '09:00', end: '17:00' }], [], [], [], [], []],
+      }),
+  },
+  {
+    name: 'holidays',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx
+        .insert(holidays)
+        .values({ brandId, name: 'Founding Day', startsOn: '2027-02-22', endsOn: '2027-02-22' }),
+  },
+  {
+    name: 'sla_policies',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(slaPolicies).values({
+        brandId,
+        name: 'Everything',
+        conditions: [],
+        targets: {},
+        escalation: [],
+      }),
+  },
+  {
+    name: 'ticket_sla_clocks',
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketSlaClocks).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        kind: 'resolution',
+        targetMinutes: 480,
+        timeMode: 'business',
+        startedAt: new Date(),
+        checkpointAt: new Date(),
       }),
   },
 ] as const;

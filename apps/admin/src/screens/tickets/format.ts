@@ -1,5 +1,5 @@
 import type { Locale } from '@helpdock/i18n';
-import type { Ticket, TicketPriority } from '@helpdock/schemas';
+import type { Ticket, TicketPriority, TicketSlaSummary } from '@helpdock/schemas';
 
 /**
  * The small decisions the ticket screens make about what to print. They are
@@ -65,11 +65,16 @@ export const PRIORITY_TONE: Readonly<
   low: 'neutral',
 };
 
-/** DESIGN §6.2 SlaTimer. Four states and nothing between them. */
+/**
+ * DESIGN §6.2 SlaTimer. `met` and `reopened` arrived with M3-02's clocks: an
+ * open ticket whose clocks are both satisfied, and a next-response clock
+ * counting after a reopen (artboard `Admin/Ticket-SLA`).
+ */
 export type SlaState =
   | { readonly kind: 'none' }
   | { readonly kind: 'paused' }
-  | { readonly kind: 'running' | 'atRisk'; readonly remaining: string }
+  | { readonly kind: 'met' }
+  | { readonly kind: 'running' | 'atRisk'; readonly remaining: string; readonly reopened: boolean }
   | { readonly kind: 'breached'; readonly over: string };
 
 /** Under a fifth of the window left is "at risk" (DESIGN §6.2). */
@@ -84,6 +89,13 @@ const AT_RISK_FRACTION = 0.2;
  * would be a number nobody can act on.
  */
 export const slaState = (ticket: Ticket, now: number): SlaState => {
+  // M3-02: the api judged the clocks against the brand's hours, which is the
+  // only way "time left" can mean business time. The due dates below are the
+  // fallback for a ticket read without it.
+  if (ticket.sla !== undefined) {
+    return judgedState(ticket.sla, now);
+  }
+
   if (ticket.status.systemState === 'closed') {
     return { kind: 'none' };
   }
@@ -106,8 +118,55 @@ export const slaState = (ticket: Ticket, now: number): SlaState => {
   const remaining = shortDuration(dueAt - now);
 
   return window > 0 && (dueAt - now) / window < AT_RISK_FRACTION
-    ? { kind: 'atRisk', remaining }
-    : { kind: 'running', remaining };
+    ? { kind: 'atRisk', remaining, reopened: false }
+    : { kind: 'running', remaining, reopened: false };
+};
+
+const judgedState = (sla: TicketSlaSummary | null, now: number): SlaState => {
+  if (sla === null || sla.state === 'none') {
+    return { kind: 'none' };
+  }
+  switch (sla.state) {
+    case 'paused':
+      return { kind: 'paused' };
+    case 'met':
+      return { kind: 'met' };
+    case 'breached':
+      return {
+        kind: 'breached',
+        over: shortDuration(
+          sla.breachedAt === null ? -sla.remainingMs : now - Date.parse(sla.breachedAt),
+        ),
+      };
+    case 'warning':
+    case 'running':
+      return {
+        kind: sla.state === 'warning' ? 'atRisk' : 'running',
+        remaining: clockDuration(sla.remainingMs),
+        reopened: sla.reopened,
+      };
+  }
+};
+
+/**
+ * A clock's time as the SLA card prints it: `18m`, `2h`, `1h 20m`, `2h 04m`,
+ * `3d 4h`. Latin digits in both locales (DESIGN §7).
+ */
+export const clockDuration = (milliseconds: number): string => {
+  const minutes = Math.floor(Math.abs(milliseconds) / MINUTE);
+  if (minutes < 1) {
+    return 'now';
+  }
+  const days = Math.floor(minutes / (24 * 60));
+  const hours = Math.floor((minutes % (24 * 60)) / 60);
+  const rest = minutes % 60;
+  if (days > 0) {
+    return hours === 0 ? `${days}d` : `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return rest === 0 ? `${hours}h` : `${hours}h ${String(rest).padStart(2, '0')}m`;
+  }
+  return `${rest}m`;
 };
 
 /**
@@ -150,13 +209,3 @@ export const paragraph = (text: string): string =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('\n', '<br />')}</p>`;
-
-/** How much of the window is gone, clamped: a bar never runs past its track. */
-export const elapsedFraction = (createdAt: string, dueAt: string, now: number): number => {
-  const window = Date.parse(dueAt) - Date.parse(createdAt);
-  if (window <= 0) {
-    return 1;
-  }
-
-  return Math.min(Math.max((now - Date.parse(createdAt)) / window, 0), 1);
-};

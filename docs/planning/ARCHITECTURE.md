@@ -138,7 +138,8 @@ ticket_messages(ticket_id, department_id /*denormalised for RLS*/, seq, client_i
 attachments(message_id, s3_key, mime, size, kind: image|video|audio|file, variants jsonb, scan_status)
 tags, ticket_tags, ticket_statuses, custom_field_defs
 views, macros, canned_responses(locale), ticket_templates
-sla_policies, business_hours, holidays
+sla_policies(conditions jsonb, time_mode, targets jsonb, escalation jsonb, position), business_hours(department_id null = brand, weekly jsonb), holidays,
+ticket_sla_clocks(ticket_id, kind, cycle, is_current, target_minutes, elapsed_ms, checkpoint_at, paused_at, due_at, satisfied_at, breached_at, fired_steps)   -- DOMAIN-RULES §3
 workflow_rules(trigger, conditions jsonb, actions jsonb, order, enabled), workflow_runs
 channels(kind, config_encrypted, status, last_error) ; mailbox/telegram/widget/form/api rows
 api_keys(brand_id, hash, scopes[], rate_limit, last_used_at)
@@ -258,7 +259,7 @@ packages/ai
 |---|---|---|
 | `inbound` | `email.poll` (per mailbox, repeatable), `telegram.update`, `form.submit` | dedupe by external id |
 | `outbound` | `email.send`, `telegram.send`, `widget.deliver` | retries 5, backoff exp, DLQ |
-| `sla` | `sla.first_response`, `sla.resolution` (delayed), `sla.escalate` | rescheduled on status change |
+| `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02) |
 | `rules` | `rules.evaluate`, `rules.time_based` (cron) | depth guard |
 | `ai` | `ai.assist`, `ai.autoreply`, `ai.classify`, `ai.transcribe` | per-brand concurrency + budget check |
 | `knowledge` | `ingest.source`, `ingest.chunk_embed`, `crawl.page` | rate-limited crawl |
@@ -267,7 +268,7 @@ packages/ai
 | `webhooks` | `webhook.deliver` | HMAC, retry, log |
 | `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |
 | `assignment` | `assignment.offline_unassign` (delayed) | M1-07's auto-unassign timer; a no-op if the agent came back or left again later |
-| `maintenance` | `cleanup.tokens`, `maintenance.retention`, `stats.rollup`, `sla.rebuild` (on boot) | cron |
+| `maintenance` | `cleanup.tokens`, `maintenance.retention`, `stats.rollup` | cron |
 
 Bull Board (auth-protected) mounted in admin System page for queue inspection.
 

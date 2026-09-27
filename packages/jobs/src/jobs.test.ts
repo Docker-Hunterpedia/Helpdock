@@ -11,6 +11,9 @@ import {
   outboxRelayJob,
   parseJobPayload,
   retentionJobId,
+  slaRebuildJob,
+  slaTimerJob,
+  slaTimerJobId,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
 import { PayloadValidationError } from './validation.js';
@@ -179,5 +182,32 @@ describe('assignment.offline_unassign', () => {
 
   it('runs on a queue of its own', () => {
     expect(assignmentOfflineUnassignJob.queue).toBe('assignment');
+  });
+});
+
+describe('sla.timer', () => {
+  const payload = {
+    brandId,
+    ticketId: '01924f00-0000-7000-8000-0000000000b1',
+    clock: 'resolution',
+    stepPercent: 75,
+  } as const;
+
+  it('keys one timer per ticket, clock and step, without a colon BullMQ would refuse', () => {
+    expect(slaTimerJobId(payload)).toBe('sla.01924f00-0000-7000-8000-0000000000b1.resolution.75');
+    expect(slaTimerJobId(payload)).not.toContain(':');
+  });
+
+  it('refuses a clock that does not exist', () => {
+    expect(() => parseJobPayload(slaTimerJob, { ...payload, clock: 'lunch' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('runs beside its rebuild on the sla queue, which re-ticks hourly', () => {
+    expect(slaTimerJob.queue).toBe('sla');
+    expect(slaRebuildJob.queue).toBe('sla');
+    expect(slaRebuildJob.schedule).toEqual({ everyMs: 3_600_000 });
+    expect(parseJobPayload(slaRebuildJob, {})).toEqual({});
   });
 });

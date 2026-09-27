@@ -270,3 +270,28 @@ export const ticketViewBuiltInEnum = pgEnum('ticket_view_built_in', [
   'department_open',
   'escalated',
 ]);
+
+/** The clocks of DOMAIN-RULES §3.1 and §3.5 (M3-02). */
+export const slaClockKindEnum = pgEnum('sla_clock_kind', [
+  'first_response',
+  'next_response',
+  'resolution',
+]);
+
+/** Business hours, or every minute of every day (M3-02). */
+export const slaTimeModeEnum = pgEnum('sla_time_mode', ['business', 'calendar']);
+
+/**
+ * Why a clock stopped without being met or breached (M3-02): the ticket was
+ * merged (§2.4), no policy applies any more, the ticket closed before this
+ * clock was satisfied, or it was closed as spam.
+ */
+export const slaStopReasonEnum = pgEnum('sla_stop_reason', [
+  'merged',
+  'no_policy',
+  'closed',
+  'excluded',
+]);
+
+/** What recorded a breach: the due time passing, or a recompute that used the target up (§3.3). */
+export const slaBreachCauseEnum = pgEnum('sla_breach_cause', ['timer', 'change']);

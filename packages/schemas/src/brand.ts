@@ -97,6 +97,18 @@ export const brandSettingsSchema = z.object({
   timeTrackingEnabled: z.boolean().default(false),
   /** Start the per-reply timer when an agent opens the composer. Meaningless while tracking is off. */
   timerStartsWithComposer: z.boolean().default(false),
+  /**
+   * An AI auto-reply satisfies the first-response clock (DOMAIN-RULES §3.1,
+   * M3-02). On by default, as that rule says; it matters once M7's auto-reply
+   * is on for the brand.
+   */
+  aiCountsAsFirstResponse: z.boolean().default(true),
+  /**
+   * Compliance reports count reopened clocks too, rather than the initial ones
+   * alone (§3.5). Off by default: "compliance reports use the initial clocks
+   * unless the brand chooses 'count reopens'".
+   */
+  slaCountReopens: z.boolean().default(false),
 });
 export type BrandSettings = z.infer<typeof brandSettingsSchema>;
 

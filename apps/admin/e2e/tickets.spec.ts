@@ -211,7 +211,7 @@ test.describe('one ticket', () => {
     await page
       .getByRole('textbox', { name: t('tickets:composer.bodyLabel') })
       .fill('On its way today.');
-    await page.getByRole('button', { name: t('tickets:composer.send') }).click();
+    await page.getByRole('button', { name: t('tickets:email.send') }).click();
 
     await expect(
       page.getByRole('status').filter({ hasText: t('tickets:toast.replied') }),
@@ -263,7 +263,7 @@ test.describe('one ticket', () => {
     await page
       .getByRole('textbox', { name: t('tickets:composer.bodyLabel') })
       .fill('The receipt is attached.');
-    await page.getByRole('button', { name: t('tickets:composer.send') }).click();
+    await page.getByRole('button', { name: t('tickets:email.send') }).click();
 
     await expect(thread.getByText('receipt.pdf')).toBeVisible();
     await expect(composer.getByText('receipt.pdf')).toHaveCount(0);

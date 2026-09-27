@@ -48,6 +48,7 @@ import { TicketHeader } from './ticket-header.tsx';
 import { TimeCard } from './time-card.tsx';
 import { loggableSeconds } from './time-format.js';
 import { useSpamActions } from './use-spam-actions.tsx';
+import { useTicketEmail } from './use-ticket-email.tsx';
 import { useTicketRoom } from './use-ticket-realtime.js';
 import { useTicketTags } from './use-ticket-tags.js';
 import { useTicketTimer } from './use-ticket-timer.js';
@@ -131,6 +132,9 @@ export function TicketView({
     viewer.id,
     body.trim() === '' ? 'viewing' : 'replying',
   );
+
+  // M2-05: the composer's email mode and the thread's delivery marks.
+  const ticketEmail = useTicketEmail(brandId, ticketId, detail.data?.ticket.channel ?? '');
 
   const mergeSearch = useQuery({
     queryKey: ticketKeys.list(brandId, { q: mergeTerm.trim(), limit: MERGE_SEARCH_LIMIT }),
@@ -246,6 +250,9 @@ export function TicketView({
         ...(message.timeSpentSeconds === undefined
           ? {}
           : { timeSpentSeconds: message.timeSpentSeconds }),
+        ...(message.kind === 'public' && ticketEmail.emailFrom !== undefined
+          ? { emailFrom: ticketEmail.emailFrom }
+          : {}),
       }),
     onSuccess: async (saved, message) => {
       dispatch({ type: 'acknowledged', clientId: message.clientId });
@@ -274,6 +281,7 @@ export function TicketView({
 
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      await ticketEmail.refresh();
       if (message.timeSpentSeconds !== undefined) {
         await time.refresh();
       }
@@ -713,6 +721,7 @@ export function TicketView({
                 unmerge.mutate(secondaryId);
               },
             }}
+            deliveryFooter={ticketEmail.deliveryFooter}
             onRetry={(message) => {
               dispatch({ type: 'retried', clientId: message.clientId, now: Date.now() });
               send.mutate({ ...message, state: 'sending', sentAt: Date.now() });
@@ -754,6 +763,7 @@ export function TicketView({
                 setAttachments((held) => held.filter((row) => row.id !== attachmentId));
               }}
               onSend={queueSend}
+              email={ticketEmail.composer}
               onBodyFocus={() => {
                 if (tracking && timerWithComposer && canWrite && !timer.running) {
                   timer.start();

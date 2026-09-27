@@ -1,11 +1,17 @@
+import type { Settings } from '@helpdock/config';
 import { type DynamicModule, Module } from '@nestjs/common';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { CsatService } from '../csat/csat.service.js';
 import { CsatLifecycleHooks } from '../csat/csat-hooks.js';
+import { EmailRepository } from '../email/email.repository.js';
+import { EmailReplyHook } from '../email/email-reply.hook.js';
+import { OutboundEmailService } from '../email/outbound-email.service.js';
+import { SettingsInstallSmtp } from '../email/transport.js';
 import { MediaRepository } from '../media/media.repository.js';
 import { ParticipantsMergeHook } from '../participants/merge-participants.hook.js';
 import { ParticipantsRepository } from '../participants/participants.repository.js';
 import { TicketParticipantsService } from '../participants/ticket-participants.service.js';
+import { SETTINGS } from '../runtime/tokens.js';
 import { BlockListService } from '../ticketing/block-list.service.js';
 import { TagsService } from '../ticketing/tags.service.js';
 import { TemplatesService } from '../ticketing/templates.service.js';
@@ -18,6 +24,7 @@ import { MergeController } from './merge/merge.controller.js';
 import { MergeRepository } from './merge/merge.repository.js';
 import { MergeService } from './merge/merge.service.js';
 import { MergeParticipantsHook } from './merge/participants.hook.js';
+import { ReplyDeliveryHook } from './reply-delivery.hook.js';
 import { TicketSpamController } from './ticket-spam.controller.js';
 import { TicketSpamService } from './ticket-spam.service.js';
 import { TicketsController } from './tickets.controller.js';
@@ -83,6 +90,7 @@ export class TicketsModule {
             AssignmentRepository,
             CsatService,
             TimeEntriesService,
+            ReplyDeliveryHook,
           ],
           useFactory: (
             tickets: TicketRepository,
@@ -94,6 +102,7 @@ export class TicketsModule {
             assignment: AssignmentRepository,
             csatSummary: CsatService,
             timeEntries: TimeEntriesService,
+            replyDelivery: ReplyDeliveryHook,
           ): TicketsService =>
             new TicketsService(
               tickets,
@@ -105,6 +114,19 @@ export class TicketsModule {
               assignment,
               csatSummary,
               timeEntries,
+              replyDelivery,
+            ),
+        },
+        // M2-05. A public reply on a ticket that answers by email queues the
+        // email in the reply's transaction. Built here rather than imported
+        // from `EmailModule`, because the service and its repository are
+        // stateless, as `MergeParticipantsHook` below is.
+        {
+          provide: ReplyDeliveryHook,
+          inject: [SETTINGS],
+          useFactory: (settings: Settings): ReplyDeliveryHook =>
+            new EmailReplyHook(
+              new OutboundEmailService(new EmailRepository(), new SettingsInstallSmtp(settings)),
             ),
         },
         // M1-08. `TicketLifecycleHooks` is a provider rather than a registry so

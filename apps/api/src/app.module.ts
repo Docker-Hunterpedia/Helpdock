@@ -21,6 +21,8 @@ import type { BrandResolver } from './context/brand-resolver.js';
 import { NoopBrandResolver } from './context/brand-resolver.js';
 import { RequestContextMiddleware } from './context/request-context.middleware.js';
 import { CsatModule } from './csat/csat.module.js';
+import { EmailModule } from './email/email.module.js';
+import type { SmtpTransportFactory } from './email/transport.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
 import type { Logger } from './logging/logger.js';
@@ -88,6 +90,8 @@ export interface AppModuleOptions {
    * passes a double so the routes can be exercised without one.
    */
   readonly objectStorage?: ObjectStorage;
+  /** "Test SMTP"'s transport (M2-05). Boot leaves it out; a suite passes a double or Mailpit. */
+  readonly smtpTransports?: SmtpTransportFactory;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -146,6 +150,11 @@ export class AppModule implements NestModule {
         RetentionModule.forRoot(),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
+        // M2-05, M2-06: Channels › Outgoing email, signatures, the ticket
+        // view's email context. Sending runs in the worker.
+        EmailModule.forRoot(
+          options.smtpTransports === undefined ? {} : { transports: options.smtpTransports },
+        ),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

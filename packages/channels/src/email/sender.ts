@@ -26,6 +26,20 @@ export interface EmailMessage {
   readonly html: string;
   /** BCP 47 tag of the catalog the body was rendered from, for the log. */
   readonly locale: string;
+  /**
+   * M2-05's ticket mail. Everything below is optional so the auth mails, which
+   * need none of it, stay as they are. `from` overrides the transport's
+   * configured sender; `messageId` is sent verbatim, angle brackets included,
+   * so a redelivery of the same job carries the same id (DOMAIN-RULES §6).
+   */
+  readonly from?: EmailAddress;
+  readonly replyTo?: string;
+  readonly cc?: readonly EmailAddress[];
+  readonly messageId?: string;
+  readonly inReplyTo?: string;
+  readonly references?: readonly string[];
+  /** Extra headers, such as M2-06's `Auto-Submitted`. */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export interface EmailSender {

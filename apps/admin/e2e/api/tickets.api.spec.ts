@@ -69,7 +69,7 @@ test.describe('the ticket workspace against the real api', () => {
     // ----------------------------------------------------------- reply
     const composer = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
     await composer.fill(REPLY);
-    await page.getByRole('button', { name: t('tickets:composer.send') }).click();
+    await page.getByRole('button', { name: t('tickets:email.send') }).click();
 
     // A `seq` came back, which is what makes a message sent (DOMAIN-RULES §7).
     await expect(

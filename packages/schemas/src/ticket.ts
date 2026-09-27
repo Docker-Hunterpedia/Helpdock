@@ -679,6 +679,12 @@ export const messageCreateRequestSchema = z.object({
    * not refused over the timer that ran beside it.
    */
   timeSpentSeconds: timeEntrySecondsSchema.optional(),
+  /**
+   * M2-05. On a public reply to an email ticket, the sender it goes out as:
+   * `default` or a department id (`emailSenderKeySchema`). Left out, the
+   * ticket's own department's sender is used. Ignored on anything else.
+   */
+  emailFrom: z.union([z.literal('default'), z.uuid()]).optional(),
 });
 export type MessageCreateRequest = z.infer<typeof messageCreateRequestSchema>;
 

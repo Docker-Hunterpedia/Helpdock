@@ -59,6 +59,7 @@ import {
 } from './lifecycle/lifecycle.service.js';
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 import { readMergeView } from './merge/merge-view.js';
+import { ReplyDeliveryHook } from './reply-delivery.hook.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS, type TicketEvent } from './ticket-events.js';
@@ -123,6 +124,8 @@ export class TicketsService {
   /** M1-12: the survey summary on a ticket read, and the per-reply timer. */
   readonly #csat: CsatService;
   readonly #timeEntries: TimeEntriesService;
+  /** M2-05: carries a public reply to the customer on the ticket's channel. */
+  readonly #replyDelivery: ReplyDeliveryHook;
 
   constructor(
     tickets: TicketRepository,
@@ -134,7 +137,9 @@ export class TicketsService {
     assignment: AssignmentRepository,
     csat: CsatService,
     timeEntries: TimeEntriesService,
+    replyDelivery: ReplyDeliveryHook = new ReplyDeliveryHook(),
   ) {
+    this.#replyDelivery = replyDelivery;
     this.#tickets = tickets;
     this.#lifecycle = lifecycle;
     this.#lifecycleReads = lifecycleReads;
@@ -672,6 +677,14 @@ export class TicketsService {
     // insert then failed.
     if (input.kind === 'public' && authorType === 'staff') {
       await this.#lifecycle.onAgentPublicReply(context, target, landing.status);
+      // M2-05. In this transaction, so the email is queued with the reply or
+      // not at all.
+      await this.#replyDelivery.onStaffPublicReply(tx, {
+        brandId,
+        ticket: target,
+        messageId: message.id,
+        emailFrom: input.emailFrom,
+      });
     }
 
     await enqueueTicketEvent(

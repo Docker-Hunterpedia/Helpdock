@@ -74,6 +74,7 @@ export function Thread({
   names,
   now,
   merges,
+  deliveryFooter,
   onRetry,
   onDiscard,
 }: {
@@ -81,6 +82,8 @@ export function Thread({
   readonly names: ThreadNames;
   readonly now: number;
   readonly merges?: ThreadMerges;
+  /** M2-05: under a reply that was emailed, "Not delivered · Retry" when it was not. */
+  readonly deliveryFooter?: ((message: TicketMessage) => ReactNode) | undefined;
   onRetry(pending: PendingMessage): void;
   onDiscard(pending: PendingMessage): void;
 }): ReactNode {
@@ -148,6 +151,7 @@ export function Thread({
                   }
                   meta={metaOf(item.message, names, locale, now)}
                   bodyHtml={item.message.bodyHtml}
+                  footer={deliveryFooter?.(item.message) ?? null}
                   {...(item.message.attachments.length === 0
                     ? {}
                     : {

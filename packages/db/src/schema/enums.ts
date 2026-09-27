@@ -270,3 +270,25 @@ export const ticketViewBuiltInEnum = pgEnum('ticket_view_built_in', [
   'department_open',
   'escalated',
 ]);
+
+/**
+ * M2-05. What an outbound email is: an agent's public reply, or one of the two
+ * auto-replies of M2-06. The auto-replies are at most one per ticket each.
+ */
+export const emailDeliveryKindEnum = pgEnum('email_delivery_kind', [
+  'reply',
+  'acknowledgment',
+  'out_of_hours',
+]);
+
+/**
+ * Where an outbound email is. `failed` is the dead-letter state an Admin sees
+ * under Channels › Outgoing email › Failed sends; `discarded` is one they gave
+ * up on, which the thread still shows as not delivered.
+ */
+export const emailDeliveryStatusEnum = pgEnum('email_delivery_status', [
+  'queued',
+  'sent',
+  'failed',
+  'discarded',
+]);

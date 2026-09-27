@@ -46,12 +46,18 @@ export const ROUTES = {
   brand: '/admin/brand',
   /** One tab of it. `/admin/brand` alone redirects to the first built one. */
   brandTab: '/admin/brand/:tab',
+  /** How customers reach the brand: Mailboxes and Outgoing email (M2-08). */
+  channels: '/admin/channels',
+  /** One tab of it. `/admin/channels` alone redirects to the first. */
+  channelsTab: '/admin/channels/:tab',
   staff: '/admin/staff',
   system: '/admin/system',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
+  /** The Email signature tab of Your account (M2-05, artboard `AdminSignature`). */
+  signature: '/me/signature',
   /**
    * The public rating page (M1-12). Not a route of the admin router: `main.tsx`
    * mounts the page on its own for this prefix, without the staff providers.
@@ -108,6 +114,9 @@ export const csatPreviewRoute = (locale: string): string =>
 
 /** One tab of the Ticketing settings, by its url segment. */
 export const ticketingRoute = (tab: string): string => `${ROUTES.ticketing}/${tab}`;
+
+/** One tab of the Channels page, by its url segment. */
+export const channelsRoute = (tab: string): string => `${ROUTES.channels}/${tab}`;
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;

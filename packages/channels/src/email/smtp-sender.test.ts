@@ -1,6 +1,66 @@
 import type { SmtpCredentials } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { SMTP_TIMEOUT_MS, smtpDeadlineMs, smtpTransportOptions } from './smtp-sender.js';
+import type { EmailMessage } from './sender.js';
+import {
+  mailOptions,
+  SMTP_TIMEOUT_MS,
+  smtpDeadlineMs,
+  smtpTransportOptions,
+} from './smtp-sender.js';
+
+describe('mailOptions', () => {
+  const base: EmailMessage = {
+    to: { address: 'mona@example.com', name: 'Mona' },
+    subject: 'Re: [HD-1042] Refund',
+    text: 'Hi',
+    html: '<p>Hi</p>',
+    locale: 'en',
+  };
+  const fallback = { address: 'support@example.com', name: 'Support' };
+
+  it('sends an auth mail as it always did, from the configured sender', () => {
+    expect(mailOptions(base, fallback)).toEqual({
+      from: fallback,
+      to: { address: 'mona@example.com', name: 'Mona' },
+      subject: base.subject,
+      text: 'Hi',
+      html: '<p>Hi</p>',
+    });
+  });
+
+  it('carries the ticket mail headers through verbatim', () => {
+    const options = mailOptions(
+      {
+        ...base,
+        from: { address: 'billing@example.com', name: 'Billing' },
+        replyTo: 'billing@example.com',
+        cc: [{ address: 'karim@example.com' }],
+        messageId: '<hd.m.1@example.com>',
+        inReplyTo: '<customer@mail.example>',
+        references: ['<customer@mail.example>'],
+        headers: { 'Auto-Submitted': 'auto-replied' },
+      },
+      fallback,
+    );
+
+    expect(options).toMatchObject({
+      from: { address: 'billing@example.com', name: 'Billing' },
+      replyTo: 'billing@example.com',
+      cc: [{ address: 'karim@example.com', name: '' }],
+      messageId: '<hd.m.1@example.com>',
+      inReplyTo: '<customer@mail.example>',
+      references: ['<customer@mail.example>'],
+      headers: { 'Auto-Submitted': 'auto-replied' },
+    });
+  });
+
+  it('leaves out an empty CC and an empty reference list', () => {
+    const options = mailOptions({ ...base, cc: [], references: [] }, fallback);
+
+    expect(options).not.toHaveProperty('cc');
+    expect(options).not.toHaveProperty('references');
+  });
+});
 
 const credentials: SmtpCredentials = {
   host: 'smtp.example.com',

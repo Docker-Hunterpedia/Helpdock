@@ -1,7 +1,7 @@
 import type { SmtpCredentials, SmtpTestResult } from '@helpdock/schemas';
 import { SMTP_RESPONSE_MAX_LENGTH } from '@helpdock/schemas';
 import { createTransport, type SMTPSentMessageInfo, type Transporter } from 'nodemailer';
-import type { EmailMessage, EmailSender } from './sender.js';
+import type { EmailAddress, EmailMessage, EmailSender } from './sender.js';
 import { classifySmtpError, SmtpTimeoutError } from './smtp-errors.js';
 
 /**
@@ -76,6 +76,31 @@ export const smtpTransportOptions = (
   };
 };
 
+const nodemailerAddress = ({ address, name }: EmailAddress) => ({ address, name: name ?? '' });
+
+/**
+ * What Nodemailer is handed for one message. Exported because the header
+ * mapping — a deterministic `Message-ID`, threading, M2-06's loop-protection
+ * headers — is the part of M2-05 worth proving without a server.
+ */
+export const mailOptions = (message: EmailMessage, fallbackFrom: EmailAddress) => ({
+  from: nodemailerAddress(message.from ?? fallbackFrom),
+  to: nodemailerAddress(message.to),
+  subject: message.subject,
+  text: message.text,
+  html: message.html,
+  ...(message.cc === undefined || message.cc.length === 0
+    ? {}
+    : { cc: message.cc.map(nodemailerAddress) }),
+  ...(message.replyTo === undefined ? {} : { replyTo: message.replyTo }),
+  ...(message.messageId === undefined ? {} : { messageId: message.messageId }),
+  ...(message.inReplyTo === undefined ? {} : { inReplyTo: message.inReplyTo }),
+  ...(message.references === undefined || message.references.length === 0
+    ? {}
+    : { references: [...message.references] }),
+  ...(message.headers === undefined ? {} : { headers: { ...message.headers } }),
+});
+
 /** A relay's reply is arbitrary text; it is shown, so it is bounded. */
 const truncateResponse = (response: string): string =>
   response.trim().slice(0, SMTP_RESPONSE_MAX_LENGTH);
@@ -128,13 +153,7 @@ export class SmtpEmailSender implements EmailSender {
     });
 
     const info = await Promise.race([
-      this.#transporter.sendMail({
-        from: { address: fromAddress, name: fromName },
-        to: { address: message.to.address, name: message.to.name ?? '' },
-        subject: message.subject,
-        text: message.text,
-        html: message.html,
-      }),
+      this.#transporter.sendMail(mailOptions(message, { address: fromAddress, name: fromName })),
       deadline,
     ]);
 

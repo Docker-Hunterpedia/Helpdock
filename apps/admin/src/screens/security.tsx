@@ -16,6 +16,7 @@ import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { PasswordStrengthBar } from '../ui/password-strength-bar.tsx';
 import { useToast } from '../ui/toasts.tsx';
+import { AccountTabs } from './account/account-tabs.tsx';
 
 /**
  * `/me/security`: a person's own account.
@@ -214,6 +215,7 @@ export function SecurityScreen(): ReactNode {
   return (
     <>
       <PageHeader title={t('me:security.title')} caption={t('me:security.caption')} />
+      <AccountTabs current="security" />
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 720 }}>
         <Card title={t('me:details.title')} caption={t('me:details.caption')}>

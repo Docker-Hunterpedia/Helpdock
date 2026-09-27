@@ -68,6 +68,28 @@ export class SmtpTimeoutError extends Error {
   }
 }
 
+/**
+ * The relay's own words for a failure, for the screens only a signed-in Admin
+ * reads: M2-05's Failed sends and the Outgoing email tab's SMTP test. Nodemailer
+ * puts the server's reply in `response` (`550 5.1.1 <mona@…>: mailbox full`);
+ * a socket error has only a message. Bounded, and never the password: neither
+ * Nodemailer nor a relay echoes the `AUTH` payload back.
+ */
+export const describeSmtpError = (error: unknown, maxLength: number): string => {
+  const response =
+    typeof error === 'object' && error !== null && 'response' in error
+      ? (error as { response?: unknown }).response
+      : undefined;
+  const text =
+    typeof response === 'string' && response.trim() !== ''
+      ? response
+      : error instanceof Error
+        ? error.message
+        : String(error);
+
+  return text.replace(/\s+/g, ' ').trim().slice(0, maxLength);
+};
+
 export const classifySmtpError = (error: unknown): SmtpErrorCode => {
   if (error instanceof SmtpTimeoutError) {
     return 'timeout';

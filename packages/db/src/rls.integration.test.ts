@@ -24,6 +24,8 @@ import {
   csatResponses,
   customFieldDefs,
   departments,
+  emailDeliveries,
+  emailOutboundSettings,
   outbox,
   retentionSettings,
   settings,
@@ -449,6 +451,29 @@ const fixtures = [
         ticketId: ticketId[brandId] ?? '',
         departmentId: departmentId[brandId] ?? '',
         token: 'fixture',
+      }),
+  },
+  {
+    name: 'email_outbound_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(emailOutboundSettings).values({ brandId, acknowledgmentEnabled: true }),
+  },
+  {
+    name: 'email_deliveries',
+    // M2-05. A child of a ticket like the four above, refused by the same
+    // trigger when the ticket belongs to another brand.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(emailDeliveries).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        kind: 'acknowledgment',
+        fromName: 'Support',
+        fromAddress: 'support@example.com',
+        toAddress: 'customer@example.com',
+        locale: 'en',
+        messageId: `<fixture.${String(nextNumber())}@example.com>`,
       }),
   },
 ] as const;

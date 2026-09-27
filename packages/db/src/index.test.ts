@@ -68,6 +68,8 @@ describe('@helpdock/db', () => {
       'csat-responses.ts',
       'custom-field-defs.ts',
       'departments.ts',
+      'email-deliveries.ts',
+      'email-outbound-settings.ts',
       'enums.ts',
       'job-receipts.ts',
       'outbox.ts',

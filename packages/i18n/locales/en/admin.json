@@ -8,6 +8,7 @@
     "reports": "Reports",
     "adminGroup": "Admin",
     "ticketing": "Ticketing",
+    "automation": "Automation",
     "settings": "Settings",
     "staff": "Staff and roles",
     "system": "System",
@@ -49,6 +50,7 @@
       "staff": "Who can work in this brand, and what they are allowed to do.",
       "system": "Version, migrations, queues and storage for this install.",
       "ticketing": "Departments, statuses, priorities and routing for this brand.",
+      "automation": "Rules, timers and the one-click bundles agents use.",
       "brand": "Identity, locale, domains and data retention for this brand.",
       "channels": "Mailboxes, outgoing email and the other ways customers reach this brand."
     },
@@ -63,6 +65,7 @@
         "staff": "Staff and roles arrive with the rest of milestone M0.",
         "system": "The system page arrives with milestone M8.",
         "ticketing": "Ticketing settings arrive with milestone M1.",
+        "automation": "Automation arrives with milestone M3.",
         "brand": "Brand settings arrive with milestone M1.",
         "channels": "Channels arrive with milestone M2."
       }

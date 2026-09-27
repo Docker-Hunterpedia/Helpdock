@@ -13,7 +13,13 @@ import {
   outboxEventJob,
   outboxRelayJob,
   parseJobPayload,
+  RULES_TIME_BASED_CRON,
   retentionJobId,
+  rulesEvaluateJob,
+  rulesEvaluateJobId,
+  rulesTimeBasedJob,
+  rulesTimeBasedJobId,
+  rulesTimeBasedScheduleJob,
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
@@ -251,5 +257,50 @@ describe('sla.timer', () => {
     expect(slaRebuildJob.queue).toBe('sla');
     expect(slaRebuildJob.schedule).toEqual({ everyMs: 3_600_000 });
     expect(parseJobPayload(slaRebuildJob, {})).toEqual({});
+  });
+});
+
+describe('the rules jobs (M3-03, M3-04)', () => {
+  const evaluation = {
+    brandId,
+    ticketId: outboxId,
+    triggers: ['ticket_updated', 'assigned'],
+    sourceOutboxId: outboxId,
+    chain: [brandId],
+  };
+
+  it('keys an evaluation by the outbox row it came from, in the job id and the receipt', () => {
+    const payload = parseJobPayload(rulesEvaluateJob, evaluation);
+
+    expect(rulesEvaluateJobId(payload)).toBe(`rules.evaluate.${outboxId}`);
+    expect(idempotencyKeyFor(rulesEvaluateJob, payload, 'job-1')).toBe(
+      `rules.evaluate:${outboxId}`,
+    );
+  });
+
+  it('refuses a chain longer than the depth guard allows, and a trigger that is not a word', () => {
+    expect(() =>
+      parseJobPayload(rulesEvaluateJob, {
+        ...evaluation,
+        chain: [brandId, brandId, brandId, brandId],
+      }),
+    ).toThrow(PayloadValidationError);
+    expect(() =>
+      parseJobPayload(rulesEvaluateJob, { ...evaluation, triggers: ['Ticket Created'] }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('ticks time-based rules every five minutes, one job per brand per tick', () => {
+    expect(rulesTimeBasedScheduleJob.schedule).toEqual({ cron: RULES_TIME_BASED_CRON });
+    expect(RULES_TIME_BASED_CRON).toBe('*/5 * * * *');
+
+    const payload = parseJobPayload(rulesTimeBasedJob, {
+      brandId,
+      tick: '2026-09-27T12:05:00.000Z',
+    });
+    expect(rulesTimeBasedJobId(payload)).toBe(
+      `rules.time_based.${brandId}.${Date.parse('2026-09-27T12:05:00.000Z')}`,
+    );
+    expect(rulesTimeBasedJobId(payload)).not.toContain(':');
   });
 });

@@ -4,6 +4,7 @@ import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { SignaturePage } from '../screens/account/signature-page.tsx';
+import { AutomationPage } from '../screens/admin/automation/automation-page.tsx';
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
 import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
@@ -96,6 +97,11 @@ export function AppRoutes(): ReactNode {
               which the page itself does, so both paths are one component. */}
           <Route path={ROUTES.ticketing} element={<TicketingPage />} />
           <Route path={ROUTES.ticketingTab} element={<TicketingPage />} />
+          {/* M3-03 to M3-05. The builder's path is deeper than a tab's, so the
+              two never compete for a url. */}
+          <Route path={ROUTES.automation} element={<AutomationPage />} />
+          <Route path={ROUTES.automationTab} element={<AutomationPage />} />
+          <Route path={ROUTES.automationRule} element={<AutomationPage />} />
           {/* M1-14. Only the Danger zone tab is built; `/admin/brand` with no
               tab redirects to it, as `/admin/ticketing` does to its first. */}
           {/* M2-08. The mailbox form is static-first (`new`) and deeper than

@@ -16,7 +16,12 @@ import {
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
+  RULES_TIME_BASED_CRON,
   registerEventHandler,
+  rulesEvaluateJob,
+  rulesEvaluateJobId,
+  rulesTimeBasedJob,
+  rulesTimeBasedScheduleJob,
   slaRebuildJob,
   startOutboxRelay,
 } from '@helpdock/jobs';
@@ -56,6 +61,8 @@ import { createS3Client, S3ObjectStorage } from '../media/storage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
+import { createRulesEngineDeps } from '../rules/engine-deps.js';
+import { createRulesProcessor, registerRulesEventHandlers } from '../rules/rules-jobs.js';
 import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { businessHoursProbe } from '../sla/business-hours-probe.js';
 import { SlaRepository } from '../sla/sla.repository.js';
@@ -134,6 +141,12 @@ export interface WorkerDependencies {
    * timers gets every one of them back (§10).
    */
   createSlaWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /**
+   * M3-03 and M3-04's `rules` consumer: event rules, and the five-minute tick
+   * for time-based rules, whose schedule is upserted on every boot for the
+   * reason the retention schedule is.
+   */
+  createRulesWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -290,6 +303,19 @@ export const workerDependencies: WorkerDependencies = {
       MAILBOX_CHANGED_EVENT,
       createMailboxChangedHandler(new MailboxesRepository(), queuePollScheduler(inbound)),
     );
+    // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
+    // with a job id derived from the outbox row, so a redelivery adds nothing.
+    // Registered before the SLA handlers: rules consume `sla.warning` and
+    // `sla.breached`, so the SLA side's log-only fallback skips those two.
+    const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
+    registerRulesEventHandlers({
+      add: async (payload) => {
+        await rules.add(rulesEvaluateJob.name, payload, {
+          ...rulesEvaluateJob.options,
+          jobId: rulesEvaluateJobId(payload),
+        });
+      },
+    });
     // M3-02. `sla.schedule` removes and re-adds a ticket's timers, the same
     // shape as the two above. Registered last: it also stands in for M3-07's
     // SLA consumers, and only where none is registered yet.
@@ -303,6 +329,7 @@ export const workerDependencies: WorkerDependencies = {
         await outbound.close();
         await inbound.close();
         await sla.close();
+        await rules.close();
       },
     };
   },
@@ -487,6 +514,46 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createRulesWorker: ({ redis, db, log }) => {
+    const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
+    rules
+      .upsertJobScheduler(
+        rulesTimeBasedScheduleJob.name,
+        { pattern: RULES_TIME_BASED_CRON, tz: 'UTC' },
+        { name: rulesTimeBasedScheduleJob.name, data: {}, opts: rulesTimeBasedScheduleJob.options },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the time-based rules schedule'),
+      );
+
+    const worker = new Worker(
+      QUEUE_NAMES.rules,
+      createRulesProcessor({
+        db,
+        log,
+        engine: createRulesEngineDeps({ log }),
+        queue: {
+          add: async (payload, jobId) => {
+            await rules.add(rulesTimeBasedJob.name, payload, {
+              ...rulesTimeBasedJob.options,
+              jobId,
+            });
+          },
+        },
+      }),
+      { connection: redis },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'rules job failed'),
+    );
+
+    return {
+      close: async () => {
+        await worker.close();
+        await rules.close();
+      },
+    };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -523,6 +590,7 @@ export const startWorker = ({
   const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
+  const rules = deps.createRulesWorker({ redis: connection, db, log });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -550,6 +618,7 @@ export const startWorker = ({
     await maintenance.close();
     await inbound.close();
     await sla.close();
+    await rules.close();
     await producers.close();
     await connection.quit();
   };

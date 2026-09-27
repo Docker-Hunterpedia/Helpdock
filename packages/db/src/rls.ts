@@ -121,6 +121,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'holidays', departmentScoped: false },
   { name: 'sla_policies', departmentScoped: false },
   { name: 'ticket_sla_clocks', departmentScoped: true },
+  // M3-03. A rule is configuration, like a tag; its execution log is a child
+  // of the ticket it ran on, and says what it found there, so it follows the
+  // ticket's department like the ticket's other children.
+  { name: 'workflow_rules', departmentScoped: false },
+  { name: 'workflow_runs', departmentScoped: true },
 ];
 
 /**

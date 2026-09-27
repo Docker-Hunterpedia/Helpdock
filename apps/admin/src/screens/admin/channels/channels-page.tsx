@@ -1,11 +1,11 @@
 import type { EmailOutgoingSettings } from '@helpdock/schemas';
-import { Box, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Button, Tab, Tabs } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Inbox, Send } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
-import { channelsRoute } from '../../../app/route-paths.js';
+import { channelsRoute, ROUTES } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useEmailApi, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { emailKeys } from '../../../email/api.js';
@@ -13,35 +13,31 @@ import { PageHeader } from '../../../shell/page-header.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { AutoRepliesCard } from './auto-replies-card.tsx';
 import { FailedSendsCard } from './failed-sends-card.tsx';
+import { MailboxesTab } from './mailboxes-tab.tsx';
 import { SendersCard } from './senders-card.tsx';
 import { SmtpCard } from './smtp-card.tsx';
+import {
+  CHANNELS_TABS,
+  type ChannelsTab,
+  channelsTabForSegment,
+  DEFAULT_CHANNELS_TAB,
+} from './tabs.js';
 
 /**
- * `Admin/Channels` (artboards `AdminEmail`, `AdminEmailOutgoing`): the page
- * header and the Mailboxes / Outgoing email tab row.
- *
- * This branch builds **Outgoing email** (M2-05, M2-06, M2-08's outbound half).
- * Mailboxes is inbound mail's (M2-02, M2-03, M2-08's inbound half) and is a
- * placeholder here until that work lands on the same page.
+ * `Admin/Channels` (M2-08; artboards `Admin · email channel` for Mailboxes and
+ * `AdminEmailOutgoing` for Outgoing email): the page header, the tab row, and
+ * the tab the url names. The tabs are links, as on Ticketing, so a tab is a
+ * url and back works. "Add mailbox" belongs to the Mailboxes tab alone.
  */
-
-export const CHANNEL_TABS = [
-  { key: 'mailboxes', segment: 'mailboxes', icon: Inbox },
-  { key: 'outgoing', segment: 'outgoing', icon: Send },
-] as const;
-
-type ChannelTab = (typeof CHANNEL_TABS)[number];
-
 export function ChannelsPage(): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
-  const session = useSession();
-  const brand = currentBrand(session);
+  const brand = currentBrand(useSession());
   const { tab: segment } = useParams();
 
-  const tab = CHANNEL_TABS.find((candidate) => candidate.segment === segment);
+  const tab = channelsTabForSegment(segment);
   if (tab === undefined) {
-    return <Navigate to={channelsRoute('outgoing')} replace />;
+    return <Navigate to={channelsRoute(DEFAULT_CHANNELS_TAB.segment)} replace />;
   }
 
   return (
@@ -49,11 +45,23 @@ export function ChannelsPage(): ReactNode {
       <PageHeader
         title={t('channels:title')}
         caption={t('channels:subtitle', { brand: brand.name })}
+        action={
+          tab.key === 'mailboxes' ? (
+            <Button
+              variant="contained"
+              component={Link}
+              to={ROUTES.mailboxNew}
+              startIcon={<Plus size={16} aria-hidden="true" />}
+            >
+              {t('channels:addMailbox')}
+            </Button>
+          ) : undefined
+        }
       />
 
       <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
         <Tabs value={tab.key} aria-label={t('channels:tabList')}>
-          {CHANNEL_TABS.map(({ key, segment: path, icon: Icon }) => (
+          {CHANNELS_TABS.map(({ key, segment: path, icon: Icon }) => (
             <Tab
               key={key}
               value={key}
@@ -77,25 +85,15 @@ function TabBody({
   tab,
   brandId,
 }: {
-  readonly tab: ChannelTab;
+  readonly tab: ChannelsTab;
   readonly brandId: string;
 }): ReactNode {
-  const t = useT();
-
-  if (tab.key === 'outgoing') {
-    return <OutgoingTab brandId={brandId} />;
+  switch (tab.key) {
+    case 'mailboxes':
+      return <MailboxesTab />;
+    case 'outgoing':
+      return <OutgoingTab brandId={brandId} />;
   }
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 640 }}>
-      <Typography variant="h3" component="h2">
-        {t('channels:mailboxes.heading')}
-      </Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        {t('channels:mailboxes.body')}
-      </Typography>
-    </Box>
-  );
 }
 
 function OutgoingTab({ brandId }: { readonly brandId: string }): ReactNode {

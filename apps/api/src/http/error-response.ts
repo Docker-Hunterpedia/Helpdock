@@ -1,6 +1,7 @@
 import { TenantContextError } from '@helpdock/db';
 import type {
   AuthErrorBody,
+  ChannelsRefusal,
   ContactRefusal,
   ErrorCode,
   ErrorResponse,
@@ -16,6 +17,7 @@ import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { ChannelsFailure } from '../channels/channels-failure.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
@@ -49,6 +51,8 @@ export interface MappedError {
   readonly lifecycle?: TicketLifecycleRefusal;
   /** Only on a refused wizard step; see `install/setup-failure.ts`. */
   readonly setup?: SetupRefusal;
+  /** Only on a refused mailbox action; see `channels/channels-failure.ts`. */
+  readonly channels?: ChannelsRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -163,6 +167,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M2-08. Before the generic branch, for the reason the ones above give.
+  if (error instanceof ChannelsFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      channels: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -210,5 +225,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.ticketing === undefined ? {} : { ticketing: { reason: mapped.ticketing } }),
     ...(mapped.lifecycle === undefined ? {} : { lifecycle: { reason: mapped.lifecycle } }),
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
+    ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
   },
 });

@@ -19,6 +19,7 @@ const env: WorkerEnv = {
   FFPROBE_PATH: 'ffprobe',
   CLAMAV_PORT: 3310,
   APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
+  OUTBOUND_ALLOW_CIDRS: [],
 };
 
 const db = {} as Db;
@@ -82,6 +83,11 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('maintenance.close') };
       },
+      createInboundWorker: ({ redis }) => {
+        calls.push('inbound.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('inbound.close') };
+      },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
@@ -109,6 +115,7 @@ describe('startWorker', () => {
       'media.create',
       'assignment.create',
       'maintenance.create',
+      'inbound.create',
       'relay.start',
     ]);
   });
@@ -182,6 +189,7 @@ describe('startWorker', () => {
       'media.close',
       'assignment.close',
       'maintenance.close',
+      'inbound.close',
       'producers.close',
       'connection.quit',
     ]);
@@ -202,6 +210,7 @@ describe('startWorker', () => {
       'media.close',
       'assignment.close',
       'maintenance.close',
+      'inbound.close',
       'producers.close',
       'connection.quit',
     ]);

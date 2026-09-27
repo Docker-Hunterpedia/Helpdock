@@ -1,5 +1,6 @@
 import type {
   AuthErrorBody,
+  ChannelsRefusal,
   ContactRefusal,
   IdentityProblem,
   StaffRefusal,
@@ -7,6 +8,7 @@ import type {
   TicketLifecycleRefusal,
 } from '@helpdock/schemas';
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
+import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
 import { StaffError } from '../staff/api.js';
 import { TicketingError } from '../ticketing/api.js';
@@ -124,6 +126,35 @@ export class HttpTransport {
     return response.status === 204 ? undefined : response.json();
   }
 
+  /**
+   * A `GET` whose answer is bytes rather than JSON: M2-07's remote-image
+   * proxy. Same token, same refresh, same error mapping as {@link request}.
+   */
+  async requestBlob(
+    path: string,
+    { retry = true }: { readonly retry?: boolean } = {},
+  ): Promise<Blob> {
+    const sent = this.#accessToken;
+    const response = await fetch(`${this.#baseUrl}${path}`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: sent === null ? {} : { authorization: `Bearer ${sent}` },
+    });
+
+    if (response.status === 401 && retry && sent !== null) {
+      this.accessToken = null;
+      if (await this.refresh()) {
+        return this.requestBlob(path, { retry: false });
+      }
+    }
+
+    if (!response.ok) {
+      throw await toError(response);
+    }
+
+    return response.blob();
+  }
+
   async refresh(): Promise<boolean> {
     this.#refreshing ??= this.#refreshOnce().finally(() => {
       this.#refreshing = null;
@@ -162,12 +193,15 @@ export class HttpTransport {
  */
 const toError = async (
   response: Response,
-): Promise<AuthError | ContactError | StaffError | TicketingError | TicketLifecycleError> => {
+): Promise<
+  AuthError | ChannelsError | ContactError | StaffError | TicketingError | TicketLifecycleError
+> => {
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
   let contact: { reason: ContactRefusal; problem?: IdentityProblem | undefined } | undefined;
   let ticketing: TicketingRefusal | undefined;
   let lifecycle: TicketLifecycleRefusal | undefined;
+  let channels: ChannelsRefusal | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -176,6 +210,7 @@ const toError = async (
     contact = body.contact;
     ticketing = body.ticketing?.reason;
     lifecycle = body.lifecycle?.reason;
+    channels = body.channels?.reason;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -195,6 +230,10 @@ const toError = async (
 
   if (lifecycle !== undefined) {
     return new TicketLifecycleError(lifecycle);
+  }
+
+  if (channels !== undefined) {
+    return new ChannelsError(channels);
   }
 
   if (auth === undefined) {

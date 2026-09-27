@@ -30,6 +30,8 @@ async function violations(page: Page): Promise<string[]> {
 const openOutgoing = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
   await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
+  // Channels opens on Mailboxes; Outgoing email is the second tab.
+  await page.getByRole('tab', { name: t('channels:tabs.outgoing') }).click();
   await page.getByRole('heading', { name: t('channels:smtp.heading') }).waitFor();
 };
 

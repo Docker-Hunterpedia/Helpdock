@@ -720,6 +720,11 @@ export function TicketView({
               onUnmerge: (secondaryId) => {
                 unmerge.mutate(secondaryId);
               },
+              // M2-04: "Merge into HD-1042…" on the threading-mismatch line.
+              onMergeInto: (reference) => {
+                setMergeTerm(reference);
+                setDialog('merge');
+              },
             }}
             deliveryFooter={ticketEmail.deliveryFooter}
             onRetry={(message) => {
@@ -783,6 +788,7 @@ export function TicketView({
         departments={directory.departments}
         contactName={contactName}
         busy={merge.isPending}
+        initialTerm={mergeTerm}
         onTermChange={setMergeTerm}
         onSubmit={(primaryTicketId) => {
           merge.mutate(primaryTicketId);

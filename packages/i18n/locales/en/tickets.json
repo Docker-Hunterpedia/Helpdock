@@ -496,6 +496,23 @@
     "retry": "Retry",
     "retryLabel": "Retry sending this email",
     "retried": "Sent back to the queue.",
-    "retryFailed": "That did not work. Try again."
+    "retryFailed": "That did not work. Try again.",
+    "label": "Email from {{name}}",
+    "toLine": "To {{addresses}}",
+    "ccLine": "Cc {{addresses}}",
+    "remoteBlocked_one": "Remote images blocked · {{count}} from {{hosts}}",
+    "remoteBlocked_other": "Remote images blocked · {{count}} from {{hosts}}",
+    "loadImages": "Load images",
+    "loadingImages": "Loading images…",
+    "imagesFailed": "Some images could not be loaded.",
+    "remoteImage": "Image from {{host}}",
+    "showQuoted": "Show quoted text",
+    "hideQuoted": "Hide quoted text",
+    "inline": "{{name}} · inline",
+    "authFailed": "SPF or DKIM failed for this message",
+    "mismatch": {
+      "open": "Open {{ticket}}",
+      "merge": "Merge into {{ticket}}…"
+    }
   }
 }

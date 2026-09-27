@@ -24,6 +24,7 @@ import { createPrincipalResolver } from './auth/principal-resolver.js';
 import { RefreshStore } from './auth/session/refresh-store.js';
 import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
+import { registerInboundParseBody } from './channels/inbound/inbound-parse-body.js';
 import { securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
@@ -177,6 +178,8 @@ export interface CreateApiAppOptions {
   readonly emailSender?: AppModuleOptions['auth']['emailSender'];
   /** M1-10's bucket. Boot leaves it out and the module builds one from `S3_*`. */
   readonly objectStorage?: AppModuleOptions['objectStorage'];
+  /** M2's IMAP connection and image fetcher, for suites. */
+  readonly channels?: AppModuleOptions['channels'];
 }
 
 export const createApiApp = async ({
@@ -185,6 +188,7 @@ export const createApiApp = async ({
   brandResolver,
   emailSender,
   objectStorage,
+  channels,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -215,6 +219,7 @@ export const createApiApp = async ({
       principalResolver: createPrincipalResolver({ env, logger, session: sessionResolver }),
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(objectStorage === undefined ? {} : { objectStorage }),
+      ...(channels === undefined ? {} : { channels }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
@@ -259,6 +264,10 @@ export const createApiApp = async ({
   // ready, and on the Fastify instance rather than as a Nest interceptor so
   // that 401s, 403s and 404s are counted too (see `http-metrics.ts`).
   registerHttpMetrics(app.getHttpAdapter().getInstance(), app.get<Metrics>(METRICS));
+
+  // M2-03. Before `init()`, which is when Nest adds its routes: the `onRoute`
+  // hook that raises the inbound-parse body limit only sees routes added after it.
+  registerInboundParseBody(app.getHttpAdapter().getInstance());
 
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

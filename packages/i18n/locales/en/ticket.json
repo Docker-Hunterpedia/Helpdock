@@ -5,6 +5,8 @@
     "mergedFrom": "{{ticket}} was merged into this ticket",
     "unmerged": "{{ticket}} was unmerged from this ticket",
     "splitTo": "Messages split to {{ticket}}",
-    "splitFrom": "Split from {{ticket}}"
+    "splitFrom": "Split from {{ticket}}",
+    "threadMismatch": "Referenced {{ticket}} but sender is not a participant",
+    "noSubject": "(no subject)"
   }
 }

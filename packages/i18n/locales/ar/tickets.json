@@ -500,6 +500,27 @@
     "retry": "إعادة المحاولة",
     "retryLabel": "إعادة محاولة إرسال هذه الرسالة",
     "retried": "أُعيد إلى الطابور.",
-    "retryFailed": "لم ينجح ذلك. حاول مرة أخرى."
+    "retryFailed": "لم ينجح ذلك. حاول مرة أخرى.",
+    "label": "بريد من {{name}}",
+    "toLine": "إلى {{addresses}}",
+    "ccLine": "نسخة إلى {{addresses}}",
+    "remoteBlocked_zero": "الصور البعيدة محجوبة · لا صور من {{hosts}}",
+    "remoteBlocked_one": "الصور البعيدة محجوبة · صورة واحدة من {{hosts}}",
+    "remoteBlocked_two": "الصور البعيدة محجوبة · صورتان من {{hosts}}",
+    "remoteBlocked_few": "الصور البعيدة محجوبة · {{count}} صور من {{hosts}}",
+    "remoteBlocked_many": "الصور البعيدة محجوبة · {{count}} صورة من {{hosts}}",
+    "remoteBlocked_other": "الصور البعيدة محجوبة · {{count}} صورة من {{hosts}}",
+    "loadImages": "تحميل الصور",
+    "loadingImages": "جارٍ تحميل الصور…",
+    "imagesFailed": "تعذّر تحميل بعض الصور.",
+    "remoteImage": "صورة من {{host}}",
+    "showQuoted": "عرض النص المقتبس",
+    "hideQuoted": "إخفاء النص المقتبس",
+    "inline": "{{name}} · مضمّنة",
+    "authFailed": "فشل التحقق SPF أو DKIM لهذه الرسالة",
+    "mismatch": {
+      "open": "فتح {{ticket}}",
+      "merge": "الدمج في {{ticket}}…"
+    }
   }
 }

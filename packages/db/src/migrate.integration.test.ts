@@ -37,6 +37,7 @@ const MIGRATION_TAGS = [
   '0022_views',
   '0023_ticket_search_tokens',
   '0024_email_outbound',
+  '0025_email_inbound',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

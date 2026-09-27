@@ -57,6 +57,9 @@ import { TicketingModule } from './ticketing/ticketing.module.js';
 import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { ViewsModule } from './views/views.module.js';
+import { agentTypingRelay } from './widget/agent-typing.js';
+import { WidgetModule, type WidgetModuleOptions } from './widget/widget.module.js';
+import { RedisWidgetBroadcast } from './widget/widget-relay.js';
 
 /**
  * The request lifecycle of ARCHITECTURE §6, in the order Nest runs it:
@@ -105,6 +108,8 @@ export interface AppModuleOptions {
   readonly smtpTransports?: SmtpTransportFactory;
   /** M2: the IMAP connection and the image proxy's fetcher, which suites replace. */
   readonly channels?: ChannelsModuleOverrides;
+  /** M4: the siteverify call and the SSE timings, which suites replace. */
+  readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -139,6 +144,17 @@ export class AppModule implements NestModule {
       db: options.db,
       ownHosts: ownHostsOf(options.env),
     });
+    // M0-13's gateway, imported by `AppModule` and by `WidgetModule` as one
+    // module, so `/widget` shares the presence and publisher `/staff` runs.
+    const realtime = RealtimeModule.forRoot({
+      ...options.realtime,
+      logger: options.logger,
+      staffSocket: {
+        appUrl: options.env.APP_URL,
+        // M4-04: an agent's open composer is the visitor's "typing".
+        onViewing: agentTypingRelay(new RedisWidgetBroadcast(options.redis)),
+      },
+    });
 
     return {
       module: AppModule,
@@ -150,7 +166,7 @@ export class AppModule implements NestModule {
         BrandsModule.forRoot({ logger: options.logger }),
         InstallModule.forRoot({ auth, logger: options.logger }),
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
-        RealtimeModule.forRoot({ ...options.realtime, logger: options.logger }),
+        realtime,
         StaffModule.forRoot({ logger: options.logger }),
         // M1-04 left two null providers behind for the contact screens; M1-02
         // fills them in. They live in `tickets/` so that contacts never learn
@@ -202,6 +218,16 @@ export class AppModule implements NestModule {
         NotificationsModule.forRoot(),
         // M5-07: Brand › Domains. The DNS and TLS check runs in the worker.
         DomainsModule.forRoot({ env: options.env, hostResolver }),
+        // M4: Channels › Widget, the widget's routes, its SSE stream and the
+        // `/widget` namespace.
+        WidgetModule.forRoot({
+          realtime,
+          env: options.env,
+          db: options.db,
+          logger: options.logger,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...options.widget,
+        }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

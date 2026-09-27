@@ -71,6 +71,15 @@ describe('primaryIdentityOf', () => {
     expect(primaryIdentityOf(rows)?.kind).toBe('telegram');
   });
 
+  it('heads a widget contact with the typed email, not the visitor id (M4-02)', () => {
+    const rows = [
+      identity({ kind: 'visitor', value: '0192c3f0-1a2b-7c3d-8e4f-0000000000aa', verified: true }),
+      identity({ kind: 'email', value: 'typed@example.com' }),
+    ];
+
+    expect(primaryIdentityOf(rows)).toMatchObject({ kind: 'email', verified: false });
+  });
+
   it('falls back to an unverified email before a phone number', () => {
     const rows = [
       identity({ kind: 'phone', value: '+49301234567' }),

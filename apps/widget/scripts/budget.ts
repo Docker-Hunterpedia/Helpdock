@@ -15,6 +15,14 @@ export const BUDGET = {
 
 export const ENTRY = 'widget.js';
 
+/**
+ * The real transport (`src/transport/remote.ts`: socket.io-client, the SSE
+ * reader and the REST calls). It is a lazy chunk like the others and held to
+ * the same 20 KB, but it is named here because it must stay one: folded into
+ * the entry, socket.io-client alone would take a third of the 40 KB.
+ */
+export const TRANSPORT_CHUNK = /^chunks\/remote-[\w-]+\.js$/;
+
 export interface BuiltFile {
   readonly name: string;
   readonly gzipBytes: number;
@@ -39,6 +47,7 @@ export function overBudget(files: readonly BuiltFile[]): string[] {
   const problems: string[] = [];
   const entry = files.find((file) => file.name === ENTRY);
   const chunks = files.filter((file) => file.name !== ENTRY);
+  const transport = chunks.find((file) => TRANSPORT_CHUNK.test(file.name));
 
   if (!entry) {
     problems.push(`${ENTRY} is missing from the build`);
@@ -46,6 +55,9 @@ export function overBudget(files: readonly BuiltFile[]): string[] {
     problems.push(
       `${ENTRY} is ${kb(entry.gzipBytes)} gzipped; the budget is ${kb(BUDGET.entryBytes)}`,
     );
+  }
+  if (entry && !transport) {
+    problems.push('the transport is not a lazy chunk of its own (chunks/remote-*.js)');
   }
   for (const chunk of chunks) {
     if (chunk.gzipBytes > BUDGET.chunkBytes) {

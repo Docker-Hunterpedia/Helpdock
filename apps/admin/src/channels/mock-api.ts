@@ -1,4 +1,5 @@
 import type {
+  ContentPolicy,
   ImapTestRequest,
   ImapTestResult,
   InboundParseSecret,
@@ -7,7 +8,14 @@ import type {
   MailboxCreateRequest,
   MailboxList,
   MailboxUpdateRequest,
+  WidgetAccessUpdate,
+  WidgetAppearance,
+  WidgetConversationSettings,
+  WidgetSettings,
+  WidgetSignedIdentity,
+  WidgetSigningSecret,
 } from '@helpdock/schemas';
+import { DEFAULT_CONTENT_POLICY, WIDGET_SETTINGS_DEFAULTS } from '@helpdock/schemas';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type ChannelsApi, ChannelsError } from './api.js';
 
@@ -146,9 +154,38 @@ export class MockChannelsApi implements ChannelsApi {
   #mailboxes: Mailbox[];
   #settings: InboundParseSettings;
   #passwords = new Map<string, string>();
+  #widget: WidgetSettings;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
+    this.#widget = {
+      brandId: '0192c3f0-1a2b-7c3d-8e4f-0000000000b1',
+      appearance: { ...WIDGET_SETTINGS_DEFAULTS.appearance },
+      conversation: {
+        ...WIDGET_SETTINGS_DEFAULTS.conversation,
+        prechatEnabled: true,
+        prechatFields: [
+          { kind: 'name', required: true },
+          { kind: 'email', required: true },
+          { kind: 'custom', key: 'order_number', required: false },
+        ],
+        transcriptEnabled: true,
+      },
+      contentPolicy: DEFAULT_CONTENT_POLICY,
+      access: {
+        allowedOrigins: ['https://www.helpdock.com', 'https://shop.helpdock.sa'],
+        captchaEnabled: false,
+        captchaProvider: 'turnstile',
+        captchaSiteKey: '',
+        captchaSecret: null,
+      },
+      signedIdentity: {
+        enabled: false,
+        seesAllChannels: false,
+        secret: { setAt: '2026-09-14T09:00:00.000Z', setBy: 'Lina Haddad' },
+      },
+      updatedAt: '2026-09-14T09:00:00.000Z',
+    };
     this.#mailboxes = seed(now());
     this.#settings = {
       secretSet: true,
@@ -262,6 +299,62 @@ export class MockChannelsApi implements ChannelsApi {
   async remoteImage(): Promise<string> {
     await Promise.resolve();
     return MOCK_REMOTE_IMAGE;
+  }
+
+  async widgetSettings(): Promise<WidgetSettings> {
+    await Promise.resolve();
+    return this.#widget;
+  }
+
+  saveWidgetAppearance(_brandId: string, request: WidgetAppearance): Promise<WidgetSettings> {
+    return this.#saveWidget({ appearance: { ...request, accent: request.accent.toUpperCase() } });
+  }
+
+  saveWidgetConversation(
+    _brandId: string,
+    request: WidgetConversationSettings,
+  ): Promise<WidgetSettings> {
+    return this.#saveWidget({ conversation: request });
+  }
+
+  saveWidgetContentPolicy(_brandId: string, request: ContentPolicy): Promise<WidgetSettings> {
+    return this.#saveWidget({ contentPolicy: request });
+  }
+
+  saveWidgetAccess(_brandId: string, request: WidgetAccessUpdate): Promise<WidgetSettings> {
+    const { captchaSecret, ...access } = request;
+    const stamp =
+      captchaSecret === undefined || captchaSecret === ''
+        ? (this.#widget.access?.captchaSecret ?? null)
+        : { setAt: new Date(this.#now()).toISOString(), setBy: 'Lina Haddad' };
+    return this.#saveWidget({ access: { ...access, captchaSecret: stamp } });
+  }
+
+  saveWidgetSignedIdentity(
+    _brandId: string,
+    request: WidgetSignedIdentity,
+  ): Promise<WidgetSettings> {
+    return this.#saveWidget({
+      signedIdentity: { ...request, secret: this.#widget.signedIdentity?.secret ?? null },
+    });
+  }
+
+  async replaceWidgetSigningSecret(): Promise<WidgetSigningSecret> {
+    const stamp = { setAt: new Date(this.#now()).toISOString(), setBy: 'Lina Haddad' };
+    await this.#saveWidget({
+      signedIdentity: {
+        enabled: this.#widget.signedIdentity?.enabled ?? false,
+        seesAllChannels: this.#widget.signedIdentity?.seesAllChannels ?? false,
+        secret: stamp,
+      },
+    });
+    return { secret: 'whsec_bW9jay1zaWduaW5nLXNlY3JldC1zaG93bi1vbmNlLXBsZWFzZQ', stamp };
+  }
+
+  async #saveWidget(patch: Partial<WidgetSettings>): Promise<WidgetSettings> {
+    await Promise.resolve();
+    this.#widget = { ...this.#widget, ...patch, updatedAt: new Date(this.#now()).toISOString() };
+    return this.#widget;
   }
 
   // ------------------------------------------------------------------

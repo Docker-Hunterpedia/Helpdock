@@ -15,11 +15,13 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "preact": "10.29.8"
+    "preact": "10.29.8",
+    "socket.io-client": "4.8.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@helpdock/i18n": "workspace:*",
+    "@helpdock/schemas": "workspace:*",
     "@helpdock/ui": "workspace:*",
     "@playwright/test": "1.63.0",
     "@testing-library/preact": "3.2.4",

@@ -317,6 +317,9 @@ importers:
       '@helpdock/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@helpdock/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@nestjs/common':
         specifier: 12.0.3
         version: 12.0.3(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
@@ -440,6 +443,9 @@ importers:
       preact:
         specifier: 10.29.8
         version: 10.29.8
+      socket.io-client:
+        specifier: 4.8.3
+        version: 4.8.3(supports-color@7.2.0)
     devDependencies:
       '@axe-core/playwright':
         specifier: 4.13.0
@@ -447,6 +453,9 @@ importers:
       '@helpdock/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@helpdock/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
       '@helpdock/ui':
         specifier: workspace:*
         version: link:../../packages/ui

@@ -90,6 +90,30 @@ export const customerCopy = (locale: Locale, brandName: string): CustomerCopy =>
   };
 };
 
+/** M4-08's transcript: the conversation only, in the visitor's language. */
+export interface TranscriptCopy {
+  readonly subject: string;
+  readonly intro: string;
+  readonly you: string;
+  readonly agent: string;
+  readonly note: string;
+}
+
+export const transcriptCopy = (
+  locale: Locale,
+  values: { readonly brandName: string; readonly reference: string },
+): TranscriptCopy => {
+  const t = i18n.getFixedT(locale, 'email');
+
+  return {
+    subject: t('transcript.subject', values),
+    intro: t('transcript.intro', values),
+    you: t('transcript.you'),
+    agent: t('transcript.agent', values),
+    note: t('transcript.note'),
+  };
+};
+
 export interface TestMessageCopy {
   readonly subject: string;
   readonly heading: string;

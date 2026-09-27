@@ -1,6 +1,7 @@
 export const PACKAGE_NAME = '@helpdock/channels' as const;
 
 export * from './adapter.js';
+export * from './captcha.js';
 export * from './email/customer-layout.js';
 export * from './email/email-adapter.js';
 export * from './email/imap/imap-client.js';

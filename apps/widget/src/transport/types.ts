@@ -14,7 +14,8 @@
  * - Nothing here may pull a schema library into the initial chunk; the size
  *   budget in D §14 counts every byte of the entry.
  *
- * Field names are snake_case because they are the wire names.
+ * Field names are snake_case. The api speaks camelCase (`docs/guides/widget-protocol.md`);
+ * the real transport translates in `map.ts`, so the UI never sees a wire shape.
  */
 
 export type WidgetLocale = 'en' | 'ar';
@@ -265,7 +266,7 @@ export type TransportErrorCode =
 export class TransportError extends Error {
   readonly code: TransportErrorCode;
 
-  constructor(code: TransportErrorCode, message = code) {
+  constructor(code: TransportErrorCode, message: string = code) {
     super(message);
     this.name = 'TransportError';
     this.code = code;

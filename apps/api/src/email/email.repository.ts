@@ -48,6 +48,19 @@ export interface SendFacts {
     readonly signatureEn: string | null;
     readonly signatureAr: string | null;
   } | null;
+  /**
+   * M4-08. The conversation a transcript carries: its public replies and AI
+   * answers in order, never a note or a system row. Empty for every other kind.
+   */
+  readonly transcript: readonly TranscriptLine[];
+}
+
+export interface TranscriptLine {
+  readonly from: 'visitor' | 'agent';
+  /** The agent's first name; null for the visitor. */
+  readonly agentName: string | null;
+  readonly text: string;
+  readonly at: Date;
 }
 
 /** What a reply is addressed with, read in the transaction that writes the reply. */
@@ -420,7 +433,40 @@ export class EmailRepository {
       contactName: ticket.contactName,
       message: message ?? null,
       author: author ?? null,
+      transcript: delivery.kind === 'transcript' ? await this.#transcript(tx, ticket.id) : [],
     };
+  }
+
+  async #transcript(tx: DbTransaction, ticketId: string): Promise<TranscriptLine[]> {
+    const rows = await tx
+      .select({
+        authorType: ticketMessages.authorType,
+        bodyText: ticketMessages.bodyText,
+        createdAt: ticketMessages.createdAt,
+        staffName: users.name,
+      })
+      .from(ticketMessages)
+      .leftJoin(
+        users,
+        and(
+          eq(ticketMessages.authorType, 'staff'),
+          sql`${users.id}::text = ${ticketMessages.authorId}`,
+        ),
+      )
+      .where(
+        and(eq(ticketMessages.ticketId, ticketId), inArray(ticketMessages.kind, ['public', 'ai'])),
+      )
+      .orderBy(asc(ticketMessages.seq));
+
+    return rows.map((row) => ({
+      from: row.authorType === 'contact' ? 'visitor' : 'agent',
+      agentName:
+        row.authorType === 'staff' && row.staffName !== null
+          ? (row.staffName.trim().split(/\s+/u)[0] ?? null)
+          : null,
+      text: row.bodyText,
+      at: row.createdAt,
+    }));
   }
 
   /**

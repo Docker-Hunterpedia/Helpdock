@@ -331,6 +331,34 @@ describe('StaffGateway', () => {
         // biome-ignore lint/suspicious/noExplicitAny: `afterInit` uses `use` only.
       }) as any;
 
+    it('refuses a page on another origin before looking at its token (M4-03)', async () => {
+      const middlewares: ((socket: unknown, next: (error?: Error) => void) => void)[] = [];
+      const gateway = new StaffGateway(
+        { resolveSession: () => Promise.resolve(null) },
+        { isSessionRevoked: () => Promise.resolve(false) },
+        harnessed.presence,
+        new RealtimePublisher(),
+        new SocketRegistry(),
+        new InMemorySocketConnectionsGauge(),
+        roomReader,
+        silentLogger(),
+        { appUrl: 'https://support.example.com' },
+      );
+      gateway.afterInit(namespaceCapturing(middlewares));
+
+      const refusal = await new Promise<Error | undefined>((resolve) => {
+        middlewares[0]?.(
+          {
+            handshake: { auth: { token: 't' }, headers: { origin: 'https://shop.example.com' } },
+            data: {},
+          },
+          resolve,
+        );
+      });
+
+      expect((refusal as HandshakeRefusal).data.code).toBe('forbidden');
+    });
+
     it('refuses a socket with no token before it is ever connected', async () => {
       const middlewares: ((socket: unknown, next: (error?: Error) => void) => void)[] = [];
       harnessed.gateway.afterInit(namespaceCapturing(middlewares));
@@ -432,6 +460,31 @@ describe('StaffGateway', () => {
       expect(socket.relayed[0]?.payload).toEqual(
         expect.objectContaining({ data: expect.objectContaining({ activity: 'replying' }) }),
       );
+    });
+
+    it('tells the widget relay what the agent is doing (M4-04)', async () => {
+      const heard: unknown[] = [];
+      const gateway = new StaffGateway(
+        { resolveSession: () => Promise.resolve(null) },
+        { isSessionRevoked: () => Promise.resolve(false) },
+        harnessed.presence,
+        new RealtimePublisher(),
+        new SocketRegistry(),
+        new InMemorySocketConnectionsGauge(),
+        roomReaderAllowing(),
+        silentLogger(),
+        { appUrl: null, onViewing: (event) => heard.push(event) },
+      );
+
+      await gateway.viewing(socketOf('s1'), {
+        brandId: BRAND_A,
+        ticketId: TICKET,
+        activity: 'replying',
+      });
+
+      expect(heard).toEqual([
+        { brandId: BRAND_A, ticketId: TICKET, userId: LINA, activity: 'replying' },
+      ]);
     });
 
     it('refuses to relay "replying" for a ticket outside the caller\u2019s departments', async () => {

@@ -8,6 +8,8 @@ const MAX_PORT = 65_535;
 const DEFAULT_PORT = 3000;
 /** Where `docker/Dockerfile` copies `apps/admin/dist`, so an image needs no `.env` entry. */
 const DEFAULT_ADMIN_DIST_DIR = '/app/admin';
+/** Where `docker/Dockerfile` copies `apps/widget/dist` (M4-01). */
+export const DEFAULT_WIDGET_DIST_DIR = '/app/widget';
 
 /**
  * The media worker spawns ffmpeg rather than linking a binding, so what it
@@ -224,6 +226,13 @@ export const envSchema = z.object({
     .default(DEFAULT_ADMIN_DIST_DIR)
     .describe(
       `optional; directory holding the built admin SPA, default ${DEFAULT_ADMIN_DIST_DIR} (where the image puts it)`,
+    ),
+  WIDGET_DIST_DIR: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      `optional; directory holding the built chat widget (widget.js, chunks/, widget-fonts/), default ${DEFAULT_WIDGET_DIST_DIR} (where the image puts it)`,
     ),
   OUTBOUND_ALLOW_CIDRS: cidrListSchema()
     .default(NO_CIDRS)

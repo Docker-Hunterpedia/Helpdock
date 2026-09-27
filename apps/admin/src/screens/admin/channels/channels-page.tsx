@@ -16,28 +16,28 @@ import { FailedSendsCard } from './failed-sends-card.tsx';
 import { MailboxesTab } from './mailboxes-tab.tsx';
 import { SendersCard } from './senders-card.tsx';
 import { SmtpCard } from './smtp-card.tsx';
-import {
-  CHANNELS_TABS,
-  type ChannelsTab,
-  channelsTabForSegment,
-  DEFAULT_CHANNELS_TAB,
-} from './tabs.js';
+import { type ChannelsTab, channelsTabForSegment, channelsTabsFor } from './tabs.js';
+import { WidgetTab } from './widget/widget-tab.tsx';
 
 /**
- * `Admin/Channels` (M2-08; artboards `Admin · email channel` for Mailboxes and
- * `AdminEmailOutgoing` for Outgoing email): the page header, the tab row, and
+ * `Admin/Channels` (M2-08; artboards `Admin · email channel` for Mailboxes,
+ * `AdminEmailOutgoing` for Outgoing email and `AdminWidget` for Widget, M4):
+ * the page header, the tab row of the tabs the viewer's role may open, and
  * the tab the url names. The tabs are links, as on Ticketing, so a tab is a
  * url and back works. "Add mailbox" belongs to the Mailboxes tab alone.
  */
 export function ChannelsPage(): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
-  const brand = currentBrand(useSession());
+  const session = useSession();
+  const brand = currentBrand(session);
   const { tab: segment } = useParams();
+  const tabs = channelsTabsFor(session.user.role);
 
-  const tab = channelsTabForSegment(segment);
+  const tab = channelsTabForSegment(segment, session.user.role);
+  const landing = tabs[0];
   if (tab === undefined) {
-    return <Navigate to={channelsRoute(DEFAULT_CHANNELS_TAB.segment)} replace />;
+    return landing === undefined ? null : <Navigate to={channelsRoute(landing.segment)} replace />;
   }
 
   return (
@@ -61,7 +61,7 @@ export function ChannelsPage(): ReactNode {
 
       <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
         <Tabs value={tab.key} aria-label={t('channels:tabList')}>
-          {CHANNELS_TABS.map(({ key, segment: path, icon: Icon }) => (
+          {tabs.map(({ key, segment: path, icon: Icon }) => (
             <Tab
               key={key}
               value={key}
@@ -93,6 +93,8 @@ function TabBody({
       return <MailboxesTab />;
     case 'outgoing':
       return <OutgoingTab brandId={brandId} />;
+    case 'widget':
+      return <WidgetTab />;
   }
 }
 

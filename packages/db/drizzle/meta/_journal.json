@@ -204,6 +204,13 @@
       "when": 1790505113705,
       "tag": "0030_brand_domain_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790512783078,
+      "tag": "0031_widget",
+      "breakpoints": true
     }
   ]
 }

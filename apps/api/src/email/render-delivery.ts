@@ -1,13 +1,14 @@
 import {
   AUTO_REPLY_HEADERS,
   type EmailMessage,
+  escapeHtml,
   paragraphsToHtml,
   renderCustomerEmail,
 } from '@helpdock/channels';
 import type { EmailDelivery } from '@helpdock/db';
 import type { AutoReplyTemplates } from '@helpdock/schemas';
 import type { SendFacts } from './email.repository.js';
-import { customerCopy, fillPlaceholders, firstNameOf } from './email-copy.js';
+import { customerCopy, fillPlaceholders, firstNameOf, transcriptCopy } from './email-copy.js';
 
 /**
  * One delivery row, rendered to the message Nodemailer sends (artboard
@@ -53,14 +54,17 @@ export const renderDelivery = ({
   const locale = delivery.locale;
   const copy = customerCopy(locale, facts.brandName);
   const auto = delivery.kind !== 'reply';
+  const transcript = delivery.kind === 'transcript';
 
-  const content = auto
-    ? autoReplyContent(delivery, facts, templates)
-    : {
-        subject: copy.replySubject(facts.ticket.reference, facts.ticket.subject),
-        bodyHtml: facts.message?.bodyHtml ?? '',
-        bodyText: facts.message?.bodyText ?? '',
-      };
+  const content = transcript
+    ? transcriptContent(delivery, facts)
+    : auto
+      ? autoReplyContent(delivery, facts, templates)
+      : {
+          subject: copy.replySubject(facts.ticket.reference, facts.ticket.subject),
+          bodyHtml: facts.message?.bodyHtml ?? '',
+          bodyText: facts.message?.bodyText ?? '',
+        };
 
   const { html, text } = renderCustomerEmail({
     locale,
@@ -70,7 +74,12 @@ export const renderDelivery = ({
     bodyHtml: content.bodyHtml,
     bodyText: content.bodyText,
     signature: auto ? null : signatureFor(facts.author, locale),
-    note: auto ? copy.autoReplyNote : null,
+    note: transcript
+      ? transcriptCopy(locale, { brandName: facts.brandName, reference: facts.ticket.reference })
+          .note
+      : auto
+        ? copy.autoReplyNote
+        : null,
     reference: {
       label: copy.referenceLabel,
       token: `[${facts.ticket.reference}]`,
@@ -97,7 +106,9 @@ export const renderDelivery = ({
     messageId: delivery.messageId,
     ...(thread.inReplyTo === undefined ? {} : { inReplyTo: thread.inReplyTo }),
     references: [...thread.references],
-    ...(auto ? { headers: AUTO_REPLY_HEADERS } : {}),
+    // A transcript is asked for, not automatic; RFC 3834's headers are for
+    // mail nobody asked for.
+    ...(auto && !transcript ? { headers: AUTO_REPLY_HEADERS } : {}),
   };
 };
 
@@ -120,5 +131,47 @@ const autoReplyContent = (
     subject: fillPlaceholders(template.subject, values),
     bodyHtml: paragraphsToHtml(body),
     bodyText: body,
+  };
+};
+
+/**
+ * M4-08. The conversation as a visitor saw it, one paragraph per message,
+ * escaped rather than rendered: an agent's reply is sent as its text, so the
+ * mail carries no markup and no link of ours (DOMAIN-RULES §4.1: "the email
+ * contains no links that grant access").
+ */
+const transcriptContent = (
+  delivery: EmailDelivery,
+  facts: SendFacts,
+): { subject: string; bodyHtml: string; bodyText: string } => {
+  const copy = transcriptCopy(delivery.locale, {
+    brandName: facts.brandName,
+    reference: facts.ticket.reference,
+  });
+  const time = new Intl.DateTimeFormat(delivery.locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+  const lines = facts.transcript.map((line) => ({
+    who: line.from === 'visitor' ? copy.you : (line.agentName ?? copy.agent),
+    when: time.format(line.at),
+    text: line.text,
+  }));
+
+  return {
+    subject: copy.subject,
+    bodyHtml: [
+      `<p style="margin:0 0 16px 0">${escapeHtml(copy.intro)}</p>`,
+      ...lines.map(
+        (line) =>
+          `<p style="margin:0 0 16px 0"><strong>${escapeHtml(line.who)}</strong> · ${escapeHtml(line.when)}<br>${line.text
+            .split(/\r?\n/)
+            .map(escapeHtml)
+            .join('<br>')}</p>`,
+      ),
+    ].join(''),
+    bodyText: [copy.intro, ...lines.map((line) => `${line.who} · ${line.when}\n${line.text}`)].join(
+      '\n\n',
+    ),
   };
 };

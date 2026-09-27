@@ -327,6 +327,51 @@ export const findOrCreateByAddress = async (
   return { contact, address: value };
 };
 
+/**
+ * An address somebody typed about a contact that already exists — the widget's
+ * pre-chat email (M4-02, DOMAIN-RULES §4.1) — recorded on that contact as
+ * unverified. It never moves the contact onto whoever else holds the address,
+ * and nobody holding it grants anything: when another contact has it, the
+ * unique index keeps it there and the two are suggested as duplicates instead.
+ *
+ * Answers the identity row when this contact holds the address afterwards,
+ * and null when somebody else does.
+ */
+export const attachUnverifiedIdentity = async (
+  tx: DbTransaction,
+  brandId: string,
+  contactId: string,
+  claim: IdentityClaim,
+): Promise<ContactIdentityRow | null> => {
+  if (isVerifiedIdentity(claim.kind, claim.source)) {
+    throw new TypeError(`attachUnverifiedIdentity takes typed identifiers, not ${claim.source}`);
+  }
+  const value = requireNormalised(claim.kind, claim.value);
+  const existing = await findByIdentity(tx, brandId, claim.kind, value);
+
+  if (existing === undefined) {
+    return insertIdentity(tx, {
+      brandId,
+      contactId,
+      kind: claim.kind,
+      value,
+      verified: false,
+      source: claim.source,
+    });
+  }
+  if (existing.contactId === contactId) {
+    return existing;
+  }
+
+  await suggestDuplicate(tx, {
+    brandId,
+    contactId,
+    otherContactId: existing.contactId,
+    reason: claim.kind,
+  });
+  return null;
+};
+
 // --------------------------------------------------------------------------
 
 const contactById = async (

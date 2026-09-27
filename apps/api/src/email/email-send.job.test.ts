@@ -21,6 +21,7 @@ const facts: SendFacts = {
   contactName: 'Mona Khalil',
   message: { bodyHtml: '<p>Done.</p>', bodyText: 'Done.', authorId: null, authorType: 'staff' },
   author: null,
+  transcript: [],
 };
 
 const install = {

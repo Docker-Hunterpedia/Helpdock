@@ -31,6 +31,7 @@ import type { Logger } from './logging/logger.js';
 import { MacrosModule } from './macros/macros.module.js';
 import { MediaModule } from './media/media.module.js';
 import type { ObjectStorage } from './media/storage.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { ParticipantsModule } from './participants/participants.module.js';
@@ -186,6 +187,8 @@ export class AppModule implements NestModule {
         // M3-06: macros and canned responses. M3-08: the audit log viewer.
         macros,
         AuditLogModule.forRoot(),
+        // M3-07: the bell's panel and the Notifications tab. Delivery runs in the worker.
+        NotificationsModule.forRoot(),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),
       ],

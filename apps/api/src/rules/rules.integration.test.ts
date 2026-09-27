@@ -618,6 +618,51 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     await disableAll();
   });
 
+  it('tells the agent a rule assigns, as `ticket.assigned` by a rule (M3-07 seam)', async () => {
+    await saveRule({
+      name: 'Chargebacks to Sam',
+      kind: 'event',
+      trigger: 'ticket_created',
+      conditions: {
+        match: 'all',
+        groups: [
+          {
+            match: 'all',
+            conditions: [{ field: 'subject', operator: 'contains', values: ['chargeback'] }],
+          },
+        ],
+      },
+      actions: [{ type: 'assign_agent', userId: sam.id }],
+    });
+
+    const ticket = await createTicket('Chargeback on order 7');
+    await drain();
+
+    expect((await ticketRow(ticket.id))?.assigneeId).toBe(sam.id);
+    const assigned = await inBrand((tx) =>
+      tx
+        .select({ payload: outbox.payload })
+        .from(outbox)
+        .where(
+          and(
+            eq(outbox.event, 'ticket.assigned'),
+            sql`${outbox.payload}->>'ticketId' = ${ticket.id}`,
+          ),
+        ),
+    );
+    expect(assigned.map((row) => row.payload)).toEqual([
+      {
+        ticketId: ticket.id,
+        departmentId: support,
+        assigneeId: sam.id,
+        assignedBy: 'rule',
+        actorId: null,
+      },
+    ]);
+
+    await disableAll();
+  });
+
   it('acts on a ticket once per stay in the status a time-based rule matches (M3-04)', async () => {
     const waitingThreeDays = {
       match: 'all' as const,

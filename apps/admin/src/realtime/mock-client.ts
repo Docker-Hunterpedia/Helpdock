@@ -1,4 +1,5 @@
 import type {
+  NotificationCreated,
   PresenceMap,
   PresenceStatus,
   SettablePresenceStatus,
@@ -136,6 +137,11 @@ export class MockRealtimeClient implements RealtimeClient {
   /** Plays the server: what a ticket room would have been told. */
   emitTicketChanged(change: TicketChanged): void {
     this.#listeners.ticketChanged(change);
+  }
+
+  /** Plays the server: a new notification for the signed-in person (M3-07). */
+  emitNotificationCreated(created: NotificationCreated): void {
+    this.#listeners.notificationCreated(created);
   }
 
   emitTicketMessage(event: TicketMessageEvent): void {

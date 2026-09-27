@@ -2,6 +2,7 @@ import {
   attachmentChangedEnvelopeSchema,
   brandPresenceSchema,
   brandRoom,
+  notificationCreatedEnvelopeSchema,
   PRESENCE_HEARTBEAT_INTERVAL_MS,
   type PresenceMap,
   presenceChangedEnvelopeSchema,
@@ -246,6 +247,15 @@ export class SocketRealtimeClient implements RealtimeClient {
       const parsed = attachmentChangedEnvelopeSchema.safeParse(envelope);
       if (parsed.success) {
         this.#listeners.attachmentChanged(parsed.data.data);
+      }
+    });
+
+    // M3-07. The server puts every socket in its own `user:` room on connect,
+    // so there is nothing to join: the frame just arrives.
+    socket.on(REALTIME_EVENTS.notificationCreated, (envelope) => {
+      const parsed = notificationCreatedEnvelopeSchema.safeParse(envelope);
+      if (parsed.success) {
+        this.#listeners.notificationCreated(parsed.data.data);
       }
     });
 

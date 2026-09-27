@@ -48,7 +48,10 @@ describe('the schema', () => {
       'inbound_parse_settings',
       'job_receipts',
       'mailboxes',
+      'notification_prefs',
+      'notifications',
       'outbox',
+      'push_subscriptions',
       'retention_settings',
       'settings',
       'sla_policies',
@@ -102,13 +105,13 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but nine has a uuid primary key; `settings` is keyed by
+    // Every table but ten has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
     // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
     // they join, `retention_settings`, `email_outbound_settings` and
-    // `inbound_parse_settings` by their brand, and `ticket_search_tokens` by
-    // the ticket and the word.
-    expect(generated).toHaveLength(byName.size - 9);
+    // `inbound_parse_settings` by their brand, `ticket_search_tokens` by
+    // the ticket and the word, and `notification_prefs` by its person.
+    expect(generated).toHaveLength(byName.size - 10);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

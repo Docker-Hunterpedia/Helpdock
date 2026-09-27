@@ -149,7 +149,7 @@ test.describe('Your account › Email signature', () => {
     const t = strings(locale);
     await signIn(page, locale);
     await openSecurity(page, locale);
-    await page.getByRole('tab', { name: t('me:tabs.signature') }).click();
+    await page.getByRole('tab', { name: t('me:account.tabs.signature') }).click();
     await page.getByRole('heading', { name: t('me:signature.heading') }).waitFor();
     expect(await violations(page)).toEqual([]);
 

@@ -334,3 +334,16 @@ export const slaStopReasonEnum = pgEnum('sla_stop_reason', [
 
 /** What recorded a breach: the due time passing, or a recompute that used the target up (§3.3). */
 export const slaBreachCauseEnum = pgEnum('sla_breach_cause', ['timer', 'change']);
+
+/**
+ * The six things staff are told about (REQUIREMENTS §4.9, M3-07). The same
+ * list keys the preference matrix on `notification_prefs`.
+ */
+export const notificationKindEnum = pgEnum('notification_kind', [
+  'assigned',
+  'replied',
+  'mentioned',
+  'sla_warning',
+  'sla_breached',
+  'escalated',
+]);

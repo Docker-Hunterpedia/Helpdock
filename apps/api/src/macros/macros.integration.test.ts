@@ -7,6 +7,7 @@ import {
   createDb,
   type Db,
   type DbHandle,
+  outbox,
   ticketActivity,
   userBrandRoles,
   users,
@@ -435,6 +436,18 @@ describe.skipIf(!hasDocker)('macros and canned responses', () => {
       expect(actions.filter((action) => action === 'ticket.macro_applied')).toHaveLength(1);
       expect(actions).not.toContain('ticket.updated');
       expect(actions).not.toContain('ticket.tags.changed');
+      // M3-07: an assign action tells the assignee, by the person who ran it.
+      const assigned = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ payload: outbox.payload })
+          .from(outbox)
+          .where(
+            sql`${outbox.event} = 'ticket.assigned' AND ${outbox.payload}->>'ticketId' = ${ticket.ticket.id}`,
+          ),
+      );
+      expect(assigned.map((row) => row.payload)).toEqual([
+        expect.objectContaining({ assigneeId: ada.id, assignedBy: 'person', actorId: ada.id }),
+      ]);
       expect(activity.find((row) => row.action === 'ticket.macro_applied')?.to).toMatchObject({
         macroName: 'Refund issued',
         assigneeId: ada.id,

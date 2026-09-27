@@ -11,6 +11,8 @@ import {
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
+  notifyEmailJob,
+  notifyPushJob,
   type OutboxRelay,
   outboxEventJob,
   QUEUE_NAMES,
@@ -58,6 +60,11 @@ import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
+import { createNotifyProcessor } from '../notifications/delivery.js';
+import { InstallChannels } from '../notifications/install-channels.js';
+import { registerNotificationHandlers } from '../notifications/notification-events.js';
+import { NotificationsRepository } from '../notifications/notifications.repository.js';
+import { WebPushSender } from '../notifications/push.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
@@ -108,8 +115,8 @@ export interface WorkerDependencies {
   registerHandlers(options: {
     redis: Redis;
     env: WorkerEnv;
+    settings: WorkerSettings;
     installSmtp: InstallSmtp;
-    log: JobLogger;
   }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   /** M2-05's `email.send` consumer on the `outbound` queue. */
@@ -147,6 +154,14 @@ export interface WorkerDependencies {
    * reason the retention schedule is.
    */
   createRulesWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  /** M3-07's `notify` consumer: notification emails and web pushes. */
+  createNotifyWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+    settings: WorkerSettings;
+  }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -175,9 +190,15 @@ export type WorkerEnv = Pick<
   // verifies it with.
   | 'APP_MASTER_KEY'
   | 'APP_MASTER_KEY_PREVIOUS'
-  // M2-02: an IMAP host is resolved through the SSRF policy (DOMAIN-RULES §13).
+  // M3-07: links in notification emails, the VAPID subject, and the private
+  // ranges a push endpoint may be in (DOMAIN-RULES §13).
+  | 'APP_URL'
+  // M2-02: an IMAP host is resolved through the same policy.
   | 'OUTBOUND_ALLOW_CIDRS'
 >;
+
+/** What the worker reads from settings: the SMTP sender and the VAPID key pair (M3-07). */
+export type WorkerSettings = Pick<Settings, 'get'>;
 
 /**
  * The scanner, or nothing. ARCHITECTURE §17 makes ClamAV optional and
@@ -236,7 +257,7 @@ export const workerDependencies: WorkerDependencies = {
   // The broadcast publishes on the same connection: a ticket event ends in a
   // socket frame, and only an `APP_ROLE=api` replica holds sockets
   // (`realtime/broadcast.ts`).
-  registerHandlers: ({ redis, env, installSmtp, log }) => {
+  registerHandlers: ({ redis, env, settings, installSmtp }) => {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
@@ -305,8 +326,6 @@ export const workerDependencies: WorkerDependencies = {
     );
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
-    // Registered before the SLA handlers: rules consume `sla.warning` and
-    // `sla.breached`, so the SLA side's log-only fallback skips those two.
     const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
     registerRulesEventHandlers({
       add: async (payload) => {
@@ -317,10 +336,30 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
     // M3-02. `sla.schedule` removes and re-adds a ticket's timers, the same
-    // shape as the two above. Registered last: it also stands in for M3-07's
-    // SLA consumers, and only where none is registered yet.
+    // shape as the two above.
     const sla = new Queue(QUEUE_NAMES.sla, { connection: redis });
-    registerSlaEventHandlers(slaDeps(sla), log);
+    registerSlaEventHandlers(slaDeps(sla));
+
+    // M3-07. After the ticket handlers, so on the events both handle the
+    // socket frame goes first. It owns `ticket.assigned`, `ticket.escalated`,
+    // `rule.notify` and `notification.*`, and subscribes to the ticket and SLA
+    // events; `notification.created` adds `notify` jobs under the same rule
+    // as the queues above, with ids derived from the row.
+    const notify = new Queue(QUEUE_NAMES.notify, { connection: redis });
+    const channels = new InstallChannels(settings);
+    registerNotificationHandlers({
+      repository: new NotificationsRepository(),
+      broadcast,
+      pushConfigured: async () => (await channels.vapidKeys()) !== null,
+      queue: {
+        addEmail: async (jobId, payload) => {
+          await notify.add(notifyEmailJob.name, payload, { ...notifyEmailJob.options, jobId });
+        },
+        addPush: async (jobId, payload) => {
+          await notify.add(notifyPushJob.name, payload, { ...notifyPushJob.options, jobId });
+        },
+      },
+    });
 
     return {
       close: async () => {
@@ -330,6 +369,7 @@ export const workerDependencies: WorkerDependencies = {
         await inbound.close();
         await sla.close();
         await rules.close();
+        await notify.close();
       },
     };
   },
@@ -554,6 +594,26 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createNotifyWorker: ({ redis, db, log, env, settings }) => {
+    const worker = new Worker(
+      QUEUE_NAMES.notify,
+      createNotifyProcessor(
+        {
+          repository: new NotificationsRepository(),
+          settings: new InstallChannels(settings),
+          push: new WebPushSender({ subject: env.APP_URL, allowCidrs: env.OUTBOUND_ALLOW_CIDRS }),
+          appUrl: env.APP_URL,
+        },
+        { db, log },
+      ),
+      { connection: redis },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'notify job failed'),
+    );
+
+    return { close: () => worker.close() };
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -561,28 +621,32 @@ export const workerDependencies: WorkerDependencies = {
 export interface StartWorkerOptions {
   readonly env: WorkerEnv;
   readonly db: Db;
+  /**
+   * The install's settings: the `smtp.*` server a brand without its own sends
+   * through (M2-05), which is also the system sender of staff notification
+   * emails, and the VAPID key pair of web push (M3-07).
+   */
+  readonly settings: WorkerSettings;
   readonly log: JobLogger;
   readonly deps?: WorkerDependencies;
-  /**
-   * M2-05: the install's `smtp.*` settings, the server a brand without its own
-   * sends through. Left out, only brands with a server of their own can send.
-   */
-  readonly settings?: Settings;
 }
-
-const NO_INSTALL_SMTP: InstallSmtp = { read: () => Promise.resolve(undefined) };
 
 export const startWorker = ({
   env,
   db,
+  settings,
   log,
   deps = workerDependencies,
-  settings,
 }: StartWorkerOptions): Closable => {
-  const installSmtp = settings === undefined ? NO_INSTALL_SMTP : new SettingsInstallSmtp(settings);
+  const installSmtp = new SettingsInstallSmtp(settings);
   const connection = deps.createConnection(env.REDIS_URL);
   // Before either worker exists, for the reason at the top of this file.
-  const producers = deps.registerHandlers({ redis: connection, env, installSmtp, log });
+  const producers = deps.registerHandlers({
+    redis: connection,
+    env,
+    settings,
+    installSmtp,
+  });
   const worker = deps.createEventWorker({ redis: connection, db, log });
   const email = deps.createEmailWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
@@ -591,6 +655,7 @@ export const startWorker = ({
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });
+  const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -619,6 +684,7 @@ export const startWorker = ({
     await inbound.close();
     await sla.close();
     await rules.close();
+    await notify.close();
     await producers.close();
     await connection.quit();
   };

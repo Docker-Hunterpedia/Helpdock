@@ -36,6 +36,8 @@ import { PasswordHasher } from '../auth/password.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import { registerNotificationHandlers } from '../notifications/notification-events.js';
+import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
@@ -283,6 +285,14 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
     registerCsatEventHandlers({
       repository: new CsatRepository(),
       tokens: new CsatTokens(createKeyring(envFor())),
+    });
+    // M3-07: an assignment writes `ticket.assigned`, a note or reply is also
+    // the notifications module's, and the worker handles both.
+    registerNotificationHandlers({
+      repository: new NotificationsRepository(),
+      broadcast: new RedisRealtimeBroadcast(worker),
+      pushConfigured: async () => false,
+      queue: { addEmail: async () => undefined, addPush: async () => undefined },
     });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });

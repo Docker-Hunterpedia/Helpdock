@@ -262,7 +262,12 @@ export const SLA_EVENTS = {
   escalated: 'ticket.escalated',
 } as const;
 
-/** Who a step's `notify` actions named, carried on the event for M3-07. */
+/**
+ * Who a step's `notify` actions named, carried flat on the event for M3-07:
+ * the people, the teams (each member by their own settings), and whether the
+ * Team Leaders of the ticket's department were named. Absent when the step
+ * named nobody, and the notification goes to whoever holds the ticket.
+ */
 export const slaNotifySchema = z.object({
   userIds: z.array(z.uuid()),
   teamIds: z.array(z.uuid()),
@@ -276,7 +281,7 @@ export const slaWarningEventSchema = z.object({
   departmentId: z.uuid(),
   clock: slaClockKindSchema,
   stepPercent: z.int().positive(),
-  notify: slaNotifySchema.optional(),
+  ...slaNotifySchema.partial().shape,
 });
 export type SlaWarningEvent = z.infer<typeof slaWarningEventSchema>;
 

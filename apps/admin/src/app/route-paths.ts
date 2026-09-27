@@ -66,9 +66,17 @@ export const ROUTES = {
   systemAuditLog: '/admin/system/audit-log',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
+  /**
+   * Your account (M3-07): one page, three tabs. `/me` alone redirects to the
+   * first; Security keeps the path it always had.
+   */
+  me: '/me',
+  meTab: '/me/:tab',
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
-  /** The Email signature tab of Your account (M2-05, artboard `AdminSignature`). */
+  /** What they are told about, and where (M3-07). */
+  meNotifications: '/me/notifications',
+  /** Their email signature (M2-05, artboard `AdminSignature`). */
   signature: '/me/signature',
   /**
    * The public rating page (M1-12). Not a route of the admin router: `main.tsx`

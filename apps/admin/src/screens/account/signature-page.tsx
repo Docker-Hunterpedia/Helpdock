@@ -12,10 +12,8 @@ import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useEmailApi } from '../../auth/session.tsx';
 import { emailKeys } from '../../email/api.js';
-import { PageHeader } from '../../shell/page-header.tsx';
 import { Field } from '../../ui/field.tsx';
 import { useEmailAction } from '../admin/channels/section-card.tsx';
-import { AccountTabs } from './account-tabs.tsx';
 
 /**
  * Your account › Email signature (artboard `AdminSignature`, M2-05): the lines
@@ -24,6 +22,7 @@ import { AccountTabs } from './account-tabs.tsx';
  *
  * Over six lines, the field turns red and says so, and Save stays enabled so
  * the error is announced when it is pressed (the artboard's invalid state).
+ * The page header and the tab row are Your account's (`account-page.tsx`).
  */
 
 const lines = (value: string): readonly string[] =>
@@ -35,7 +34,7 @@ const lines = (value: string): readonly string[] =>
 export const tooManyLines = (value: string): boolean =>
   value.replace(/\s+$/u, '').split(/\r?\n/).length > EMAIL_SIGNATURE_MAX_LINES;
 
-export function SignaturePage(): ReactNode {
+export function SignatureTab(): ReactNode {
   const t = useT();
   const api = useEmailApi();
   const tokens = useSemanticTokens();
@@ -78,144 +77,139 @@ export function SignaturePage(): ReactNode {
   } as const;
 
   return (
-    <>
-      <PageHeader title={t('me:signature.pageTitle')} caption={t('me:signature.pageCaption')} />
-      <AccountTabs current="signature" />
-
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 640px) minmax(0, 420px)' },
+        gap: 6,
+        alignItems: 'start',
+      }}
+    >
       <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 640px) minmax(0, 420px)' },
-          gap: 6,
-          alignItems: 'start',
-        }}
+        component="form"
+        noValidate
+        onSubmit={submit}
+        aria-labelledby={`${id}-heading`}
+        sx={{ ...card, display: 'flex', flexDirection: 'column' }}
       >
         <Box
-          component="form"
-          noValidate
-          onSubmit={submit}
-          aria-labelledby={`${id}-heading`}
-          sx={{ ...card, display: 'flex', flexDirection: 'column' }}
+          sx={{
+            paddingBlock: 4,
+            paddingInline: 5,
+            borderBlockEnd: `1px solid ${tokens['border.default']}`,
+          }}
         >
-          <Box
-            sx={{
-              paddingBlock: 4,
-              paddingInline: 5,
-              borderBlockEnd: `1px solid ${tokens['border.default']}`,
-            }}
-          >
-            <Typography id={`${id}-heading`} variant="h3" component="h2" sx={{ fontSize: 16 }}>
-              {t('me:signature.heading')}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
-              {t('me:signature.caption')}
-            </Typography>
-          </Box>
+          <Typography id={`${id}-heading`} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+            {t('me:signature.heading')}
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
+            {t('me:signature.caption')}
+          </Typography>
+        </Box>
 
-          <Box sx={{ padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Field
+        <Box sx={{ padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Field
+            id={`${id}-en`}
+            label={t('me:signature.en')}
+            hint={t('me:signature.enHint')}
+            error={wrong.en ? t('me:signature.tooManyLines') : undefined}
+          >
+            <TextField
               id={`${id}-en`}
-              label={t('me:signature.en')}
-              hint={t('me:signature.enHint')}
-              error={wrong.en ? t('me:signature.tooManyLines') : undefined}
-            >
-              <TextField
-                id={`${id}-en`}
-                multiline
-                minRows={4}
-                value={draft.en}
-                error={wrong.en}
-                onChange={(event) => {
-                  setDraft((held) => ({ ...held, en: event.target.value }));
-                }}
-                slotProps={{
-                  htmlInput: {
-                    dir: 'ltr',
-                    lang: 'en',
-                    maxLength: EMAIL_SIGNATURE_MAX_LENGTH,
-                    'aria-describedby': `${id}-en-${wrong.en ? 'error' : 'hint'}`,
-                    'aria-invalid': wrong.en,
-                  },
-                }}
-              />
-            </Field>
-            <Field
-              id={`${id}-ar`}
-              label={`${t('me:signature.ar')} · ${t('me:signature.arNative')}`}
-              hint={t('me:signature.arHint')}
-              error={wrong.ar ? t('me:signature.tooManyLines') : undefined}
-            >
-              <TextField
-                id={`${id}-ar`}
-                multiline
-                minRows={4}
-                value={draft.ar}
-                error={wrong.ar}
-                onChange={(event) => {
-                  setDraft((held) => ({ ...held, ar: event.target.value }));
-                }}
-                slotProps={{
-                  htmlInput: {
-                    dir: 'rtl',
-                    lang: 'ar',
-                    maxLength: EMAIL_SIGNATURE_MAX_LENGTH,
-                    'aria-describedby': `${id}-ar-${wrong.ar ? 'error' : 'hint'}`,
-                    'aria-invalid': wrong.ar,
-                  },
-                }}
-              />
-            </Field>
-          </Box>
-
-          <Box
-            sx={{
-              paddingBlock: 3,
-              paddingInline: 5,
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 2,
-              borderBlockStart: `1px solid ${tokens['border.default']}`,
-              backgroundColor: tokens['bg.canvas'],
-              borderEndStartRadius: '10px',
-              borderEndEndRadius: '10px',
-            }}
-          >
-            <Button
-              variant="text"
-              disabled={save.isPending || stored.data === undefined}
-              onClick={() => {
-                if (stored.data !== undefined) {
-                  setDraft(stored.data);
-                  setChecked(false);
-                }
+              multiline
+              minRows={4}
+              value={draft.en}
+              error={wrong.en}
+              onChange={(event) => {
+                setDraft((held) => ({ ...held, en: event.target.value }));
               }}
-            >
-              {t('me:signature.discard')}
-            </Button>
-            <Button type="submit" variant="contained" disabled={save.isPending}>
-              {t('me:signature.save')}
-            </Button>
-          </Box>
+              slotProps={{
+                htmlInput: {
+                  dir: 'ltr',
+                  lang: 'en',
+                  maxLength: EMAIL_SIGNATURE_MAX_LENGTH,
+                  'aria-describedby': `${id}-en-${wrong.en ? 'error' : 'hint'}`,
+                  'aria-invalid': wrong.en,
+                },
+              }}
+            />
+          </Field>
+          <Field
+            id={`${id}-ar`}
+            label={`${t('me:signature.ar')} · ${t('me:signature.arNative')}`}
+            hint={t('me:signature.arHint')}
+            error={wrong.ar ? t('me:signature.tooManyLines') : undefined}
+          >
+            <TextField
+              id={`${id}-ar`}
+              multiline
+              minRows={4}
+              value={draft.ar}
+              error={wrong.ar}
+              onChange={(event) => {
+                setDraft((held) => ({ ...held, ar: event.target.value }));
+              }}
+              slotProps={{
+                htmlInput: {
+                  dir: 'rtl',
+                  lang: 'ar',
+                  maxLength: EMAIL_SIGNATURE_MAX_LENGTH,
+                  'aria-describedby': `${id}-ar-${wrong.ar ? 'error' : 'hint'}`,
+                  'aria-invalid': wrong.ar,
+                },
+              }}
+            />
+          </Field>
         </Box>
 
         <Box
-          component="aside"
-          aria-labelledby={`${id}-preview`}
-          sx={{ ...card, padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}
+          sx={{
+            paddingBlock: 3,
+            paddingInline: 5,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 2,
+            borderBlockStart: `1px solid ${tokens['border.default']}`,
+            backgroundColor: tokens['bg.canvas'],
+            borderEndStartRadius: '10px',
+            borderEndEndRadius: '10px',
+          }}
         >
-          <Box>
-            <Typography id={`${id}-preview`} variant="h3" component="h2" sx={{ fontSize: 16 }}>
-              {t('me:signature.previewHeading')}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
-              {t('me:signature.previewCaption')}
-            </Typography>
-          </Box>
-          <PreviewBlock locale="en" signature={draft.en} />
-          <PreviewBlock locale="ar" signature={draft.ar.trim() === '' ? draft.en : draft.ar} />
+          <Button
+            variant="text"
+            disabled={save.isPending || stored.data === undefined}
+            onClick={() => {
+              if (stored.data !== undefined) {
+                setDraft(stored.data);
+                setChecked(false);
+              }
+            }}
+          >
+            {t('me:signature.discard')}
+          </Button>
+          <Button type="submit" variant="contained" disabled={save.isPending}>
+            {t('me:signature.save')}
+          </Button>
         </Box>
       </Box>
-    </>
+
+      <Box
+        component="aside"
+        aria-labelledby={`${id}-preview`}
+        sx={{ ...card, padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}
+      >
+        <Box>
+          <Typography id={`${id}-preview`} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+            {t('me:signature.previewHeading')}
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
+            {t('me:signature.previewCaption')}
+          </Typography>
+        </Box>
+        <PreviewBlock locale="en" signature={draft.en} />
+        <PreviewBlock locale="ar" signature={draft.ar.trim() === '' ? draft.en : draft.ar} />
+      </Box>
+    </Box>
   );
 }
 

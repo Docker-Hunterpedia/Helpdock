@@ -238,13 +238,17 @@ describe.skipIf(!hasDocker)('assignment', () => {
   const presence = { online: async () => online };
 
   /** What the worker does with one `assignment.requested` row. */
-  const runRotation = (ticketId: string, trigger: 'routed' | 'on_unassign' = 'routed') =>
+  const runRotation = (
+    ticketId: string,
+    trigger: 'routed' | 'on_unassign' = 'routed',
+    ruleChain?: readonly string[],
+  ) =>
     withSystem(runtime.db, seeded.brandId, (tx) =>
       createAssignmentRequestedHandler({ repository, presence })({
         outboxId: uuidv7(),
         brandId: seeded.brandId,
         event: ASSIGNMENT_EVENTS.requested,
-        payload: { ticketId, trigger },
+        payload: { ticketId, trigger, ...(ruleChain === undefined ? {} : { ruleChain }) },
         tx,
         log: silentLogger,
       }),
@@ -640,6 +644,29 @@ describe.skipIf(!hasDocker)('assignment', () => {
       expect((await outboxEvents('ticket.updated')).map((payload) => payload.ticketId)).toContain(
         first.ticket.id,
       );
+    });
+
+    it('tells the pick, by the rotation or by the rule that asked for it (M3-07)', async () => {
+      await closeOut();
+      await configure(support, { mode: 'round_robin', loadCap: null });
+      online = new Set([sam.id]);
+
+      const byRotation = await createTicket(ada);
+      await runRotation(byRotation.ticket.id);
+      await closeOut();
+      const byRule = await createTicket(ada);
+      await runRotation(byRule.ticket.id, 'routed', [uuidv7()]);
+
+      const assigned = await outboxEvents('ticket.assigned');
+      expect(assigned.find((payload) => payload.ticketId === byRotation.ticket.id)).toMatchObject({
+        assigneeId: sam.id,
+        assignedBy: 'round_robin',
+        actorId: null,
+      });
+      expect(assigned.find((payload) => payload.ticketId === byRule.ticket.id)).toMatchObject({
+        assigneeId: sam.id,
+        assignedBy: 'rule',
+      });
     });
 
     it('skips anybody offline, away or out of rotation, and leaves the ticket if nobody is left', async () => {

@@ -60,5 +60,89 @@
       "body": "Hi {{contact.first_name}},\n\nThanks for writing to {{brand.name}}. Your request is {{ticket.number}}. The {{department.name}} team is away right now and will reply by email as soon as they are back.\n\nTo add anything, reply to this email and it joins the same request."
     },
     "fallbackName": "there"
+  },
+  "staffNotification": {
+    "brand": "Helpdock",
+    "kicker": {
+      "assigned": "Assignment",
+      "replied": "Reply",
+      "mentioned": "Mention",
+      "sla_warning": "SLA warning · {{clock}}",
+      "sla_breached": "SLA breach · {{clock}}",
+      "escalated": "Escalation"
+    },
+    "subject": {
+      "assigned": "[{{reference}}] Assigned to you: {{subject}}",
+      "replied": "[{{reference}}] {{contact}} replied",
+      "mentioned": "[{{reference}}] {{actor}} mentioned you",
+      "sla_warning": "[{{reference}}] SLA warning: {{percent}} % of the {{clock}} target used",
+      "sla_breached": "[{{reference}}] SLA breached: {{clock}}",
+      "escalated": "[{{reference}}] Escalated: {{subject}}"
+    },
+    "heading": {
+      "assigned": "{{reference}} is yours now",
+      "replied": "{{contact}} replied on {{reference}}",
+      "mentioned": "{{actor}} mentioned you on {{reference}}",
+      "sla_warning": "{{reference}} is close to its {{clock}} target",
+      "sla_breached": "{{reference}} missed its {{clock}} target",
+      "escalated": "{{reference}} was escalated"
+    },
+    "body": {
+      "assigned": {
+        "person": "{{actor}} assigned it to you.",
+        "rule": "A workflow rule assigned it to you.",
+        "round_robin": "Round-robin assigned it to you.",
+        "skill_based": "Skill-based assignment gave it to you."
+      },
+      "replied": "The contact answered on a ticket assigned to you.",
+      "mentioned": "In an internal note on {{subject}}. Customers never see notes.",
+      "sla_warning": "{{percent}} % of the {{clock}} target is used and the ticket still needs an answer.",
+      "sla_breached": "The {{clock}} target has passed and the ticket still needs an answer.",
+      "escalated": "An SLA step or a rule escalated it to you or your team."
+    },
+    "clock": {
+      "first_response": "first response",
+      "next_response": "next response",
+      "resolution": "resolution",
+      "unknown": "SLA"
+    },
+    "someone": "Someone",
+    "aContact": "The contact",
+    "noteLabel": "Internal note · {{actor}}",
+    "replyLabel": "Reply · {{contact}}",
+    "ruleLabel": "Message from a workflow rule",
+    "rows": {
+      "ticket": "Ticket",
+      "contact": "Contact",
+      "department": "Department",
+      "priority": "Priority",
+      "assignee": "Assigned to",
+      "you": "You",
+      "nobody": "Nobody"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "action": {
+      "open": "Open {{reference}}",
+      "reply": "Reply in Helpdock"
+    },
+    "why": {
+      "assigned": "You get this email because assignment emails are on for you.",
+      "replied": "You get this email because reply emails are on for you.",
+      "mentioned": "You get this email because mention emails are on for you.",
+      "sla_warning": "You get this email because SLA warning emails are on for you.",
+      "sla_breached": "You get this email because SLA breach emails are on for you.",
+      "escalated": "You get this email because escalation emails are on for you."
+    },
+    "settings": "Change notification settings",
+    "sentTo": "Helpdock · sent to {{email}}",
+    "push": {
+      "testTitle": "Helpdock test notification",
+      "testBody": "Browser push works on this browser."
+    }
   }
 }

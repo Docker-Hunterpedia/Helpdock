@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
-import { SignaturePage } from '../screens/account/signature-page.tsx';
+import { YourAccountPage } from '../screens/account/account-page.tsx';
 import { AutomationPage } from '../screens/admin/automation/automation-page.tsx';
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
@@ -20,7 +20,6 @@ import { NewContactPage } from '../screens/contacts/new-contact-page.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
-import { SecurityScreen } from '../screens/security.tsx';
 import { SetupPage } from '../screens/setup/setup-page.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
 import { StaffScreen } from '../screens/staff.tsx';
@@ -116,12 +115,11 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
           <Route path={ROUTES.brand} element={<BrandPage />} />
           <Route path={ROUTES.brandTab} element={<BrandPage />} />
-          <Route path={ROUTES.security} element={<SecurityScreen />} />
-          {/* M2-05 and M2-08: the Email signature tab of Your account, and
-              Channels with its Outgoing email tab. */}
-          <Route path={ROUTES.signature} element={<SignaturePage />} />
-          <Route path={ROUTES.channels} element={<ChannelsPage />} />
-          <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
+          {/* Your account: Security (M0-06), Notifications (M3-07) and Email
+              signature (M2-05) are tabs of one page, and `/me` alone opens
+              the first. */}
+          <Route path={ROUTES.me} element={<Navigate to={ROUTES.security} replace />} />
+          <Route path={ROUTES.meTab} element={<YourAccountPage />} />
         </Route>
 
         {/* M1-15. Its own shell, without the page padding: the workspace is

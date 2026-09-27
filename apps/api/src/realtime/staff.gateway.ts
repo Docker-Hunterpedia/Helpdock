@@ -11,6 +11,7 @@ import {
   type TicketViewingAck,
   ticketRoom,
   ticketViewingRequestSchema,
+  userRoom,
 } from '@helpdock/schemas';
 import { Inject, UseFilters } from '@nestjs/common';
 import {
@@ -135,6 +136,10 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 
   handleConnection(socket: StaffSocket): void {
     this.#registry.add(socket);
+    // M3-07. A person's own room, joined for them: the bell hears about new
+    // notifications there whichever brand or screen the socket is on, and the
+    // handshake has already proved who the socket belongs to.
+    void socket.join(userRoom(userIdOf(socket.data)));
     this.#gauge.set({ namespace: STAFF_NAMESPACE }, this.#registry.size());
     this.#logger.debug(
       { userId: userIdOf(socket.data), familyId: socket.data.familyId },

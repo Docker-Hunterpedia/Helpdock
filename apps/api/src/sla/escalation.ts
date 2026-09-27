@@ -157,7 +157,7 @@ export const fireSlaTimer = async (
 };
 
 /** Who a step's `notify` actions named, or nothing when it has none. */
-const notifyOf = (actions: readonly SlaAction[]): { notify?: SlaNotify } => {
+export const notifyOf = (actions: readonly SlaAction[]): Partial<SlaNotify> => {
   const recipients = actions.flatMap((action) =>
     action.type === 'notify' ? [action.recipient] : [],
   );
@@ -166,15 +166,13 @@ const notifyOf = (actions: readonly SlaAction[]): { notify?: SlaNotify } => {
   }
 
   return {
-    notify: {
-      userIds: recipients.flatMap((recipient) =>
-        recipient.kind === 'user' ? [recipient.userId] : [],
-      ),
-      teamIds: recipients.flatMap((recipient) =>
-        recipient.kind === 'team' ? [recipient.teamId] : [],
-      ),
-      departmentLeads: recipients.some((recipient) => recipient.kind === 'department_leads'),
-    },
+    userIds: recipients.flatMap((recipient) =>
+      recipient.kind === 'user' ? [recipient.userId] : [],
+    ),
+    teamIds: recipients.flatMap((recipient) =>
+      recipient.kind === 'team' ? [recipient.teamId] : [],
+    ),
+    departmentLeads: recipients.some((recipient) => recipient.kind === 'department_leads'),
   };
 };
 

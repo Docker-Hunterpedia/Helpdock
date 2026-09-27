@@ -18,7 +18,7 @@ const renderSecurity = async () => {
     initialEntries: ['/me/security'],
   });
 
-  await screen.findByRole('heading', { name: 'Security', level: 1 });
+  await screen.findByRole('heading', { name: 'Your account', level: 1 });
 
   return rendered;
 };

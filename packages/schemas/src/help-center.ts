@@ -112,6 +112,12 @@ export const hcRefusalSchema = z.enum([
   'was-published',
   'schedule-in-past',
   'limit-reached',
+  // M5-06: an accent below 3:1 on the surface (DESIGN §8), an image that is
+  // not a finished upload for that purpose, a featured article that is not
+  // this brand's.
+  'low-contrast',
+  'media-not-ready',
+  'unknown-article',
 ]);
 export type HcRefusal = z.infer<typeof hcRefusalSchema>;
 
@@ -330,8 +336,10 @@ export const hcMediaPresignRequestSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   mime: z.enum(HC_IMAGE_MIME_TYPES),
   size: z.int().positive().max(HC_IMAGE_MAX_BYTES),
+  /** M5-06: a logo or favicon is scaled to 512 px rather than 2048. */
+  purpose: z.enum(['article', 'logo', 'favicon']).default('article'),
 });
-export type HcMediaPresignRequest = z.infer<typeof hcMediaPresignRequestSchema>;
+export type HcMediaPresignRequest = z.input<typeof hcMediaPresignRequestSchema>;
 
 export const hcMediaPresignResponseSchema = z.object({
   mediaId: z.uuid(),

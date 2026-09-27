@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolveBrandTheme } from './brand.js';
 import { tokensCssBundle, tokensToCss } from './css.js';
 import { tokens } from './tokens.js';
 import { SEMANTIC_TOKEN_NAMES } from './tokens.schema.js';
@@ -65,5 +66,33 @@ describe('tokensCssBundle', () => {
 
   it('matches the published stylesheet', () => {
     expect(tokensCssBundle()).toMatchSnapshot();
+  });
+});
+
+describe('tokensCssBundle with a brand', () => {
+  const brand = resolveBrandTheme({ accent: '#2B5FB3', radius: 12, surfaceTone: 'cool' });
+
+  it('carries the brand accent in light and its lifted accent in dark', () => {
+    const bundle = tokensCssBundle(brand);
+
+    expect(bundle).toContain(`--hd-action-primary: ${brand.accent.light.base};`);
+    expect(bundle).toContain(`--hd-action-primary: ${brand.accent.dark.base};`);
+    expect(bundle).not.toContain(
+      `--hd-action-primary: ${tokens.semantic.light['action.primary']};`,
+    );
+  });
+
+  it('scales md and lg and keeps the surface tone of the light ground', () => {
+    const bundle = tokensCssBundle(brand);
+
+    expect(bundle).toContain('--hd-radius-md: 12px;');
+    expect(bundle).toContain(`--hd-radius-lg: ${String(brand.radius.lg)}px;`);
+    expect(bundle).toContain(`--hd-bg-canvas: ${brand.neutral.n50};`);
+  });
+
+  it('leaves the status hues alone', () => {
+    expect(tokensCssBundle(brand)).toContain(
+      `--hd-status-danger: ${tokens.semantic.light['status.danger']};`,
+    );
   });
 });

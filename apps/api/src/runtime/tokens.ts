@@ -19,3 +19,10 @@ export const ADMIN_DIST = Symbol('helpdock.admin-dist');
 export const PRINCIPAL_RESOLVER = Symbol('helpdock.principal-resolver');
 /** Filled in by M5, when brand domains exist; see `src/context/brand-resolver.ts`. */
 export const BRAND_RESOLVER = Symbol('helpdock.brand-resolver');
+
+/**
+ * The pages a brand's own host is answered with instead of the admin SPA: the
+ * help center (M5-03). Optional, so a process or a suite without it serves the
+ * admin on every host as before; see `static/admin-spa.controller.ts`.
+ */
+export const HOST_PAGES = Symbol('helpdock.host-pages');

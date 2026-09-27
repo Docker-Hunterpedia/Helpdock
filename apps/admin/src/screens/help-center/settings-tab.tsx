@@ -2,19 +2,98 @@ import type { HcAccess } from '@helpdock/schemas';
 import { Box, Button, FormControlLabel, Radio, RadioGroup, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
+import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
+import { brandRoute, channelsRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { helpCenterKeys } from '../../help-center/api.js';
 import { useToast } from '../../ui/toasts.tsx';
+import { CustomCssCard } from './site/custom-css-card.tsx';
+import { HomeCard } from './site/home-card.tsx';
+import { LinksCard } from './site/links-card.tsx';
+import { ThemeCard } from './site/theme-card.tsx';
+import { useSite } from './site/use-site.js';
 import { useHelpCenter, useHelpCenterReport } from './use-help-center.js';
 
 /**
- * Help center › Settings, "Who can read it" (M5-09, `Admin/HelpCenter-Settings`
- * card 1): public, or signed-in staff only. The theme, home page and links
- * cards below it arrive with M5-06. A Viewer reads the choice and cannot change
- * it.
+ * Help center › Settings (`Admin/HelpCenter-Settings`): "Who can read it"
+ * (M5-09), then M5-06's Theme and Home page beside Header and footer links and
+ * Custom CSS, and a note on where the rest lives. Every card saves on its own.
+ * A Viewer reads them all and changes none.
  */
 export function SettingsTab({ canManage }: { readonly canManage: boolean }): ReactNode {
+  const site = useSite();
+  const { structure } = useHelpCenter();
+
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1.2fr) minmax(0, 1fr)' },
+        gap: 6,
+        alignItems: 'start',
+      }}
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+        <AccessCard canManage={canManage} />
+        {site.data === undefined ? null : (
+          <>
+            <ThemeCard appearance={site.data.appearance} canManage={canManage} />
+            <HomeCard home={site.data.home} structure={structure.data} canManage={canManage} />
+          </>
+        )}
+      </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+        {site.data === undefined ? null : (
+          <>
+            <LinksCard links={site.data.links} canManage={canManage} />
+            <CustomCssCard css={site.data.customCss} canManage={canManage} />
+          </>
+        )}
+        <WhereTheRestLives />
+      </Box>
+    </Box>
+  );
+}
+
+/** "Where the rest lives": the address on Brand › Domains, the widget's theme on Channels › Widget. */
+function WhereTheRestLives(): ReactNode {
+  const t = useT();
+  const tokens = useSemanticTokens();
+  return (
+    <Box
+      component="aside"
+      aria-labelledby="hc-rest-heading"
+      sx={{
+        padding: 4,
+        borderRadius: '10px',
+        backgroundColor: tokens['bg.muted'],
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        fontSize: 13,
+      }}
+    >
+      <Typography id="hc-rest-heading" component="h2" sx={{ fontSize: 13, fontWeight: 600 }}>
+        {t('helpCenter:site.rest.heading')}
+      </Typography>
+      <Typography sx={{ fontSize: 13 }}>
+        {t('helpCenter:site.rest.address')}{' '}
+        <Link to={brandRoute('domains')}>{t('helpCenter:site.rest.domains')}</Link>
+      </Typography>
+      <Typography sx={{ fontSize: 13 }}>
+        {t('helpCenter:site.rest.widgetTheme')}{' '}
+        <Link to={channelsRoute('widget')}>{t('helpCenter:site.rest.widget')}</Link>
+      </Typography>
+      <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+        {t('helpCenter:site.rest.cache')}
+      </Typography>
+    </Box>
+  );
+}
+
+/** "Who can read it" (M5-09, card 1): public, or signed-in staff only. */
+function AccessCard({ canManage }: { readonly canManage: boolean }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const toast = useToast();
@@ -67,7 +146,6 @@ export function SettingsTab({ canManage }: { readonly canManage: boolean }): Rea
       component="section"
       aria-labelledby="hc-access-heading"
       sx={{
-        maxWidth: 720,
         borderRadius: '10px',
         border: `1px solid ${tokens['border.default']}`,
         backgroundColor: tokens['bg.surface'],

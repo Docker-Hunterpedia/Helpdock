@@ -9,7 +9,7 @@ import {
 import { Box, Button, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Editor } from '@tiptap/core';
-import { ArrowLeft, Check, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, Check, Eye, LoaderCircle } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../../app/i18n.js';
@@ -21,6 +21,7 @@ import { helpCenterKeys, isHelpCenterError } from '../../../help-center/api.js';
 import { useToast } from '../../../ui/toasts.tsx';
 import { breadcrumb } from '../article-rows.js';
 import { managesHelpCenter } from '../help-center-page.tsx';
+import { openHelpCenterHref } from '../site/site-draft.js';
 import { fromWallClock, toWallClock } from '../time.js';
 import { useHelpCenter, useHelpCenterReport } from '../use-help-center.js';
 import { RichTextEditor } from './rich-text-editor.tsx';
@@ -350,6 +351,16 @@ function LocaleEditor({
             t('helpCenter:editor.saveFailed')
           ) : null}
         </Box>
+        <Button
+          variant="outlined"
+          href={openHelpCenterHref(brand.id, { preview: { articleId: article.id, locale } })}
+          target="_blank"
+          rel="noopener"
+          disabled={version === undefined}
+          startIcon={<Eye size={16} aria-hidden="true" />}
+        >
+          {t('helpCenter:preview')}
+        </Button>
         {editable ? (
           <Button
             variant="contained"

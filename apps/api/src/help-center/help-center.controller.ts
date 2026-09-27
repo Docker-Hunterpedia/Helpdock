@@ -317,7 +317,7 @@ export class HelpCenterController {
  * audit trail and the Activity panel name a person, so anything else is
  * refused here until that milestone decides what it names instead.
  */
-const context = (): HelpCenterContext => {
+export const context = (): HelpCenterContext => {
   const request = requireRequestContext();
   const principal = request.principal;
   const brandId = request.targetBrandId;

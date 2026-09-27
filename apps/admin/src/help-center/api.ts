@@ -1,12 +1,17 @@
 import type {
+  HcAppearance,
+  HcAppearanceUpdateRequest,
   HcArticle,
   HcArticleCreateRequest,
   HcArticleUpdateRequest,
   HcCategory,
   HcCategoryCreateRequest,
   HcCategoryUpdateRequest,
+  HcCustomCssResult,
+  HcHomeLayout,
   HcInsights,
   HcInsightsQuery,
+  HcLinks,
   HcLocale,
   HcMedia,
   HcMediaPresignRequest,
@@ -17,6 +22,9 @@ import type {
   HcSectionCreateRequest,
   HcSectionUpdateRequest,
   HcSettings,
+  HcSite,
+  HcStaffPassRequest,
+  HcStaffPassResponse,
   HcStructure,
   HcVersionSaveRequest,
   HcVersionStatusRequest,
@@ -77,6 +85,14 @@ export interface HelpCenterApi {
   /** M5-08: Help center › Insights. */
   insights(brandId: string, query: HcInsightsQuery): Promise<HcInsights>;
   image(brandId: string, mediaId: string): Promise<HcMedia>;
+  /** M5-06: everything on the Settings tab below "Who can read it". */
+  site(brandId: string): Promise<HcSite>;
+  saveAppearance(brandId: string, request: HcAppearanceUpdateRequest): Promise<HcAppearance>;
+  saveHome(brandId: string, request: HcHomeLayout): Promise<HcHomeLayout>;
+  saveLinks(brandId: string, request: HcLinks): Promise<HcLinks>;
+  saveCustomCss(brandId: string, css: string): Promise<HcCustomCssResult>;
+  /** M5-03: a one-use address that opens the help center as staff. */
+  staffPass(brandId: string, request: HcStaffPassRequest): Promise<HcStaffPassResponse>;
 }
 
 /** Every cache key the help center screens use. */
@@ -87,6 +103,7 @@ export const helpCenterKeys = {
   settings: (brandId: string) => ['help-center', brandId, 'settings'] as const,
   insights: (brandId: string, query: HcInsightsQuery) =>
     ['help-center', brandId, 'insights', query.days, query.locale ?? 'all', query.sort] as const,
+  site: (brandId: string) => ['help-center', brandId, 'site'] as const,
 };
 
 /** A change the api refused by a rule, with the reason the screen turns into a sentence. */

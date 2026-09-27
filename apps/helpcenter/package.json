@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Vite SSR help center rendered on brand domains.",
+  "description": "Reserved for a client-side help center app; the pages are rendered by the api today (ADR 0015).",
   "license": "AGPL-3.0-only",
   "exports": {
     ".": {

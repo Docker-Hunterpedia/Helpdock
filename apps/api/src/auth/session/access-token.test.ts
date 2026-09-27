@@ -105,6 +105,10 @@ describe('verifyAccessToken', () => {
     ).resolves.toBeNull();
   });
 
+  it('refuses an empty token', async () => {
+    expect(await verifyAccessToken('', await keysFor())).toBeNull();
+  });
+
   it('refuses an unsigned token, whatever its claims say', async () => {
     const keys = await keysFor();
     const header = Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url');

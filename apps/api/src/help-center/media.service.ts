@@ -74,6 +74,7 @@ export class HelpCenterMediaService {
       originalName: safeFileName(request.fileName),
       mime: request.mime,
       size: request.size,
+      purpose: request.purpose ?? 'article',
       uploadedBy: actorId,
     });
     const upload = await this.#storage.presignUpload({

@@ -2,7 +2,7 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { type DbTransaction, hcMedia } from '@helpdock/db';
 import type { HelpCenterMediaProcessPayload, JobHandler, JobLogger } from '@helpdock/jobs';
-import { HC_IMAGE_MAX_BYTES } from '@helpdock/schemas';
+import { HC_IMAGE_MAX_BYTES, HC_SITE_IMAGE_MAX_EDGE } from '@helpdock/schemas';
 import { eq } from 'drizzle-orm';
 import sharp, { type OutputInfo } from 'sharp';
 import { bytesMatchMime, MAGIC_BYTES_PROBE } from '../media/magic-bytes.js';
@@ -16,8 +16,9 @@ import { hcMediaKey } from './media.service.js';
  * `help_center.media_process` (M5-02): an article image through the image
  * half of ARCHITECTURE §9, with the same budgets, guards and verdict rules as
  * `media/process.job.ts` — download under the cap, sniff the magic bytes,
- * re-encode to WebP at quality 82 and at most 2048 px, drop every byte of
- * metadata, and discard the original, which is what disarms a polyglot.
+ * re-encode to WebP at quality 82 and at most 2048 px — 512 for a help center
+ * logo or favicon (M5-06, DESIGN §8) — drop every byte of metadata, and
+ * discard the original, which is what disarms a polyglot.
  *
  * A verdict (not an image, will not decode, too large) makes the row
  * `rejected` and the job *returns*; only the bucket or the database throws,
@@ -73,14 +74,15 @@ const convert = async (
   }
 
   const target = path.join(dir, 'image.webp');
+  const maxEdge = row.purpose === 'article' ? IMAGE_MAX_EDGE : HC_SITE_IMAGE_MAX_EDGE;
   let info: OutputInfo;
   try {
     info = await sharp(source, { limitInputPixels: MAX_INPUT_PIXELS, animated: false })
       .timeout({ seconds: Math.ceil(TIMEOUTS_MS.image / 1_000) })
       .rotate()
       .resize({
-        width: IMAGE_MAX_EDGE,
-        height: IMAGE_MAX_EDGE,
+        width: maxEdge,
+        height: maxEdge,
         fit: 'inside',
         withoutEnlargement: true,
       })

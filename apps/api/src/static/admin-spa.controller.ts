@@ -1,13 +1,19 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { Controller, Get, Inject, NotFoundException, Req, Res } from '@nestjs/common';
+import { Controller, Get, Inject, NotFoundException, Optional, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public } from '../auth/route-declaration.js';
-import { ADMIN_DIST } from '../runtime/tokens.js';
+import { ADMIN_DIST, HOST_PAGES } from '../runtime/tokens.js';
 import { cacheControlFor, INDEX_FILE, isApiPath, resolveAssetPath } from './admin-assets.js';
 import { adminContentSecurityPolicy } from './content-security-policy.js';
 import { InstallInfoService } from './install-info.service.js';
 import { rewriteInstallMeta } from './install-meta.js';
+
+/** Pages a host other than the install's is answered with (the help center, M5-03). */
+export interface HostPages {
+  serves(request: FastifyRequest): Promise<boolean>;
+  serve(request: FastifyRequest, reply: FastifyReply): Promise<void>;
+}
 
 /**
  * The admin SPA on the admin host (ARCHITECTURE §3). One catch-all route: a
@@ -17,11 +23,16 @@ import { rewriteInstallMeta } from './install-meta.js';
  *
  * Fastify's router prefers a static route to a wildcard, so `/health`, `/ready`
  * and every declared `/api/…` route still win over this one.
+ *
+ * A brand's verified help center host is not the admin's: its pages have no
+ * prefix to route on, so this catch-all asks {@link HostPages} first and hands
+ * the request over when the host is one (ADR 0015).
  */
 @Controller()
 export class AdminSpaController {
   readonly #root: string | undefined;
   readonly #installInfo: InstallInfoService;
+  readonly #hostPages: HostPages | undefined;
   /** The build never changes while the process runs, so the file is read once. */
   #index: string | undefined;
   /** Derived from that file, because it carries the hash of its inline script. */
@@ -30,9 +41,11 @@ export class AdminSpaController {
   constructor(
     @Inject(ADMIN_DIST) root: string | undefined,
     @Inject(InstallInfoService) installInfo: InstallInfoService,
+    @Optional() @Inject(HOST_PAGES) hostPages?: HostPages,
   ) {
     this.#root = root;
     this.#installInfo = installInfo;
+    this.#hostPages = hostPages;
   }
 
   // Fastify 5's router takes `/*` and nothing else: `{*path}` and `*path` are
@@ -41,14 +54,18 @@ export class AdminSpaController {
   @Get('*')
   @Public()
   async serve(@Req() request: FastifyRequest, @Res() reply: FastifyReply): Promise<void> {
-    const root = this.#root;
-    if (root === undefined) {
-      throw new NotFoundException('This process serves no admin build (ADMIN_DIST_DIR)');
-    }
-
     const pathname = request.url.split('?')[0] ?? '/';
     if (isApiPath(pathname)) {
       throw new NotFoundException('Unknown endpoint');
+    }
+    if (this.#hostPages !== undefined && (await this.#hostPages.serves(request))) {
+      await this.#hostPages.serve(request, reply);
+      return;
+    }
+
+    const root = this.#root;
+    if (root === undefined) {
+      throw new NotFoundException('This process serves no admin build (ADMIN_DIST_DIR)');
     }
 
     const asset = resolveAssetPath(root, pathname);

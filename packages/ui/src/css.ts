@@ -1,3 +1,5 @@
+import type { ResolvedBrandTheme } from './brand.js';
+import { resolveSemanticTokens } from './semantic.js';
 import { tokens } from './tokens.js';
 import type { ThemeMode } from './tokens.schema.js';
 
@@ -13,6 +15,12 @@ export interface TokensToCssOptions {
    */
   readonly include?: 'all' | 'mode';
   readonly indent?: string;
+  /**
+   * A brand's resolved choices (DESIGN §8): its accent and surface tone in the
+   * colours, its `md` and `lg` radius and its font pair. The help center pages
+   * the api renders style themselves from this; without it, the defaults.
+   */
+  readonly brand?: ResolvedBrandTheme;
 }
 
 /** `bodyLg` and `bg.canvas` both become `body-lg` / `bg-canvas`. */
@@ -22,8 +30,8 @@ const toCssName = (name: string): string =>
 const declaration = (name: string, value: string | number): string =>
   `${PREFIX}-${toCssName(name)}: ${value};`;
 
-function modeDeclarations(mode: ThemeMode): string[] {
-  const lines = Object.entries(tokens.semantic[mode]).map(([name, value]) =>
+function modeDeclarations(mode: ThemeMode, brand: ResolvedBrandTheme | undefined): string[] {
+  const lines = Object.entries(resolveSemanticTokens(mode, brand)).map(([name, value]) =>
     declaration(name, value),
   );
 
@@ -34,16 +42,16 @@ function modeDeclarations(mode: ThemeMode): string[] {
   return lines;
 }
 
-function staticDeclarations(): string[] {
+function staticDeclarations(brand: ResolvedBrandTheme | undefined): string[] {
   const lines: string[] = [];
 
-  for (const [name, value] of Object.entries(tokens.radius)) {
+  for (const [name, value] of Object.entries(brand?.radius ?? tokens.radius)) {
     lines.push(declaration(`radius-${name}`, `${value}px`));
   }
   for (const step of tokens.spacing.scale) {
     lines.push(declaration(`space-${step}`, `${step}px`));
   }
-  for (const [name, value] of Object.entries(tokens.typography.fontFamily)) {
+  for (const [name, value] of Object.entries(brand?.fontFamily ?? tokens.typography.fontFamily)) {
     lines.push(declaration(`font-${name}`, value));
   }
   for (const [name, value] of Object.entries(tokens.typography.fontWeight)) {
@@ -76,11 +84,12 @@ export function tokensToCss({
   mode,
   include = 'all',
   indent = INDENT,
+  brand,
 }: TokensToCssOptions): string {
   const lines =
     include === 'mode'
-      ? modeDeclarations(mode)
-      : [...modeDeclarations(mode), ...staticDeclarations()];
+      ? modeDeclarations(mode, brand)
+      : [...modeDeclarations(mode, brand), ...staticDeclarations(brand)];
 
   return lines.map((line) => `${indent}${line}`).join('\n');
 }
@@ -88,12 +97,21 @@ export function tokensToCss({
 /**
  * A ready-to-serve stylesheet: light on `:root`, dark under
  * `prefers-color-scheme` unless the document opted into light, and dark again
- * for an explicit `data-theme="dark"`.
+ * for an explicit `data-theme="dark"`. With a brand, its choices throughout.
  */
-export function tokensCssBundle(): string {
-  const light = tokensToCss({ mode: 'light' });
-  const dark = tokensToCss({ mode: 'dark', include: 'mode', indent: INDENT.repeat(2) });
-  const darkTopLevel = tokensToCss({ mode: 'dark', include: 'mode' });
+export function tokensCssBundle(brand?: ResolvedBrandTheme): string {
+  const light = tokensToCss({ mode: 'light', ...(brand === undefined ? {} : { brand }) });
+  const dark = tokensToCss({
+    mode: 'dark',
+    include: 'mode',
+    indent: INDENT.repeat(2),
+    ...(brand === undefined ? {} : { brand }),
+  });
+  const darkTopLevel = tokensToCss({
+    mode: 'dark',
+    include: 'mode',
+    ...(brand === undefined ? {} : { brand }),
+  });
 
   return [
     ':root {',

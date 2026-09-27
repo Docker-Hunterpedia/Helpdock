@@ -368,6 +368,9 @@ export const hcAccessEnum = pgEnum('hc_access', ['public', 'internal_only']);
 export const hcSearchSourceEnum = pgEnum('hc_search_source', ['help_center', 'widget']);
 
 /** M5-02. An article image's way through the media pipeline. */
+/** What an image in `hc_media` is for (M5-06): logos and favicons are scaled to 512 px. */
+export const hcMediaPurposeEnum = pgEnum('hc_media_purpose', ['article', 'logo', 'favicon']);
+
 export const hcMediaStatusEnum = pgEnum('hc_media_status', [
   'pending',
   'processing',

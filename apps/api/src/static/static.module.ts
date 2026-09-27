@@ -10,6 +10,8 @@ import { InstallInfoService } from './install-info.service.js';
 export interface StaticModuleOptions {
   readonly env: Pick<Env, 'ADMIN_DIST_DIR'>;
   readonly logger: Logger;
+  /** The module exporting `HOST_PAGES` (the help center, M5-03); a suite may leave it out. */
+  readonly hostPages?: DynamicModule;
 }
 
 /**
@@ -21,9 +23,10 @@ export interface StaticModuleOptions {
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class StaticModule {
-  static forRoot({ env, logger }: StaticModuleOptions): DynamicModule {
+  static forRoot({ env, logger, hostPages }: StaticModuleOptions): DynamicModule {
     return {
       module: StaticModule,
+      imports: hostPages === undefined ? [] : [hostPages],
       // The fonts first: a static route, so the SPA's catch-all never sees it.
       controllers: [FontsController, AdminSpaController],
       providers: [

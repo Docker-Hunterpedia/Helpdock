@@ -42,8 +42,9 @@ RUN pnpm install --frozen-lockfile --offline --trust-lockfile
 FROM deps AS build
 WORKDIR /repo
 
-# `apps/helpcenter` and `apps/widget` are still placeholders; their `build` is a
-# `tsc` over one file, so the whole graph builds and nothing is special-cased.
+# `apps/helpcenter` is still a placeholder whose `build` is a `tsc` over one
+# file; `apps/widget` builds `dist/widget.js` with Vite. Serving that from the
+# api lands with the widget routes (M4-04).
 RUN pnpm build
 
 # `pnpm deploy` writes a self-contained tree: the api's own files plus the

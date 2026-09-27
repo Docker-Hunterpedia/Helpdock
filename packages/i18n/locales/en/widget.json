@@ -1,0 +1,161 @@
+{
+  "window": {
+    "label": "Support chat",
+    "minimise": "Minimise chat",
+    "poweredBy": "Powered by Helpdock"
+  },
+  "launcher": {
+    "open": "Open support chat",
+    "close": "Minimise support chat",
+    "text": "Chat with us",
+    "unread_one": "{{count}} unread message",
+    "unread_other": "{{count}} unread messages"
+  },
+  "header": {
+    "chatTitle": "{{brand}} support",
+    "helpTitle": "{{brand}} help",
+    "formTitle": "Contact {{brand}}",
+    "agentCaption": "{{department}} · {{team}}",
+    "caption": {
+      "online": "Usually replies in a few minutes",
+      "openOffline": "We will reply by email",
+      "closed": "Back {{day}} at {{time}}",
+      "queued": "Finding someone for you",
+      "ended": "Conversation ended",
+      "form": "We reply by email, usually within a day",
+      "help": "Search our articles"
+    }
+  },
+  "presence": {
+    "single": "{{names}} is online",
+    "several": "{{names}} are online"
+  },
+  "queue": {
+    "position": "You are {{position}} in line",
+    "eta_one": "about {{count}} min",
+    "eta_other": "about {{count}} min",
+    "ordinal": {
+      "one": "{{n}}st",
+      "two": "{{n}}nd",
+      "few": "{{n}}rd",
+      "other": "{{n}}th"
+    }
+  },
+  "hours": {
+    "closedTitle": "We are closed right now",
+    "closedBody": "We open {{day}} at {{time}} ({{zone}}). Leave a message and we will reply by email."
+  },
+  "connection": {
+    "reconnectingTitle": "Reconnecting…",
+    "reconnectingBody": "You can keep writing. Messages send when the connection is back.",
+    "back": "Back online. You are up to date.",
+    "newMessages_one": "{{count}} new message",
+    "newMessages_other": "{{count}} new messages"
+  },
+  "thread": {
+    "label": "Messages",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "agentJoined": "{{name}} joined",
+    "ended": "{{name}} ended the conversation",
+    "endedAnonymous": "The conversation ended",
+    "talkingTo": "You are talking to {{team}}. We will reply here and at {{email}}.",
+    "replyAfterOpening": "Thanks. We will reply to {{email}} after we open.",
+    "typing": "{{name}} is typing…"
+  },
+  "message": {
+    "sending": "Sending…",
+    "sent": "Sent",
+    "seen": "Seen",
+    "notSent": "Not sent",
+    "retry": "Retry"
+  },
+  "composer": {
+    "attach": "Attach a file",
+    "label": "Message",
+    "placeholder": "Write a message…",
+    "voice": "Record a voice message",
+    "send": "Send"
+  },
+  "voice": {
+    "form": "Voice message",
+    "cancel": "Cancel recording",
+    "recording": "Recording",
+    "timer": "Recording time {{elapsed}} of {{max}}",
+    "stop": "Stop and send voice message",
+    "play": "Play voice message, {{duration}}",
+    "pause": "Pause voice message, {{duration}}",
+    "denied": "Allow microphone access to record a voice message."
+  },
+  "attachment": {
+    "openImage": "Open photo {{name}}",
+    "openVideo": "Open video {{name}}",
+    "download": "Download {{name}}",
+    "tooLarge": {
+      "image": "{{name}} is {{size}}. Images can be up to {{max}}.",
+      "video": "{{name}} is {{size}}. Videos can be up to {{max}}.",
+      "voice": "{{name}} is {{size}}. Voice messages can be up to {{max}}.",
+      "file": "{{name}} is {{size}}. Files can be up to {{max}}."
+    },
+    "typeRejected": "{{name}} is a file type we cannot accept.",
+    "tooMany": "You can send up to {{max}} files in one message.",
+    "dismiss": "Dismiss",
+    "uploadFailed": "{{name}} could not be uploaded. Try again."
+  },
+  "prechat": {
+    "title": "Start a conversation",
+    "name": "Name",
+    "email": "Email",
+    "emailHint": "We send replies here if you leave the chat.",
+    "message": "How can we help?",
+    "optional": "(optional)",
+    "submit": "Start chat",
+    "invalidEmail": "Enter an email like name@example.com.",
+    "required": "Fill in this field.",
+    "failed": "We could not start the chat. Try again.",
+    "rateLimited": "Too many attempts. Wait a minute and try again."
+  },
+  "captcha": {
+    "group": "Security check",
+    "checking": "Checking your browser…",
+    "verified": "Verified. You can continue.",
+    "failed": "The security check could not load. Reload the page and try again.",
+    "rejected": "The security check failed. Try it again."
+  },
+  "ended": {
+    "title": "This conversation has ended",
+    "transcriptLabel": "Email me the transcript",
+    "transcriptHint": "Only this conversation is sent. The email has no sign-in links.",
+    "send": "Send",
+    "sent": "Transcript sent to {{email}}.",
+    "failed": "We could not send the transcript. Try again.",
+    "newConversation": "Start a new conversation"
+  },
+  "articles": {
+    "suggested": "Articles that might help",
+    "searchLabel": "Search help articles",
+    "popular": "Popular articles",
+    "resultsLabel": "Search results",
+    "results_one": "{{count}} article for “{{query}}”",
+    "results_other": "{{count}} articles for “{{query}}”",
+    "none": "No articles match. Try other words.",
+    "openHelpCenter": "Open the full help center",
+    "back": "Back to articles",
+    "backToChat": "Back to chat",
+    "updated": "Updated {{date}}",
+    "readingTime_one": "{{count}} min read",
+    "readingTime_other": "{{count}} min read",
+    "openInHelpCenter": "Open in help center",
+    "loadFailed": "This article could not be loaded. Try again."
+  },
+  "form": {
+    "offline": "No one is online right now. Leave a message and we will reply by email.",
+    "message": "Message",
+    "attach": "Attach",
+    "submit": "Send message",
+    "sentTitle": "Message sent",
+    "sentBody": "Your reference is {{ref}}. We will reply to {{email}}.",
+    "another": "Send another message",
+    "failed": "We could not send your message. Try again."
+  }
+}

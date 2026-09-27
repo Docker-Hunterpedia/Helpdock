@@ -1,5 +1,5 @@
 import type { Ticket, TicketViewingActivity } from '@helpdock/schemas';
-import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Button, IconButton, Typography } from '@mui/material';
 import { Eye, PanelRightOpen, PenLine } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
@@ -34,6 +34,8 @@ export function TicketHeader({
   now,
   showDetailsButton,
   onShowDetails,
+  onMacro,
+  macroOpen = false,
 }: {
   readonly ticket: Ticket;
   readonly departmentName: string | undefined;
@@ -44,6 +46,9 @@ export function TicketHeader({
   readonly now: number;
   readonly showDetailsButton: boolean;
   onShowDetails(): void;
+  /** M3-06: opens the composer's macro picker. Absent for a reader who cannot reply. */
+  onMacro?: (() => void) | undefined;
+  readonly macroOpen?: boolean | undefined;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -74,13 +79,17 @@ export function TicketHeader({
           </Typography>
         </Box>
 
-        <Tooltip title={t('tickets:header.macroUnavailable')}>
-          <Box component="span" sx={{ display: 'inline-flex' }}>
-            <Button variant="outlined" size="small" disabled>
-              {t('tickets:header.macro')}
-            </Button>
-          </Box>
-        </Tooltip>
+        {onMacro === undefined ? null : (
+          <Button
+            variant="outlined"
+            size="small"
+            aria-haspopup="dialog"
+            aria-expanded={macroOpen}
+            onClick={onMacro}
+          >
+            {t('tickets:header.macro')}
+          </Button>
+        )}
 
         <TicketActionsMenu items={actions} />
 

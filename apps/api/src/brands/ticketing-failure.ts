@@ -42,6 +42,8 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'time-tracking-off': HttpStatus.CONFLICT,
   // M1-05. The view's shape refuses, not the actor's role.
   'view-is-built-in': HttpStatus.CONFLICT,
+  // M3-06. The macro moved under the agent, not their role.
+  'macro-changed': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -64,6 +66,7 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
   'time-tracking-off': 'This brand has time tracking turned off',
   'view-is-built-in':
     'A built-in view may be renamed, reordered or hidden, never deleted, refiltered or reshared',
+  'macro-changed': 'That macro has changed since it was applied; apply it again',
 };
 
 export class TicketingFailure extends HttpException {

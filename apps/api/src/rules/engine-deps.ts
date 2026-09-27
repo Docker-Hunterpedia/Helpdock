@@ -1,15 +1,19 @@
 import type { JobLogger } from '@helpdock/jobs';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
+import { cannedResponsePort } from '../macros/canned-response-port.js';
+import { CannedResponsesService } from '../macros/canned-responses.service.js';
+import { MacrosRepository } from '../macros/macros.repository.js';
 import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { businessHoursProbe } from '../sla/business-hours-probe.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
 import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
+import { TemplatesRepository } from '../ticketing/templates.repository.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
 import { TicketRepository } from '../tickets/tickets.repository.js';
 import type { RulesEngineDeps } from './engine.js';
-import { type CannedResponseRenderer, noCannedResponses } from './ports.js';
+import type { CannedResponseRenderer } from './ports.js';
 import { RulesRepository } from './rules.repository.js';
 
 /**
@@ -21,13 +25,15 @@ import { RulesRepository } from './rules.repository.js';
  * ticket schedules the survey an agent's close would, and a rule's change or
  * canned reply moves the clocks as an agent's would.
  *
- * The "business hours" condition reads M3-01's calendar. `cannedResponses` is
- * the seam `ports.ts` describes; until M3-06 is wired, a canned reply is
- * recorded as unavailable.
+ * The "business hours" condition reads M3-01's calendar, and "send canned
+ * response" M3-06's `CannedResponsesService` through the transaction the
+ * engine hands it. A unit test may pass its own `cannedResponses`.
  */
 export const createRulesEngineDeps = ({
   log,
-  cannedResponses = noCannedResponses,
+  cannedResponses = cannedResponsePort(
+    new CannedResponsesService(new MacrosRepository(), new TemplatesRepository()),
+  ),
 }: {
   readonly log: JobLogger;
   readonly cannedResponses?: CannedResponseRenderer;

@@ -44,7 +44,7 @@ export const ROUTES = {
   ticketingTab: '/admin/ticketing/:tab',
   /** Workflow rules, time-based rules and macros (M3-03 to M3-06). */
   automation: '/admin/automation',
-  /** One tab of it. `/admin/automation` alone redirects to Rules. */
+  /** One tab of it. `/admin/automation` alone redirects to the first the reader has. */
   automationTab: '/admin/automation/:tab',
   /** The rule builder (M3-05): a saved rule, or `new` with `?kind=`. */
   automationRule: '/admin/automation/rules/:ruleId',
@@ -62,6 +62,8 @@ export const ROUTES = {
   mailbox: '/admin/channels/mailboxes/:mailboxId',
   staff: '/admin/staff',
   system: '/admin/system',
+  /** The install-wide audit log (M3-08), reached from System. */
+  systemAuditLog: '/admin/system/audit-log',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
   /** A person's own account: password, second factor, signed-in browsers. */

@@ -249,6 +249,11 @@ export const ticketingRefusalSchema = z.enum([
    * refiltered or reshared (409, M1-05).
    */
   'view-is-built-in',
+  /**
+   * A staged action is not one of the macro's own any more: somebody edited the
+   * macro between it being applied and the reply being sent (409, M3-06).
+   */
+  'macro-changed',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

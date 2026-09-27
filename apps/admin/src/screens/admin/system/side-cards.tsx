@@ -1,7 +1,9 @@
 import type { AuditEntry, ChannelStatus, SystemAiSpend, SystemStorage } from '@helpdock/schemas';
 import { Box, Link, Typography } from '@mui/material';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Link as RouterLink } from 'react-router';
 import { useT } from '../../../app/i18n.js';
+import { ROUTES } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { Card } from './card.js';
 import { formatBytes, formatCompact, formatUsd, percentOf } from './format.js';
@@ -180,35 +182,20 @@ export function UsageCard({
 const AUDIT_PREVIEW_ROWS = 3;
 
 /**
- * The audit rows the install-scope read returned.
- *
- * The artboard's "Open" link would go to a full audit view, and there is no
- * audit view in M0 — so the affordance expands the card in place instead of
- * pointing at nothing, the same way "All queues" does on this page. It becomes
- * a link when the screen it would open exists.
+ * The audit rows the install-scope read returned: the newest three, and
+ * "Open" to the full viewer (M3-08, artboard `AdminAuditLog`).
  */
 export function AuditCard({ audit }: { readonly audit: readonly AuditEntry[] }): ReactNode {
   const t = useT();
-  const [expanded, setExpanded] = useState(false);
-
-  const preview = expanded ? audit : audit.slice(0, AUDIT_PREVIEW_ROWS);
+  const preview = audit.slice(0, AUDIT_PREVIEW_ROWS);
 
   return (
     <Card
       title={t('system:audit.title')}
       action={
-        audit.length > AUDIT_PREVIEW_ROWS ? (
-          <Link
-            component="button"
-            type="button"
-            variant="caption"
-            onClick={() => {
-              setExpanded((open) => !open);
-            }}
-          >
-            {t(expanded ? 'system:audit.showFewer' : 'system:audit.showAll')}
-          </Link>
-        ) : null
+        <Link component={RouterLink} to={ROUTES.systemAuditLog} variant="caption">
+          {t('system:audit.open')}
+        </Link>
       }
     >
       {preview.length === 0 ? (

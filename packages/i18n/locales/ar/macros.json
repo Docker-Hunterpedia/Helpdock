@@ -1,0 +1,201 @@
+{
+  "kind": {
+    "macro": "ماكرو",
+    "canned": "رد جاهز"
+  },
+  "scope": {
+    "shared": "مشترك",
+    "personal": "شخصي",
+    "personalOnlyMe": "شخصي · لي وحدي"
+  },
+  "list": {
+    "heading": "الماكرو والردود الجاهزة",
+    "caption": "المشتركة مع أقسامك، وما يخصك وحدك.",
+    "new": "جديد",
+    "newKind": {
+      "macro": "ماكرو",
+      "canned": "رد جاهز"
+    },
+    "search": "ابحث بالاسم أو النص",
+    "searchLabel": "البحث في الماكرو والردود الجاهزة",
+    "filter": {
+      "label": "عرض",
+      "all": "الكل",
+      "macro": "الماكرو",
+      "canned": "الجاهزة"
+    },
+    "table": "الماكرو والردود الجاهزة في {{brand}}",
+    "columns": {
+      "name": "الاسم",
+      "scope": "النطاق",
+      "department": "القسم",
+      "lastUsed": "آخر استخدام"
+    },
+    "allDepartments": "الكل",
+    "actionCount_zero": "بلا إجراءات",
+    "actionCount_one": "إجراء واحد",
+    "actionCount_two": "إجراءان",
+    "actionCount_few": "{{count}} إجراءات",
+    "actionCount_many": "{{count}} إجراءً",
+    "actionCount_other": "{{count}} إجراء",
+    "bothLanguages": "EN AR",
+    "englishOnly": "الإنجليزية فقط",
+    "noReply": "بلا رد",
+    "never": "أبدًا",
+    "justNow": "الآن",
+    "footer": "{{shown}} من {{total}} · العناصر الشخصية لا يراها إلا صاحبها.",
+    "empty": {
+      "heading": "لا ماكرو بعد",
+      "body": "أنشئ ردًا جاهزًا لرد تكتبه كثيرًا، أو ماكرو يضبط أيضًا الحالة والوسوم والمسؤول."
+    }
+  },
+  "editor": {
+    "new": {
+      "macro": "ماكرو جديد",
+      "canned": "رد جاهز جديد"
+    },
+    "editedBy": "عدّله {{name}} · {{date}}",
+    "editedOn": "عُدّل في {{date}}",
+    "duplicate": "تكرار",
+    "copyName": "{{name}} (نسخة)",
+    "delete": "حذف {{name}}",
+    "name": "الاسم",
+    "required": "مطلوب",
+    "scope": "النطاق",
+    "department": "القسم",
+    "allDepartments": "كل الأقسام",
+    "scopeNote": "يعدّل العناصرَ المشتركة المشرفون وقادة فرق القسم، ويستخدمها كل موظف فيه. ويمكن لأي شخص الاحتفاظ بعناصر شخصية.",
+    "reply": {
+      "heading": "الرد",
+      "caption": "لغة جهة الاتصال تحدد النسخة؛ وإن كانت النسخة العربية فارغة تُستخدم الإنجليزية.",
+      "captionMacro": "اختياري للماكرو. لغة جهة الاتصال تحدد النسخة؛ وإن كانت النسخة العربية فارغة تُستخدم الإنجليزية.",
+      "en": "الإنجليزية",
+      "enCaption": "الافتراضية",
+      "ar": "العربية",
+      "arCaption": "العربية"
+    },
+    "placeholders": {
+      "open": "عنصر نائب",
+      "search": "ابحث عن عنصر نائب",
+      "list": "العناصر النائبة",
+      "groups": {
+        "contact": "جهة الاتصال",
+        "ticket": "التذكرة والعلامة وأنت"
+      },
+      "hint": "يُدرج عند المؤشر. القيم المعروضة أمثلة."
+    },
+    "preview": {
+      "en": "معاينة · الإنجليزية:",
+      "ar": "معاينة · العربية:"
+    },
+    "problems": {
+      "nameRequired": "أعطه اسمًا.",
+      "englishRequired": "يحتاج الرد الجاهز إلى نصه الإنجليزي.",
+      "nothingToDo": "يحتاج الماكرو إلى رد أو إجراء أو كليهما.",
+      "actionIncomplete": "اختر قيمة لكل إجراء أو احذفه.",
+      "arabicWithoutEnglish": "الإنجليزية هي النسخة الافتراضية؛ اكتبها قبل العربية."
+    },
+    "cannedNote": "للرد الجاهز المحرر نفسه دون قسم الإجراءات.",
+    "discard": "تجاهل",
+    "save": "حفظ التغييرات",
+    "create": "إنشاء",
+    "nothing": {
+      "heading": "لم يُحدَّد شيء",
+      "body": "اختر ماكرو أو ردًا جاهزًا لتعديله، أو أنشئ واحدًا جديدًا."
+    }
+  },
+  "actions": {
+    "legend": "الإجراءات",
+    "caption": "تُجهَّز عند تطبيق الماكرو وتُنفَّذ بهذا الترتيب عند إرسال الرد، أو فورًا إن لم يكن هناك رد.",
+    "type": "الإجراء {{position}}",
+    "types": {
+      "set_status": "ضبط الحالة",
+      "set_priority": "ضبط الأولوية",
+      "add_tag": "إضافة وسم",
+      "remove_tag": "إزالة وسم",
+      "assign": "إسناد إلى"
+    },
+    "value": {
+      "set_status": "الحالة للإجراء {{position}}",
+      "set_priority": "الأولوية للإجراء {{position}}",
+      "add_tag": "الوسم للإجراء {{position}}",
+      "remove_tag": "الوسم للإجراء {{position}}",
+      "assign": "المسؤول للإجراء {{position}}"
+    },
+    "assignee": {
+      "self": "الموظف الذي يطبّقه",
+      "team": "فريق {{team}} · بالتناوب",
+      "unassigned": "بلا مسؤول"
+    },
+    "remove": "إزالة الإجراء {{position}}",
+    "add": "إضافة إجراء"
+  },
+  "confirm": {
+    "title": "حذف {{name}}؟",
+    "body": "لن يستطيع الموظفون تطبيقه بعد الآن. تبقى الردود التي أُرسلت به كما هي.",
+    "submit": "حذف"
+  },
+  "toast": {
+    "created": "أُنشئ {{name}}.",
+    "updated": "حُفظ {{name}}.",
+    "deleted": "حُذف {{name}}.",
+    "applied": "طُبّق {{name}}."
+  },
+  "picker": {
+    "label": "إدراج ماكرو أو رد جاهز",
+    "search": "البحث في الماكرو والردود الجاهزة",
+    "results": "النتائج",
+    "none": "لا شيء يطابق.",
+    "scopeNote": "العناصر المشتركة مع {{department}} أو مع كل الأقسام، أو عناصرك الشخصية فقط.",
+    "optionMacro_zero": "ماكرو · رد بلا إجراءات",
+    "optionMacro_one": "ماكرو · رد وإجراء واحد",
+    "optionMacro_two": "ماكرو · رد وإجراءان",
+    "optionMacro_few": "ماكرو · رد و{{count}} إجراءات",
+    "optionMacro_many": "ماكرو · رد و{{count}} إجراءً",
+    "optionMacro_other": "ماكرو · رد و{{count}} إجراء",
+    "optionMacroNoReply_zero": "ماكرو · بلا إجراءات ولا رد",
+    "optionMacroNoReply_one": "ماكرو · إجراء واحد بلا رد",
+    "optionMacroNoReply_two": "ماكرو · إجراءان بلا رد",
+    "optionMacroNoReply_few": "ماكرو · {{count}} إجراءات بلا رد",
+    "optionMacroNoReply_many": "ماكرو · {{count}} إجراءً بلا رد",
+    "optionMacroNoReply_other": "ماكرو · {{count}} إجراء بلا رد",
+    "optionCanned": "جاهز · {{text}}",
+    "optionPersonal": "جاهز · شخصي · {{text}}",
+    "variant": {
+      "en": "النسخة الإنجليزية",
+      "ar": "النسخة العربية"
+    },
+    "contactLanguage": {
+      "en": "لغة {{name}} الإنجليزية",
+      "ar": "لغة {{name}} العربية"
+    },
+    "fellBack": "النسخة العربية فارغة، فتُستخدم الإنجليزية",
+    "useEnglish": "استخدم الإنجليزية",
+    "useArabic": "استخدم العربية",
+    "highlightNote": "النص المظلّل جاء من العناصر النائبة، ويُدرج نصًا عاديًا يمكنك تعديله.",
+    "noReply": "لا رد في هذا الماكرو. تُنفَّذ إجراءاته فور تطبيقه.",
+    "whenSent": "عند إرسال الرد",
+    "atOnce": "عند تطبيقه",
+    "keys": "↑ ↓ للتنقل · Enter للتطبيق · Esc للإغلاق",
+    "cancel": "إلغاء",
+    "apply": "تطبيق الماكرو",
+    "insert": "إدراج"
+  },
+  "staged": {
+    "label": "جهّزه الماكرو {{name}}",
+    "via": "عبر الماكرو {{name}}:",
+    "status": "الحالة {{from}} ← {{to}}",
+    "priority": "الأولوية {{from}} ← {{to}}",
+    "tagAdd": "وسم + {{name}}",
+    "tagRemove": "وسم − {{name}}",
+    "assignee": "المسؤول ← {{name}}",
+    "assigneeStays": "يبقى المسؤول {{name}}",
+    "unassign": "المسؤول ← لا أحد",
+    "aTeam": "فريق",
+    "remove": "إزالة: {{action}}",
+    "clear": "إلغاء الماكرو المجهّز"
+  },
+  "event": {
+    "applied": "طبّق {{actor}} الماكرو {{name}}"
+  }
+}

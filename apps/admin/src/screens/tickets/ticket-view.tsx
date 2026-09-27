@@ -1,6 +1,9 @@
 import { dir } from '@helpdock/i18n';
 import type {
   Attachment,
+  Macro,
+  MessageCreateRequest,
+  RenderedMacro,
   TicketDetail,
   TicketMergeResult,
   TicketPriority,
@@ -11,7 +14,7 @@ import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { Box, Button, Drawer } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, GitMerge, Split, TicketIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useReducer, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -29,6 +32,12 @@ import { refusalCopy } from '../../ticketing/refusal-copy.js';
 import { isTicketLifecycleError } from '../../tickets/api.js';
 import { ticketFieldsFor } from '../../tickets/custom-values.js';
 import { ticketKeys } from '../../tickets/keys.js';
+import {
+  type StagedMacro,
+  type StagingLookups,
+  setsStatus,
+  withInserted,
+} from '../../tickets/macro-staging.js';
 import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
@@ -37,11 +46,13 @@ import { Composer, type ComposerMode } from './composer.tsx';
 import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
 import { assigneeName } from './directory.js';
-import { paragraph, ticketReference } from './format.js';
+import { paragraph, statusName, ticketReference } from './format.js';
 import { LogTimeDialog } from './log-time-dialog.tsx';
+import { MacroPicker } from './macro-picker.tsx';
 import { MergeDialog } from './merge-dialog.tsx';
 import { MergedIntoBanner } from './merged-block.tsx';
 import { SplitDialog } from './split-dialog.tsx';
+import { StagedMacroChips } from './staged-macro.tsx';
 import { Thread, type ThreadNames } from './thread.tsx';
 import type { TicketAction } from './ticket-actions-menu.tsx';
 import { TicketHeader } from './ticket-header.tsx';
@@ -119,6 +130,12 @@ export function TicketView({
   // M1-09: the ⋯ menu's two dialogs, and what the merge search last asked for.
   const [dialog, setDialog] = useState<'merge' | 'split' | null>(null);
   const [mergeTerm, setMergeTerm] = useState('');
+  // M3-06: the macro picker, what an applied macro has staged, and which
+  // pending send carries which macro — kept by `clientId`, so a retry of a
+  // failed send runs the same actions with the same reply.
+  const [picking, setPicking] = useState(false);
+  const [staged, setStaged] = useState<StagedMacro | null>(null);
+  const macroBySend = useRef(new Map<string, StagedMacro>());
 
   const detail = useQuery({
     queryKey: ticketKeys.detail(brandId, ticketId),
@@ -239,8 +256,8 @@ export function TicketView({
   }, [focusToken]);
 
   const send = useMutation({
-    mutationFn: (message: PendingMessage) =>
-      api.reply(brandId, ticketId, {
+    mutationFn: async (message: PendingMessage) => {
+      const request: MessageCreateRequest = {
         kind: message.kind,
         bodyHtml: message.bodyHtml,
         clientId: message.clientId,
@@ -253,8 +270,28 @@ export function TicketView({
         ...(message.kind === 'public' && ticketEmail.emailFrom !== undefined
           ? { emailFrom: ticketEmail.emailFrom }
           : {}),
-      }),
+      };
+      const macro = macroBySend.current.get(message.clientId);
+      if (macro === undefined) {
+        return api.reply(brandId, ticketId, request);
+      }
+
+      // M3-06: the reply and the kept actions in one request, one entry.
+      const result = await api.runMacro(brandId, ticketId, {
+        macroId: macro.macro.id,
+        actions: [...macro.actions],
+        reply: request,
+      });
+      /* c8 ignore next 3 -- a run with a reply always answers with it. */
+      if (result.message === null) {
+        throw new Error('The macro run answered without the reply it was sent');
+      }
+
+      return result.message;
+    },
     onSuccess: async (saved, message) => {
+      const macro = macroBySend.current.get(message.clientId);
+      macroBySend.current.delete(message.clientId);
       dispatch({ type: 'acknowledged', clientId: message.clientId });
       queryClient.setQueryData<TicketDetail>(ticketKeys.detail(brandId, ticketId), (held) =>
         held === undefined
@@ -274,10 +311,12 @@ export function TicketView({
 
       // "Then set status" is applied after the send, never with it: a status
       // moved by a reply that never left would be a lie about what happened.
-      if (thenStatusId !== '') {
+      // A macro's own status wins over "Then set status" (artboard
+      // `AdminComposerMacros`), so the second is not sent at all.
+      if (thenStatusId !== '' && !setsStatus(macro ?? null)) {
         await update.mutateAsync({ statusId: thenStatusId });
-        setThenStatusId('');
       }
+      setThenStatusId('');
 
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
@@ -286,11 +325,43 @@ export function TicketView({
         await time.refresh();
       }
     },
-    onError: (_error, message) => {
+    onError: (error, message) => {
       dispatch({ type: 'failed', clientId: message.clientId });
-      toast({ tone: 'danger', message: t('tickets:toast.sendFailed') });
+      toast({
+        tone: 'danger',
+        message:
+          isTicketingError(error) && error.reason === 'macro-changed'
+            ? t(refusalCopy(error.reason))
+            : t('tickets:toast.sendFailed'),
+      });
     },
   });
+
+  /** M3-06: a macro with no reply runs the moment it is applied. */
+  const runNow = useMutation({
+    mutationFn: (macro: Macro) =>
+      api.runMacro(brandId, ticketId, { macroId: macro.id, actions: [...macro.actions] }),
+    onSuccess: async (_result, macro) => {
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      toast({ tone: 'success', message: t('macros:toast.applied', { name: macro.name }) });
+    },
+    onError: (error: unknown) => {
+      refused(error);
+    },
+  });
+
+  const applyMacro = (macro: Macro, rendered: RenderedMacro | null): void => {
+    setPicking(false);
+    if (rendered === null) {
+      runNow.mutate(macro);
+      return;
+    }
+
+    setMode('reply');
+    setBody((held) => withInserted(held, rendered.text));
+    setStaged({ macro: { id: macro.id, name: macro.name }, actions: macro.actions });
+  };
 
   /**
    * A refusal a person can act on gets its sentence: the lifecycle's (M1-08,
@@ -496,6 +567,26 @@ export function TicketView({
   const departmentName = directory.departments.find(
     (department) => department.id === ticket.departmentId,
   )?.name;
+  // M3-06: how a staged action names what it moves.
+  const lookups: StagingLookups = {
+    viewerId: viewer.id,
+    statusName: (id) => {
+      const found = directory.statuses.find((status) => status.id === id);
+      return found === undefined ? '—' : statusName(found, locale);
+    },
+    tagName: (id) => {
+      const found = directory.tags.find((tag) => tag.id === id);
+      return found === undefined
+        ? '—'
+        : locale === 'ar' && found.nameAr !== null
+          ? found.nameAr
+          : found.name;
+    },
+    personName: (id) =>
+      names.staffName(id) ?? agents.find((agent) => agent.userId === id)?.name ?? '—',
+    teamName: () => t('macros:staged.aTeam'),
+    priorityName: (priority) => t(`tickets:priority.${priority}`),
+  };
 
   const copyLink = async (link: string): Promise<void> => {
     try {
@@ -630,6 +721,10 @@ export function TicketView({
       state: 'sending',
     };
 
+    if (staged !== null && message.kind === 'public') {
+      macroBySend.current.set(message.clientId, staged);
+      setStaged(null);
+    }
     dispatch({ type: 'queued', message });
     setBody('');
     setAttachments([]);
@@ -685,6 +780,14 @@ export function TicketView({
           onShowDetails={() => {
             onDetailsOpenChange(true);
           }}
+          macroOpen={picking}
+          {...(canWrite && mergedInto === null
+            ? {
+                onMacro: () => {
+                  setPicking((open) => !open);
+                },
+              }
+            : {})}
         />
 
         {/* M1-09: above the thread rather than in it, so "this ticket was
@@ -742,11 +845,57 @@ export function TicketView({
         {mergedInto === null ? (
           <Box
             sx={{
+              position: 'relative',
               padding: 5,
               borderBlockStart: `1px solid ${tokens['border.default']}`,
               backgroundColor: tokens['bg.canvas'],
             }}
           >
+            {picking ? (
+              // Over the thread rather than in the column, so opening it moves
+              // neither the thread nor the composer (artboard `AdminComposerMacros`).
+              <Box
+                sx={{
+                  position: 'absolute',
+                  insetInline: 20,
+                  insetBlockEnd: '100%',
+                  // What is left of the viewport above the composer, never less than a few rows.
+                  maxHeight: 'max(240px, calc(100vh - 460px))',
+                  overflowY: 'auto',
+                  zIndex: 2,
+                }}
+              >
+                <MacroPicker
+                  brandId={brandId}
+                  ticket={ticket}
+                  departmentName={departmentName ?? ''}
+                  contactLocale={contact.data?.locale ?? brand.data?.defaultLocale ?? 'en'}
+                  contactName={contact.data?.name ?? null}
+                  lookups={lookups}
+                  onApply={applyMacro}
+                  onClose={() => {
+                    setPicking(false);
+                  }}
+                />
+              </Box>
+            ) : null}
+            {staged === null ? null : (
+              <StagedMacroChips
+                staged={staged}
+                ticket={ticket}
+                lookups={lookups}
+                onRemove={(index) => {
+                  setStaged((held) =>
+                    held === null
+                      ? held
+                      : { ...held, actions: held.actions.filter((_action, at) => at !== index) },
+                  );
+                }}
+                onClear={() => {
+                  setStaged(null);
+                }}
+              />
+            )}
             <Composer
               mode={mode}
               body={body}
@@ -771,6 +920,14 @@ export function TicketView({
               }}
               onSend={queueSend}
               email={ticketEmail.composer}
+              macrosOpen={picking}
+              {...(canWrite
+                ? {
+                    onOpenMacros: () => {
+                      setPicking((open) => !open);
+                    },
+                  }
+                : {})}
               onBodyFocus={() => {
                 if (tracking && timerWithComposer && canWrite && !timer.running) {
                   timer.start();

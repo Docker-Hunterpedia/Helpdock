@@ -1,10 +1,15 @@
 import type {
   AssignableAgentList,
   Attachment,
+  Macro,
+  MacroLocale,
+  MacroRunRequest,
+  MacroRunResponse,
   MarkSpamRequest,
   MergedTicket,
   MessageCreateRequest,
   RelatedTicket,
+  RenderedMacro,
   Tag,
   Ticket,
   TicketActivityEntry,
@@ -43,6 +48,8 @@ import {
   customValuesSchema,
   mergeCustomValues,
   normaliseEmail,
+  renderSegments,
+  splitName,
   TICKET_PAGE_SIZE_DEFAULT,
   UNMERGE_WINDOW_MS,
 } from '@helpdock/schemas';
@@ -62,6 +69,7 @@ import type { TicketingApi } from '../ticketing/api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
+import type { MockMacros } from '../ticketing/mock-macros.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
 import { mockSlaOf, mockSlaSummaryOf } from './mock-sla.js';
 import { MockViews } from './mock-views.js';
@@ -599,6 +607,17 @@ const senderOf = (ticket: Ticket): TicketSpamSender['sender'] => {
   return null;
 };
 
+/**
+ * What this fixture reads of the ticketing one: the brand's tags and fields
+ * (M1-15), and the macros a composer fills in and applies (M3-06).
+ */
+type MockCatalog = Pick<TicketingApi, 'tags' | 'customFields'> & {
+  readonly macroStore?: MockMacros;
+};
+
+/** Who the mock session is, for `{{agent.first_name}}`; `staff/mock-api.ts` seeds her. */
+const MOCK_SELF_NAME = 'Lina Haddad';
+
 export class MockTicketsApi implements TicketsApi {
   readonly #statuses = seedStatuses();
   #tickets: Ticket[];
@@ -634,7 +653,7 @@ export class MockTicketsApi implements TicketsApi {
   readonly #views = new MockViews((filters) => this.#matching(queryOfView(filters)).length);
   readonly #now: number;
   /** M1-15: the brand's tags and custom fields, which the Ticketing screens own. */
-  readonly #catalog: Pick<TicketingApi, 'tags' | 'customFields'>;
+  readonly #catalog: MockCatalog;
 
   /**
    * The uploader fixture, when there is one, so that a file attached in the
@@ -646,7 +665,7 @@ export class MockTicketsApi implements TicketsApi {
     now: number = Date.now(),
     blockList: MockBlockList = new MockBlockList(),
     contactName: (contactId: string) => string | undefined = seedContactName,
-    catalog: Pick<TicketingApi, 'tags' | 'customFields'> = new MockTicketingApi(blockList),
+    catalog: MockCatalog = new MockTicketingApi(blockList),
   ) {
     this.#catalog = catalog;
     this.#uploads = uploads;
@@ -986,6 +1005,108 @@ export class MockTicketsApi implements TicketsApi {
     );
 
     return Promise.resolve(message);
+  }
+
+  // ---------------------------------------------------------------- M3-06
+
+  async renderMacro(
+    _brandId: string,
+    ticketId: string,
+    macroId: string,
+    locale: MacroLocale = 'en',
+  ): Promise<RenderedMacro> {
+    const ticket = this.#require(ticketId);
+    const macro = this.#macro(macroId);
+    const fellBack = locale !== 'en' && macro.bodies[locale].trim() === '';
+    const used: MacroLocale = fellBack ? 'en' : locale;
+    const contact = ticket.contactId === null ? undefined : this.#contactName(ticket.contactId);
+    const values = new Map<string, string>([
+      ['brand.name', 'Helpdock'],
+      ['ticket.number', `${ticket.prefix}-${String(ticket.number)}`],
+      ['agent.first_name', splitName(MOCK_SELF_NAME).first],
+    ]);
+    if (contact !== undefined) {
+      const { first, last } = splitName(contact);
+      values.set('contact.name', contact);
+      values.set('contact.first_name', first);
+      values.set('contact.last_name', last);
+      values.set('contact.email', '');
+    }
+    const { segments, unknown } = renderSegments(macro.bodies[used], values);
+
+    return {
+      locale: used,
+      fellBack,
+      text: segments.map((segment) => segment.text).join(''),
+      segments: [...segments],
+      unknownPlaceholders: [...unknown],
+    };
+  }
+
+  async runMacro(
+    brandId: string,
+    ticketId: string,
+    request: MacroRunRequest,
+  ): Promise<MacroRunResponse> {
+    const macro = this.#macro(request.macroId);
+    const message =
+      request.reply === undefined ? null : await this.reply(brandId, ticketId, request.reply);
+    this.#catalog.macroStore?.touch(macro.id);
+    if (request.actions.length === 0) {
+      return { message };
+    }
+
+    const before = this.#require(ticketId);
+    let tags = (before.tags ?? []).map((tag) => tag.id);
+    let next: Ticket = before;
+    for (const action of request.actions) {
+      if (action.type === 'set_status') {
+        next = { ...next, status: this.#statusOf(action.statusId) };
+      } else if (action.type === 'set_priority') {
+        next = { ...next, priority: action.priority };
+      } else if (action.type === 'add_tag') {
+        tags = tags.includes(action.tagId) ? tags : [...tags, action.tagId];
+      } else if (action.type === 'remove_tag') {
+        tags = tags.filter((id) => id !== action.tagId);
+      } else {
+        const { assignee } = action;
+        next = {
+          ...next,
+          assigneeId:
+            assignee.kind === 'self'
+              ? MOCK_SELF_ID
+              : assignee.kind === 'user'
+                ? assignee.userId
+                : null,
+          ...(assignee.kind === 'team' ? { teamId: assignee.teamId } : {}),
+        };
+      }
+    }
+    const { tags: known } = await this.#catalog.tags(brandId);
+    this.#put({
+      ...next,
+      tags: known
+        .filter((tag) => tags.includes(tag.id))
+        .map(({ id, name, nameAr, color }) => ({ id, name, nameAr, color })),
+      updatedAt: isoNow(),
+    });
+    this.#log(
+      ticketId,
+      'ticket.macro_applied',
+      { status: before.status.name },
+      { status: next.status.name, macroId: macro.id, macroName: macro.name },
+    );
+
+    return { message };
+  }
+
+  #macro(macroId: string): Macro {
+    const macro = this.#catalog.macroStore?.find(macroId);
+    if (macro === undefined) {
+      throw new Error('No such macro or canned response');
+    }
+
+    return macro;
   }
 
   // ---------------------------------------------------------------- M1-12

@@ -8,6 +8,7 @@ import { AutomationPage } from '../screens/admin/automation/automation-page.tsx'
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
 import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
+import { AuditLogPage } from '../screens/admin/system/audit-log-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
 import { TicketingPage } from '../screens/admin/ticketing/ticketing-page.tsx';
@@ -85,6 +86,8 @@ export function AppRoutes(): ReactNode {
               as "Not allowed", which is one answer in one place. */}
           <Route path={ROUTES.system} element={<SystemPage />} />
           <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
+          {/* M3-08. Install-wide like the rest of System; the api refuses anybody else. */}
+          <Route path={ROUTES.systemAuditLog} element={<AuditLogPage />} />
           <Route path={ROUTES.staff} element={<StaffScreen />} />
           {/* M1-04. `new` and `accounts/:id` are static-first, which React
               Router ranks above `:contactId`, so a contact can never be
@@ -97,8 +100,9 @@ export function AppRoutes(): ReactNode {
               which the page itself does, so both paths are one component. */}
           <Route path={ROUTES.ticketing} element={<TicketingPage />} />
           <Route path={ROUTES.ticketingTab} element={<TicketingPage />} />
-          {/* M3-03 to M3-05. The builder's path is deeper than a tab's, so the
-              two never compete for a url. */}
+          {/* M3-03 to M3-06. `/admin/automation` alone redirects to the first
+              tab the reader has. The builder's path is deeper than a tab's, so
+              the two never compete for a url. */}
           <Route path={ROUTES.automation} element={<AutomationPage />} />
           <Route path={ROUTES.automationTab} element={<AutomationPage />} />
           <Route path={ROUTES.automationRule} element={<AutomationPage />} />

@@ -10,7 +10,8 @@ import type { PendingMessage } from './pending.js';
  * *same events* as messages — `ticket.created`, `ticket.replied` and
  * `ticket.note_added` each accompany a row that is already a bubble — so
  * drawing them all would say everything twice. What is left is what only the
- * log knows: a field moved, and the status moved.
+ * log knows: a field moved, the status moved, and (M3-06) a macro moved
+ * several at once, which is one entry "via macro …".
  *
  * Ordering is by time, and a pending send sorts last within its own instant so
  * that what somebody just typed sits at the bottom where they left it.
@@ -21,7 +22,11 @@ import type { PendingMessage } from './pending.js';
  * further down a chain has no announcement here and sits at its merge time.
  */
 
-const THREAD_EVENT_ACTIONS: readonly string[] = ['ticket.updated', 'ticket.status.changed'];
+const THREAD_EVENT_ACTIONS: readonly string[] = [
+  'ticket.updated',
+  'ticket.status.changed',
+  'ticket.macro_applied',
+];
 
 export type ThreadItem =
   | {

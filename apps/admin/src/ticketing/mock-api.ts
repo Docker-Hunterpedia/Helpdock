@@ -28,6 +28,11 @@ import type {
   FeedbackSettingsUpdateRequest,
   Holiday,
   HolidayCreateRequest,
+  Macro,
+  MacroCreateRequest,
+  MacroList,
+  MacroListQuery,
+  MacroUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -54,7 +59,12 @@ import type {
   TicketTemplatePreview,
   TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
-import { defaultBrandSettings, isChoiceField } from '@helpdock/schemas';
+import {
+  defaultBrandSettings,
+  isChoiceField,
+  type RenderedTemplate,
+  renderTemplate,
+} from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type TicketingApi, TicketingError } from './api.js';
@@ -68,6 +78,7 @@ import {
   worksIn,
 } from './mock-assignment.js';
 import { MockBlockList } from './mock-block-list.js';
+import { MockMacros } from './mock-macros.js';
 import { MockSlaSettings } from './mock-sla.js';
 
 /**
@@ -385,27 +396,9 @@ const MOCK_PLACEHOLDER_VALUES: ReadonlyMap<string, string> = new Map([
   ['contact.email', 'mona@example.com'],
 ]);
 
-const MOCK_PLACEHOLDER = /\{\{\s*([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)\s*\}\}/gi;
-
-/**
- * The api's renderer, in miniature: a name it knows is replaced, one it does
- * not is left spelled out and reported. It is a `Map` here for the same reason
- * it is one there — an object would answer `constructor`.
- */
-const renderMock = (text: string): { text: string; unknown: string[] } => {
-  const unknown = new Set<string>();
-  const rendered = text.replace(MOCK_PLACEHOLDER, (match, name: string) => {
-    const value = MOCK_PLACEHOLDER_VALUES.get(name.toLowerCase());
-    if (value === undefined) {
-      unknown.add(name.toLowerCase());
-      return match;
-    }
-
-    return value;
-  });
-
-  return { text: rendered, unknown: [...unknown] };
-};
+/** The api's renderer, the one `@helpdock/schemas` shares, over the fixture's values. */
+const renderMock = (text: string): RenderedTemplate =>
+  renderTemplate(text, MOCK_PLACEHOLDER_VALUES);
 
 /** Sort order first, then name, as every list in this module is ordered. */
 const byOrder = (a: TagSummary, b: TagSummary): number =>
@@ -475,8 +468,36 @@ export class MockTicketingApi implements TicketingApi {
     [`${MOCK_SUPPORT_ID}:${MOCK_YARA_ID}`, ['0192c3f0-1a2b-7c3d-8e4f-000000000101']],
   ]);
 
+  /**
+   * M3-06. Public so `MockTicketsApi` can fill one in and apply it, as the api
+   * reads the same table for both.
+   */
+  readonly macroStore = new MockMacros();
+
   constructor(blockList: MockBlockList = new MockBlockList()) {
     this.#blockList = blockList;
+  }
+
+  // ---------------------------------------------------------------- M3-06
+
+  async macros(_brandId: string, query?: MacroListQuery): Promise<MacroList> {
+    return this.macroStore.list(query);
+  }
+
+  async createMacro(_brandId: string, request: MacroCreateRequest): Promise<Macro> {
+    return this.macroStore.create(request);
+  }
+
+  async updateMacro(
+    _brandId: string,
+    macroId: string,
+    request: MacroUpdateRequest,
+  ): Promise<Macro> {
+    return this.macroStore.update(macroId, request);
+  }
+
+  async deleteMacro(_brandId: string, macroId: string): Promise<void> {
+    this.macroStore.remove(macroId);
   }
 
   async departments(_brandId: string): Promise<DepartmentSummaryList> {

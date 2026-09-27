@@ -1,6 +1,7 @@
 export const PACKAGE_NAME = '@helpdock/schemas' as const;
 
 export * from './assignment.js';
+export * from './audit-log.js';
 export * from './auth.js';
 export * from './brand.js';
 export * from './business-hours.js';
@@ -15,9 +16,11 @@ export * from './error.js';
 export * from './health.js';
 export * from './identity-rules.js';
 export * from './install.js';
+export * from './macros.js';
 export * from './media.js';
 export * from './merge.js';
 export * from './participants.js';
+export * from './placeholders.js';
 export * from './principal.js';
 export * from './realtime.js';
 export * from './retention.js';

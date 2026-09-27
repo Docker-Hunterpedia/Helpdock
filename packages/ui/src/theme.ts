@@ -215,6 +215,8 @@ function buildComponents(
       styleOverrides: {
         root: {
           height: px(SIZE.input),
+          // A textarea grows with its rows; the fixed height is for one line.
+          '&.MuiInputBase-multiline': { height: 'auto' },
           borderRadius: px(radius.md),
           backgroundColor: semantic['bg.surface'],
           ...typeStyle('body'),

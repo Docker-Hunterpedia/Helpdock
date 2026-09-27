@@ -24,6 +24,8 @@ import {
 } from '@helpdock/db';
 import { type RulesEvaluatePayload, silentLogger } from '@helpdock/jobs';
 import type {
+  Macro,
+  RuleBuilderOptions,
   RuleDraftInput,
   RuleTestRunResult,
   Ticket,
@@ -42,7 +44,6 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { evaluateEventRules, runScheduledRules } from './engine.js';
 import { createRulesEngineDeps } from './engine-deps.js';
-import type { CannedResponseRenderer } from './ports.js';
 import { createRulesSourceHandler } from './rules-jobs.js';
 
 /**
@@ -54,8 +55,9 @@ import { createRulesSourceHandler } from './rules-jobs.js';
  * left" deterministically. What it proves:
  *
  * 1. **M3's exit criterion**: "on create, if subject contains X, assign to
- *    team Y and reply with canned Z" runs and is logged — with a test double
- *    for M3-06's canned responses.
+ *    team Y and reply with canned Z" runs and is logged — with a real M3-06
+ *    canned response, saved through its route and rendered by
+ *    `CannedResponsesService` in the engine's transaction.
  * 2. **M3's other exit criterion**: a rule loop is prevented. Two rules that
  *    reassign each other are stopped by the depth guard at the cycle, and the
  *    loop ends.
@@ -92,19 +94,6 @@ interface Person {
   token: string;
 }
 
-/** M3-06's `render`, doubled: one canned response, in both languages. */
-const REFUND_RECEIVED = uuidv7();
-const cannedDouble: CannedResponseRenderer = {
-  render: (id, { locale }) =>
-    Promise.resolve(
-      id === REFUND_RECEIVED
-        ? {
-            bodyHtml: locale === 'ar' ? '<p>تم استلام طلب الاسترداد</p>' : '<p>Refund received</p>',
-          }
-        : null,
-    ),
-};
-
 describe.skipIf(!hasDocker)('workflow rules', () => {
   let postgres: StartedPostgreSqlContainer;
   let redisContainer: StartedRedisContainer;
@@ -122,6 +111,8 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
   let refundsDesk: string;
   let refundTag: string;
   let awaitingStatus: string;
+  /** M3-06's shared canned response "Refund received", in both languages. */
+  let refundReceived: string;
 
   let ada: Person;
   /** A Team Leader of Support only. */
@@ -212,7 +203,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
   const inBrand = <T>(fn: Parameters<typeof withSystem<T>>[2]): Promise<T> =>
     withSystem(runtime.db, seeded.brandId, fn);
 
-  const engine = () => createRulesEngineDeps({ log: silentLogger, cannedResponses: cannedDouble });
+  const engine = () => createRulesEngineDeps({ log: silentLogger });
 
   /**
    * The relay and the two hops after it, until the outbox is empty: every
@@ -370,6 +361,18 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     ada.token = await signIn(seeded.email, seeded.password);
     tess.token = await signIn(tess.email, PASSWORD);
     sam.token = await signIn(sam.email, PASSWORD);
+
+    const canned = await call<Macro>('POST', `${brandPath()}/macros`, ada, {
+      kind: 'canned',
+      name: 'Refund received',
+      scope: 'shared',
+      bodies: {
+        en: 'Refund received · {{ticket.number}}',
+        ar: 'تم استلام طلب الاسترداد · {{ticket.number}}',
+      },
+    });
+    expect(canned.status).toBe(201);
+    refundReceived = canned.body.id;
   }, 300_000);
 
   afterAll(async () => {
@@ -398,7 +401,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       },
       actions: [
         { type: 'assign_team', teamId: refundsDesk },
-        { type: 'send_canned', cannedResponseId: REFUND_RECEIVED },
+        { type: 'send_canned', cannedResponseId: refundReceived },
         { type: 'add_tag', tagId: refundTag },
       ],
     });
@@ -425,7 +428,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     expect(messages[0]).toMatchObject({
       kind: 'public',
       authorId: `rule:${rule.id}`,
-      bodyText: 'Refund received',
+      bodyText: `Refund received · ${row?.prefix}-${row?.number}`,
     });
 
     // The reply's event says it does not count as a response (DOMAIN-RULES §3.1),
@@ -496,6 +499,55 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     // receipt are the outbox row's, and the rule itself is idempotent anyway.
     await drain();
     expect((await runsOf(ticket.id)).filter((run) => run.result === 'applied')).toHaveLength(1);
+
+    await disableAll();
+  });
+
+  it('offers and sends shared canned responses only, never somebody’s personal one (M3-06 seam)', async () => {
+    const personal = await call<Macro>('POST', `${brandPath()}/macros`, ada, {
+      kind: 'canned',
+      name: 'My own thanks',
+      scope: 'personal',
+      bodies: { en: 'Thanks from me', ar: '' },
+    });
+    expect(personal.status).toBe(201);
+
+    const options = await call<RuleBuilderOptions>('GET', `${brandPath()}/rules/options`, ada);
+    expect(options.status).toBe(200);
+    expect(options.body.cannedResponses).toEqual([{ id: refundReceived, name: 'Refund received' }]);
+
+    // The worker reads as nobody, so the personal one is not in the brand as
+    // the engine sees it: the reply is recorded as not carried out.
+    await saveRule({
+      name: 'Personal thanks',
+      kind: 'event',
+      trigger: 'ticket_created',
+      conditions: {
+        match: 'all',
+        groups: [
+          {
+            match: 'all',
+            conditions: [{ field: 'subject', operator: 'contains', values: ['thanks'] }],
+          },
+        ],
+      },
+      actions: [{ type: 'send_canned', cannedResponseId: personal.body.id }],
+    });
+    const ticket = await createTicket('Many thanks');
+    await drain();
+
+    const log = await call<WorkflowRunList>('GET', `${brandPath()}/rules/runs`, ada);
+    const run = log.body.runs.find((entry) => entry.ticketId === ticket.id);
+    expect(run?.actions.map((outcome) => outcome.effect)).toEqual(['unavailable']);
+    const replies = await inBrand((tx) =>
+      tx
+        .select()
+        .from(ticketMessages)
+        .where(
+          and(eq(ticketMessages.ticketId, ticket.id), eq(ticketMessages.authorType, 'system')),
+        ),
+    );
+    expect(replies).toEqual([]);
 
     await disableAll();
   });
@@ -709,7 +761,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         },
         actions: [
           { type: 'assign_team', teamId: billingTeam },
-          { type: 'send_canned', cannedResponseId: REFUND_RECEIVED },
+          { type: 'send_canned', cannedResponseId: refundReceived },
         ],
       },
     });
@@ -834,7 +886,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
           },
         ],
       },
-      actions: [{ type: 'send_canned', cannedResponseId: REFUND_RECEIVED, countsAsResponse }],
+      actions: [{ type: 'send_canned', cannedResponseId: refundReceived, countsAsResponse }],
     });
     await saveRule(replyOn('counted', true));
     await saveRule(replyOn('courtesy', false));

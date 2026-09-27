@@ -1,7 +1,7 @@
 import type { RuleKind } from '@helpdock/schemas';
 import { Box, Button, Tab, Tabs } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { Construction, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
@@ -10,50 +10,44 @@ import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { automationKeys } from '../../../automation/api.js';
 import { useAutomationApi } from '../../../automation/context.tsx';
-import { EmptyState } from '../../../shell/empty-state.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
+import { MacrosTab } from './macros-tab.tsx';
 import { RuleBuilder } from './rule-builder.tsx';
 import { RulesTab } from './rules-tab.tsx';
+import { tabForSegment, tabOfKind, tabsFor } from './tabs.js';
 
 /**
- * `Admin/Automation` (M3-03 to M3-05; artboards `AdminAutomationRules` and
- * `AdminRuleBuilder`): the page header, the tab row, and either a tab's list
- * or the builder for one rule.
+ * `Admin/Automation` (M3-03 to M3-06; artboards `AdminAutomationRules`,
+ * `AdminRuleBuilder` and `AdminAutomationMacros`): the page header, the tab
+ * row, and either a tab's list or the builder for one rule.
  *
  * The builder sits under the tab its rule belongs to — an event rule under
  * Rules, a scheduled one under Time-based — so the tab row still says where
  * the person is, and "back" is the tab's own list.
  *
- * Macros is M3-06's. Until that deliverable lands its tab says so, rather
- * than being absent and the row changing shape later.
+ * The row is the reader's: an Agent has Macros alone, and never asks for the
+ * rules, which the api would refuse them.
  */
-
-export const AUTOMATION_TABS = [
-  { key: 'rules', segment: 'rules', kind: 'event' },
-  { key: 'timeBased', segment: 'time-based', kind: 'scheduled' },
-  { key: 'macros', segment: 'macros', kind: null },
-] as const;
-
-type AutomationTab = (typeof AUTOMATION_TABS)[number];
-
-const tabOfKind = (kind: RuleKind): AutomationTab =>
-  kind === 'scheduled' ? AUTOMATION_TABS[1] : AUTOMATION_TABS[0];
-
 export function AutomationPage(): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
-  const brand = currentBrand(useSession());
+  const session = useSession();
+  const brand = currentBrand(session);
   const api = useAutomationApi();
   const { tab: segment, ruleId } = useParams();
   const [search] = useSearchParams();
   const { pathname } = useLocation();
 
+  const tabs = tabsFor(session.user.role);
+  const readsRules = tabs.some((candidate) => candidate.kind !== null);
+
   const rules = useQuery({
     queryKey: automationKeys.rules(brand.id),
     queryFn: () => api.rules(brand.id),
+    enabled: readsRules,
   });
 
-  const editing = ruleId === undefined ? null : ruleId;
+  const editing = ruleId === undefined || !readsRules ? null : ruleId;
   const newKind: RuleKind = search.get('kind') === 'scheduled' ? 'scheduled' : 'event';
   const editedRule =
     editing === null || editing === 'new'
@@ -62,11 +56,12 @@ export function AutomationPage(): ReactNode {
 
   const tab =
     editing === null
-      ? AUTOMATION_TABS.find((candidate) => candidate.segment === segment)
+      ? tabForSegment(tabs, segment)
       : tabOfKind(editing === 'new' ? newKind : (editedRule?.kind ?? 'event'));
 
   if (tab === undefined) {
-    return <Navigate to={automationRoute(AUTOMATION_TABS[0].segment)} replace />;
+    const first = tabs[0];
+    return first === undefined ? null : <Navigate to={automationRoute(first.segment)} replace />;
   }
 
   const newRuleKind: RuleKind = tab.kind ?? 'event';
@@ -93,7 +88,7 @@ export function AutomationPage(): ReactNode {
 
       <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
         <Tabs value={tab.key} aria-label={t('rules:tabList')}>
-          {AUTOMATION_TABS.map((candidate) => (
+          {tabs.map((candidate) => (
             <Tab
               key={candidate.key}
               value={candidate.key}
@@ -118,11 +113,7 @@ export function AutomationPage(): ReactNode {
           }
         />
       ) : tab.kind === null ? (
-        <EmptyState
-          icon={Construction}
-          heading={t('rules:macros.heading')}
-          body={t('rules:macros.body')}
-        />
+        <MacrosTab />
       ) : (
         <RulesTab kind={tab.kind} rules={rules} />
       )}

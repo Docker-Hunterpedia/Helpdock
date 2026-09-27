@@ -5,7 +5,8 @@
   "tabs": {
     "mailboxes": "Mailboxes",
     "outgoing": "Outgoing email",
-    "widget": "Widget"
+    "widget": "Widget",
+    "webForm": "Web form"
   },
   "mailboxes": {
     "heading": "Mailboxes",
@@ -537,5 +538,83 @@
       "guide": "How to sign: widget protocol guide",
       "saved": "Signed identity saved"
     }
+  },
+  "webForm": {
+    "hosted": {
+      "heading": "Hosted form",
+      "caption": "A page where customers write to you without chat. Each submission opens a ticket."
+    },
+    "enabled": {
+      "label": "The form is on",
+      "hint": "Turn it off to take the page down. The address then answers “This form is closed”."
+    },
+    "address": {
+      "label": "Public address",
+      "copy": "Copy the form address",
+      "copied": "Address copied",
+      "open": "Open",
+      "hint": "On the help center's domain from Brand › Domains, or on this install's address until the brand has one. To put a form inside your own page, use the widget in Contact form mode."
+    },
+    "fields": {
+      "heading": "Fields",
+      "order": "Order",
+      "field": "Field",
+      "type": "Type",
+      "shown": "Shown",
+      "required": "Required",
+      "reorder": "Reorder {{name}}",
+      "reorderHint": "Use the up and down arrow keys to move a field.",
+      "show": "Show {{name}}",
+      "require": "{{name}} is required",
+      "builtIn": "Built in",
+      "builtInEmail": "Built in · where we reply",
+      "custom": "Custom field",
+      "note": "Shown fields appear in this order. Custom fields come from Ticketing › Custom fields, and answers are saved on the ticket. An email typed here is not verified.",
+      "names": {
+        "name": "Name",
+        "email": "Email",
+        "subject": "Subject",
+        "message": "Message"
+      },
+      "types": {
+        "name": "Text",
+        "email": "Email",
+        "subject": "Text",
+        "long_text": "Long text",
+        "text": "Text",
+        "number": "Number",
+        "date": "Date",
+        "select": "Select",
+        "multi_select": "Multi-select",
+        "checkbox": "Checkbox"
+      }
+    },
+    "after": {
+      "heading": "After it is sent",
+      "caption": "Where the ticket goes and what the customer reads."
+    },
+    "department": {
+      "label": "Opens tickets in",
+      "default": "The first department ({{name}})",
+      "hint": "That department's agents, rules and SLA policy apply."
+    },
+    "captcha": {
+      "label": "Check for bots before sending",
+      "hint": "Cloudflare Turnstile, with the keys set on the Widget tab. A failed check creates nothing.",
+      "missingKeys": "No CAPTCHA keys are set on the Widget tab yet. While this is on, the form takes no messages."
+    },
+    "thankYou": {
+      "en": "Thank-you message · English",
+      "ar": "Thank-you message · العربية",
+      "hint": "{{placeholder}} becomes the reference, like {{sample}}. The page is shown in the customer's language.",
+      "empty": "Write a thank-you message."
+    },
+    "preview": {
+      "heading": "What the customer sees",
+      "title": "Message sent"
+    },
+    "save": "Save changes",
+    "saved": "Web form saved",
+    "loadFailed": "The web form could not be loaded. Reload the page to try again."
   }
 }

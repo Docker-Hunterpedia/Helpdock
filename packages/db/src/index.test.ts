@@ -96,6 +96,7 @@ describe('@helpdock/db', () => {
       'user-brand-roles.ts',
       'users.ts',
       'views.ts',
+      'web-form-settings.ts',
       'widget-settings.ts',
       'widget-visitors.ts',
       'workflow-rules.ts',

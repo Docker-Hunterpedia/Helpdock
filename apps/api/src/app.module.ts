@@ -57,6 +57,7 @@ import { TicketingModule } from './ticketing/ticketing.module.js';
 import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { ViewsModule } from './views/views.module.js';
+import { WebFormModule, type WebFormModuleOptions } from './web-form/web-form.module.js';
 import { agentTypingRelay } from './widget/agent-typing.js';
 import { WidgetModule, type WidgetModuleOptions } from './widget/widget.module.js';
 import { RedisWidgetBroadcast } from './widget/widget-relay.js';
@@ -110,6 +111,8 @@ export interface AppModuleOptions {
   readonly channels?: ChannelsModuleOverrides;
   /** M4: the siteverify call and the SSE timings, which suites replace. */
   readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
+  /** M4-09: the siteverify call, which suites replace. */
+  readonly webForm?: Pick<WebFormModuleOptions, 'captchaTransport'>;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -227,6 +230,16 @@ export class AppModule implements NestModule {
           logger: options.logger,
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...options.widget,
+        }),
+        // M4-09: Channels › Web form and the public form at `/contact`.
+        WebFormModule.forRoot({
+          env: options.env,
+          db: options.db,
+          redis: options.redis,
+          logger: options.logger,
+          brandResolver: options.brandResolver ?? hostResolver,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...options.webForm,
         }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger }),

@@ -1,6 +1,12 @@
 import type { CaptchaTransport } from '@helpdock/channels';
 import { describe, expect, it, vi } from 'vitest';
-import { type BrandCaptchaKeys, CaptchaVerifier } from './captcha-keys.js';
+import { type BrandCaptchaKeys, CaptchaVerifier, safeCaptchaTransport } from './captcha-keys.js';
+
+const { safeFetch } = vi.hoisted(() => ({ safeFetch: vi.fn() }));
+vi.mock('@helpdock/net', async (original) => ({
+  ...(await original<typeof import('@helpdock/net')>()),
+  safeFetch,
+}));
 
 const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
 const KEYS: BrandCaptchaKeys = { provider: 'turnstile', siteKey: 'site', secret: 's3cret' };
@@ -51,5 +57,27 @@ describe('CaptchaVerifier', () => {
         remoteIp: null,
       }),
     ).toBe('not_configured');
+  });
+});
+
+describe('safeCaptchaTransport', () => {
+  it('posts the form through the SSRF-safe client, small and without redirects', async () => {
+    safeFetch.mockResolvedValue({ status: 200, body: Buffer.from('{"success":true}') });
+    const transport = safeCaptchaTransport(['10.0.0.0/8']);
+
+    const answer = await transport.postForm(
+      'https://verify.test/siteverify',
+      new URLSearchParams({ a: 'b c' }),
+    );
+
+    expect(answer).toEqual({ status: 200, body: '{"success":true}' });
+    const [url, init, policy] = safeFetch.mock.calls[0] ?? [];
+    expect(url).toBe('https://verify.test/siteverify');
+    expect(init).toEqual({
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'a=b+c',
+    });
+    expect(policy).toMatchObject({ maxRedirects: 0, allowCidrs: ['10.0.0.0/8'] });
   });
 });

@@ -52,6 +52,7 @@ import {
   userBrandRoles,
   users,
   views,
+  webFormSettings,
   widgetSettings,
   widgetVisitors,
   workflowRules,
@@ -618,6 +619,12 @@ const fixtures = [
     // M4-02. The hash is unique across the install, so each brand's needs its own.
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(widgetVisitors).values({ brandId, secretHash: `fixture-${brandId}` }),
+  },
+  // M4-09. Configuration, one row per brand.
+  {
+    name: 'web_form_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(webFormSettings).values({ brandId, enabled: true }),
   },
 ] as const;
 

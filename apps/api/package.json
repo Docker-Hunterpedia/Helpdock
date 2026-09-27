@@ -21,7 +21,8 @@
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/api",
     "seed:dev": "node dist/seed/seed-dev.js",
     "test:coverage": "vitest run --config vitest.coverage.config.ts",
-    "perf:tickets": "vitest run --config vitest.perf.config.ts"
+    "perf:tickets": "vitest run --config vitest.perf.config.ts",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0",
@@ -68,7 +69,9 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@nestjs/testing": "12.0.3",
+    "@playwright/test": "1.63.0",
     "@testcontainers/postgresql": "12.1.0",
     "@testcontainers/redis": "12.1.0",
     "@types/clamscan": "2.4.1",

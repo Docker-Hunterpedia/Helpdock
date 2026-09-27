@@ -17,11 +17,13 @@ import { MailboxesTab } from './mailboxes-tab.tsx';
 import { SendersCard } from './senders-card.tsx';
 import { SmtpCard } from './smtp-card.tsx';
 import { type ChannelsTab, channelsTabForSegment, channelsTabsFor } from './tabs.js';
+import { WebFormTab } from './web-form-tab.tsx';
 import { WidgetTab } from './widget/widget-tab.tsx';
 
 /**
  * `Admin/Channels` (M2-08; artboards `Admin · email channel` for Mailboxes,
- * `AdminEmailOutgoing` for Outgoing email and `AdminWidget` for Widget, M4):
+ * `AdminEmailOutgoing` for Outgoing email, `AdminWidget` for Widget, M4, and
+ * `AdminWebForm` for Web form, M4-09):
  * the page header, the tab row of the tabs the viewer's role may open, and
  * the tab the url names. The tabs are links, as on Ticketing, so a tab is a
  * url and back works. "Add mailbox" belongs to the Mailboxes tab alone.
@@ -95,6 +97,8 @@ function TabBody({
       return <OutgoingTab brandId={brandId} />;
     case 'widget':
       return <WidgetTab />;
+    case 'webForm':
+      return <WebFormTab />;
   }
 }
 

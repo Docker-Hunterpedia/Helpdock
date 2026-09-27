@@ -8,6 +8,8 @@ import type {
   MailboxCreateRequest,
   MailboxList,
   MailboxUpdateRequest,
+  WebFormSettings,
+  WebFormSettingsUpdate,
   WidgetAccessUpdate,
   WidgetAppearance,
   WidgetConversationSettings,
@@ -21,6 +23,7 @@ import {
   inboundParseSettingsSchema,
   mailboxListSchema,
   mailboxSchema,
+  webFormSettingsSchema,
   widgetSettingsSchema,
   widgetSigningSecretSchema,
 } from '@helpdock/schemas';
@@ -144,6 +147,18 @@ export class HttpChannelsApi implements ChannelsApi {
 
   #widget(brandId: string): string {
     return `${this.#brand(brandId)}/widget`;
+  }
+
+  async webForm(brandId: string): Promise<WebFormSettings> {
+    return webFormSettingsSchema.parse(
+      await this.#transport.request('GET', `${this.#brand(brandId)}/web-form`),
+    );
+  }
+
+  async saveWebForm(brandId: string, request: WebFormSettingsUpdate): Promise<WebFormSettings> {
+    return webFormSettingsSchema.parse(
+      await this.#transport.request('PUT', `${this.#brand(brandId)}/web-form`, request),
+    );
   }
 
   #brand(brandId: string): string {

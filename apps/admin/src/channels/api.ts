@@ -9,6 +9,8 @@ import type {
   MailboxCreateRequest,
   MailboxList,
   MailboxUpdateRequest,
+  WebFormSettings,
+  WebFormSettingsUpdate,
   WidgetAccessUpdate,
   WidgetAppearance,
   WidgetConversationSettings,
@@ -18,8 +20,8 @@ import type {
 } from '@helpdock/schemas';
 
 /**
- * Everything Channels › Mailboxes and the thread's email card need (M2-02,
- * M2-03, M2-07, M2-08). `MockChannelsApi` is the fixture the unit tests and the
+ * Everything Channels › Mailboxes, Channels › Web form and the thread's email
+ * card need (M2-02, M2-03, M2-07, M2-08, M4-09). `MockChannelsApi` is the fixture the unit tests and the
  * mock Playwright projects run against; `HttpChannelsApi` is the real service.
  * The same shape as `TicketingApi`: one interface, two adapters, and refusals
  * that cross as a code the screen picks a sentence for.
@@ -61,11 +63,20 @@ export interface ChannelsApi {
   saveWidgetSignedIdentity(brandId: string, request: WidgetSignedIdentity): Promise<WidgetSettings>;
   /** "Replace": the new signing secret, which the screen shows once. */
   replaceWidgetSigningSecret(brandId: string): Promise<WidgetSigningSecret>;
+
+  /** Channels › Web form (M4-09). */
+  webForm(brandId: string): Promise<WebFormSettings>;
+  saveWebForm(brandId: string, request: WebFormSettingsUpdate): Promise<WebFormSettings>;
 }
 
 /** Query keys for the Widget tab. */
 export const widgetKeys = {
   settings: (brandId: string) => ['channels', brandId, 'widget'] as const,
+};
+
+/** Query keys, so a save can refresh exactly what it changed. */
+export const channelsKeys = {
+  webForm: (brandId: string) => ['channels', brandId, 'web-form'] as const,
 };
 
 export class ChannelsError extends Error {

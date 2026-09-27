@@ -4,6 +4,7 @@ import type { Logger } from '../logging/logger.js';
 import { ADMIN_DIST, LOGGER } from '../runtime/tokens.js';
 import { resolveAdminDist } from './admin-assets.js';
 import { AdminSpaController } from './admin-spa.controller.js';
+import { FontsController } from './fonts.controller.js';
 import { InstallInfoService } from './install-info.service.js';
 
 export interface StaticModuleOptions {
@@ -23,7 +24,8 @@ export class StaticModule {
   static forRoot({ env, logger }: StaticModuleOptions): DynamicModule {
     return {
       module: StaticModule,
-      controllers: [AdminSpaController],
+      // The fonts first: a static route, so the SPA's catch-all never sees it.
+      controllers: [FontsController, AdminSpaController],
       providers: [
         { provide: ADMIN_DIST, useValue: resolveAdminDist(env.ADMIN_DIST_DIR) },
         // `ENV` and `DB` come from the two `@Global()` runtime modules; the

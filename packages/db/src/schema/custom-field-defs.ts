@@ -62,6 +62,12 @@ export const customFieldDefs = pgTable(
      * way.
      */
     agentVisible: boolean('agent_visible').notNull().default(true),
+    /**
+     * "Show on web form" (M4-09): a ticket field the brand's hosted form asks
+     * the customer for. Meaningful for `target = 'ticket'` alone; the form's
+     * own settings say where it goes and whether it is required there.
+     */
+    webForm: boolean('web_form').notNull().default(false),
     /** Position in this target's list. Dense and zero-based after every reorder. */
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

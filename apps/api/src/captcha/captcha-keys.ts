@@ -5,7 +5,7 @@ import {
 } from '@helpdock/channels';
 import { decryptSecret, type Keyring } from '@helpdock/config';
 import type { Db, DbTransaction } from '@helpdock/db';
-import { policies, safeFetch } from '@helpdock/net';
+import { safeFetch } from '@helpdock/net';
 import type { CaptchaProvider } from '@helpdock/schemas';
 import { z } from 'zod';
 import { withSystemJob } from '../tenant/system-job.js';
@@ -61,7 +61,15 @@ export class DbCaptchaKeys implements CaptchaKeysReader {
   }
 }
 
-/** The siteverify POST, through the SSRF-safe client like every call out (DOMAIN-RULES §13). */
+/** A siteverify answer is a few hundred bytes. */
+const VERIFY_BODY_LIMIT = 64 * 1024;
+const VERIFY_TIMEOUT_MS = 10_000;
+
+/**
+ * The siteverify POST, through the SSRF-safe client like every call out
+ * (DOMAIN-RULES §13), even though the host is ours to choose: small, quick and
+ * never redirected.
+ */
 export const safeCaptchaTransport = (allowCidrs: readonly string[]): CaptchaTransport => ({
   postForm: async (url, form) => {
     const response = await safeFetch(
@@ -71,7 +79,12 @@ export const safeCaptchaTransport = (allowCidrs: readonly string[]): CaptchaTran
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: form.toString(),
       },
-      { ...policies.webhook, allowCidrs: [...allowCidrs] },
+      {
+        maxBodyBytes: VERIFY_BODY_LIMIT,
+        totalTimeoutMs: VERIFY_TIMEOUT_MS,
+        maxRedirects: 0,
+        allowCidrs: [...allowCidrs],
+      },
     );
     return { status: response.status, body: response.body.toString('utf8') };
   },
@@ -103,17 +116,13 @@ export class CaptchaVerifier {
       return 'failed';
     }
 
-    try {
-      const verdict = await this.#adapter(keys.provider).verify({
-        secret: keys.secret,
-        token: input.token,
-        remoteIp: input.remoteIp,
-      });
-      return verdict.success ? 'passed' : 'failed';
-    } catch {
-      // A provider that cannot be reached fails closed: ADR 0003 asks for a
-      // visible error rather than a check that silently passes.
-      return 'failed';
-    }
+    // A provider that cannot be reached answers a refusal (ADR 0003: fail
+    // closed), so this never passes on an error.
+    const verdict = await this.#adapter(keys.provider).verify({
+      secret: keys.secret,
+      token: input.token,
+      remoteIp: input.remoteIp,
+    });
+    return verdict.success ? 'passed' : 'failed';
   }
 }

@@ -15,6 +15,7 @@ import arSystem from '../locales/ar/system.json' with { type: 'json' };
 import arTicket from '../locales/ar/ticket.json' with { type: 'json' };
 import arTicketing from '../locales/ar/ticketing.json' with { type: 'json' };
 import arTickets from '../locales/ar/tickets.json' with { type: 'json' };
+import arWebform from '../locales/ar/webform.json' with { type: 'json' };
 import arWidget from '../locales/ar/widget.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
@@ -34,6 +35,7 @@ import enSystem from '../locales/en/system.json' with { type: 'json' };
 import enTicket from '../locales/en/ticket.json' with { type: 'json' };
 import enTicketing from '../locales/en/ticketing.json' with { type: 'json' };
 import enTickets from '../locales/en/tickets.json' with { type: 'json' };
+import enWebform from '../locales/en/webform.json' with { type: 'json' };
 import enWidget from '../locales/en/widget.json' with { type: 'json' };
 import enWizard from '../locales/en/wizard.json' with { type: 'json' };
 
@@ -72,6 +74,8 @@ export const NAMESPACES = [
   'macros',
   // M4: the chat widget on customer sites (`apps/widget`), read by the visitor.
   'widget',
+  // The hosted web form (M4-09): read by the customer, not by staff.
+  'webform',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -98,6 +102,7 @@ export const resources = {
     rules: enRules,
     macros: enMacros,
     widget: enWidget,
+    webform: enWebform,
   },
   ar: {
     common: arCommon,
@@ -119,6 +124,7 @@ export const resources = {
     rules: arRules,
     macros: arMacros,
     widget: arWidget,
+    webform: arWebform,
   },
 };
 

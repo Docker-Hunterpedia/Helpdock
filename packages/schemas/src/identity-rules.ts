@@ -36,6 +36,8 @@ export const identitySourceSchema = z.enum([
   'widget.visitor',
   /** Anything typed into a widget pre-chat form. */
   'widget.form',
+  /** The address typed into a brand's hosted web form (M4-09). */
+  'web.form',
   /** Typed by an agent on the contact screens. */
   'agent',
   /** A bulk import. */
@@ -67,6 +69,7 @@ export const IDENTITY_SOURCE_RULES: Readonly<Record<IdentitySource, SourceRule>>
   'widget.signed': { kinds: ['external'], verified: true },
   'widget.visitor': { kinds: ['visitor'], verified: true },
   'widget.form': { kinds: ['email', 'phone'], verified: false },
+  'web.form': { kinds: ['email'], verified: false },
   agent: { kinds: ALL_KINDS, verified: false },
   import: { kinds: ALL_KINDS, verified: false },
 });

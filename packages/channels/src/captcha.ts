@@ -33,18 +33,41 @@ export type CaptchaVerdict =
   | { readonly success: true; readonly hostname: string | null }
   | { readonly success: false; readonly errorCodes: readonly string[] };
 
+/**
+ * What a server-rendered page (the web form) needs to draw the challenge, and
+ * the CSP sources it must allow. The widget loads the providers' scripts
+ * itself and reads only `provider` and `siteKey`.
+ */
+export interface CaptchaRenderConfig {
+  readonly provider: CaptchaProviderName;
+  readonly siteKey: string;
+  /** Loaded `async defer`; the provider renders into every element with {@link widgetClass}. */
+  readonly scriptUrl: string;
+  readonly widgetClass: string;
+  /** The form field the provider's script fills with the token. */
+  readonly responseField: string;
+  readonly csp: {
+    readonly scriptSrc: readonly string[];
+    readonly frameSrc: readonly string[];
+    readonly styleSrc: readonly string[];
+    readonly connectSrc: readonly string[];
+  };
+}
+
 export interface CaptchaProvider {
   readonly name: CaptchaProviderName;
   /** What a client needs to render the challenge. The site key is public. */
-  renderConfig(siteKey: string): {
-    readonly provider: CaptchaProviderName;
-    readonly siteKey: string;
-  };
+  renderConfig(siteKey: string, locale: string): CaptchaRenderConfig;
   verify(input: CaptchaVerifyInput): Promise<CaptchaVerdict>;
 }
 
-export const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com';
+export const TURNSTILE_VERIFY_URL = `${TURNSTILE_ORIGIN}/turnstile/v0/siteverify`;
 export const HCAPTCHA_VERIFY_URL = 'https://api.hcaptcha.com/siteverify';
+const HCAPTCHA_ORIGINS = ['https://hcaptcha.com', 'https://*.hcaptcha.com'];
+
+/** A token is a few hundred characters; far more is not a token. */
+const MAX_TOKEN_LENGTH = 4096;
 
 /** Both providers answer this shape; anything else is a failure, not a pass. */
 const siteverifyResponseSchema = z.object({
@@ -75,19 +98,67 @@ const parseVerdict = (status: number, body: string): CaptchaVerdict => {
     : { success: false, errorCodes: parsed.data['error-codes'] ?? [] };
 };
 
+/** Answers that are not worth a round trip: the provider would refuse them too. */
+const refuseEarly = ({ secret, token }: CaptchaVerifyInput): CaptchaVerdict | null => {
+  if (secret === '') {
+    return { success: false, errorCodes: ['missing-input-secret'] };
+  }
+  if (token.trim() === '') {
+    return { success: false, errorCodes: ['missing-input-response'] };
+  }
+  if (token.length > MAX_TOKEN_LENGTH) {
+    return { success: false, errorCodes: ['invalid-input-response'] };
+  }
+  return null;
+};
+
+const renderConfigFor = (
+  name: CaptchaProviderName,
+  siteKey: string,
+  locale: string,
+): CaptchaRenderConfig =>
+  name === 'turnstile'
+    ? {
+        provider: name,
+        siteKey,
+        scriptUrl: `${TURNSTILE_ORIGIN}/turnstile/v0/api.js`,
+        widgetClass: 'cf-turnstile',
+        responseField: 'cf-turnstile-response',
+        csp: {
+          scriptSrc: [TURNSTILE_ORIGIN],
+          frameSrc: [TURNSTILE_ORIGIN],
+          styleSrc: [],
+          connectSrc: [],
+        },
+      }
+    : {
+        provider: name,
+        siteKey,
+        scriptUrl: `https://js.hcaptcha.com/1/api.js?hl=${encodeURIComponent(locale)}`,
+        widgetClass: 'h-captcha',
+        responseField: 'h-captcha-response',
+        csp: {
+          scriptSrc: HCAPTCHA_ORIGINS,
+          frameSrc: HCAPTCHA_ORIGINS,
+          styleSrc: HCAPTCHA_ORIGINS,
+          connectSrc: HCAPTCHA_ORIGINS,
+        },
+      };
+
 const createProvider = (
   name: CaptchaProviderName,
   url: string,
   transport: CaptchaTransport,
 ): CaptchaProvider => ({
   name,
-  renderConfig: (siteKey) => ({ provider: name, siteKey }),
-  verify: async ({ secret, token, remoteIp, idempotencyKey }) => {
-    if (token.trim() === '') {
-      // Not worth a round trip: both providers answer `missing-input-response`.
-      return { success: false, errorCodes: ['missing-input-response'] };
+  renderConfig: (siteKey, locale) => renderConfigFor(name, siteKey, locale),
+  verify: async (input) => {
+    const refused = refuseEarly(input);
+    if (refused !== null) {
+      return refused;
     }
 
+    const { secret, token, remoteIp, idempotencyKey } = input;
     const form = new URLSearchParams({ secret, response: token });
     if (remoteIp != null && remoteIp !== '') {
       form.set('remoteip', remoteIp);
@@ -96,7 +167,13 @@ const createProvider = (
       form.set('idempotency_key', idempotencyKey);
     }
 
-    const response = await transport.postForm(url, form);
+    let response: { status: number; body: string };
+    try {
+      response = await transport.postForm(url, form);
+    } catch {
+      // Unreachable is a refusal, never a pass (ADR 0003: fail closed).
+      return { success: false, errorCodes: ['network-error'] };
+    }
     return parseVerdict(response.status, response.body);
   },
 });

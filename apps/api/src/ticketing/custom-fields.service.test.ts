@@ -30,6 +30,7 @@ const def = (over: Partial<CustomFieldDefRow> & { id: string }): CustomFieldDefR
   options: [],
   required: false,
   agentVisible: true,
+  webForm: false,
   sortOrder: 0,
   createdAt: new Date(),
   updatedAt: new Date(),

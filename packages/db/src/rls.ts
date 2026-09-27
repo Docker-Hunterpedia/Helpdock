@@ -140,6 +140,10 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // reaches a department only through a ticket, whose own policy decides.
   { name: 'widget_settings', departmentScoped: false },
   { name: 'widget_visitors', departmentScoped: false },
+  // M4-09. The hosted form's configuration is the Admin's, like
+  // `email_outbound_settings`: it names a department to file into, which is
+  // where tickets go, not who may read the row.
+  { name: 'web_form_settings', departmentScoped: false },
 ];
 
 /**

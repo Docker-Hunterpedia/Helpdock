@@ -8,6 +8,9 @@ import type {
   MailboxCreateRequest,
   MailboxList,
   MailboxUpdateRequest,
+  WebFormField,
+  WebFormSettings,
+  WebFormSettingsUpdate,
   WidgetAccessUpdate,
   WidgetAppearance,
   WidgetConversationSettings,
@@ -149,12 +152,69 @@ const seed = (now: number): Mailbox[] => [
 
 let nextId = 100;
 
+const builtin = (
+  field: 'name' | 'email' | 'subject' | 'message',
+  type: WebFormField['type'],
+  locked: boolean,
+): WebFormField => ({
+  field,
+  kind: 'builtin',
+  label: '',
+  labelAr: null,
+  type,
+  shown: true,
+  required: locked,
+  locked,
+});
+
+const custom = (
+  key: string,
+  label: string,
+  labelAr: string,
+  type: WebFormField['type'],
+  shown: boolean,
+  required = false,
+): WebFormField => ({
+  field: `custom:${key}`,
+  kind: 'custom',
+  label,
+  labelAr,
+  type,
+  shown,
+  required,
+  locked: false,
+});
+
+/** The `AdminWebForm` artboard: four built-in fields, four custom ones, two of them shown. */
+export const MOCK_WEB_FORM: WebFormSettings = {
+  enabled: true,
+  publicUrl: 'https://help.helpdock.io/contact',
+  departmentId: null,
+  captcha: { enabled: true, ready: true, provider: 'turnstile' },
+  thankYou: {
+    en: 'Thanks, we have your message. Your reference is {{ticket.number}}; we reply by email, usually within a day.',
+    ar: 'شكراً، وصلتنا رسالتك. رقم طلبك {{ticket.number}}، وسنرد عليك بالبريد الإلكتروني خلال يوم عادةً.',
+  },
+  fields: [
+    builtin('name', 'name', false),
+    builtin('email', 'email', true),
+    builtin('subject', 'subject', false),
+    builtin('message', 'long_text', true),
+    custom('order_number', 'Order number', 'رقم الطلب', 'text', true),
+    custom('product', 'Product', 'المنتج', 'select', true, true),
+    custom('plan', 'Plan', 'الخطة', 'select', false),
+    custom('country', 'Country', 'الدولة', 'select', false),
+  ],
+  updatedAt: '2026-09-20T09:00:00.000Z',
+};
+
 export class MockChannelsApi implements ChannelsApi {
   readonly #now: () => number;
   #mailboxes: Mailbox[];
   #settings: InboundParseSettings;
   #passwords = new Map<string, string>();
   #widget: WidgetSettings;
+  #webForm: WebFormSettings = MOCK_WEB_FORM;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
@@ -358,6 +418,35 @@ export class MockChannelsApi implements ChannelsApi {
   }
 
   // ------------------------------------------------------------------
+
+  async webForm(): Promise<WebFormSettings> {
+    await Promise.resolve();
+    return this.#webForm;
+  }
+
+  /** As the api does: the list in the order sent, and the locked two always on. */
+  async saveWebForm(_brandId: string, request: WebFormSettingsUpdate): Promise<WebFormSettings> {
+    await Promise.resolve();
+    const byField = new Map(this.#webForm.fields.map((field) => [field.field, field]));
+    const fields = request.fields.flatMap((entry) => {
+      const field = byField.get(entry.field);
+      if (field === undefined) {
+        return [];
+      }
+      const shown = field.locked || entry.shown;
+      return [{ ...field, shown, required: field.locked || (shown && entry.required) }];
+    });
+    this.#webForm = {
+      ...this.#webForm,
+      enabled: request.enabled,
+      departmentId: request.departmentId,
+      captcha: { ...this.#webForm.captcha, enabled: request.captchaEnabled },
+      thankYou: request.thankYou,
+      fields,
+      updatedAt: new Date(this.#now()).toISOString(),
+    };
+    return this.#webForm;
+  }
 
   #refuseTaken(address: string, except: string | null): void {
     const lowered = address.trim().toLowerCase();

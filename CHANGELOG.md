@@ -14,6 +14,88 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 0.3.0 — 2026-09-28
+
+**M4 Widget and realtime** and **M5 Help center**. Customers can now reach the
+desk from a brand's own website: an embeddable chat widget, a hosted contact
+form, and a bilingual help center on the brand's domain whose articles the
+widget searches too.
+
+### M4 Widget and realtime
+
+- **The chat widget.** One `<script type="module" … data-brand>` tag. It is a
+  Preact app in a Shadow DOM, about 26 KB gzipped, with socket.io loaded only
+  when a conversation starts. It has four modes (chat, chat with suggested
+  articles, help center only, and contact form), light, dark and auto themes
+  from the brand's accent, and English and Arabic with right-to-left layout.
+- **Visitor identity and ownership.** A server-issued visitor id and a hashed
+  secret. An optional signed identity comes from the customer's own backend. A
+  typed email never opens another contact's conversations.
+- **Origin allow-list and rate limits** on every widget route and on the socket
+  handshake. They are set on Channels › Widget.
+- **Delivery you can trust.** Messages are deduplicated by client id, carry a
+  sequence number per conversation, and catch up after a reconnect, with an SSE
+  fallback. A dropped network, an api restart or a double send leaves exactly
+  one message.
+- **In the widget:** a pre-chat form, business-hours awareness, the transcript
+  by email, agent name and avatar, and attachments and voice notes within the
+  brand's content policy.
+- **The hosted web form** at `/contact`, per brand, with custom fields,
+  attachments and optional CAPTCHA (Turnstile or hCaptcha). It needs no
+  JavaScript.
+- **The widget protocol** is documented for native apps in
+  [`docs/guides/widget-protocol.md`](docs/guides/widget-protocol.md).
+
+### M5 Help center
+
+- **Content:** categories, sections and articles with an English and an Arabic
+  version, drafts, scheduled publishing, and a fallback to the brand's default
+  language. The admin editor handles headings, tables, callouts, code, images
+  (re-encoded to WebP), YouTube and Vimeo embeds, and Markdown import and
+  export.
+- **Visibility:** each version is public or internal, and a whole help center
+  can be internal-only. Internal content never reaches the sitemap, public
+  search or a public cached page. Staff reach it through a one-minute pass from
+  the admin.
+- **Pages on the brand's own domain.** Custom domains are checked by CNAME and
+  TXT and get certificates from Caddy on demand. Pages are server-rendered in
+  both languages and cached, with canonical and hreflang links, Open Graph,
+  JSON-LD, a sitemap and `robots.txt`.
+- **Theme:** accent colour, logo, favicon, home layout, header and footer
+  links, and custom CSS, which is filtered through a strict allowlist.
+- **Search** in English and Arabic with typo tolerance on titles, plus a search
+  log that shows what customers looked for and did not find.
+- **Feedback:** views and "Was this helpful?" votes, and an Insights tab. From
+  an article, "Still need help?" opens the widget or the form and tells the
+  agent which article the customer came from.
+
+### Fixes
+
+- A brand added after setup now gets the built-in ticket statuses. Before this
+  release no ticket could be filed in it, and its widget said it was
+  unavailable.
+
+### Upgrade notes
+
+- Run the migrations (`0030`–`0035`). Restart the worker so it picks up the
+  help center jobs (publishing, image processing, search indexing).
+- The image now carries the widget build and serves it at `/widget.js`. Set
+  `WIDGET_DIST_DIR` only when you run the api outside the image.
+- Optional: `HELPCENTER_CNAME_TARGET` names the host customers' help center
+  domains should point at. It defaults to the host of `APP_URL`. The install
+  guide's [custom domains](docs/guides/install.md#custom-domains) section has
+  the DNS steps.
+- The bundled `Caddyfile` changed. If you keep your own copy, compare it: a
+  domain marked as proxied by Cloudflare no longer triggers a certificate
+  request.
+
+### Known gaps
+
+Listed in [M4](docs/completed/M4-widget-and-realtime.md) and
+[M5](docs/completed/M5-help-center.md). The one to know before exposing a help
+center: images in internal articles are not access-controlled beyond an
+unguessable address.
+
 ## 0.2.0 — 2026-09-27
 
 **M2 Email channel** and **M3 Automation and SLAs**. Helpdock now talks to

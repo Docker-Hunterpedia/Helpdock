@@ -408,7 +408,7 @@ export class MockChannelsApi implements ChannelsApi {
         secret: stamp,
       },
     });
-    return { secret: 'whsec_bW9jay1zaWduaW5nLXNlY3JldC1zaG93bi1vbmNlLXBsZWFzZQ', stamp };
+    return { secret: 'hdws_mock-signing-secret-shown-once', stamp };
   }
 
   async #saveWidget(patch: Partial<WidgetSettings>): Promise<WidgetSettings> {

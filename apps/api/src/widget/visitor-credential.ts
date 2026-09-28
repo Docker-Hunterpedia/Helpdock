@@ -69,5 +69,11 @@ export const checkSignedIdentity = (
   return skew <= SIGNED_IDENTITY_WINDOW_SECONDS ? 'valid' : 'expired';
 };
 
-/** A new signing secret for a brand: 32 random bytes, base64url. Shown once. */
-export const issueSigningSecret = (): string => `whsec_${randomBytes(32).toString('base64url')}`;
+/**
+ * A new signing secret for a brand: 32 random bytes, base64url, shown once.
+ * `hdws_` ("Helpdock widget secret") names it as ours, so a secret scanner
+ * that finds a leaked one does not report it as another product's key. The
+ * whole string is the HMAC key, so secrets issued with the earlier `whsec_`
+ * prefix keep verifying.
+ */
+export const issueSigningSecret = (): string => `hdws_${randomBytes(32).toString('base64url')}`;

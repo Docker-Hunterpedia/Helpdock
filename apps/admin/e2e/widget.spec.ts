@@ -89,7 +89,7 @@ test.describe('Channels › Widget', () => {
     const signed = page.getByRole('region', { name: t('channels:widget.signed.heading') });
 
     await signed.getByRole('button', { name: t('channels:widget.signed.replace') }).click();
-    await expect(signed.getByLabel(t('channels:widget.signed.newSecret'))).toHaveValue(/^whsec_/);
+    await expect(signed.getByLabel(t('channels:widget.signed.newSecret'))).toHaveValue(/^hdws_/);
     expect(await violations(page)).toEqual([]);
 
     await signed.getByRole('button', { name: t('channels:widget.signed.done') }).click();

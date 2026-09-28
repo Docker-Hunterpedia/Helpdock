@@ -9,7 +9,7 @@ import {
   visitorSecretFrom,
 } from './visitor-credential.js';
 
-const SIGNING = 'whsec_test-signing-secret';
+const SIGNING = 'hdws_test-signing-secret';
 const NOW = new Date('2026-09-27T10:00:00.000Z');
 const NOW_S = Math.floor(NOW.getTime() / 1000);
 
@@ -78,7 +78,14 @@ describe('checkSignedIdentity', () => {
 
 describe('issueSigningSecret', () => {
   it('is prefixed and random', () => {
-    expect(issueSigningSecret()).toMatch(/^whsec_[A-Za-z0-9_-]{43}$/);
+    expect(issueSigningSecret()).toMatch(/^hdws_[A-Za-z0-9_-]{43}$/);
     expect(issueSigningSecret()).not.toBe(issueSigningSecret());
+  });
+
+  it('keeps verifying a secret issued with the earlier whsec_ prefix', () => {
+    const legacy = 'whsec_legacy-signing-secret';
+    const identity = signed({ user_id: 'u-1', ts: NOW_S }, legacy);
+
+    expect(checkSignedIdentity(identity, legacy, NOW)).toBe('valid');
   });
 });

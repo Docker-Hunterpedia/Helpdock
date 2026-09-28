@@ -1,5 +1,11 @@
 # @helpdock/api
 
+## 0.3.1
+
+### Patch Changes
+
+- [#140](https://github.com/Docker-Hunterpedia/Helpdock/pull/140) [`a2c7c46`](https://github.com/Docker-Hunterpedia/Helpdock/commit/a2c7c465085f0b8989bf93b6f9abafb72488f1b0) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - New widget signing secrets start with `hdws_` instead of `whsec_`, the prefix Stripe uses for its webhook secrets, so secret scanners no longer report a Helpdock secret as a Stripe key. Secrets generated earlier keep working; replace one only if you want the new prefix.
+
 ## 0.3.0
 
 ### Minor Changes

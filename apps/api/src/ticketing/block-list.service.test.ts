@@ -23,10 +23,12 @@ const fakeSettings = (values: Record<string, string> = {}): Settings =>
 const harness = ({
   settings = fakeSettings({ 'smtp.from': 'Support@Helpdock.com' }),
   domains = ['help.acme.test'],
+  ownAddresses = [],
   brand = defaultBrandSettings(),
 }: {
   readonly settings?: Settings;
   readonly domains?: readonly string[];
+  readonly ownAddresses?: readonly string[];
   readonly brand?: BrandSettings;
 } = {}) => {
   const rows: BlockedSenderRow[] = [];
@@ -70,6 +72,7 @@ const harness = ({
       );
     }),
     brandDomains: vi.fn(async () => [...domains]),
+    ownEmailAddresses: vi.fn(async () => [...ownAddresses]),
     brandSettings: vi.fn(async () => brand),
     updateBrandSettings: vi.fn(async (_tx: DbTransaction, _brand: string, next: BrandSettings) => {
       saved.push(next);
@@ -195,6 +198,19 @@ describe('blocking a sender from a ticket', () => {
       service.blockFromTicket(context, { kind: 'email', value: 'support@helpdock.com' }, TICKET),
     ).rejects.toMatchObject({ reason: 'sender-is-own' });
   });
+
+  it('refuses a configured mailbox or outbound sender and its domain', async () => {
+    const { service, context } = harness({
+      ownAddresses: ['inbound@brand.test', 'billing@outbound.test'],
+    });
+
+    await expect(
+      service.create(context, { kind: 'email', value: 'inbound@brand.test' }),
+    ).rejects.toMatchObject({ reason: 'sender-is-own' });
+    await expect(
+      service.create(context, { kind: 'domain', value: 'outbound.test' }),
+    ).rejects.toMatchObject({ reason: 'sender-is-own' });
+  });
 });
 
 describe('the rest of the tab', () => {
@@ -251,6 +267,8 @@ describe('the rest of the tab', () => {
     expect(
       await service.isListed(tx, BRAND, { kind: 'email', value: 'spam@promo-deals.biz' }),
     ).toBe(true);
-    expect(await service.isOwn(tx, { kind: 'email', value: 'lina@helpdock.com' })).toBe(true);
+    expect(await service.isOwn(tx, BRAND, { kind: 'email', value: 'lina@helpdock.com' })).toBe(
+      true,
+    );
   });
 });

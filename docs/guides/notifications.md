@@ -51,7 +51,8 @@ its ticket.
 
 A row holds ids, never content: the subject and names are read when the panel
 is, under the reader's own department scope, so a ticket they can no longer see
-drops out of their panel.
+drops out of their panel. The nightly retention job deletes rows older than 30
+days in bounded batches for each brand.
 
 New rows arrive as a `notification:created` frame on the person's own
 `user:<id>` room (see [realtime](realtime.md)). The frame carries ids only; the
@@ -155,5 +156,3 @@ module owns each event ([`packages/jobs`](../../packages/jobs/README.md#handling
 
 - The first-run wizard does not generate the VAPID pair yet, as ADR 0002
   foresees; an operator sets it from the environment.
-- Notification rows are not purged by the nightly retention job. The panel shows
-  30 days; older rows stay until their ticket is deleted.

@@ -17,7 +17,8 @@ retention card. Only an Admin sees the page and only an Admin may change it
 | AI call logs | **90 days** | 1 to 3650 | Stored only. `ai_calls` arrives with M7, which adds the purge |
 | Help center search log | **180 days** | 1 to 3650 | Hard-deletes the search log (M5-05) and, in the same window, the article view rows that dedupe view counts (M5-08). The count is the search log's |
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
-| Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Stored only. The widget's visitors (`widget_visitors`, M4) are not purged yet |
+| Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Hard-deletes inactive `widget_visitors` only when no ticket references them; a visitor with a conversation keeps its session |
+| Notification rows | **30 days** | fixed | Hard-deletes rows older than the bell's display window |
 | Outbox rows and job receipts | 7 days | fixed | Hard delete, 7 days after publish or completion |
 
 A brand that never saves the form is kept under the defaults. The form sends
@@ -47,7 +48,8 @@ forever, or a table that does not exist yet.
 
 ```
 03:00 UTC  maintenance.retention.schedule   one job per brand, then job_receipts
-           maintenance.retention (brand)    closed, spam, search log and views, audit log, outbox → audit row
+           maintenance.retention (brand)    closed, spam, search log and views, audit log,
+                                            idle visitors, notifications, outbox → audit row
 ```
 
 The worker registers the schedule on every boot, so a Redis that lost it gets
@@ -101,10 +103,7 @@ Both answer `{ settings, preview, lastRun }`, as `retentionOverviewSchema` in
 
 ## Known gaps
 
-- AI call logs and visitor sessions are stored but not purged yet. The
-  milestone that purges each one adds its cutoff to
-  `apps/api/src/retention/retention-rules.ts` and its purge to
-  `retention.job.ts`, as M5-05 did for the help center search log.
+- AI call logs are stored but not purged yet. M7 adds their table and purge.
 - Composer uploads that were never sent (`message_id` still null) are not swept.
   They are deleted with their ticket.
 - Brand deletion (the other half of the Danger zone) is its own deliverable.

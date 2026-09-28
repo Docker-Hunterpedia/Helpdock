@@ -13,6 +13,7 @@ import {
   type DbTransaction,
   departments,
   jobReceipts,
+  notifications,
   outbox,
   retentionSettings,
   seedBrandStatuses,
@@ -22,6 +23,7 @@ import {
   userBrandRoles,
   users,
   uuidv7,
+  widgetVisitors,
   withSystem,
 } from '@helpdock/db';
 import { type MaintenanceRetentionPayload, silentLogger } from '@helpdock/jobs';
@@ -396,6 +398,7 @@ describe.skipIf(!hasDocker)('data retention', () => {
     for (const brand of [brandA, brandB]) {
       await withSystem(db(), brand.id, async (tx) => {
         await tx.delete(tickets);
+        await tx.delete(widgetVisitors);
         await tx.delete(retentionSettings);
       });
     }
@@ -453,6 +456,150 @@ describe.skipIf(!hasDocker)('data retention', () => {
   // ----------------------------------------------------------------- the purge
 
   describe('the nightly purge', () => {
+    it('purges only inactive visitors with no conversation, within the running brand', async () => {
+      const expired = uuidv7();
+      const active = uuidv7();
+      const withConversation = uuidv7();
+      const otherBrand = uuidv7();
+      await withSystem(db(), brandA.id, (tx) =>
+        tx.insert(widgetVisitors).values([
+          {
+            id: expired,
+            brandId: brandA.id,
+            secretHash: `test-${expired}`,
+            lastSeenAt: daysAgo(31),
+          },
+          { id: active, brandId: brandA.id, secretHash: `test-${active}`, lastSeenAt: daysAgo(1) },
+          {
+            id: withConversation,
+            brandId: brandA.id,
+            secretHash: `test-${withConversation}`,
+            lastSeenAt: daysAgo(31),
+          },
+        ]),
+      );
+      await withSystem(db(), brandB.id, (tx) =>
+        tx.insert(widgetVisitors).values({
+          id: otherBrand,
+          brandId: brandB.id,
+          secretHash: `test-${otherBrand}`,
+          lastSeenAt: daysAgo(31),
+        }),
+      );
+      const conversation = await seedTicket(brandA, { status: 'open' });
+      await withSystem(db(), brandA.id, (tx) =>
+        tx
+          .update(tickets)
+          .set({ visitorId: withConversation })
+          .where(eq(tickets.id, conversation.id)),
+      );
+
+      const overview = await call<RetentionOverview>(
+        'GET',
+        `/api/brands/${brandA.id}/retention`,
+        adminToken,
+      );
+      expect(overview.body.preview.visitorSessions).toBe(1);
+
+      const counts = await runBrandRetention({
+        db: db(),
+        brandId: brandA.id,
+        jobId: 'job-visitors',
+        batchSize: 1,
+      });
+      expect(counts.visitorSessions).toBe(1);
+      const remainingA = await withSystem(db(), brandA.id, (tx) =>
+        tx.select({ id: widgetVisitors.id }).from(widgetVisitors),
+      );
+      expect(remainingA.map((row) => row.id).sort()).toEqual([active, withConversation].sort());
+      expect(
+        await withSystem(db(), brandB.id, (tx) =>
+          tx.select({ id: widgetVisitors.id }).from(widgetVisitors),
+        ),
+      ).toEqual([{ id: otherBrand }]);
+      expect(
+        (await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-visitors-again' }))
+          .visitorSessions,
+      ).toBe(0);
+    });
+
+    it('purges notifications older than the panel window in bounded brand-scoped batches', async () => {
+      const ticketA = await seedTicket(brandA, { status: 'open' });
+      const ticketB = await seedTicket(brandB, { status: 'open' });
+      const old = uuidv7();
+      const recent = uuidv7();
+      const otherBrand = uuidv7();
+      await withSystem(db(), brandA.id, (tx) =>
+        tx.insert(notifications).values([
+          {
+            id: old,
+            brandId: brandA.id,
+            userId: seeded.userId,
+            ticketId: ticketA.id,
+            kind: 'assigned',
+            sourceEventId: uuidv7(),
+            inApp: true,
+            email: false,
+            push: false,
+            createdAt: daysAgo(31),
+          },
+          {
+            id: recent,
+            brandId: brandA.id,
+            userId: seeded.userId,
+            ticketId: ticketA.id,
+            kind: 'assigned',
+            sourceEventId: uuidv7(),
+            inApp: true,
+            email: false,
+            push: false,
+            createdAt: daysAgo(1),
+          },
+        ]),
+      );
+      await withSystem(db(), brandB.id, (tx) =>
+        tx.insert(notifications).values({
+          id: otherBrand,
+          brandId: brandB.id,
+          userId: seeded.userId,
+          ticketId: ticketB.id,
+          kind: 'assigned',
+          sourceEventId: uuidv7(),
+          inApp: true,
+          email: false,
+          push: false,
+          createdAt: daysAgo(31),
+        }),
+      );
+
+      const counts = await runBrandRetention({
+        db: db(),
+        brandId: brandA.id,
+        jobId: 'job-notifications',
+        batchSize: 1,
+      });
+      expect(counts.notifications).toBe(1);
+      expect(
+        await withSystem(db(), brandA.id, (tx) =>
+          tx.select({ id: notifications.id }).from(notifications),
+        ),
+      ).toEqual([{ id: recent }]);
+      expect(
+        await withSystem(db(), brandB.id, (tx) =>
+          tx.select({ id: notifications.id }).from(notifications),
+        ),
+      ).toEqual([{ id: otherBrand }]);
+      expect(
+        (
+          await runBrandRetention({
+            db: db(),
+            brandId: brandA.id,
+            jobId: 'job-notifications-again',
+          })
+        ).notifications,
+      ).toBe(0);
+    });
+
     it('removes expired closed and spam tickets with their messages, rows and objects, and nothing else', async () => {
       await setClosedWindow(brandA.id, 30);
       const expired = await seedTicket(brandA, {

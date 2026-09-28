@@ -91,6 +91,20 @@ export const runBrandRetention = async ({
     () => inBrand((tx) => repository.purgeAuditBatch(tx, brandId, cutoffs.auditLog, batchSize)),
     batchSize,
   );
+  counts.visitorSessions = await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeVisitorSessionsBatch(tx, brandId, cutoffs.visitorSessions, batchSize),
+      ),
+    batchSize,
+  );
+  counts.notifications = await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeNotificationsBatch(tx, brandId, cutoffs.notifications, batchSize),
+      ),
+    batchSize,
+  );
   counts.outbox = await drainInBatches(
     () => inBrand((tx) => purgePublishedOutbox(tx, { now, limit: batchSize })),
     batchSize,

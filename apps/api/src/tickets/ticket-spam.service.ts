@@ -55,7 +55,7 @@ export class TicketSpamService {
     return {
       sender,
       offered: offerBlockSender,
-      blockable: !(await this.#blockList.isOwn(tx, sender)),
+      blockable: !(await this.#blockList.isOwn(tx, brandId, sender)),
       blocked: await this.#blockList.isListed(tx, brandId, sender),
     };
   }

@@ -17,6 +17,11 @@ export default defineConfig<{ pageLocale: 'en' | 'ar' }>({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : [['list']],
+  // Text baselines (the RTL snapshot), one per name on every platform.
+  snapshotPathTemplate: '{testDir}/__snapshots__/{testFileName}/{arg}{ext}',
+  expect: {
+    toMatchAriaSnapshot: { pathTemplate: '{testDir}/__snapshots__/{testFileName}/{arg}{ext}' },
+  },
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',

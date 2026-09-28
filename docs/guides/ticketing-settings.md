@@ -667,12 +667,14 @@ reaches: `PATCH /api/brands/:brandId/ticketing/reply-behaviour`. See
 
 An install admin adds a brand with `POST /api/install/brands`. It is the
 first-run wizard's brand step minus the parts that only make sense once, and it
-does four things in one transaction:
+does these things in one transaction:
 
 1. creates the brand, whose insert trigger creates its ticket sequence;
 2. gives whoever asked an `admin` role in it, so it is reachable;
 3. creates one department, `General` unless the request names another;
-4. writes a `brand.created` audit row under the install scope, and a second
+4. writes the six built-in statuses and the default views, as the wizard does
+   for the first brand;
+5. writes a `brand.created` audit row under the install scope, and a second
    inside the new brand, so its own log is not empty at birth.
 
 The prefix is unique across the install and is refused as a rejected field

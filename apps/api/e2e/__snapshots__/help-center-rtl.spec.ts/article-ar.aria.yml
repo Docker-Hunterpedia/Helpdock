@@ -1,0 +1,22 @@
+- main:
+  - navigation "مسار التنقل":
+    - list:
+      - listitem:
+        - link "المساعدة":
+          - /url: /hc/0192c3f0-1a2b-7c3d-8e4f-0000000000b1/ar
+      - listitem:
+        - link "الإرجاع والاسترداد":
+          - /url: /hc/0192c3f0-1a2b-7c3d-8e4f-0000000000b1/ar/categories/returns-and-refunds
+      - listitem:
+        - link "المبالغ المستردة":
+          - /url: /hc/0192c3f0-1a2b-7c3d-8e4f-0000000000b1/ar/sections/refunds
+      - listitem: مواعيد استرداد المبلغ
+  - article:
+    - heading "مواعيد استرداد المبلغ" [level=1]
+    - text: /آخر تحديث \d+ سبتمبر \d+ قراءة في دقيقة/
+    - paragraph: بعد أن نستلم المنتج المُرجَع، نُصدر المبلغ المسترد.
+    - code: "/Refund reference: RF-\\d+-\\d+/"
+  - group "هل كانت هذه المقالة مفيدة؟":
+    - text: ""
+    - button "نعم"
+    - button "لا"

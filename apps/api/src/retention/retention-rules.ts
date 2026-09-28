@@ -60,8 +60,9 @@ export const rowValuesFrom = (settings: RetentionSettings): RetentionWindowColum
  * for "never", which is §11's default and means the category is skipped
  * entirely rather than purged with an infinitely old cutoff.
  *
- * AI calls and visitor sessions are absent: their purges arrive with M7 and
- * M4. Their windows are stored so the form is whole, and the milestone that
+ * AI calls and visitor sessions are absent. M7 adds the AI calls' purge; the
+ * widget's visitors (`widget_visitors`, M4) are not purged yet, an accepted
+ * gap of M4. Their windows are stored so the form is whole, and whatever
  * purges each adds its cutoff here. The search log's (M5-05) covers the help
  * center's article views too (M5-08), which are kept exactly as long.
  */

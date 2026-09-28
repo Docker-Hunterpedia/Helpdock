@@ -4,6 +4,7 @@ import type { EmailMessage } from '@helpdock/channels';
 import { createKeyring, type Env } from '@helpdock/config';
 import {
   auditLog,
+  BUILT_IN_TICKET_STATUSES,
   brands,
   brandTicketSequenceName,
   createDb,
@@ -886,6 +887,15 @@ describe.skipIf(!hasDocker)('brands, departments and teams', () => {
           .from(userBrandRoles),
       );
       expect(role).toEqual([{ role: 'admin', userId: seeded.userId }]);
+
+      // A brand with no statuses is one no ticket can be filed in (DOMAIN-RULES
+      // §2.1): the widget, the web form and email would all refuse it.
+      const statuses = await withSystem(runtime.db, created.id, (tx) =>
+        tx.select({ systemKey: ticketStatuses.systemKey }).from(ticketStatuses),
+      );
+      expect(statuses.map((row) => row.systemKey).sort()).toEqual(
+        BUILT_IN_TICKET_STATUSES.map((status) => status.key).sort(),
+      );
 
       // The token in hand was minted before this brand existed, so it does not
       // carry a role in it — DOMAIN-RULES §1.6's "at most ten minutes" lag,

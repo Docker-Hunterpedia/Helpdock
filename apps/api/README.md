@@ -1,7 +1,7 @@
 # @helpdock/api
 
 The NestJS application. One image, two roles: `APP_ROLE=api` serves HTTP,
-WebSockets and (from M5) the server-rendered help center; `APP_ROLE=worker`
+WebSockets, the widget's API and the server-rendered help center and web form; `APP_ROLE=worker`
 drains queues. Specs: [ARCHITECTURE
 §6](../../docs/planning/ARCHITECTURE.md#6-request-lifecycle--tenancy) for the
 request lifecycle and [DOMAIN-RULES

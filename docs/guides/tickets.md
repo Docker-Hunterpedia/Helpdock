@@ -1415,8 +1415,7 @@ pnpm --filter @helpdock/api perf:tickets
 
 **What differs from §14**, so the numbers are read for what they are: the host
 is whatever runs the command, not a dedicated 2 vCPU / 4 GB machine; the load
-generator shares it; there is no worker and no widget traffic (the widget is
-M4); and there are no articles or chunks. On a shared or busy machine the tail
+generator shares it; there is no worker and no widget traffic; and there are no articles or chunks. On a shared or busy machine the tail
 measures the machine, so run it on an idle one.
 
 ### What it measured last (2026-09-25)
@@ -1559,7 +1558,7 @@ set only when that person is still active in the brand and wrote a public reply
 on the ticket, so the page names nobody the customer has not already heard
 from. That keeps it inside §4.6's "nothing beyond their purpose". An api key, a
 rule, or a staff member who never replied is not named. A spent link sends no
-name. "Browse the help center" waits for M5.
+name. "Browse the help center" is not drawn yet.
 
 **The preview.** Ticketing › Feedback › **Open the rating page as a customer
 sees it** opens `/csat/preview?lang=<admin's language>` in a new tab. That is

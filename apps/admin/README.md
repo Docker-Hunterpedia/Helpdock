@@ -578,6 +578,16 @@ over two databases:
 - **`api`** also drives one ticket end to end: typed in, replied to, noted and
   closed, then reloaded — which is the `seq`, the note's `kind` and the
   transition hook being the api's rather than the browser's.
+- **`api`** also drives the widget (M4) on customer pages of their own origins:
+  a conversation with an agent, a send cut off and submitted twice
+  (`widget-live`), two brands on two origins in their own accents
+  (`widget-brands`), a send the api dies under and the restart after it
+  (`widget-restart`, which kills and restarts an api replica of its own on
+  `HD_E2E_REPLICA_API_PORT`, 3097 by default), and a non-allowed origin
+  refused (`widget`). These four share one signed-in admin page, the `admin`
+  worker fixture of `e2e/api/widget-helpers.ts`: the suite signs in from one
+  address, and the api allows twenty sign-in attempts per address in fifteen
+  minutes.
 - **`setup`** drives the first-run wizard against a second install that nobody
   has set up, straight at an api that serves `dist/` itself. It has to be a
   second install, because "fresh" means the `users` table is empty and the

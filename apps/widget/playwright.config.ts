@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 5275;
+const PORT = Number(process.env.HD_WIDGET_E2E_PORT ?? 5275);
 const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
 const BASE_URL = externalBaseUrl ?? `http://localhost:${PORT}`;
 
@@ -15,6 +15,11 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list'], ['html', { open: 'never' }]] : [['list']],
+  // Text baselines (the RTL snapshot), one per name on every platform.
+  snapshotPathTemplate: '{testDir}/__snapshots__/{testFileName}/{arg}{ext}',
+  expect: {
+    toMatchAriaSnapshot: { pathTemplate: '{testDir}/__snapshots__/{testFileName}/{arg}{ext}' },
+  },
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',

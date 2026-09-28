@@ -1,0 +1,11 @@
+html: lang=ar dir=rtl
+header brand: column=right
+header language link: column=left dir=ltr
+section nav: column=right
+main: column=middle
+aside: column=left
+title: direction=rtl starts=right
+body paragraph: direction=rtl starts=right
+code block: direction=ltr
+breadcrumb chevrons: mirrored mirrored mirrored
+feedback buttons: yes right of no

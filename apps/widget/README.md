@@ -125,7 +125,9 @@ pnpm --filter @helpdock/widget e2e     # Playwright on the harness, en and ar, w
 The api serves the build at `/widget.js`, `/chunks/:file` and
 `/widget-fonts/:file` from `WIDGET_DIST_DIR` (the image puts it at
 `/app/widget`). The end-to-end test against a real api, with a customer page
-on its own origin, is `apps/admin/e2e/api/widget-live.api.spec.ts`
+on its own origin, is `apps/admin/e2e/api/widget-live.api.spec.ts`, with
+`widget-brands` (two brands on two origins), `widget-restart` (an api restart
+mid-send) and `widget` (a non-allowed origin) beside it
 (`pnpm --filter @helpdock/admin e2e:api`, after `pnpm build`).
 
 The harness (`harness/`) is an empty host page with the widget on the mock

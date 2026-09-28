@@ -1,15 +1,9 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { type BrowserContext, expect, type Page, test } from '@playwright/test';
-import { generate } from 'otplib';
+import type { BrowserContext, Page } from '@playwright/test';
 import { strings } from '../strings.js';
-import {
-  ACCOUNT_EMAIL_ENV,
-  ACCOUNT_PASSWORD_ENV,
-  E2E_API_ORIGIN,
-  SKIP_ENV,
-  TOTP_SECRET_ENV,
-} from './install.js';
+import { E2E_API_ORIGIN, SKIP_ENV } from './install.js';
+import { expect, openAdmin, test } from './widget-helpers.js';
 
 /**
  * The widget end to end against the real api (M4-01, M4-04): the built
@@ -62,20 +56,6 @@ test.afterAll(async () => {
   await new Promise((resolve) => site.close(resolve));
 });
 
-const signInAsAdmin = async (page: Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
 /** The Channels › Widget tag for this install, with the site's origin allowed. */
 const embedFor = async (page: Page, origin: string): Promise<string> => {
   await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
@@ -116,19 +96,18 @@ test.describe('the widget against the real api', () => {
   let visitor: Page;
   let ticketId = '';
 
-  test.beforeAll(async ({ browser }) => {
-    admin = await browser.newPage();
+  test.beforeAll(async ({ browser, admin: signedIn }) => {
+    admin = signedIn;
     visitorContext = await browser.newContext();
     visitor = await visitorContext.newPage();
   });
 
   test.afterAll(async () => {
-    await admin.close();
     await visitorContext.close();
   });
 
   test('a visitor writes from a customer page, the agent answers, the visitor sees it', async () => {
-    await signInAsAdmin(admin);
+    await openAdmin(admin);
     embedTag = await embedFor(admin, siteOrigin);
     expect(embedTag).toMatch(
       /^<script type="module" src="[^"]+" data-brand="[0-9a-f-]{36}"><\/script>$/,

@@ -63,6 +63,11 @@ export const INVITE_TOKEN_ENV = 'HD_E2E_INVITE_TOKEN';
 export const INVITEE_EMAIL = 'invitee@helpdock.test';
 /** Set when Docker is missing, so the specs skip with a reason instead of failing. */
 export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
+/**
+ * The seeded api's environment, as JSON, so a spec can start a replica of it
+ * against the same Postgres and Redis ({@link startApiReplica}).
+ */
+const API_ENV_ENV = 'HD_E2E_API_ENV';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(here, '../../../api');
@@ -269,6 +274,57 @@ export const startInstall = async (): Promise<RunningInstall> => {
   process.env[ACCOUNT_PASSWORD_ENV] = seeded.password;
   process.env[TOTP_SECRET_ENV] = seeded.totpSecret;
   process.env[INVITE_TOKEN_ENV] = seeded.inviteToken;
+  process.env[API_ENV_ENV] = JSON.stringify(env);
 
   return { stop: () => stopEverything('SIGTERM') };
+};
+
+export interface ApiReplica {
+  readonly origin: string;
+  /** Ends the process at once, as a crash or `docker kill` would, and waits for it to exit. */
+  kill(): Promise<void>;
+}
+
+/**
+ * A second api process of the seeded install, on a port of its own: the same
+ * database, Redis and master key, so it serves the same brands and visitors,
+ * and receives the worker's events through the same Redis channel as any
+ * replica (DOMAIN-RULES §7).
+ *
+ * It exists for the one spec that has to stop an api under a live widget.
+ * Stopping the api every other spec uses would fail whichever ran next;
+ * stopping a replica only this spec talks to fails nothing.
+ */
+export const startApiReplica = async (port: number): Promise<ApiReplica> => {
+  const seededEnv = process.env[API_ENV_ENV];
+  if (seededEnv === undefined) {
+    throw new Error(`${API_ENV_ENV} is not set: the global setup did not start the install.`);
+  }
+  const origin = `http://localhost:${String(port)}`;
+  const child = spawn(process.execPath, [path.join(apiRoot, 'dist/main.js')], {
+    cwd: apiRoot,
+    env: {
+      ...process.env,
+      ...(JSON.parse(seededEnv) as NodeJS.ProcessEnv),
+      PORT: String(port),
+    },
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+
+  const kill = async (): Promise<void> => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+    await exited;
+  };
+
+  try {
+    await waitForHealth(origin);
+  } catch (error) {
+    await kill();
+    throw error;
+  }
+
+  return { origin, kill };
 };

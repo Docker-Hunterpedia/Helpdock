@@ -1,0 +1,16 @@
+- region "دردشة الدعم":
+  - heading "دعم Helpdock" [level=2]
+  - text: نرد عادةً خلال دقائق
+  - button "تصغير الدردشة"
+  - text: Lina وKarim وSara متصلون الآن
+  - log "الرسائل":
+    - list:
+      - listitem: اليوم
+      - listitem: Helpdock مرحباً بك في دعم Helpdock. اسألنا عن الطلبات أو الإرجاع أو حسابك وسيجيبك أحد أعضاء الفريق هنا.
+  - button "إرفاق ملف"
+  - text: الرسالة
+  - textbox "الرسالة":
+    - /placeholder: اكتب رسالة…
+  - button "تسجيل رسالة صوتية"
+  - button "إرسال"
+  - text: مدعوم من Helpdock

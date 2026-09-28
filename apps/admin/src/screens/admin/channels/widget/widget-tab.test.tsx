@@ -180,7 +180,7 @@ describe('Channels › Widget', () => {
     await user.click(within(signed).getByRole('button', { name: 'Replace' }));
 
     const fresh = await within(signed).findByLabelText('New signing secret');
-    expect(fresh).toHaveValue('whsec_bW9jay1zaWduaW5nLXNlY3JldC1zaG93bi1vbmNlLXBsZWFzZQ');
+    expect(fresh).toHaveValue('hdws_mock-signing-secret-shown-once');
     expect(within(signed).getByRole('status')).toHaveTextContent('It will not be shown again.');
 
     await user.click(within(signed).getByRole('button', { name: 'I have copied it' }));

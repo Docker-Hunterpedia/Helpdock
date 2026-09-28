@@ -144,6 +144,8 @@ signed identity.
 When a brand turns on **Signed identity**, the host site can tell Helpdock who
 the signed-in user is. The host's **server** signs the user's details with the
 brand's signing secret. The admin shows the secret once, when it is generated.
+It starts with `hdws_`; use the whole string, prefix included, as the HMAC key.
+Secrets generated before 0.3.1 start with `whsec_` and keep working.
 
 1. Build the payload (`signedIdentityPayloadSchema`):
 

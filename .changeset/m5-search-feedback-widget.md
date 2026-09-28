@@ -1,5 +1,0 @@
----
-'@helpdock/api': minor
----
-
-Help center search, feedback and the widget's help center (M5-05, M5-08, M5-10). Search matches English and Arabic in each language's own stemming, weights titles over bodies, forgives typos in titles, and never lets a visitor match an internal, draft or archived article: the filter runs in SQL before ranking, and the index follows every publish, unpublish and visibility change within seconds, with an hourly reconcile behind it. Every search is logged with its hit count for the new Help center › Insights tab, which shows top searches, searches with no results (with "Write article") and each article's views and "Was this helpful?" answers over 7, 30 or 90 days; the log follows the brand's search log retention. Views count once per visitor per article per day, and a vote once per visitor per article version. The chat widget's help center mode and its "Articles that might help" strip now search and open real public articles, the config lists the most viewed ones, and "Still need help?" from an article — `Helpdock('open', { article })` in the widget, `?article=` on the web form — shows agents which article the customer came from.

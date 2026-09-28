@@ -178,10 +178,16 @@ test.describe('the editor', () => {
     await signIn(page, locale);
     await openHelpCenter(page, locale);
     await page.getByRole('link', { name: 'How we calculate restocking fees' }).first().click();
+    // The article loads after the route opens; a status picked before it lands is reset by it.
+    await expect(page.getByLabel(t('helpCenter:editor.title'), { exact: true })).toHaveValue(
+      'How we calculate restocking fees',
+    );
 
     await page.getByRole('combobox', { name: t('helpCenter:panel.status.heading') }).click();
     await page.getByRole('option', { name: t('helpCenter:status.scheduled') }).click();
-    await page.getByLabel(t('helpCenter:panel.status.date')).fill('2020-01-01');
+    const date = page.getByLabel(t('helpCenter:panel.status.date'));
+    await expect(date).toBeVisible();
+    await date.fill('2020-01-01');
     await page.getByRole('button', { name: t('helpCenter:editor.schedule') }).click();
 
     await expect(page.getByRole('alert')).toHaveText(t('helpCenter:refusals.schedule-in-past'));

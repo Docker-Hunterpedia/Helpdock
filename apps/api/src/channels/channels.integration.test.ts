@@ -896,8 +896,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       });
       expect(allowed.body.outcome).toBe('accepted');
 
-      const blocked = unique('blocked');
-      await call('POST', `${brandPath()}/blocked-senders`, ada, { kind: 'email', value: blocked });
+      const blocked = 'blocked@promo-deals.biz';
+      const block = await call('POST', `${brandPath()}/blocked-senders`, ada, {
+        kind: 'email',
+        value: blocked,
+      });
+      expect(block.status).toBe(201);
       expect(
         (
           await parse({

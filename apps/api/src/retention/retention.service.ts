@@ -75,7 +75,7 @@ export class RetentionService {
   /**
    * "Next purge" per row. Counted with the same conditions the job deletes by
    * (`retention.repository.ts`), so the number on the form is the number that
-   * goes. The two categories whose purge has not arrived yet are null.
+   * goes. AI calls remain null until M7 creates their table.
    */
   async #preview(
     tx: DbTransaction,
@@ -93,7 +93,11 @@ export class RetentionService {
       aiCalls: null,
       searchLog: await this.#repository.countSearchLog(tx, brandId, cutoffs.searchLog),
       auditLog: await this.#repository.countAuditLog(tx, brandId, cutoffs.auditLog),
-      visitorSessions: null,
+      visitorSessions: await this.#repository.countVisitorSessions(
+        tx,
+        brandId,
+        cutoffs.visitorSessions,
+      ),
     };
   }
 }

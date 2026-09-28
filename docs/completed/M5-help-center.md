@@ -93,8 +93,7 @@ integration tests run against real Postgres and Redis (Testcontainers) in CI's
       block staying left to right. The widget has the same kind of test:
       `apps/widget/e2e/rtl-snapshot.spec.ts` › "the Arabic chat window matches
       its RTL snapshot". The baselines are text, not pixels, so they match on
-      any platform. **Neither Playwright project runs in CI yet**; see the
-      gaps.
+      any platform. Both Playwright projects run in CI since #139.
 - [x] **An internal article never appears in the sitemap, public search, or a
       `public` cached response, tested after toggling an article from public to
       internal.** `help-center-site.integration.test.ts` › "M5 exit criteria,
@@ -153,7 +152,7 @@ Written down and carried forward. None of them blocks M6, M7 or M8.
 | **Only IBM Plex ships** | Noto Sans and Vazirmatn fall back to the system stack until their files are added to `packages/ui/fonts` (`BRAND_FONTS`). | [Theme and site settings](#m5-06-theme-and-site-settings) |
 | **SVG logos are refused** | Rasterising an uploaded SVG lets it reference other files. The pipeline takes PNG, JPEG, WebP and GIF. | [Theme and site settings](#m5-06-theme-and-site-settings) |
 | **`hc_media` is not purged when a brand is deleted** | Retention (M1-14) knows ticket attachments only, so a deleted brand's article images, logo and favicon stay in the bucket. | This doc |
-| **The api's page Playwright project is not in CI** | `pnpm --filter @helpdock/api e2e` covers the help center and web form pages in both languages with axe, and the Arabic RTL snapshot. It runs locally only. A maintainer has to add the workflow step; agents do not edit `.github/`. The widget's suite is in the same position ([M4](M4-widget-and-realtime.md#gaps-and-follow-ups)). | [development guide](../guides/development.md#browser-tests) |
+| ~~The api's page Playwright project is not in CI~~ | Closed in #139: the admin `e2e` job runs `pnpm --filter @helpdock/api e2e` on its first shard. | [CI workflow](../../.github/workflows/ci.yml) |
 | **No real TLS certificate is tested** | See the first exit criterion. It needs the registered domain listed under the PRD's external dependencies. | [PRD, external dependencies](../planning/PRD.md#external-dependencies) |
 | Comments are counted, not listed, on Insights | The Articles table shows "n comments" as text. The artboard links it to a list that has no artboard yet. | This doc |
 | Insights reads the search log live | There is no daily rollup. The 180-day window and the brand limits keep it cheap enough for now. | This doc |

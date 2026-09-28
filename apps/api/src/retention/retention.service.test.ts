@@ -49,6 +49,7 @@ const fakes = () => {
     },
     countAuditLog: async () => 0,
     countSearchLog: async () => 7,
+    countVisitorSessions: async () => 3,
   } as unknown as RetentionRepository;
   const tx = {
     insert: () => ({
@@ -72,7 +73,7 @@ describe('RetentionService.overview', () => {
       aiCalls: null,
       searchLog: 7,
       auditLog: 0,
-      visitorSessions: null,
+      visitorSessions: 3,
     });
     expect(recorded.counted.map((entry) => entry.kind)).toEqual(['spam']);
     expect(overview.lastRun).toBeNull();

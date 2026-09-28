@@ -10,6 +10,8 @@ import {
   type Db,
   type DbHandle,
   departments,
+  emailOutboundSettings,
+  mailboxes,
   outbox,
   ticketActivity,
   userBrandRoles,
@@ -442,6 +444,43 @@ describe.skipIf(!hasDocker)('spam and the sender block list', () => {
 
       expect(await outboxEventsFor(ticket.id)).toEqual(['ticket.created', 'ticket.spam']);
     });
+  });
+
+  it('protects configured inbound and outbound addresses from the block list', async () => {
+    await withSystem(runtime.db, seeded.brandId, async (tx) => {
+      await tx.insert(mailboxes).values({
+        brandId: seeded.brandId,
+        address: 'mailbox@own-mail.test',
+        displayName: 'Mailbox',
+        departmentId: support,
+        method: 'inbound_parse',
+      });
+      await tx.insert(emailOutboundSettings).values({
+        brandId: seeded.brandId,
+        defaultFromAddress: 'default@own-default.test',
+        departmentSenders: [
+          {
+            departmentId: billing,
+            fromName: 'Billing',
+            fromAddress: 'billing@own-billing.test',
+            replyTo: null,
+          },
+        ],
+      });
+    });
+
+    for (const [kind, value] of [
+      ['email', 'mailbox@own-mail.test'],
+      ['email', 'default@own-default.test'],
+      ['domain', 'own-billing.test'],
+    ] as const) {
+      const refused = await call<Refusal>('POST', `${brandPath()}/blocked-senders`, ada, {
+        kind,
+        value,
+      });
+      expect(refused.status).toBe(409);
+      expect(refused.body.error.ticketing?.reason).toBe('sender-is-own');
+    }
   });
 
   describe('"Not spam"', () => {

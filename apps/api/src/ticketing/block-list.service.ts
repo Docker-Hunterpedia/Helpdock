@@ -25,9 +25,8 @@ import type { TicketingContext } from './ticketing-context.js';
  * for "Mark as spam", which reaches {@link blockFromTicket} and nothing else.
  *
  * **What a brand sends from** is read at the moment it matters, not cached:
- * the install's `smtp.from` address and its domain, and every hostname in
- * `brand_domains`. M2's per-brand mailboxes join the list when they exist
- * (`docs/guides/ticketing-settings.md` records the gap).
+ * the install's `smtp.from` address, the brand's mailboxes and outgoing
+ * senders, and every hostname in `brand_domains`.
  */
 export class BlockListService {
   readonly #repository: BlockListRepository;
@@ -50,7 +49,7 @@ export class BlockListService {
     request: BlockedSenderCreateRequest,
   ): Promise<BlockedSender> {
     const key = await this.#normalise(request.kind, request.value);
-    await this.#refuseOwn(context.tx, key);
+    await this.#refuseOwn(context.tx, context.brandId, key);
 
     const created = await this.#insert(context, key, null);
     if (created === undefined) {
@@ -71,7 +70,7 @@ export class BlockListService {
     ticketId: string,
   ): Promise<string> {
     const key = await this.#normalise(sender.kind, sender.value);
-    await this.#refuseOwn(context.tx, key);
+    await this.#refuseOwn(context.tx, context.brandId, key);
 
     const created = await this.#insert(context, key, ticketId);
     if (created !== undefined) {
@@ -108,8 +107,8 @@ export class BlockListService {
   }
 
   /** Whether blocking this sender would block the brand's own mail. */
-  async isOwn(tx: DbTransaction, sender: SenderKey): Promise<boolean> {
-    return isOwnSender(sender, await this.#ownSenders(tx));
+  async isOwn(tx: DbTransaction, brandId: string, sender: SenderKey): Promise<boolean> {
+    return isOwnSender(sender, await this.#ownSenders(tx, brandId));
   }
 
   /** Whether this exact sender is on the list already. */
@@ -167,19 +166,21 @@ export class BlockListService {
     return { kind, value: result.value };
   }
 
-  async #refuseOwn(tx: DbTransaction, key: SenderKey): Promise<void> {
-    if (await this.isOwn(tx, key)) {
+  async #refuseOwn(tx: DbTransaction, brandId: string, key: SenderKey): Promise<void> {
+    if (await this.isOwn(tx, brandId, key)) {
       throw new TicketingFailure('sender-is-own');
     }
   }
 
-  async #ownSenders(tx: DbTransaction): Promise<OwnSenders> {
+  async #ownSenders(tx: DbTransaction, brandId: string): Promise<OwnSenders> {
     const from = normaliseEmail(await this.#settings.get('smtp.from'));
-    const hostnames = await this.#repository.brandDomains(tx);
+    const [hostnames, configured] = await Promise.all([
+      this.#repository.brandDomains(tx, brandId),
+      this.#repository.ownEmailAddresses(tx, brandId),
+    ]);
+    const addresses = [...(from.ok ? [from.value] : []), ...configured];
 
-    return from.ok
-      ? { addresses: [from.value], domains: [domainOfAddress(from.value), ...hostnames] }
-      : { addresses: [], domains: hostnames };
+    return { addresses, domains: [...hostnames, ...addresses.map(domainOfAddress)] };
   }
 
   async #insert(

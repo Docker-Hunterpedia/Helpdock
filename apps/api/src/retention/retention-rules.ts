@@ -60,10 +60,7 @@ export const rowValuesFrom = (settings: RetentionSettings): RetentionWindowColum
  * for "never", which is §11's default and means the category is skipped
  * entirely rather than purged with an infinitely old cutoff.
  *
- * AI calls and visitor sessions are absent. M7 adds the AI calls' purge; the
- * widget's visitors (`widget_visitors`, M4) are not purged yet, an accepted
- * gap of M4. Their windows are stored so the form is whole, and whatever
- * purges each adds its cutoff here. The search log's (M5-05) covers the help
+ * AI calls are absent until M7 adds their purge. The search log's (M5-05) covers the help
  * center's article views too (M5-08), which are kept exactly as long.
  */
 export interface RetentionCutoffs {
@@ -71,8 +68,13 @@ export interface RetentionCutoffs {
   readonly spamTickets: Date;
   readonly searchLog: Date;
   readonly auditLog: Date;
+  readonly visitorSessions: Date;
+  readonly notifications: Date;
   readonly outbox: Date;
 }
+
+/** The bell shows thirty days, and notifications are not a per-brand setting. */
+export const NOTIFICATION_RETENTION_DAYS = 30;
 
 export const retentionCutoffs = (settings: RetentionSettings, now: Date): RetentionCutoffs => ({
   closedTickets:
@@ -82,6 +84,8 @@ export const retentionCutoffs = (settings: RetentionSettings, now: Date): Retent
   spamTickets: retentionCutoff(settings.spamTicketDays, now),
   searchLog: retentionCutoff(settings.searchLogDays, now),
   auditLog: retentionCutoff(settings.auditLogDays, now),
+  visitorSessions: retentionCutoff(settings.visitorSessionDays, now),
+  notifications: retentionCutoff(NOTIFICATION_RETENTION_DAYS, now),
   // Fixed by DOMAIN-RULES §6, not by the brand.
   outbox: retentionCutoff(RETENTION_DAYS, now),
 });

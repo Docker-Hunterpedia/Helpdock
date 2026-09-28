@@ -497,7 +497,7 @@ under the field, where they are fixed, rather than as a toast:
 | Refusal | When |
 |---|---|
 | `sender-invalid` | The value is not an address, a domain, a phone number or a chat id |
-| `sender-is-own` | "A domain your brand sends from cannot be blocked": the install's `smtp.from` address or its domain, a hostname in `brand_domains`, a parent of either, or anything below either |
+| `sender-is-own` | "A domain your brand sends from cannot be blocked": the install's `smtp.from`, this brand's inbound mailboxes and outgoing senders, their domains, a hostname in this brand's `brand_domains`, a parent of any of those domains, or anything below one |
 | `sender-already-blocked` | The row exists already |
 
 **Unblock** is the bin on each row, behind a confirmation. The counter is
@@ -505,11 +505,10 @@ written to the audit row, because afterwards it is the only record of what the
 block had been doing. The audit log names the kind, never the value: an address
 is personal data and the audit log outlives the block.
 
-> **What a brand "sends from" today** is the install-wide `smtp.from` and the
-> brand's `brand_domains` hostnames. It does not read M2's mailboxes or
-> department senders yet, so a brand's own mailbox address can be blocked
-> ([M2 gaps](../completed/M2-email-channel.md#gaps-and-follow-ups)). `smtp.from`
-> is read install-wide, as `contacts.defaultCallingCode` is.
+The check reads the install-wide `smtp.from` and this brand's configured
+mailboxes, default outgoing sender, department senders and `brand_domains`
+hostnames at the time of the request. A sender of another brand does not make
+an address un-blockable here.
 
 ### The Spam status card
 

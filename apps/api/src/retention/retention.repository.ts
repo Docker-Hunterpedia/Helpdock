@@ -3,10 +3,12 @@ import {
   auditLog,
   type DbTransaction,
   hcSearchLog,
+  notifications,
   type RetentionSettingsRow,
   retentionSettings,
   ticketStatuses,
   tickets,
+  widgetVisitors,
 } from '@helpdock/db';
 import type { RetentionCounts } from '@helpdock/schemas';
 import {
@@ -17,6 +19,7 @@ import {
   inArray,
   isNotNull,
   lt,
+  notExists,
   notInArray,
   type SQL,
   sql,
@@ -132,7 +135,72 @@ export class RetentionRepository {
     return row?.total ?? 0;
   }
 
+  /** A visitor with a ticket still owns its conversation, however long they were away. */
+  async countVisitorSessions(tx: DbTransaction, brandId: string, cutoff: Date): Promise<number> {
+    const [row] = await tx
+      .select({ total: count() })
+      .from(widgetVisitors)
+      .where(this.#expiredVisitor(tx, brandId, cutoff));
+
+    return row?.total ?? 0;
+  }
+
   // ------------------------------------------------------------------- purges
+
+  async purgeVisitorSessionsBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = await tx
+      .select({ id: widgetVisitors.id })
+      .from(widgetVisitors)
+      .where(this.#expiredVisitor(tx, brandId, cutoff))
+      .orderBy(asc(widgetVisitors.lastSeenAt), asc(widgetVisitors.id))
+      .limit(limit)
+      .for('update', { skipLocked: true });
+    if (batch.length === 0) {
+      return 0;
+    }
+    const deleted = await tx
+      .delete(widgetVisitors)
+      .where(
+        inArray(
+          widgetVisitors.id,
+          batch.map((row) => row.id),
+        ),
+      )
+      .returning({ id: widgetVisitors.id });
+    return deleted.length;
+  }
+
+  async purgeNotificationsBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = await tx
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(and(eq(notifications.brandId, brandId), lt(notifications.createdAt, cutoff)))
+      .orderBy(asc(notifications.createdAt), asc(notifications.id))
+      .limit(limit);
+    if (batch.length === 0) {
+      return 0;
+    }
+    const deleted = await tx
+      .delete(notifications)
+      .where(
+        inArray(
+          notifications.id,
+          batch.map((row) => row.id),
+        ),
+      )
+      .returning({ id: notifications.id });
+    return deleted.length;
+  }
 
   /** The next batch of tickets to purge, oldest first. */
   async ticketBatch(
@@ -264,5 +332,15 @@ export class RetentionRepository {
     return kind === 'closed'
       ? closedTicketCondition(tx, brandId, cutoff)
       : spamTicketCondition(tx, brandId, cutoff);
+  }
+
+  #expiredVisitor(tx: DbTransaction, brandId: string, cutoff: Date): SQL {
+    return and(
+      eq(widgetVisitors.brandId, brandId),
+      lt(widgetVisitors.lastSeenAt, cutoff),
+      notExists(
+        tx.select({ id: tickets.id }).from(tickets).where(eq(tickets.visitorId, widgetVisitors.id)),
+      ),
+    ) as SQL;
   }
 }

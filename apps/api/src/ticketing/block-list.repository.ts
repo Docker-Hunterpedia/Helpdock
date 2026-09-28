@@ -4,6 +4,8 @@ import {
   brandDomains,
   brands,
   type DbTransaction,
+  emailOutboundSettings,
+  mailboxes,
   type NewBlockedSender,
   users,
 } from '@helpdock/db';
@@ -99,10 +101,33 @@ export class BlockListRepository {
   }
 
   /** The hostnames the brand owns (`brand_domains`), lower-case as stored. */
-  async brandDomains(tx: DbTransaction): Promise<string[]> {
-    const rows = await tx.select({ domain: brandDomains.domain }).from(brandDomains);
+  async brandDomains(tx: DbTransaction, brandId: string): Promise<string[]> {
+    const rows = await tx
+      .select({ domain: brandDomains.domain })
+      .from(brandDomains)
+      .where(eq(brandDomains.brandId, brandId));
 
     return rows.map((row) => row.domain);
+  }
+
+  async ownEmailAddresses(tx: DbTransaction, brandId: string): Promise<string[]> {
+    const inbound = await tx
+      .select({ address: mailboxes.address })
+      .from(mailboxes)
+      .where(eq(mailboxes.brandId, brandId));
+    const [outbound] = await tx
+      .select({
+        defaultFromAddress: emailOutboundSettings.defaultFromAddress,
+        departmentSenders: emailOutboundSettings.departmentSenders,
+      })
+      .from(emailOutboundSettings)
+      .where(eq(emailOutboundSettings.brandId, brandId));
+
+    return [
+      ...inbound.map((row) => row.address),
+      ...(outbound?.defaultFromAddress ? [outbound.defaultFromAddress] : []),
+      ...(outbound?.departmentSenders.map((sender) => sender.fromAddress) ?? []),
+    ];
   }
 
   async brandSettings(tx: DbTransaction, brandId: string): Promise<BrandSettings | undefined> {

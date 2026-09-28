@@ -74,6 +74,7 @@ export const retentionCategorySchema = z.enum([
   'searchLog',
   'auditLog',
   'visitorSessions',
+  'notifications',
   'outbox',
 ]);
 export type RetentionCategory = z.infer<typeof retentionCategorySchema>;

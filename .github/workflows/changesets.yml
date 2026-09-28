@@ -16,7 +16,8 @@ on:
 
 concurrency:
   group: changesets-${{ github.ref }}
-  cancel-in-progress: true
+  # A push during the image build must not cancel a release whose tag exists.
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -67,7 +68,7 @@ jobs:
     name: tag
     needs: version
     # Nothing pending: the version PR was just merged, or there was nothing to release.
-    if: needs.version.outputs.pending == 'false'
+    if: needs.version.outputs.pending != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

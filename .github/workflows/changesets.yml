@@ -6,9 +6,10 @@ name: Changesets
 # release, bumps `apps/api/package.json` — the version the System page reports
 # and the image is tagged with — and writes its changelog.
 #
-# It publishes nothing: every workspace is private and nothing goes to npm. The
-# release is the `v*` tag a maintainer pushes after merging that pull request,
-# which `release.yml` turns into an image and a GitHub Release.
+# It publishes nothing to npm: every workspace is private. The second half runs
+# when that pull request merges and no changesets are left: `tag` pushes
+# `v<version>` once, and `release` calls `release.yml`, which turns it into an
+# image and a GitHub Release. A maintainer can still push a `v*` tag by hand.
 on:
   push:
     branches: [main]
@@ -24,6 +25,8 @@ jobs:
   version:
     name: version
     runs-on: ubuntu-latest
+    outputs:
+      pending: ${{ steps.changesets.outputs.hasChangesets }}
     permissions:
       # The `changeset-release/main` branch the action force-pushes.
       contents: write
@@ -51,6 +54,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Open or update the version pull request
+        id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           version-script: pnpm changeset:version
@@ -58,3 +62,47 @@ jobs:
           commit-message: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  tag:
+    name: tag
+    needs: version
+    # Nothing pending: the version PR was just merged, or there was nothing to release.
+    if: needs.version.outputs.pending == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # A tag pushed with GITHUB_TOKEN starts no workflow, so `release` below calls
+      # release.yml directly instead of relying on its tag trigger.
+      - name: Tag the version, once
+        id: tag
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./apps/api/package.json').version")"
+          tag="v$version"
+          if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; nothing to release."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$tag" -m "Helpdock $version"
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: release
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}

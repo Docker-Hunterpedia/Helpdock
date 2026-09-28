@@ -13,12 +13,12 @@ what is inside it.
 1. Every pull request that changes behaviour adds a changeset: `pnpm changeset`.
 2. Merging to `main` opens or updates a **"chore: version packages"** pull
    request. It bumps the version and writes the changelog.
-3. Merge that pull request, then summarise the release in the root
-   [`CHANGELOG.md`](../../CHANGELOG.md).
-4. Tag the merge commit `v<version>` and push the tag.
-5. [`release.yml`](../../.github/workflows/release.yml) builds and pushes the
-   multi-architecture image, generates a CycloneDX SBOM and creates the GitHub
-   Release.
+3. Summarise the release in the root [`CHANGELOG.md`](../../CHANGELOG.md) in a
+   pull request of its own, then merge the version pull request.
+4. That merge releases: `changesets.yml` tags the merge commit `v<version>` and
+   calls [`release.yml`](../../.github/workflows/release.yml), which builds and
+   pushes the multi-architecture image, generates a CycloneDX SBOM and creates
+   the GitHub Release.
 
 Nothing is published to npm. Every workspace is `"private": true`.
 
@@ -85,18 +85,25 @@ merged since the last release. Do not commit to it by hand.
 > Without it the job fails with a 403 that says exactly that.
 
 Before merging it, add a section to the root
-[`CHANGELOG.md`](../../CHANGELOG.md) under the new version. That file is the
-summary — a paragraph and a handful of bullets about what the release is for.
-`apps/api/CHANGELOG.md` is the detail. The heading has to read
-`## <version> — <date>`, because the release workflow copies the section under it
-into the GitHub Release.
+[`CHANGELOG.md`](../../CHANGELOG.md) under the new version, in a separate pull
+request. That file is the summary — a paragraph and a handful of bullets about
+what the release is for. `apps/api/CHANGELOG.md` is the detail. The heading has
+to read `## <version> — <date>`, because the release workflow copies the section
+under it into the GitHub Release. Without one, the release body falls back to the
+`## <version>` section the version pull request wrote in `apps/api/CHANGELOG.md`.
 
-## Tagging
+**Merging the version pull request is the release.** On that push no changesets
+are left, so the `tag` job in `changesets.yml` pushes `v<version>` on the merge
+commit, once: if the tag already exists it does nothing. The `release` job then
+calls `release.yml` with that tag. It calls it directly because a tag pushed
+with the workflow's own `GITHUB_TOKEN` starts no other workflow.
 
-A tag is the only trigger. Cut it from a commit on `main` whose `ci` run was
-green — nothing in the release workflow re-runs the test suite, on purpose: a
-release ships the artefact that was tested, not a second build of a moving
-branch.
+## Tagging by hand
+
+A pushed `v*` tag still releases on its own, for a re-release or a pre-release.
+Cut it from a commit on `main` whose `ci` run was green — nothing in the release
+workflow re-runs the test suite, on purpose: a release ships the artefact that
+was tested, not a second build of a moving branch.
 
 ```bash
 git switch main && git pull
@@ -115,7 +122,7 @@ Release as a pre-release and does **not** move `:latest`.
 |---|---|
 | **Image** | `docker/build-push-action` with QEMU and Buildx for `linux/amd64` and `linux/arm64`. The Dockerfile downloads no architecture-specific binary, so one recipe produces both. |
 | **Tags** | `ghcr.io/docker-hunterpedia/helpdock:<version>`, plus `:latest` when it is not a pre-release. |
-| **Provenance** | `HELPDOCK_GIT_SHA=${{ github.sha }}` is baked in as `org.opencontainers.image.revision` and is what the System page shows next to the version. |
+| **Provenance** | The commit the tag points at is baked in as `HELPDOCK_GIT_SHA`, as `org.opencontainers.image.revision` and is what the System page shows next to the version. |
 | **Registry** | GHCR, with the run's own `GITHUB_TOKEN` and `packages: write`. No personal access token is stored anywhere. |
 | **SBOM** | `anchore/sbom-action` in CycloneDX JSON, generated **from the pushed image** so it covers the base image's Debian packages and ffmpeg, not only `node_modules`. Attached to the Release as `helpdock-<version>.cdx.json`. |
 | **Release** | Created from the tag. Its body is the `CHANGELOG.md` section for that version, followed by GitHub's generated list of merged pull requests. |
@@ -139,7 +146,9 @@ Release as a pre-release and does **not** move `:latest`.
 ## If something goes wrong
 
 The tag is the input, so a failed run is re-runnable from the Actions tab
-without touching the repository. A tag pointing at the wrong commit is the one
-case that needs care: delete it locally and on the remote, then tag again. A
-version already pulled by somebody is never re-tagged — publish the next patch
-instead.
+without touching the repository: for an automatic release, re-run the failed
+`release` job of the `Changesets` run. A tag pointing at the wrong commit is the
+one case that needs care: delete it locally and on the remote, then tag again.
+The `protect-release-tags` ruleset lets anyone with write access create a `v*`
+tag but only a repository admin move or delete one. A version already pulled by
+somebody is never re-tagged — publish the next patch instead.

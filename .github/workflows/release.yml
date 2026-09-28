@@ -3,7 +3,10 @@ name: Release
 # ARCHITECTURE §16: a `v*` tag publishes the multi-architecture image to GHCR
 # and opens a GitHub Release carrying the changelog and a CycloneDX SBOM.
 #
-# The tag is the trigger and the only input. It is cut from a commit whose `ci`
+# The tag is the trigger and the only input: pushed by `changesets.yml` when the
+# version pull request merges (which calls this workflow directly, because a tag
+# pushed with `GITHUB_TOKEN` starts no workflow), or by a maintainer by hand.
+# It is cut from a commit whose `ci`
 # run was green — nothing here re-runs the test suite, because a release must
 # ship the artefact that was tested, not a second build of a moving branch.
 # `docs/guides/release.md` is the procedure.
@@ -11,6 +14,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: The v<version> tag to release.
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -29,6 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag || github.ref }}
           # The image build and the release notes only read the tree. The
           # `contents: write` token this job holds is used by the release
           # action, which takes it as an input rather than out of `.git/config`.
@@ -41,9 +51,10 @@ jobs:
       - name: Read the version from the tag
         id: version
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
+          case "$TAG" in v[0-9]*) ;; *) echo "not a version tag: $TAG" >&2; exit 1 ;; esac
           version="${TAG#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -64,6 +75,9 @@ jobs:
             fi
             echo 'TAGS_EOF'
           } >> "$GITHUB_OUTPUT"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # `linux/arm64` is built under emulation. It is slow and it is correct:
       # the Dockerfile downloads no architecture-specific binary, so one recipe
@@ -92,7 +106,7 @@ jobs:
           tags: ${{ steps.version.outputs.tags }}
           build-args: |
             HELPDOCK_VERSION=${{ steps.version.outputs.version }}
-            HELPDOCK_GIT_SHA=${{ github.sha }}
+            HELPDOCK_GIT_SHA=${{ steps.version.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -123,6 +137,16 @@ jobs:
             capture { print }
           ' CHANGELOG.md > release-notes.md
 
+          # Otherwise the entries the version pull request wrote, under a
+          # heading that is exactly `## <version>`.
+          if [ ! -s release-notes.md ]; then
+            awk -v heading="## $VERSION" '
+              $0 == heading { capture = 1; next }
+              capture && index($0, "## ") == 1 { exit }
+              capture { print }
+            ' apps/api/CHANGELOG.md > release-notes.md
+          fi
+
           if [ ! -s release-notes.md ]; then
             printf 'No CHANGELOG.md section for %s. The generated notes below are all there is.\n' \
               "$VERSION" > release-notes.md
@@ -132,6 +156,7 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: Helpdock ${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.tag }}
           body_path: release-notes.md
           # Appended below the changelog: the merged pull requests and the new
           # contributors, which the changelog deliberately does not list.

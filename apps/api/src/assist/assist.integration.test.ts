@@ -67,6 +67,7 @@ import { createLogger } from '../logging/logger.js';
 import { evaluateEventRules } from '../rules/engine.js';
 import { createRulesEngineDeps } from '../rules/engine-deps.js';
 import { seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { runTranscription } from '../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../transcription/transcription-events.js';
 import { runTriage } from '../triage/triage.job.js';
@@ -182,19 +183,8 @@ describe.skipIf(!hasDocker)('agent assist, triage and transcription', () => {
         body: (response.body === '' ? undefined : response.json()) as T,
       }));
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { accessToken?: string };
-    if (body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addStaff = async (
     role: 'agent' | 'team_leader',

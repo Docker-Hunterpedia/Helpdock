@@ -9,7 +9,12 @@ import type {
   SignInResult,
   TotpEnrolment,
 } from '@helpdock/schemas';
-import { MOCK_ENROLMENT_CODE, MOCK_TOTP_SECRET, type MockStaffApi } from '../staff/mock-api.js';
+import {
+  assertNotMockBreached,
+  MOCK_ENROLMENT_CODE,
+  MOCK_TOTP_SECRET,
+  type MockStaffApi,
+} from '../staff/mock-api.js';
 import { type AuthApi, AuthError } from './api.js';
 
 /**
@@ -182,8 +187,9 @@ export class MockAuthApi implements AuthApi {
     await delay(MAGIC_LINK_DELAY_MS);
   }
 
-  async resetPassword(_token: string, _password: string): Promise<void> {
+  async resetPassword(_token: string, password: string): Promise<void> {
     await delay(MAGIC_LINK_DELAY_MS);
+    assertNotMockBreached(password);
   }
 
   /**
@@ -212,6 +218,24 @@ export class MockAuthApi implements AuthApi {
     );
   }
 
+  async startEnrolment(challengeId: string): Promise<TotpEnrolment> {
+    if (!challengeId.startsWith('mock-enrol-')) {
+      throw new AuthError('challenge-expired');
+    }
+    return this.enrolTotp();
+  }
+
+  async completeEnrolment(
+    challengeId: string,
+    code: string,
+  ): Promise<RecoveryCodes & { readonly session: Session }> {
+    await this.startEnrolment(challengeId);
+    const { recoveryCodes } = await this.confirmTotp(code);
+    this.#session = MOCK_SESSION;
+
+    return { recoveryCodes, session: MOCK_SESSION };
+  }
+
   async previewInvite(token: string): Promise<PublicInvite> {
     const invite = this.#staff?.inviteFor(token);
     if (invite === undefined) {
@@ -221,11 +245,12 @@ export class MockAuthApi implements AuthApi {
     return invite;
   }
 
-  async acceptInvite(token: string, _request: InviteAcceptRequest): Promise<SignInResult> {
+  async acceptInvite(token: string, request: InviteAcceptRequest): Promise<SignInResult> {
     const invite = this.#staff?.inviteFor(token);
     if (invite === undefined) {
       throw new AuthError('challenge-expired');
     }
+    assertNotMockBreached(request.password);
 
     this.#staff?.spendInvite(token);
     // An install that requires 2FA sends a brand new account to enrolment

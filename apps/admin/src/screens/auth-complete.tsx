@@ -71,7 +71,7 @@ export function AuthComplete(): ReactNode {
   }
 
   if (enrol !== null) {
-    return <Navigate to={ROUTES.totpEnrolment} replace />;
+    return <Navigate to={ROUTES.totpEnrolment} replace state={{ challengeId: enrol }} />;
   }
 
   const failed = failure !== null || exchange.isError;

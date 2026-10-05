@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
-import { generate } from 'otplib';
 import { strings } from '../strings.js';
 import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import { freshTotpCode } from './totp.js';
 
 /**
  * M1-15 against the real api: one ticket taken from typing it in to closing it.
@@ -37,7 +37,7 @@ const signInAsAdmin = async (page: Page): Promise<void> => {
 
   await page
     .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
+    .fill(await freshTotpCode(process.env[TOTP_SECRET_ENV] ?? ''));
   await page.getByRole('button', { name: t('auth:totp.submit') }).click();
   await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
 };

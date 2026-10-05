@@ -43,6 +43,7 @@ import {
 } from '../media/object-purge.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { FakeStorage } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { runBrandRetention, scheduleRetention } from './retention.job.js';
 
 /**
@@ -163,20 +164,8 @@ describe.skipIf(!hasDocker)('data retention', () => {
         body: (response.body === '' ? undefined : response.json()) as T,
       }));
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   /** Statuses, and one department, for a brand that already exists. */
   const fixtureFor = async (brandId: string): Promise<BrandFixture> =>

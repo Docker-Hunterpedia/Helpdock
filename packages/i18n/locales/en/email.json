@@ -30,6 +30,18 @@
     "expiry_other": "The invitation expires in {{count}} days.",
     "ignore": "If you were not expecting this, you can ignore this message. No account exists until you accept."
   },
+  "securityChange": {
+    "subject": "Your {{appName}} sign-in details changed",
+    "heading": "Your sign-in details changed",
+    "body_password": "The password of {{email}} was changed from its security page. Every other browser was signed out.",
+    "body_passwordReset": "The password of {{email}} was reset with an emailed link. Every browser was signed out.",
+    "body_twoFactorEnabled": "Two-factor sign-in was turned on for {{email}}.",
+    "body_twoFactorDisabled": "Two-factor sign-in was turned off for {{email}}. Signing in now needs only the password.",
+    "body_recoveryCodes": "New recovery codes were made for {{email}}. The old ones no longer work.",
+    "action": "Review your security page",
+    "expiry": "If this was you, there is nothing more to do.",
+    "ignore": "If it was not you, reset your password now and tell your administrator."
+  },
   "smtpTest": {
     "subject": "{{appName}} test message",
     "heading": "Your mail server works",

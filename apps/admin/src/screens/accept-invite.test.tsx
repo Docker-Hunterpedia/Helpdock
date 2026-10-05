@@ -1,8 +1,14 @@
 import { screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
 import { MockAuthApi } from '../auth/mock-api.js';
-import { MOCK_EXPIRED_INVITE_TOKEN, MOCK_INVITE_TOKEN, MockStaffApi } from '../staff/mock-api.js';
+import {
+  MOCK_BREACHED_PASSWORD,
+  MOCK_ENROLMENT_CODE,
+  MOCK_EXPIRED_INVITE_TOKEN,
+  MOCK_INVITE_TOKEN,
+  MockStaffApi,
+} from '../staff/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 
 /**
@@ -10,11 +16,11 @@ import { renderApp } from '../test/render.tsx';
  * Both states matter: the live invitation, and the link that has run out.
  */
 
-const renderInvite = (token: string) => {
+const renderInvite = (token: string, authApi?: MockAuthApi) => {
   const staffApi = new MockStaffApi();
 
   return renderApp(<AppRoutes />, {
-    authApi: new MockAuthApi(staffApi),
+    authApi: authApi ?? new MockAuthApi(staffApi),
     staffApi,
     initialEntries: [`/invite/${token}`],
   });
@@ -79,6 +85,41 @@ describe('a live invitation', () => {
     expect(
       await screen.findByRole('heading', { name: 'Turn on two-factor', level: 1 }),
     ).toBeInTheDocument();
+  });
+
+  it('enrols with the challenge it was handed, and signs in when that is done', async () => {
+    const staffApi = new MockStaffApi();
+    const authApi = new MockAuthApi(staffApi);
+    const start = vi.spyOn(authApi, 'startEnrolment');
+    const complete = vi.spyOn(authApi, 'completeEnrolment');
+    const { user } = renderInvite(MOCK_INVITE_TOKEN, authApi);
+
+    await user.type(await screen.findByLabelText('Your name'), 'Karim Aziz');
+    await user.type(screen.getByLabelText('Choose a password'), 'a long enough password');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    await user.type(await screen.findByLabelText('Authentication code'), MOCK_ENROLMENT_CODE);
+    await user.click(screen.getByRole('button', { name: 'Turn on two-factor' }));
+    await screen.findByRole('heading', { name: 'Save your recovery codes', level: 1 });
+
+    expect(start).toHaveBeenCalledWith(expect.stringMatching(/^mock-enrol-/));
+    expect(complete).toHaveBeenCalledWith(
+      expect.stringMatching(/^mock-enrol-/),
+      MOCK_ENROLMENT_CODE,
+    );
+    await expect(authApi.me()).resolves.not.toBeNull();
+  });
+
+  it('draws a breached password as the field’s error, not as a banner', async () => {
+    const { user } = renderInvite(MOCK_INVITE_TOKEN);
+
+    await user.type(await screen.findByLabelText('Your name'), 'Karim Aziz');
+    await user.type(screen.getByLabelText('Choose a password'), MOCK_BREACHED_PASSWORD);
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This password appears in lists of leaked passwords',
+    );
+    expect(screen.getByLabelText('Choose a password')).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('offers both languages, each in its own name', async () => {

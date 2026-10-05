@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { generate } from 'otplib';
 import { strings } from '../strings.js';
 import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import { freshTotpCode } from './totp.js';
 
 /**
  * The exit criterion of M0: sign in, answer the second factor, land in the
@@ -39,7 +39,7 @@ test.describe('against the real api', () => {
     await expect(page.getByRole('heading', { name: t('auth:totp.title') })).toBeVisible();
     await expect(page.getByText(t('auth:totp.subtitle', { email }))).toBeVisible();
 
-    await page.getByLabel(t('auth:totp.codeLabel')).fill(await generate({ secret: totpSecret }));
+    await page.getByLabel(t('auth:totp.codeLabel')).fill(await freshTotpCode(totpSecret));
     await page.getByRole('button', { name: t('auth:totp.submit') }).click();
 
     await expect(

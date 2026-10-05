@@ -120,13 +120,12 @@ export class StaffModule {
         },
         {
           provide: AccountService,
-          inject: [StaffRepository, AuthService, SessionService, SETTINGS],
+          inject: [StaffRepository, AuthService, SessionService],
           useFactory: (
             staff: StaffRepository,
             auth: AuthService,
             sessions: SessionService,
-            settings: Settings,
-          ): AccountService => new AccountService({ staff, auth, sessions, settings, logger }),
+          ): AccountService => new AccountService({ staff, auth, sessions, logger }),
         },
         {
           provide: InstallStaffService,

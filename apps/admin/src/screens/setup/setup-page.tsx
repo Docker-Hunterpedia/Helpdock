@@ -26,6 +26,7 @@ import {
   type SetupApi,
   SetupClosedError,
   SetupKeyInvalidError,
+  SetupPasswordBreachedError,
   SetupThrottledError,
   SetupValidationError,
 } from './setup-api.js';
@@ -81,6 +82,7 @@ export function SetupPage({ api, ai, onFinished = leaveTo }: SetupPageProps): Re
   const [failure, setFailure] = useState<'closed' | 'throttled' | 'failed' | null>(null);
   const [prefixTaken, setPrefixTaken] = useState(false);
   const [setupKeyRefused, setSetupKeyRefused] = useState(false);
+  const [passwordBreached, setPasswordBreached] = useState(false);
   const [testResult, setTestResult] = useState<SmtpTestResult | null>(null);
   const [require2fa, setRequire2fa] = useState(false);
 
@@ -111,6 +113,7 @@ export function SetupPage({ api, ai, onFinished = leaveTo }: SetupPageProps): Re
     onMutate: () => {
       setFailure(null);
       setSetupKeyRefused(false);
+      setPasswordBreached(false);
     },
     onSuccess: (response) => {
       dispatch({
@@ -124,6 +127,10 @@ export function SetupPage({ api, ai, onFinished = leaveTo }: SetupPageProps): Re
       // next move is to fix one value, not to retry.
       if (error instanceof SetupKeyInvalidError) {
         setSetupKeyRefused(true);
+        return;
+      }
+      if (error instanceof SetupPasswordBreachedError) {
+        setPasswordBreached(true);
         return;
       }
       fail(error);
@@ -228,6 +235,7 @@ export function SetupPage({ api, ai, onFinished = leaveTo }: SetupPageProps): Re
             // it, so a page served by some other process still has a way on.
             setupKeyRequired={install.setupKeyRequired || setupKeyRefused}
             setupKeyRefused={setupKeyRefused}
+            passwordBreached={passwordBreached}
           />
         ) : null}
 

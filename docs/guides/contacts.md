@@ -216,6 +216,30 @@ wakes up, and only an Admin is offered the button at all.
 
 There is no undo.
 
+## Export
+
+The other half of a privacy request (ASVS 8.3.2):
+`GET /api/brands/:brandId/contacts/:contactId/export` answers one JSON document,
+downloaded as `contact-export.json`, with everything the brand holds about the
+person that is theirs to have:
+
+- the contact — name, timezone, customer id, custom fields, every identifier,
+  and when it was erased if it was;
+- every ticket filed for them, oldest first, with its reference, subject,
+  channel, status and dates;
+- in each, the conversation as they saw it — public replies, AI answers and
+  system lines, in order — and the files on each message, by name, type and
+  size, with the api path that issues a short-lived download link for an
+  authorised caller (the presigned link itself would be dead before the export
+  was read).
+
+Internal notes, on tickets or on the contact, are the team's working papers and
+are left out. Only an Admin of the brand may export (`export-forbidden`
+otherwise), as only an Admin may erase, and every export writes a
+`contact.exported` audit row with the number of tickets and messages and none of
+their contents. There is no button for it yet: the contact screen's artboards
+have none, so it is an API call until they do.
+
 ## Permissions
 
 | Action | Needs |
@@ -223,6 +247,7 @@ There is no undo.
 | Read contacts, accounts, timeline | `contact:read` — every role, Viewer included |
 | Create, edit, add or remove an identifier, note, dismiss a duplicate, merge, undo a merge | `contact:write` — Admin, Team Leader, Agent |
 | Erase a contact | `contact:write` **and** the Admin role in that brand |
+| Export a contact | `contact:read` **and** the Admin role in that brand |
 
 ## API
 
@@ -240,6 +265,7 @@ tenant transaction.
 | `DELETE /contacts/:contactId/identities/:identityId` | `contact:write` | Removes one, never the last. |
 | `POST /contacts/:contactId/notes` | `contact:write` | Adds a staff-only note. |
 | `POST /contacts/:contactId/duplicates/:suggestionId/dismiss` | `contact:write` | "Not the same". |
+| `GET /contacts/:contactId/export` | `contact:read` + Admin | The export above, as a download. |
 | `POST /contacts/:contactId/anonymise` | `contact:write` + Admin | The erasure above. |
 | `GET /contacts/:contactId/merge-preview?otherContactId=` | `contact:read` | Both sides with their ticket counts (hidden ones included) and the identifiers after a merge. |
 | `POST /contacts/:contactId/merge` | `contact:write` | `{ mergedContactId, suggestionId? }`: folds that contact into this one. Answers this contact. |
@@ -267,7 +293,7 @@ A refused action answers with the usual error body plus a `contact` block:
 ```
 
 `reason` is one of `identity-taken`, `identity-invalid` (with a `problem` that
-says how), `last-identity`, `anonymise-forbidden`, `anonymised`,
+says how), `last-identity`, `anonymise-forbidden`, `export-forbidden`, `anonymised`,
 `domain-taken`, `merged`, `merge-self`, `merge-expired` or `merge-blocked`. The admin turns the code into a sentence; no English crosses the
 boundary. None of the messages repeats the identifier that was refused, because
 "that address is taken" told to a stranger who is guessing addresses is an
@@ -326,6 +352,9 @@ setting resolution lands (the open gap in
 `HD_CONTACTS_DEFAULT_CALLING_CODE`.
 
 ## Known gaps
+
+- **Export has no button.** The contact artboards have none, so an Admin calls
+  the API. The admin gains one when an artboard draws it.
 
 - **A merge does not carry the merged contact's other suggestions over.** They
   are hidden while the merge stands and come back if it is undone.

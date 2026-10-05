@@ -7,6 +7,7 @@ import {
   parseJobPayload,
 } from './jobs.js';
 import { type JobLogger, silentLogger } from './logger.js';
+import { createKeyedSerializer } from './ordering.js';
 import { PayloadValidationError } from './validation.js';
 
 /**
@@ -50,6 +51,12 @@ export interface CreateWorkerOptions {
   readonly db: Db;
   readonly log?: JobLogger | undefined;
   readonly concurrency?: number | undefined;
+  /**
+   * Keys that jobs sharing one must not run at once, read from the raw job data.
+   * Jobs with a key in common run one after another in the order the worker
+   * took them; the rest run side by side up to `concurrency` (`ordering.ts`).
+   */
+  readonly serialize?: ((data: unknown) => readonly string[]) | undefined;
 }
 
 const rethrowAsUnrecoverable = (error: unknown): never => {
@@ -121,11 +128,15 @@ export const createJobProcessor =
 export const createWorker = <TName extends string, TPayload extends BrandScopedPayload>(
   definition: JobDefinition<TName, TPayload>,
   handler: JobHandler<TPayload>,
-  { redis, db, log = silentLogger, concurrency }: CreateWorkerOptions,
+  { redis, db, log = silentLogger, concurrency, serialize }: CreateWorkerOptions,
 ): Worker => {
+  const processJob = createJobProcessor(definition, handler, { db, log });
+  const serializer = createKeyedSerializer();
   const worker = new Worker(
     definition.queue,
-    createJobProcessor(definition, handler, { db, log }),
+    serialize === undefined
+      ? processJob
+      : (job: Job) => serializer.run(serialize(job.data), () => processJob(job)),
     {
       connection: redis,
       ...(concurrency === undefined ? {} : { concurrency }),

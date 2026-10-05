@@ -9,6 +9,7 @@ import {
   contactCreateRequestSchema,
   contactDetailSchema,
   contactDuplicateParamSchema,
+  contactExportSchema,
   contactIdentityInputSchema,
   contactIdentityParamSchema,
   contactIdParamSchema,
@@ -37,6 +38,7 @@ import { createZodDto } from 'nestjs-zod';
 
 export class ContactListDto extends createZodDto(contactListSchema) {}
 export class ContactDetailDto extends createZodDto(contactDetailSchema) {}
+export class ContactExportDto extends createZodDto(contactExportSchema) {}
 export class ContactTimelineDto extends createZodDto(contactTimelineSchema) {}
 export class ContactSearchQueryDto extends createZodDto(contactSearchQuerySchema) {}
 

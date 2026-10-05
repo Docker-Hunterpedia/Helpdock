@@ -90,7 +90,10 @@ export function SignIn(): ReactNode {
       }
 
       if (result.kind === 'totp-enrolment-required') {
-        void navigate(ROUTES.totpEnrolment, { replace: true });
+        void navigate(ROUTES.totpEnrolment, {
+          replace: true,
+          state: { challengeId: result.challengeId },
+        });
         return;
       }
 

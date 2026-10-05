@@ -33,6 +33,9 @@ export const totpChallengeKey = (challengeId: string): string => `auth:totp:${ch
 /** Set when a challenge burns its last attempt; blocks sign-in for this account. */
 export const totpLockKey = (userId: string): string => `auth:totp-lock:${userId}`;
 
+/** The last time step an authenticator code of this account was accepted at. */
+export const totpUsedStepKey = (userId: string): string => `auth:totp-step:${userId}`;
+
 /** A browser the user chose to trust, addressed by the hash of its cookie's nonce. */
 export const trustedDeviceKey = (userId: string, nonceHash: string): string =>
   `auth:trust:${userId}:${nonceHash}`;

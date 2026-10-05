@@ -163,10 +163,20 @@ describe('the built-in settings.changed handler', () => {
 });
 
 describe('createOutboxEventHandler', () => {
-  it('unpacks the job payload into a dispatch', async () => {
+  it('takes the ordering lock, then unpacks the job payload into a dispatch', async () => {
     const dispatcher = createOutboxDispatcher();
-    const handler = vi.fn().mockResolvedValue(undefined);
+    const steps: string[] = [];
+    const handler = vi.fn().mockImplementation(() => {
+      steps.push('dispatch');
+      return Promise.resolve();
+    });
     dispatcher.register('ticket.replied', handler);
+    const lockingTx = {
+      execute: vi.fn().mockImplementation(() => {
+        steps.push('lock');
+        return Promise.resolve([]);
+      }),
+    } as unknown as DbTransaction;
 
     const log = recordingLogger();
     await createOutboxEventHandler(dispatcher)({
@@ -177,7 +187,7 @@ describe('createOutboxEventHandler', () => {
         payload: { ticketId: 7 },
       },
       brandId: '01924f00-0000-7000-8000-0000000000aa',
-      tx,
+      tx: lockingTx,
       job: { id: 'job-1' } as never,
       log,
     });
@@ -187,5 +197,6 @@ describe('createOutboxEventHandler', () => {
       payload: { ticketId: 7 },
       outboxId: '01924f00-0000-7000-8000-000000000001',
     });
+    expect(steps).toEqual(['lock', 'dispatch']);
   });
 });

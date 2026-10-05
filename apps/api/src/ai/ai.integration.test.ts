@@ -56,6 +56,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { configureEmbeddingSpace, reembedChunks } from '../knowledge/embedding-space.job.js';
 import { createLogger } from '../logging/logger.js';
 import { seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { handleBudgetAlert } from './budget-alert.handler.js';
 import { AI_BUDGET_ALERT_EVENT } from './budget-meter.js';
 import { createAiRuntime } from './db-ai-ports.js';
@@ -167,19 +168,8 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
         body: (response.body === '' ? undefined : response.json()) as T,
       }));
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { accessToken?: string };
-    if (body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addStaff = async (role: 'agent' | 'team_leader'): Promise<string> => {
     const masterKey = decodeMasterKey(MASTER_KEY);

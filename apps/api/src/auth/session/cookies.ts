@@ -1,6 +1,7 @@
+import type { Env } from '@helpdock/config';
 import type { SessionCookiePayload } from '@helpdock/schemas';
 import { sessionCookiePayloadSchema } from '@helpdock/schemas';
-import { REFRESH_TOKEN_TTL_SECONDS } from './refresh-store.js';
+import { type SessionLifetime, sessionLifetime } from './lifetime.js';
 
 /**
  * The two cookies the auth service sets, and the attributes that make them
@@ -15,10 +16,23 @@ import { REFRESH_TOKEN_TTL_SECONDS } from './refresh-store.js';
  *
  * There is deliberately no `Domain`: without one a cookie is host-only, and a
  * sibling subdomain of the install cannot set or read it.
+ *
+ * **The `__Secure-` prefix, not `__Host-`** (ASVS 3.4.4). Over https both names
+ * carry `__Secure-`, which a browser only accepts from a secure origin with
+ * `Secure` set, so a plain-http page or a man in the middle cannot plant one.
+ * `__Host-` would add "no `Domain`, `Path=/`" — and the first half already
+ * holds, while the second would send the refresh token to every route in the
+ * app instead of the five that read it. Narrow `Path` is worth more than the
+ * stricter prefix; the deviation is recorded in `docs/completed/asvs-l2.md`.
+ * Over plain http the prefix would make the browser drop the cookie, so a local
+ * install keeps the bare names.
  */
 
+/** The bare names; {@link refreshCookie} and {@link trustedDeviceCookie} add the prefix. */
 export const REFRESH_COOKIE = 'hd_refresh';
 export const TRUSTED_DEVICE_COOKIE = 'hd_trust';
+
+const SECURE_PREFIX = '__Secure-';
 
 /** Every route that reads a cookie lives here; nothing else is sent one. */
 export const AUTH_COOKIE_PATH = '/api/auth';
@@ -56,11 +70,33 @@ export const cookieAttributes = ({
   maxAge: maxAgeSeconds,
 });
 
-export const refreshCookieAttributes = (appUrl: string): CookieAttributes =>
-  cookieAttributes({ appUrl, maxAgeSeconds: REFRESH_TOKEN_TTL_SECONDS });
+/** A cookie's name and the attributes it is set and cleared with. */
+export interface CookieSpec {
+  readonly name: string;
+  readonly attributes: CookieAttributes;
+}
 
-export const trustedDeviceCookieAttributes = (appUrl: string): CookieAttributes =>
-  cookieAttributes({ appUrl, maxAgeSeconds: TRUSTED_DEVICE_TTL_SECONDS });
+const prefixed = (appUrl: string, name: string): string =>
+  isSecureAppUrl(appUrl) ? `${SECURE_PREFIX}${name}` : name;
+
+/** Lives as long as the family behind it can (`lifetime.ts`). */
+export const refreshCookie = (
+  appUrl: string,
+  lifetime: Pick<SessionLifetime, 'maxSeconds'>,
+): CookieSpec => ({
+  name: prefixed(appUrl, REFRESH_COOKIE),
+  attributes: cookieAttributes({ appUrl, maxAgeSeconds: lifetime.maxSeconds }),
+});
+
+/** The refresh cookie as this install's `.env` configures it. */
+export const refreshCookieOf = (
+  env: Pick<Env, 'APP_URL' | 'AUTH_SESSION_IDLE_MINUTES' | 'AUTH_SESSION_MAX_HOURS'>,
+): CookieSpec => refreshCookie(env.APP_URL, sessionLifetime(env));
+
+export const trustedDeviceCookie = (appUrl: string): CookieSpec => ({
+  name: prefixed(appUrl, TRUSTED_DEVICE_COOKIE),
+  attributes: cookieAttributes({ appUrl, maxAgeSeconds: TRUSTED_DEVICE_TTL_SECONDS }),
+});
 
 /**
  * `<family>.<token>` — the family says which chain to look up and the token is

@@ -4,8 +4,9 @@ import {
   decodeRefreshCookie,
   encodeRefreshCookie,
   isSecureAppUrl,
-  refreshCookieAttributes,
-  trustedDeviceCookieAttributes,
+  refreshCookie,
+  refreshCookieOf,
+  trustedDeviceCookie,
 } from './cookies.js';
 
 const FAMILY_ID = uuidv7();
@@ -20,31 +21,51 @@ describe('isSecureAppUrl', () => {
   });
 });
 
-describe('refreshCookieAttributes', () => {
-  it('is httpOnly, Lax and scoped to the auth routes, whatever the URL', () => {
-    expect(refreshCookieAttributes('http://localhost:3000')).toMatchObject({
+const LIFETIME = { maxSeconds: 12 * 60 * 60 };
+
+describe('refreshCookie', () => {
+  it('is httpOnly, Lax, scoped to the auth routes and as long-lived as its family', () => {
+    expect(refreshCookie('http://localhost:3000', LIFETIME).attributes).toMatchObject({
       httpOnly: true,
       sameSite: 'lax',
       path: '/api/auth',
-      maxAge: 30 * 24 * 60 * 60,
+      maxAge: 12 * 60 * 60,
     });
   });
 
   it('is Secure over https and not over http, where it would be dropped silently', () => {
-    expect(refreshCookieAttributes('https://support.example.com').secure).toBe(true);
-    expect(refreshCookieAttributes('http://localhost:3000').secure).toBe(false);
+    expect(refreshCookie('https://support.example.com', LIFETIME).attributes.secure).toBe(true);
+    expect(refreshCookie('http://localhost:3000', LIFETIME).attributes.secure).toBe(false);
+  });
+
+  it('carries the __Secure- prefix over https, so only a secure origin can set it (ASVS 3.4.4)', () => {
+    expect(refreshCookie('https://support.example.com', LIFETIME).name).toBe('__Secure-hd_refresh');
+    expect(refreshCookie('http://localhost:3000', LIFETIME).name).toBe('hd_refresh');
   });
 
   it('never carries a Domain, which would let a sibling subdomain read it', () => {
-    expect(refreshCookieAttributes('https://support.example.com')).not.toHaveProperty('domain');
+    expect(refreshCookie('https://support.example.com', LIFETIME).attributes).not.toHaveProperty(
+      'domain',
+    );
+  });
+
+  it('takes its lifetime from the install, twelve hours unless it says otherwise', () => {
+    expect(refreshCookieOf({ APP_URL: 'https://support.example.com' }).attributes.maxAge).toBe(
+      12 * 60 * 60,
+    );
+    expect(
+      refreshCookieOf({ APP_URL: 'https://support.example.com', AUTH_SESSION_MAX_HOURS: 48 })
+        .attributes.maxAge,
+    ).toBe(48 * 60 * 60);
   });
 });
 
-describe('trustedDeviceCookieAttributes', () => {
-  it('lasts the thirty days the checkbox promises', () => {
-    expect(trustedDeviceCookieAttributes('https://support.example.com').maxAge).toBe(
-      30 * 24 * 60 * 60,
-    );
+describe('trustedDeviceCookie', () => {
+  it('lasts the thirty days the checkbox promises, under the same prefix', () => {
+    const cookie = trustedDeviceCookie('https://support.example.com');
+
+    expect(cookie.attributes.maxAge).toBe(30 * 24 * 60 * 60);
+    expect(cookie.name).toBe('__Secure-hd_trust');
   });
 });
 

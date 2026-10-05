@@ -22,6 +22,11 @@ export type TenantScopeKind =
   /** `INSTALL_SCOPE_BRAND_ID`: an install-admin path, audited on entry. */
   | 'install';
 
+export interface ClientFacts {
+  readonly ip: string | null;
+  readonly userAgent: string | null;
+}
+
 export class RequestContext {
   readonly requestId: string;
   readonly startedAt: bigint;
@@ -46,6 +51,13 @@ export class RequestContext {
   scopeKind: TenantScopeKind | null = null;
   /** The open transaction, for the duration of the handler only. */
   tx: DbTransaction | null = null;
+  /**
+   * Where the request came from, as Fastify resolved it under `TRUST_PROXY`.
+   * Filled by a `preHandler` hook (`client-facts.ts`) because this middleware
+   * sees the raw request, before Fastify has worked out `request.ip`. Code that
+   * writes its own audit rows outside the request transaction reads it here.
+   */
+  client: ClientFacts | null = null;
 
   constructor(options: { requestId: string; method: string; path: string }) {
     this.requestId = options.requestId;

@@ -152,7 +152,10 @@ with when it was sent and when it lapses.
 form asks for a name, a password of at least twelve characters and a language;
 submitting it spends the token, activates the account, writes
 `staff.invite.accepted` and signs the person in. If the install requires
-two-factor, they land on enrolment first.
+two-factor, or they were invited as an Admin, they land on enrolment first.
+The password is checked against the breached-password list
+([authentication](authentication.md#breached-passwords)), and the field has a
+show/hide toggle.
 
 An expired, revoked or already-accepted link answers `410` and the screen says
 so. All three read the same from outside, so a stale link cannot be used to find
@@ -216,8 +219,9 @@ administrator removes the "Former staff" row with the brand-scoped action.
 
 ## Two-factor enrolment
 
-`/sign-in/enrol` is where an install with `auth.require2fa` on sends an account
-without an authenticator, and where **Turn on two-factor** on the security page
+`/sign-in/enrol` is where sign-in sends an account that must have an
+authenticator and has none — an Admin, an install admin, or anybody while
+`auth.require2fa` is on — with the enrolment challenge sign-in answered, and where **Turn on two-factor** on the security page
 leads.
 
 1. **Scan.** The screen stages a secret and draws it as a QR code, with the same
@@ -242,15 +246,16 @@ a second place.
 |---|---|
 | Your details | Name and interface language. The sign-in address is read-only; an administrator changes it. |
 | Password | Current password, then a new one of at least twelve characters. Changing it signs out **every other** browser and forgets every browser this account trusted. |
-| Two-factor | Status, how many recovery codes are left, and — unless the install requires it — turning it off. Turning it off and redrawing the codes each ask for a live authenticator code, because a session proves somebody signed in, not that the person at the keyboard now is the account holder. |
+| Two-factor | Status, how many recovery codes are left, and — unless the account must have one (an Admin, an install admin, or `auth.require2fa` on) — turning it off. Turning it off and redrawing the codes each ask for a live authenticator code, because a session proves somebody signed in, not that the person at the keyboard now is the account holder. |
 | Active sessions | Every browser this account is signed in on, with the current one marked. Sign one out, or sign out everywhere. |
 
-These write no `audit_log` row. `audit_log` is keyed on `brand_id`, and a
-password change belongs to a person rather than to a brand; writing it under
-whichever brand happened to be first would put a fact somewhere it is not true,
-and writing it under the install sentinel would mean an ordinary staff principal
-opening an install-scope transaction. They are written to the process log
-instead, with the user id and the reason.
+Each change is audited in install scope by the `auth` system principal — a
+password change belongs to a person, not to a brand — and emailed to the
+account holder ([authentication › The audit
+trail](authentication.md#the-audit-trail), [When a credential
+changes](authentication.md#when-a-credential-changes)). The new password goes
+through the same field as an invitation's: show/hide, the strength bar, and the
+breached-list check.
 
 ## Endpoints
 
@@ -271,7 +276,7 @@ instead, with the user id and the reason.
 | `GET /api/me/profile` | `@Authenticated()` | |
 | `PATCH /api/me/profile` | `@Authenticated()` | Name and language |
 | `POST /api/me/password` | `@Authenticated()` | Current plus new |
-| `POST /api/me/totp/disable` | `@Authenticated()` | A live code. Refused while `auth.require2fa` is on |
+| `POST /api/me/totp/disable` | `@Authenticated()` | A live code. Refused while `auth.require2fa` is on, and always for an Admin or install admin |
 | `POST /api/me/recovery-codes/regenerate` | `@Authenticated()` | A live code |
 | `GET /api/me/sessions` | `@Authenticated()` | |
 | `DELETE /api/me/sessions/:family` | `@Authenticated()` | |
@@ -298,7 +303,7 @@ user-facing English crosses that boundary.
 | Key | Default | |
 |---|---|---|
 | `roles.viewerEnabled` | `true` | Whether the read-only Viewer role can be assigned |
-| `auth.require2fa` | `false` | Sends a new account to enrolment, and stops anybody turning the second factor off |
+| `auth.require2fa` | `false` | Sends every account without an authenticator to enrolment, and stops anybody turning the second factor off. Admins and install admins are held to it whatever it says |
 
 No new `.env` key.
 

@@ -36,6 +36,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
 import {
   registerWebhookEventHandlers,
@@ -247,13 +248,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     await app.getHttpAdapter().getInstance().ready();
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
 
-    const signIn = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email: seeded.email, password: seeded.password }),
-    });
-    staffToken = (signIn.json() as { accessToken: string }).accessToken;
+    staffToken = await signInForTest(app, { email: seeded.email, password: seeded.password });
 
     const [department] = await withSystem(runtime.db, seeded.brandId, (tx) =>
       tx.select({ id: departments.id }).from(departments).limit(1),

@@ -24,6 +24,7 @@ import { createLogger } from '../logging/logger.js';
 import { InstallChannels } from '../notifications/install-channels.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { createAuthEmailEventHandler, createAuthEmailProcessor } from './auth-email.job.js';
 import { AUTH_EMAIL_EVENT } from './auth-email.js';
 
@@ -330,11 +331,10 @@ describe.skipIf(!hasDocker)('auth email delivery', () => {
 
   it('delivers an invitation once, naming the brand, and the invitation opens', async () => {
     await useSystemSmtp(true);
-    const signedIn = await post('/api/auth/sign-in', {
+    const accessToken = await signInForTest(app, {
       email: seeded.email,
       password: seeded.password,
     });
-    const accessToken = (signedIn.json() as { accessToken?: string }).accessToken ?? '';
     const invitee = `new-agent-${String(Date.now())}@helpdock.test`;
     logLines.length = 0;
 

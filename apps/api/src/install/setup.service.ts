@@ -31,6 +31,7 @@ import { DEFAULT_DEPARTMENT_NAME } from '@helpdock/schemas';
 import { ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { ZodError } from 'zod';
+import { assertNotBreached } from '../auth/breached/breached-passwords.js';
 import type { PasswordHasher } from '../auth/password.js';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import type { IssuedSession, SessionService } from '../auth/session/session.service.js';
@@ -210,6 +211,7 @@ export class SetupService {
       throw new SetupFailure('setup-key-invalid');
     }
 
+    assertNotBreached(input.password);
     // Outside the transaction: argon2 spends 19 MiB and two passes, and a
     // connection held for that long is a connection nobody else can have.
     const passwordHash = await this.#hasher.hash(input.password);

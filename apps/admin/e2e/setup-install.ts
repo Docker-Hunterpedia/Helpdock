@@ -211,7 +211,7 @@ export const completeAccountStep = async (page: Page, locale: Locale): Promise<v
 
   await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
   await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
-  await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+  await page.getByLabel(t('wizard:account.passwordLabel'), { exact: true }).fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: t('wizard:account.submit') }).click();
   await page.getByRole('heading', { name: t('wizard:brand.title') }).waitFor();
 };

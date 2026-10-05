@@ -125,6 +125,7 @@ misconfigured — it is a backstop, not a reason to skip the exclusion.
 | `db_pool_connections` | gauge | `state` | Sessions the runtime role holds on the server, by the state Postgres reports — `active`, `idle`, `idle_in_transaction`, `idle_in_transaction_(aborted)`, and `unknown` for a session Postgres reports no state for. Install-wide, not per replica. |
 | `db_up`, `redis_up` | gauge | — | `1` when the readiness probe reached it, `0` when it did not. |
 | `socket_connections` | gauge | `namespace` | Open Socket.IO connections on this replica, per namespace (`/staff` and `/widget`). |
+| `rate_limit_refusals_total` | counter | `bucket` | Requests and socket events a rate limit refused, by the limit's name: `signin-email`, `signin-ip`, `email-dispatch`, `step-up`, `invite-lookup`, the widget and web-form budgets, the socket-event budgets, `inbound-parse`, `telegram-webhook`, `domain-check`. Never the address or account it refused. Counted per api replica. |
 
 `prom-client`'s default Node metrics are on the same registry: event-loop lag,
 heap, handles, GC and process start time.
@@ -143,6 +144,12 @@ the install; the log line describes the request.
 - `outbox_unpublished_rows` above zero and not falling while `outbox_relay_up`
   is `1` — the relay is running but behind.
 - `db_up == 0` or `redis_up == 0`.
+- `sum by (bucket) (rate(rate_limit_refusals_total[5m])) * 300 > 50` — more than
+  fifty refusals in five minutes on one limit. On `signin-email` or `signin-ip`
+  it is somebody guessing passwords or spraying addresses; on a widget bucket it
+  is a script, not a visitor (ASVS 8.1.4, 11.1.8). Look up the matching
+  `auth.sign_in.failed` rows in the [audit log](audit-log.md) for the addresses
+  they came from.
 
 ---
 
@@ -316,8 +323,29 @@ usability pass, not by the install.
 | `LOG_LEVEL` | `info` | pino's level for both roles |
 | `METRICS_TOKEN` | unset | Bearer token for `/metrics`. Required for any request that arrives through the reverse proxy. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Turns tracing on and says where spans go |
+| `OUTBOX_CONCURRENCY` | `8` | Outbox events one worker runs at once ([Scaling the worker](#scaling-the-worker)) |
 
-`.env.example` documents all three.
+`.env.example` documents all four.
+
+## Scaling the worker
+
+Every side effect — a socket frame to a visitor, an SLA clock, a rule, a
+notification, an email — is an `outbox.event` job. A worker runs
+`OUTBOX_CONCURRENCY` of them at once (8 by default), with one rule: **events
+of one ticket run one at a time, in the order they were written**, and events
+of different tickets run side by side. An event that names no ticket is
+ordered with the other ticket-less events of its brand
+([ADR 0021](../decisions/0021-outbox-events-ordered-per-ticket.md)).
+
+Each running event holds one of the worker's ten database connections, so
+raise `OUTBOX_CONCURRENCY` with care; a second `worker` replica is the other
+way to add throughput. Between replicas, an advisory lock per ticket keeps two
+processes from running events of one ticket at the same moment.
+
+If `queue_jobs{queue="outbox",state="waiting"}` keeps growing while
+`outbox_relay_up` is `1`, the worker is behind: raise the concurrency, add a
+replica, or look for one ticket with a burst of events, which runs no faster
+than one at a time.
 
 ---
 

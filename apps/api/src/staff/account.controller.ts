@@ -1,3 +1,4 @@
+import type { Env } from '@helpdock/config';
 import type { Profile, RecoveryCodes, StaffSessionList } from '@helpdock/schemas';
 import {
   Body,
@@ -16,8 +17,9 @@ import type { FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { requireStaffPrincipalId } from '../auth/principal.js';
 import { Authenticated } from '../auth/route-declaration.js';
-import { decodeRefreshCookie, REFRESH_COOKIE } from '../auth/session/cookies.js';
+import { decodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
+import { ENV } from '../runtime/tokens.js';
 import { AccountService } from './account.service.js';
 import {
   PasswordChangeRequestDto,
@@ -45,9 +47,11 @@ import {
 @Controller('api/me')
 export class AccountController {
   readonly #account: AccountService;
+  readonly #refreshCookieName: string;
 
-  constructor(@Inject(AccountService) account: AccountService) {
+  constructor(@Inject(AccountService) account: AccountService, @Inject(ENV) env: Env) {
     this.#account = account;
+    this.#refreshCookieName = refreshCookieOf(env).name;
   }
 
   @Get('profile')
@@ -131,6 +135,6 @@ export class AccountController {
 
   /** This browser's own refresh family, so the list can mark it and a password change can spare it. */
   #familyId(request: FastifyRequest): string | null {
-    return decodeRefreshCookie(request.cookies[REFRESH_COOKIE])?.fam ?? null;
+    return decodeRefreshCookie(request.cookies[this.#refreshCookieName])?.fam ?? null;
   }
 }

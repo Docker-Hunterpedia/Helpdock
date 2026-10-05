@@ -34,6 +34,7 @@ import {
   notifyPushJob,
   type OutboxRelay,
   outboxEventJob,
+  outboxJobOrderingKeys,
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
@@ -213,7 +214,7 @@ export interface WorkerDependencies {
     settings: WorkerSettings;
     installSmtp: InstallSmtp;
   }): Closable;
-  createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  createEventWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** The `outbound` queue: M2-05's `email.send` and M6-02's `telegram.send`. */
   createOutboundWorker(options: {
     redis: Redis;
@@ -324,7 +325,16 @@ export type WorkerEnv = Pick<
   | 'TELEGRAM_API_ROOT'
   // M7-03: whether a website crawl may render pages in a headless browser.
   | 'KNOWLEDGE_CRAWL_RENDER'
+  // M9: how many outbox events run at once.
+  | 'OUTBOX_CONCURRENCY'
 >;
+
+/**
+ * Outbox events one worker runs at once when `OUTBOX_CONCURRENCY` is unset.
+ * Each holds a database connection while it runs, out of the pool's ten, and
+ * the other consumers need theirs.
+ */
+export const DEFAULT_OUTBOX_CONCURRENCY = 8;
 
 /**
  * What the worker reads from settings: the SMTP sender and the VAPID key pair
@@ -670,8 +680,16 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
-  createEventWorker: ({ redis, db, log }) =>
-    createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
+  // Events of one ticket one at a time and in order; different tickets side by
+  // side (`@helpdock/jobs` ordering.ts, docs/guides/operations.md).
+  createEventWorker: ({ redis, db, log, env }) =>
+    createWorker(outboxEventJob, createOutboxEventHandler(), {
+      redis,
+      db,
+      log,
+      concurrency: env.OUTBOX_CONCURRENCY ?? DEFAULT_OUTBOX_CONCURRENCY,
+      serialize: outboxJobOrderingKeys,
+    }),
   createOutboundWorker: ({ redis, db, log, env, installSmtp }) => {
     const keyring = createKeyring(env);
     const emailRepository = new EmailRepository();
@@ -1274,7 +1292,7 @@ export const startWorker = ({
     settings,
     installSmtp,
   });
-  const worker = deps.createEventWorker({ redis: connection, db, log });
+  const worker = deps.createEventWorker({ redis: connection, db, log, env });
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });

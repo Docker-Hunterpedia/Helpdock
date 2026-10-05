@@ -122,7 +122,7 @@ function Feedback({ message, ai }: { message: WidgetMessage; ai: AiPart }) {
     );
   }
   return (
-    <div class="hd-ai-feedback" role="group" aria-label={t('ai.helpful')}>
+    <fieldset class="hd-ai-feedback" aria-label={t('ai.helpful')}>
       <span class="hd-grow" aria-hidden="true">
         {t('ai.helpful')}
       </span>
@@ -144,7 +144,7 @@ function Feedback({ message, ai }: { message: WidgetMessage; ai: AiPart }) {
       >
         <Icon name="thumbsDown" size={18} />
       </button>
-    </div>
+    </fieldset>
   );
 }
 

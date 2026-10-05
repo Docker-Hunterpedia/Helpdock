@@ -30,8 +30,8 @@ import { currentBrand, useSession } from '../../auth/session.tsx';
 import { helpCenterKeys } from '../../help-center/api.js';
 import { useHelpCenterApi } from '../../help-center/context.tsx';
 import { useToast } from '../../ui/toasts.tsx';
-import { AIBadge } from '../tickets/assist/ai-badge.tsx';
-import { formatUsd } from '../tickets/assist/format.js';
+import { AIBadge } from '../tickets/ai/ai-badge.tsx';
+import { formatCost } from '../tickets/ai/ai-log-disclosure.tsx';
 
 /**
  * Help center › Proposals (M7-05, `Admin/HelpCenter-ArticleApproval`): the
@@ -496,11 +496,11 @@ function ProposalReview({ proposalId }: { readonly proposalId: string }): ReactN
             >
               {detail.call === null ? null : (
                 <>
-                  <dt>{t('tickets:assist.log.model')}</dt>
+                  <dt>{t('tickets:autoReply.logModel')}</dt>
                   <dd className="mono">{detail.call.model}</dd>
-                  <dt>{t('tickets:assist.log.cost')}</dt>
-                  <dd className="mono">{formatUsd(detail.call.costUsd)}</dd>
-                  <dt>{t('tickets:assist.log.redactions')}</dt>
+                  <dt>{t('tickets:autoReply.logCost')}</dt>
+                  <dd className="mono">{formatCost(detail.call.costUsd)}</dd>
+                  <dt>{t('tickets:autoReply.logRedactions')}</dt>
                   <dd>
                     {detail.call.redactionCount === 0
                       ? '0'

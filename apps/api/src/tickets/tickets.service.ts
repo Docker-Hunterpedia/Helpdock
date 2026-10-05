@@ -29,6 +29,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { pauseAi } from '../ai/auto-reply/ai-pause.js';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { requestAutoAssign } from '../assignment/assignment-events.js';
 import {
@@ -612,6 +613,16 @@ export class TicketsService {
         assignedBy: 'person',
         actorId: staffActorId(principal),
       });
+      // M7-06, DOMAIN-RULES §9: a person has taken the conversation.
+      if (principal.type === 'staff') {
+        await pauseAi(tx, {
+          brandId,
+          ticketId,
+          reason: 'staff_assigned',
+          at: new Date(),
+          actorId: principal.id,
+        });
+      }
     }
     // M1-07. A ticket arriving unassigned in a department that routes by itself
     // is routed; a manual unassignment in place is somebody's choice and is not.
@@ -767,6 +778,15 @@ export class TicketsService {
       // moves, so the clock ends at the reply rather than at a pause.
       await this.#lifecycle.onResponded(context, target, landing.status);
       await this.#lifecycle.onAgentPublicReply(context, target, landing.status);
+      // M7-06, DOMAIN-RULES §9: once a person has answered, the assistant
+      // does not answer this conversation again.
+      await pauseAi(tx, {
+        brandId,
+        ticketId: target.id,
+        reason: 'staff_reply',
+        at: now,
+        actorId: actor.actorId,
+      });
       // M2-05. In this transaction, so the email is queued with the reply or
       // not at all.
       await this.#replyDelivery.onStaffPublicReply(tx, {

@@ -17,8 +17,8 @@ import { RefreshCw, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
-import { AIBadge } from './ai-badge.tsx';
-import { formatUsd } from './format.js';
+import { AIBadge } from '../ai/ai-badge.tsx';
+import { formatCost } from '../ai/ai-log-disclosure.tsx';
 
 /**
  * "Draft an article from HD-1029" (`Admin/Ticket-AI` panel 5, dialog 720):
@@ -246,7 +246,7 @@ export function DraftArticleDialog({
           </Button>
           {draft === null ? null : (
             <Typography variant="mono" sx={{ fontSize: 12, color: 'text.secondary' }}>
-              {`${draft.meta.model} · ${formatUsd(draft.meta.costUsd)}`}
+              {`${draft.meta.model} · ${formatCost(draft.meta.costUsd)}`}
             </Typography>
           )}
           <Box sx={{ flex: 1 }} />

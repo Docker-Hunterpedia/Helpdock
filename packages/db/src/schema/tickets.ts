@@ -198,6 +198,26 @@ export const tickets = pgTable(
       (): SQL => sql`to_tsvector('english', coalesce(${tickets.subject}, ''))`,
     ),
     /**
+     * M7-06, DOMAIN-RULES §9: the assistant is paused on this conversation.
+     * Set when the model hands off, the customer asks for a person, or a
+     * staff member replies or takes the ticket; every auto-reply job reads it
+     * immediately before it sends and aborts while it is set. Cleared only by
+     * "Return to assistant". `ai_paused_until` null with `ai_paused_at` set is
+     * "for the rest of the conversation", which is every pause v1 makes.
+     */
+    aiPausedAt: timestamp('ai_paused_at', { withTimezone: true }),
+    aiPausedUntil: timestamp('ai_paused_until', { withTimezone: true }),
+    aiPauseReason: text('ai_pause_reason'),
+    /**
+     * M7-06, DOMAIN-RULES §15's AI deflection: the first time auto-reply
+     * considered the conversation (eligible), the first answer it sent, and
+     * the first handoff of any kind. Never cleared, so a "Return to assistant"
+     * does not turn a handed-off conversation back into a deflected one.
+     */
+    aiEligibleAt: timestamp('ai_eligible_at', { withTimezone: true }),
+    aiAnsweredAt: timestamp('ai_answered_at', { withTimezone: true }),
+    aiHandedOffAt: timestamp('ai_handed_off_at', { withTimezone: true }),
+    /**
      * Millisecond precision, unlike every other timestamp in the schema, and
      * the same for `updated_at`. Both are **cursor** columns: the ticket list
      * pages by keyset, and the cursor carries the value as an ISO-8601 string,
@@ -278,6 +298,10 @@ export const tickets = pgTable(
     // ticket, and what the contact screen's counts read.
     index('tickets_brand_contact_idx').on(table.brandId, table.contactId),
     index('tickets_search_idx').using('gin', table.search),
+    // M7-06: Reports' AI deflection reads the conversations auto-reply considered.
+    index('tickets_brand_ai_eligible_idx')
+      .on(table.brandId, table.aiEligibleAt)
+      .where(sql`${table.aiEligibleAt} is not null`),
     // M3-04: a time-based rule's read, "in this status since before then".
     index('tickets_brand_status_changed_idx').on(
       table.brandId,

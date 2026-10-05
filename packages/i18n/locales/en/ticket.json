@@ -8,6 +8,15 @@
     "splitFrom": "Split from {{ticket}}",
     "threadMismatch": "Referenced {{ticket}} but sender is not a participant",
     "noSubject": "(no subject)",
-    "chatSubject": "Chat conversation"
+    "chatSubject": "Chat conversation",
+    "aiPaused": {
+      "low_confidence": "Handed off to a person · confidence {{confidence}} below {{threshold}}",
+      "invalid_citation": "Handed off to a person · the answer cited a source it was not given",
+      "customer_request": "Assistant paused · the customer asked for a person",
+      "staff_reply": "Assistant paused · a staff member replied",
+      "staff_assigned": "Assistant paused · a staff member took the ticket"
+    },
+    "aiResumed": "Returned the conversation to the assistant",
+    "aiSources": "Sources"
   }
 }

@@ -42,6 +42,7 @@ import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { useToast } from '../../ui/toasts.tsx';
+import { useTicketAi } from './ai/use-ticket-ai.tsx';
 import { useTicketAssist } from './assist/use-ticket-assist.tsx';
 import { TranscriptsProvider } from './assist/voice-transcript.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
@@ -192,6 +193,13 @@ export function TicketView({
   const tracking = brand.data?.settings.timeTrackingEnabled === true;
   const timerWithComposer = brand.data?.settings.timerStartsWithComposer === true;
   const canWrite = role !== 'viewer';
+  // M7-06: the auto-reply's log, the paused strip and the "AI on this ticket" card.
+  const ticketAi = useTicketAi({
+    brandId,
+    ticket: detail.data?.ticket,
+    canWrite,
+    now,
+  });
   const timer = useTicketTimer(ticketId);
 
   // M1-15: the tags row and the editable custom fields. The definitions share
@@ -672,6 +680,7 @@ export function TicketView({
           }}
         />
       )}
+      {ticketAi.card}
     </>
   );
 
@@ -872,6 +881,7 @@ export function TicketView({
               }
               telegram={ticketTelegram.thread}
               assist={assist.thread}
+              ai={ticketAi.thread}
               onRetry={(message) => {
                 dispatch({ type: 'retried', clientId: message.clientId, now: Date.now() });
                 send.mutate({ ...message, state: 'sending', sentAt: Date.now() });
@@ -883,6 +893,9 @@ export function TicketView({
           </TranscriptsProvider>
         </Box>
 
+        {ticketAi.strip === null || mergedInto !== null ? null : (
+          <Box sx={{ paddingInline: 5, paddingBlockEnd: 3 }}>{ticketAi.strip}</Box>
+        )}
         {mergedInto === null ? (
           <Box
             sx={{

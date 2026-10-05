@@ -1,4 +1,4 @@
-import type { Attachment, WidgetMessage } from '../transport/types.js';
+import type { AiFeedback, Attachment, WidgetMessage } from '../transport/types.js';
 
 /**
  * The visitor's view of one conversation under the delivery contract in
@@ -33,6 +33,32 @@ export interface ThreadState {
   readonly lastSeq: number;
   readonly readSeq: number;
 }
+
+/** M7-06: the visitor's "Was this helpful?" on an assistant answer, shown at once. */
+export const setFeedback = (
+  state: ThreadState,
+  messageId: string,
+  feedback: AiFeedback,
+): ThreadState => ({
+  ...state,
+  confirmed: state.confirmed.map((message) =>
+    message.id === messageId && message.ai
+      ? { ...message, ai: { ...message.ai, feedback } }
+      : message,
+  ),
+});
+
+/**
+ * M7-06: whether the assistant is answering this thread — it has written, and
+ * nobody has taken over since — which is when "Talk to a human" is offered.
+ */
+export const assistantAnswering = (state: ThreadState, handedOff: boolean): boolean => {
+  if (handedOff) {
+    return false;
+  }
+  const last = state.confirmed.findLast((message) => message.author.kind !== 'visitor');
+  return last?.author.kind === 'ai' && last.ai?.kind === 'answer';
+};
 
 export interface ApplyResult {
   readonly state: ThreadState;

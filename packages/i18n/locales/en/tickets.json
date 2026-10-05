@@ -582,8 +582,45 @@
       "ar": "Arabic"
     }
   },
-  "assist": {
+  "autoReply": {
+    "author": "Assistant",
     "badge": "AI",
+    "answerMeta": "auto-reply",
+    "handoffMeta": "handoff message",
+    "sources": "Sources",
+    "source": "Source {{n}}, {{title}}",
+    "public": "Public",
+    "internal": "Internal",
+    "log": "AI log",
+    "logModel": "Model",
+    "logTokens": "Tokens",
+    "tokensValue": "{{tokensIn}} in · {{tokensOut}} out",
+    "logCost": "Cost",
+    "logRedactions": "Redactions",
+    "logConfidence": "Confidence",
+    "confidenceValue": "{{confidence}} · threshold {{threshold}}",
+    "logSources": "Sources",
+    "sourcesValue": "{{retrieved}} retrieved (visitor) · {{cited}} cited · all valid",
+    "event": {
+      "low_confidence": "Handed off to a person · confidence {{confidence}} below {{threshold}}",
+      "invalid_citation": "Handed off to a person · the answer cited a source it was not given",
+      "customer_request": "Assistant paused · the customer asked for a person",
+      "staff_reply": "Assistant paused · {{name}} replied",
+      "staff_assigned": "Assistant paused · {{name}} took the ticket",
+      "resumed": "{{name}} returned the conversation to the assistant",
+      "someone": "a staff member"
+    },
+    "paused": "Assistant paused",
+    "pausedAt": "handed off at",
+    "resume": "Return to assistant",
+    "resumed": "The assistant will answer this conversation again.",
+    "resumeFailed": "The conversation could not be returned to the assistant. Try again.",
+    "card": "AI on this ticket",
+    "calls": "Calls",
+    "tokens": "Tokens",
+    "cost": "Cost"
+  },
+  "assist": {
     "button": "Assist",
     "discard": "Discard",
     "sources": "Sources",
@@ -663,14 +700,6 @@
       "dismiss": "Dismiss {{field}} {{value}}",
       "caption": "Nothing changes until you accept. Moving to a department you are not in hides the ticket from you."
     },
-    "log": {
-      "title": "AI log",
-      "model": "Model",
-      "tokens": "Tokens",
-      "tokensValue": "{{in}} in · {{out}} out",
-      "cost": "Cost",
-      "redactions": "Redactions"
-    },
     "transcript": {
       "toggle": "Transcript",
       "pending": "Transcribing…",
@@ -697,11 +726,6 @@
       "cancel": "Cancel",
       "send": "Send for approval",
       "sent": "Sent for approval. Team Leaders will review it."
-    },
-    "paused": {
-      "label": "Assistant paused",
-      "since": "handed off at",
-      "return": "Return to assistant"
     },
     "failed": {
       "generic": "The assistant could not do that. Try again.",

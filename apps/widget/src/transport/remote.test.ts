@@ -621,6 +621,33 @@ describe('the remote transport', () => {
 
     expect(api.calls[0]?.body).toMatchObject({ articleId: ARTICLE });
   });
+
+  it('hands a conversation to the team and records feedback over REST (M7-06)', async () => {
+    const api = fakeApi({
+      'POST /conversations': () => ({ conversation: conversation(), message: null }),
+      [`POST /conversations/${CONVERSATION}/handoff`]: () => conversation({ aiHandedOff: true }),
+      [`GET /conversations/${CONVERSATION}/queue`]: () => ({
+        conversationId: CONVERSATION,
+        position: 2,
+      }),
+      [`POST /conversations/${CONVERSATION}/messages/${ARTICLE}/feedback`]: () =>
+        message(2, { author: 'ai' }),
+    });
+    const transport = createRemoteTransport({
+      apiOrigin: API,
+      brand: BRAND,
+      storage: memoryStore({ [secretKeyFor(BRAND)]: SECRET }),
+      fetch: api.fetch,
+      network: null,
+    });
+    await transport.startConversation({});
+
+    const handedOff = await transport.handOff(CONVERSATION);
+    await transport.sendFeedback(CONVERSATION, ARTICLE, 'not_helpful');
+
+    expect(handedOff).toMatchObject({ status: 'queued', ai_handed_off: true });
+    expect(api.calls.at(-1)?.body).toEqual({ feedback: 'not_helpful' });
+  });
 });
 
 const ARTICLE = '0192c3f0-1a2b-7c3d-8e4f-0000000000a1';

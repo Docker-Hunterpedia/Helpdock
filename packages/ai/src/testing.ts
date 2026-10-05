@@ -143,6 +143,7 @@ export interface InMemoryAiPortsOptions {
   readonly provider?: AiProviderConfig;
   readonly modelId?: string;
   readonly systemPrompt?: string;
+  readonly systemPromptAr?: string;
   readonly guardrails?: BrandGuardrails;
   readonly embedding?: EmbeddingConfig | null;
 }
@@ -161,6 +162,7 @@ export class InMemoryAiPorts implements AiPorts {
   provider: AiProviderConfig | null;
   modelId: string;
   systemPrompt: string;
+  systemPromptAr: string;
   piiRedaction: boolean;
   embeddingConfig: EmbeddingConfig | null;
   /** Set to make the next calls refuse. */
@@ -170,6 +172,7 @@ export class InMemoryAiPorts implements AiPorts {
     this.provider = options.provider ?? FAKE_PROVIDER;
     this.modelId = options.modelId ?? 'gpt-4o-mini';
     this.systemPrompt = options.systemPrompt ?? '';
+    this.systemPromptAr = options.systemPromptAr ?? '';
     this.piiRedaction = options.guardrails?.piiRedaction ?? true;
     this.embeddingConfig = options.embedding === undefined ? null : options.embedding;
   }
@@ -182,6 +185,7 @@ export class InMemoryAiPorts implements AiPorts {
       provider: this.provider,
       modelId: this.modelId,
       systemPrompt: this.systemPrompt,
+      systemPromptAr: this.systemPromptAr,
     });
   }
 

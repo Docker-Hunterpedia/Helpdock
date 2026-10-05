@@ -5,7 +5,7 @@ import { type ReactNode, useId } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
-import { AILogDisclosure } from './ai-log-disclosure.tsx';
+import { AssistLogDisclosure } from './ai-log-disclosure.tsx';
 
 /**
  * The Summary variant of DESIGN §6.3 AISuggestionCard (M7-05): opens the
@@ -84,7 +84,7 @@ export function SummaryCard({
           </li>
         ))}
       </Box>
-      <AILogDisclosure meta={summary.meta} />
+      <AssistLogDisclosure meta={summary.meta} />
     </Box>
   );
 }

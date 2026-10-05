@@ -275,8 +275,29 @@ describe('toMessage', () => {
       kind: 'agent',
       agent: { id: 'brand', name: 'Acme', avatar_url: null },
     });
-    expect(ai.author.kind).toBe('agent');
+    expect(ai.author).toEqual({ kind: 'ai' });
     expect(toMessage(wireMessage({ author: 'system' }), 'Acme').author).toEqual({ kind: 'system' });
+  });
+
+  it("carries an assistant answer's sources and the visitor's feedback (M7-06)", () => {
+    const message = toMessage(
+      wireMessage({
+        author: 'ai',
+        ai: {
+          kind: 'answer',
+          citations: [{ marker: 1, title: 'Refund timelines', url: null, articleId: CONVERSATION }],
+          feedback: 'helpful',
+        },
+      }),
+      'Acme',
+    );
+
+    expect(message.ai).toEqual({
+      kind: 'answer',
+      citations: [{ marker: 1, title: 'Refund timelines', url: null, article_id: CONVERSATION }],
+      feedback: 'helpful',
+    });
+    expect(toMessage(wireMessage({}), 'Acme').ai).toBeUndefined();
   });
 });
 
@@ -301,8 +322,10 @@ describe('toConversation', () => {
       department: null,
       visitor_email: 'omar@example.com',
       read_seq: 0,
+      ai_handed_off: false,
     });
     expect(toConversation(wire, null, null).status).toBe('active');
+    expect(toConversation({ ...wire, aiHandedOff: true }, null, null).ai_handed_off).toBe(true);
     expect(toConversation({ ...wire, state: 'closed' }, 2, null).status).toBe('ended');
   });
 });

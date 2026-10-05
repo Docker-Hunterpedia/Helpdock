@@ -6,14 +6,15 @@ import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 
 /**
- * DESIGN §6.3 CitationList (M7-04 to M7-06) as agent assist shows it: a
+ * DESIGN §6.3 CitationList as agent assist shows it (M7-05); auto-reply's,
+ * which cites public sources only, is `../ai/citation-list.tsx`. Here: a
  * "Sources" caption and an ordered list — the mono number, a book or file
  * icon, the title (a link when the source has one), and its visibility as an
  * icon and a word. An internal source carries the "Internal" chip and
  * "removed on Insert", because Insert strips it from a public reply
  * (DOMAIN-RULES §5).
  */
-export function CitationList({
+export function AssistCitationList({
   citations,
   size = 13,
 }: {

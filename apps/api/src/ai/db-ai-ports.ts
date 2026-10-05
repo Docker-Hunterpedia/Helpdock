@@ -56,7 +56,12 @@ export class DbAiPorts implements AiPorts {
     if (provider === undefined || modelId === '') {
       throw new AiNotConfiguredError(brandId);
     }
-    return { provider, modelId, systemPrompt: row?.systemPrompt ?? '' };
+    return {
+      provider,
+      modelId,
+      systemPrompt: row?.systemPrompt ?? '',
+      systemPromptAr: row?.systemPromptAr ?? '',
+    };
   }
 
   async guardrails(brandId: string): Promise<BrandGuardrails> {

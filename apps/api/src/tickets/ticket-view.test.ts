@@ -58,6 +58,12 @@ const row = (contactId: string | null): TicketRow => ({
   closedAt: null,
   statusChangedAt: AT,
   custom: {},
+  aiPausedAt: null,
+  aiPausedUntil: null,
+  aiPauseReason: null,
+  aiEligibleAt: null,
+  aiAnsweredAt: null,
+  aiHandedOffAt: null,
   search: null,
   deletedAt: null,
   createdAt: AT,
@@ -87,6 +93,24 @@ describe('toTicket', () => {
     const ticket = toTicket(row(CONTACT), status, [], { id: CONTACT, name: 'Nadia Karim' });
 
     expect(ticketSchema.parse(ticket).contact).toEqual({ id: CONTACT, name: 'Nadia Karim' });
+  });
+
+  it('carries the assistant state only once the assistant took part (M7-06)', () => {
+    const untouched = toTicket(
+      { ...row(null), aiPausedAt: AT, aiPauseReason: 'staff_reply' },
+      status,
+    );
+    const assisted = toTicket(
+      { ...row(null), aiEligibleAt: AT, aiPausedAt: AT, aiPauseReason: 'low_confidence' },
+      status,
+    );
+
+    expect(untouched).not.toHaveProperty('ai');
+    expect(ticketSchema.parse(assisted).ai).toEqual({
+      pausedAt: AT.toISOString(),
+      pausedUntil: null,
+      reason: 'low_confidence',
+    });
   });
 
   it('keeps an explicit null, which says the ticket names nobody', () => {

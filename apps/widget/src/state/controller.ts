@@ -1,5 +1,6 @@
 import type {
   AgentSummary,
+  AiFeedback,
   Attachment,
   AttachmentKind,
   Availability,
@@ -22,6 +23,7 @@ import {
   applyLive,
   applyReadReceipt,
   emptyThread,
+  setFeedback,
   setPendingStatus,
   type ThreadState,
 } from './thread.js';
@@ -466,7 +468,13 @@ export class WidgetController {
         const ended =
           event.conversation.status === 'ended' && this.#state.conversation?.status !== 'ended';
         this.#set({
-          conversation: event.conversation,
+          conversation: {
+            ...event.conversation,
+            // A handoff is for good: a frame that predates it does not undo it.
+            ai_handed_off:
+              event.conversation.ai_handed_off === true ||
+              this.#state.conversation?.ai_handed_off === true,
+          },
           ...(event.conversation.status === 'queued' ? {} : { queue: null }),
           ...(event.conversation.status === 'ended' ? { typing: null } : { csat: null }),
         });
@@ -509,6 +517,36 @@ export class WidgetController {
     if (conversation) {
       this.#transport.sendTyping(conversation.id, false);
     }
+  }
+
+  /**
+   * M7-06: "Talk to a human". The thread shows the handoff at once; the
+   * server's answer, or the next conversation event, confirms it.
+   */
+  async handOff(): Promise<void> {
+    const { conversation } = this.#state;
+    if (!conversation || conversation.ai_handed_off === true) {
+      return;
+    }
+    this.#set({ conversation: { ...conversation, ai_handed_off: true } });
+    try {
+      const updated = await this.#transport.handOff(conversation.id);
+      if (this.#state.conversation?.id === updated.id) {
+        this.#set({ conversation: { ...this.#state.conversation, ...updated } });
+      }
+    } catch {
+      this.#set({ conversation: { ...conversation, ai_handed_off: false } });
+    }
+  }
+
+  /** M7-06: "Was this helpful?". Recorded once; the thanks line replaces the buttons. */
+  sendFeedback(messageId: string, feedback: AiFeedback): void {
+    const { conversation } = this.#state;
+    if (!conversation) {
+      return;
+    }
+    this.#set({ thread: setFeedback(this.#state.thread, messageId, feedback) });
+    this.#transport.sendFeedback(conversation.id, messageId, feedback).catch(() => undefined);
   }
 
   async requestTranscript(email: string): Promise<void> {

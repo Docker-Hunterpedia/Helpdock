@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { assistantAnswering } from '../state/thread.js';
 import type { ArticleSummary } from '../transport/types.js';
+import { TalkToHuman } from './Assistant.js';
 import { Banners } from './Banners.js';
 import { Composer } from './Composer.js';
 import { ContactForm } from './ContactForm.js';
@@ -89,9 +91,14 @@ export function App() {
     content = (
       <>
         <Banners />
-        <Thread />
+        <Thread onOpenArticle={setArticle} />
         {conversation?.status !== 'ended' ? (
-          <Composer onOpenArticle={setArticle} />
+          <>
+            {assistantAnswering(state.thread, conversation?.ai_handed_off === true) ? (
+              <TalkToHuman />
+            ) : null}
+            <Composer onOpenArticle={setArticle} />
+          </>
         ) : state.csat?.state === 'open' ? null : (
           // The card replaces the composer area until it is answered or skipped (M8-06).
           <Ended />

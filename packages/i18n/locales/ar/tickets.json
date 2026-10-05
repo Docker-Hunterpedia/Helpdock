@@ -590,8 +590,45 @@
       "ar": "العربية"
     }
   },
+  "autoReply": {
+    "author": "المساعد",
+    "badge": "AI",
+    "answerMeta": "رد تلقائي",
+    "handoffMeta": "رسالة التحويل",
+    "sources": "المصادر",
+    "source": "المصدر {{n}}، {{title}}",
+    "public": "عام",
+    "internal": "داخلي",
+    "log": "سجل الذكاء الاصطناعي",
+    "logModel": "النموذج",
+    "logTokens": "الرموز",
+    "tokensValue": "{{tokensIn}} داخلة · {{tokensOut}} خارجة",
+    "logCost": "التكلفة",
+    "logRedactions": "الإخفاءات",
+    "logConfidence": "الثقة",
+    "confidenceValue": "{{confidence}} · الحد {{threshold}}",
+    "logSources": "المصادر",
+    "sourcesValue": "{{retrieved}} مسترجعة (للزوار) · {{cited}} مستشهد بها · جميعها صالحة",
+    "event": {
+      "low_confidence": "حُوّلت إلى شخص · الثقة {{confidence}} أقل من {{threshold}}",
+      "invalid_citation": "حُوّلت إلى شخص · استشهدت الإجابة بمصدر لم يُعطَ للمساعد",
+      "customer_request": "المساعد متوقف · طلب العميل التحدث إلى شخص",
+      "staff_reply": "المساعد متوقف · ردّ {{name}}",
+      "staff_assigned": "المساعد متوقف · تولّى {{name}} التذكرة",
+      "resumed": "أعاد {{name}} المحادثة إلى المساعد",
+      "someone": "أحد الموظفين"
+    },
+    "paused": "المساعد متوقف",
+    "pausedAt": "حُوّلت عند",
+    "resume": "إعادة إلى المساعد",
+    "resumed": "سيجيب المساعد في هذه المحادثة مجددًا.",
+    "resumeFailed": "تعذّرت إعادة المحادثة إلى المساعد. حاول مرة أخرى.",
+    "card": "الذكاء الاصطناعي في هذه التذكرة",
+    "calls": "الاستدعاءات",
+    "tokens": "الرموز",
+    "cost": "التكلفة"
+  },
   "assist": {
-    "badge": "ذكاء اصطناعي",
     "button": "المساعد",
     "discard": "تجاهل",
     "sources": "المصادر",
@@ -683,14 +720,6 @@
       "dismiss": "تجاهل {{field}} {{value}}",
       "caption": "لا يتغير شيء حتى تقبل. النقل إلى قسم لست فيه يخفي التذكرة عنك."
     },
-    "log": {
-      "title": "سجل الذكاء الاصطناعي",
-      "model": "النموذج",
-      "tokens": "الرموز",
-      "tokensValue": "{{in}} داخل · {{out}} خارج",
-      "cost": "التكلفة",
-      "redactions": "المحجوبات"
-    },
     "transcript": {
       "toggle": "النص المكتوب",
       "pending": "جارٍ التفريغ…",
@@ -725,11 +754,6 @@
       "cancel": "إلغاء",
       "send": "إرسال للموافقة",
       "sent": "أُرسل للموافقة. سيراجعه قادة الفرق."
-    },
-    "paused": {
-      "label": "المساعد متوقف",
-      "since": "حُوّل إلى شخص عند",
-      "return": "إعادة إلى المساعد"
     },
     "failed": {
       "generic": "تعذّر على المساعد ذلك. حاول مرة أخرى.",

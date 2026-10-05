@@ -385,6 +385,70 @@ export type TicketAiCalls = z.infer<typeof ticketAiCallsSchema>;
 
 export const ticketAiCallsParamSchema = z.object({ brandId: z.uuid(), ticketId: z.uuid() });
 
+// ---------------------------------------------------------------- auto-reply
+
+/**
+ * Auto-reply on a conversation (M7-06, DOMAIN-RULES §9). The brand's
+ * per-channel switches, threshold and handoff wording are the assistant modes
+ * of the AI settings; these are the conversation's side.
+ */
+
+/**
+ * Why the assistant stopped answering a conversation (DOMAIN-RULES §9): it
+ * handed off below the threshold or on a citation it was not given, the
+ * customer asked for a person, or a staff member replied or took the ticket.
+ */
+export const aiPauseReasonSchema = z.enum([
+  'low_confidence',
+  'invalid_citation',
+  'customer_request',
+  'staff_reply',
+  'staff_assigned',
+]);
+export type AiPauseReason = z.infer<typeof aiPauseReasonSchema>;
+
+/** A conversation's assistant state, on the ticket. `pausedAt` null: it may answer. */
+export const ticketAiStateSchema = z.object({
+  pausedAt: z.iso.datetime().nullable(),
+  /** Null with `pausedAt` set: for the rest of the conversation. */
+  pausedUntil: z.iso.datetime().nullable(),
+  reason: aiPauseReasonSchema.nullable(),
+});
+export type TicketAiState = z.infer<typeof ticketAiStateSchema>;
+
+export const aiCitationViewSchema = z.object({
+  /** The number in the text, `[1]`. */
+  marker: z.int().positive(),
+  title: z.string(),
+  url: z.string().nullable(),
+  visibility: z.enum(['public', 'internal']),
+});
+export type AiCitationView = z.infer<typeof aiCitationViewSchema>;
+
+export const aiFeedbackSchema = z.enum(['helpful', 'not_helpful']);
+export type AiFeedback = z.infer<typeof aiFeedbackSchema>;
+
+/**
+ * What the thread draws for a message the assistant wrote or a pause it
+ * caused: the answer with its sources and the figures of its AI log, the
+ * handoff message, or the System event of a pause or a resume.
+ */
+export const ticketMessageAiSchema = z.object({
+  kind: z.enum(['answer', 'handoff', 'paused', 'resumed']),
+  /** The answer as plain text without the sources list the body carries for email and Telegram. */
+  answer: z.string().nullable(),
+  /** The `ai_calls` row behind it; null when no model was asked. */
+  callId: z.uuid().nullable(),
+  model: z.string().nullable(),
+  confidence: z.number().min(0).max(1).nullable(),
+  threshold: z.number().min(0).max(1).nullable(),
+  citations: z.array(aiCitationViewSchema),
+  reason: aiPauseReasonSchema.nullable(),
+  /** The customer's "Was this helpful?" on an answer. */
+  feedback: aiFeedbackSchema.nullable(),
+});
+export type TicketMessageAi = z.infer<typeof ticketMessageAiSchema>;
+
 // ------------------------------------------------------------- the brand's log
 
 /** One AI call in the brand's activity list (M7-10): counts and cost, no bodies. */

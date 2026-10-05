@@ -1,6 +1,6 @@
 import type { AssistCitation } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { formatUsd, insertableReply, redactionParts, textLocale } from './format.js';
+import { insertableReply, redactionParts, textLocale } from './format.js';
 
 const citation = (
   marker: number,
@@ -53,11 +53,7 @@ describe('textLocale', () => {
   });
 });
 
-describe('formatUsd and redactionParts', () => {
-  it('writes a cost with four decimals', () => {
-    expect(formatUsd(0.0031)).toBe('$0.0031');
-  });
-
+describe('redactionParts', () => {
   it('splits placeholders out of a redacted text', () => {
     expect(redactionParts('Call [PHONE_1] or [EMAIL_1].')).toEqual([
       { text: 'Call ', placeholder: false },

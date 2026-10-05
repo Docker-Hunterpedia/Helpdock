@@ -1,5 +1,6 @@
 import type { DbTransaction, TicketMessage as TicketMessageRow, WidgetVisitor } from '@helpdock/db';
 import {
+  type AiFeedback,
   type ContentPolicy,
   type WidgetConversation,
   type WidgetConversationList,
@@ -15,6 +16,9 @@ import {
   widgetStartRequestSchema,
 } from '@helpdock/schemas';
 import type { z } from 'zod';
+import { readAiMeta } from '../ai/auto-reply/ai-meta.js';
+import { pauseAi } from '../ai/auto-reply/ai-pause.js';
+import { AutoReplyRepository } from '../ai/auto-reply/auto-reply.repository.js';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { requestAutoAssign } from '../assignment/assignment-events.js';
 import { routesAutomatically } from '../assignment/ticket-assignment.js';
@@ -78,6 +82,8 @@ type SendInput = z.input<typeof widgetSendRequestSchema>;
 /** Emoji, which a brand may switch off (REQUIREMENTS §4.6). */
 const EMOJI = /\p{Extended_Pictographic}/u;
 
+const autoReplies = new AutoReplyRepository();
+
 export class WidgetConversationsService {
   readonly #deps: WidgetConversationsDependencies;
 
@@ -112,6 +118,76 @@ export class WidgetConversationsService {
         throw new WidgetFailure('not_found');
       }
       return view;
+    });
+  }
+
+  /**
+   * M7-06: "Talk to a human". Pauses the assistant for the rest of the
+   * conversation (DOMAIN-RULES §9) under the ticket's row lock, the one a
+   * late auto-reply job takes before it sends, so nothing the assistant
+   * prepared reaches the visitor after this returns. Pressing it twice, or
+   * after the team already took over, changes nothing.
+   */
+  handoff(
+    brandId: string,
+    facts: WidgetRequestFacts,
+    conversationId: string,
+    now: Date = new Date(),
+  ): Promise<WidgetConversation> {
+    return this.#deps.gate.visitor(brandId, facts, { write: true }, async (scope) => {
+      const entry = await this.#require(scope, conversationId);
+      if (this.#access(scope, entry) !== 'write') {
+        throw new WidgetFailure('read_only');
+      }
+      await this.#deps.tickets.nextSeq(scope.tx, entry.ticket.id);
+      // The button is the assistant's: pressing it is taking part in an
+      // assistant conversation (DOMAIN-RULES §15's "eligible").
+      await autoReplies.markEligible(scope.tx, entry.ticket.id, now);
+      const paused = await pauseAi(scope.tx, {
+        brandId,
+        ticketId: entry.ticket.id,
+        reason: 'customer_request',
+        at: now,
+        actorId: scope.visitor.id,
+      });
+      if (paused !== undefined) {
+        await enqueueTicketEvent(scope.tx, brandId, TICKET_EVENTS.updated, {
+          ticketId: paused.id,
+          departmentId: paused.departmentId,
+        });
+      }
+      const [view] = await this.#views(scope.tx, [
+        paused === undefined ? entry : { ...entry, ticket: paused },
+      ]);
+      /* c8 ignore next 3 -- one entry in, one view out. */
+      if (view === undefined) {
+        throw new WidgetFailure('not_found');
+      }
+      return view;
+    });
+  }
+
+  /** M7-06: "Was this helpful?" on one of the assistant's answers in this conversation. */
+  feedback(
+    brandId: string,
+    facts: WidgetRequestFacts,
+    conversationId: string,
+    messageId: string,
+    feedback: AiFeedback,
+  ): Promise<WidgetMessage> {
+    return this.#deps.gate.visitor(brandId, facts, { write: true }, async (scope) => {
+      const entry = await this.#require(scope, conversationId);
+      const row = await this.#deps.widget.message(scope.tx, messageId);
+      const meta = row === undefined ? undefined : readAiMeta(row.aiMeta);
+      if (row === undefined || row.ticketId !== entry.ticket.id || meta?.kind !== 'answer') {
+        throw new WidgetFailure('not_found');
+      }
+      const updated = { ...meta, feedback };
+      await autoReplies.saveFeedback(scope.tx, row.id, updated);
+      return toWidgetMessage({ ...row, aiMeta: updated }, [], {
+        staffNames: new Map(),
+        showAgentIdentity: false,
+      });
     });
   }
 

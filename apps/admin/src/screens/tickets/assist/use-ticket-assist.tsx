@@ -26,10 +26,10 @@ import { helpCenterKeys } from '../../../help-center/api.js';
 import { useHelpCenterApi } from '../../../help-center/context.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import type { ThreadAssist } from '../thread.tsx';
-import { AILogDisclosure } from './ai-log-disclosure.tsx';
+import { AssistLogDisclosure } from './ai-log-disclosure.tsx';
 import { AISuggestionCard } from './ai-suggestion-card.tsx';
 import { type AssistAction, AssistMenu } from './assist-menu.tsx';
-import { CitationList } from './citation-list.tsx';
+import { AssistCitationList } from './citation-list.tsx';
 import { DraftArticleDialog } from './draft-article-dialog.tsx';
 import { insertableReply, textLocale } from './format.js';
 import { MessageAiFacts, RedactedText, TranslatedText } from './message-ai-facts.tsx';
@@ -354,8 +354,8 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
               setCard(null);
             }}
           >
-            <CitationList citations={card.result.citations} size={12} />
-            <AILogDisclosure meta={card.result.meta} />
+            <AssistCitationList citations={card.result.citations} size={12} />
+            <AssistLogDisclosure meta={card.result.meta} />
           </AISuggestionCard>
         );
       case 'rewrite':
@@ -381,7 +381,7 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
               />
             }
           >
-            <AILogDisclosure meta={card.result.meta} />
+            <AssistLogDisclosure meta={card.result.meta} />
           </AISuggestionCard>
         );
       case 'translation':
@@ -400,7 +400,7 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
               setCard(null);
             }}
           >
-            <AILogDisclosure meta={card.result.meta} />
+            <AssistLogDisclosure meta={card.result.meta} />
           </AISuggestionCard>
         );
     }

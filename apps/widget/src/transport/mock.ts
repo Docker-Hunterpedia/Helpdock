@@ -1,5 +1,7 @@
 import {
   type AgentSummary,
+  type AiFeedback,
+  type AiPart,
   type ArticleDetail,
   type Attachment,
   type AttachmentKind,
@@ -172,6 +174,26 @@ export class MockTransport implements WidgetTransport {
     this.#assertOnline();
   }
 
+  async handOff(conversationId: string): Promise<ConversationSummary> {
+    this.#record('handOff', conversationId);
+    this.#assertOnline();
+    if (!this.#conversation) {
+      throw new TransportError('not_found');
+    }
+    this.#conversation = { ...this.#conversation, ai_handed_off: true };
+    return this.#conversation;
+  }
+
+  async sendFeedback(conversationId: string, messageId: string, feedback: AiFeedback) {
+    this.#record('sendFeedback', conversationId, messageId, feedback);
+    this.#assertOnline();
+    this.#messages = this.#messages.map((message) =>
+      message.id === messageId && message.ai
+        ? { ...message, ai: { ...message.ai, feedback } }
+        : message,
+    );
+  }
+
   async getCsat(conversationId: string): Promise<CsatCard | null> {
     this.#record('getCsat', conversationId);
     this.#assertOnline();
@@ -285,6 +307,24 @@ export class MockTransport implements WidgetTransport {
       system: null,
     });
     this.#emit({ type: 'message', message });
+    return message;
+  }
+
+  /** M7-06: the assistant answers, with its sources, or hands off with the brand's text. */
+  aiReply(body: string, ai: AiPart): WidgetMessage {
+    const message = this.#store({
+      client_id: null,
+      author: { kind: 'ai' },
+      body,
+      attachments: [],
+      system: null,
+      ai,
+    });
+    this.#emit({ type: 'message', message });
+    if (ai.kind === 'handoff' && this.#conversation) {
+      this.#conversation = { ...this.#conversation, ai_handed_off: true };
+      this.#emit({ type: 'conversation', conversation: this.#conversation });
+    }
     return message;
   }
 

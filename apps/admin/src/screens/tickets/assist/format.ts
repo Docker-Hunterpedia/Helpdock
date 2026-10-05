@@ -1,12 +1,10 @@
 import type { AssistCitation, SuggestReplyResult } from '@helpdock/schemas';
 
 /**
- * The pure halves of agent assist's screens (M7-05, M7-09): how a cost is
- * written, which language a text is in, and what "Insert" puts in the reply.
+ * The pure halves of agent assist's screens (M7-05, M7-09): which language a
+ * text is in, what "Insert" puts in the reply, and the placeholders of a
+ * redacted text.
  */
-
-/** `$0.0031`: the four decimals the AI log draws, in Latin digits in both locales. */
-export const formatUsd = (value: number): string => `$${value.toFixed(4)}`;
 
 // The Arabic blocks, as `detectLocale` in `@helpdock/ai` reads them.
 const ARABIC_LETTER = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/u;

@@ -11,6 +11,7 @@ import type { AiPorts } from './ports.js';
 import { createTranscribe, type TranscribeRequest, type TranscribeResult } from './transcribe.js';
 
 export * from './assist/index.js';
+export * from './auto-reply/index.js';
 export * from './complete.js';
 export * from './embed.js';
 export * from './guardrails/budget.js';

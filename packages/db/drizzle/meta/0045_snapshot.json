@@ -1,5 +1,5 @@
 {
-  "id": "9cdb0ca3-5d6a-45f2-8c83-870f89c7e443",
+  "id": "36d2ebe8-3b18-4045-be2b-e7767f33b769",
   "prevId": "1828140a-860e-4b9b-9a90-bbc6ecb9bfa4",
   "version": "7",
   "dialect": "postgresql",
@@ -458,435 +458,6 @@
           "value": "(\"ai_settings\".\"provider_id\" IS NULL) = (\"ai_settings\".\"model_id\" IS NULL)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.article_proposals": {
-      "name": "article_proposals",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "section_id": {
-          "name": "section_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "locale": {
-          "name": "locale",
-          "type": "locale",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "body_markdown": {
-          "name": "body_markdown",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message_count": {
-          "name": "message_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "citations": {
-          "name": "citations",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "ai_call_id": {
-          "name": "ai_call_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "article_proposal_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'waiting'"
-        },
-        "proposed_by": {
-          "name": "proposed_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "proposed_at": {
-          "name": "proposed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "decided_by": {
-          "name": "decided_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reject_reason": {
-          "name": "reject_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "article_id": {
-          "name": "article_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "article_proposals_brand_status_idx": {
-          "name": "article_proposals_brand_status_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "proposed_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "article_proposals_ticket_idx": {
-          "name": "article_proposals_ticket_idx",
-          "columns": [
-            {
-              "expression": "ticket_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "article_proposals_brand_department_idx": {
-          "name": "article_proposals_brand_department_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "department_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "article_proposals_brand_id_brands_id_fk": {
-          "name": "article_proposals_brand_id_brands_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "article_proposals_ticket_id_tickets_id_fk": {
-          "name": "article_proposals_ticket_id_tickets_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "article_proposals_department_id_departments_id_fk": {
-          "name": "article_proposals_department_id_departments_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "departments",
-          "columnsFrom": ["department_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "article_proposals_section_id_hc_sections_id_fk": {
-          "name": "article_proposals_section_id_hc_sections_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "hc_sections",
-          "columnsFrom": ["section_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "article_proposals_ai_call_id_ai_calls_id_fk": {
-          "name": "article_proposals_ai_call_id_ai_calls_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "ai_calls",
-          "columnsFrom": ["ai_call_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "article_proposals_proposed_by_users_id_fk": {
-          "name": "article_proposals_proposed_by_users_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "users",
-          "columnsFrom": ["proposed_by"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "article_proposals_decided_by_users_id_fk": {
-          "name": "article_proposals_decided_by_users_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "users",
-          "columnsFrom": ["decided_by"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "article_proposals_article_id_hc_articles_id_fk": {
-          "name": "article_proposals_article_id_hc_articles_id_fk",
-          "tableFrom": "article_proposals",
-          "tableTo": "hc_articles",
-          "columnsFrom": ["article_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.ticket_field_suggestions": {
-      "name": "ticket_field_suggestions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tag_ids": {
-          "name": "tag_ids",
-          "type": "uuid[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::uuid[]"
-        },
-        "priority": {
-          "name": "priority",
-          "type": "ticket_priority",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "suggested_department_id": {
-          "name": "suggested_department_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ai_call_id": {
-          "name": "ai_call_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "ticket_field_suggestions_ticket_key": {
-          "name": "ticket_field_suggestions_ticket_key",
-          "columns": [
-            {
-              "expression": "ticket_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ticket_field_suggestions_brand_department_idx": {
-          "name": "ticket_field_suggestions_brand_department_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "department_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "ticket_field_suggestions_brand_id_brands_id_fk": {
-          "name": "ticket_field_suggestions_brand_id_brands_id_fk",
-          "tableFrom": "ticket_field_suggestions",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ticket_field_suggestions_ticket_id_tickets_id_fk": {
-          "name": "ticket_field_suggestions_ticket_id_tickets_id_fk",
-          "tableFrom": "ticket_field_suggestions",
-          "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ticket_field_suggestions_department_id_departments_id_fk": {
-          "name": "ticket_field_suggestions_department_id_departments_id_fk",
-          "tableFrom": "ticket_field_suggestions",
-          "tableTo": "departments",
-          "columnsFrom": ["department_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "ticket_field_suggestions_suggested_department_id_departments_id_fk": {
-          "name": "ticket_field_suggestions_suggested_department_id_departments_id_fk",
-          "tableFrom": "ticket_field_suggestions",
-          "tableTo": "departments",
-          "columnsFrom": ["suggested_department_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "ticket_field_suggestions_ai_call_id_ai_calls_id_fk": {
-          "name": "ticket_field_suggestions_ai_call_id_ai_calls_id_fk",
-          "tableFrom": "ticket_field_suggestions",
-          "tableTo": "ai_calls",
-          "columnsFrom": ["ai_call_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.api_idempotency_keys": {
@@ -1496,31 +1067,6 @@
         },
         "processed_at": {
           "name": "processed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "transcript_status": {
-          "name": "transcript_status",
-          "type": "transcript_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "transcript_text": {
-          "name": "transcript_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "transcript_language": {
-          "name": "transcript_language",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "transcribed_at": {
-          "name": "transcribed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -10252,6 +9798,42 @@
             "type": "stored"
           }
         },
+        "ai_paused_at": {
+          "name": "ai_paused_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_paused_until": {
+          "name": "ai_paused_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_pause_reason": {
+          "name": "ai_pause_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_eligible_at": {
+          "name": "ai_eligible_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_answered_at": {
+          "name": "ai_answered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_handed_off_at": {
+          "name": "ai_handed_off_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp (3) with time zone",
@@ -10526,6 +10108,28 @@
           "isUnique": false,
           "concurrently": false,
           "method": "gin",
+          "with": {}
+        },
+        "tickets_brand_ai_eligible_idx": {
+          "name": "tickets_brand_ai_eligible_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ai_eligible_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tickets\".\"ai_eligible_at\" is not null",
+          "concurrently": false,
+          "method": "btree",
           "with": {}
         },
         "tickets_brand_status_changed_idx": {
@@ -12113,11 +11717,6 @@
       "schema": "public",
       "values": ["ok", "error", "refused"]
     },
-    "public.article_proposal_status": {
-      "name": "article_proposal_status",
-      "schema": "public",
-      "values": ["waiting", "approved", "rejected"]
-    },
     "public.assignment_mode": {
       "name": "assignment_mode",
       "schema": "public",
@@ -12378,11 +11977,6 @@
       "name": "ticket_view_built_in",
       "schema": "public",
       "values": ["my_open", "unassigned", "overdue", "department_open", "escalated"]
-    },
-    "public.transcript_status": {
-      "name": "transcript_status",
-      "schema": "public",
-      "values": ["pending", "done", "failed"]
     },
     "public.user_status": {
       "name": "user_status",

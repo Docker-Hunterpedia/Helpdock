@@ -1,4 +1,5 @@
 import type {
+  AiCallView,
   AssignableAgentList,
   Attachment,
   Macro,
@@ -14,6 +15,8 @@ import type {
   Ticket,
   TicketActivityEntry,
   TicketActivityList,
+  TicketAiCalls,
+  TicketAiState,
   TicketCc,
   TicketCcRequest,
   TicketCreateRequest,
@@ -751,6 +754,8 @@ export class MockTicketsApi implements TicketsApi {
   readonly #csat = new Map<string, TicketCsat>();
   /** Keyed by the secondary's id; present while it is merged. */
   readonly #merges = new Map<string, MergeRecord>();
+  /** M7-06: the AI log of each ticket. */
+  readonly #aiCalls = new Map<string, readonly AiCallView[]>();
   /** M1-05. Counted against this fixture's own tickets, as the api counts its own. */
   readonly #views = new MockViews((filters) => this.#matching(queryOfView(filters)).length);
   readonly #now: number;
@@ -1344,6 +1349,23 @@ export class MockTicketsApi implements TicketsApi {
     this.#log(primary.id, 'ticket.unmerged', { ticketId }, { ticketId: primary.id });
 
     return Promise.resolve({ primary: this.#require(primary.id), secondary: restored });
+  }
+
+  /** M7-06. The fixture's model calls; none until a test seeds them with {@link seedAiCalls}. */
+  async aiCalls(_brandId: string, ticketId: string): Promise<TicketAiCalls> {
+    this.#require(ticketId);
+    return Promise.resolve({ items: [...(this.#aiCalls.get(ticketId) ?? [])] });
+  }
+
+  async resumeAssistant(_brandId: string, ticketId: string): Promise<TicketAiState> {
+    const ticket = this.#require(ticketId);
+    const ai: TicketAiState = { pausedAt: null, pausedUntil: null, reason: null };
+    this.#tickets = this.#tickets.map((row) => (row.id === ticketId ? { ...ticket, ai } : row));
+    return Promise.resolve(ai);
+  }
+
+  seedAiCalls(ticketId: string, calls: readonly AiCallView[]): void {
+    this.#aiCalls.set(ticketId, calls);
   }
 
   async split(

@@ -30,6 +30,7 @@ Thanks for your interest. Helpdock is early and moving fast, so please read this
 - Side effects (email, Telegram, AI calls, webhooks, indexing) go through BullMQ, never inline in a request.
 - Secrets are encrypted at rest and never returned to the client after save.
 - User-facing strings go through i18n catalogs with English and Arabic entries.
+- Screens are built from an artboard and [DESIGN.md](DESIGN.md). [docs/design/](docs/design/README.md) shows every artboard as an image with its source; a screen with no artboard needs one before it is built.
 
 ## Security issues
 

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Helpdock typography</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans','IBM Plex Sans Arabic',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E}a:hover{color:#0C5F59}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; padding: 48px; display: flex; flex-direction: column; gap: 28px; background: #F7F5F0;">
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #5C564C;">Foundations · 02</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600;">Typography</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #5C564C; max-width: 760px;">IBM Plex Sans and IBM Plex Sans Arabic were drawn as one family, so English and Arabic sit on the same scale with the same weights. Plex Mono carries ticket numbers, keys and code. Three weights only: 400, 500, 600.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px;">
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">display 32/40</div><div style="font-size: 32px; line-height: 40px; font-weight: 600;">Inbox, sorted.</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">h1 24/32</div><div style="font-size: 24px; line-height: 32px; font-weight: 600;">Billing department</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">h2 20/28</div><div style="font-size: 20px; line-height: 28px; font-weight: 600;">Refund not received after 10 days</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">h3 16/24</div><div style="font-size: 16px; line-height: 24px; font-weight: 600;">Conversation</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">body-lg 16/24</div><div style="font-size: 16px; line-height: 24px;">Thanks for reaching out. I can see the refund was issued on the 4th and should land within 5 business days.</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">body 14/20</div><div style="font-size: 14px; line-height: 20px;">Assigned to Lina · First response due in 1 h 20 m · 3 attachments</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">caption 12/16</div><div style="font-size: 12px; line-height: 16px; font-weight: 500; color: #5C564C;">Updated 4 minutes ago via email</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C;">mono 13/20</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 20px;">HD-1042 · hd_live_7f3a…</div></div>
+    </div>
+
+    <div lang="ar" dir="rtl" style="display: flex; flex-direction: column; gap: 18px; font-family: 'IBM Plex Sans Arabic', 'IBM Plex Sans', sans-serif;">
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">display 32/40</div><div style="font-size: 32px; line-height: 40px; font-weight: 600;">صندوق وارد مرتّب.</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">h1 24/32</div><div style="font-size: 24px; line-height: 32px; font-weight: 600;">قسم الفوترة</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">h2 20/28</div><div style="font-size: 20px; line-height: 28px; font-weight: 600;">لم يصل المبلغ المسترد بعد 10 أيام</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">h3 16/24</div><div style="font-size: 16px; line-height: 24px; font-weight: 600;">المحادثة</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">body-lg 16/24</div><div style="font-size: 16px; line-height: 24px;">شكراً لتواصلك معنا. أرى أن المبلغ المسترد صدر يوم 4 وسيصل خلال 5 أيام عمل.</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">body 14/20</div><div style="font-size: 14px; line-height: 20px;">مُسندة إلى لينا · الرد الأول خلال ساعة و20 دقيقة · 3 مرفقات</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">caption 12/16</div><div style="font-size: 12px; line-height: 16px; font-weight: 500; color: #5C564C;">حُدّثت قبل 4 دقائق عبر البريد</div></div>
+      <div style="display: flex; align-items: baseline; gap: 16px;"><div style="width: 110px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C564C; direction: ltr; text-align: right;">mono 13/20</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 20px; direction: ltr; text-align: right;">HD-1042 · hd_live_7f3a…</div></div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-top: 8px; border-top: 1px solid #E3DFD6;">
+    <div style="font-size: 12px; line-height: 18px; color: #5C564C;"><strong style="color: #16181C; font-weight: 600;">Rules.</strong> Admin base is 14 px. Widget and help center base is 16 px. Line-height is always a multiple of 4.</div>
+    <div style="font-size: 12px; line-height: 18px; color: #5C564C;"><strong style="color: #16181C; font-weight: 600;">Arabic.</strong> Same sizes and weights. No letter-spacing, no uppercase transforms, no italics. Numbers and ticket ids stay Latin and LTR inside RTL text.</div>
+    <div style="font-size: 12px; line-height: 18px; color: #5C564C;"><strong style="color: #16181C; font-weight: 600;">Fallbacks.</strong> Self-host the woff2 files in <span style="font-family: 'IBM Plex Mono', monospace;">packages/ui</span>; system stack is ui-sans-serif, system-ui. Never load fonts from a third party in the widget.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin · accept invitation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: #F7F5F0; font-size: 14px; line-height: 20px;">
+  <div style="width: 440px; display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="width: 32px; height: 32px; border-radius: 6px; background: #0F766E; color: #FFFFFF; font-weight: 600; font-size: 16px; display: inline-flex; align-items: center; justify-content: center;">H</span>
+      <span style="font-weight: 600; font-size: 16px;">Helpdock</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600;">You're invited to Helpdock</h1>
+      <p style="margin: 0; color: #5C564C;"><strong style="font-weight: 500; color: #16181C;">Omar Aziz</strong> invited <strong style="font-weight: 500; color: #16181C;">nour@helpdock.com</strong> as an <strong style="font-weight: 500; color: #16181C;">Agent</strong> in Technical. The link works for 4 more days.</p>
+    </div>
+    <form style="display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6;">
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="inv-name" style="font-size: 13px; font-weight: 500;">Your name</label><input id="inv-name" type="text" value="Nour Saleh" autocomplete="name" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="inv-pass" style="font-size: 13px; font-weight: 500;">Choose a password</label><input id="inv-pass" type="password" value="••••••••••••••" autocomplete="new-password" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"><div style="display: flex; gap: 4px;"><span style="flex-grow: 1; height: 4px; border-radius: 999px; background: #2E7D4F;"></span><span style="flex-grow: 1; height: 4px; border-radius: 999px; background: #2E7D4F;"></span><span style="flex-grow: 1; height: 4px; border-radius: 999px; background: #2E7D4F;"></span><span style="flex-grow: 1; height: 4px; border-radius: 999px; background: #E3DFD6;"></span></div><div style="font-size: 12px; line-height: 16px; color: #5C564C;">At least 12 characters. Strong.</div></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="inv-locale" style="font-size: 13px; font-weight: 500;">Language</label><select id="inv-locale" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"><option>English</option><option>العربية</option></select></div>
+      <button type="submit" style="height: 36px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500;">Create account</button>
+      <div style="font-size: 12px; line-height: 16px; color: #5C564C;">Next you'll set up two-factor authentication, which this install requires.</div>
+    </form>
+    <div style="padding: 12px 14px; border-radius: 6px; background: #FBEEDF; border: 1px solid #B45309; color: #7C3A06; font-size: 13px; line-height: 18px; display: flex; gap: 10px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Expired or used link state: "This invitation is no longer valid. Ask Omar Aziz to send a new one." with a single secondary button "Back to sign in".</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

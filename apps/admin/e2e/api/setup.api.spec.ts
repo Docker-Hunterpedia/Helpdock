@@ -43,7 +43,7 @@ test.describe('the first-run wizard against the real api', () => {
     await key.fill('not-the-setup-key');
     await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
     await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
-    await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+    await page.getByLabel(t('wizard:account.passwordLabel'), { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: t('wizard:account.submit') }).click();
     await expect(page.getByRole('alert')).toHaveText(t('wizard:account.setupKeyInvalid'));
 

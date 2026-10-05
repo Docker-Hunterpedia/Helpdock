@@ -36,6 +36,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../../bo
 import { createLogger } from '../../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../../seed/dev-seed.js';
 import { FakeStorage } from '../../testing/media.js';
+import { signInForTest } from '../../testing/staff-sign-in.js';
 import { reindexArticles } from '../search/search-index.js';
 import { createPageCacheHandler } from './cache-events.js';
 import { generationKey, RedisPageCache } from './page-cache.js';
@@ -173,19 +174,8 @@ describe.skipIf(!hasDocker)('the help center pages (M5-03, M5-04, M5-06)', () =>
       ...(options.cookies === undefined ? {} : { cookies: options.cookies }),
     });
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addPerson = async (db: Db, who: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);

@@ -39,7 +39,12 @@ export class InboundParseController {
    * It bounds a stranger hammering the endpoint without a secret, not a
    * provider doing its job.
    */
-  readonly #limiter = createIpRateLimiter({ limit: 600, windowMs: 60_000, maxTrackedIps: 4096 });
+  readonly #limiter = createIpRateLimiter({
+    bucket: 'inbound-parse',
+    limit: 600,
+    windowMs: 60_000,
+    maxTrackedIps: 4096,
+  });
   readonly #inbound: InboundParseService;
 
   constructor(@Inject(InboundParseService) inbound: InboundParseService) {

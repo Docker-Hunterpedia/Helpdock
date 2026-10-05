@@ -579,7 +579,7 @@ export const notifyPushJob = defineJob({
     `notify.push:${payload.subscriptionId}:${payload.notificationId ?? payload.testId}`,
 });
 
-export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite'] as const;
+export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite', 'securityChange'] as const;
 
 export const authEmailPayloadSchema = z.object({
   brandId: z.uuid(),
@@ -594,15 +594,19 @@ export const authEmailPayloadSchema = z.object({
    * holds it in the clear.
    */
   urlEncrypted: z.string().min(1),
-  /** How long the link lasts, in the unit the kind's catalog key counts in. */
-  expiresIn: z.int().positive(),
+  /**
+   * How long the link lasts, in the unit the kind's catalog key counts in.
+   * Absent for a `securityChange`, whose link is to a page and does not expire.
+   */
+  expiresIn: z.int().positive().optional(),
   /** Extra interpolation the invite's sentences need: inviter, brand and role. */
   values: z.record(z.string(), z.string()).optional(),
 });
 export type AuthEmailPayload = z.infer<typeof authEmailPayloadSchema>;
 
 /**
- * A sign-in link, a password reset or a staff invitation, sent from the
+ * A sign-in link, a password reset, a staff invitation or a notice that a
+ * credential changed, sent from the
  * install's system sender in the recipient's language. Added by the
  * `auth.email_requested` outbox handler with a job id derived from the outbox
  * row, so a redelivered event adds nothing, and keyed by that row, so one

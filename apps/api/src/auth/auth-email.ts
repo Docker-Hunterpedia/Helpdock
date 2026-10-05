@@ -5,8 +5,9 @@ import { z } from 'zod';
 import { AUTH_SYSTEM_PRINCIPAL, type StaffRepository } from './staff.repository.js';
 
 /**
- * The request half of auth email: a sign-in link, a password reset or a staff
- * invitation becomes one `auth.email_requested` outbox row, and the worker's
+ * The request half of auth email: a sign-in link, a password reset, a staff
+ * invitation or a credential-change notice becomes one `auth.email_requested`
+ * outbox row, and the worker's
  * `auth.email` job renders and sends it (`auth-email.job.ts`). Nothing here
  * talks to a mail server, so no request waits on one and none sends anything
  * the transaction it belongs to later rolls back (AGENTS.md, side effects).
@@ -25,7 +26,8 @@ export const authEmailEventSchema = z.object({
   kind: z.enum(AUTH_EMAIL_KINDS),
   userId: z.uuid(),
   urlEncrypted: z.string().min(1),
-  expiresIn: z.int().positive(),
+  /** Absent for a `securityChange`, whose link is to a page and does not expire. */
+  expiresIn: z.int().positive().optional(),
   values: z.record(z.string(), z.string()).optional(),
 });
 export type AuthEmailEvent = z.infer<typeof authEmailEventSchema>;
@@ -37,7 +39,7 @@ export interface AuthEmailRequest {
   readonly kind: AuthEmailKind;
   readonly userId: string;
   readonly url: string;
-  readonly expiresIn: number;
+  readonly expiresIn?: number;
   readonly values?: Readonly<Record<string, string>>;
 }
 
@@ -111,7 +113,7 @@ export class OutboxAuthMail implements AuthMail {
       kind,
       userId,
       urlEncrypted: encryptSecret(url, this.#keyring),
-      expiresIn,
+      ...(expiresIn === undefined ? {} : { expiresIn }),
       ...(values === undefined ? {} : { values: { ...values } }),
     };
   }

@@ -48,6 +48,7 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { FakeTelegram, textUpdate } from '../testing/fake-telegram.js';
 import { FakeStorage } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { telegramApiFactory } from './bot-api-factory.js';
 import { createTelegramInboundService } from './factory.js';
 import { TelegramRepository } from './telegram.repository.js';
@@ -193,19 +194,8 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     return updateId;
   };
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addPerson = async (db: Db, who: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);

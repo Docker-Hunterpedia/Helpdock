@@ -59,6 +59,7 @@ import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceService } from '../realtime/presence.service.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
 import { WIDGET_VISITOR_WRITE_RULE } from './widget-gate.js';
@@ -271,19 +272,8 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       payload: body,
     });
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addPerson = async (db: Db, name: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);
@@ -373,6 +363,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
 
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    ignoreAuthEmailInThisSuite();
     registerWidgetEventHandlers(new RedisWidgetBroadcast(worker));
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });

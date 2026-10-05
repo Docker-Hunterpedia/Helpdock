@@ -34,6 +34,7 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { AutoReplyService } from './auto-reply.service.js';
 import { EmailRepository } from './email.repository.js';
 import { createEmailSendEventHandler, EMAIL_EVENTS } from './email-events.js';
@@ -163,19 +164,8 @@ describe.skipIf(!hasDocker)('outbound email', () => {
 
   const brandPath = () => `/api/brands/${seeded.brandId}`;
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const mailpitMessages = async (): Promise<MailpitSummary[]> => {
     const response = await fetch(`${mailpitApi}/api/v1/messages`);

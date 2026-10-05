@@ -45,6 +45,7 @@ import { registerNotificationHandlers } from '../notifications/notification-even
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { CsatRepository } from './csat.repository.js';
 import { CSAT_PUBLIC_RULE } from './csat.service.js';
@@ -170,23 +171,11 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
   const timePath = (ticketId: string) => `${ticketPath(ticketId)}/time-entries`;
   const publicPath = (token: string) => `/api/public/csat/${token}`;
 
-  const signIn = async (email: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({
-        email,
-        password: email === seeded.email ? seeded.password : PASSWORD,
-      }),
+  const signIn = (email: string): Promise<string> =>
+    signInForTest(app, {
+      email,
+      password: email === seeded.email ? seeded.password : PASSWORD,
     });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
-    return body.accessToken;
-  };
 
   const addPerson = async (db: Db, name: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);
@@ -287,6 +276,7 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
     // The worker's handlers, registered in this process as start-up does.
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    ignoreAuthEmailInThisSuite();
     registerCsatEventHandlers({
       repository: new CsatRepository(),
       tokens: new CsatTokens(createKeyring(envFor())),

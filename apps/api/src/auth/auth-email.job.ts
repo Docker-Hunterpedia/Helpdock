@@ -69,7 +69,7 @@ export const composeAuthEmail = (
     name: recipient.name,
     url: decryptSecret(payload.urlEncrypted, keyring),
     locale: recipient.locale,
-    expiresIn: payload.expiresIn,
+    ...(payload.expiresIn === undefined ? {} : { expiresIn: payload.expiresIn }),
     ...(payload.values === undefined ? {} : { values: payload.values }),
   });
 

@@ -47,6 +47,7 @@ import { businessHoursProbe } from '../sla/business-hours-probe.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
 import { FakeStorage } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 
 /**
  * Where M2's two halves meet, against real Postgres, Redis and Mailpit:
@@ -327,13 +328,7 @@ describe.skipIf(!hasDocker)('inbound and outbound email together', () => {
       support = created?.id ?? '';
     });
 
-    const signIn = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email: seeded.email, password: seeded.password }),
-    });
-    token = (signIn.json() as { accessToken: string }).accessToken;
+    token = await signInForTest(app, { email: seeded.email, password: seeded.password });
 
     expect(
       (

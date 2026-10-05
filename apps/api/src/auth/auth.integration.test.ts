@@ -2,10 +2,17 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { EmailMessage } from '@helpdock/channels';
 import { createKeyring, type Env } from '@helpdock/config';
-import { createDb, type DbHandle, users } from '@helpdock/db';
+import {
+  auditLog,
+  createDb,
+  type DbHandle,
+  INSTALL_SCOPE_BRAND_ID,
+  users,
+  withTenant,
+} from '@helpdock/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, like, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { generate } from 'otplib';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -13,8 +20,9 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
+import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 import { PRINCIPAL_REVOKED_CHANNEL } from './redis-keys.js';
-import { REFRESH_COOKIE, TRUSTED_DEVICE_COOKIE } from './session/cookies.js';
+import { refreshCookieOf, trustedDeviceCookie } from './session/cookies.js';
 
 /**
  * The whole of M0-05 over HTTP, against a real Postgres and a real Redis: the
@@ -30,8 +38,12 @@ const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
 const REDIS_IMAGE = 'redis:7-alpine';
 
 const APP_ROLE_PASSWORD = 'app-role-password';
+const METRICS_TOKEN = 'metrics-token-for-the-auth-suite';
 const MASTER_KEY = Buffer.alloc(32, 11).toString('base64');
 const APP_URL = 'https://support.example.com';
+/** Over https the cookies carry the `__Secure-` prefix (ASVS 3.4.4). */
+const REFRESH_COOKIE = refreshCookieOf({ APP_URL }).name;
+const TRUSTED_DEVICE_COOKIE = trustedDeviceCookie(APP_URL).name;
 
 /**
  * The origin a redirect lands on. Compared as a parsed origin, not a prefix:
@@ -75,6 +87,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       APP_MASTER_KEY: MASTER_KEY,
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
+      METRICS_TOKEN,
       PORT: 0,
       TRUST_PROXY: false,
       DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/helpdock`,
@@ -117,7 +130,15 @@ describe.skipIf(!hasDocker)('the auth service', () => {
   const cookieOf = (response: Awaited<ReturnType<typeof post>>, name: string): string | undefined =>
     response.cookies.find((cookie) => cookie.name === name)?.value;
 
-  const totpCode = (): Promise<string> => generate({ secret: seeded.totpSecret ?? '', period: 30 });
+  /**
+   * A code for the seeded authenticator. The api accepts each step once, and
+   * these tests sign in faster than steps roll over, so the used step is
+   * forgotten first; the one test about replay does not use this.
+   */
+  const totpCode = async (): Promise<string> => {
+    await forgetUsedTotpSteps(runtime.redis);
+    return generate({ secret: seeded.totpSecret ?? '', period: 30 });
+  };
 
   /** Password, then the second factor, ending in a session and its cookie. */
   const signIn = async (): Promise<{ accessToken: string; refreshCookie: string }> => {
@@ -578,6 +599,113 @@ describe.skipIf(!hasDocker)('the auth service', () => {
 
     it('refuses a provider it does not have', async () => {
       expect((await get('/api/auth/oauth/facebook/start')).statusCode).toBe(403);
+    });
+  });
+
+  describe('M9 hardening (ASVS)', () => {
+    const authRows = () =>
+      withTenant(
+        runtime.db,
+        {
+          brandIds: [INSTALL_SCOPE_BRAND_ID],
+          departmentIds: 'all',
+          principalType: 'system',
+          principalId: 'test',
+        },
+        (tx) =>
+          tx
+            .select()
+            .from(auditLog)
+            .where(like(auditLog.action, 'auth.%'))
+            .orderBy(desc(auditLog.createdAt)),
+      );
+
+    it('writes sign-ins to the install-scope audit trail, with where they came from', async () => {
+      await post(
+        '/api/auth/sign-in',
+        { email: seeded.email, password: 'not the password' },
+        { 'user-agent': 'Audit-Probe/1.0' },
+      );
+
+      const [row] = await authRows();
+      expect(row).toMatchObject({
+        brandId: INSTALL_SCOPE_BRAND_ID,
+        action: 'auth.sign_in.failed',
+        actorType: 'system',
+        actorId: 'auth',
+        targetType: 'user',
+        targetId: seeded.userId,
+        userAgent: 'Audit-Probe/1.0',
+        meta: { method: 'password', reason: 'wrong-password' },
+      });
+      expect(row?.ip).not.toBeNull();
+      expect(row?.requestId).not.toBeNull();
+
+      await signIn();
+      expect((await authRows())[0]).toMatchObject({
+        action: 'auth.sign_in.succeeded',
+        actorType: 'staff',
+        actorId: seeded.userId,
+        meta: { method: 'password', secondFactor: 'totp' },
+      });
+    });
+
+    it('accepts an authenticator code once, in Redis, whichever challenge it is typed into', async () => {
+      await forgetUsedTotpSteps(runtime.redis);
+      const code = await generate({ secret: seeded.totpSecret ?? '', period: 30 });
+      const answer = async () => {
+        const started = await post('/api/auth/sign-in', {
+          email: seeded.email,
+          password: seeded.password,
+        });
+        return post('/api/auth/totp', {
+          challengeId: (started.json() as { challengeId: string }).challengeId,
+          code,
+          trustDevice: false,
+        });
+      };
+
+      expect((await answer()).statusCode).toBe(201);
+      const replayed = await answer();
+
+      expect(replayed.statusCode).toBe(401);
+      expect(replayed.json()).toMatchObject({ error: { auth: { code: 'totp-mismatch' } } });
+      expect((await authRows())[0]).toMatchObject({ action: 'auth.second_factor.replayed' });
+    });
+
+    it('names the refresh cookie __Secure- and lets it live as long as the absolute limit', async () => {
+      const started = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      const finished = await post('/api/auth/totp', {
+        challengeId: (started.json() as { challengeId: string }).challengeId,
+        code: await totpCode(),
+        trustDevice: true,
+      });
+
+      const refresh = finished.cookies.find((cookie) => cookie.name === '__Secure-hd_refresh');
+      expect(refresh).toMatchObject({ secure: true, httpOnly: true, path: '/api/auth' });
+      expect(refresh?.maxAge).toBe(12 * 60 * 60);
+      expect(refresh?.domain).toBeUndefined();
+      expect(finished.cookies.map((cookie) => cookie.name)).toContain('__Secure-hd_trust');
+    });
+
+    it('marks every JSON answer as a download (ASVS 14.4.2)', async () => {
+      const methods = await get('/api/auth/methods');
+      const refused = await post('/api/auth/sign-in', { email: 'nope' });
+
+      expect(methods.headers['content-disposition']).toBe('attachment; filename="api.json"');
+      expect(refused.headers['content-disposition']).toBe('attachment; filename="api.json"');
+    });
+
+    it('counts refusals in rate_limit_refusals_total', async () => {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        await post('/api/auth/sign-in', { email: 'flood@example.com', password: 'whatever it is' });
+      }
+
+      const metrics = await get('/metrics', { authorization: `Bearer ${METRICS_TOKEN}` });
+      expect(metrics.body).toMatch(/rate_limit_refusals_total\{bucket="signin-email"\} [1-9]/);
     });
   });
 

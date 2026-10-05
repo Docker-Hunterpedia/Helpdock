@@ -61,6 +61,7 @@ import { StaticModule } from './static/static.module.js';
 import { TelegramModule, type TelegramModuleOverrides } from './telegram/telegram.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
 import { TicketingModule } from './ticketing/ticketing.module.js';
+import { DbContactExportProvider } from './tickets/contact-export.js';
 import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { ViewsModule } from './views/views.module.js';
@@ -206,6 +207,8 @@ export class AppModule implements NestModule {
           timeline: new DbContactTimelineProvider(),
           // M1-14: an erasure also removes the files the person sent.
           erasure: new DbContactErasureProvider(),
+          // M9: the access half of erasure (ASVS 8.3.2).
+          exporter: new DbContactExportProvider(),
         }),
         ticketing,
         csat,

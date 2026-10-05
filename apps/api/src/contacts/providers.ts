@@ -1,5 +1,5 @@
 import type { DbTransaction } from '@helpdock/db';
-import type { ContactStats, ContactTimelineItem } from '@helpdock/schemas';
+import type { ContactExportTicket, ContactStats, ContactTimelineItem } from '@helpdock/schemas';
 
 /**
  * The two things the contact screens need from tickets, and nothing else.
@@ -110,6 +110,22 @@ export class NoContactErasureProvider implements ContactErasureProvider {
   }
 }
 
+/**
+ * The ticket half of a contact export (ASVS 8.3.2): the contact's tickets and
+ * the conversation in each, read in the export's own transaction.
+ */
+export interface ContactExportProvider {
+  ticketsOf(tx: DbTransaction, brandId: string, contactId: string): Promise<ContactExportTicket[]>;
+}
+
+/** No tickets to export: a brand with no ticketing yet. */
+export class NoContactExportProvider implements ContactExportProvider {
+  ticketsOf(): Promise<ContactExportTicket[]> {
+    return Promise.resolve([]);
+  }
+}
+
 export const TICKET_STATS_PROVIDER = Symbol('helpdock.ticket-stats-provider');
+export const CONTACT_EXPORT_PROVIDER = Symbol('helpdock.contact-export-provider');
 export const CONTACT_ERASURE_PROVIDER = Symbol('helpdock.contact-erasure-provider');
 export const CONTACT_TIMELINE_PROVIDER = Symbol('helpdock.contact-timeline-provider');

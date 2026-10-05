@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin · email signature</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; background: #F7F5F0; font-size: 14px; line-height: 20px; overflow: hidden;">
+<nav aria-label="Main" style="width: 220px; flex-shrink: 0; box-sizing: border-box; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; border-inline-end: 1px solid #E3DFD6; background: #F7F5F0;">
+<div style="display: flex; align-items: center; gap: 10px; padding-block: 6px 14px; padding-inline: 8px 0;"><span style="width: 28px; height: 28px; border-radius: 6px; background: #0F766E; color: #FFFFFF; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span><div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;"><span style="font-weight: 600;">Helpdock</span><span style="font-size: 12px; color: #5C564C;">Brand · switch</span></div><button type="button" aria-label="Notifications, 3 unread" aria-haspopup="dialog" aria-expanded="false" style="position: relative; width: 32px; height: 32px; flex-shrink: 0; border-radius: 6px; border: 0; background: transparent; color: #16181C; display: inline-flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span aria-hidden="true" style="position: absolute; top: 0; inset-inline-end: 0; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: #0F766E; color: #FFFFFF; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; line-height: 18px; text-align: center;">3</span></button></div>
+<a href="#tickets" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg>Tickets</a>
+<a href="#contacts" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>Contacts</a>
+<a href="#hc" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Help center</a>
+<a href="#reports" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>Reports</a>
+<div style="font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #7D7669; padding: 16px 10px 4px 10px;">Admin</div>
+<a href="#brand" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>Brand</a>
+<a href="#settings" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>Settings</a>
+<a href="#ticketing" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>Ticketing</a>
+<a href="#automation" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>Automation</a>
+<a href="#channels" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>Channels</a>
+<a href="#staff" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></svg>Staff and roles</a>
+<a href="#system" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 6px; color: #16181C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>System</a>
+<div style="margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-top: 1px solid #E3DFD6;"><span style="width: 28px; height: 28px; border-radius: 999px; background: #0F766E; color: #FFFFFF; font-weight: 600; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;">L</span><div style="display: flex; flex-direction: column;"><span style="font-weight: 500;">Lina Haddad</span><span style="font-size: 12px; color: #5C564C;">Admin · <span style="color: #2E7D4F;">online</span></span></div></div>
+</nav>
+
+<main style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+<header style="padding: 20px 32px 0 32px; display: flex; flex-direction: column; gap: 16px;">
+<div style="display: flex; align-items: center; gap: 12px;"><h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600;">Your account</h1><span style="font-size: 13px; color: #5C564C;">Only you see these settings</span></div>
+<div style="display: flex; gap: 4px; border-bottom: 1px solid #E3DFD6;"><a href="#security" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 500; color: #5C564C; border-bottom: 2px solid transparent;">Security</a><a href="AdminNotifications.dc.html" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 500; color: #5C564C; border-bottom: 2px solid transparent;">Notifications</a><a href="#signature" aria-current="page" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 500; color: #0F766E; border-bottom: 2px solid #0F766E;">Email signature</a></div>
+</header>
+<div style="flex-grow: 1; min-height: 0; padding: 24px 32px; display: grid; grid-template-columns: minmax(0, 760px) 340px; gap: 32px; align-content: start; overflow: hidden;">
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0;">
+
+<form aria-labelledby="sig-h" style="border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; display: flex; flex-direction: column;">
+<div style="padding: 16px 20px; border-bottom: 1px solid #EFECE5; display: flex; flex-direction: column; gap: 2px;"><h2 id="sig-h" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600;">Email signature</h2><span style="font-size: 13px; color: #5C564C;">Added under your public replies by email. Never on internal notes, chat or Telegram.</span></div>
+<div style="padding: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+<div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;"><label for="sig-en" style="font-size: 13px; font-weight: 500;">English</label><textarea id="sig-en" rows="4" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; line-height: 20px; color: #16181C; resize: vertical; box-sizing: border-box; width: 100%;">Lina Haddad
+Billing team · Helpdock</textarea><div style="font-size: 12px; line-height: 16px; color: #5C564C;">Plain text, up to 6 lines. Links are made clickable.</div></div>
+<div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;"><label for="sig-ar" style="font-size: 13px; font-weight: 500;">Arabic <span lang="ar" style="font-family: 'IBM Plex Sans Arabic','IBM Plex Sans',ui-sans-serif,system-ui,sans-serif; font-weight: 400; color: #5C564C;">العربية</span></label><textarea id="sig-ar" dir="rtl" lang="ar" rows="4" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; line-height: 20px; color: #16181C; resize: vertical; box-sizing: border-box; width: 100%; font-family: 'IBM Plex Sans Arabic','IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;">لينا حداد
+فريق الفوترة · Helpdock</textarea><div style="font-size: 12px; line-height: 16px; color: #5C564C;">Used when the customer’s language is Arabic. Left empty, the English one is used.</div></div>
+</div>
+<div style="padding: 0 20px 16px 20px; display: flex; flex-direction: column; gap: 6px;">
+<div style="font-size: 12px; line-height: 16px; color: #5C564C;">Invalid state: over 6 lines turns the field’s border red with “A signature can have at most 6 lines.” under it, and Save stays enabled so the error is announced on submit.</div>
+</div>
+<div style="padding: 12px 20px; border-top: 1px solid #EFECE5; display: flex; justify-content: flex-end; gap: 8px; background: #F7F5F0; border-radius: 0 0 10px 10px;"><button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-size: 14px; font-weight: 500; color: #16181C;">Discard</button><button type="submit" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px;">Save signature</button></div>
+</form>
+<div style="font-size: 12px; line-height: 16px; color: #5C564C;">Route <span style="font-family: 'IBM Plex Mono', monospace;">/me/signature</span>, the third tab of Your account. The Security tab keeps your details, password, two-factor and sessions.</div>
+</div>
+<aside aria-labelledby="pv-h" style="border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; display: flex; flex-direction: column; padding: 16px; gap: 14px; align-self: start;">
+<div style="display: flex; flex-direction: column; gap: 2px;"><h2 id="pv-h" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600;">Preview</h2><span style="font-size: 13px; color: #5C564C;">The end of a reply as the customer sees it. Updates as you type.</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12px; font-weight: 500; color: #5C564C;">English</span>
+<div dir="ltr" lang="en" style="padding: 14px 16px; border-radius: 6px; border: 1px solid #E3DFD6; background: #FFFFFF; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 20px; ">
+<span>Hi Mona,</span><span style="color: #5C564C;">…it should appear by 11 September.</span>
+<div style="padding-top: 10px; border-top: 1px solid #EFECE5; display: flex; flex-direction: column; color: #403C35;"><span style="font-weight: 500; color: #16181C;">Lina Haddad</span><span>Billing team · Helpdock</span></div>
+</div></div>
+<div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 12px; font-weight: 500; color: #5C564C;">Arabic</span>
+<div dir="rtl" lang="ar" style="padding: 14px 16px; border-radius: 6px; border: 1px solid #E3DFD6; background: #FFFFFF; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 20px; font-family: 'IBM Plex Sans Arabic','IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;">
+<span>مرحباً سارة،</span><span style="color: #5C564C;">…فقط أجيبي على هذه الرسالة.</span>
+<div style="padding-top: 10px; border-top: 1px solid #EFECE5; display: flex; flex-direction: column; color: #403C35;"><span style="font-weight: 500; color: #16181C;">لينا حداد</span><span>فريق الفوترة · Helpdock</span></div>
+</div></div>
+</aside>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

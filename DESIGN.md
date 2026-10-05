@@ -1,7 +1,9 @@
 # Helpdock design system — "Quiet desk"
 
 Status: accepted · Version 1.0 (2026-09-18) · Owner: @Docker-Hunterpedia
-Canvas with color, type, component sheet and reference screens: https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ (private until shared).
+Canvas with color, type, component sheet and reference screens: https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ (private until shared). Rendered screens and artboard sources in the repository: [docs/design/](docs/design/README.md).
+
+The canvas is the source of truth for every artboard. [docs/design/](docs/design/README.md) is a rendered snapshot of it, with each artboard's `*.dc.html` source and a PNG, so the screens can be seen and diffed without the canvas. Whenever an artboard changes, the same PR refreshes its source in `docs/design/artboards/` and re-renders the PNGs with `pnpm design:render`.
 
 **Design-first rule.** Every screen is designed on that canvas before it is built. Artboards are named by area and screen, for example `Admin/Login`, `Admin/Wizard`, `Widget/Chat-AR`. An implementation PR names the artboard it was built from.
 

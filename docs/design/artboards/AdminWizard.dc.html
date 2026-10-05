@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin · first-run wizard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 56px 0; display: flex; flex-direction: column; align-items: center; gap: 32px; background: #F7F5F0; font-size: 14px; line-height: 20px;">
+  <div style="width: 720px; display: flex; align-items: center; gap: 10px;">
+    <span style="width: 28px; height: 28px; border-radius: 6px; background: #0F766E; color: #FFFFFF; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">H</span>
+    <span style="font-weight: 600;">Set up Helpdock</span>
+    <span style="margin-left: auto; font-size: 12px; color: #5C564C; font-family: 'IBM Plex Mono', monospace;">v0.1.0 · api + worker healthy</span>
+  </div>
+
+  <ol style="width: 720px; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #0F766E;"></div><div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #0A4A45;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Admin account</div></li>
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #0F766E;"></div><div style="font-size: 13px; font-weight: 600;">2 · First brand</div></li>
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #E3DFD6;"></div><div style="font-size: 13px; color: #7D7669;">3 · Outgoing email</div></li>
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #E3DFD6;"></div><div style="font-size: 13px; color: #7D7669;">4 · Done</div></li>
+  </ol>
+
+  <form style="width: 720px; box-sizing: border-box; padding: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600;">Your first brand</h1>
+      <p style="margin: 0; color: #5C564C;">A brand is one support desk: its own inboxes, help center, widget and agents. You can add more later.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="b-name" style="font-size: 13px; font-weight: 500;">Brand name</label><input id="b-name" type="text" value="Helpdock" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="b-prefix" style="font-size: 13px; font-weight: 500;">Ticket prefix</label><input id="b-prefix" type="text" value="HD" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: #16181C; text-transform: uppercase;"><div style="font-size: 12px; line-height: 16px; color: #5C564C;">Tickets will look like <span style="font-family: 'IBM Plex Mono', monospace;">HD-1042</span>. Cannot be changed after creation.</div></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="b-locale" style="font-size: 13px; font-weight: 500;">Default language</label><select id="b-locale" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"><option>English</option><option>العربية</option></select></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="b-tz" style="font-size: 13px; font-weight: 500;">Timezone</label><select id="b-tz" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"><option>Asia/Riyadh (UTC+3)</option><option>Europe/Berlin</option></select></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px;"><label for="b-domain" style="font-size: 13px; font-weight: 500;">Help center domain <span style="font-weight: 400; color: #7D7669;">(optional, you can verify it later)</span></label><input id="b-domain" type="text" placeholder="support.helpdock.com" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"></div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px solid #EFECE5;">
+      <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #16181C; font-size: 14px; font-weight: 500;">Back</button>
+      <button type="submit" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500;">Create brand and continue</button>
+    </div>
+  </form>
+
+  <div style="width: 720px; display: flex; gap: 12px; padding: 14px 16px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; font-size: 13px; line-height: 18px; color: #5C564C;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div><strong style="font-weight: 600; color: #16181C;">Keep your master key safe.</strong> Secrets are encrypted with <span style="font-family: 'IBM Plex Mono', monospace;">APP_MASTER_KEY</span> from your <span style="font-family: 'IBM Plex Mono', monospace;">.env</span>. If it is lost, stored credentials cannot be recovered. <a href="#ops">How to back it up</a></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -27,6 +27,14 @@ h1, h2, h3 { text-wrap: pretty; }
 .hd-icon { flex-shrink: 0; }
 [dir="rtl"] .hd-mirror { transform: scaleX(-1); }
 .hd-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* The first stop on every page; hidden until it has focus. Its target takes focus without a ring. */
+.hd-skip {
+  position: absolute; inset-block-start: 8px; inset-inline-start: 8px; z-index: 1; min-block-size: 44px; padding-inline: 16px;
+  display: inline-flex; align-items: center; border-radius: var(--hd-radius-md); background: var(--hd-bg-surface);
+  color: var(--hd-text-link); font-size: 14px; font-weight: 500; box-shadow: var(--hd-elevation-2);
+}
+.hd-skip:not(:focus) { inline-size: 1px; block-size: 1px; min-block-size: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#hd-main:focus { outline: none; }
 .hd-muted { color: var(--hd-text-secondary); }
 .hd-caption { font-size: 12px; line-height: 16px; color: var(--hd-text-secondary); }
 
@@ -89,6 +97,11 @@ h1, h2, h3 { text-wrap: pretty; }
 .hd-button:disabled { background: var(--hd-bg-muted); color: var(--hd-text-secondary); cursor: not-allowed; }
 .hd-button-secondary { border: 1px solid var(--hd-border-strong); background: var(--hd-bg-surface); color: var(--hd-text-primary); }
 .hd-button-secondary:hover { background: var(--hd-bg-muted); text-decoration: none; }
+.hd-button-ghost {
+  block-size: 40px; padding-inline: 16px; border-radius: var(--hd-radius-md); font-size: 14px; font-weight: 500;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--hd-text-secondary);
+}
+.hd-button-ghost:hover { background: var(--hd-bg-muted); text-decoration: none; }
 .hd-button-lg { block-size: 48px; padding-inline: 20px; font-size: 16px; }
 
 .hd-hero {
@@ -185,6 +198,8 @@ a.hd-card:hover { text-decoration: none; border-color: var(--hd-border-strong); 
 .hd-note a { color: inherit; text-decoration: underline; }
 .hd-note-body { display: flex; flex-direction: column; gap: 4px; }
 .hd-body { display: flex; flex-direction: column; gap: 20px; font-size: 16px; line-height: 24px; }
+/* A link inside a sentence is underlined: in dark mode the link colour is under 3:1 against the text around it. */
+.hd-body a { text-decoration: underline; text-underline-offset: 2px; }
 .hd-body > * { margin: 0; }
 .hd-body p, .hd-body li { max-inline-size: 68ch; text-wrap: pretty; }
 .hd-body h2 { margin-block-start: 8px; font-size: 20px; line-height: 28px; font-weight: 600; }
@@ -219,11 +234,23 @@ a.hd-card:hover { text-decoration: none; border-color: var(--hd-border-strong); 
 .hd-body [data-callout] > * { margin: 0; }
 .hd-video { position: relative; aspect-ratio: 16 / 9; border-radius: var(--hd-radius-lg); overflow: hidden; background: var(--hd-bg-muted); }
 .hd-video iframe { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; border: 0; }
+/* Focus is inside the third-party player, so the box around it draws the ring. */
+.hd-video:focus-within { outline: var(--hd-focus-width) var(--hd-focus-style) var(--hd-border-focus); outline-offset: var(--hd-focus-offset); }
 
 .hd-feedback { margin-block-start: 8px; padding: 16px; border-radius: var(--hd-radius-lg); border: 1px solid var(--hd-border-default); background: var(--hd-bg-surface); display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 14px; }
 .hd-feedback fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; inline-size: 100%; }
 .hd-feedback legend { float: inline-start; padding: 0; margin-inline-end: auto; }
-.hd-feedback .hd-button-secondary { block-size: 44px; }
+.hd-feedback .hd-button-secondary, .hd-feedback .hd-button, .hd-feedback .hd-button-ghost { block-size: 44px; }
+.hd-feedback [aria-pressed="true"] { border-color: var(--hd-text-primary); background: var(--hd-bg-muted); }
+.hd-feedback-comment { flex-direction: column; align-items: stretch; }
+.hd-feedback-label { font-weight: 500; }
+.hd-feedback textarea {
+  inline-size: 100%; padding-block: 8px; padding-inline: 12px; border-radius: var(--hd-radius-md); border: 1px solid var(--hd-border-strong);
+  background: var(--hd-bg-surface); color: var(--hd-text-primary); font: inherit; font-size: 14px; line-height: 20px; resize: vertical;
+}
+.hd-feedback textarea:focus-visible { border-color: var(--hd-border-focus); }
+.hd-feedback-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.hd-feedback-actions .hd-caption { flex: 1 1 240px; }
 .hd-feedback-done { color: var(--hd-text-primary); }
 .hd-feedback-done svg { color: var(--hd-status-success); }
 

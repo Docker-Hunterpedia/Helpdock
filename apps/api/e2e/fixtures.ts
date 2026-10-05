@@ -8,3 +8,6 @@ export const REFERENCE = 'HD-1042';
 /** What `help-center-server.ts` serves and `help-center.spec.ts` visits (M5-03). */
 export const HELP_CENTER_PORT = Number(process.env.HD_HELP_CENTER_E2E_PORT ?? 5291);
 export const HELP_CENTER_URL = `http://127.0.0.1:${String(HELP_CENTER_PORT)}`;
+/** The same server's internal-only twin, for the wall every visitor meets there (M9-04). */
+export const HELP_CENTER_WALL_PORT = HELP_CENTER_PORT + 100;
+export const HELP_CENTER_WALL_URL = `http://127.0.0.1:${String(HELP_CENTER_WALL_PORT)}`;

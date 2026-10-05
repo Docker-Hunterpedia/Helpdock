@@ -3,6 +3,10 @@ import {
   assignmentOfflineUnassignJob,
   authEmailJob,
   authEmailJobId,
+  BRAND_PURGE_CRON,
+  brandPurgeJob,
+  brandPurgeJobId,
+  brandPurgeScheduleJob,
   DOMAIN_VERIFY_CRON,
   domainVerifyJob,
   domainVerifyJobId,
@@ -35,9 +39,13 @@ import {
   rulesTimeBasedJob,
   rulesTimeBasedJobId,
   rulesTimeBasedScheduleJob,
+  STATS_ROLLUP_CRON,
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
+  statsRollupJob,
+  statsRollupJobId,
+  statsRollupScheduleJob,
   telegramPollJob,
   telegramPollSchedulerId,
   telegramSendJob,
@@ -527,5 +535,33 @@ describe('the Telegram jobs (M6)', () => {
     expect(telegramPollJob.queue).toBe('inbound');
     expect(telegramPollJob.options.attempts).toBe(1);
     expect(telegramPollSchedulerId(botId)).toBe(`telegram.poll.${botId}`);
+  });
+});
+
+describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
+  it('rolls up hourly off the top of the hour, one job per brand and tick', () => {
+    const payload = parseJobPayload(statsRollupJob, { brandId, tick: '2026-10-05T09:07:00.000Z' });
+
+    expect(statsRollupScheduleJob.schedule).toEqual({ cron: STATS_ROLLUP_CRON });
+    expect(STATS_ROLLUP_CRON).toBe('7 * * * *');
+    expect(statsRollupJob.queue).toBe('maintenance');
+    expect(statsRollupJobId(payload)).toBe(
+      `stats.rollup.${brandId}.${Date.parse('2026-10-05T09:07:00.000Z')}`,
+    );
+  });
+
+  it('purges a brand once, under an id that names only the brand', () => {
+    const payload = parseJobPayload(brandPurgeJob, { brandId });
+
+    expect(brandPurgeJobId(payload)).toBe(`brand.purge.${brandId}`);
+    expect(brandPurgeJob.options.removeOnFail).toBe(false);
+    expect(() => parseJobPayload(brandPurgeJob, { brandId: 'nope' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('looks for brands past their grace nightly, an hour after retention', () => {
+    expect(brandPurgeScheduleJob.schedule).toEqual({ cron: BRAND_PURGE_CRON });
+    expect(BRAND_PURGE_CRON).toBe('0 4 * * *');
   });
 });

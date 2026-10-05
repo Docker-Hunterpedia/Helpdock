@@ -3,6 +3,9 @@ import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
   authEmailJob,
+  BRAND_PURGE_CRON,
+  brandPurgeJob,
+  brandPurgeScheduleJob,
   createJobProcessor,
   createOutboxEventHandler,
   createQueueConnection,
@@ -11,6 +14,7 @@ import {
   domainVerifyJob,
   domainVerifyScheduleJob,
   emailPollJob,
+  emailPollSchedulerId,
   emailSendJob,
   helpCenterMediaProcessJob,
   helpCenterPublishDueJob,
@@ -34,8 +38,11 @@ import {
   rulesEvaluateJobId,
   rulesTimeBasedJob,
   rulesTimeBasedScheduleJob,
+  STATS_ROLLUP_CRON,
   slaRebuildJob,
   startOutboxRelay,
+  statsRollupJob,
+  statsRollupScheduleJob,
   telegramPollJob,
   telegramSendJob,
 } from '@helpdock/jobs';
@@ -50,6 +57,7 @@ import {
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
 import { createAuthEmailEventHandler, createAuthEmailProcessor } from '../auth/auth-email.job.js';
 import { AUTH_EMAIL_EVENT } from '../auth/auth-email.js';
+import { createBrandPurgeProcessor } from '../brands/brand-purge.job.js';
 import {
   createEmailPollProcessor,
   createMailboxChangedHandler,
@@ -87,6 +95,7 @@ import {
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
+import { S3BrandObjects } from '../media/brand-objects.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
@@ -97,8 +106,10 @@ import { InstallChannels } from '../notifications/install-channels.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { WebPushSender } from '../notifications/push.js';
+import { StorageUsageStore } from '../observability/storage-usage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
+import { createStatsProcessor } from '../reports/rollup.job.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
 import { createRulesEngineDeps } from '../rules/engine-deps.js';
 import { createRulesProcessor, registerRulesEventHandlers } from '../rules/rules-jobs.js';
@@ -184,7 +195,12 @@ export interface WorkerDependencies {
    * schedule is upserted on every boot, so a Redis that lost it gets it back
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
    */
-  createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  createMaintenanceWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+  }): Closable;
   /**
    * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox, and in
    * development M6-01's `telegram.poll` per bot. Every scheduler is upserted
@@ -612,35 +628,80 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
-  createMaintenanceWorker: ({ redis, db, log }) => {
+  createMaintenanceWorker: ({ redis, db, log, env }) => {
     const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
-    const scheduled = maintenance.upsertJobScheduler(
-      maintenanceRetentionScheduleJob.name,
-      { pattern: RETENTION_CRON, tz: 'UTC' },
-      {
-        name: maintenanceRetentionScheduleJob.name,
-        data: {},
-        opts: maintenanceRetentionScheduleJob.options,
+    // M1-14's nightly retention, M8-04's hourly rollup and M8-07's nightly
+    // purge tick, each upserted on every boot for the reason above.
+    for (const { job, cron } of [
+      { job: maintenanceRetentionScheduleJob, cron: RETENTION_CRON },
+      { job: statsRollupScheduleJob, cron: STATS_ROLLUP_CRON },
+      { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
+    ]) {
+      maintenance
+        .upsertJobScheduler(
+          job.name,
+          { pattern: cron, tz: 'UTC' },
+          { name: job.name, data: {}, opts: job.options },
+        )
+        .catch((error: unknown) =>
+          log.error({ err: error, job: job.name }, 'could not register a maintenance schedule'),
+        );
+    }
+
+    const objects = new S3BrandObjects(createS3Client(env), env.S3_BUCKET);
+    const storageUsage = new StorageUsageStore(redis);
+    const inbound = new Queue(QUEUE_NAMES.inbound, { connection: redis });
+    const stats = createStatsProcessor({
+      db,
+      log,
+      storage: { objects, store: storageUsage },
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(statsRollupJob.name, payload, {
+            ...statsRollupJob.options,
+            jobId,
+          });
+        },
       },
-    );
-    scheduled.catch((error: unknown) =>
-      log.error({ err: error }, 'could not register the nightly retention schedule'),
-    );
+    });
+    const purge = createBrandPurgeProcessor({
+      db,
+      log,
+      objects,
+      redis,
+      storageUsage,
+      removePollers: async (mailboxIds) => {
+        for (const mailboxId of mailboxIds) {
+          await inbound.removeJobScheduler(emailPollSchedulerId(mailboxId));
+        }
+      },
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(brandPurgeJob.name, payload, {
+            ...brandPurgeJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+    const retention = createMaintenanceProcessor({
+      db,
+      log,
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(maintenanceRetentionJob.name, payload, {
+            ...maintenanceRetentionJob.options,
+            jobId,
+          });
+        },
+      },
+    });
 
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
-      createMaintenanceProcessor({
-        db,
-        log,
-        queue: {
-          add: async (payload, jobId) => {
-            await maintenance.add(maintenanceRetentionJob.name, payload, {
-              ...maintenanceRetentionJob.options,
-              jobId,
-            });
-          },
-        },
-      }),
+      async (job) => {
+        await (stats(job) ?? purge(job) ?? retention(job));
+      },
       // One brand at a time: retention is background housekeeping, and two
       // brands purging at once would only compete for the same disk.
       { connection: redis, concurrency: 1 },
@@ -653,6 +714,7 @@ export const workerDependencies: WorkerDependencies = {
       close: async () => {
         await worker.close();
         await maintenance.close();
+        await inbound.close();
       },
     };
   },
@@ -987,7 +1049,7 @@ export const startWorker = ({
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
-  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
+  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log, env });
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });

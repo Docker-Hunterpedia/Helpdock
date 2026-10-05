@@ -16,6 +16,8 @@ import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
 import type { PrincipalResolver } from './auth/principal-resolver.js';
+import { BrandAvailability } from './brands/brand-availability.js';
+import { BrandGoneGuard } from './brands/brand-gone.guard.js';
 import { BrandsModule } from './brands/brands.module.js';
 import { ChannelsModule, type ChannelsModuleOverrides } from './channels/channels.module.js';
 import { ContactsModule } from './contacts/contacts.module.js';
@@ -39,6 +41,7 @@ import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { ParticipantsModule } from './participants/participants.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 import { DbContactErasureProvider } from './retention/contact-erasure.js';
 import { RetentionModule } from './retention/retention.module.js';
 import { DomainCheckController } from './routes/domain-check.controller.js';
@@ -184,7 +187,11 @@ export class AppModule implements NestModule {
         auth,
         BrandsModule.forRoot({ logger: options.logger }),
         InstallModule.forRoot({ auth, logger: options.logger }),
-        ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
+        ObservabilityModule.forRoot({
+          logger: options.logger,
+          bootFacts: options.bootFacts,
+          signingKeys: options.auth.signingKeys,
+        }),
         realtime,
         StaffModule.forRoot({ logger: options.logger }),
         // M1-04 left two null providers behind for the contact screens; M1-02
@@ -212,6 +219,8 @@ export class AppModule implements NestModule {
         }),
         // M1-14: the Data retention form. The purge itself runs in the worker.
         RetentionModule.forRoot(),
+        // M8-04: Reports. The rollups they read are written by the worker.
+        ReportsModule.forRoot(),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
         // M2-05, M2-06: Channels › Outgoing email, signatures, the ticket
@@ -287,6 +296,9 @@ export class AppModule implements NestModule {
         DomainCheckService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionGuard },
+        // M8-07: a brand being deleted answers 410 on every public route.
+        { provide: BrandAvailability, useValue: new BrandAvailability(options.db) },
+        { provide: APP_GUARD, useClass: BrandGoneGuard },
         { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
         { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
         { provide: APP_PIPE, useClass: ZodValidationPipe },

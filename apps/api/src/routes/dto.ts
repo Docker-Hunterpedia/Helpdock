@@ -5,6 +5,8 @@ import {
   domainCheckResultSchema,
   healthSchema,
   meSchema,
+  productMetricsSchema,
+  queueBoardPassSchema,
   readinessSchema,
   systemQueuePageSchema,
   systemQueuesQuerySchema,
@@ -31,4 +33,6 @@ export class BrandIdParamDto extends createZodDto(brandIdParamSchema) {}
 export class DomainCheckResultDto extends createZodDto(domainCheckResultSchema) {}
 export class SystemStatusDto extends createZodDto(systemStatusSchema) {}
 export class SystemQueuePageDto extends createZodDto(systemQueuePageSchema) {}
+export class ProductMetricsDto extends createZodDto(productMetricsSchema) {}
+export class QueueBoardPassDto extends createZodDto(queueBoardPassSchema) {}
 export class SystemQueuesQueryDto extends createZodDto(systemQueuesQuerySchema) {}

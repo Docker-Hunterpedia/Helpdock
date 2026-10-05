@@ -1,5 +1,6 @@
 import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import * as brandPurge from './brand-purge.js';
 import * as client from './client.js';
 import * as index from './index.js';
 import * as migrate from './migrate.js';
@@ -14,6 +15,7 @@ import * as uuid from './uuid.js';
 import * as views from './views.js';
 
 const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  'brand-purge.ts': brandPurge,
   'client.ts': client,
   'migrate.ts': migrate,
   'rls.ts': rls,
@@ -79,6 +81,7 @@ describe('@helpdock/db', () => {
       'mailboxes.ts',
       'notifications.ts',
       'outbox.ts',
+      'reports.ts',
       'retention-settings.ts',
       'settings.ts',
       'sla-policies.ts',

@@ -151,6 +151,46 @@ export class OutboundEmailService {
   }
 
   /**
+   * M8-06. The survey on close, to the ticket's contact and to nobody else: no
+   * CCs, since a rating is the requester's to give. Keyed by the survey, so a
+   * redelivered survey job queues one email. Nothing is queued for a contact
+   * with no address or a brand with no sender; the agent still has the link.
+   */
+  async queueCsatSurvey(
+    tx: DbTransaction,
+    input: { readonly brandId: string; readonly ticketId: string; readonly surveyId: string },
+  ): Promise<EmailDelivery | undefined> {
+    const addressing = await this.#repository.replyAddressing(tx, input.ticketId);
+    if (addressing?.contact == null) {
+      return undefined;
+    }
+    const sender = await this.#sender(tx, input.brandId, addressing.departmentId, undefined);
+    if (sender === undefined) {
+      return undefined;
+    }
+
+    return this.#insertAndEnqueue(tx, input.brandId, {
+      ticketId: input.ticketId,
+      departmentId: addressing.departmentId,
+      ticketMessageId: null,
+      csatResponseId: input.surveyId,
+      kind: 'csat',
+      fromName: sender.from.name,
+      fromAddress: sender.from.address,
+      replyTo: sender.replyTo,
+      toName: addressing.contact.name === '' ? null : addressing.contact.name,
+      toAddress: addressing.contact.address,
+      ccAddresses: [],
+      locale: addressing.locale,
+      messageId: outboundMessageId({
+        kind: 'csat',
+        id: input.surveyId,
+        fromAddress: sender.from.address,
+      }),
+    });
+  }
+
+  /**
    * Puts failed or discarded sends back in the queue for a new round of
    * attempts, with the same `Message-ID`: a customer whose server did take an
    * earlier attempt after all sees one message, not two.

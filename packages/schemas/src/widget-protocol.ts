@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { csatRatingSchema } from './csat.js';
 import { customFieldTypeSchema } from './custom-fields.js';
 import {
   ATTACHMENT_NAME_MAX,
@@ -558,6 +559,45 @@ export const widgetStreamQuerySchema = z.object({
 });
 export type WidgetStreamQuery = z.infer<typeof widgetStreamQuerySchema>;
 
+// ------------------------------------------------------------- CSAT (M8-06)
+
+/**
+ * The satisfaction card a closed conversation shows (`Widget/CSAT-EN`): one
+ * per close, the survey of the conversation's latest close.
+ *
+ * - `open`: ask. The card replaces the composer until answered or skipped.
+ * - `rated`: thanks, echoing the score and the comment.
+ * - `skipped`: the visitor pressed Skip. Nothing was recorded, and the card is
+ *   not offered again on any device.
+ * - `expired`: thirty days passed, or another channel's answer arrived first.
+ */
+export const widgetCsatStateSchema = z.enum(['open', 'rated', 'skipped', 'expired']);
+export type WidgetCsatState = z.infer<typeof widgetCsatStateSchema>;
+
+export const widgetCsatSchema = z.object({
+  conversationId: z.uuid(),
+  state: widgetCsatStateSchema,
+  rating: csatRatingSchema.nullable(),
+  comment: z.string().nullable(),
+  /** When Skip was pressed, for "You skipped the rating · 10:06". */
+  skippedAt: z.iso.datetime().nullable(),
+});
+export type WidgetCsat = z.infer<typeof widgetCsatSchema>;
+
+/** `GET …/csat`: the card, or null while the conversation has no survey to offer. */
+export const widgetCsatResponseSchema = z.object({ csat: widgetCsatSchema.nullable() });
+export type WidgetCsatResponse = z.infer<typeof widgetCsatResponseSchema>;
+
+/** The widget caps the comment shorter than the rating page (`Widget/CSAT-EN`). */
+export const WIDGET_CSAT_COMMENT_MAX = 1000;
+
+/** `POST …/csat`. */
+export const widgetCsatRequestSchema = z.object({
+  rating: csatRatingSchema,
+  comment: z.string().trim().max(WIDGET_CSAT_COMMENT_MAX).optional(),
+});
+export type WidgetCsatRequest = z.input<typeof widgetCsatRequestSchema>;
+
 // ------------------------------------------------------ realtime (§7)
 
 /** Where the `/widget` namespace lives; the path is the staff one's. */
@@ -588,6 +628,8 @@ export const WIDGET_EVENTS = {
   presence: 'presence',
   queue: 'queue',
   conversation: 'conversation',
+  /** M8-06: the conversation's satisfaction card appeared or changed. */
+  csat: 'csat',
 } as const;
 
 export const widgetJoinSchema = z.object({ conversationId: z.uuid() });
@@ -643,6 +685,7 @@ export const WIDGET_EVENT_PAYLOADS = {
   [WIDGET_EVENTS.presence]: widgetPresenceSchema,
   [WIDGET_EVENTS.queue]: widgetQueueSchema,
   [WIDGET_EVENTS.conversation]: widgetConversationEventSchema,
+  [WIDGET_EVENTS.csat]: widgetCsatSchema,
 } as const;
 
 export type WidgetServerEvent = keyof typeof WIDGET_EVENT_PAYLOADS;

@@ -5,6 +5,7 @@ import {
   index,
   integer,
   pgTable,
+  smallint,
   timestamp,
   uuid,
   varchar,
@@ -55,6 +56,12 @@ export const reportDaily = pgTable(
      * for the reason `report_agent_daily.agent_id` has none.
      */
     assigneeId: uuid('assignee_id'),
+    /**
+     * The grain the row was built at, against `REPORT_ROLLUP_VERSION` in the
+     * rollup job: rows from before the assignee joined the grain are 1, and a
+     * brand with such rows in its backfill window is rebuilt in full once.
+     */
+    rollupVersion: smallint('rollup_version').notNull().default(1),
     created: counter('created'),
     resolved: counter('resolved'),
     /** Tickets open at the end of the day: the backlog trend's point. */

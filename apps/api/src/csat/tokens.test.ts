@@ -1,7 +1,7 @@
 import { createKeyring } from '@helpdock/config';
 import { CSAT_TOKEN_PATTERN } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { CsatTokens, hashCsatToken } from './tokens.js';
+import { CsatTokens, csatSurveyUrl, hashCsatToken } from './tokens.js';
 
 const CURRENT = Buffer.alloc(32, 1).toString('base64');
 const PREVIOUS = Buffer.alloc(32, 2).toString('base64');
@@ -78,5 +78,35 @@ describe('hashCsatToken', () => {
 
     expect(hashCsatToken(token)).toMatch(/^[0-9a-f]{64}$/);
     expect(hashCsatToken(token)).not.toContain(token);
+  });
+});
+
+describe('csatSurveyUrl', () => {
+  const APP_URL = 'https://desk.example.com';
+  const survey = (token: string) => ({ id: SUBJECT.surveyId, tokenHash: hashCsatToken(token) });
+
+  it('is the page of the stored link, with a channel’s score and language', () => {
+    const tokens = tokensUnder(CURRENT, PREVIOUS);
+    const issued = tokensUnder(PREVIOUS).sign(SUBJECT);
+
+    expect(
+      csatSurveyUrl(
+        tokens,
+        APP_URL,
+        { brandId: SUBJECT.brandId, survey: survey(issued) },
+        { rating: '4', lang: 'ar' },
+      ),
+    ).toBe(`${APP_URL}/csat/${issued}?rating=4&lang=ar`);
+  });
+
+  it('is null once no key of ours signed the stored link', () => {
+    const issued = tokensUnder(OLDER).sign(SUBJECT);
+
+    expect(
+      csatSurveyUrl(tokensUnder(CURRENT), APP_URL, {
+        brandId: SUBJECT.brandId,
+        survey: survey(issued),
+      }),
+    ).toBeNull();
   });
 });

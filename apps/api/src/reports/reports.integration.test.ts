@@ -33,6 +33,7 @@ import { DEV_PRINCIPAL_ENV_KEY, DEV_PRINCIPAL_HEADER } from '../auth/principal-r
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { runBrandRollup } from './rollup.job.js';
+import { REPORT_ROLLUP_VERSION } from './rollup.repository.js';
 
 /**
  * M8-04's exit criterion: "Reports match seeded data in an integration test."
@@ -746,6 +747,48 @@ describe.skipIf(!hasDocker)('reports', () => {
         .set({ settings: brand?.settings ?? {} })
         .where(eq(brands.id, BRAND_A));
       await rollUp(BRAND_A);
+    });
+
+    describe('rows built before the assignee joined the grain', () => {
+      // Three weeks on, the seeded days are out of the trailing week, so only
+      // a full rebuild reaches them.
+      const later = () => new Date(Date.now() + 21 * DAY_MS);
+      const rollUpLater = () =>
+        runBrandRollup({ db: db(), brandId: BRAND_A, jobId: 'stats.rollup.test', now: later() });
+      /** What a row written before migration 0044 looks like. */
+      const makePre0044 = (version: number) =>
+        withSystem(db(), BRAND_A, (tx) =>
+          tx.update(reportDaily).set({ assigneeId: null, rollupVersion: version }),
+        );
+      const versions = () =>
+        withSystem(db(), BRAND_A, async (tx) =>
+          (await tx.selectDistinct({ v: reportDaily.rollupVersion }).from(reportDaily)).map(
+            (row) => row.v,
+          ),
+        );
+
+      it('leaves the history alone while it is at the current grain', async () => {
+        await makePre0044(REPORT_ROLLUP_VERSION);
+
+        const { range } = await rollUpLater();
+
+        expect(range?.from).not.toBe(FROM);
+        expect((await report()).agents[0]?.firstResponse.count).toBe(0);
+      });
+
+      it("rebuilds a brand's whole history once its rows are of an older grain", async () => {
+        await makePre0044(1);
+
+        const { range } = await rollUpLater();
+
+        expect(range?.from).toBe(FROM);
+        expect(await versions()).toEqual([REPORT_ROLLUP_VERSION]);
+        expect((await report()).agents[0]).toMatchObject({
+          agentId: AGENT_ONE,
+          firstResponse: { count: 2, medianMs: 2_400_000 },
+        });
+        expect((await rollUpLater()).range?.from).not.toBe(FROM);
+      });
     });
   });
 

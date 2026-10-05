@@ -11,8 +11,11 @@ import type {
 } from '@helpdock/schemas';
 import { OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS } from '@helpdock/schemas';
 import type { Logger } from '../logging/logger.js';
+import type { AuthAuditAction, AuthAuditTrail, SignInMethod } from './auth-audit.js';
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import { AuthFailure } from './auth-failure.js';
+import { assertNotBreached } from './breached/breached-passwords.js';
+import type { SecurityChange } from './email-templates.js';
 import type { EmailTokenStore } from './email-token.store.js';
 import type { ExchangeStore } from './exchange.store.js';
 import type { OauthService } from './oauth/oauth.service.js';
@@ -29,8 +32,9 @@ import type { IssuedSession, SessionService } from './session/session.service.js
 import type { Queryable, StaffRepository, StaffUser } from './staff.repository.js';
 import type { TotpChallengeStore } from './totp/challenge-store.js';
 import { hashRecoveryCodes, newRecoveryCodes, spendRecoveryCode } from './totp/recovery-codes.js';
-import { newTotpSecret, totpUri, verifyTotpCode } from './totp/totp.js';
+import { matchTotpStep, newTotpSecret, totpUri } from './totp/totp.js';
 import type { TrustedDeviceStore } from './totp/trusted-device.js';
+import type { TotpStepStore } from './totp/used-steps.js';
 
 /**
  * Every way into this install, in one service.
@@ -47,13 +51,21 @@ import type { TrustedDeviceStore } from './totp/trusted-device.js';
  *    twice.
  * 3. **The second factor is not optional once it is on.** Every path that
  *    proves a first factor — password, magic link, OAuth — goes through the
- *    same check afterwards.
+ *    same check afterwards. For an Admin or an install admin it is not
+ *    optional at all (ASVS 4.3.1).
+ *
+ * Every decision is also written to the auth audit trail (`auth-audit.ts`),
+ * and every change to a credential sends the account holder a `securityChange`
+ * email (ASVS 2.2.3), so a change they did not make is one they hear about.
  */
 
 /** Ten minutes, the same figure DOMAIN-RULES §4.6 gives for a magic link. */
 export const PASSWORD_RESET_TTL_MINUTES = 10;
 
 const SECONDS_PER_MINUTE = 60;
+
+/** What a code typed into a form turned out to be. */
+type CodeCheck = 'accepted' | 'mismatch' | 'replayed';
 
 export type SignInOutcome =
   | { readonly kind: 'session'; readonly issued: IssuedSession }
@@ -85,6 +97,8 @@ export interface AuthServiceOptions {
   readonly sessions: SessionService;
   readonly hasher: PasswordHasher;
   readonly challenges: TotpChallengeStore;
+  /** The last authenticator step each account used, so no code is accepted twice. */
+  readonly steps: TotpStepStore;
   readonly trustedDevices: TrustedDeviceStore;
   readonly tokens: EmailTokenStore;
   readonly exchanges: ExchangeStore;
@@ -94,6 +108,7 @@ export interface AuthServiceOptions {
   readonly keyring: Keyring;
   /** Queues auth email through the outbox; the worker sends it (`auth-email.job.ts`). */
   readonly mail: AuthMail;
+  readonly audit: AuthAuditTrail;
   readonly logger: Logger;
   readonly appUrl: string;
 }
@@ -137,17 +152,29 @@ export class AuthService {
     // same. Without it the form is an address oracle with a stopwatch.
     if (user === undefined || user.passwordHash === null || !this.#isUsable(user)) {
       await this.#parts.hasher.burnVerificationTime(input.password);
+      await this.#audit('auth.sign_in.failed', user?.id ?? null, 'system', {
+        method: 'password',
+        reason: user === undefined ? 'unknown-account' : 'unusable-account',
+      });
       throw new AuthFailure('invalid-credentials');
     }
 
     const verification = await this.#parts.hasher.verify(user.passwordHash, input.password);
     if (!verification.valid) {
+      await this.#audit('auth.sign_in.failed', user.id, 'system', {
+        method: 'password',
+        reason: 'wrong-password',
+      });
       throw new AuthFailure('invalid-credentials');
     }
 
     // Only now, with the password proved, is it safe to say the account is
     // locked: saying it earlier would tell a stranger the address exists.
     if (await this.#parts.challenges.isLocked(user.id)) {
+      await this.#audit('auth.sign_in.failed', user.id, 'system', {
+        method: 'password',
+        reason: 'locked',
+      });
       throw new AuthFailure('totp-locked');
     }
 
@@ -167,6 +194,7 @@ export class AuthService {
     await this.#parts.limiter.reset(SIGN_IN_EMAIL_RULE, input.email);
 
     return this.#afterFirstFactor(user, {
+      method: 'password',
       userAgent: input.userAgent,
       trustedDeviceCookie: input.trustedDeviceCookie,
     });
@@ -189,13 +217,15 @@ export class AuthService {
   }): Promise<{ readonly issued: IssuedSession; readonly trustedDeviceCookie: string | null }> {
     const { challenge, user } = await this.#requireChallenge(challengeId, 'second-factor');
 
-    const secret = this.#totpSecretOf(user);
-    if (secret === null || !(await verifyTotpCode({ secret, code }))) {
+    if ((await this.#checkCode(user, code, 'sign-in')) !== 'accepted') {
       throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
     }
 
     await this.#parts.challenges.consume(challengeId);
-    const issued = await this.#openSession(user, userAgent);
+    const issued = await this.#openSession(user, userAgent, {
+      method: firstFactorOf(challenge),
+      secondFactor: 'totp',
+    });
 
     return {
       issued,
@@ -216,6 +246,9 @@ export class AuthService {
 
     const match = await spendRecoveryCode(code, user.recoveryCodesHashed, this.#parts.hasher);
     if (match === null) {
+      await this.#audit('auth.second_factor.failed', user.id, 'system', {
+        factor: 'recovery-code',
+      });
       throw await this.#spendAttempt(challengeId, challenge, 'recovery-invalid');
     }
 
@@ -227,8 +260,14 @@ export class AuthService {
       { userId: user.id, remaining: match.remaining.length },
       'A recovery code was spent to sign in',
     );
+    await this.#audit('auth.recovery_code.used', user.id, 'staff', {
+      remaining: match.remaining.length,
+    });
 
-    return this.#openSession(user, userAgent);
+    return this.#openSession(user, userAgent, {
+      method: firstFactorOf(challenge),
+      secondFactor: 'recovery-code',
+    });
   }
 
   // ------------------------------------------------------------------
@@ -241,40 +280,83 @@ export class AuthService {
    * lock themselves out by scanning a code that did not save.
    */
   async enrolTotp(userId: string, tx?: Queryable): Promise<TotpEnrolment> {
-    const user = await this.#requireUser(userId, tx);
-    const secret = newTotpSecret();
-
-    await this.#parts.staff.stageTotpSecret(
-      user.id,
-      encryptSecret(secret, this.#parts.keyring),
-      tx,
-    );
-
-    return {
-      secret,
-      uri: totpUri({ secret, email: user.email, issuer: new URL(this.#parts.appUrl).host }),
-    };
+    return this.#stageSecret(await this.#requireUser(userId, tx), tx);
   }
 
   /** Enables the second factor and hands over the recovery codes, once. */
-  async confirmTotp(userId: string, code: string, tx?: Queryable): Promise<RecoveryCodes> {
+  async confirmTotp(userId: string, code: string, tx?: DbTransaction): Promise<RecoveryCodes> {
     const user = await this.#requireUser(userId, tx);
-    const secret = this.#totpSecretOf(user);
 
-    if (secret === null || !(await verifyTotpCode({ secret, code }))) {
+    if ((await this.#checkCode(user, code, 'enrolment')) !== 'accepted') {
       throw new AuthFailure('totp-mismatch');
     }
 
-    const recoveryCodes = newRecoveryCodes();
-    await this.#parts.staff.enableTotp(
-      user.id,
-      await hashRecoveryCodes(recoveryCodes, this.#parts.hasher),
-      tx,
-    );
-    await this.#parts.challenges.clearLock(user.id);
-    this.#parts.logger.info({ userId: user.id }, 'Enabled the second factor for a staff account');
+    return this.#enableSecondFactor(user, tx);
+  }
 
-    return { recoveryCodes };
+  // ------------------------------------------------------------------
+  // Enrolment before a session: an account that must have a second factor
+  // ------------------------------------------------------------------
+
+  /**
+   * The first half of enrolment for an account that was handed a
+   * `totp-enrolment-required` challenge instead of a session. The challenge
+   * proves the first factor, as the session does for {@link enrolTotp}; it is
+   * not spent here, because the code has yet to be typed.
+   */
+  async startEnrolment(challengeId: string): Promise<TotpEnrolment> {
+    const { user } = await this.#requireChallenge(challengeId, 'enrolment');
+
+    return this.#stageSecret(user);
+  }
+
+  /**
+   * The second half: a live code turns the factor on, the challenge is spent,
+   * and the session it stood in for is opened. A wrong code costs an attempt,
+   * as it does at sign-in, because this is a sign-in.
+   */
+  async completeEnrolment({
+    challengeId,
+    code,
+    userAgent,
+  }: {
+    readonly challengeId: string;
+    readonly code: string;
+    readonly userAgent: string | undefined;
+  }): Promise<{ readonly recoveryCodes: string[]; readonly issued: IssuedSession }> {
+    const { challenge, user } = await this.#requireChallenge(challengeId, 'enrolment');
+
+    if ((await this.#checkCode(user, code, 'enrolment')) !== 'accepted') {
+      throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
+    }
+
+    const { recoveryCodes } = await this.#enableSecondFactor(user);
+    await this.#parts.challenges.consume(challengeId);
+    const issued = await this.#openSession(user, userAgent, {
+      method: firstFactorOf(challenge),
+      secondFactor: 'totp',
+    });
+
+    return { recoveryCodes, issued };
+  }
+
+  /**
+   * Whether this account may be without a second factor. Never, for an Admin
+   * of any brand or an install admin, whatever `auth.require2fa` says: their
+   * session can change who else works here (ASVS 4.3.1, DOMAIN-RULES §12).
+   */
+  async isSecondFactorRequired(user: StaffUser, tx?: Queryable): Promise<boolean> {
+    if (user.installAdmin || (await this.#parts.settings.get('auth.require2fa'))) {
+      return true;
+    }
+
+    const memberships = await this.#parts.staff.membershipsOf(user.id, tx);
+    return memberships.some((membership) => membership.role === 'admin');
+  }
+
+  /** {@link isSecondFactorRequired} by id, for the security page. */
+  async secondFactorRequiredFor(userId: string, tx?: Queryable): Promise<boolean> {
+    return this.isSecondFactorRequired(await this.#requireUser(userId, tx), tx);
   }
 
   /**
@@ -282,11 +364,11 @@ export class AuthService {
    * walked up to an unlocked laptop has the session but not the phone, and
    * without this they could remove the factor that would have stopped them.
    *
-   * Refused while `auth.require2fa` is on, because an install that requires an
-   * authenticator cannot have accounts without one (DOMAIN-RULES §12).
+   * Refused while `auth.require2fa` is on, or for an account that must keep a
+   * second factor anyway, because those cannot be without one (DOMAIN-RULES §12).
    */
-  async disableTotp(userId: string, code: string, tx?: Queryable): Promise<void> {
-    if (await this.#parts.settings.get('auth.require2fa')) {
+  async disableTotp(userId: string, code: string, tx?: DbTransaction): Promise<void> {
+    if (await this.isSecondFactorRequired(await this.#requireUser(userId, tx), tx)) {
       throw new AuthFailure('unavailable');
     }
 
@@ -295,6 +377,8 @@ export class AuthService {
     await this.#parts.staff.disableTotp(user.id, tx);
     await this.#parts.trustedDevices.revokeAll(user.id);
     this.#parts.logger.warn({ userId: user.id }, 'Disabled the second factor for a staff account');
+    await this.#audit('auth.second_factor.disabled', user.id, 'staff');
+    await this.#notifySecurityChange(user.id, 'twoFactorDisabled', tx);
   }
 
   /**
@@ -305,7 +389,7 @@ export class AuthService {
   async regenerateRecoveryCodes(
     userId: string,
     code: string,
-    tx?: Queryable,
+    tx?: DbTransaction,
   ): Promise<RecoveryCodes> {
     const user = await this.#requireLiveCode(userId, code, tx);
     const recoveryCodes = newRecoveryCodes();
@@ -316,6 +400,8 @@ export class AuthService {
       tx,
     );
     this.#parts.logger.info({ userId: user.id }, 'Redrew the recovery codes of a staff account');
+    await this.#audit('auth.recovery_codes.regenerated', user.id, 'staff');
+    await this.#notifySecurityChange(user.id, 'recoveryCodes', tx);
 
     return { recoveryCodes };
   }
@@ -338,7 +424,7 @@ export class AuthService {
     readonly currentPassword: string;
     readonly newPassword: string;
     readonly keepFamilyId: string | null;
-    readonly tx?: Queryable;
+    readonly tx?: DbTransaction;
   }): Promise<void> {
     await this.#spendStepUp(userId);
 
@@ -352,8 +438,10 @@ export class AuthService {
 
     const verification = await this.#parts.hasher.verify(user.passwordHash, currentPassword);
     if (!verification.valid) {
+      await this.#audit('auth.step_up.refused', user.id, 'system', { reason: 'wrong-password' });
       throw new AuthFailure('invalid-credentials');
     }
+    assertNotBreached(newPassword);
 
     await this.#parts.staff.updatePasswordHash(
       user.id,
@@ -368,6 +456,8 @@ export class AuthService {
     );
 
     this.#parts.logger.info({ userId: user.id, revoked }, 'A staff account changed its password');
+    await this.#audit('auth.password.changed', user.id, 'staff', { sessionsRevoked: revoked });
+    await this.#notifySecurityChange(user.id, 'password', tx);
   }
 
   /**
@@ -378,6 +468,7 @@ export class AuthService {
    * the hashes in the table would stop verifying.
    */
   hashPassword(password: string): Promise<string> {
+    assertNotBreached(password);
     return this.#parts.hasher.hash(password);
   }
 
@@ -391,7 +482,11 @@ export class AuthService {
   async signInAfterInvite(userId: string, userAgent: string | undefined): Promise<SignInOutcome> {
     const user = await this.#requireUser(userId);
 
-    return this.#afterFirstFactor(user, { userAgent, trustedDeviceCookie: undefined });
+    return this.#afterFirstFactor(user, {
+      method: 'invite',
+      userAgent,
+      trustedDeviceCookie: undefined,
+    });
   }
 
   /**
@@ -466,7 +561,11 @@ export class AuthService {
       return null;
     }
 
-    return this.#afterFirstFactor(user, { userAgent, trustedDeviceCookie: undefined });
+    return this.#afterFirstFactor(user, {
+      method: 'magic-link',
+      userAgent,
+      trustedDeviceCookie: undefined,
+    });
   }
 
   // ------------------------------------------------------------------
@@ -518,6 +617,9 @@ export class AuthService {
     readonly token: string;
     readonly password: string;
   }): Promise<void> {
+    // Before the link is spent, so a refused password leaves the person a link
+    // that still works for a better one.
+    assertNotBreached(password);
     const payload = await this.#parts.tokens.consume(token, 'password-reset');
     if (payload === null) {
       throw new AuthFailure('challenge-expired');
@@ -534,6 +636,8 @@ export class AuthService {
     await this.#parts.sessions.revokeEverything(user.id, 'password-reset');
 
     this.#parts.logger.info({ userId: user.id }, 'Password reset; every session was revoked');
+    await this.#audit('auth.password.reset', user.id, 'staff');
+    await this.#notifySecurityChange(user.id, 'passwordReset');
   }
 
   // ------------------------------------------------------------------
@@ -574,10 +678,19 @@ export class AuthService {
 
     const user = await this.#parts.staff.findByEmail(identity.email);
     if (user === undefined || !this.#isUsable(user)) {
+      await this.#audit('auth.sign_in.failed', user?.id ?? null, 'system', {
+        method: 'oauth',
+        provider,
+        reason: user === undefined ? 'unknown-account' : 'unusable-account',
+      });
       throw new AuthFailure('no-account');
     }
 
-    return this.#afterFirstFactor(user, { userAgent, trustedDeviceCookie: undefined });
+    return this.#afterFirstFactor(user, {
+      method: 'oauth',
+      userAgent,
+      trustedDeviceCookie: undefined,
+    });
   }
 
   // ------------------------------------------------------------------
@@ -653,13 +766,24 @@ export class AuthService {
   async #afterFirstFactor(
     user: StaffUser,
     {
+      method,
       userAgent,
       trustedDeviceCookie,
-    }: { readonly userAgent: string | undefined; readonly trustedDeviceCookie: string | undefined },
+    }: {
+      readonly method: SignInMethod;
+      readonly userAgent: string | undefined;
+      readonly trustedDeviceCookie: string | undefined;
+    },
   ): Promise<SignInOutcome> {
     if (user.totpEnabled) {
       if (await this.#parts.trustedDevices.isTrusted(user.id, trustedDeviceCookie)) {
-        return { kind: 'session', issued: await this.#openSession(user, userAgent) };
+        return {
+          kind: 'session',
+          issued: await this.#openSession(user, userAgent, {
+            method,
+            secondFactor: 'trusted-browser',
+          }),
+        };
       }
 
       return {
@@ -667,22 +791,36 @@ export class AuthService {
         challengeId: await this.#parts.challenges.create({
           userId: user.id,
           kind: 'second-factor',
+          firstFactor: method,
         }),
         email: user.email,
       };
     }
 
-    if (await this.#parts.settings.get('auth.require2fa')) {
+    // An Admin who had no authenticator before the rule existed lands here at
+    // their next sign-in, and enrols before they get a session.
+    if (await this.isSecondFactorRequired(user)) {
       return {
         kind: 'totp-enrolment-required',
-        challengeId: await this.#parts.challenges.create({ userId: user.id, kind: 'enrolment' }),
+        challengeId: await this.#parts.challenges.create({
+          userId: user.id,
+          kind: 'enrolment',
+          firstFactor: method,
+        }),
       };
     }
 
-    return { kind: 'session', issued: await this.#openSession(user, userAgent) };
+    return {
+      kind: 'session',
+      issued: await this.#openSession(user, userAgent, { method, secondFactor: null }),
+    };
   }
 
-  async #openSession(user: StaffUser, userAgent: string | undefined): Promise<IssuedSession> {
+  async #openSession(
+    user: StaffUser,
+    userAgent: string | undefined,
+    factors: { readonly method: string; readonly secondFactor: string | null },
+  ): Promise<IssuedSession> {
     // An invited account becomes active the first time it proves an identity
     // (DOMAIN-RULES §12).
     if (user.status === 'invited') {
@@ -692,10 +830,81 @@ export class AuthService {
     const issued = await this.#parts.sessions.open({ userId: user.id, userAgent });
     if (issued === null) {
       // Nothing to sign in to: this account holds no role in any brand.
+      await this.#audit('auth.sign_in.failed', user.id, 'system', {
+        method: factors.method,
+        reason: 'no-brand-role',
+      });
       throw new AuthFailure('no-account');
     }
 
+    await this.#audit('auth.sign_in.succeeded', user.id, 'staff', {
+      method: factors.method,
+      secondFactor: factors.secondFactor,
+      familyId: issued.refreshCookieValue.fam,
+    });
+
     return issued;
+  }
+
+  /** Stages a fresh secret, for both ways into enrolment. */
+  async #stageSecret(user: StaffUser, tx?: Queryable): Promise<TotpEnrolment> {
+    const secret = newTotpSecret();
+
+    await this.#parts.staff.stageTotpSecret(
+      user.id,
+      encryptSecret(secret, this.#parts.keyring),
+      tx,
+    );
+
+    return {
+      secret,
+      uri: totpUri({ secret, email: user.email, issuer: new URL(this.#parts.appUrl).host }),
+    };
+  }
+
+  async #enableSecondFactor(user: StaffUser, tx?: DbTransaction): Promise<RecoveryCodes> {
+    const recoveryCodes = newRecoveryCodes();
+    await this.#parts.staff.enableTotp(
+      user.id,
+      await hashRecoveryCodes(recoveryCodes, this.#parts.hasher),
+      tx,
+    );
+    await this.#parts.challenges.clearLock(user.id);
+    this.#parts.logger.info({ userId: user.id }, 'Enabled the second factor for a staff account');
+    await this.#audit('auth.second_factor.enabled', user.id, 'staff');
+    await this.#notifySecurityChange(user.id, 'twoFactorEnabled', tx);
+
+    return { recoveryCodes };
+  }
+
+  /**
+   * Whether `code` is this account's authenticator code, and one it has not
+   * used before (ASVS 2.8.4, 2.8.5). A replayed code is refused exactly like a
+   * wrong one — the person at the form learns nothing new — and is logged and
+   * audited, because a valid code arriving twice means somebody else saw it.
+   */
+  async #checkCode(user: StaffUser, code: string, during: string): Promise<CodeCheck> {
+    const secret = this.#totpSecretOf(user);
+    const step = secret === null ? null : await matchTotpStep({ secret, code });
+
+    if (step === null) {
+      await this.#audit('auth.second_factor.failed', user.id, 'system', {
+        factor: 'totp',
+        during,
+      });
+      return 'mismatch';
+    }
+
+    if (!(await this.#parts.steps.claim(user.id, step))) {
+      this.#parts.logger.warn(
+        { userId: user.id, during },
+        'An authenticator code was presented again after it had been accepted; refused',
+      );
+      await this.#audit('auth.second_factor.replayed', user.id, 'system', { during });
+      return 'replayed';
+    }
+
+    return 'accepted';
   }
 
   async #assertSignInAllowed(email: string, ip: string): Promise<void> {
@@ -757,6 +966,9 @@ export class AuthService {
         { userId: found.challenge.userId },
         'A second-factor challenge used its last attempt; the account is locked for 15 minutes',
       );
+      await this.#audit('auth.account.locked', found.challenge.userId, 'system', {
+        challenge: found.challenge.kind,
+      });
       return new AuthFailure('totp-locked');
     }
 
@@ -771,9 +983,9 @@ export class AuthService {
     await this.#spendStepUp(userId);
 
     const user = await this.#requireUser(userId, tx);
-    const secret = this.#totpSecretOf(user);
 
-    if (!user.totpEnabled || secret === null || !(await verifyTotpCode({ secret, code }))) {
+    // A wrong or replayed code is audited by `#checkCode`, with `during: step-up`.
+    if (!user.totpEnabled || (await this.#checkCode(user, code, 'step-up')) !== 'accepted') {
       throw new AuthFailure('totp-mismatch');
     }
 
@@ -789,6 +1001,7 @@ export class AuthService {
   async #spendStepUp(userId: string): Promise<void> {
     if (!(await this.#parts.limiter.consume(STEP_UP_RULE, userId))) {
       this.#parts.logger.warn({ userId }, 'A step-up check was refused by the rate limit');
+      await this.#audit('auth.step_up.refused', userId, 'system', { reason: 'rate-limited' });
       throw new AuthFailure('totp-locked');
     }
   }
@@ -831,7 +1044,7 @@ export class AuthService {
    * `queueForAccount` writes the outbox row in one of its own, after the token
    * exists (`auth-email.ts` says why that order).
    */
-  async #send(request: AuthEmailRequest & { readonly kind: 'magicLink' | 'passwordReset' }) {
+  async #send(request: AuthEmailRequest) {
     if (!(await this.#parts.mail.queueForAccount(request))) {
       this.#parts.logger.info(
         { userId: request.userId, kind: request.kind },
@@ -839,4 +1052,57 @@ export class AuthService {
       );
     }
   }
+
+  /**
+   * Tells the account holder a credential changed (ASVS 2.2.3, 2.5.5). From
+   * inside a request the outbox row joins the request's transaction, so a
+   * change that rolls back sends nothing; it is routed through the first brand
+   * of the account that this transaction can see, which is a brand the person
+   * works in. A reset has no transaction to join and goes the way the reset
+   * link itself went.
+   */
+  async #notifySecurityChange(
+    userId: string,
+    change: SecurityChange,
+    tx?: DbTransaction,
+  ): Promise<void> {
+    const request: AuthEmailRequest = {
+      kind: 'securityChange',
+      userId,
+      url: new URL('/me/security', this.#parts.appUrl).toString(),
+      values: { change },
+    };
+
+    const [brandId] =
+      tx === undefined
+        ? []
+        : (await this.#parts.staff.membershipsOf(userId, tx))
+            .map((membership) => membership.brandId)
+            .sort();
+
+    if (tx === undefined || brandId === undefined) {
+      await this.#send(request);
+      return;
+    }
+
+    await this.#parts.mail.queue(tx, brandId, request);
+  }
+
+  #audit(
+    action: AuthAuditAction,
+    userId: string | null,
+    actor: 'staff' | 'system',
+    meta?: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
+    return this.#parts.audit.record({
+      action,
+      userId,
+      actor,
+      ...(meta === undefined ? {} : { meta }),
+    });
+  }
 }
+
+/** The first factor a challenge was opened after; older challenges did not record one. */
+const firstFactorOf = (found: Awaited<ReturnType<TotpChallengeStore['read']>>): string =>
+  found.status === 'ok' ? (found.challenge.firstFactor ?? 'unknown') : 'unknown';

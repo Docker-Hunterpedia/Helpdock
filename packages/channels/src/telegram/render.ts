@@ -1,6 +1,6 @@
 import type { InlineKeyboardMarkup } from 'grammy/types';
 import { TELEGRAM_MESSAGE_MAX_LENGTH } from './bot-api.js';
-import type { TelegramPoint } from './update.js';
+import { csatCallbackData, type TelegramPoint } from './update.js';
 
 /**
  * Text going out to a chat, and the text a location comes in as (M6-02,
@@ -76,3 +76,27 @@ export const languageKeyboard = (): InlineKeyboardMarkup => ({
     ],
   ],
 });
+
+/**
+ * M8-06's survey (`Telegram/Chat-EN`, panel 5): "1"–"5" in one row, each
+ * recording its score in one tap, then a URL button that opens the rating page
+ * for a comment.
+ */
+export const csatKeyboard = (
+  surveyId: string,
+  comment: { readonly label: string; readonly url: string },
+): InlineKeyboardMarkup => ({
+  inline_keyboard: [
+    [1, 2, 3, 4, 5].map((rating) => ({
+      text: String(rating),
+      callback_data: csatCallbackData(surveyId, rating),
+    })),
+    [{ text: comment.label, url: comment.url }],
+  ],
+});
+
+/** After a tap the scores go and the comment button stays, while the link is open. */
+export const csatCommentKeyboard = (comment: {
+  readonly label: string;
+  readonly url: string;
+}): InlineKeyboardMarkup => ({ inline_keyboard: [[{ text: comment.label, url: comment.url }]] });

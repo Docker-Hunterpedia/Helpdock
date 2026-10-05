@@ -3,6 +3,7 @@ import { uuidv7 } from '@helpdock/db';
 import type { AuthSessionResponse, Session } from '@helpdock/schemas';
 import type { Redis } from 'ioredis';
 import type { Logger } from '../../logging/logger.js';
+import type { AuthAuditTrail } from '../auth-audit.js';
 import {
   brandPreferenceKey,
   PRINCIPAL_REVOKED_CHANNEL,
@@ -40,6 +41,7 @@ export class SessionService {
   readonly #logger: Logger;
   readonly #appUrl: string;
   readonly #settings: Settings;
+  readonly #audit: AuthAuditTrail | undefined;
 
   constructor({
     staff,
@@ -49,6 +51,7 @@ export class SessionService {
     logger,
     appUrl,
     settings,
+    audit,
   }: {
     readonly staff: StaffRepository;
     readonly refresh: RefreshStore;
@@ -57,6 +60,8 @@ export class SessionService {
     readonly logger: Logger;
     readonly appUrl: string;
     readonly settings: Settings;
+    /** Where a reused refresh token is recorded. `createAuthRuntime` always passes one. */
+    readonly audit?: AuthAuditTrail;
   }) {
     this.#staff = staff;
     this.#refresh = refresh;
@@ -65,6 +70,7 @@ export class SessionService {
     this.#logger = logger;
     this.#appUrl = appUrl;
     this.#settings = settings;
+    this.#audit = audit;
   }
 
   /**
@@ -133,12 +139,27 @@ export class SessionService {
       return { status: 'rejected' };
     }
 
+    if (outcome.status === 'expired') {
+      this.#logger.info(
+        { userId: outcome.userId, familyId },
+        'A session family reached its absolute lifetime; the browser signs in again',
+      );
+      await this.#announceRevocation(outcome.userId, 'session-expired', [familyId]);
+      return { status: 'rejected' };
+    }
+
     if (outcome.status === 'reused') {
       this.#logger.warn(
         { userId: outcome.userId, familyId },
         'A rotated refresh token was presented again; the session family was revoked',
       );
       await this.#announceRevocation(outcome.userId, 'refresh-token-reuse', [familyId]);
+      await this.#audit?.record({
+        action: 'auth.refresh_token.reused',
+        userId: outcome.userId,
+        actor: 'system',
+        meta: { familyId },
+      });
       return { status: 'reused' };
     }
 

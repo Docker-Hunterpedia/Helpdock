@@ -239,9 +239,12 @@ merges into `brands.settings` rather than replacing it.
 | Track time on tickets (`timeTrackingEnabled`) | off | The Time card, the Log time dialog and the "Log time…" menu item. While it is off, a manual entry is refused and a reply's timer is dropped. See [time tracking](tickets.md#time-tracking) |
 | Start the timer when an agent opens the composer (`timerStartsWithComposer`) | off | The timer starts when the caret enters the reply box and is logged with the reply. Disabled on the screen while time tracking is off |
 
-The aside says how the link reaches a customer: with the closing message on the
-ticket's channel, once those channels exist (M8-06). Until then the agent copies
-it from the ticket.
+The aside says how the survey reaches a customer: when the ticket closes, on the
+ticket's channel — an email with the five scores, a card in the widget
+conversation, or a Telegram message with score buttons (M8-06, see
+[satisfaction surveys](tickets.md#satisfaction-surveys)). The link is also on
+the ticket for the agent to share another way. The setting has no delay and no
+channel choice, because the artboard draws none.
 
 The artboard's "Open the rating page as a customer sees it" preview link is not
 drawn: there is no survey to open until a ticket closes, and a preview needs a

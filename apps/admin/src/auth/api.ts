@@ -41,6 +41,16 @@ export interface AuthApi {
   enrolTotp(): Promise<TotpEnrolment>;
   /** Enables the second factor and hands over the recovery codes, once. */
   confirmTotp(code: string): Promise<RecoveryCodes>;
+  /**
+   * The same two steps for an account that must have a second factor and was
+   * handed an enrolment challenge instead of a session. Completing it signs
+   * the person in.
+   */
+  startEnrolment(challengeId: string): Promise<TotpEnrolment>;
+  completeEnrolment(
+    challengeId: string,
+    code: string,
+  ): Promise<RecoveryCodes & { readonly session: Session }>;
   /** Reads an invitation without spending it, so a refresh costs nothing. */
   previewInvite(token: string): Promise<PublicInvite>;
   /** Spends it, creates the account, and signs the person in. */

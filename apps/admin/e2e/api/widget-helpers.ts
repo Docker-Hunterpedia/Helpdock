@@ -2,9 +2,9 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { WidgetAccessUpdate, WidgetAppearance, WidgetSettings } from '@helpdock/schemas';
 import { type APIResponse, test as base, type Page } from '@playwright/test';
-import { generate } from 'otplib';
 import { strings } from '../strings.js';
 import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, TOTP_SECRET_ENV } from './install.js';
+import { freshTotpCode } from './totp.js';
 
 /**
  * What the widget specs against the real api share: the seeded account signed
@@ -23,7 +23,7 @@ const signInAsAdmin = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
   await page
     .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
+    .fill(await freshTotpCode(process.env[TOTP_SECRET_ENV] ?? ''));
   await page.getByRole('button', { name: t('auth:totp.submit') }).click();
   await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
 };

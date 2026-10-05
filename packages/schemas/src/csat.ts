@@ -31,15 +31,24 @@ export const csatRatingSchema = z.int().min(CSAT_RATING_MIN).max(CSAT_RATING_MAX
 /**
  * Where a survey stands, as the agent sees it.
  *
- * - `pending`: created on close, not handed to a channel yet. Delivery is wired
- *   per channel later (M8-06), so until then every unrated survey is pending
- *   and the agent shares the link by hand, as `AdminTicketingFeedback` says.
- * - `sent`: a channel delivered it.
+ * - `pending`: created on close, not delivered yet: the email or the Telegram
+ *   message is still queued, or the ticket has no channel to reach the
+ *   customer on, and the agent can share the link by hand.
+ * - `sent`: a channel delivered it (M8-06): the email went out, the Telegram
+ *   message landed, or the widget card was offered.
  * - `rated`: the customer answered; `rating` and `comment` are filled.
  * - `expired`: thirty days passed without an answer.
  */
 export const csatStateSchema = z.enum(['pending', 'sent', 'rated', 'expired']);
 export type CsatState = z.infer<typeof csatStateSchema>;
+
+/**
+ * M8-06: where an answer came from. A Telegram tap records the score alone and
+ * leaves the link open for a comment; an answer through the page or the widget
+ * card is final.
+ */
+export const csatAnswerChannelSchema = z.enum(['link', 'widget', 'telegram']);
+export type CsatAnswerChannel = z.infer<typeof csatAnswerChannelSchema>;
 
 export const ticketCsatSchema = z.object({
   state: csatStateSchema,
@@ -109,6 +118,11 @@ export const csatSurveyViewSchema = z.discriminatedUnion('state', [
        */
       closedBy: z.string().min(1).nullable(),
     }),
+    /**
+     * The score a Telegram tap already recorded (M8-06), pressed when the page
+     * opens so the customer only adds a comment. Absent otherwise.
+     */
+    rating: csatRatingSchema.optional(),
   }),
   z.object({ state: z.literal('rated'), brand: csatBrandSchema, rating: csatRatingSchema }),
   z.object({ state: z.literal('used'), brand: csatBrandSchema }),

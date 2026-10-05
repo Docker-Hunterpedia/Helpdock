@@ -2,12 +2,12 @@ import type { Locale } from '@helpdock/i18n';
 import { SUPPORTED_LNGS } from '@helpdock/i18n';
 import type { SetupAdminRequest } from '@helpdock/schemas';
 import { PASSWORD_MIN_LENGTH } from '@helpdock/schemas';
-import { Box, Button, OutlinedInput, Select } from '@mui/material';
+import { Button, OutlinedInput, Select } from '@mui/material';
 import { type ReactNode, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { Field, fieldDescribedBy } from '../../ui/field.tsx';
+import { PasswordField } from '../../ui/password-field.tsx';
 import { passwordStrength } from '../../ui/password-strength.js';
-import { PasswordStrengthBar } from '../../ui/password-strength-bar.tsx';
 import { SetupKeyField } from './setup-key-field.tsx';
 import { StepFrame } from './setup-layout.tsx';
 
@@ -81,6 +81,8 @@ export interface AccountStepProps {
   readonly setupKeyRequired?: boolean;
   /** The api refused the key that was sent; drawn under the field. */
   readonly setupKeyRefused?: boolean;
+  /** The api found the password on its breached-password list (ASVS 2.1.7). */
+  readonly passwordBreached?: boolean;
 }
 
 export function AccountStep({
@@ -90,6 +92,7 @@ export function AccountStep({
   pending,
   setupKeyRequired = false,
   setupKeyRefused = false,
+  passwordBreached = false,
 }: AccountStepProps): ReactNode {
   const t = useT();
   const [name, setName] = useState('');
@@ -191,36 +194,20 @@ export function AccountStep({
         />
       </Field>
 
-      <Box>
-        <Field
-          id="setup-password"
-          label={t('wizard:account.passwordLabel')}
-          hint={passwordHint}
-          error={passwordError}
-        >
-          <OutlinedInput
-            id="setup-password"
-            type="password"
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-            }}
-            error={Boolean(passwordError)}
-            fullWidth
-            slotProps={{
-              input: {
-                dir: 'ltr',
-                autoComplete: 'new-password',
-                'aria-describedby': fieldDescribedBy('setup-password', {
-                  hint: passwordHint,
-                  error: passwordError,
-                }),
-              },
-            }}
-          />
-        </Field>
-        <PasswordStrengthBar strength={strength} />
-      </Box>
+      <PasswordField
+        id="setup-password"
+        label={t('wizard:account.passwordLabel')}
+        value={password}
+        onChange={setPassword}
+        hint={passwordHint}
+        refusal={
+          passwordError !== undefined
+            ? { kind: 'short', message: passwordError }
+            : passwordBreached
+              ? { kind: 'breached' }
+              : null
+        }
+      />
 
       <Field id="setup-locale" label={t('wizard:account.languageLabel')}>
         {/* Native, so the `<label for>` above really labels it and a test can

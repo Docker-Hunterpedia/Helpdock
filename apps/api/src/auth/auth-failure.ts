@@ -25,6 +25,7 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'totp-locked': HttpStatus.TOO_MANY_REQUESTS,
   unavailable: HttpStatus.TOO_MANY_REQUESTS,
   'no-account': HttpStatus.FORBIDDEN,
+  'password-breached': HttpStatus.BAD_REQUEST,
 };
 
 const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
@@ -35,6 +36,7 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   'totp-locked': 'Too many attempts; this account is locked for a short while',
   unavailable: 'Sign-in is unavailable right now',
   'no-account': 'No account on this install matches that identity',
+  'password-breached': 'That password appears in a list of breached passwords; choose another',
 };
 
 export class AuthFailure extends HttpException {

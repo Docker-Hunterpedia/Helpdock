@@ -2,6 +2,7 @@ import { createKeyring, encryptSecret } from '@helpdock/config';
 import { silentLogger } from '@helpdock/jobs';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { describe, expect, it } from 'vitest';
+import { noSurveyEmails } from '../testing/csat-doubles.js';
 import {
   FakeEmailRepository,
   installSmtp,
@@ -10,7 +11,12 @@ import {
 } from '../testing/email-doubles.js';
 import { BRAND, DELIVERY, deliveryRow, settingsRow, TICKET } from '../testing/email-fixtures.js';
 import type { SendFacts } from './email.repository.js';
-import { createEmailSendHandler, isLastAttempt, NoSmtpServerError } from './email-send.job.js';
+import {
+  createEmailSendHandler,
+  isLastAttempt,
+  NoSmtpServerError,
+  type SurveyEmailSource,
+} from './email-send.job.js';
 
 const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 9).toString('base64') });
 
@@ -29,7 +35,9 @@ const install = {
   from: { address: 'noreply@install.example', name: 'Install' },
 };
 
-const setup = (options: { install?: typeof install | undefined } = { install }) => {
+const setup = (
+  options: { install?: typeof install | undefined; surveys?: SurveyEmailSource } = { install },
+) => {
   const repository = new FakeEmailRepository();
   repository.deliveries = [deliveryRow()];
   repository.facts = facts;
@@ -39,6 +47,7 @@ const setup = (options: { install?: typeof install | undefined } = { install }) 
     keyring,
     installSmtp: installSmtp(options.install),
     transports: transports.factory,
+    surveys: options.surveys ?? noSurveyEmails,
     now: () => new Date('2026-09-27T10:00:00Z'),
   });
   const run = () =>
@@ -84,6 +93,33 @@ describe('the email.send handler', () => {
       user: 'support@helpdock.io',
       password: 'app-password',
     });
+  });
+
+  it('sends a survey with its links and counts the survey sent with the email', async () => {
+    const SURVEY = '0199f4b2-4444-7000-8000-0000000000cc';
+    const marked: { surveyId: string; at: Date }[] = [];
+    const { repository, transports, run } = setup({
+      install,
+      surveys: {
+        forDelivery: () =>
+          Promise.resolve({
+            links: [1, 2, 3, 4, 5].map((n) => `https://desk.test/csat/t?rating=${String(n)}`),
+            closedBy: 'Lina',
+          }),
+        markSent: (_tx, surveyId, at) => {
+          marked.push({ surveyId, at });
+          return Promise.resolve();
+        },
+      },
+    });
+    repository.deliveries = [
+      deliveryRow({ kind: 'csat', ticketMessageId: null, csatResponseId: SURVEY }),
+    ];
+
+    await run();
+
+    expect(transports.sent[0]?.html).toContain('https://desk.test/csat/t?rating=5');
+    expect(marked).toEqual([{ surveyId: SURVEY, at: new Date('2026-09-27T10:00:00Z') }]);
   });
 
   it('sends nothing for a row that is already sent, discarded or failed', async () => {

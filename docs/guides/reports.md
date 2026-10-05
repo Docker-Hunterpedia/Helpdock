@@ -118,7 +118,10 @@ rebuilds hourly, at seven minutes past, for every active brand:
   the week drops out of the days it was counted in.
 - A brand with no rollups yet — an install upgraded to M8, or a new brand — is
   backfilled from its first ticket, up to 400 days back, in transactions of 31
-  days.
+  days. So is a brand whose rollups in those 400 days were built at an older
+  grain: each `report_daily` row records the `rollup_version` it was built at,
+  and a run that finds one below the code's `REPORT_ROLLUP_VERSION` rebuilds the
+  brand's whole history once, then goes back to the trailing week.
 - Days older than a week are not rebuilt. A ticket deleted after that stays in
   the history it was counted in, the backlog of a past day is the snapshot
   taken at the time, and retention purging old tickets does not rewrite old
@@ -130,11 +133,12 @@ rebuilds hourly, at seven minutes past, for every active brand:
 The rollup tables are `report_daily` and `report_agent_daily`
 (department-scoped), and `report_search_daily` and `report_help_center_daily`
 (brand-scoped), from migration `0037_report_rollups`. Migration
-`0043_report_daily_assignee` added the assignee to `report_daily`'s grain (day,
-department, channel, priority and assignee). Days rolled up before it have no
-assignee: on an install upgraded across it, the Agent filter and the per-agent
-times, SLA and CSAT cover the days rebuilt since (the trailing week, every
-hour), and older days count those figures under no agent.
+`0044_report_daily_assignee` added the assignee to `report_daily`'s grain (day,
+department, channel, priority and assignee) and the `rollup_version` column;
+rows from before it read as version 1, so on an upgraded install each brand's
+next hourly run rebuilds its last 400 days with the assignee, and the Agent
+filter and per-agent times, SLA and CSAT cover that history. Days older than
+400 days keep no assignee.
 
 ## API
 

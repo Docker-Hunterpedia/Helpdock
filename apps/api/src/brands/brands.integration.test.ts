@@ -27,6 +27,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
+import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 
 /**
  * The whole of M1-01 over HTTP, against a real Postgres and a real Redis.
@@ -158,6 +159,7 @@ describe.skipIf(!hasDocker)('brands, departments and teams', () => {
       return firstBody.accessToken;
     }
 
+    await forgetUsedTotpSteps(runtime.redis);
     const second = await request('POST', '/api/auth/totp', {
       body: {
         challengeId: firstBody.challengeId,

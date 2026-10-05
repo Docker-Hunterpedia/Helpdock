@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
+import { rateLimitRefusals } from '../observability/rate-limit-refusals.js';
 import { hashSubject, rateLimitKey } from './redis-keys.js';
 
 /**
@@ -118,7 +119,12 @@ export class RateLimiter {
       randomUUID(),
     );
 
-    return allowed === 1;
+    if (allowed !== 1) {
+      rateLimitRefusals().record(rule.bucket);
+      return false;
+    }
+
+    return true;
   }
 
   /**

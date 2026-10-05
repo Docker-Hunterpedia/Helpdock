@@ -1,5 +1,5 @@
 import { PASSWORD_MIN_LENGTH } from '@helpdock/schemas';
-import { Box, Button, Link, OutlinedInput } from '@mui/material';
+import { Box, Button, Link } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { MailCheck } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
@@ -15,7 +15,7 @@ import { ROUTES } from '../app/route-paths.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
-import { Field, fieldDescribedBy } from '../ui/field.tsx';
+import { PasswordField } from '../ui/password-field.tsx';
 import { AuthLayout } from './auth-layout.tsx';
 
 /**
@@ -119,13 +119,14 @@ export function PasswordReset(): ReactNode {
   };
 
   const fieldId = 'password-reset-password';
-  const error = tooShort ? t('auth:passwordReset.passwordTooShort') : undefined;
-  const hint = t('auth:passwordReset.passwordHint');
-  const failed = reset.isError
-    ? isAuthError(reset.error) && reset.error.code === 'challenge-expired'
-      ? t('auth:passwordReset.invalid')
-      : t('auth:unavailable')
-    : undefined;
+  const breached =
+    reset.isError && isAuthError(reset.error) && reset.error.code === 'password-breached';
+  const failed =
+    reset.isError && !breached
+      ? isAuthError(reset.error) && reset.error.code === 'challenge-expired'
+        ? t('auth:passwordReset.invalid')
+        : t('auth:unavailable')
+      : undefined;
 
   return (
     <AuthLayout
@@ -147,26 +148,24 @@ export function PasswordReset(): ReactNode {
       >
         {failed ? <AlertBanner tone="danger">{failed}</AlertBanner> : null}
 
-        <Field id={fieldId} label={t('auth:passwordReset.passwordLabel')} hint={hint} error={error}>
-          <OutlinedInput
-            id={fieldId}
-            type="password"
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-            }}
-            error={Boolean(error)}
-            fullWidth
-            slotProps={{
-              input: {
-                dir: 'ltr',
-                autoComplete: 'new-password',
-                autoFocus: true,
-                'aria-describedby': fieldDescribedBy(fieldId, { hint, error }),
-              },
-            }}
-          />
-        </Field>
+        <PasswordField
+          id={fieldId}
+          label={t('auth:passwordReset.passwordLabel')}
+          value={password}
+          onChange={(value) => {
+            setPassword(value);
+            reset.reset();
+          }}
+          hint={t('auth:passwordReset.passwordHint')}
+          refusal={
+            tooShort
+              ? { kind: 'short', message: t('auth:passwordReset.passwordTooShort') }
+              : breached
+                ? { kind: 'breached' }
+                : null
+          }
+          autoFocus
+        />
 
         <Button
           type="submit"

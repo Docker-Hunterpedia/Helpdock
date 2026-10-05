@@ -9,10 +9,13 @@ import {
   userFamiliesKey,
 } from '../redis-keys.js';
 import { ACCESS_TOKEN_TTL_SECONDS } from './access-token.js';
+import { DEFAULT_SESSION_LIFETIME, type SessionLifetime } from './lifetime.js';
 
 /**
- * Refresh tokens, as ARCHITECTURE §7 specifies them: opaque, rotating, thirty
- * days, and held in Redis so they can be revoked.
+ * Refresh tokens, as ARCHITECTURE §7 specifies them: opaque, rotating, and held
+ * in Redis so they can be revoked. How long a family lives is two limits, idle
+ * and absolute (`lifetime.ts`): the record's TTL is the idle limit, renewed on
+ * each refresh but never past the absolute one.
  *
  * A **family** is one browser's chain of tokens. Every refresh mints a new
  * token and forgets the old one, so a token is worth exactly one use. If a
@@ -25,9 +28,6 @@ import { ACCESS_TOKEN_TTL_SECONDS } from './access-token.js';
  * contains no usable session.
  */
 
-/** Thirty days, in seconds (ARCHITECTURE §7). */
-export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
-
 const TOKEN_BYTES = 32;
 /** Enough to tell two browsers apart in an operator's eyes; not a fingerprint. */
 const MAX_USER_AGENT_LENGTH = 120;
@@ -37,7 +37,9 @@ export type RotationOutcome =
   /** The presented token is not the family's current one: someone has a copy. */
   | { readonly status: 'reused'; readonly userId: string }
   /** No such family: it expired, or it was revoked, or the cookie is made up. */
-  | { readonly status: 'unknown' };
+  | { readonly status: 'unknown' }
+  /** The family reached its absolute lifetime and is gone; its owner signs in again. */
+  | { readonly status: 'expired'; readonly userId: string };
 
 export interface IssuedRefreshToken {
   readonly familyId: string;
@@ -71,8 +73,13 @@ if redis.call('HGET', KEYS[1], 'currentHash') ~= ARGV[1] then
   redis.call('DEL', KEYS[1])
   return {'reused', userId}
 end
+local remaining = tonumber(redis.call('HGET', KEYS[1], 'issuedAt') or '0') + tonumber(ARGV[6]) - tonumber(ARGV[3])
+if remaining <= 0 then
+  redis.call('DEL', KEYS[1])
+  return {'expired', userId}
+end
 redis.call('HSET', KEYS[1], 'currentHash', ARGV[2], 'lastUsedAt', ARGV[3], 'ua', ARGV[4])
-redis.call('EXPIRE', KEYS[1], ARGV[5])
+redis.call('EXPIRE', KEYS[1], math.min(tonumber(ARGV[5]), remaining))
 return {'rotated', userId}
 `;
 
@@ -99,9 +106,11 @@ const toSeconds = (value: string | null | undefined): number | null => {
 
 export class RefreshStore {
   readonly #redis: Redis;
+  readonly #lifetime: SessionLifetime;
 
-  constructor(redis: Redis) {
+  constructor(redis: Redis, lifetime: SessionLifetime = DEFAULT_SESSION_LIFETIME) {
     this.#redis = redis;
+    this.#lifetime = lifetime;
   }
 
   /** Opens a new family for a browser that has just proved who it is. */
@@ -125,9 +134,9 @@ export class RefreshStore {
         lastUsedAt: String(now),
         ua: truncateUserAgent(userAgent),
       })
-      .expire(familyKey(familyId), REFRESH_TOKEN_TTL_SECONDS)
+      .expire(familyKey(familyId), this.#lifetime.idleSeconds)
       .sadd(userFamiliesKey(userId), familyId)
-      .expire(userFamiliesKey(userId), REFRESH_TOKEN_TTL_SECONDS)
+      .expire(userFamiliesKey(userId), this.#lifetime.maxSeconds)
       .exec();
 
     return { familyId, token };
@@ -158,12 +167,17 @@ export class RefreshStore {
       hashToken(next),
       String(now),
       truncateUserAgent(userAgent),
-      String(REFRESH_TOKEN_TTL_SECONDS),
+      String(this.#lifetime.idleSeconds),
+      String(this.#lifetime.maxSeconds),
     )) as [string, string];
 
     if (status === 'rotated') {
-      await this.#redis.expire(userFamiliesKey(userId), REFRESH_TOKEN_TTL_SECONDS);
+      await this.#redis.expire(userFamiliesKey(userId), this.#lifetime.maxSeconds);
       return { status: 'rotated', userId, token: next };
+    }
+    if (status === 'expired') {
+      await this.#forgetFamily(userId, familyId);
+      return { status: 'expired', userId };
     }
     if (status === 'reused') {
       // The family is already gone; what is left is the bookkeeping around it,

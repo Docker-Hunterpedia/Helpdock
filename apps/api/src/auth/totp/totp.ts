@@ -19,7 +19,12 @@ export const TOTP_DIGITS = 6;
 /** Base32, which is what an authenticator app scans and what a person types. */
 export const newTotpSecret = (): string => generateSecret();
 
-export const verifyTotpCode = async ({
+/**
+ * The time step a code belongs to, or `null` when it matches none in the
+ * window. The step is what replay protection remembers: a code is a function of
+ * the secret and the step, so "this step was used" is "this code was used".
+ */
+export const matchTotpStep = async ({
   secret,
   code,
   /** Overridden by the tests, which have to stand at a known point in time. */
@@ -28,7 +33,7 @@ export const verifyTotpCode = async ({
   readonly secret: string;
   readonly code: string;
   readonly epochSeconds?: number;
-}): Promise<boolean> => {
+}): Promise<number | null> => {
   // otplib throws for a token that is not six digits rather than answering
   // false. The Zod schema on the route already refuses those, so reaching this
   // is a bug — but a bug in shape checking must not become a 500 on the sign-in
@@ -43,11 +48,17 @@ export const verifyTotpCode = async ({
       ...(epochSeconds === undefined ? {} : { epoch: epochSeconds }),
     });
 
-    return result.valid;
+    return result.valid && 'timeStep' in result ? result.timeStep : null;
   } catch {
-    return false;
+    return null;
   }
 };
+
+export const verifyTotpCode = async (options: {
+  readonly secret: string;
+  readonly code: string;
+  readonly epochSeconds?: number;
+}): Promise<boolean> => (await matchTotpStep(options)) !== null;
 
 /**
  * The `otpauth://` URI a QR code encodes. The label is the address so that a

@@ -6,9 +6,15 @@ import {
   type OutboxEventHandler,
   registerEventHandler,
 } from '@helpdock/jobs';
-import { CSAT_TOKEN_TTL_DAYS, isSpamStatus } from '@helpdock/schemas';
+import {
+  CSAT_TOKEN_TTL_DAYS,
+  csatAnswerChannelSchema,
+  csatRatingSchema,
+  isSpamStatus,
+} from '@helpdock/schemas';
 import { z } from 'zod';
 import type { CsatRepository } from './csat.repository.js';
+import type { CsatDelivery } from './csat-delivery.js';
 import { type CsatTokens, hashCsatToken } from './tokens.js';
 
 /**
@@ -18,7 +24,8 @@ import { type CsatTokens, hashCsatToken } from './tokens.js';
  * ```
  * close   →  tickets + ticket_activity + outbox(csat.requested)   (one transaction)
  * relay   →  BullMQ outbox.event                                   (after commit)
- * worker  →  this handler → csat_responses                         (with its receipt)
+ * worker  →  this handler → csat_responses + the channel's send    (with its receipt)
+ * answer  →  csat_responses + outbox(csat.received)                (page, widget or Telegram)
  * ```
  *
  * The event is its own rather than a second handler on `ticket.closed`, because
@@ -27,12 +34,15 @@ import { type CsatTokens, hashCsatToken } from './tokens.js';
  * transaction that closed it (`tickets/lifecycle/hooks.ts`). The brand toggle is
  * read there too, so a survey reflects the setting at the moment of the close.
  *
- * Delivering the link is per channel and later (M8-06). Until then the agent
- * shares it from the details panel.
+ * The survey goes out on the ticket's channel in the same transaction
+ * (`csat-delivery.ts`, M8-06). Every recorded answer emits `csat.received`
+ * (`csat-answers.ts`), which workflow rules subscribe to (M3-03) and which is
+ * the webhook event of the same name.
  */
 
 export const CSAT_EVENTS = {
   requested: 'csat.requested',
+  received: 'csat.received',
 } as const;
 
 export const csatRequestedPayloadSchema = z.object({
@@ -53,11 +63,36 @@ export const enqueueCsatRequested = (
     payload: csatRequestedPayloadSchema.parse(payload),
   });
 
+/**
+ * An answer was recorded. `ticketId` is what the rules module reads of any
+ * event; the comment is not carried, so the outbox holds no customer text.
+ */
+export const csatReceivedPayloadSchema = z.object({
+  ticketId: z.uuid(),
+  surveyId: z.uuid(),
+  rating: csatRatingSchema,
+  via: csatAnswerChannelSchema,
+  ratedAt: z.iso.datetime(),
+});
+export type CsatReceivedPayload = z.infer<typeof csatReceivedPayloadSchema>;
+
+export const enqueueCsatReceived = (
+  tx: DbTransaction,
+  brandId: string,
+  payload: CsatReceivedPayload,
+): Promise<string> =>
+  enqueueOutbox(tx, {
+    brandId,
+    event: CSAT_EVENTS.received,
+    payload: csatReceivedPayloadSchema.parse(payload),
+  });
+
 const DAY_MS = 86_400_000;
 
 export interface CsatSurveyJobDependencies {
   readonly repository: CsatRepository;
   readonly tokens: CsatTokens;
+  readonly delivery: Pick<CsatDelivery, 'deliver'>;
   /** Overridden by tests. */
   readonly now?: () => Date;
 }
@@ -69,10 +104,15 @@ export interface CsatSurveyJobDependencies {
  * passed between the close and this: a ticket reopened (or deleted, merged or
  * marked spam) since is no longer the close the survey would ask about, and is
  * skipped. The unique `(ticket_id, closed_at)` makes a second delivery a no-op
- * even past the job receipt.
+ * even past the job receipt, and only the run that created the survey sends it.
  */
 export const createCsatRequestedHandler =
-  ({ repository, tokens, now = () => new Date() }: CsatSurveyJobDependencies): OutboxEventHandler =>
+  ({
+    repository,
+    tokens,
+    delivery,
+    now = () => new Date(),
+  }: CsatSurveyJobDependencies): OutboxEventHandler =>
   async ({ brandId, payload, tx, log }: OutboxEventContext): Promise<void> => {
     const { ticketId, closedAt } = csatRequestedPayloadSchema.parse(payload);
     const facts = await repository.closedTicketFacts(tx, ticketId);
@@ -91,7 +131,7 @@ export const createCsatRequestedHandler =
 
     const id = uuidv7();
     const created = now();
-    const inserted = await repository.insertSurvey(tx, {
+    const survey = await repository.insertSurvey(tx, {
       id,
       brandId,
       ticketId,
@@ -100,35 +140,33 @@ export const createCsatRequestedHandler =
       tokenHash: hashCsatToken(tokens.sign({ brandId, surveyId: id })),
       expiresAt: new Date(created.getTime() + CSAT_TOKEN_TTL_DAYS * DAY_MS),
     });
+    if (survey === undefined) {
+      log.info({ brandId, ticketId }, 'csat survey already exists for this close');
+      return;
+    }
 
-    log.info({ brandId, ticketId, surveyId: inserted ? id : null }, 'csat survey created');
+    const channel = await delivery.deliver(
+      tx,
+      brandId,
+      { id: ticketId, ...facts },
+      survey,
+      created,
+    );
+    log.info({ brandId, ticketId, surveyId: id, channel }, 'csat survey created');
   };
 
 /**
- * A customer rated a survey. Written in the transaction that stores the
- * rating; the rules engine (M3-03, `csat_received`) and the `csat.received`
- * webhook (M8-03) subscribe to it under their own names. Ids only: the comment
- * is read from the row by whoever needs it.
+ * `csat.received`'s own slot. Rules (M3-03) and webhooks (M8-03) subscribe to
+ * the event under their names; this only leaves the answer in the log.
  */
-export const CSAT_RECEIVED_EVENT = 'csat.received';
-
-export const enqueueCsatReceived = (
-  tx: DbTransaction,
-  brandId: string,
-  payload: { readonly ticketId: string; readonly surveyId: string },
-): Promise<string> =>
-  enqueueOutbox(tx, { brandId, event: CSAT_RECEIVED_EVENT, payload: { ...payload } });
-
-/** The owner's slot of `csat.received`, which only logs: the rules and the webhooks subscribe. */
-const logReceived: OutboxEventHandler = async ({ brandId, outboxId, payload, log }) => {
-  log.info(
-    { event: CSAT_RECEIVED_EVENT, brandId, outboxId, surveyId: payload.surveyId },
-    'csat received',
-  );
+const logCsatReceived: OutboxEventHandler = async ({ brandId, payload, log }) => {
+  const { ticketId, rating, via } = csatReceivedPayloadSchema.parse(payload);
+  log.info({ brandId, ticketId, rating, via }, 'csat answer received');
+  await Promise.resolve();
 };
 
 /** Called by the worker's start-up, before the consumer exists (`worker/start-worker.ts`). */
 export const registerCsatEventHandlers = (dependencies: CsatSurveyJobDependencies): void => {
   registerEventHandler(CSAT_EVENTS.requested, createCsatRequestedHandler(dependencies));
-  registerEventHandler(CSAT_RECEIVED_EVENT, logReceived);
+  registerEventHandler(CSAT_EVENTS.received, logCsatReceived);
 };

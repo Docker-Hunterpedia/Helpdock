@@ -12,9 +12,11 @@ const draft = {
 const render = ({
   setupKeyRequired = false,
   setupKeyRefused = false,
+  passwordBreached = false,
 }: {
   setupKeyRequired?: boolean;
   setupKeyRefused?: boolean;
+  passwordBreached?: boolean;
 } = {}) => {
   const onSubmit = vi.fn();
 
@@ -28,6 +30,7 @@ const render = ({
         pending={false}
         setupKeyRequired={setupKeyRequired}
         setupKeyRefused={setupKeyRefused}
+        passwordBreached={passwordBreached}
       />,
     ),
   };
@@ -64,6 +67,15 @@ describe('validateAccount', () => {
 });
 
 describe('AccountStep', () => {
+  it('draws the api’s breached-list refusal on the password field (ASVS 2.1.7)', () => {
+    render({ passwordBreached: true });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This password appears in lists of leaked passwords',
+    );
+    expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('names the reading in words, so nothing depends on the bar’s colour', async () => {
     const { user } = render();
 

@@ -12,6 +12,7 @@ import {
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { departments } from './departments.js';
+import { csatAnswerChannelEnum } from './enums.js';
 import { tickets } from './tickets.js';
 
 /**
@@ -56,11 +57,19 @@ export const csatResponses = pgTable(
     /** SHA-256 of the token, hex. */
     tokenHash: text('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    /** Set by a channel when it delivers the link (M8-06). */
+    /** Set by the channel that delivered the survey (M8-06). */
     sentAt: timestamp('sent_at', { withTimezone: true }),
     rating: smallint('rating'),
     comment: text('comment'),
     ratedAt: timestamp('rated_at', { withTimezone: true }),
+    /** Where the answer came from (M8-06); null until there is one. */
+    ratedVia: csatAnswerChannelEnum('rated_via'),
+    /**
+     * The visitor pressed Skip on the widget's card (M8-06). It records no
+     * answer and only stops the card being offered again; a link sent by
+     * another channel still works.
+     */
+    skippedAt: timestamp('skipped_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

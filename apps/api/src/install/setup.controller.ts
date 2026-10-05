@@ -12,11 +12,7 @@ import { Body, Controller, Inject, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Public } from '../auth/route-declaration.js';
-import {
-  encodeRefreshCookie,
-  REFRESH_COOKIE,
-  refreshCookieAttributes,
-} from '../auth/session/cookies.js';
+import { encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { ENV } from '../runtime/tokens.js';
 import {
   SetupAdminRequestDto,
@@ -83,10 +79,11 @@ export class SetupController {
     });
 
     if (issued !== null) {
+      const cookie = refreshCookieOf(this.#env);
       reply.setCookie(
-        REFRESH_COOKIE,
+        cookie.name,
         encodeRefreshCookie(issued.refreshCookieValue),
-        refreshCookieAttributes(this.#env.APP_URL),
+        cookie.attributes,
       );
     }
 

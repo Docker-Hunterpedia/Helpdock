@@ -1,5 +1,6 @@
-import { type ApiKeyRow, apiKeys, type Db, type DbTransaction } from '@helpdock/db';
+import { type ApiKeyRow, apiKeys, type Db, type DbTransaction, users } from '@helpdock/db';
 import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { withAllBrands } from '../tenant/all-brands.js';
 
 /**
@@ -19,9 +20,24 @@ export interface ActiveApiKey {
   readonly rateLimitPerMinute: number;
 }
 
+/** A key with the names of the staff who issued and revoked it, for the Developers page. */
+export interface ApiKeyWithNames {
+  readonly key: ApiKeyRow;
+  readonly createdByName: string | null;
+  readonly revokedByName: string | null;
+}
+
+const creators = alias(users, 'api_key_creators');
+const revokers = alias(users, 'api_key_revokers');
+
 export class ApiKeysRepository {
-  async list(tx: DbTransaction): Promise<ApiKeyRow[]> {
-    return tx.select().from(apiKeys).orderBy(desc(apiKeys.createdAt));
+  async list(tx: DbTransaction): Promise<ApiKeyWithNames[]> {
+    return tx
+      .select({ key: apiKeys, createdByName: creators.name, revokedByName: revokers.name })
+      .from(apiKeys)
+      .leftJoin(creators, eq(creators.id, apiKeys.createdBy))
+      .leftJoin(revokers, eq(revokers.id, apiKeys.revokedBy))
+      .orderBy(desc(apiKeys.createdAt));
   }
 
   async insert(

@@ -13,11 +13,18 @@ Both are public: they describe the routes, nothing of any brand's data. The docu
 
 ## API keys
 
-A key belongs to one brand and is made by that brand's Admin (`brand:manage`). The admin screen is a later task; until then the endpoints are:
+A key belongs to one brand and is made by that brand's Admin (`brand:manage`), on **Developers › API keys** in the admin (artboard `Admin/Developers-ApiKeys`):
+
+- **The table** lists every key with its first 12 characters, scopes, rate limit, who created it and when, and when it was last used. Revoked keys stay in the list, struck through, with who revoked them; untick "Show revoked" to hide them.
+- **Create API key** asks for a name, at least one scope and a rate limit (600 unless changed). The key is then shown **once**, with Copy; after "Done" the page holds only its prefix.
+- **Revoke** asks first and says what stops working. A revoked key answers `401` at once.
+- **API docs** in the page header opens `/api/docs`, and the "Calling the API" card has a `curl` example against this install.
+
+The page calls these endpoints, which an Admin's own scripts may call too:
 
 | Request | What it does |
 |---|---|
-| `GET /api/brands/{brandId}/api-keys` | The brand's keys: name, the first 12 characters, scopes, rate limit, created, last used, revoked |
+| `GET /api/brands/{brandId}/api-keys` | The brand's keys: name, the first 12 characters, scopes, rate limit, created and by whom (`createdByName`), last used, revoked and by whom (`revokedByName`) |
 | `POST /api/brands/{brandId}/api-keys` | `{ "name", "scopes": [...], "rateLimitPerMinute"? }`. The answer carries `key` — **the only time it is ever shown** |
 | `DELETE /api/brands/{brandId}/api-keys/{keyId}` | Revokes the key. Final: a key that should work again is a new key |
 

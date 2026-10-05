@@ -16,6 +16,7 @@ import { authRedis } from '../testing/auth-redis.js';
 import type { RedisStub } from '../testing/redis-stub.js';
 import { silentLogger } from '../testing/silent-logger.js';
 import { AuthService } from './auth.service.js';
+import type { AuthAuditEntry, AuthAuditTrail } from './auth-audit.js';
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import type { AuthFailure } from './auth-failure.js';
 import { EmailTokenStore } from './email-token.store.js';
@@ -30,6 +31,7 @@ import type { StaffMembership, StaffRepository, StaffUser } from './staff.reposi
 import { TotpChallengeStore } from './totp/challenge-store.js';
 import { newTotpSecret } from './totp/totp.js';
 import { TrustedDeviceStore } from './totp/trusted-device.js';
+import { TotpStepStore } from './totp/used-steps.js';
 
 /**
  * The service on its own, with the database replaced by a handful of rows and
@@ -65,7 +67,7 @@ class FakeStaffRepository {
   readonly memberships = new Map<string, StaffMembership[]>();
   readonly brands: Brand[] = [brand()];
 
-  add(user: StaffUser, role: StaffMembership['role'] = 'admin', brandId = BRAND_ID): StaffUser {
+  add(user: StaffUser, role: StaffMembership['role'] = 'agent', brandId = BRAND_ID): StaffUser {
     this.users.set(user.id, user);
     this.memberships.set(user.id, [
       { id: uuidv7(), userId: user.id, brandId, role, departmentIds: null, createdAt: new Date() },
@@ -114,6 +116,10 @@ class FakeStaffRepository {
     this.#patch(userId, { recoveryCodesHashed });
   }
 
+  async disableTotp(userId: string): Promise<void> {
+    this.#patch(userId, { totpEnabled: false, totpSecretEncrypted: null, recoveryCodesHashed: [] });
+  }
+
   async markActive(userId: string): Promise<void> {
     this.#patch(userId, { status: 'active' });
   }
@@ -148,6 +154,20 @@ class CollectingAuthMail implements AuthMail {
   }
 }
 
+/** The trail, as a list; that rows reach `audit_log` is the integration suite's to prove. */
+class RecordingAudit implements AuthAuditTrail {
+  readonly entries: AuthAuditEntry[] = [];
+
+  record(entry: AuthAuditEntry): Promise<void> {
+    this.entries.push(entry);
+    return Promise.resolve();
+  }
+
+  actions(): string[] {
+    return this.entries.map((entry) => entry.action);
+  }
+}
+
 /** Enabled for neither provider unless a test says otherwise. */
 class FakeOauthService {
   enabled = false;
@@ -176,6 +196,7 @@ let stub: RedisStub;
 let staff: FakeStaffRepository;
 let oauth: FakeOauthService;
 let mail: CollectingAuthMail;
+let audit: RecordingAudit;
 let settings: Settings;
 let service: AuthService;
 let hasher: PasswordHasher;
@@ -232,6 +253,7 @@ beforeEach(async () => {
   staff = new FakeStaffRepository();
   oauth = new FakeOauthService();
   mail = new CollectingAuthMail();
+  audit = new RecordingAudit();
   hasher = new PasswordHasher(MASTER_KEY);
 
   settings = createSettings({
@@ -263,6 +285,7 @@ beforeEach(async () => {
     sessions,
     hasher,
     challenges: new TotpChallengeStore(created.redis),
+    steps: new TotpStepStore(created.redis),
     trustedDevices: new TrustedDeviceStore({ redis: created.redis, masterKey: MASTER_KEY }),
     tokens: new EmailTokenStore(created.redis),
     exchanges: new ExchangeStore(created.redis),
@@ -271,6 +294,7 @@ beforeEach(async () => {
     settings,
     keyring: createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
     mail,
+    audit,
     logger: silentLogger(),
     appUrl: APP_URL,
   });
@@ -862,7 +886,7 @@ describe('the redirect hand-off', () => {
 
 describe('me and signing out', () => {
   it('describes the session the account holds', async () => {
-    const user = staff.add(await newUser());
+    const user = staff.add(await newUser(), 'admin');
 
     await expect(service.me(user.id)).resolves.toMatchObject({
       user: { email: user.email, role: 'admin' },
@@ -939,6 +963,337 @@ describe('me and signing out', () => {
         principalId: user.id,
         reason: 'sign-out-everywhere',
       }),
+    });
+  });
+});
+
+describe('a second factor for administrators (ASVS 4.3.1)', () => {
+  it('sends an Admin with no authenticator to enrolment, whatever the setting', async () => {
+    staff.add(await newUser(), 'admin');
+
+    await expect(signIn()).resolves.toMatchObject({ kind: 'totp-enrolment-required' });
+  });
+
+  it('does the same for an install admin who is only an agent in their brand', async () => {
+    staff.add(await newUser({ installAdmin: true }), 'agent');
+
+    await expect(signIn()).resolves.toMatchObject({ kind: 'totp-enrolment-required' });
+  });
+
+  it('leaves an agent to choose, while the install does not require it', async () => {
+    staff.add(await newUser(), 'agent');
+
+    await expect(signIn()).resolves.toMatchObject({ kind: 'session' });
+  });
+
+  it('refuses to let an Admin turn their second factor off', async () => {
+    const { user, secret } = await withTotp();
+    staff.add(user, 'admin');
+
+    await expect(service.disableTotp(user.id, await generate({ secret }))).rejects.toMatchObject({
+      auth: { code: 'unavailable' },
+    });
+    expect(staff.users.get(user.id)?.totpEnabled).toBe(true);
+  });
+
+  it('reports the rule to the security page', async () => {
+    const admin = staff.add(await newUser(), 'admin');
+    const agent = staff.add(await newUser({ email: 'sami@helpdock.com' }), 'agent');
+
+    await expect(service.secondFactorRequiredFor(admin.id)).resolves.toBe(true);
+    await expect(service.secondFactorRequiredFor(agent.id)).resolves.toBe(false);
+  });
+});
+
+describe('enrolment from a challenge', () => {
+  const challenge = async (): Promise<string> => {
+    staff.add(await newUser(), 'admin');
+    const started = await signIn();
+    if (started.kind !== 'totp-enrolment-required') {
+      throw new Error('expected an enrolment challenge');
+    }
+    return started.challengeId;
+  };
+
+  it('stages a secret, turns it on, and opens the session the challenge stood in for', async () => {
+    const challengeId = await challenge();
+    const { secret } = await service.startEnrolment(challengeId);
+
+    const { recoveryCodes, issued } = await service.completeEnrolment({
+      challengeId,
+      code: await generate({ secret }),
+      userAgent: 'Firefox',
+    });
+
+    expect(recoveryCodes).toHaveLength(10);
+    expect(issued.session.user.email).toBe('lina@helpdock.com');
+    expect([...staff.users.values()][0]?.totpEnabled).toBe(true);
+    expect(audit.actions()).toEqual(['auth.second_factor.enabled', 'auth.sign_in.succeeded']);
+    expect(audit.entries[1]?.meta).toMatchObject({ method: 'password', secondFactor: 'totp' });
+  });
+
+  it('spends the challenge, so it cannot enrol twice', async () => {
+    const challengeId = await challenge();
+    const { secret } = await service.startEnrolment(challengeId);
+    await service.completeEnrolment({
+      challengeId,
+      code: await generate({ secret }),
+      userAgent: undefined,
+    });
+
+    await expect(service.startEnrolment(challengeId)).rejects.toMatchObject({
+      auth: { code: 'challenge-expired' },
+    });
+  });
+
+  it('charges a wrong code an attempt, as a sign-in does', async () => {
+    const challengeId = await challenge();
+    await service.startEnrolment(challengeId);
+
+    await expect(
+      service.completeEnrolment({ challengeId, code: '000000', userAgent: undefined }),
+    ).rejects.toMatchObject({ auth: { code: 'totp-mismatch', attemptsLeft: 2 } });
+  });
+
+  it('will not take a second-factor challenge in place of an enrolment one', async () => {
+    const { user } = await withTotp();
+    staff.add(user);
+    const started = await signIn();
+    if (started.kind !== 'totp-required') {
+      throw new Error('expected a challenge');
+    }
+
+    await expect(service.startEnrolment(started.challengeId)).rejects.toMatchObject({
+      auth: { code: 'challenge-expired' },
+    });
+  });
+});
+
+describe('a code is accepted once (ASVS 2.8.4, 2.8.5)', () => {
+  const challengeFor = async (): Promise<string> => {
+    const started = await signIn();
+    if (started.kind !== 'totp-required') {
+      throw new Error('expected a challenge');
+    }
+    return started.challengeId;
+  };
+
+  const verify = async (code: string) =>
+    service.verifyTotp({
+      challengeId: await challengeFor(),
+      code,
+      trustDevice: false,
+      userAgent: undefined,
+    });
+
+  it('refuses the same code at a second challenge, and records that it was replayed', async () => {
+    const { user, secret } = await withTotp();
+    staff.add(user);
+    const code = await generate({ secret });
+    await verify(code);
+
+    await expect(verify(code)).rejects.toMatchObject({
+      auth: { code: 'totp-mismatch', attemptsLeft: 2 },
+    });
+    expect(audit.actions()).toContain('auth.second_factor.replayed');
+  });
+
+  it('refuses an older code once a newer one has been used', async () => {
+    const { user, secret } = await withTotp();
+    staff.add(user);
+    const now = Math.floor(Date.now() / 1000);
+    await verify(await generate({ secret, epoch: now }));
+
+    await expect(verify(await generate({ secret, epoch: now - 30 }))).rejects.toMatchObject({
+      auth: { code: 'totp-mismatch' },
+    });
+  });
+
+  it('will not let the code that just signed in also turn the second factor off', async () => {
+    const { user, secret } = await withTotp();
+    staff.add(user);
+    const code = await generate({ secret });
+    await verify(code);
+
+    await expect(service.disableTotp(user.id, code)).rejects.toMatchObject({
+      auth: { code: 'totp-mismatch' },
+    });
+  });
+});
+
+describe('breached passwords (ASVS 2.1.7)', () => {
+  it('refuses one on a change, whatever its case, and keeps the old password', async () => {
+    const user = staff.add(await newUser());
+
+    await expect(
+      service.changePassword({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: 'QwertyUIOP123',
+        keepFamilyId: null,
+      }),
+    ).rejects.toMatchObject({ auth: { code: 'password-breached' } });
+    expect(
+      await hasher.verify(staff.users.get(user.id)?.passwordHash ?? '', PASSWORD),
+    ).toMatchObject({ valid: true });
+  });
+
+  it('refuses one on a reset before the link is spent, so the link still works', async () => {
+    const user = staff.add(await newUser());
+    await service.requestPasswordReset({ email: user.email, ip: '203.0.113.5' });
+    const token = resetTokenIn(mail.sent[0]?.url ?? '');
+
+    await expect(
+      service.resetPassword({ token, password: 'passwordpassword' }),
+    ).rejects.toMatchObject({ auth: { code: 'password-breached' } });
+    await expect(
+      service.resetPassword({ token, password: 'a whole new password' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses one for a new account, which is how an invitation sets its first', () => {
+    expect(() => service.hashPassword('iloveyou1234')).toThrow(
+      expect.objectContaining({ auth: { code: 'password-breached' } }),
+    );
+  });
+});
+
+describe('telling the account holder a credential changed (ASVS 2.2.3, 2.5.5)', () => {
+  const changeNotices = () => mail.sent.filter((sent) => sent.kind === 'securityChange');
+
+  it('queues a notice in the request transaction when the password is changed', async () => {
+    const user = staff.add(await newUser());
+
+    await service.changePassword({
+      userId: user.id,
+      currentPassword: PASSWORD,
+      newPassword: 'a whole new password',
+      keepFamilyId: null,
+      tx: {} as DbTransaction,
+    });
+
+    expect(changeNotices()).toEqual([
+      expect.objectContaining({
+        userId: user.id,
+        brandId: BRAND_ID,
+        url: `${APP_URL}/me/security`,
+        values: { change: 'password' },
+      }),
+    ]);
+  });
+
+  it('sends one after a reset, which has no transaction to join', async () => {
+    const user = staff.add(await newUser());
+    await service.requestPasswordReset({ email: user.email, ip: '203.0.113.5' });
+
+    await service.resetPassword({
+      token: resetTokenIn(mail.sent[0]?.url ?? ''),
+      password: 'a whole new password',
+    });
+
+    expect(changeNotices()).toEqual([
+      expect.objectContaining({
+        userId: user.id,
+        brandId: null,
+        values: { change: 'passwordReset' },
+      }),
+    ]);
+  });
+
+  it('sends one when the second factor goes on, comes off, or its codes are redrawn', async () => {
+    const user = staff.add(await newUser());
+    const { secret } = await service.enrolTotp(user.id);
+    const now = Math.floor(Date.now() / 1000);
+    await service.confirmTotp(user.id, await generate({ secret, epoch: now - 30 }));
+    await service.regenerateRecoveryCodes(user.id, await generate({ secret, epoch: now }));
+    await service.disableTotp(user.id, await generate({ secret, epoch: now + 30 }));
+
+    expect(changeNotices().map((sent) => sent.values?.change)).toEqual([
+      'twoFactorEnabled',
+      'recoveryCodes',
+      'twoFactorDisabled',
+    ]);
+    expect(audit.actions()).toEqual([
+      'auth.second_factor.enabled',
+      'auth.recovery_codes.regenerated',
+      'auth.second_factor.disabled',
+    ]);
+  });
+});
+
+describe('the audit trail of a sign-in (ASVS 7.1.3, 7.2.1)', () => {
+  it('records a success with the way in', async () => {
+    const user = staff.add(await newUser());
+
+    await signIn();
+
+    expect(audit.entries).toEqual([
+      expect.objectContaining({
+        action: 'auth.sign_in.succeeded',
+        userId: user.id,
+        actor: 'staff',
+        meta: expect.objectContaining({ method: 'password', secondFactor: null }),
+      }),
+    ]);
+  });
+
+  it('records a wrong password against the account, and an unknown address against nobody', async () => {
+    const user = staff.add(await newUser());
+
+    await signIn({ password: 'not the password at all' }).catch(() => undefined);
+    await signIn({ email: 'nobody@helpdock.com' }).catch(() => undefined);
+
+    expect(audit.entries).toEqual([
+      expect.objectContaining({
+        action: 'auth.sign_in.failed',
+        userId: user.id,
+        actor: 'system',
+        meta: { method: 'password', reason: 'wrong-password' },
+      }),
+      expect.objectContaining({
+        action: 'auth.sign_in.failed',
+        userId: null,
+        meta: { method: 'password', reason: 'unknown-account' },
+      }),
+    ]);
+    // The address that was typed is not written anywhere in the trail.
+    expect(JSON.stringify(audit.entries)).not.toContain('nobody@helpdock.com');
+  });
+
+  it('records the lock when the last attempt is spent', async () => {
+    const { user } = await withTotp();
+    staff.add(user);
+    const started = await signIn();
+    if (started.kind !== 'totp-required') {
+      throw new Error('expected a challenge');
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await service
+        .verifyTotp({
+          challengeId: started.challengeId,
+          code: '000000',
+          trustDevice: false,
+          userAgent: undefined,
+        })
+        .catch(() => undefined);
+    }
+
+    expect(audit.actions()).toContain('auth.account.locked');
+  });
+
+  it('records a step-up the rate limit refused', async () => {
+    const { user } = await withTotp();
+    staff.add(user);
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await service.regenerateRecoveryCodes(user.id, '000000').catch(() => undefined);
+    }
+
+    expect(audit.entries.at(-1)).toMatchObject({
+      action: 'auth.step_up.refused',
+      userId: user.id,
+      meta: { reason: 'rate-limited' },
     });
   });
 });

@@ -58,6 +58,17 @@ const NO_ASSIGNEE = '00000000-0000-0000-0000-000000000000';
 const assigneeKey = (column: SQL): SQL =>
   sql`coalesce(${column}, ${NO_ASSIGNEE}::uuid) AS assignee_key`;
 
+/**
+ * The grain `report_daily` rows are built at. 2 added the assignee
+ * (`0044_report_daily_assignee`). Raise it whenever the grain or a column's
+ * meaning changes: a brand with older rows in its backfill window is then
+ * rebuilt in full by its next run, with no data rewritten in SQL.
+ */
+export const REPORT_ROLLUP_VERSION = 2;
+
+/** Whether a brand's rollups exist, and whether they are at {@link REPORT_ROLLUP_VERSION}. */
+export type RollupState = 'none' | 'stale' | 'current';
+
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 /** `[from 00:00, to + 1 00:00)` on the brand's wall clock, as instants. */
@@ -127,15 +138,25 @@ export class RollupRepository {
     await this.#rebuildHelpCenter(tx, scope);
   }
 
-  /** Whether the brand has been rolled up before; a brand that has not is backfilled. */
-  async hasRollups(tx: DbTransaction, brandId: string): Promise<boolean> {
-    const rows = await tx
-      .select({ day: reportDaily.day })
-      .from(reportDaily)
-      .where(eq(reportDaily.brandId, brandId))
-      .limit(1);
+  /**
+   * `none` for a brand never rolled up, `stale` when a row from `since` on was
+   * built at an older {@link REPORT_ROLLUP_VERSION}, `current` otherwise. Both
+   * of the first two are backfilled. Rows before `since` are left out: the
+   * backfill does not reach them, so they would read as stale for ever.
+   */
+  async rollupState(tx: DbTransaction, brandId: string, since: string): Promise<RollupState> {
+    const [row] = await tx.execute<{ any_row: boolean; stale: boolean }>(sql`
+      SELECT EXISTS (SELECT 1 FROM report_daily WHERE brand_id = ${brandId}) AS any_row,
+        EXISTS (
+          SELECT 1 FROM report_daily
+          WHERE brand_id = ${brandId} AND day >= ${since}::date
+            AND rollup_version < ${REPORT_ROLLUP_VERSION}
+        ) AS stale`);
+    if (row?.any_row !== true) {
+      return 'none';
+    }
 
-    return rows.length > 0;
+    return row.stale ? 'stale' : 'current';
   }
 
   /** The local day of the brand's first ticket, or null when it has none. */
@@ -243,7 +264,7 @@ export class RollupRepository {
         brand_id, day, department_id, channel, priority, assignee_id, created, resolved, backlog,
         first_response_ms, resolution_ms, sla_response_met, sla_response_breached,
         sla_resolution_met, sla_resolution_breached, csat_1, csat_2, csat_3, csat_4, csat_5,
-        created_by_hour
+        created_by_hour, rollup_version
       )
       SELECT ${brandId}, day, department_id, channel, priority,
         nullif(assignee_key, ${NO_ASSIGNEE}::uuid),
@@ -253,7 +274,7 @@ export class RollupRepository {
         coalesce(g.res_met, 0), coalesce(g.res_breached, 0),
         coalesce(g.csat_1, 0), coalesce(g.csat_2, 0), coalesce(g.csat_3, 0),
         coalesce(g.csat_4, 0), coalesce(g.csat_5, 0),
-        coalesce(g.hours, array_fill(0, ARRAY[24]))
+        coalesce(g.hours, array_fill(0, ARRAY[24])), ${REPORT_ROLLUP_VERSION}
       FROM grouped g
       FULL JOIN backlog b USING (day, department_id, channel, priority, assignee_key)`);
   }

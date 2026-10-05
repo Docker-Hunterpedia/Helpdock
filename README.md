@@ -36,6 +36,10 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 
 Milestones are grouped into five phases with deliverables and exit criteria in the [PRD](docs/planning/PRD.md). All project documents live under [docs/](docs/), organised by lifecycle stage.
 
+## Design
+
+The design system is [DESIGN.md](DESIGN.md). Every screen, from the admin app to the widget, help center and emails, is drawn before it is built; [docs/design/](docs/design/README.md) shows each one as a rendered image, grouped by milestone, with its artboard source.
+
 ## Development
 
 Node.js 24 and pnpm 12, then `pnpm install`. The root scripts are `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm format`. See [docs/guides/development.md](docs/guides/development.md) for the workspace layout, how to add a package and how CI runs, and [docs/guides/release.md](docs/guides/release.md) for how a commit becomes a published image.

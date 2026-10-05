@@ -27,6 +27,7 @@
     "check:boundaries": "node scripts/check-app-boundaries.ts",
     "check:routes": "node scripts/check-route-permissions.ts",
     "check:validation": "node scripts/check-route-validation.ts",
+    "design:render": "node scripts/render-artboards.ts docs/design/artboards docs/design/screens",
     "changeset": "changeset",
     "changeset:version": "changeset version"
   },
@@ -34,8 +35,10 @@
     "@biomejs/biome": "2.5.14",
     "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "3.0.3",
+    "@playwright/test": "1.63.0",
     "@types/node": "24.13.5",
     "@vitest/coverage-v8": "5.0.1",
+    "sharp": "0.35.4",
     "turbo": "2.10.13",
     "typescript": "7.0.2",
     "vitest": "5.0.1"

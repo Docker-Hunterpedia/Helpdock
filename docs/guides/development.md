@@ -39,6 +39,7 @@ Run these from the repository root.
 | `pnpm check:boundaries` | Enforces the app import rule described below. |
 | `pnpm check:routes` | Fails when a controller handler declares neither `@Requires`, `@Authenticated` nor `@Public`. |
 | `pnpm check:validation` | Fails when a `@Param`, `@Query` or `@Body` on a controller handler names no Zod schema. |
+| `pnpm design:render` | Renders the artboard sources in `docs/design/artboards/` to PNGs in `docs/design/screens/`. See [docs/design/](../design/README.md). |
 | `pnpm changeset` | Records what a change should say in the next release. See [the release guide](release.md). |
 | `pnpm --filter @helpdock/api seed:dev` | Creates the development install: one brand, one admin, a published password. Refuses `NODE_ENV=production`. |
 
@@ -54,8 +55,8 @@ pnpm turbo run typecheck --filter=@helpdock/api
 ```
 apps/          api, admin, helpcenter, widget
 packages/      db, schemas, ai, channels, ui, i18n, config, net, jobs
-scripts/       repository checks run by CI
-docs/          planning, guides, decisions
+scripts/       repository checks run by CI, and the artboard renderer
+docs/          planning, guides, decisions, rendered design screens
 ```
 
 Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end. `apps/admin` adds `dev`, `e2e` and `e2e:baselines`, and its `build` is `vite build` rather than `tsc`; see [Admin app](#admin-app).

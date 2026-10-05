@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Help center · article</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; background: #F7F5F0; font-size: 16px; line-height: 24px; overflow: hidden;">
+  <header style="height: 64px; box-sizing: border-box; padding: 0 64px; display: flex; align-items: center; gap: 24px; border-bottom: 1px solid #E3DFD6; background: #FFFFFF;">
+    <a href="#home" style="display: flex; align-items: center; gap: 10px; color: #16181C; font-weight: 600;"><span style="width: 28px; height: 28px; border-radius: 6px; background: {{accent}}; color: #FFFFFF; font-size: 14px; display: inline-flex; align-items: center; justify-content: center;">H</span>Helpdock Help</a>
+    <nav aria-label="Help center" style="display: flex; gap: 20px; font-size: 14px; margin-left: 12px;"><a href="#c1" style="color: #5C564C;">Orders</a><a href="#c2" style="color: #16181C; font-weight: 500;">Returns &amp; refunds</a><a href="#c3" style="color: #5C564C;">Account</a><a href="#c4" style="color: #5C564C;">Shipping</a></nav>
+    <label style="margin-left: auto; display: flex; align-items: center; gap: 8px; width: 320px; height: 40px; padding: 0 12px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; color: #5C564C; font-size: 14px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" placeholder="Search help articles" aria-label="Search help articles" style="border: 0; outline: 0; background: transparent; flex-grow: 1; font-size: 14px; color: #16181C;"></label>
+    <a href="#lang" lang="ar" style="font-size: 14px; color: #5C564C; font-family: 'IBM Plex Sans Arabic', 'IBM Plex Sans', sans-serif;">العربية</a>
+  </header>
+
+  <div style="flex-grow: 1; min-height: 0; padding: 40px 64px; display: grid; grid-template-columns: 240px minmax(0, 1fr) 240px; gap: 48px; overflow: hidden;">
+    <aside aria-label="In this section" style="display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 20px;">
+      <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #7D7669; padding: 0 10px 8px 10px;">Returns &amp; refunds</div>
+      <a href="#s1" style="padding: 8px 10px; border-radius: 6px; color: #5C564C;">How to start a return</a>
+      <a href="#s2" style="padding: 8px 10px; border-radius: 6px; background: #EFECE5; color: #16181C; font-weight: 500;">Refund timelines</a>
+      <a href="#s3" style="padding: 8px 10px; border-radius: 6px; color: #5C564C;">Exchanges</a>
+      <a href="#s4" style="padding: 8px 10px; border-radius: 6px; color: #5C564C;">Damaged or wrong items</a>
+      <a href="#s5" style="padding: 8px 10px; border-radius: 6px; color: #5C564C;">Return shipping costs</a>
+    </aside>
+
+    <article style="display: flex; flex-direction: column; gap: 20px; max-width: 680px;">
+      <nav aria-label="Breadcrumb" style="font-size: 13px; color: #5C564C; display: flex; gap: 8px;"><a href="#home" style="color: #5C564C;">Help</a><span>/</span><a href="#c2" style="color: #5C564C;">Returns &amp; refunds</a><span>/</span><span style="color: #16181C;">Refund timelines</span></nav>
+      <h1 style="margin: 0; font-size: 32px; line-height: 40px; font-weight: 600; text-wrap: pretty;">Refund timelines</h1>
+      <div style="font-size: 13px; color: #5C564C; display: flex; gap: 12px; align-items: center;"><span>Updated 12 Sep 2026</span><span style="width: 3px; height: 3px; border-radius: 999px; background: #A8A196;"></span><span>2 min read</span></div>
+      <p style="margin: 0; text-wrap: pretty;">Once we receive and inspect your return, we issue the refund to your original payment method. How long it takes to appear depends on who you paid with.</p>
+      <div style="border: 1px solid #E3DFD6; border-radius: 10px; background: #FFFFFF; overflow: hidden; font-size: 14px; line-height: 20px;">
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 14px; background: #EFECE5; font-weight: 500;"><div>Payment method</div><div>After we issue the refund</div></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 14px; border-top: 1px solid #EFECE5;"><div>Credit or debit card</div><div>3–5 business days</div></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 14px; border-top: 1px solid #EFECE5;"><div>PayPal</div><div>Same day</div></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 14px; border-top: 1px solid #EFECE5;"><div>Store credit</div><div>Immediately</div></div>
+      </div>
+      <div style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 10px; background: #ECF7F5; border: 1px solid #CDEBE6; font-size: 15px; line-height: 22px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F766E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><div><strong style="font-weight: 600;">Tip.</strong> The refund email includes the date we issued it. Count business days from that date, not from the day you shipped the return.</div></div>
+      <h2 style="margin: 8px 0 0 0; font-size: 20px; line-height: 28px; font-weight: 600;">If it has been longer than that</h2>
+      <p style="margin: 0; text-wrap: pretty;">Check with your bank first, then <a href="#contact">contact us</a> with your order number. We can send you the refund reference to pass on to them.</p>
+      <div style="margin-top: 8px; padding: 16px; border-radius: 10px; border: 1px solid #E3DFD6; background: #FFFFFF; display: flex; align-items: center; gap: 12px; font-size: 14px;"><span style="flex-grow: 1;">Was this article helpful?</span><button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H7V10l4-8a3 3 0 0 1 3 3v.9z"/></svg>Yes</button><button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg);"><path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H7V10l4-8a3 3 0 0 1 3 3v.9z"/></svg>No</button></div>
+    </article>
+
+    <aside style="display: flex; flex-direction: column; gap: 16px;">
+      <div style="padding: 16px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 16px; font-weight: 600;">Still need help?</div>
+        <div style="font-size: 14px; line-height: 20px; color: #5C564C;">Start a chat and we'll bring this article with you.</div>
+        <button type="button" style="height: 40px; padding: 0 16px; border-radius: 6px; border: 0; background: {{accent}}; color: #FFFFFF; font-size: 14px; font-weight: 500;">Chat with us</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 20px;">
+        <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #7D7669;">Related</div>
+        <a href="#r1">How to start a return</a>
+        <a href="#r2">Where is my order?</a>
+        <a href="#r3">Cancelling an order</a>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0F766E","options":["#0F766E","#2B5FB3","#B45309","#16181C"]},"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return { accent: this.props.accent ?? '#0F766E' }; }
+}
+</script>
+</body>
+</html>

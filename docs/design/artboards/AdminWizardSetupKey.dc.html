@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin · wizard setup key</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 56px 0; display: flex; flex-direction: column; align-items: center; gap: 32px; background: #F7F5F0; font-size: 14px; line-height: 20px;">
+  <div style="width: 720px; display: flex; align-items: center; gap: 10px;">
+    <span style="width: 28px; height: 28px; border-radius: 6px; background: #0F766E; color: #FFFFFF; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">H</span>
+    <span style="font-weight: 600;">Set up Helpdock</span>
+    <span style="margin-left: auto; font-size: 12px; color: #5C564C; font-family: 'IBM Plex Mono', monospace;">v0.1.0 · api + worker healthy</span>
+  </div>
+
+  <ol style="width: 720px; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #0F766E;"></div><div style="font-size: 13px; font-weight: 600;">1 · Admin account</div></li>
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #E3DFD6;"></div><div style="font-size: 13px; color: #5C564C;">2 · First brand</div></li>
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #E3DFD6;"></div><div style="font-size: 13px; color: #5C564C;">3 · Outgoing email</div></li>
+    <li style="display: flex; flex-direction: column; gap: 8px;"><div style="height: 4px; border-radius: 999px; background: #E3DFD6;"></div><div style="font-size: 13px; color: #5C564C;">4 · Done</div></li>
+  </ol>
+
+  <form style="width: 720px; box-sizing: border-box; padding: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600;">Create the admin account</h1>
+      <p style="margin: 0; color: #5C564C;">This account owns the install. You can invite everyone else once Helpdock is set up.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 8px; background: #F7F5F0; border: 1px solid #E3DFD6;">
+      <label for="w-key" style="font-size: 13px; font-weight: 500;">Setup key</label>
+      <input id="w-key" type="password" autocomplete="off" value="wrong-key-value" aria-invalid="true" aria-describedby="w-key-err w-key-hint" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C; font-family: 'IBM Plex Mono', monospace; border-color: #B3261E;">
+      <div id="w-key-err" role="alert" style="font-size: 12px; line-height: 16px; color: #B3261E;">That setup key is not right. Check <span style="font-family: 'IBM Plex Mono', monospace;">HD_SETUP_TOKEN</span> in the server's <span style="font-family: 'IBM Plex Mono', monospace;">.env</span>.</div>
+      <div id="w-key-hint" style="font-size: 12px; line-height: 16px; color: #5C564C;">This install asks for the value of <span style="font-family: 'IBM Plex Mono', monospace;">HD_SETUP_TOKEN</span>, so only someone with access to the server can create the admin.</div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="w-name" style="font-size: 13px; font-weight: 500;">Your name</label><input id="w-name" type="text" value="Lina Haddad" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="w-email" style="font-size: 13px; font-weight: 500;">Email</label><input id="w-email" type="email" value="lina@example.com" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px;"><label for="w-pw" style="font-size: 13px; font-weight: 500;">Password</label><input id="w-pw" type="password" value="correct horse battery" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"></div>
+    <div style="display: flex; justify-content: flex-end; align-items: center; padding-top: 8px; border-top: 1px solid #EFECE5;">
+      <button type="submit" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500;">Create admin and continue</button>
+    </div>
+  </form>
+
+  <div style="width: 720px; font-size: 12px; line-height: 18px; color: #5C564C;">Shown only when the operator set <span style="font-family: 'IBM Plex Mono', monospace;">HD_SETUP_TOKEN</span>; without it step 1 looks as it does today. The key is checked in constant time, rate-limited like the rest of step 1, never logged, and stops being accepted once the admin exists. The error state is drawn; the empty state has no error line.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

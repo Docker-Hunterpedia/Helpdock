@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
@@ -16,7 +17,9 @@ import { brands } from './brands.js';
 import {
   embeddingStatusEnum,
   hcVisibilityEnum,
+  knowledgeLogLevelEnum,
   knowledgeSourceKindEnum,
+  knowledgeSyncScheduleEnum,
   knowledgeSyncStatusEnum,
 } from './enums.js';
 import { hcArticles } from './help-center.js';
@@ -59,12 +62,29 @@ export const knowledgeSources = pgTable(
     /** OAuth tokens and the like, as an `encryptSecret` envelope. Never returned. */
     configEncrypted: text('config_encrypted'),
     syncStatus: knowledgeSyncStatusEnum('sync_status').notNull().default('idle'),
+    /** M7-03. `automatic` for articles and files; crawls, Notion and Drive choose. */
+    schedule: knowledgeSyncScheduleEnum('schedule').notNull().default('manual'),
+    /** When the run in progress claimed the source; a stale claim may be taken over. */
+    syncStartedAt: timestamp('sync_started_at', { withTimezone: true }),
+    /** Pages or files done and planned in the run in progress, for "260 / 520 pages". */
+    progressDone: integer('progress_done').notNull().default(0),
+    progressTotal: integer('progress_total'),
     lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
     lastError: text('last_error'),
+    /** `auth` when the service refused the credentials, so the admin shows "Reconnect". */
+    lastErrorCode: text('last_error_code'),
+    /** The staff member who added it, for "uploaded by" and "connected by". */
+    createdBy: text('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('knowledge_sources_brand_idx').on(table.brandId)],
+  (table) => [
+    index('knowledge_sources_brand_idx').on(table.brandId),
+    // One help center source per brand, created the first time an article syncs.
+    uniqueIndex('knowledge_sources_article_key')
+      .on(table.brandId)
+      .where(sql`${table.kind} = 'article'`),
+  ],
 );
 
 export type KnowledgeSource = typeof knowledgeSources.$inferSelect;
@@ -101,6 +121,34 @@ export const knowledgeDocuments = pgTable(
 );
 
 export type KnowledgeDocument = typeof knowledgeDocuments.$inferSelect;
+
+/**
+ * M7-03. What a sync did, line by line, for the source drawer's log. A line is
+ * a `code` and its `params`, not prose, so the admin renders it in the
+ * reader's language; `run_id` groups the lines of one run.
+ */
+export const knowledgeSyncLog = pgTable(
+  'knowledge_sync_log',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    brandId: uuid('brand_id')
+      .notNull()
+      .references(() => brands.id, { onDelete: 'cascade' }),
+    sourceId: uuid('source_id')
+      .notNull()
+      .references(() => knowledgeSources.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    level: knowledgeLogLevelEnum('level').notNull(),
+    code: text('code').notNull(),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('knowledge_sync_log_source_idx').on(table.sourceId, table.createdAt)],
+);
+
+export type KnowledgeSyncLogRow = typeof knowledgeSyncLog.$inferSelect;
 
 /** `arabic` for Arabic chunks, `english` for the rest, as the help center index does. */
 const chunkSearch = (): SQL =>

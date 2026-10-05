@@ -418,6 +418,26 @@ export const knowledgeSyncStatusEnum = pgEnum('knowledge_sync_status', [
 ]);
 
 /**
+ * M7-03. When a source syncs on its own: `automatic` for articles (on
+ * publish) and files (on upload), a daily or weekly run in the brand's zone
+ * for crawls, Notion and Drive, or only when someone presses "Sync now".
+ */
+export const knowledgeSyncScheduleEnum = pgEnum('knowledge_sync_schedule', [
+  'automatic',
+  'daily',
+  'weekly',
+  'manual',
+]);
+
+/** M7-03. A line of a source's sync log: `done` closes a run. */
+export const knowledgeLogLevelEnum = pgEnum('knowledge_log_level', [
+  'info',
+  'warn',
+  'error',
+  'done',
+]);
+
+/**
  * M7-02. Whether retrieval may rank by vector (DOMAIN-RULES §8). Only `ready`
  * serves vectors; `reindexing` falls back to full text.
  */

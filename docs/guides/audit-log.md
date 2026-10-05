@@ -5,6 +5,15 @@ M3-08) shows who changed what across the whole install, newest first. It is
 read-only; retention removes rows after each brand's audit window (two years by
 default, never under 90 days, DOMAIN-RULES §11).
 
+## Sign-ins and credential changes
+
+Every authentication decision — sign-ins that succeeded or failed, locks,
+refused step-ups, replayed codes, reused refresh tokens, and every change to a
+password, second factor or recovery codes — is an `auth.*` row in install
+scope (**Brand: install**), written by the `auth` system principal with the
+client address and user agent. [Authentication › The audit
+trail](authentication.md#the-audit-trail) lists them.
+
 ## Who may read it
 
 Install admins only. The route is `GET /api/install/audit-log`, declared
@@ -45,4 +54,13 @@ Their defaults read `app.request_ip`, `app.request_id` and
 transaction next to the RLS settings. So every writer fills them without
 passing anything, and rows written by a worker are null. The address is
 `request.ip` as Fastify resolves it under `TRUST_PROXY`, and is dropped unless
-it parses as an IP.
+it parses as an IP. The auth trail, written outside the request transaction,
+passes the same three facts itself, from the request context.
+
+## Known gaps
+
+- **Install-scope rows have no retention window.** Retention purges each
+  brand's rows after its audit window; rows under the install sentinel —
+  install-wide settings, brand deletion and the `auth.*` trail — are kept until
+  an install-scope retention setting exists. The sign-in rate limits bound how
+  fast failed sign-ins can add rows.

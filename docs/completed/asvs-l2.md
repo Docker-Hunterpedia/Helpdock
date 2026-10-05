@@ -25,39 +25,39 @@ what to do. Paths are relative to the repository root; `api` is `apps/api/src`.
 | Chapter | Met | Partial | Gap | N/A | Operator |
 |---|---|---|---|---|---|
 | V1 Architecture, design and threat modeling | 30 | 7 | 0 | 1 | 0 |
-| V2 Authentication | 29 | 5 | 5 | 11 | 0 |
-| V3 Session management | 13 | 2 | 2 | 1 | 0 |
-| V4 Access control | 8 | 1 | 0 | 0 | 0 |
+| V2 Authentication | 36 | 3 | 0 | 11 | 0 |
+| V3 Session management | 14 | 3 | 0 | 1 | 0 |
+| V4 Access control | 9 | 0 | 0 | 0 | 0 |
 | V5 Validation, sanitisation and encoding | 25 | 0 | 0 | 5 | 0 |
 | V6 Stored cryptography | 9 | 2 | 0 | 2 | 0 |
-| V7 Error handling and logging | 7 | 4 | 0 | 0 | 1 |
-| V8 Data protection | 7 | 7 | 1 | 0 | 0 |
+| V7 Error handling and logging | 9 | 2 | 0 | 0 | 1 |
+| V8 Data protection | 9 | 6 | 0 | 0 | 0 |
 | V9 Communications | 6 | 2 | 0 | 0 | 0 |
 | V10 Malicious code | 5 | 0 | 0 | 0 | 0 |
-| V11 Business logic | 5 | 3 | 0 | 0 | 0 |
+| V11 Business logic | 6 | 2 | 0 | 0 | 0 |
 | V12 Files and resources | 12 | 2 | 0 | 1 | 0 |
 | V13 API and web services | 8 | 1 | 0 | 4 | 0 |
-| V14 Configuration | 19 | 3 | 1 | 1 | 0 |
-| **All** | **183** | **39** | **9** | **26** | **1** |
+| V14 Configuration | 20 | 3 | 0 | 1 | 0 |
+| **All** | **198** | **33** | **0** | **26** | **1** |
 
-### Gaps and partials to close before 1.0
+### Gaps and partials closed before 1.0
 
-Ordered by what an attacker would reach first. Each one is to be filed as a
-follow-up issue in the M9 milestone.
+The walk-through found eleven; all were closed in M9-02's follow-up, each with
+the evidence in its row below. One closes with a recorded deviation (3.4.4).
 
-| Requirement | What is missing | Proposed fix |
+| Requirement | What was missing | What closed it |
 |---|---|---|
-| 2.2.3, 2.5.5 | No email is sent when a password, second factor or recovery codes change | An `auth.email_requested` kind `securityChange`, sent from the same outbox path as the reset email |
-| 2.1.7 | Passwords are not checked against a breached-password list | A bundled list of the most common breached passwords (no network call), checked at set and change |
-| 2.8.4, 2.8.5 | A TOTP code is not remembered as used, so it could open a second challenge within its 30 seconds | Store the last accepted time step per account and refuse it again |
-| 2.1.8, 2.1.12 | No strength meter and no show-password toggle on the password fields | A visibility toggle and a length and breached-list hint under the field; needs an artboard |
-| 3.3.2 | A refresh family lives 30 days with no idle limit; a session is never asked to re-authenticate | Idle expiry on the family (for example 12 hours without a refresh) and an absolute lifetime |
-| 3.4.4 | The refresh cookie is not `__Host-` prefixed, because it is scoped to `Path=/api/auth` | Accept `__Secure-` (host-only, no `Domain`) and record the deviation, or move the cookie to `Path=/` |
-| 4.3.1 | A second factor for administrators is a setting (`auth.require2fa`, off by default), not a rule | Require it for Admin and install-admin accounts whatever the setting |
-| 7.1.3, 7.2.1 | Sign-in failures and access-control refusals are logged at `debug`/`warn` in the process log, not in the audit log | An `auth.*` audit trail for sign-in success, failure, lock and step-up refusal |
-| 8.1.4 | Rate limits refuse, but nothing alerts on an abnormal number of refusals | A `rate_limit_refusals_total` counter and an alert in the operations guide's alert set |
-| 8.3.2 | A contact can be erased, but nobody can export their data | A contact export (tickets, messages, attachments) beside "Anonymise contact" |
-| 14.4.2 | API JSON responses carry no `Content-Disposition` | `Content-Disposition: attachment; filename="api.json"` on `application/json` responses |
+| 2.2.3, 2.5.5 | No email when a password, second factor or recovery codes change | A `securityChange` auth email through the outbox, `en` and `ar` (`api/auth/auth.service.ts` `#notifySecurityChange`) |
+| 2.1.7 | No breached-password check | A bundled list, checked at every place a password is set ([ADR 0019](../decisions/0019-bundled-breached-password-list.md)) |
+| 2.8.4, 2.8.5 | A TOTP code could open a second challenge within its 30 s | The last accepted step is kept per account and only later ones pass (`api/auth/totp/used-steps.ts`) |
+| 2.1.8, 2.1.12 | No strength meter and no show-password toggle on every password field | `Admin/PasswordField` on the four screens that choose a password (`apps/admin/src/ui/password-field.tsx`) |
+| 3.3.2 | A refresh family lived 30 days, renewed by use | Idle and absolute limits, `AUTH_SESSION_IDLE_MINUTES` (240) and `AUTH_SESSION_MAX_HOURS` (12) |
+| 3.4.4 | No cookie prefix | `__Secure-` over https; `__Host-` declined to keep `Path=/api/auth` (deviation, see the row) |
+| 4.3.1 | A second factor for administrators was a setting | Required for Admins and install admins whatever the setting; enrolment by challenge at the next sign-in |
+| 7.1.3, 7.2.1 | Sign-in failures only in the process log | An `auth.*` trail in install scope ([ADR 0020](../decisions/0020-auth-audit-trail-in-install-scope.md)) |
+| 8.1.4 | Nothing alerted on rate-limit refusals | `rate_limit_refusals_total{bucket}` and an alert in the operations guide |
+| 8.3.2 | No contact export | `GET /api/brands/:brandId/contacts/:contactId/export`, Admin only, audited |
+| 14.4.2 | No `Content-Disposition` on JSON | `attachment; filename="api.json"` on every JSON answer (`api/http/json-disposition.ts`) |
 
 ## V1 Architecture, design and threat modeling
 
@@ -112,15 +112,15 @@ follow-up issue in the M9 milestone.
 | 2.1.4 | Any printable Unicode allowed | Met | No character class rules in the schema |
 | 2.1.5 | Users can change their password | Met | `POST /api/me/password` |
 | 2.1.6 | Change requires current and new password | Met | Same route, step-up budget (`STEP_UP_RULE`) |
-| 2.1.7 | Checked against breached passwords | Gap | Not implemented |
-| 2.1.8 | Password strength meter | Gap | Not implemented |
+| 2.1.7 | Checked against breached passwords | Met | The 46 146 entries of 12+ characters among SecLists' million most common, case-insensitive, checked by the wizard, invitation acceptance, reset and change (`api/auth/breached/breached-passwords.ts`, ADR 0019); `password-breached` drawn on the field; `breached-passwords.test.ts`, `auth.service.test.ts` › breached passwords |
+| 2.1.8 | Password strength meter | Met | `PasswordStrengthBar` with its reading in the hint, on every field that chooses a password (`apps/admin/src/ui/password-field.tsx`, artboard `Admin/PasswordField`) |
 | 2.1.9 | No composition rules | Met | `docs/guides/authentication.md` "Passwords" |
 | 2.1.10 | No periodic rotation | Met | None exists |
 | 2.1.11 | Paste and password managers allowed | Met | Plain `type="password"` inputs with `autocomplete="current-password"` (`apps/admin/src/screens/sign-in.tsx`, `security.tsx`) |
-| 2.1.12 | Show the masked password on request | Gap | No visibility toggle on the password fields (`apps/admin/src/screens/sign-in.tsx`) |
+| 2.1.12 | Show the masked password on request | Met | A show/hide toggle with `aria-pressed` on every field that chooses a password, hidden again on submit (`password-field.tsx`, `password-field.test.tsx`, `e2e/password-field.spec.ts`). The sign-in field has none: it chooses nothing |
 | 2.2.1 | Anti-automation | Met | Sliding-window limits per address and per IP (`api/auth/rate-limit.ts`), challenge lock after three second-factor failures |
 | 2.2.2 | Weak authenticators limited | Met | Email links are single-use and short-lived; SMS is not offered |
-| 2.2.3 | Notification after authentication details change | Gap | No email on password, second factor or recovery code change |
+| 2.2.3 | Notification after authentication details change | Met | A `securityChange` email on password change and reset, second factor on and off, recovery codes redrawn, through the outbox in the change's transaction, `en` and `ar` (`auth.service.ts` `#notifySecurityChange`, `email-templates.test.ts`) |
 | 2.3.1 | Initial secrets random, expire, not long-term | Met | Invitation tokens 256 bits, 7 days, single use (`api/auth/email-token.store.ts`) |
 | 2.3.2 | Hardware authenticator enrolment supported | Partial | TOTP only; no WebAuthn/FIDO |
 | 2.3.3 | Renewal instructions for time-bound authenticators | N/A | No time-bound authenticators issued |
@@ -133,7 +133,7 @@ follow-up issue in the M9 milestone.
 | 2.5.2 | No hints or knowledge-based answers | Met | None exist |
 | 2.5.3 | Recovery does not reveal the current password | Met | Hashes only |
 | 2.5.4 | No shared or default accounts | Met | The first admin is created by the wizard; no seeded credentials in production |
-| 2.5.5 | Notification when an authentication factor changes | Gap | See 2.2.3 |
+| 2.5.5 | Notification when an authentication factor changes | Met | As 2.2.3 |
 | 2.5.6 | Forgotten password uses a secure recovery mechanism | Met | 10-minute single-use reset link; the second factor is still asked afterwards |
 | 2.5.7 | Lost second factor re-proven at enrolment strength | Partial | Recovery codes, or an Admin resets the factor (`staff` lifecycle); no identity proofing beyond the Admin's judgement |
 | 2.6.1 | Lookup secrets used once | Met | Recovery codes consumed on use (`replaceRecoveryCodes`) |
@@ -146,8 +146,8 @@ follow-up issue in the M9 milestone.
 | 2.8.1 | Time-based OTP has a defined lifetime | Met | 30-second step, one step of drift (`authentication.md` "Two-factor") |
 | 2.8.2 | OTP seeds protected | Met | Encrypted with the keyring (`totpSecretEncrypted`) |
 | 2.8.3 | Approved algorithms for OTP | Met | RFC 6238 via `otplib` |
-| 2.8.4 | A TOTP code used only once in its window | Partial | Each challenge is spent on success, but a code is not recorded as used, so the same code could open a second challenge within its 30 s |
-| 2.8.5 | Reuse of a TOTP code logged and refused | Partial | As 2.8.4 |
+| 2.8.4 | A TOTP code used only once in its window | Met | The last accepted step per account is kept in Redis for as long as it can match, and only later steps pass, by compare-and-set (`api/auth/totp/used-steps.ts`); proved against Redis in `auth.integration.test.ts` |
+| 2.8.5 | Reuse of a TOTP code logged and refused | Met | A replayed code is refused as a wrong one, logged at `warn` and audited as `auth.second_factor.replayed` |
 | 2.8.6 | Physical OTP generators revocable | N/A | None issued |
 | 2.9.1 | Crypto device keys stored securely | N/A | No cryptographic authenticators |
 | 2.9.2 | Challenge nonce at least 64 bits | N/A | As above |
@@ -171,13 +171,13 @@ already knows.
 | 3.2.3 | Tokens stored securely in the browser | Met | Access token in memory, refresh token in an httpOnly cookie |
 | 3.2.4 | Approved algorithms for tokens | Met | ES256 JWT (`jose`), SHA-256 of the refresh token at rest |
 | 3.3.1 | Logout and expiry invalidate the session | Met | Family revoked, access tokens of the family marked revoked (`refresh-store.ts`), sockets of that browser closed (`realtime/revocation.subscriber.ts`) |
-| 3.3.2 | Re-authentication after 12 h or 30 min idle (L2) | Gap | A family lives 30 days and is renewed by use |
+| 3.3.2 | Re-authentication after 12 h or 30 min idle (L2) | Met | A family ends 12 hours after sign-in and after 4 hours unused by default (`AUTH_SESSION_MAX_HOURS`, `AUTH_SESSION_IDLE_MINUTES`; `api/auth/session/refresh-store.ts`, `refresh-store.test.ts`) |
 | 3.3.3 | Option to end other sessions after a password change | Met | Password change revokes every other family (`revokeEverythingExcept`) |
 | 3.3.4 | Users can see and end their active sessions | Met | Security page lists every browser and signs one out (`GET /api/me/sessions`, `api/staff/account.controller.ts`) |
 | 3.4.1 | Cookies `Secure` | Partial | Set when `APP_URL` is https, deliberately not on a plain-http local install |
 | 3.4.2 | Cookies `HttpOnly` | Met | `api/auth/session/cookies.ts` |
 | 3.4.3 | Cookies `SameSite` | Met | `Lax` |
-| 3.4.4 | `__Host-` prefix | Gap | Not prefixed; cookie scoped to `Path=/api/auth` with no `Domain` |
+| 3.4.4 | `__Host-` prefix | Partial | `__Secure-hd_refresh` and `__Secure-hd_trust` over https, host-only (no `Domain`). `__Host-` would need `Path=/` and send the refresh token to every route rather than `/api/auth`; that narrower path is kept as a recorded deviation (`api/auth/session/cookies.ts`, authentication guide › Cookies) |
 | 3.4.5 | Path attribute when sharing a domain | Met | `Path=/api/auth` |
 | 3.5.1 | Users can revoke OAuth tokens of linked apps | N/A | Helpdock keeps no provider tokens after sign-in |
 | 3.5.2 | Session tokens, not static API secrets | Met | Staff sessions only; API keys are M8 and must be walked again then |
@@ -194,7 +194,7 @@ already knows.
 | 4.1.5 | Fails securely | Met | Undeclared route refused (`PermissionGuard`), no tenant context means no rows (`FORCE ROW LEVEL SECURITY`) |
 | 4.2.1 | Protected against IDOR | Met | RLS by brand and department; the RLS isolation suite (`packages/db/src/rls.integration.test.ts`) and DOMAIN-RULES §1.6 negative tests |
 | 4.2.2 | Anti-CSRF | Met | API authenticated by bearer header, not cookies; the refresh cookie is `SameSite=Lax` on `/api/auth` only; the setup wizard checks `Sec-Fetch-Site` (`api/install/same-site.ts`) |
-| 4.3.1 | Admin interfaces use MFA | Partial | Available and enforceable install-wide (`auth.require2fa`); not required by default |
+| 4.3.1 | Admin interfaces use MFA | Met | Required for every Admin and install admin whatever `auth.require2fa` says; one without is sent to enrolment at sign-in and cannot turn it off (`auth.service.ts` `isSecondFactorRequired`) |
 | 4.3.2 | Directory browsing disabled, no metadata exposed | Met | `@fastify/static` without listing; no `.git` in the image (`.dockerignore`) |
 | 4.3.3 | Step-up or segregation for high-value actions | Met | Step-up for credential changes; destructive brand actions need `brand:manage` (Admin) and are audited |
 
@@ -257,9 +257,9 @@ already knows.
 |---|---|---|---|
 | 7.1.1 | No credentials or session tokens logged | Met | pino `redact` with `remove: true` (`api/logging/logger.ts`), token paths scrubbed, Semgrep `helpdock-secret-in-log` |
 | 7.1.2 | No other sensitive data logged | Met | `operations.md` "What a line never carries" |
-| 7.1.3 | Security-relevant events logged | Partial | Locks, step-up refusals, rate-limit refusals and second-factor changes are logged (`auth.service.ts`); plain sign-in failures are not |
+| 7.1.3 | Security-relevant events logged | Met | Every sign-in success and failure, lock, refused step-up, replayed code, reused refresh token and credential change is an `auth.*` row in install scope with address and user agent (`api/auth/auth-audit.ts`, ADR 0020); rate-limit refusals are counted in `rate_limit_refusals_total` |
 | 7.1.4 | Enough detail for an investigation | Met | Request id, role, user id, brand id on every line |
-| 7.2.1 | Authentication decisions logged | Partial | As 7.1.3 |
+| 7.2.1 | Authentication decisions logged | Met | As 7.1.3 |
 | 7.2.2 | Access control decisions logged | Partial | Refusals logged at `debug` by the exception filter; not audited |
 | 7.3.1 | Log injection prevented | Met | Structured JSON lines |
 | 7.3.3 | Logs protected from tampering | Partial | Audit log is append-only to the runtime role (RLS, no update policy); process logs are the operator's |
@@ -275,12 +275,12 @@ already knows.
 | 8.1.1 | Sensitive data not cached by intermediaries | Met | API responses `no-store`; only public help center pages are `public` (`docs/guides/help-center.md` "Caching") |
 | 8.1.2 | Cached and temporary copies protected | Met | Redis page cache holds public pages only; staff pages never cached |
 | 8.1.3 | Few parameters in requests | Met | Ids in paths, bodies in JSON |
-| 8.1.4 | Abnormal request volumes detected and alerted | Gap | Limits refuse; nothing alerts (see the list above) |
+| 8.1.4 | Abnormal request volumes detected and alerted | Met | `rate_limit_refusals_total{bucket}` on every limit, and an alert on it in the operations guide's first alert set |
 | 8.2.1 | Anti-caching headers for sensitive data | Met | As 8.1.1 |
 | 8.2.2 | No sensitive data in browser storage | Partial | The admin stores nothing; the widget keeps the visitor secret in `localStorage` by design (widget protocol "A visitor") |
 | 8.2.3 | Client storage cleared at session end | Partial | Admin memory cleared on sign-out; the widget visitor secret persists until the visitor clears it |
 | 8.3.1 | Sensitive data in bodies or headers, not the URL | Partial | Email links carry their token in the path (scrubbed from logs); everything else in bodies |
-| 8.3.2 | Users can export or delete their data | Partial | Erasure exists ("Anonymise contact"); export does not |
+| 8.3.2 | Users can export or delete their data | Met | Erasure ("Anonymise contact") and export (`GET …/contacts/:contactId/export`: contact, tickets, conversation, attachment paths; Admin only, audited) |
 | 8.3.3 | Users told what is collected | Partial | Operator's privacy notice; the help center footer links are configurable but nothing ships a notice |
 | 8.3.4 | Sensitive data identified with a policy | Met | DOMAIN-RULES §11 |
 | 8.3.5 | Access to sensitive data audited | Partial | Changes are audited (`audit_log`); reads are not |
@@ -322,7 +322,7 @@ already knows.
 | 11.1.5 | Business logic limits against likely risks | Met | Load caps on assignment, depth guard on rules (`automation.md`), attachment caps |
 | 11.1.6 | No TOCTOU on sensitive operations | Met | Advisory locks (wizard step 1, assignment, outbox), unique constraints with `clientId` |
 | 11.1.7 | Unusual activity monitored | Partial | Metrics and logs exist; no anomaly alerting |
-| 11.1.8 | Alerts on automated attacks | Partial | Rate-limit refusals are logged at `warn`; nothing alerts on them (see 8.1.4) |
+| 11.1.8 | Alerts on automated attacks | Met | As 8.1.4 |
 
 ## V12 Files and resources
 
@@ -380,7 +380,7 @@ already knows.
 | 14.3.2 | Debug modes off in production | Met | `NODE_ENV=production` in the image; pretty logging and the dev principal header refuse production |
 | 14.3.3 | No version details in headers | Met | No `X-Powered-By`; the version is on the System page only, for admins |
 | 14.4.1 | `Content-Type` with charset on every response | Met | Fastify sets it for JSON and HTML |
-| 14.4.2 | `Content-Disposition` on API responses | Gap | Not set |
+| 14.4.2 | `Content-Disposition` on API responses | Met | `attachment; filename="api.json"` on every JSON answer unless a route chose its own (`api/http/json-disposition.ts`) |
 | 14.4.3 | Content Security Policy | Met | `default-src 'none'` on the api; hashed scripts on the admin; nonces on the help center and web form |
 | 14.4.4 | `X-Content-Type-Options: nosniff` | Met | helmet |
 | 14.4.5 | HSTS | Met | On https installs, api and Caddy |

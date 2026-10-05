@@ -36,6 +36,7 @@ import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
 import { TicketRepository } from '../tickets/tickets.repository.js';
+import { OnlineAgents } from './online-agents.js';
 import { WidgetController } from './widget.controller.js';
 import { WidgetGateway } from './widget.gateway.js';
 import { WidgetRepository } from './widget.repository.js';
@@ -107,12 +108,12 @@ class WidgetLifecycle implements OnModuleInit, OnModuleDestroy {
     await this.#hub.start();
     this.#unsubscribe = this.#presence.onChange((brandId) => {
       void this.#config
-        .agentsOnline(brandId)
-        .then((agentsOnline) =>
+        .presence(brandId)
+        .then((presence) =>
           this.#broadcast.emit({
             room: brandVisitorsRoom(brandId),
             event: WIDGET_EVENTS.presence,
-            data: { agentsOnline },
+            data: presence,
             seq: null,
           }),
         )
@@ -199,7 +200,12 @@ export class WidgetModule {
             new WidgetConfigService({
               gate,
               businessHours: new BusinessHoursService(slaRepository, new SlaService(slaRepository)),
-              presence,
+              online: new OnlineAgents({
+                db,
+                presence,
+                settings: settingsRepository,
+                widget,
+              }),
               captcha: captchaKeys,
               assetOrigin: env.APP_URL,
               popular: feedback,

@@ -115,6 +115,30 @@ export const widgetPrechatFieldViewSchema = z.object({
 });
 export type WidgetPrechatFieldView = z.infer<typeof widgetPrechatFieldViewSchema>;
 
+/** How many online agents the widget is told about; it draws three avatars and their names. */
+export const WIDGET_ONLINE_AGENTS_MAX = 5;
+
+/**
+ * An online agent as a visitor may see them: a first name, never an id or a
+ * surname (DOMAIN-RULES §1.3, layer 4).
+ */
+export const widgetOnlineAgentSchema = z.object({
+  name: z.string(),
+  avatarUrl: z.url().nullable(),
+});
+export type WidgetOnlineAgent = z.infer<typeof widgetOnlineAgentSchema>;
+
+/**
+ * Who is online for the brand. `agents` is empty when nobody is, and also when
+ * the brand does not show agents' names (`showAgentIdentity`); `agentsOnline`
+ * answers "is anybody there?" either way.
+ */
+export const widgetPresenceSchema = z.object({
+  agentsOnline: z.boolean(),
+  agents: z.array(widgetOnlineAgentSchema).max(WIDGET_ONLINE_AGENTS_MAX),
+});
+export type WidgetPresence = z.infer<typeof widgetPresenceSchema>;
+
 /** "Is anybody there?" (M4-08): the brand's calendar and whether an agent is online. */
 export const widgetAvailabilitySchema = z.object({
   /** Inside the brand's business hours right now. */
@@ -124,6 +148,7 @@ export const widgetAvailabilitySchema = z.object({
   timezone: z.string(),
   /** At least one agent of the brand is online (DOMAIN-RULES §12). */
   agentsOnline: z.boolean(),
+  agents: widgetPresenceSchema.shape.agents,
 });
 export type WidgetAvailability = z.infer<typeof widgetAvailabilitySchema>;
 
@@ -601,9 +626,6 @@ export const widgetTypingSchema = z.object({
   agentName: z.string().nullable(),
 });
 export type WidgetTyping = z.infer<typeof widgetTypingSchema>;
-
-export const widgetPresenceSchema = z.object({ agentsOnline: z.boolean() });
-export type WidgetPresence = z.infer<typeof widgetPresenceSchema>;
 
 /** The conversation moved: closed, reopened, or continued on a new one (§2.3). */
 export const widgetConversationEventSchema = z.object({

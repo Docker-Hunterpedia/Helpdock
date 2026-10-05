@@ -32,7 +32,7 @@ import { AiFailure } from './ai-failure.js';
  * every route runs in install scope and is audited on entry.
  *
  * Providers live in the `ai.providers` setting, encrypted whole under
- * `APP_MASTER_KEY` (ADR 0016). A credential is accepted on the way in and
+ * `APP_MASTER_KEY` (ADR 0018). A credential is accepted on the way in and
  * never comes back out: a response says which kind of credential a provider
  * holds, and when OAuth tokens expire, and nothing more. An audit row records
  * every change without any credential in it.

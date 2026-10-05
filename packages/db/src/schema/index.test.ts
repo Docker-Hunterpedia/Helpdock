@@ -69,12 +69,19 @@ describe('the schema', () => {
       'notifications',
       'outbox',
       'push_subscriptions',
+      'report_agent_daily',
+      'report_daily',
+      'report_help_center_daily',
+      'report_search_daily',
       'retention_settings',
       'settings',
       'sla_policies',
       'tags',
       'team_members',
       'teams',
+      'telegram_bots',
+      'telegram_chats',
+      'telegram_deliveries',
       'ticket_activity',
       'ticket_messages',
       'ticket_participants',
@@ -125,7 +132,7 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but eighteen has a uuid primary key; `settings` is keyed by
+    // Every table but twenty-two has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
     // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
     // they join, `retention_settings`, `email_outbound_settings`,
@@ -135,7 +142,9 @@ describe('the schema', () => {
     // the article version it indexes and `hc_article_views` by the article,
     // the visitor and the day, `ai_settings` by its brand, `ai_budget_alerts`
     // by the brand, window and level, and `embedding_space` is a single row.
-    expect(generated).toHaveLength(byName.size - 18);
+    // The four report rollups of M8-04 have no key: a run deletes and rewrites
+    // a brand's days whole.
+    expect(generated).toHaveLength(byName.size - 22);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

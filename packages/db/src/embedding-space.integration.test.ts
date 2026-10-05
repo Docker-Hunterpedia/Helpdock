@@ -20,7 +20,7 @@ import { uuidv7 } from './uuid.js';
 
 /**
  * The `vector(<dims>)` column of ADR 0005, created and resized by the
- * runtime role through the owner-rights functions of migration 0036, as the
+ * runtime role through the owner-rights functions of migration 0038, as the
  * `knowledge.configure` job does it.
  */
 

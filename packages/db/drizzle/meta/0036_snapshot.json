@@ -1,5 +1,5 @@
 {
-  "id": "eee41144-e584-4d37-96ec-ecdce3ade96e",
+  "id": "85279627-266f-4f5e-8fb8-696cfb19af2f",
   "prevId": "c04da700-4f3d-4220-8923-224ee4c178b7",
   "version": "7",
   "dialect": "postgresql",
@@ -76,375 +76,6 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.ai_budget_alerts": {
-      "name": "ai_budget_alerts",
-      "schema": "",
-      "columns": {
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "period": {
-          "name": "period",
-          "type": "ai_budget_period",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "period_start": {
-          "name": "period_start",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "level": {
-          "name": "level",
-          "type": "ai_budget_level",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "spent_usd": {
-          "name": "spent_usd",
-          "type": "numeric(14, 6)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "limit_usd": {
-          "name": "limit_usd",
-          "type": "numeric(12, 4)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "ai_budget_alerts_brand_id_brands_id_fk": {
-          "name": "ai_budget_alerts_brand_id_brands_id_fk",
-          "tableFrom": "ai_budget_alerts",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "ai_budget_alerts_brand_id_period_period_start_level_pk": {
-          "name": "ai_budget_alerts_brand_id_period_period_start_level_pk",
-          "columns": ["brand_id", "period", "period_start", "level"]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.ai_calls": {
-      "name": "ai_calls",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "feature": {
-          "name": "feature",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "ai_call_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tokens_in": {
-          "name": "tokens_in",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "tokens_out": {
-          "name": "tokens_out",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "cost_usd": {
-          "name": "cost_usd",
-          "type": "numeric(14, 6)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "latency_ms": {
-          "name": "latency_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "redaction_count": {
-          "name": "redaction_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "prompt_hash": {
-          "name": "prompt_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "prompt": {
-          "name": "prompt",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "response": {
-          "name": "response",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "redactions": {
-          "name": "redactions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sources": {
-          "name": "sources",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "error": {
-          "name": "error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "bodies_purged_at": {
-          "name": "bodies_purged_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "ai_calls_brand_created_idx": {
-          "name": "ai_calls_brand_created_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ai_calls_ticket_idx": {
-          "name": "ai_calls_ticket_idx",
-          "columns": [
-            {
-              "expression": "ticket_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "ai_calls_brand_id_brands_id_fk": {
-          "name": "ai_calls_brand_id_brands_id_fk",
-          "tableFrom": "ai_calls",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ai_calls_ticket_id_tickets_id_fk": {
-          "name": "ai_calls_ticket_id_tickets_id_fk",
-          "tableFrom": "ai_calls",
-          "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.ai_settings": {
-      "name": "ai_settings",
-      "schema": "",
-      "columns": {
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "provider_id": {
-          "name": "provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model_id": {
-          "name": "model_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "system_prompt": {
-          "name": "system_prompt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "pii_redaction": {
-          "name": "pii_redaction",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "injection_filter": {
-          "name": "injection_filter",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "daily_budget_usd": {
-          "name": "daily_budget_usd",
-          "type": "numeric(12, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "monthly_budget_usd": {
-          "name": "monthly_budget_usd",
-          "type": "numeric(12, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "ai_settings_brand_id_brands_id_fk": {
-          "name": "ai_settings_brand_id_brands_id_fk",
-          "tableFrom": "ai_settings",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "ai_settings_daily_budget_check": {
-          "name": "ai_settings_daily_budget_check",
-          "value": "\"ai_settings\".\"daily_budget_usd\" IS NULL OR \"ai_settings\".\"daily_budget_usd\" > 0"
-        },
-        "ai_settings_monthly_budget_check": {
-          "name": "ai_settings_monthly_budget_check",
-          "value": "\"ai_settings\".\"monthly_budget_usd\" IS NULL OR \"ai_settings\".\"monthly_budget_usd\" > 0"
-        },
-        "ai_settings_model_pair_check": {
-          "name": "ai_settings_model_pair_check",
-          "value": "(\"ai_settings\".\"provider_id\" IS NULL) = (\"ai_settings\".\"model_id\" IS NULL)"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.assignment_agents": {
@@ -4610,548 +4241,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.embedding_space": {
-      "name": "embedding_space",
-      "schema": "",
-      "columns": {
-        "singleton": {
-          "name": "singleton",
-          "type": "boolean",
-          "primaryKey": true,
-          "notNull": true,
-          "default": true
-        },
-        "status": {
-          "name": "status",
-          "type": "embedding_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'unconfigured'"
-        },
-        "active_model": {
-          "name": "active_model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "active_dims": {
-          "name": "active_dims",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_provider": {
-          "name": "target_provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_model": {
-          "name": "target_model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_dims": {
-          "name": "target_dims",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "column_dims": {
-          "name": "column_dims",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "finished_at": {
-          "name": "finished_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "embedding_space_singleton_check": {
-          "name": "embedding_space_singleton_check",
-          "value": "\"embedding_space\".\"singleton\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.knowledge_chunks": {
-      "name": "knowledge_chunks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_id": {
-          "name": "source_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "document_id": {
-          "name": "document_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "article_id": {
-          "name": "article_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ordinal": {
-          "name": "ordinal",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "visibility": {
-          "name": "visibility",
-          "type": "hc_visibility",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content_hash": {
-          "name": "content_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_count": {
-          "name": "token_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "suspicious": {
-          "name": "suspicious",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "search": {
-          "name": "search",
-          "type": "tsvector",
-          "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "to_tsvector(case when \"locale\" = 'ar' then 'arabic'::regconfig else 'english'::regconfig end, \"content\")",
-            "type": "stored"
-          }
-        },
-        "embedding_model": {
-          "name": "embedding_model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "embedded_at": {
-          "name": "embedded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "meta": {
-          "name": "meta",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "knowledge_chunks_brand_source_idx": {
-          "name": "knowledge_chunks_brand_source_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "knowledge_chunks_document_idx": {
-          "name": "knowledge_chunks_document_idx",
-          "columns": [
-            {
-              "expression": "document_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "knowledge_chunks_brand_model_idx": {
-          "name": "knowledge_chunks_brand_model_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "embedding_model",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "knowledge_chunks_brand_id_brands_id_fk": {
-          "name": "knowledge_chunks_brand_id_brands_id_fk",
-          "tableFrom": "knowledge_chunks",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_chunks_source_id_knowledge_sources_id_fk": {
-          "name": "knowledge_chunks_source_id_knowledge_sources_id_fk",
-          "tableFrom": "knowledge_chunks",
-          "tableTo": "knowledge_sources",
-          "columnsFrom": ["source_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_chunks_document_id_knowledge_documents_id_fk": {
-          "name": "knowledge_chunks_document_id_knowledge_documents_id_fk",
-          "tableFrom": "knowledge_chunks",
-          "tableTo": "knowledge_documents",
-          "columnsFrom": ["document_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_chunks_article_id_hc_articles_id_fk": {
-          "name": "knowledge_chunks_article_id_hc_articles_id_fk",
-          "tableFrom": "knowledge_chunks",
-          "tableTo": "hc_articles",
-          "columnsFrom": ["article_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.knowledge_documents": {
-      "name": "knowledge_documents",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_id": {
-          "name": "source_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "external_id": {
-          "name": "external_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "url": {
-          "name": "url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "article_id": {
-          "name": "article_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "content_hash": {
-          "name": "content_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "knowledge_documents_brand_id_brands_id_fk": {
-          "name": "knowledge_documents_brand_id_brands_id_fk",
-          "tableFrom": "knowledge_documents",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_documents_source_id_knowledge_sources_id_fk": {
-          "name": "knowledge_documents_source_id_knowledge_sources_id_fk",
-          "tableFrom": "knowledge_documents",
-          "tableTo": "knowledge_sources",
-          "columnsFrom": ["source_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_documents_article_id_hc_articles_id_fk": {
-          "name": "knowledge_documents_article_id_hc_articles_id_fk",
-          "tableFrom": "knowledge_documents",
-          "tableTo": "hc_articles",
-          "columnsFrom": ["article_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "knowledge_documents_source_external_key": {
-          "name": "knowledge_documents_source_external_key",
-          "nullsNotDistinct": false,
-          "columns": ["source_id", "external_id"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.knowledge_sources": {
-      "name": "knowledge_sources",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "knowledge_source_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "visibility": {
-          "name": "visibility",
-          "type": "hc_visibility",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'internal'"
-        },
-        "config": {
-          "name": "config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "config_encrypted": {
-          "name": "config_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sync_status": {
-          "name": "sync_status",
-          "type": "knowledge_sync_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'idle'"
-        },
-        "last_synced_at": {
-          "name": "last_synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "knowledge_sources_brand_idx": {
-          "name": "knowledge_sources_brand_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "knowledge_sources_brand_id_brands_id_fk": {
-          "name": "knowledge_sources_brand_id_brands_id_fk",
-          "tableFrom": "knowledge_sources",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.inbound_parse_settings": {
       "name": "inbound_parse_settings",
       "schema": "",
@@ -6616,6 +5705,578 @@
           "columns": ["department_id", "name"]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.telegram_bots": {
+      "name": "telegram_bots",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telegram_id": {
+          "name": "telegram_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_updated_at": {
+          "name": "token_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_updated_by": {
+          "name": "token_updated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "webhook_secret": {
+          "name": "webhook_secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "welcome_en": {
+          "name": "welcome_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "welcome_ar": {
+          "name": "welcome_ar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "language_pick": {
+          "name": "language_pick",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "webhook_url": {
+          "name": "webhook_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "webhook_set_at": {
+          "name": "webhook_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "poll_offset": {
+          "name": "poll_offset",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_update_at": {
+          "name": "last_update_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error_at": {
+          "name": "last_error_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "telegram_bots_telegram_id_key": {
+          "name": "telegram_bots_telegram_id_key",
+          "columns": [
+            {
+              "expression": "telegram_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_bots_brand_idx": {
+          "name": "telegram_bots_brand_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "telegram_bots_brand_id_brands_id_fk": {
+          "name": "telegram_bots_brand_id_brands_id_fk",
+          "tableFrom": "telegram_bots",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "telegram_bots_department_id_departments_id_fk": {
+          "name": "telegram_bots_department_id_departments_id_fk",
+          "tableFrom": "telegram_bots",
+          "tableTo": "departments",
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "telegram_bots_token_updated_by_users_id_fk": {
+          "name": "telegram_bots_token_updated_by_users_id_fk",
+          "tableFrom": "telegram_bots",
+          "tableTo": "users",
+          "columnsFrom": ["token_updated_by"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.telegram_chats": {
+      "name": "telegram_chats",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bot_id": {
+          "name": "bot_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contact_id": {
+          "name": "contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_message_at": {
+          "name": "last_message_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "telegram_chats_bot_chat_key": {
+          "name": "telegram_chats_bot_chat_key",
+          "columns": [
+            {
+              "expression": "bot_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_chats_brand_contact_idx": {
+          "name": "telegram_chats_brand_contact_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_chats_ticket_idx": {
+          "name": "telegram_chats_ticket_idx",
+          "columns": [
+            {
+              "expression": "ticket_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "telegram_chats_brand_id_brands_id_fk": {
+          "name": "telegram_chats_brand_id_brands_id_fk",
+          "tableFrom": "telegram_chats",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "telegram_chats_bot_id_telegram_bots_id_fk": {
+          "name": "telegram_chats_bot_id_telegram_bots_id_fk",
+          "tableFrom": "telegram_chats",
+          "tableTo": "telegram_bots",
+          "columnsFrom": ["bot_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "telegram_chats_contact_id_contacts_id_fk": {
+          "name": "telegram_chats_contact_id_contacts_id_fk",
+          "tableFrom": "telegram_chats",
+          "tableTo": "contacts",
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "telegram_chats_ticket_id_tickets_id_fk": {
+          "name": "telegram_chats_ticket_id_tickets_id_fk",
+          "tableFrom": "telegram_chats",
+          "tableTo": "tickets",
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.telegram_deliveries": {
+      "name": "telegram_deliveries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticket_message_id": {
+          "name": "ticket_message_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bot_id": {
+          "name": "bot_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "telegram_delivery_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'queued'"
+        },
+        "parts_sent": {
+          "name": "parts_sent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sent_message_ids": {
+          "name": "sent_message_ids",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_at": {
+          "name": "failed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "telegram_deliveries_message_key": {
+          "name": "telegram_deliveries_message_key",
+          "columns": [
+            {
+              "expression": "ticket_message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_deliveries_ticket_idx": {
+          "name": "telegram_deliveries_ticket_idx",
+          "columns": [
+            {
+              "expression": "ticket_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_deliveries_brand_status_idx": {
+          "name": "telegram_deliveries_brand_status_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "telegram_deliveries_brand_id_brands_id_fk": {
+          "name": "telegram_deliveries_brand_id_brands_id_fk",
+          "tableFrom": "telegram_deliveries",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "telegram_deliveries_department_id_departments_id_fk": {
+          "name": "telegram_deliveries_department_id_departments_id_fk",
+          "tableFrom": "telegram_deliveries",
+          "tableTo": "departments",
+          "columnsFrom": ["department_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "telegram_deliveries_ticket_id_tickets_id_fk": {
+          "name": "telegram_deliveries_ticket_id_tickets_id_fk",
+          "tableFrom": "telegram_deliveries",
+          "tableTo": "tickets",
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "telegram_deliveries_ticket_message_id_ticket_messages_id_fk": {
+          "name": "telegram_deliveries_ticket_message_id_ticket_messages_id_fk",
+          "tableFrom": "telegram_deliveries",
+          "tableTo": "ticket_messages",
+          "columnsFrom": ["ticket_message_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "telegram_deliveries_bot_id_telegram_bots_id_fk": {
+          "name": "telegram_deliveries_bot_id_telegram_bots_id_fk",
+          "tableFrom": "telegram_deliveries",
+          "tableTo": "telegram_bots",
+          "columnsFrom": ["bot_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -9763,21 +9424,6 @@
       "schema": "public",
       "values": ["staff", "visitor", "apikey", "system"]
     },
-    "public.ai_budget_level": {
-      "name": "ai_budget_level",
-      "schema": "public",
-      "values": ["warning", "exceeded"]
-    },
-    "public.ai_budget_period": {
-      "name": "ai_budget_period",
-      "schema": "public",
-      "values": ["day", "month"]
-    },
-    "public.ai_call_status": {
-      "name": "ai_call_status",
-      "schema": "public",
-      "values": ["ok", "error", "refused"]
-    },
     "public.assignment_mode": {
       "name": "assignment_mode",
       "schema": "public",
@@ -9879,11 +9525,6 @@
       "schema": "public",
       "values": ["queued", "sent", "failed", "discarded"]
     },
-    "public.embedding_status": {
-      "name": "embedding_status",
-      "schema": "public",
-      "values": ["unconfigured", "reindexing", "ready"]
-    },
     "public.hc_access": {
       "name": "hc_access",
       "schema": "public",
@@ -9913,16 +9554,6 @@
       "name": "hc_visibility",
       "schema": "public",
       "values": ["public", "internal"]
-    },
-    "public.knowledge_source_kind": {
-      "name": "knowledge_source_kind",
-      "schema": "public",
-      "values": ["article", "file", "crawl", "notion", "gdrive"]
-    },
-    "public.knowledge_sync_status": {
-      "name": "knowledge_sync_status",
-      "schema": "public",
-      "values": ["idle", "queued", "syncing", "ok", "failed"]
     },
     "public.locale": {
       "name": "locale",
@@ -9988,6 +9619,11 @@
       "name": "tag_color",
       "schema": "public",
       "values": ["info", "success", "warning", "escalated", "sand", "stone", "clay", "bark"]
+    },
+    "public.telegram_delivery_status": {
+      "name": "telegram_delivery_status",
+      "schema": "public",
+      "values": ["queued", "sent", "failed"]
     },
     "public.ticket_channel": {
       "name": "ticket_channel",

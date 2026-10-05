@@ -1,5 +1,4 @@
 import {
-  brands,
   type Db,
   type DbTransaction,
   departments,
@@ -9,9 +8,9 @@ import {
   mailboxes,
   type NewMailbox,
   users,
-  withTenant,
 } from '@helpdock/db';
 import { and, asc, eq, inArray } from 'drizzle-orm';
+import { withAllBrands } from '../tenant/all-brands.js';
 
 /**
  * The `mailboxes` and `inbound_parse_settings` tables (M2-02, M2-03, M2-08).
@@ -193,25 +192,3 @@ export class MailboxesRepository {
     );
   }
 }
-
-/**
- * A transaction over every brand, as the system principal. `brands` is a
- * global table, so reading its ids needs no context; the context is then set
- * to exactly those ids, the way ARCHITECTURE §6 asks an all-brands path to.
- */
-const withAllBrands = async <T>(
-  db: Db,
-  principalId: string,
-  fn: (tx: DbTransaction) => Promise<T[]>,
-): Promise<T[]> => {
-  const brandIds = (await db.select({ id: brands.id }).from(brands)).map((row) => row.id);
-  if (brandIds.length === 0) {
-    return [];
-  }
-
-  return withTenant(
-    db,
-    { brandIds, departmentIds: 'all', principalType: 'system', principalId },
-    fn,
-  );
-};

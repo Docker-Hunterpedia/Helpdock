@@ -11,12 +11,15 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { AiModule, type AiModuleOptions } from './ai/ai.module.js';
+import { DbAiUsage } from './ai/db-ai-usage.js';
 import { AssignmentModule } from './assignment/assignment.module.js';
 import { AuditLogModule } from './audit/audit-log.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
 import { PermissionGuard } from './auth/permission.guard.js';
 import type { PrincipalResolver } from './auth/principal-resolver.js';
+import { BrandAvailability } from './brands/brand-availability.js';
+import { BrandGoneGuard } from './brands/brand-gone.guard.js';
 import { BrandsModule } from './brands/brands.module.js';
 import { ChannelsModule, type ChannelsModuleOverrides } from './channels/channels.module.js';
 import { ContactsModule } from './contacts/contacts.module.js';
@@ -40,6 +43,7 @@ import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { ParticipantsModule } from './participants/participants.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 import { DbContactErasureProvider } from './retention/contact-erasure.js';
 import { RetentionModule } from './retention/retention.module.js';
 import { DomainCheckController } from './routes/domain-check.controller.js';
@@ -54,6 +58,7 @@ import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js'
 import { SlaModule } from './sla/sla.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
+import { TelegramModule, type TelegramModuleOverrides } from './telegram/telegram.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
 import { TicketingModule } from './ticketing/ticketing.module.js';
 import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
@@ -111,6 +116,8 @@ export interface AppModuleOptions {
   readonly smtpTransports?: SmtpTransportFactory;
   /** M2: the IMAP connection and the image proxy's fetcher, which suites replace. */
   readonly channels?: ChannelsModuleOverrides;
+  /** M6: the Bot API, which suites replace with a local stand-in for Telegram. */
+  readonly telegram?: TelegramModuleOverrides;
   /** M4: the siteverify call and the SSE timings, which suites replace. */
   readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
   /** M4-09: the siteverify call, which suites replace. */
@@ -184,7 +191,11 @@ export class AppModule implements NestModule {
         auth,
         BrandsModule.forRoot({ logger: options.logger }),
         InstallModule.forRoot({ auth, logger: options.logger }),
-        ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
+        ObservabilityModule.forRoot({
+          logger: options.logger,
+          bootFacts: options.bootFacts,
+          signingKeys: options.auth.signingKeys,
+        }),
         realtime,
         StaffModule.forRoot({ logger: options.logger }),
         // M1-04 left two null providers behind for the contact screens; M1-02
@@ -212,6 +223,9 @@ export class AppModule implements NestModule {
         }),
         // M1-14: the Data retention form. The purge itself runs in the worker.
         RetentionModule.forRoot(),
+        // M8-04: Reports. The rollups they read are written by the worker.
+        // M7 binds the AI seam of Reports and the System page to `ai_calls`.
+        ReportsModule.forRoot({ aiUsage: new DbAiUsage(options.settings) }),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
         // M2-05, M2-06: Channels › Outgoing email, signatures, the ticket
@@ -226,6 +240,15 @@ export class AppModule implements NestModule {
           logger: options.logger,
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...(options.channels === undefined ? {} : { overrides: options.channels }),
+        }),
+        // M6: Channels › Telegram, the webhook and the thread's delivery
+        // status. Polling and sending run in the worker.
+        TelegramModule.forRoot({
+          env: options.env,
+          db: options.db,
+          logger: options.logger,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...(options.telegram === undefined ? {} : { overrides: options.telegram }),
         }),
         // M3-03 to M3-05: workflow rules, their log and the test run. The
         // engine runs in the worker.
@@ -281,6 +304,9 @@ export class AppModule implements NestModule {
         DomainCheckService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionGuard },
+        // M8-07: a brand being deleted answers 410 on every public route.
+        { provide: BrandAvailability, useValue: new BrandAvailability(options.db) },
+        { provide: APP_GUARD, useClass: BrandGoneGuard },
         { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
         { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
         { provide: APP_PIPE, useClass: ZodValidationPipe },

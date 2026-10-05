@@ -29,3 +29,26 @@ export class ReplyDeliveryHook {
     await Promise.resolve();
   }
 }
+
+/**
+ * Every channel's hook in turn (M2-05's email, M6-02's Telegram). Each decides
+ * from the ticket's channel whether the reply is its to carry, so at most one
+ * of them queues anything.
+ */
+export class ChannelReplyDeliveryHooks extends ReplyDeliveryHook {
+  readonly #hooks: readonly ReplyDeliveryHook[];
+
+  constructor(hooks: readonly ReplyDeliveryHook[]) {
+    super();
+    this.#hooks = hooks;
+  }
+
+  override async onStaffPublicReply(
+    tx: DbTransaction,
+    event: StaffPublicReplyEvent,
+  ): Promise<void> {
+    for (const hook of this.#hooks) {
+      await hook.onStaffPublicReply(tx, event);
+    }
+  }
+}

@@ -95,14 +95,17 @@ describe('parseWidgetEmit', () => {
         JSON.stringify({
           room: brandVisitorsRoom(BRAND),
           event: 'presence',
-          data: { agentsOnline: true },
+          data: { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] },
           seq: null,
         }),
       ),
     ).toMatchObject({
       room: `visitors:${BRAND}`,
       event: 'presence',
-      envelope: { seq: null, data: { agentsOnline: true } },
+      envelope: {
+        seq: null,
+        data: { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] },
+      },
     });
   });
 });

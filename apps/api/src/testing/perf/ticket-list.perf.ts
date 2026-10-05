@@ -1,32 +1,18 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { promisify } from 'node:util';
-import { decodeMasterKey } from '@helpdock/config';
-import {
-  createDb,
-  type DbHandle,
-  runMigrations,
-  type TenantContext,
-  views,
-  withTenant,
-} from '@helpdock/db';
+import { type TenantContext, views, withTenant } from '@helpdock/db';
 import {
   type TicketList,
   ticketListQuerySchema,
   ticketViewFiltersSchema,
   VIEW_COUNT_CAP,
 } from '@helpdock/schemas';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PasswordHasher } from '../../auth/password.js';
 import type { SearchMode } from '../../tickets/ticket-query.js';
 import { TicketRepository } from '../../tickets/tickets.repository.js';
 import { DOMAIN_RULES_14, type PerfDataset, seedPerfDataset } from './dataset.js';
 import { type LoadResult, type LoadScenario, type LoadSession, runLoad } from './load.js';
+import { hasDocker, envNumber as number, type PerfStack, signIn, startPerfStack } from './stack.js';
 
 /**
  * The M1 exit criterion: "Ticket list of 50k seeded tickets loads under 150 ms
@@ -61,25 +47,8 @@ import { type LoadResult, type LoadScenario, type LoadSession, runLoad } from '.
  * the numbers mean something only on the §14 host.
  */
 
-const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
-const REDIS_IMAGE = 'redis:7-alpine';
-const APP_ROLE_PASSWORD = 'perf-app-role-password';
-const MASTER_KEY = Buffer.alloc(32, 14).toString('base64');
-const PASSWORD = 'a perf run password';
-const API_ROOT = path.resolve(import.meta.dirname, '../../..');
-const API_ENTRY = path.join(API_ROOT, 'dist/main.js');
-const BASE_PORT = 3900;
 const LIVE_STATES = ['open', 'on_hold', 'escalated'];
 const TOKEN_REFRESH_MS = 4 * 60_000;
-
-const number = (name: string, fallback: number): number => {
-  const raw = process.env[name];
-  const value = raw === undefined || raw === '' ? fallback : Number(raw);
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${name} must be a non-negative number`);
-  }
-  return value;
-};
 
 const settings = {
   concurrency: number('PERF_CONCURRENCY', 50),
@@ -93,13 +62,6 @@ const settings = {
 };
 
 const scaled = (value: number): number => Math.max(1, Math.round(value * settings.scale));
-
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
 
 /** One list request: which session asks, and the query string it sends. */
 interface ListCase {
@@ -139,109 +101,41 @@ const parsedQuery = (query: ListCase['query']) =>
   );
 
 describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §14)', () => {
-  let postgres: StartedPostgreSqlContainer;
-  let redis: StartedRedisContainer;
-  let owner: DbHandle;
-  let app: DbHandle;
+  let stack: PerfStack;
   let dataset: PerfDataset;
-  const replicas: ChildProcess[] = [];
-  const baseUrls: string[] = [];
 
   beforeAll(async () => {
-    if (!existsSync(API_ENTRY)) {
-      throw new Error(`${API_ENTRY} is missing: run \`pnpm --filter @helpdock/api build\` first`);
-    }
-
-    [postgres, redis] = await Promise.all([
-      new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(120_000).start(),
-      new RedisContainer(REDIS_IMAGE).withStartupTimeout(120_000).start(),
-    ]);
-
-    const bootstrap = createDb({ url: postgres.getConnectionUri(), max: 1 });
-    await bootstrap.db.execute(sql.raw('CREATE DATABASE helpdock'));
-    await bootstrap.close();
-
-    const hostPort = `${postgres.getHost()}:${postgres.getPort()}`;
-    const migrationUrl = `postgres://${postgres.getUsername()}:${postgres.getPassword()}@${hostPort}/helpdock`;
-    const appUrl = `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${hostPort}/helpdock`;
-
-    await runMigrations({ migrationUrl, appRolePassword: APP_ROLE_PASSWORD, log: () => {} });
-    owner = createDb({ url: migrationUrl, max: 2 });
-    app = createDb({ url: appUrl, max: 2 });
-
-    const masterKey = decodeMasterKey(MASTER_KEY);
-    if (masterKey === undefined) {
-      throw new Error('the perf master key is not 32 bytes of base64');
-    }
-
-    const seedStarted = performance.now();
-    // Seeded as the runtime role, so every row passes the same policies and
-    // triggers the api's writes do; analysed as the owner, which the runtime
-    // role deliberately is not.
-    dataset = await seedPerfDataset(app.db, {
-      measured: {
-        ...DOMAIN_RULES_14.measured,
-        tickets: scaled(DOMAIN_RULES_14.measured.tickets),
-        contacts: scaled(DOMAIN_RULES_14.measured.contacts),
-      },
-      others: {
-        ...DOMAIN_RULES_14.others,
-        tickets: scaled(DOMAIN_RULES_14.others.tickets),
-        contacts: scaled(DOMAIN_RULES_14.others.contacts),
-      },
-      passwordHash: await new PasswordHasher(masterKey).hash(PASSWORD),
-      log: (message) => process.stdout.write(`${message}\n`),
-    });
-    await owner.db.execute(sql`ANALYZE`);
-    process.stdout.write(`Seeded in ${Math.round((performance.now() - seedStarted) / 1000)} s.\n`);
-
-    for (let index = 0; index < settings.replicas; index += 1) {
-      const port = BASE_PORT + index;
-      replicas.push(
-        spawn(process.execPath, [API_ENTRY], {
-          cwd: API_ROOT,
-          stdio: ['ignore', 'ignore', 'inherit'],
-          env: {
-            ...process.env,
-            APP_URL: `http://127.0.0.1:${port}`,
-            APP_ROLE: 'api',
-            APP_MASTER_KEY: MASTER_KEY,
-            NODE_ENV: 'production',
-            LOG_LEVEL: 'warn',
-            PORT: String(port),
-            DATABASE_URL: appUrl,
-            DATABASE_MIGRATION_URL: migrationUrl,
-            REDIS_URL: redis.getConnectionUrl(),
-            S3_ENDPOINT: 'http://127.0.0.1:9',
-            S3_REGION: 'us-east-1',
-            S3_BUCKET: 'helpdock',
-            S3_ACCESS_KEY_ID: 'perf',
-            S3_SECRET_ACCESS_KEY: 'perf',
+    stack = await startPerfStack({
+      replicas: settings.replicas,
+      seed: async (app, passwordHash) => {
+        dataset = await seedPerfDataset(app.db, {
+          measured: {
+            ...DOMAIN_RULES_14.measured,
+            tickets: scaled(DOMAIN_RULES_14.measured.tickets),
+            contacts: scaled(DOMAIN_RULES_14.measured.contacts),
           },
-        }),
-      );
-      baseUrls.push(`http://127.0.0.1:${port}`);
-    }
-
-    for (const baseUrl of baseUrls) {
-      await waitForHealth(baseUrl);
-    }
+          others: {
+            ...DOMAIN_RULES_14.others,
+            tickets: scaled(DOMAIN_RULES_14.others.tickets),
+            contacts: scaled(DOMAIN_RULES_14.others.contacts),
+          },
+          passwordHash,
+          log: (message) => process.stdout.write(`${message}\n`),
+        });
+      },
+    });
   }, 1_800_000);
 
   afterAll(async () => {
-    for (const replica of replicas) {
-      replica.kill('SIGTERM');
-    }
-    await app?.close();
-    await owner?.close();
-    await Promise.all([postgres?.stop(), redis?.stop()]);
+    await stack?.stop();
   });
 
   it(
     'lists under the p95 gate as an Admin and as a department-restricted Agent',
     async () => {
+      const { baseUrls } = stack;
       const [firstUrl] = baseUrls as [string];
-      const sessions: Record<'admin' | 'agent', LoadSession> = {
+      const sessions: Record<'admin' | 'agent', LoadSession & { token: string }> = {
         admin: { label: 'admin', token: await signIn(firstUrl, dataset.admin.email) },
         agent: { label: 'agent', token: await signIn(firstUrl, dataset.agent.email) },
       };
@@ -362,7 +256,7 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
       };
       const query = parsedQuery(listCase.query);
 
-      await withTenant(app.db, context, async (tx) => {
+      await withTenant(stack.app.db, context, async (tx) => {
         const reader = { brandId: dataset.brandId, viewerId: context.principalId };
         const page = await repository.listTickets(tx, reader, query);
         const halves: SearchMode[] = page.search === 'fuzzy' ? ['exact', 'fuzzy'] : ['exact'];
@@ -389,7 +283,7 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
         principalId,
       };
 
-      const rows = await withTenant(app.db, context, async (tx) => {
+      const rows = await withTenant(stack.app.db, context, async (tx) => {
         const shown = (await tx.select().from(views)).filter(
           (view) =>
             view.visibleDepartmentIds === null ||
@@ -414,34 +308,6 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
     return plans;
   };
 });
-
-const waitForHealth = async (baseUrl: string): Promise<void> => {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    const healthy = await fetch(`${baseUrl}/health`).then(
-      (response) => response.ok,
-      () => false,
-    );
-    if (healthy) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  throw new Error(`${baseUrl} did not become healthy`);
-};
-
-const signIn = async (baseUrl: string, email: string): Promise<string> => {
-  const response = await fetch(`${baseUrl}/api/auth/sign-in`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password: PASSWORD }),
-  });
-  const body = (await response.json()) as { kind?: string; accessToken?: string };
-  if (body.kind !== 'session' || body.accessToken === undefined) {
-    throw new Error(`sign-in as ${email} did not produce a session`);
-  }
-  return body.accessToken;
-};
 
 const getJson = async <T>(baseUrl: string, pathAndQuery: string, token: string): Promise<T> => {
   const response = await fetch(`${baseUrl}${pathAndQuery}`, {

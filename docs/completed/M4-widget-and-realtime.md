@@ -140,7 +140,7 @@ Written down and carried forward. None of them blocks M6, M7 or M8.
 
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
-| **`agents_online` is always empty** against a real api | The widget's "Lina, Karim and Sara are online now" line reads a list the wire format does not carry. The transport maps the config's `agentsOnline` boolean to an empty list (`apps/widget/src/transport/map.ts`). The mock transport fills it, so only the harness shows the avatars. | This doc |
+| ~~`agents_online` is always empty against a real api~~ | Closed in M9: availability and the `presence` frame carry `agents` (first names, empty when the brand hides agents), and `apps/widget/src/transport/map.ts` maps them. | This doc |
 | **Non-text custom fields are asked as text** in the pre-chat and contact forms | The widget draws every custom field as a text input. The api validates the answer against the field's type, so a bad value is refused, not stored. | This doc |
 | **The web form's file input is worded in the browser's language**, not the page's | A native `<input type="file">` draws its own button ("Choose file"), which the page cannot translate. | This doc |
 | **A form ticket from an address another contact holds gets no emailed replies until the contacts are merged** | DOMAIN-RULES §4.4 never hands a typed address another contact's history. The new contact holds no address until an agent merges it, so the acknowledgment reaches the typed address and agent replies do not. Whether a form ticket should remember its typed address for replies is an open question. | [web form guide](../guides/web-form.md#the-typed-address-is-a-claim) |

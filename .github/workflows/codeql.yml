@@ -1,8 +1,8 @@
 name: CodeQL
 
 # Static analysis, the half of ARCHITECTURE §15's security line that does not
-# need a running stack. Semgrep's Nest rules and the ZAP baseline scan against
-# the Compose stack are M9-05; they are not here.
+# need a running stack. Semgrep's Nest rules run in `ci.yml` and the ZAP
+# baseline scan against the Compose stack in `zap.yml` (M9-05).
 #
 # It is a workflow of its own rather than a step of `ci`, because an analysis
 # takes minutes, uploads to a different place (the security tab, not the run

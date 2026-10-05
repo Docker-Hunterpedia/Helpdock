@@ -228,11 +228,22 @@ than `en` or `ar` is refused with `400`.
 `GET /availability` returns `widgetAvailabilitySchema` on its own:
 
 ```json
-{ "open": false, "nextOpenAt": "2026-09-28T06:00:00.000Z", "timezone": "Asia/Riyadh", "agentsOnline": false }
+{
+  "open": true,
+  "nextOpenAt": null,
+  "timezone": "Asia/Riyadh",
+  "agentsOnline": true,
+  "agents": [{ "name": "Karim", "avatarUrl": null }, { "name": "Lina", "avatarUrl": null }]
+}
 ```
 
 `nextOpenAt` is `null` while the brand is open, and also when the brand has no
-business hours.
+business hours. `agents` lists up to five of the brand's agents who are online
+right now (not away), by first name and sorted, for the "Lina, Karim and Sara
+are online now" line. It is empty when nobody is online, and also when the
+brand turned off **Show the agent's name and photo**: `agentsOnline` still says
+whether anybody is there. It never carries a staff id or a surname. Staff have
+no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
 
 ## Conversations
 
@@ -459,7 +470,7 @@ on `message` events and `null` on all others.
 | `message` | `widgetMessageSchema` |
 | `receipt` | `{ conversationId, kind: "delivered" \| "read", seq }` |
 | `typing` | `{ conversationId, typing, agentName }` |
-| `presence` | `{ agentsOnline }` |
+| `presence` | `{ agentsOnline, agents }`, as in [`GET /availability`](#configuration) |
 | `queue` | `{ conversationId, position }` |
 | `conversation` | `{ conversationId, state: "open" \| "closed", continuedById }` |
 

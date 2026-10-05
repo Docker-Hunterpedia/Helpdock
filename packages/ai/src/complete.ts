@@ -255,7 +255,7 @@ export const createComplete =
     const fields = {
       tokensIn: answer.usage.input + answer.usage.cacheRead + answer.usage.cacheWrite,
       tokensOut: answer.usage.output,
-      // Priced from the configured model's entry in pi-ai's registry (ADR 0016),
+      // Priced from the configured model's entry in pi-ai's registry (ADR 0018),
       // on a copy: `calculateCost` writes into the usage it is given.
       costUsd: calculateCost(model, structuredClone(answer.usage)).total,
     };

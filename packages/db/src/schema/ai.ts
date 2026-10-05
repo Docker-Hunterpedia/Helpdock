@@ -27,7 +27,7 @@ import { tickets } from './tickets.js';
  * one by id. **No row means the defaults**: the install's model, both
  * guardrails on, no budget and no prompt of its own.
  *
- * Budgets are US dollars, the unit pi-ai prices calls in (ADR 0016). Null is
+ * Budgets are US dollars, the unit pi-ai prices calls in (ADR 0018). Null is
  * "no limit"; the CHECKs keep a hand-edited row from setting a limit of zero,
  * which would read as a hard stop nobody asked for.
  */

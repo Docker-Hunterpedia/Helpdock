@@ -69,6 +69,10 @@ export const PERMISSIONS = [
   // REQUIREMENTS §4.7) and reading its model, guardrails and budget. Changing
   // the model, the guardrails or the budget stays `brand:manage`.
   'ai:manage',
+  // M8-04: the brand's reports. An Admin's, a Team Leader's (their departments,
+  // by row-level security on the rollups) and a Viewer's, who "may read
+  // reports" (DOMAIN-RULES §1.2). Not an Agent's: their work is tickets.
+  'report:read',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -98,6 +102,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'help_center:read',
     'help_center:manage',
     'ai:manage',
+    'report:read',
   ],
   // "Departments they lead: agents, SLAs, rules, macros, canned responses, help
   // center, widget theme, content policy, reopen policy" — brand-level
@@ -117,6 +122,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'help_center:read',
     'help_center:manage',
     'ai:manage',
+    'report:read',
   ],
   agent: [
     'ticket:read',
@@ -127,7 +133,14 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'staff:read',
     'help_center:read',
   ],
-  viewer: ['ticket:read', 'contact:read', 'brand:read', 'staff:read', 'help_center:read'],
+  viewer: [
+    'ticket:read',
+    'contact:read',
+    'brand:read',
+    'staff:read',
+    'help_center:read',
+    'report:read',
+  ],
 });
 
 export const roleHasPermission = (role: BrandRole, permission: Permission): boolean =>

@@ -228,8 +228,9 @@ anything a stranger could not learn by trying the port.
 | Postgres | Server version, migrations applied at boot, and the runtime role — which must be `helpdock_app` with RLS forced (DOMAIN-RULES §1.5) |
 | Redis | Version, latency, and whether an AOF rewrite is running (not a failure, but it costs latency) |
 | Queues | The first few, with waiting, active, failed, delayed and the age of the oldest waiting job; "All queues" fetches the rest. A failed count is a dead-letter count. |
-| Channels | Empty: mailbox health is on Channels › Mailboxes, and this card does not read it yet ([M2 gaps](../completed/M2-email-channel.md#gaps-and-follow-ups)) |
-| Storage and AI spend | "Not configured" until M1 measures the bucket and M7 measures spend. A subsystem that is not measured says so rather than showing a zero. |
+| Channels | Every brand's mailboxes and Telegram bots, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red ([email](email.md), [Telegram](telegram.md)) |
+| Storage | The bucket's size in total and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. "Not configured" until the worker has measured once. |
+| AI spend | "Not configured" until M7 records LLM calls. A subsystem that is not measured says so rather than showing a zero. |
 | Audit log | The most recent install-scope entries |
 
 The endpoint is `@Requires('install:admin')`: everything on it is install-wide,
@@ -241,7 +242,7 @@ draws "Not allowed"; the nav item is not offered to them in the first place.
 
 ### Where the numbers come from
 
-Two are worth knowing:
+Three are worth knowing:
 
 - **The outbox backlog is reported by the relay, not queried by the api.** An
   install-scope request holds only the install sentinel in `app.brand_ids`, so
@@ -254,6 +255,48 @@ Two are worth knowing:
   log lives in the `drizzle` schema, which the runtime role is deliberately not
   granted. An api replica counts the migrations while it is applying them and
   carries the number; a worker never migrates, so it reports nothing.
+- **Storage is measured by the worker, not by the page.** Measuring a brand is
+  listing every object under its prefix, which on a large bucket is thousands
+  of requests. The hourly `stats.rollup` job measures a brand when its reading
+  is more than six hours old and keeps it in the Redis hash
+  `hd:storage:usage`; the page shows the last readings. Losing Redis loses the
+  readings until the next run.
+
+### The queue dashboard
+
+[Bull Board](https://github.com/felixmosh/bull-board) is served at
+`/api/install/queues/board/`: every queue's jobs, their
+payloads and errors, with retry, promote and clean ([ADR
+0004](../decisions/0004-bull-board-for-queues.md), [ADR
+0017](../decisions/0017-bull-board-behind-a-one-use-pass.md)). It shows **every
+brand's jobs**, because queues are install-wide; that is why only an install
+admin may open it.
+
+A new tab cannot carry the admin's sign-in, so the page asks
+`POST /api/install/system/queue-board` for a one-minute, one-use address, and
+opening it sets the `hd_queue_board` cookie (an hour, `HttpOnly`,
+`SameSite=Strict`, scoped to the board's path). Every board request checks
+that the admin's browser session is still signed in and that the account is
+still an active install admin; otherwise it answers 401. Signing out of the
+admin closes the board on its next request.
+
+Bull Board is English and left-to-right and does not follow the admin's theme;
+the everyday view is the Queues card above.
+
+### Product metrics
+
+`GET /api/install/system/metrics`, install admin only, answers the product
+metrics of [DOMAIN-RULES §15](../planning/DOMAIN-RULES.md#15-product-metrics)
+that the install can measure about itself:
+
+| Metric | How it is measured |
+|---|---|
+| Activation | The first ticket from any channel that is not manual (email, widget, Telegram, form, API), in any brand, and whether it came within 7 days of the wizard. The wizard's end is when the first brand was created. |
+| Help center self-service | Per brand, over the last 30 days: widget article views not followed by a ticket from the same visitor within an hour, over widget views. Only a view in the widget names a visitor a ticket can also name, so the rate is over those; every view is counted beside it. Read from `report_help_center_daily`, which `stats.rollup` writes. |
+| AI deflection | Per brand, null until M7 records auto-replies. |
+
+Agent efficiency and handoff quality are measured by people in the M9
+usability pass, not by the install.
 
 ---
 
@@ -303,8 +346,9 @@ the two keys can coexist when it does.
 
 ## Still to come
 
-- **M8-05** embeds Bull Board in the System page ([ADR
-  0004](../decisions/0004-bull-board-for-queues.md)). Until then "Open queue
-  dashboard" opens the full queue table.
+- The admin's System page draws the per-brand storage list and the product
+  metrics, and its "Open queue dashboard" button asks for the board's pass,
+  once their artboards exist. The api serves all three today; until then the
+  button opens the full queue table.
 - **M9-06** adds backup, restore, upgrade and key rotation to this guide, and
   **M9-10** rehearses them (DOMAIN-RULES §10).

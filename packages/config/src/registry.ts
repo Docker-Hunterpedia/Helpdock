@@ -291,7 +291,7 @@ export const SETTING_DEFINITIONS = [
     secret: true,
     scope: 'install',
     description:
-      'Model providers and their credentials (API key or OAuth tokens), as a JSON array. Never returned to the client (ADR 0016).',
+      'Model providers and their credentials (API key or OAuth tokens), as a JSON array. Never returned to the client (ADR 0018).',
   }),
   defineSetting({
     key: 'ai.defaultProvider',

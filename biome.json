@@ -15,6 +15,7 @@
       "!packages/ui/fonts",
       "!docs/design/artboards",
       "!.agents",
+      "!.semgrep",
       "!.claude"
     ]
   },

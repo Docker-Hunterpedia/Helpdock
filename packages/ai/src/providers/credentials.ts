@@ -4,7 +4,7 @@ import { getOAuthApiKey, getOAuthProvider, type OAuthCredentials } from '@marioz
 
 /**
  * Turns a provider's stored credential into what a pi-ai call takes (ADR
- * 0016). An API key is used as it is. OAuth (subscription) credentials are
+ * 0018). An API key is used as it is. OAuth (subscription) credentials are
  * exchanged through pi-ai's OAuth entry point, which refreshes them when they
  * have expired; the refreshed set is handed back so the caller can store it,
  * because the next refresh needs the new refresh token.

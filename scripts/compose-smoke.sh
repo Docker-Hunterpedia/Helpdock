@@ -51,34 +51,9 @@ cleanup() {
 trap cleanup EXIT
 
 password='smoke-password'
-cat > "${env_file}" <<EOF
-APP_URL=http://localhost:3000
-APP_ROLE=api
-APP_MASTER_KEY=$(head -c 32 /dev/urandom | base64)
-NODE_ENV=production
-PORT=3000
-TRUST_PROXY=false
-DATABASE_URL=postgres://helpdock_app:${password}@postgres:5432/helpdock
-DATABASE_MIGRATION_URL=postgres://helpdock_owner:${password}@postgres:5432/helpdock
-REDIS_URL=redis://redis:6379
-S3_ENDPOINT=http://minio:9000
-S3_REGION=us-east-1
-S3_BUCKET=helpdock
-S3_ACCESS_KEY_ID=helpdock
-S3_SECRET_ACCESS_KEY=${password}
-# MinIO addresses a bucket as a path; virtual-host style would need DNS for
-# `helpdock.minio`, which nothing in this stack provides.
-S3_FORCE_PATH_STYLE=true
-OUTBOUND_ALLOW_CIDRS=
-
-ADMIN_HOST=admin.smoke.test
-API_HOST=api.smoke.test
-ACME_EMAIL=
-POSTGRES_USER=helpdock_owner
-POSTGRES_PASSWORD=${password}
-POSTGRES_DB=helpdock
-HELPDOCK_APP_PASSWORD=${password}
-EOF
+# shellcheck source=scripts/compose-env.sh
+source "${repo_root}/scripts/compose-env.sh"
+write_compose_env "${env_file}" "${password}"
 
 # Caddy is left out: it would try to get certificates for hosts that do not
 # resolve. The dev override publishes the api on 127.0.0.1:3000 instead.

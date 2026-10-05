@@ -7,7 +7,7 @@ through, and the per-brand budget (M7-01, M7-02, M7-08;
 [REQUIREMENTS §4.7](../planning/REQUIREMENTS.md#47-ai),
 [ARCHITECTURE §10](../planning/ARCHITECTURE.md#10-ai-subsystem),
 [ADR 0005](../decisions/0005-single-embedding-model-per-install.md),
-[ADR 0016](../decisions/0016-pi-ai-provider-layer.md)).
+[ADR 0018](../decisions/0018-pi-ai-provider-layer.md)).
 
 This is the foundation the AI features build on. Agent assist, auto-reply,
 triage and knowledge ingest arrive with their own deliverables; the admin

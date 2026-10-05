@@ -164,6 +164,7 @@ const harness = ({
       limiter: new RateLimiter(redis),
       logger: silentLogger(),
       setupKey,
+      vapid: () => ({ publicKey: 'generated-public', privateKey: 'generated-private' }),
       smtp: (options) => {
         smtpOptions.push(options);
         return {
@@ -482,5 +483,27 @@ describe('finishing', () => {
     const token = await withToken(state);
 
     await expect(state.service.complete({ ip: IP, token })).resolves.toEqual({ require2fa: false });
+  });
+
+  it('generates the VAPID pair an install without one needs for push (ADR 0002)', async () => {
+    const state = harness();
+    const token = await withToken(state);
+
+    await state.service.complete({ ip: IP, token });
+
+    await expect(state.settings.get('push.vapidPublicKey')).resolves.toBe('generated-public');
+    await expect(state.settings.get('push.vapidPrivateKey')).resolves.toBe('generated-private');
+    expect(state.inserts.map((insert) => insert.values)).toContainEqual(
+      expect.objectContaining({ action: 'install.setup.push' }),
+    );
+  });
+
+  it('generates nothing for a caller without a wizard token', async () => {
+    const state = harness();
+
+    await expect(state.service.complete({ ip: IP, token: undefined })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    await expect(state.settings.get('push.vapidPublicKey')).resolves.toBe('');
   });
 });

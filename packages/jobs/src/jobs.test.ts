@@ -3,6 +3,10 @@ import {
   assignmentOfflineUnassignJob,
   authEmailJob,
   authEmailJobId,
+  BRAND_PURGE_CRON,
+  brandPurgeJob,
+  brandPurgeJobId,
+  brandPurgeScheduleJob,
   DOMAIN_VERIFY_CRON,
   domainVerifyJob,
   domainVerifyJobId,
@@ -37,9 +41,16 @@ import {
   rulesTimeBasedJob,
   rulesTimeBasedJobId,
   rulesTimeBasedScheduleJob,
+  STATS_ROLLUP_CRON,
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
+  statsRollupJob,
+  statsRollupJobId,
+  statsRollupScheduleJob,
+  telegramPollJob,
+  telegramPollSchedulerId,
+  telegramSendJob,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
 import { PayloadValidationError } from './validation.js';
@@ -248,6 +259,14 @@ describe('assignment.offline_unassign', () => {
     );
     expect(idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first')).not.toBe(
       idempotencyKeyFor(assignmentOfflineUnassignJob, later, 'first'),
+    );
+  });
+
+  it('keys a run deferred to the next opening apart from the run that deferred it', () => {
+    const deferred = { ...payload, deferredTo: '2026-09-27T06:00:00.000Z' };
+
+    expect(idempotencyKeyFor(assignmentOfflineUnassignJob, deferred, 'first')).not.toBe(
+      idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first'),
     );
   });
 
@@ -477,5 +496,80 @@ describe('the help center search reindex (M5-05)', () => {
     expect(idempotencyKeyFor(helpCenterSearchReindexJob, payload, 'job-1')).toBe(
       `help_center.search_reindex:${brandId}:2026-10-01T06:00:00.000Z`,
     );
+  });
+});
+
+describe('the Telegram jobs (M6)', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000dd';
+  const botId = '01924f00-0000-7000-8000-0000000000de';
+
+  it('keys a reply by its delivery and a notice by the outbox row that asked for it', () => {
+    expect(idempotencyKeyFor(telegramSendJob, { kind: 'reply', brandId, deliveryId }, 'any')).toBe(
+      `telegram.send:${deliveryId}`,
+    );
+    expect(
+      idempotencyKeyFor(
+        telegramSendJob,
+        {
+          kind: 'notice',
+          brandId,
+          sourceOutboxId: outboxId,
+          botId,
+          chatId: '42',
+          notice: 'welcome',
+          locale: 'ar',
+        },
+        'any',
+      ),
+    ).toBe(`telegram.notice:${outboxId}`);
+  });
+
+  it('refuses a notice it would not know how to word', () => {
+    expect(() =>
+      parseJobPayload(telegramSendJob, {
+        kind: 'notice',
+        brandId,
+        sourceOutboxId: outboxId,
+        botId,
+        chatId: '42',
+        notice: 'advert',
+        locale: 'en',
+      }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('sends on the outbound queue and polls on the inbound one, a scheduler per bot', () => {
+    expect(telegramSendJob.queue).toBe('outbound');
+    expect(telegramPollJob.queue).toBe('inbound');
+    expect(telegramPollJob.options.attempts).toBe(1);
+    expect(telegramPollSchedulerId(botId)).toBe(`telegram.poll.${botId}`);
+  });
+});
+
+describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
+  it('rolls up hourly off the top of the hour, one job per brand and tick', () => {
+    const payload = parseJobPayload(statsRollupJob, { brandId, tick: '2026-10-05T09:07:00.000Z' });
+
+    expect(statsRollupScheduleJob.schedule).toEqual({ cron: STATS_ROLLUP_CRON });
+    expect(STATS_ROLLUP_CRON).toBe('7 * * * *');
+    expect(statsRollupJob.queue).toBe('maintenance');
+    expect(statsRollupJobId(payload)).toBe(
+      `stats.rollup.${brandId}.${Date.parse('2026-10-05T09:07:00.000Z')}`,
+    );
+  });
+
+  it('purges a brand once, under an id that names only the brand', () => {
+    const payload = parseJobPayload(brandPurgeJob, { brandId });
+
+    expect(brandPurgeJobId(payload)).toBe(`brand.purge.${brandId}`);
+    expect(brandPurgeJob.options.removeOnFail).toBe(false);
+    expect(() => parseJobPayload(brandPurgeJob, { brandId: 'nope' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('looks for brands past their grace nightly, an hour after retention', () => {
+    expect(brandPurgeScheduleJob.schedule).toEqual({ cron: BRAND_PURGE_CRON });
+    expect(BRAND_PURGE_CRON).toBe('0 4 * * *');
   });
 });

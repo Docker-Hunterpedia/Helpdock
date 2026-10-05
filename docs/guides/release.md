@@ -14,7 +14,10 @@ what is inside it.
 2. Merging to `main` opens or updates a **"chore: version packages"** pull
    request. It bumps the version and writes the changelog.
 3. Summarise the release in the root [`CHANGELOG.md`](../../CHANGELOG.md) in a
-   pull request of its own, then merge the version pull request.
+   pull request of its own. Run the **ZAP baseline** workflow by hand on the
+   version pull request's branch (`changeset-release/main`) and see it pass
+   ([security scanning](security-scanning.md#zap-baseline)), then merge the
+   version pull request.
 4. That merge releases: `changesets.yml` tags the merge commit `v<version>` and
    calls [`release.yml`](../../.github/workflows/release.yml), which builds and
    pushes the multi-architecture image, generates a CycloneDX SBOM and creates
@@ -133,6 +136,11 @@ Release as a pre-release and does **not** move `:latest`.
 > settings → Change visibility, and link it to the repository so the Packages
 > sidebar shows it. Until then `docker pull` fails for everybody but you, and
 > [the install guide](install.md) does not work as written.
+
+The `v*` tag also starts [`zap.yml`](../../.github/workflows/zap.yml), the ZAP
+baseline scan against the tagged commit's stack, as does any push to a
+`release/**` branch. It does not hold up the image; a failure there is fixed in
+the next patch ([security scanning](security-scanning.md)).
 
 ## After a release
 

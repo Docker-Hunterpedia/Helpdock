@@ -1,4 +1,4 @@
-# 0016 The AI provider layer: pi-ai behind one facade, credentials in one secret setting, cost from pi-ai's model registry
+# 0018 The AI provider layer: pi-ai behind one facade, credentials in one secret setting, cost from pi-ai's model registry
 
 Status: accepted
 Date: 2026-10-05

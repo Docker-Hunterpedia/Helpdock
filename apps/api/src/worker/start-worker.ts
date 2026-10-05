@@ -3,6 +3,9 @@ import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
   authEmailJob,
+  BRAND_PURGE_CRON,
+  brandPurgeJob,
+  brandPurgeScheduleJob,
   createJobProcessor,
   createOutboxEventHandler,
   createQueueConnection,
@@ -11,6 +14,7 @@ import {
   domainVerifyJob,
   domainVerifyScheduleJob,
   emailPollJob,
+  emailPollSchedulerId,
   emailSendJob,
   helpCenterMediaProcessJob,
   helpCenterPublishDueJob,
@@ -36,8 +40,13 @@ import {
   rulesEvaluateJobId,
   rulesTimeBasedJob,
   rulesTimeBasedScheduleJob,
+  STATS_ROLLUP_CRON,
   slaRebuildJob,
   startOutboxRelay,
+  statsRollupJob,
+  statsRollupScheduleJob,
+  telegramPollJob,
+  telegramSendJob,
 } from '@helpdock/jobs';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
@@ -47,11 +56,13 @@ import { createAiRuntime } from '../ai/db-ai-ports.js';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import {
   createOfflineUnassignProcessor,
+  type OfflineUnassignQueue,
   registerAssignmentEventHandlers,
 } from '../assignment/assignment-events.js';
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
 import { createAuthEmailEventHandler, createAuthEmailProcessor } from '../auth/auth-email.job.js';
 import { AUTH_EMAIL_EVENT } from '../auth/auth-email.js';
+import { createBrandPurgeProcessor } from '../brands/brand-purge.job.js';
 import {
   createEmailPollProcessor,
   createMailboxChangedHandler,
@@ -90,6 +101,7 @@ import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
 import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
+import { S3BrandObjects } from '../media/brand-objects.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
@@ -100,8 +112,10 @@ import { InstallChannels } from '../notifications/install-channels.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { WebPushSender } from '../notifications/push.js';
+import { StorageUsageStore } from '../observability/storage-usage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
+import { createStatsProcessor } from '../reports/rollup.job.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
 import { createRulesEngineDeps } from '../rules/engine-deps.js';
 import { createRulesProcessor, registerRulesEventHandlers } from '../rules/rules-jobs.js';
@@ -115,6 +129,20 @@ import {
   registerSlaEventHandlers,
   type SlaWorkerDeps,
 } from '../sla/sla-worker.js';
+import { telegramApiFactory } from '../telegram/bot-api-factory.js';
+import { createTelegramInboundService } from '../telegram/factory.js';
+import { TelegramRepository } from '../telegram/telegram.repository.js';
+import { registerTelegramEventHandlers } from '../telegram/telegram-events.js';
+import {
+  createTelegramBotChangedHandler,
+  createTelegramPollProcessor,
+  queueTelegramPollScheduler,
+  scheduleAllTelegramPollers,
+} from '../telegram/telegram-poll.job.js';
+import {
+  createTelegramSendHandler,
+  createTelegramSendProcessor,
+} from '../telegram/telegram-send.job.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
 import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
@@ -156,8 +184,8 @@ export interface WorkerDependencies {
     installSmtp: InstallSmtp;
   }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
-  /** M2-05's `email.send` consumer on the `outbound` queue. */
-  createEmailWorker(options: {
+  /** The `outbound` queue: M2-05's `email.send` and M6-02's `telegram.send`. */
+  createOutboundWorker(options: {
     redis: Redis;
     db: Db;
     log: JobLogger;
@@ -173,10 +201,16 @@ export interface WorkerDependencies {
    * schedule is upserted on every boot, so a Redis that lost it gets it back
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
    */
-  createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  createMaintenanceWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+  }): Closable;
   /**
-   * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox. Every
-   * mailbox's scheduler is upserted on boot, as the retention schedule is.
+   * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox, and in
+   * development M6-01's `telegram.poll` per bot. Every scheduler is upserted
+   * on boot, as the retention schedule is.
    */
   createInboundWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /**
@@ -253,6 +287,9 @@ export type WorkerEnv = Pick<
   | 'OUTBOUND_ALLOW_CIDRS'
   // M5-07: where a custom domain's CNAME must point.
   | 'HELPCENTER_CNAME_TARGET'
+  // M6: whether bots are polled, and where the Bot API is.
+  | 'TELEGRAM_POLLING'
+  | 'TELEGRAM_API_ROOT'
 >;
 
 /**
@@ -295,7 +332,18 @@ const assignmentReads = (redis: Redis) => {
   };
 };
 
-/** M3-01's calendar, for M2-06's out-of-hours reply. */
+/** M1-07's delayed timers, added under the id the caller derived from the departure. */
+const offlineUnassignQueue = (queue: Queue): OfflineUnassignQueue => ({
+  add: async ({ jobId, delayMs, payload }) => {
+    await queue.add(assignmentOfflineUnassignJob.name, payload, {
+      ...assignmentOfflineUnassignJob.options,
+      jobId,
+      delay: delayMs,
+    });
+  },
+});
+
+/** M3-01's calendar, for M2-06's out-of-hours reply and M1-07's offline timer. */
 const businessHoursService = (): BusinessHoursService => {
   const repository = new SlaRepository();
 
@@ -362,15 +410,7 @@ export const workerDependencies: WorkerDependencies = {
     const assignment = new Queue(QUEUE_NAMES.assignment, { connection: redis });
     registerAssignmentEventHandlers({
       ...assignmentReads(redis),
-      queue: {
-        add: async ({ jobId, delayMs, payload }) => {
-          await assignment.add(assignmentOfflineUnassignJob.name, payload, {
-            ...assignmentOfflineUnassignJob.options,
-            jobId,
-            delay: delayMs,
-          });
-        },
-      },
+      queue: offlineUnassignQueue(assignment),
     });
 
     // M2-05 and M2-06. `email.send` ends in a job on the `outbound` queue, under
@@ -397,6 +437,21 @@ export const workerDependencies: WorkerDependencies = {
       MAILBOX_CHANGED_EVENT,
       createMailboxChangedHandler(new MailboxesRepository(), queuePollScheduler(inbound)),
     );
+    // M6-02, M6-04. A reply to a chat and a bot's welcome end in a
+    // `telegram.send` job on the `outbound` queue, under the same rule as
+    // `email.send`; a bot saved or removed reschedules its development poller.
+    registerTelegramEventHandlers({
+      queue: {
+        add: async ({ jobId, payload }) => {
+          await outbound.add(telegramSendJob.name, payload, { ...telegramSendJob.options, jobId });
+        },
+      },
+      botChanged: createTelegramBotChangedHandler(
+        new TelegramRepository(),
+        queueTelegramPollScheduler(inbound),
+        env.TELEGRAM_POLLING === true,
+      ),
+    });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
     const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
@@ -493,27 +548,41 @@ export const workerDependencies: WorkerDependencies = {
   },
   createEventWorker: ({ redis, db, log }) =>
     createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
-  createEmailWorker: ({ redis, db, log, env, installSmtp }) => {
-    const repository = new EmailRepository();
+  createOutboundWorker: ({ redis, db, log, env, installSmtp }) => {
+    const keyring = createKeyring(env);
+    const emailRepository = new EmailRepository();
+    const email = createEmailSendProcessor({
+      db,
+      log,
+      repository: emailRepository,
+      handler: createEmailSendHandler({
+        repository: emailRepository,
+        keyring,
+        installSmtp,
+        transports: smtpTransportFactory,
+      }),
+    });
+    const telegramRepository = new TelegramRepository();
+    const telegram = createTelegramSendProcessor({
+      db,
+      log,
+      repository: telegramRepository,
+      handler: createTelegramSendHandler({
+        db,
+        repository: telegramRepository,
+        keyring,
+        api: telegramApiFactory(env.TELEGRAM_API_ROOT),
+      }),
+    });
     const worker = new Worker(
       QUEUE_NAMES.outbound,
-      createEmailSendProcessor({
-        db,
-        log,
-        repository,
-        handler: createEmailSendHandler({
-          repository,
-          keyring: createKeyring(env),
-          installSmtp,
-          transports: smtpTransportFactory,
-        }),
-      }),
+      (job) => (job.name === telegramSendJob.name ? telegram(job) : email(job)),
       { connection: redis },
     );
     worker.on('failed', (job, error) =>
       log.error(
         { job: job?.name, jobId: job?.id, attemptsMade: job?.attemptsMade, err: error },
-        'email.send failed',
+        'outbound job failed',
       ),
     );
     return worker;
@@ -556,41 +625,102 @@ export const workerDependencies: WorkerDependencies = {
     );
     return worker;
   },
-  createAssignmentWorker: ({ redis, db, log }) =>
-    createWorker(
+  createAssignmentWorker: ({ redis, db, log }) => {
+    const businessHours = businessHoursService();
+    // The timer re-adds itself to its own queue when it fires while the
+    // department is closed.
+    const deferrals = new Queue(QUEUE_NAMES.assignment, { connection: redis });
+    const worker = createWorker(
       assignmentOfflineUnassignJob,
-      createOfflineUnassignProcessor(assignmentReads(redis)),
+      createOfflineUnassignProcessor({
+        ...assignmentReads(redis),
+        calendarFor: (tx, brandId, departmentId) =>
+          businessHours.calendarFor(brandId, departmentId, tx),
+        queue: offlineUnassignQueue(deferrals),
+      }),
       { redis, db, log },
-    ),
-  createMaintenanceWorker: ({ redis, db, log }) => {
-    const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
-    const scheduled = maintenance.upsertJobScheduler(
-      maintenanceRetentionScheduleJob.name,
-      { pattern: RETENTION_CRON, tz: 'UTC' },
-      {
-        name: maintenanceRetentionScheduleJob.name,
-        data: {},
-        opts: maintenanceRetentionScheduleJob.options,
+    );
+    return {
+      close: async () => {
+        await worker.close();
+        await deferrals.close();
       },
-    );
-    scheduled.catch((error: unknown) =>
-      log.error({ err: error }, 'could not register the nightly retention schedule'),
-    );
+    };
+  },
+  createMaintenanceWorker: ({ redis, db, log, env }) => {
+    const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
+    // M1-14's nightly retention, M8-04's hourly rollup and M8-07's nightly
+    // purge tick, each upserted on every boot for the reason above.
+    for (const { job, cron } of [
+      { job: maintenanceRetentionScheduleJob, cron: RETENTION_CRON },
+      { job: statsRollupScheduleJob, cron: STATS_ROLLUP_CRON },
+      { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
+    ]) {
+      maintenance
+        .upsertJobScheduler(
+          job.name,
+          { pattern: cron, tz: 'UTC' },
+          { name: job.name, data: {}, opts: job.options },
+        )
+        .catch((error: unknown) =>
+          log.error({ err: error, job: job.name }, 'could not register a maintenance schedule'),
+        );
+    }
+
+    const objects = new S3BrandObjects(createS3Client(env), env.S3_BUCKET);
+    const storageUsage = new StorageUsageStore(redis);
+    const inbound = new Queue(QUEUE_NAMES.inbound, { connection: redis });
+    const stats = createStatsProcessor({
+      db,
+      log,
+      storage: { objects, store: storageUsage },
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(statsRollupJob.name, payload, {
+            ...statsRollupJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+    const purge = createBrandPurgeProcessor({
+      db,
+      log,
+      objects,
+      redis,
+      storageUsage,
+      removePollers: async (mailboxIds) => {
+        for (const mailboxId of mailboxIds) {
+          await inbound.removeJobScheduler(emailPollSchedulerId(mailboxId));
+        }
+      },
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(brandPurgeJob.name, payload, {
+            ...brandPurgeJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+    const retention = createMaintenanceProcessor({
+      db,
+      log,
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(maintenanceRetentionJob.name, payload, {
+            ...maintenanceRetentionJob.options,
+            jobId,
+          });
+        },
+      },
+    });
 
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
-      createMaintenanceProcessor({
-        db,
-        log,
-        queue: {
-          add: async (payload, jobId) => {
-            await maintenance.add(maintenanceRetentionJob.name, payload, {
-              ...maintenanceRetentionJob.options,
-              jobId,
-            });
-          },
-        },
-      }),
+      async (job) => {
+        await (stats(job) ?? purge(job) ?? retention(job));
+      },
       // One brand at a time: retention is background housekeeping, and two
       // brands purging at once would only compete for the same disk.
       { connection: redis, concurrency: 1 },
@@ -603,6 +733,7 @@ export const workerDependencies: WorkerDependencies = {
       close: async () => {
         await worker.close();
         await maintenance.close();
+        await inbound.close();
       },
     };
   },
@@ -628,10 +759,37 @@ export const workerDependencies: WorkerDependencies = {
           ),
       }),
     });
+    // M6-01, development only: every bot polled instead of waiting for webhooks.
+    const telegramRepository = new TelegramRepository();
+    const telegramApi = telegramApiFactory(env.TELEGRAM_API_ROOT);
+    if (env.TELEGRAM_POLLING === true) {
+      scheduleAllTelegramPollers(db, telegramRepository, queueTelegramPollScheduler(inbound)).catch(
+        (error: unknown) => log.error({ err: error }, 'could not register the Telegram pollers'),
+      );
+    }
+    const telegramPoll = createTelegramPollProcessor({
+      db,
+      log,
+      keyring: createKeyring(env),
+      repository: telegramRepository,
+      api: telegramApi,
+      inbound: createTelegramInboundService({
+        db,
+        storage: storageFor(env),
+        log,
+        keyring: createKeyring(env),
+        api: telegramApi,
+      }),
+    });
+
     const worker = new Worker(
       QUEUE_NAMES.inbound,
       async (job) => {
-        // `telegram.update` and `form.submit` share this queue from M4 and M6.
+        if (job.name === telegramPollJob.name) {
+          await telegramPoll(job);
+          return;
+        }
+        // `form.submit` shares this queue from M4.
         if (job.name !== emailPollJob.name) {
           throw new UnrecoverableError(`No consumer for ${job.name} on the inbound queue`);
         }
@@ -941,10 +1099,10 @@ export const startWorker = ({
     installSmtp,
   });
   const worker = deps.createEventWorker({ redis: connection, db, log });
-  const email = deps.createEmailWorker({ redis: connection, db, log, env, installSmtp });
+  const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
-  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
+  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log, env });
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });
@@ -969,7 +1127,7 @@ export const startWorker = ({
     await relay.stop();
     await worker.close();
     // After the event worker, which adds its jobs, like the media worker below.
-    await email.close();
+    await outbound.close();
     // After the event worker, because that is what adds media jobs: closing the
     // media worker first would leave a job queued with nothing draining it,
     // which is harmless but slower to notice than the other order's bug.

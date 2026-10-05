@@ -38,6 +38,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'help_center:read': true,
     'help_center:manage': true,
     'ai:manage': true,
+    'report:read': true,
   },
   team_leader: {
     'ticket:read': true,
@@ -61,6 +62,8 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'help_center:manage': true,
     // REQUIREMENTS §4.7: the system prompt is "editable by Team Leader".
     'ai:manage': true,
+    // M8-04: their departments' reports, narrowed by row-level security.
+    'report:read': true,
   },
   agent: {
     'ticket:read': true,
@@ -80,6 +83,8 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'help_center:read': true,
     'help_center:manage': false,
     'ai:manage': false,
+    // Agents work tickets; reading the brand's reports is not part of that.
+    'report:read': false,
   },
   viewer: {
     'ticket:read': true,
@@ -99,6 +104,8 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'help_center:read': true,
     'help_center:manage': false,
     'ai:manage': false,
+    // §1.2: a Viewer "may read reports".
+    'report:read': true,
   },
 };
 

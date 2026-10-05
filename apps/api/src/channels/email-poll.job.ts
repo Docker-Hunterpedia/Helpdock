@@ -16,6 +16,7 @@ import {
 } from '@helpdock/jobs';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { isBrandGone } from '../brands/brand-availability.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import type { InboundEmailService } from './inbound/inbound-email.service.js';
 import type { MailboxesRepository, MailboxLocator } from './mailboxes.repository.js';
@@ -77,6 +78,11 @@ export const createEmailPollProcessor =
   async (job: { readonly data: unknown }): Promise<void> => {
     const { brandId, mailboxId } = parseJobPayload(emailPollJob, job.data);
     const now = (deps.now ?? (() => new Date()))();
+    // M8-07: a brand being deleted takes no more mail. The scheduler stays, so
+    // a restore within the grace period picks up where polling stopped.
+    if (await isBrandGone(deps.db, brandId)) {
+      return;
+    }
     const mailbox = await withSystemJob(deps.db, brandId, jobIdFor(mailboxId), (tx) =>
       deps.repository.row(tx, mailboxId),
     );

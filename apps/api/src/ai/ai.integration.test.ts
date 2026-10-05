@@ -56,6 +56,7 @@ import { seedDevInstall } from '../seed/dev-seed.js';
 import { handleBudgetAlert } from './budget-alert.handler.js';
 import { AI_BUDGET_ALERT_EVENT } from './budget-meter.js';
 import { createAiRuntime } from './db-ai-ports.js';
+import { DbAiUsage } from './db-ai-usage.js';
 
 /**
  * M7-01, M7-02 and M7-08 against a real Postgres and Redis, with pi-ai's faux
@@ -601,6 +602,17 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       await withSystem(db(), brandId, (tx) =>
         tx.update(aiSettings).set({ dailyBudgetUsd: null }).where(eq(aiSettings.brandId, brandId)),
       );
+    });
+  });
+
+  // ------------------------------------------------------ the System page
+
+  describe('install AI spend', () => {
+    it("sums this month's calls of every brand, with no ceiling while a brand has no monthly budget", async () => {
+      const spend = await new DbAiUsage(runtime.settings).installSpend(db());
+
+      expect(spend).toMatchObject({ configured: true, budgetUsd: null, alertAtPercent: null });
+      expect(spend.configured && spend.costUsd).toBeGreaterThan(1);
     });
   });
 

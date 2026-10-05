@@ -1,5 +1,7 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Logger } from '../logging/logger.js';
+import { BrandDeletionController } from './brand-deletion.controller.js';
+import { BrandDeletionService } from './brand-deletion.service.js';
 import { BrandsController } from './brands.controller.js';
 import { BrandsService } from './brands.service.js';
 import { DepartmentsController } from './departments.controller.js';
@@ -33,7 +35,7 @@ export class BrandsModule {
   static forRoot({ logger }: BrandsModuleOptions): DynamicModule {
     return {
       module: BrandsModule,
-      controllers: [BrandsController, DepartmentsController],
+      controllers: [BrandsController, DepartmentsController, BrandDeletionController],
       providers: [
         BrandsService,
         {
@@ -49,6 +51,11 @@ export class BrandsModule {
         {
           provide: InstallBrandsService,
           useFactory: (): InstallBrandsService => new InstallBrandsService(logger),
+        },
+        // M8-07: requesting a deletion and restoring within the grace.
+        {
+          provide: BrandDeletionService,
+          useFactory: (): BrandDeletionService => new BrandDeletionService(logger),
         },
       ],
     };

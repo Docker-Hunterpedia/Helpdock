@@ -66,7 +66,7 @@ export const updateEmbeddingSpace = async (
 
 /**
  * Drops the vector index and gives `knowledge_chunks.embedding` this dimension,
- * through the owner-rights function of migration 0036: the runtime role may
+ * through the owner-rights function of migration 0038: the runtime role may
  * not run DDL (DOMAIN-RULES §1.5).
  */
 export const setEmbeddingDims = async (executor: Executor, dims: number): Promise<void> => {

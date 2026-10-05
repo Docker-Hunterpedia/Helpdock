@@ -244,6 +244,12 @@ export const assignmentOfflineUnassignPayloadSchema = z.object({
   departmentId: z.uuid(),
   /** When presence noticed they went offline; the timer counts from here. */
   since: z.iso.datetime(),
+  /**
+   * Set when the timer fired while the department was closed and was put off
+   * to its next opening (DOMAIN-RULES §12). Part of the key, so the deferred
+   * run is a delivery of its own rather than a duplicate of the first.
+   */
+  deferredTo: z.iso.datetime().optional(),
 });
 
 export type AssignmentOfflineUnassignPayload = z.infer<
@@ -270,7 +276,8 @@ export const assignmentOfflineUnassignJob = defineJob({
     removeOnFail: false,
   },
   idempotencyKey: (payload) =>
-    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
+    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}` +
+    (payload.deferredTo === undefined ? '' : `:${payload.deferredTo}`),
 });
 
 export const emailSendPayloadSchema = z.object({
@@ -842,6 +849,172 @@ export const knowledgeReembedJob = defineJob({
 });
 
 export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
+export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('reply'),
+    brandId: z.uuid(),
+    /** The `telegram_deliveries` row: the whole job is about it, and it is the natural key. */
+    deliveryId: z.uuid(),
+  }),
+  z.object({
+    kind: z.literal('notice'),
+    brandId: z.uuid(),
+    /** The outbox row that asked for it, which is what a redelivery repeats. */
+    sourceOutboxId: z.uuid(),
+    botId: z.uuid(),
+    chatId: z.string().min(1).max(32),
+    notice: z.enum(['welcome', 'language_set']),
+    locale: z.enum(['en', 'ar']),
+    /** The button press a `language_set` answers, so the spinner on it stops. */
+    callbackQueryId: z.string().min(1).max(128).optional(),
+  }),
+]);
+
+export type TelegramSendPayload = z.infer<typeof telegramSendPayloadSchema>;
+
+/** Attempts before a reply to a chat is `failed` (M6-02). */
+export const TELEGRAM_SEND_JOB_ATTEMPTS = 5;
+
+/**
+ * M6-02 and M6-04's outbound Telegram (ARCHITECTURE §13, `outbound` queue): an
+ * agent's reply to a chat, or the `/start` welcome and the language
+ * confirmation. Asked for through the outbox — `telegram.reply` beside the
+ * `telegram_deliveries` row, `telegram.notice` beside the inbound update that
+ * called for it — and added by those events' handlers with the outbox row's id.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "Telegram send keyed by
+ * `ticket_message_id`"): a reply is keyed by its delivery, which is one per
+ * ticket message; a notice by the outbox row that asked for it.
+ */
+export const telegramSendJob = defineJob({
+  name: 'telegram.send',
+  queue: QUEUE_NAMES.outbound,
+  schema: telegramSendPayloadSchema,
+  options: {
+    attempts: TELEGRAM_SEND_JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) =>
+    payload.kind === 'reply'
+      ? `telegram.send:${payload.deliveryId}`
+      : `telegram.notice:${payload.sourceOutboxId}`,
+});
+
+export const telegramPollPayloadSchema = z.object({
+  brandId: z.uuid(),
+  botId: z.uuid(),
+});
+
+export type TelegramPollPayload = z.infer<typeof telegramPollPayloadSchema>;
+
+/** How often a bot is polled in development. */
+export const TELEGRAM_POLL_INTERVAL_MS = 3_000;
+
+/**
+ * M6-01's long polling, for development only (`TELEGRAM_POLLING=true`): one
+ * `getUpdates` per bot every {@link TELEGRAM_POLL_INTERVAL_MS}, from the
+ * offset on the bot's row. One BullMQ job scheduler per bot, id
+ * {@link telegramPollSchedulerId}, upserted on boot and when `telegram_bot.changed`
+ * says a bot came or went, as `email.poll` is for mailboxes.
+ *
+ * One attempt and no receipt for the reason `email.poll` has none: the next
+ * tick is the retry, and every message dedupes by its own id.
+ */
+export const telegramPollJob = defineJob({
+  name: 'telegram.poll',
+  queue: QUEUE_NAMES.inbound,
+  schema: telegramPollPayloadSchema,
+  options: {
+    attempts: 1,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { age: 7 * 86_400, count: 1_000 },
+  },
+});
+
+/** The scheduler id of one bot's poller. */
+export const telegramPollSchedulerId = (botId: string): string => `telegram.poll.${botId}`;
+
+export const statsRollupPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The hour of the tick that added it, as an ISO instant; the job id is built from it. */
+  tick: z.iso.datetime(),
+});
+export type StatsRollupPayload = z.infer<typeof statsRollupPayloadSchema>;
+
+/**
+ * M8-04: rebuilds **one** brand's report rollups for the trailing days, and
+ * backfills a brand that has none. Added hourly per active brand by
+ * {@link statsRollupScheduleJob} (ARCHITECTURE §13, `maintenance` queue). No
+ * receipt: a run deletes the days it covers and writes them again, so a
+ * repeat leaves the same rows behind.
+ */
+export const statsRollupJob = defineJob({
+  name: 'stats.rollup',
+  queue: QUEUE_NAMES.maintenance,
+  schema: statsRollupPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The BullMQ job id of one brand's rollup for one tick. Dots, for the reason {@link retentionJobId} gives. */
+export const statsRollupJobId = ({ brandId, tick }: StatsRollupPayload): string =>
+  `stats.rollup.${brandId}.${Date.parse(tick)}`;
+
+/** Seven minutes past every hour, off the top of the hour the other crons use. */
+export const STATS_ROLLUP_CRON = '7 * * * *';
+
+/** The hourly tick that fans {@link statsRollupJob} out per active brand. */
+export const statsRollupScheduleJob = defineJob({
+  name: 'stats.rollup.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: STATS_ROLLUP_CRON },
+});
+
+export const brandPurgePayloadSchema = z.object({ brandId: z.uuid() });
+export type BrandPurgePayload = z.infer<typeof brandPurgePayloadSchema>;
+
+/**
+ * M8-07: the hard purge of a brand whose 30-day grace is over (DOMAIN-RULES
+ * §11) — every tenant row, the brand's object prefix and its Redis keys. Added
+ * by {@link brandPurgeScheduleJob} for each brand that is due, keyed by the
+ * brand, so it runs once however often the tick sees it. Every step deletes
+ * "what is left", so a retry after a crash finishes the job rather than
+ * repeating it.
+ */
+export const brandPurgeJob = defineJob({
+  name: 'brand.purge',
+  queue: QUEUE_NAMES.maintenance,
+  schema: brandPurgePayloadSchema,
+  options: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 300_000 },
+    removeOnComplete: { age: 30 * 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+});
+
+/** One purge per brand: a brand is purged once. */
+export const brandPurgeJobId = ({ brandId }: BrandPurgePayload): string => `brand.purge.${brandId}`;
+
+/** 04:00 UTC every night, an hour after retention, so the two never compete for the disk. */
+export const BRAND_PURGE_CRON = '0 4 * * *';
+
+/** The nightly tick that adds {@link brandPurgeJob} for each brand whose grace is over. */
+export const brandPurgeScheduleJob = defineJob({
+  name: 'brand.purge.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: BRAND_PURGE_CRON },
+});
 
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
@@ -870,6 +1043,12 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
   [knowledgeConfigureJob.name]: knowledgeConfigureJob,
   [knowledgeReembedJob.name]: knowledgeReembedJob,
+  [telegramSendJob.name]: telegramSendJob,
+  [telegramPollJob.name]: telegramPollJob,
+  [statsRollupJob.name]: statsRollupJob,
+  [statsRollupScheduleJob.name]: statsRollupScheduleJob,
+  [brandPurgeJob.name]: brandPurgeJob,
+  [brandPurgeScheduleJob.name]: brandPurgeScheduleJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

@@ -1,3 +1,4 @@
+export * from './brand-purge.js';
 export * from './client.js';
 export * from './embedding-space.js';
 export * from './migrate.js';

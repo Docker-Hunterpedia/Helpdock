@@ -30,7 +30,9 @@ import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { registerHttpMetrics } from './observability/http-metrics.js';
 import type { Metrics } from './observability/metrics.js';
-import { METRICS } from './observability/tokens.js';
+import { QueueBoardAccess, registerQueueBoard } from './observability/queue-board.js';
+import type { QueueRegistry } from './observability/queues.js';
+import { METRICS, QUEUE_REGISTRY } from './observability/tokens.js';
 import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
 import { resolveAdminDist } from './static/admin-assets.js';
@@ -180,6 +182,8 @@ export interface CreateApiAppOptions {
   readonly objectStorage?: AppModuleOptions['objectStorage'];
   /** M2's IMAP connection and image fetcher, for suites. */
   readonly channels?: AppModuleOptions['channels'];
+  /** M6's Bot API, for suites. */
+  readonly telegram?: AppModuleOptions['telegram'];
   /** M4's siteverify call and SSE timings, for suites. */
   readonly widget?: AppModuleOptions['widget'];
   /** M4-09's siteverify call, for suites. */
@@ -194,6 +198,7 @@ export const createApiApp = async ({
   brandResolver,
   objectStorage,
   channels,
+  telegram,
   widget,
   webForm,
   ai,
@@ -224,6 +229,7 @@ export const createApiApp = async ({
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(channels === undefined ? {} : { channels }),
+      ...(telegram === undefined ? {} : { telegram }),
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
       ...(ai === undefined ? {} : { ai }),
@@ -277,6 +283,14 @@ export const createApiApp = async ({
   // M2-03 and M4-09. Before `init()`, which is when Nest adds its routes: the
   // `onRoute` hook that raises their body limit only sees routes added after it.
   registerFormBodies(app.getHttpAdapter().getInstance(), [INBOUND_PARSE_ROUTE, WEB_FORM_ROUTE]);
+
+  // M8-05: Bull Board brings its own router, so it is a Fastify plugin behind
+  // its own install-admin session check (`queue-board.ts`, ADR 0017).
+  await registerQueueBoard(app.getHttpAdapter().getInstance(), {
+    access: app.get(QueueBoardAccess),
+    queues: app.get<QueueRegistry>(QUEUE_REGISTRY).queues(),
+    secure: new URL(env.APP_URL).protocol === 'https:',
+  });
 
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

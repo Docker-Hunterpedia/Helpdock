@@ -281,13 +281,6 @@
       "when": 1791202932776,
       "tag": "0041_knowledge_ingest",
       "breakpoints": true
-    },
-    {
-      "idx": 42,
-      "version": "7",
-      "when": 1791203877536,
-      "tag": "0042_auto_reply_handoff",
-      "breakpoints": true
     }
   ]
 }

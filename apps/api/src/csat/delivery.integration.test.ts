@@ -69,6 +69,7 @@ import {
 } from '../telegram/telegram-send.job.js';
 import { FakeTelegram, textUpdate } from '../testing/fake-telegram.js';
 import { FakeStorage } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
@@ -383,13 +384,7 @@ describe.skipIf(!hasDocker)('CSAT delivery on close (M8-06)', () => {
     registerRulesEventHandlers({ add: async (payload) => void rulesJobs.push(payload) });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
-    const signedIn = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email: seeded.email, password: seeded.password }),
-    });
-    token = (signedIn.json() as { accessToken: string }).accessToken;
+    token = await signInForTest(app, { email: seeded.email, password: seeded.password });
 
     await withSystem(runtime.db, seeded.brandId, async (tx) => {
       const [first] = await tx.select({ id: departments.id }).from(departments).limit(1);

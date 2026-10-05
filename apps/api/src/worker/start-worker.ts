@@ -352,9 +352,10 @@ export const workerDependencies: WorkerDependencies = {
 
     // M1-07. `assignment.staff_offline` ends in a delayed job, for the same
     // reason and under the same rule as the media one above.
+    const assignment = new Queue(QUEUE_NAMES.assignment, { connection: redis });
     registerAssignmentEventHandlers({
       ...assignmentReads(redis),
-      queue: offlineUnassignQueue(new Queue(QUEUE_NAMES.assignment, { connection: redis })),
+      queue: offlineUnassignQueue(assignment),
     });
 
     // M2-05 and M2-06. `email.send` ends in a job on the `outbound` queue, under
@@ -542,16 +543,25 @@ export const workerDependencies: WorkerDependencies = {
   },
   createAssignmentWorker: ({ redis, db, log }) => {
     const businessHours = businessHoursService();
-    return createWorker(
+    // The timer re-adds itself to its own queue when it fires while the
+    // department is closed.
+    const deferrals = new Queue(QUEUE_NAMES.assignment, { connection: redis });
+    const worker = createWorker(
       assignmentOfflineUnassignJob,
       createOfflineUnassignProcessor({
         ...assignmentReads(redis),
         calendarFor: (tx, brandId, departmentId) =>
           businessHours.calendarFor(brandId, departmentId, tx),
-        queue: offlineUnassignQueue(new Queue(QUEUE_NAMES.assignment, { connection: redis })),
+        queue: offlineUnassignQueue(deferrals),
       }),
       { redis, db, log },
     );
+    return {
+      close: async () => {
+        await worker.close();
+        await deferrals.close();
+      },
+    };
   },
   createMaintenanceWorker: ({ redis, db, log }) => {
     const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });

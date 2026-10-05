@@ -449,6 +449,7 @@ describe('StaffGateway', () => {
         new InMemorySocketConnectionsGauge(),
         roomReader,
         logger,
+        allowEverything,
       );
       const middlewares: ((socket: unknown, next: (error?: Error) => void) => void)[] = [];
       gateway.afterInit(namespaceCapturing(middlewares));
@@ -478,6 +479,7 @@ describe('StaffGateway', () => {
         new InMemorySocketConnectionsGauge(),
         roomReader,
         silentLogger(),
+        allowEverything,
       );
       gateway.afterInit(namespaceCapturing(middlewares));
 

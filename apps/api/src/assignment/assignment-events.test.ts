@@ -15,6 +15,7 @@ import {
   createOfflineUnassignProcessor,
   createStaffOfflineHandler,
   type OfflineSinceStore,
+  type OfflineUnassignQueue,
   registerAssignmentEventHandlers,
 } from './assignment-events.js';
 
@@ -347,7 +348,7 @@ describe('assignment.offline_unassign', () => {
       status?: PresenceStatus;
       latest?: string | null;
       calendar?: BusinessCalendar;
-      add?: ReturnType<typeof vi.fn>;
+      add?: OfflineUnassignQueue['add'];
     } = {},
   ) => {
     const { tx, inserted } = fakeTx();

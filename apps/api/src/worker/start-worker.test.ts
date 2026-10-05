@@ -71,11 +71,11 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('worker.close') };
       },
-      createEmailWorker: ({ redis, installSmtp }) => {
-        calls.push('email.create');
+      createOutboundWorker: ({ redis, installSmtp }) => {
+        calls.push('outbound.create');
         expect(redis).toBe(connection);
         started.installSmtp = installSmtp;
-        return { close: async () => void calls.push('email.close') };
+        return { close: async () => void calls.push('outbound.close') };
       },
       createMediaWorker: ({ redis }) => {
         calls.push('media.create');
@@ -151,7 +151,7 @@ describe('startWorker', () => {
       'connection.create',
       'handlers.register',
       'worker.create',
-      'email.create',
+      'outbound.create',
       'media.create',
       'assignment.create',
       'maintenance.create',
@@ -239,7 +239,7 @@ describe('startWorker', () => {
     expect(calls).toEqual([
       'relay.stop',
       'worker.close',
-      'email.close',
+      'outbound.close',
       'media.close',
       'assignment.close',
       'maintenance.close',
@@ -266,7 +266,7 @@ describe('startWorker', () => {
     expect(calls).toEqual([
       'relay.stop',
       'worker.close',
-      'email.close',
+      'outbound.close',
       'media.close',
       'assignment.close',
       'maintenance.close',

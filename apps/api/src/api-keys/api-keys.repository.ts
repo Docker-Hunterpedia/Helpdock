@@ -60,8 +60,8 @@ export class ApiKeysRepository {
    * a minute rather than one a request.
    */
   async findActiveByHash(db: Db, keyHash: string): Promise<ActiveApiKey | undefined> {
-    return withAllBrands(db, 'api-key.resolve', undefined, async (tx) => {
-      const [row] = await tx
+    const [key] = await withAllBrands(db, 'api-key.resolve', async (tx) => {
+      const rows = await tx
         .select({
           id: apiKeys.id,
           brandId: apiKeys.brandId,
@@ -71,26 +71,26 @@ export class ApiKeysRepository {
         .from(apiKeys)
         .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)))
         .limit(1);
-      if (row === undefined) {
-        return undefined;
-      }
-
-      await tx
-        .update(apiKeys)
-        .set({ lastUsedAt: sql`now()` })
-        .where(
-          and(
-            eq(apiKeys.id, row.id),
-            or(
-              isNull(apiKeys.lastUsedAt),
-              lt(
-                apiKeys.lastUsedAt,
-                sql`now() - make_interval(secs => ${LAST_USED_DEBOUNCE_SECONDS})`,
+      const [row] = rows;
+      if (row !== undefined) {
+        await tx
+          .update(apiKeys)
+          .set({ lastUsedAt: sql`now()` })
+          .where(
+            and(
+              eq(apiKeys.id, row.id),
+              or(
+                isNull(apiKeys.lastUsedAt),
+                lt(
+                  apiKeys.lastUsedAt,
+                  sql`now() - make_interval(secs => ${LAST_USED_DEBOUNCE_SECONDS})`,
+                ),
               ),
             ),
-          ),
-        );
-      return row;
+          );
+      }
+      return rows;
     });
+    return key;
   }
 }

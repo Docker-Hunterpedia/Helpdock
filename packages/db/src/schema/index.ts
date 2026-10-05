@@ -31,6 +31,7 @@ export * from './sla-policies.js';
 export * from './tags.js';
 export * from './team-members.js';
 export * from './teams.js';
+export * from './telegram.js';
 export * from './ticket-activity.js';
 export * from './ticket-messages.js';
 export * from './ticket-participants.js';

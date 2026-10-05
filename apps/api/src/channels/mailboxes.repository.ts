@@ -170,7 +170,7 @@ export class MailboxesRepository {
       return undefined;
     }
 
-    const rows = await withAllBrands(db, 'inbound-parse.route', [] as MailboxLocator[], (tx) =>
+    const rows = await withAllBrands(db, 'inbound-parse.route', (tx) =>
       tx
         .select(locator)
         .from(mailboxes)
@@ -183,7 +183,7 @@ export class MailboxesRepository {
 
   /** Every IMAP mailbox of every brand, for the worker to schedule on boot (DOMAIN-RULES §10). */
   async listPollable(db: Db): Promise<MailboxLocator[]> {
-    return withAllBrands(db, 'email.poll.schedule', [] as MailboxLocator[], (tx) =>
+    return withAllBrands(db, 'email.poll.schedule', (tx) =>
       tx
         .select(locator)
         .from(mailboxes)

@@ -1,6 +1,6 @@
 import type { Db, DbTransaction } from '@helpdock/db';
 import { RELAY_STATUS_KEY } from '@helpdock/jobs';
-import { systemQueuePageSchema, systemStatusSchema } from '@helpdock/schemas';
+import { type ChannelStatus, systemQueuePageSchema, systemStatusSchema } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import type { ReadinessService } from '../runtime/readiness.service.js';
@@ -73,11 +73,22 @@ const fakeQueues = (names: readonly string[]): QueueRegistry =>
 
 const QUEUE_NAMES = ['inbound', 'outbound', 'sla', 'rules', 'ai', 'knowledge', 'media'];
 
+const CHANNEL: ChannelStatus = {
+  id: '01924f00-0000-7000-8000-0000000000c1',
+  name: '@acme_support_bot',
+  kind: 'telegram',
+  status: 'ok',
+  detail: 'healthy',
+  checkedAt: '2026-09-19T10:00:00.000Z',
+};
+
 const serviceWith = ({
   relay = null,
+  channels = async () => [CHANNEL],
   rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2 }],
 }: {
   relay?: string | null;
+  channels?: () => Promise<readonly ChannelStatus[]>;
   rows?: Record<string, unknown>[];
 } = {}) =>
   new SystemService(
@@ -86,6 +97,7 @@ const serviceWith = ({
     fakeReadiness(),
     fakeQueues(QUEUE_NAMES),
     BOOT_FACTS,
+    channels,
   );
 
 const inRequest = <T>(run: () => Promise<T>): Promise<T> => {
@@ -155,7 +167,12 @@ describe('SystemService.status', () => {
 
     expect(status.storage).toEqual({ configured: false });
     expect(status.aiSpend).toEqual({ configured: false });
-    expect(status.channels).toEqual([]);
+  });
+
+  it('lists every channel the reader found (M2, M6)', async () => {
+    const status = await inRequest(() => serviceWith().status());
+
+    expect(status.channels).toEqual([CHANNEL]);
   });
 
   it('carries the install-scope audit rows as ISO timestamps', async () => {
@@ -179,6 +196,9 @@ describe('SystemService.status', () => {
         },
       } as unknown as QueueRegistry,
       BOOT_FACTS,
+      async () => {
+        throw new Error('no connection');
+      },
     );
 
     const status = await inRequest(() => service.status());

@@ -257,7 +257,7 @@ packages/ai
 
 | Queue | Jobs | Notes |
 |---|---|---|
-| `inbound` | `email.poll` (per mailbox, repeatable), `telegram.update`, `form.submit` | dedupe by external id |
+| `inbound` | `email.poll` (per mailbox, repeatable), `telegram.poll` (per bot, development only; production updates arrive by webhook and are filed in the request), `form.submit` | dedupe by external id |
 | `outbound` | `email.send`, `telegram.send`, `widget.deliver` | retries 5, backoff exp, DLQ |
 | `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02) |
 | `rules` | `rules.evaluate`, `rules.time_based` (cron) | depth guard |

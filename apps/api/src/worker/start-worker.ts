@@ -36,6 +36,8 @@ import {
   rulesTimeBasedScheduleJob,
   slaRebuildJob,
   startOutboxRelay,
+  telegramPollJob,
+  telegramSendJob,
   webhookDeliverJob,
 } from '@helpdock/jobs';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
@@ -111,6 +113,20 @@ import {
   registerSlaEventHandlers,
   type SlaWorkerDeps,
 } from '../sla/sla-worker.js';
+import { telegramApiFactory } from '../telegram/bot-api-factory.js';
+import { createTelegramInboundService } from '../telegram/factory.js';
+import { TelegramRepository } from '../telegram/telegram.repository.js';
+import { registerTelegramEventHandlers } from '../telegram/telegram-events.js';
+import {
+  createTelegramBotChangedHandler,
+  createTelegramPollProcessor,
+  queueTelegramPollScheduler,
+  scheduleAllTelegramPollers,
+} from '../telegram/telegram-poll.job.js';
+import {
+  createTelegramSendHandler,
+  createTelegramSendProcessor,
+} from '../telegram/telegram-send.job.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
 import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
@@ -155,8 +171,8 @@ export interface WorkerDependencies {
     installSmtp: InstallSmtp;
   }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
-  /** M2-05's `email.send` consumer on the `outbound` queue. */
-  createEmailWorker(options: {
+  /** The `outbound` queue: M2-05's `email.send` and M6-02's `telegram.send`. */
+  createOutboundWorker(options: {
     redis: Redis;
     db: Db;
     log: JobLogger;
@@ -174,8 +190,9 @@ export interface WorkerDependencies {
    */
   createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
   /**
-   * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox. Every
-   * mailbox's scheduler is upserted on boot, as the retention schedule is.
+   * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox, and in
+   * development M6-01's `telegram.poll` per bot. Every scheduler is upserted
+   * on boot, as the retention schedule is.
    */
   createInboundWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /**
@@ -247,6 +264,9 @@ export type WorkerEnv = Pick<
   | 'OUTBOUND_ALLOW_CIDRS'
   // M5-07: where a custom domain's CNAME must point.
   | 'HELPCENTER_CNAME_TARGET'
+  // M6: whether bots are polled, and where the Bot API is.
+  | 'TELEGRAM_POLLING'
+  | 'TELEGRAM_API_ROOT'
 >;
 
 /** What the worker reads from settings: the SMTP sender and the VAPID key pair (M3-07). */
@@ -385,6 +405,21 @@ export const workerDependencies: WorkerDependencies = {
       MAILBOX_CHANGED_EVENT,
       createMailboxChangedHandler(new MailboxesRepository(), queuePollScheduler(inbound)),
     );
+    // M6-02, M6-04. A reply to a chat and a bot's welcome end in a
+    // `telegram.send` job on the `outbound` queue, under the same rule as
+    // `email.send`; a bot saved or removed reschedules its development poller.
+    registerTelegramEventHandlers({
+      queue: {
+        add: async ({ jobId, payload }) => {
+          await outbound.add(telegramSendJob.name, payload, { ...telegramSendJob.options, jobId });
+        },
+      },
+      botChanged: createTelegramBotChangedHandler(
+        new TelegramRepository(),
+        queueTelegramPollScheduler(inbound),
+        env.TELEGRAM_POLLING === true,
+      ),
+    });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
     const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
@@ -500,27 +535,41 @@ export const workerDependencies: WorkerDependencies = {
   },
   createEventWorker: ({ redis, db, log }) =>
     createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
-  createEmailWorker: ({ redis, db, log, env, installSmtp }) => {
-    const repository = new EmailRepository();
+  createOutboundWorker: ({ redis, db, log, env, installSmtp }) => {
+    const keyring = createKeyring(env);
+    const emailRepository = new EmailRepository();
+    const email = createEmailSendProcessor({
+      db,
+      log,
+      repository: emailRepository,
+      handler: createEmailSendHandler({
+        repository: emailRepository,
+        keyring,
+        installSmtp,
+        transports: smtpTransportFactory,
+      }),
+    });
+    const telegramRepository = new TelegramRepository();
+    const telegram = createTelegramSendProcessor({
+      db,
+      log,
+      repository: telegramRepository,
+      handler: createTelegramSendHandler({
+        db,
+        repository: telegramRepository,
+        keyring,
+        api: telegramApiFactory(env.TELEGRAM_API_ROOT),
+      }),
+    });
     const worker = new Worker(
       QUEUE_NAMES.outbound,
-      createEmailSendProcessor({
-        db,
-        log,
-        repository,
-        handler: createEmailSendHandler({
-          repository,
-          keyring: createKeyring(env),
-          installSmtp,
-          transports: smtpTransportFactory,
-        }),
-      }),
+      (job) => (job.name === telegramSendJob.name ? telegram(job) : email(job)),
       { connection: redis },
     );
     worker.on('failed', (job, error) =>
       log.error(
         { job: job?.name, jobId: job?.id, attemptsMade: job?.attemptsMade, err: error },
-        'email.send failed',
+        'outbound job failed',
       ),
     );
     return worker;
@@ -635,10 +684,37 @@ export const workerDependencies: WorkerDependencies = {
           ),
       }),
     });
+    // M6-01, development only: every bot polled instead of waiting for webhooks.
+    const telegramRepository = new TelegramRepository();
+    const telegramApi = telegramApiFactory(env.TELEGRAM_API_ROOT);
+    if (env.TELEGRAM_POLLING === true) {
+      scheduleAllTelegramPollers(db, telegramRepository, queueTelegramPollScheduler(inbound)).catch(
+        (error: unknown) => log.error({ err: error }, 'could not register the Telegram pollers'),
+      );
+    }
+    const telegramPoll = createTelegramPollProcessor({
+      db,
+      log,
+      keyring: createKeyring(env),
+      repository: telegramRepository,
+      api: telegramApi,
+      inbound: createTelegramInboundService({
+        db,
+        storage: storageFor(env),
+        log,
+        keyring: createKeyring(env),
+        api: telegramApi,
+      }),
+    });
+
     const worker = new Worker(
       QUEUE_NAMES.inbound,
       async (job) => {
-        // `telegram.update` and `form.submit` share this queue from M4 and M6.
+        if (job.name === telegramPollJob.name) {
+          await telegramPoll(job);
+          return;
+        }
+        // `form.submit` shares this queue from M4.
         if (job.name !== emailPollJob.name) {
           throw new UnrecoverableError(`No consumer for ${job.name} on the inbound queue`);
         }
@@ -942,7 +1018,7 @@ export const startWorker = ({
     installSmtp,
   });
   const worker = deps.createEventWorker({ redis: connection, db, log });
-  const email = deps.createEmailWorker({ redis: connection, db, log, env, installSmtp });
+  const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
@@ -971,7 +1047,7 @@ export const startWorker = ({
     await relay.stop();
     await worker.close();
     // After the event worker, which adds its jobs, like the media worker below.
-    await email.close();
+    await outbound.close();
     // After the event worker, because that is what adds media jobs: closing the
     // media worker first would leave a job queued with nothing draining it,
     // which is harmless but slower to notice than the other order's bug.

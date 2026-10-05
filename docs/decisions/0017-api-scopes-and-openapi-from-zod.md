@@ -1,4 +1,4 @@
-# 0016 API keys act brand-wide through their own permissions, and OpenAPI is generated from Zod
+# 0017 API keys act brand-wide through their own permissions, and OpenAPI is generated from Zod
 
 Status: accepted
 Date: 2026-10-05

@@ -38,6 +38,9 @@ import {
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
+  telegramPollJob,
+  telegramPollSchedulerId,
+  telegramSendJob,
   WEBHOOK_DELIVER_ATTEMPTS,
   webhookDeliverJob,
 } from './jobs.js';
@@ -492,5 +495,52 @@ describe('the help center search reindex (M5-05)', () => {
     expect(idempotencyKeyFor(helpCenterSearchReindexJob, payload, 'job-1')).toBe(
       `help_center.search_reindex:${brandId}:2026-10-01T06:00:00.000Z`,
     );
+  });
+});
+
+describe('the Telegram jobs (M6)', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000dd';
+  const botId = '01924f00-0000-7000-8000-0000000000de';
+
+  it('keys a reply by its delivery and a notice by the outbox row that asked for it', () => {
+    expect(idempotencyKeyFor(telegramSendJob, { kind: 'reply', brandId, deliveryId }, 'any')).toBe(
+      `telegram.send:${deliveryId}`,
+    );
+    expect(
+      idempotencyKeyFor(
+        telegramSendJob,
+        {
+          kind: 'notice',
+          brandId,
+          sourceOutboxId: outboxId,
+          botId,
+          chatId: '42',
+          notice: 'welcome',
+          locale: 'ar',
+        },
+        'any',
+      ),
+    ).toBe(`telegram.notice:${outboxId}`);
+  });
+
+  it('refuses a notice it would not know how to word', () => {
+    expect(() =>
+      parseJobPayload(telegramSendJob, {
+        kind: 'notice',
+        brandId,
+        sourceOutboxId: outboxId,
+        botId,
+        chatId: '42',
+        notice: 'advert',
+        locale: 'en',
+      }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('sends on the outbound queue and polls on the inbound one, a scheduler per bot', () => {
+    expect(telegramSendJob.queue).toBe('outbound');
+    expect(telegramPollJob.queue).toBe('inbound');
+    expect(telegramPollJob.options.attempts).toBe(1);
+    expect(telegramPollSchedulerId(botId)).toBe(`telegram.poll.${botId}`);
   });
 });

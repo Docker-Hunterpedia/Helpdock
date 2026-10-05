@@ -169,6 +169,13 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'api_idempotency_keys', departmentScoped: false },
   { name: 'webhooks', departmentScoped: false },
   { name: 'webhook_deliveries', departmentScoped: false },
+  // M6-01, M6-02. A bot is configuration, like `mailboxes`; a chat names the
+  // ticket it continues but holds none of it, like `notifications`. A reply's
+  // delivery is a child of its ticket and follows the ticket's department, as
+  // `email_deliveries` does.
+  { name: 'telegram_bots', departmentScoped: false },
+  { name: 'telegram_chats', departmentScoped: false },
+  { name: 'telegram_deliveries', departmentScoped: true },
 ];
 
 /**

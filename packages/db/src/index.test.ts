@@ -86,6 +86,7 @@ describe('@helpdock/db', () => {
       'tags.ts',
       'team-members.ts',
       'teams.ts',
+      'telegram.ts',
       'ticket-activity.ts',
       'ticket-messages.ts',
       'ticket-participants.ts',

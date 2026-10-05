@@ -4,7 +4,7 @@
  * every job definition points at one of them.
  */
 export const QUEUE_NAMES = {
-  /** `email.poll`, `telegram.update`, `form.submit`. Deduped by external id. */
+  /** `email.poll`, `telegram.poll` (development), `form.submit`. Deduped by external id. */
   inbound: 'inbound',
   /** `email.send`, `telegram.send`, `widget.deliver`. */
   outbound: 'outbound',

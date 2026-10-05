@@ -23,7 +23,8 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0013](0013-web-form-page-rendered-by-the-api.md) | Render the hosted web form as plain HTML from the api until the help center exists | accepted |
 | [0014](0014-markdown-through-tiptap.md) | Markdown import and export through `@tiptap/markdown`, in the browser | accepted |
 | [0015](0015-help-center-pages-rendered-by-the-api.md) | Render the help center as plain HTML from the api, and carry the staff session to its host with a one-use pass | accepted |
-| [0016](0016-api-scopes-and-openapi-from-zod.md) | API keys act brand-wide through their own permissions, and OpenAPI is generated from Zod | accepted |
+| [0016](0016-telegram-updates-filed-in-the-webhook-request.md) | File Telegram updates in the webhook request, and poll only in development | accepted |
+| [0017](0017-api-scopes-and-openapi-from-zod.md) | API keys act brand-wide through their own permissions, and OpenAPI is generated from Zod | accepted |
 
 ## Template
 

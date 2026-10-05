@@ -1,26 +1,23 @@
 import { brands, type Db, type DbTransaction, withTenant } from '@helpdock/db';
 
 /**
- * A transaction over every brand, as the system principal named
- * `principalId`. For the few questions asked *before* a brand is known: an
- * inbound-parse request names only a recipient (M2-03), a worker booting has
- * to re-register every brand's poller (M2-02), and an API request names only
- * its key (M8-01).
+ * A transaction over every brand, as the system principal, for the questions
+ * asked *before* a brand is known: which brand an inbound-parse recipient or a
+ * Telegram webhook belongs to, whose an API key is (M8-01), which pollers a booting worker re-registers,
+ * what the install's System page lists. `brands` is a global table, so reading
+ * its ids needs no context; the context is then set to exactly those ids, the
+ * way ARCHITECTURE §6 asks an all-brands path to.
  *
- * `brands` is a global table, so reading its ids needs no context; the context
- * is then set to exactly those ids, the way ARCHITECTURE §6 asks an all-brands
- * path to. With no brand at all there is nothing to scope to, and `empty` is
- * the answer.
+ * `principalId` names the path, so the database's own logging says who asked.
  */
 export const withAllBrands = async <T>(
   db: Db,
   principalId: string,
-  empty: T,
-  fn: (tx: DbTransaction) => Promise<T>,
-): Promise<T> => {
+  fn: (tx: DbTransaction) => Promise<T[]>,
+): Promise<T[]> => {
   const brandIds = (await db.select({ id: brands.id }).from(brands)).map((row) => row.id);
   if (brandIds.length === 0) {
-    return empty;
+    return [];
   }
 
   return withTenant(

@@ -13,6 +13,9 @@ import { TicketParticipantsService } from '../participants/ticket-participants.s
 import { SETTINGS } from '../runtime/tokens.js';
 import { SlaService } from '../sla/sla.service.js';
 import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
+import { OutboundTelegramService } from '../telegram/outbound-telegram.service.js';
+import { TelegramRepository } from '../telegram/telegram.repository.js';
+import { TelegramReplyHook } from '../telegram/telegram-reply.hook.js';
 import { BlockListService } from '../ticketing/block-list.service.js';
 import { TagsService } from '../ticketing/tags.service.js';
 import { TemplatesService } from '../ticketing/templates.service.js';
@@ -25,7 +28,7 @@ import { MergeController } from './merge/merge.controller.js';
 import { MergeRepository } from './merge/merge.repository.js';
 import { MergeService } from './merge/merge.service.js';
 import { MergeParticipantsHook } from './merge/participants.hook.js';
-import { ReplyDeliveryHook } from './reply-delivery.hook.js';
+import { ChannelReplyDeliveryHooks, ReplyDeliveryHook } from './reply-delivery.hook.js';
 import { TicketSpamController } from './ticket-spam.controller.js';
 import { TicketSpamService } from './ticket-spam.service.js';
 import { TicketsController } from './tickets.controller.js';
@@ -131,9 +134,13 @@ export class TicketsModule {
           provide: ReplyDeliveryHook,
           inject: [SETTINGS],
           useFactory: (settings: Settings): ReplyDeliveryHook =>
-            new EmailReplyHook(
-              new OutboundEmailService(new EmailRepository(), new SettingsInstallSmtp(settings)),
-            ),
+            new ChannelReplyDeliveryHooks([
+              new EmailReplyHook(
+                new OutboundEmailService(new EmailRepository(), new SettingsInstallSmtp(settings)),
+              ),
+              // M6-02. A reply on a Telegram ticket goes to its chat.
+              new TelegramReplyHook(new OutboundTelegramService(new TelegramRepository())),
+            ]),
         },
         // M1-08. `TicketLifecycleHooks` is a provider rather than a registry so
         // that M3-02's clocks and M1-12's survey replace one line here instead

@@ -824,8 +824,8 @@ export const WEBHOOK_DELIVER_ATTEMPTS = 8;
  *
  * Eight attempts, doubling from 30 seconds: the last one is 32 minutes after
  * the one before it and about an hour after the first, so a receiver that is
- * down for a deploy or a short outage still gets the event. Idempotent by delivery: a delivery that already
- * succeeded is not sent again.
+ * down for a deploy or a short outage still gets the event. Idempotent by
+ * delivery: a delivery that already succeeded is not sent again.
  */
 export const webhookDeliverJob = defineJob({
   name: 'webhook.deliver',
@@ -839,6 +839,93 @@ export const webhookDeliverJob = defineJob({
   },
   idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
 });
+
+export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('reply'),
+    brandId: z.uuid(),
+    /** The `telegram_deliveries` row: the whole job is about it, and it is the natural key. */
+    deliveryId: z.uuid(),
+  }),
+  z.object({
+    kind: z.literal('notice'),
+    brandId: z.uuid(),
+    /** The outbox row that asked for it, which is what a redelivery repeats. */
+    sourceOutboxId: z.uuid(),
+    botId: z.uuid(),
+    chatId: z.string().min(1).max(32),
+    notice: z.enum(['welcome', 'language_set']),
+    locale: z.enum(['en', 'ar']),
+    /** The button press a `language_set` answers, so the spinner on it stops. */
+    callbackQueryId: z.string().min(1).max(128).optional(),
+  }),
+]);
+
+export type TelegramSendPayload = z.infer<typeof telegramSendPayloadSchema>;
+
+/** Attempts before a reply to a chat is `failed` (M6-02). */
+export const TELEGRAM_SEND_JOB_ATTEMPTS = 5;
+
+/**
+ * M6-02 and M6-04's outbound Telegram (ARCHITECTURE §13, `outbound` queue): an
+ * agent's reply to a chat, or the `/start` welcome and the language
+ * confirmation. Asked for through the outbox — `telegram.reply` beside the
+ * `telegram_deliveries` row, `telegram.notice` beside the inbound update that
+ * called for it — and added by those events' handlers with the outbox row's id.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "Telegram send keyed by
+ * `ticket_message_id`"): a reply is keyed by its delivery, which is one per
+ * ticket message; a notice by the outbox row that asked for it.
+ */
+export const telegramSendJob = defineJob({
+  name: 'telegram.send',
+  queue: QUEUE_NAMES.outbound,
+  schema: telegramSendPayloadSchema,
+  options: {
+    attempts: TELEGRAM_SEND_JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) =>
+    payload.kind === 'reply'
+      ? `telegram.send:${payload.deliveryId}`
+      : `telegram.notice:${payload.sourceOutboxId}`,
+});
+
+export const telegramPollPayloadSchema = z.object({
+  brandId: z.uuid(),
+  botId: z.uuid(),
+});
+
+export type TelegramPollPayload = z.infer<typeof telegramPollPayloadSchema>;
+
+/** How often a bot is polled in development. */
+export const TELEGRAM_POLL_INTERVAL_MS = 3_000;
+
+/**
+ * M6-01's long polling, for development only (`TELEGRAM_POLLING=true`): one
+ * `getUpdates` per bot every {@link TELEGRAM_POLL_INTERVAL_MS}, from the
+ * offset on the bot's row. One BullMQ job scheduler per bot, id
+ * {@link telegramPollSchedulerId}, upserted on boot and when `telegram_bot.changed`
+ * says a bot came or went, as `email.poll` is for mailboxes.
+ *
+ * One attempt and no receipt for the reason `email.poll` has none: the next
+ * tick is the retry, and every message dedupes by its own id.
+ */
+export const telegramPollJob = defineJob({
+  name: 'telegram.poll',
+  queue: QUEUE_NAMES.inbound,
+  schema: telegramPollPayloadSchema,
+  options: {
+    attempts: 1,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { age: 7 * 86_400, count: 1_000 },
+  },
+});
+
+/** The scheduler id of one bot's poller. */
+export const telegramPollSchedulerId = (botId: string): string => `telegram.poll.${botId}`;
 
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
@@ -866,6 +953,8 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterSearchReindexJob.name]: helpCenterSearchReindexJob,
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
   [webhookDeliverJob.name]: webhookDeliverJob,
+  [telegramSendJob.name]: telegramSendJob,
+  [telegramPollJob.name]: telegramPollJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

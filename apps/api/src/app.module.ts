@@ -55,6 +55,7 @@ import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js'
 import { SlaModule } from './sla/sla.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
+import { TelegramModule, type TelegramModuleOverrides } from './telegram/telegram.module.js';
 import { TenantInterceptor } from './tenant/tenant.interceptor.js';
 import { TicketingModule } from './ticketing/ticketing.module.js';
 import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/contact-providers.js';
@@ -113,6 +114,8 @@ export interface AppModuleOptions {
   readonly smtpTransports?: SmtpTransportFactory;
   /** M2: the IMAP connection and the image proxy's fetcher, which suites replace. */
   readonly channels?: ChannelsModuleOverrides;
+  /** M6: the Bot API, which suites replace with a local stand-in for Telegram. */
+  readonly telegram?: TelegramModuleOverrides;
   /** M4: the siteverify call and the SSE timings, which suites replace. */
   readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
   /** M4-09: the siteverify call, which suites replace. */
@@ -232,6 +235,15 @@ export class AppModule implements NestModule {
           logger: options.logger,
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...(options.channels === undefined ? {} : { overrides: options.channels }),
+        }),
+        // M6: Channels › Telegram, the webhook and the thread's delivery
+        // status. Polling and sending run in the worker.
+        TelegramModule.forRoot({
+          env: options.env,
+          db: options.db,
+          logger: options.logger,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...(options.telegram === undefined ? {} : { overrides: options.telegram }),
         }),
         // M3-03 to M3-05: workflow rules, their log and the test run. The
         // engine runs in the worker.

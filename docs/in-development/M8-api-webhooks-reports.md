@@ -38,7 +38,7 @@ Copied from the PRD, ticked as they are met.
 - Table `api_keys` (brand): name, `prefix` (first 12 characters), `key_hash` (SHA-256, unique across the install), `scopes text[]`, `rate_limit_per_minute` (default 600), `created_by`, `last_used_at`, `revoked_at`/`revoked_by`. In `TENANT_TABLES` and the RLS negative suite.
 - Admin routes, `brand:manage`: `GET`/`POST /api/brands/:brandId/api-keys`, `DELETE …/:keyId` (revoke). The key is in the create answer only. `api_key.created` and `api_key.revoked` audit rows carry the prefix and scopes, never the key.
 - `ApiKeyPrincipalResolver` (`api-keys/api-key-principal-resolver.ts`) wraps the session resolver in `bootstrap.ts`: an `hd_live_` bearer is hashed and looked up in an all-brands system transaction (`tenant/all-brands.ts`, shared with inbound parse), throttled per key in Redis (sliding window, bucket `api-key`), and becomes `{ type: 'apikey', id, brandId, scopes }`. `last_used_at` is written at most once a minute.
-- The six scopes are permissions of their own (`auth/permissions.ts`); no role holds one. An API key's tenant context is its brand with every department ([ADR 0016](../decisions/0016-api-scopes-and-openapi-from-zod.md)).
+- The six scopes are permissions of their own (`auth/permissions.ts`); no role holds one. An API key's tenant context is its brand with every department ([ADR 0017](../decisions/0017-api-scopes-and-openapi-from-zod.md)).
 
 ## M8-02 REST v1
 
@@ -58,7 +58,7 @@ Copied from the PRD, ticked as they are met.
 
 ## Migrations
 
-- `0036_api_keys_and_webhooks.sql`: `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
+- `0037_api_keys_and_webhooks.sql`: `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
 
 ## Pull requests
 

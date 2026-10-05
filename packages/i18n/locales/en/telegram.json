@@ -1,0 +1,10 @@
+{
+  "bot": {
+    "welcome": "Hello! Send us your question and the team will answer here.",
+    "languagePrompt": "Which language should we answer in?",
+    "languageSet": "Thank you. We will answer in English. Send your message whenever you are ready."
+  },
+  "thread": {
+    "location": "Location"
+  }
+}

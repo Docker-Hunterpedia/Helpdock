@@ -228,7 +228,7 @@ anything a stranger could not learn by trying the port.
 | Postgres | Server version, migrations applied at boot, and the runtime role — which must be `helpdock_app` with RLS forced (DOMAIN-RULES §1.5) |
 | Redis | Version, latency, and whether an AOF rewrite is running (not a failure, but it costs latency) |
 | Queues | The first few, with waiting, active, failed, delayed and the age of the oldest waiting job; "All queues" fetches the rest. A failed count is a dead-letter count. |
-| Channels | Empty: mailbox health is on Channels › Mailboxes, and this card does not read it yet ([M2 gaps](../completed/M2-email-channel.md#gaps-and-follow-ups)) |
+| Channels | Every brand's mailboxes and Telegram bots, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red ([email](email.md), [Telegram](telegram.md)) |
 | Storage and AI spend | "Not configured" until M1 measures the bucket and M7 measures spend. A subsystem that is not measured says so rather than showing a zero. |
 | Audit log | The most recent install-scope entries |
 

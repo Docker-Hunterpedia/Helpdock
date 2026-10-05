@@ -48,6 +48,7 @@ const fakes = () => {
       return kind === 'closed' ? 12 : 62;
     },
     countAuditLog: async () => 0,
+    countAiCallBodies: async () => 4,
     countSearchLog: async () => 7,
     countVisitorSessions: async () => 3,
   } as unknown as RetentionRepository;
@@ -70,7 +71,7 @@ describe('RetentionService.overview', () => {
     expect(overview.preview).toEqual({
       closedTickets: null,
       spamTickets: 62,
-      aiCalls: null,
+      aiCalls: 4,
       searchLog: 7,
       auditLog: 0,
       visitorSessions: 3,

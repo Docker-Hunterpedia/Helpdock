@@ -111,6 +111,26 @@ describe('environment overrides', () => {
     await expect(settings.get('captcha.provider')).resolves.toBe('turnstile');
   });
 
+  it('reads a list setting as JSON and locks it', async () => {
+    const providers = [
+      {
+        id: 'openai',
+        kind: 'openai',
+        label: 'OpenAI',
+        baseUrl: null,
+        auth: { type: 'apiKey', apiKey: 'sk-test' },
+      },
+    ];
+    const { settings } = harness({ HD_AI_PROVIDERS: JSON.stringify(providers) });
+
+    await expect(settings.get('ai.providers')).resolves.toEqual(providers);
+    expect(settings.isLockedByEnv('ai.providers')).toBe(true);
+  });
+
+  it('refuses to start on a list override that is not JSON', () => {
+    expect(() => harness({ HD_AI_PROVIDERS: '[{"id":' }).settings).toThrow(/HD_AI_PROVIDERS/);
+  });
+
   it('ignores a blank override, so a key left empty in .env stays editable', async () => {
     const { settings } = harness({ HD_SMTP_HOST: '   ' });
 

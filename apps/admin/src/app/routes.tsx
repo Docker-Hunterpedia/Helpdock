@@ -117,6 +117,7 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
           <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
           <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
+          <Route path={ROUTES.telegramBot} element={<ChannelsPage />} />
           {/* M5-01, M5-02, M5-09. `/help-center` alone opens Articles. */}
           <Route path={ROUTES.helpCenter} element={<HelpCenterPage />} />
           <Route path={ROUTES.helpCenterTab} element={<HelpCenterPage />} />

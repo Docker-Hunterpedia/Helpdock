@@ -32,6 +32,9 @@ import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-ap
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { HttpTelegramApi } from '../telegram/http-api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { HttpTicketingApi } from '../ticketing/http-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -74,6 +77,8 @@ export interface AdminApis {
   readonly reports: ReportsApi;
   /** The install-admin routes: System (M0-10, M8-05) and brand deletion (M8-07). */
   readonly system: SystemApi;
+  /** M6: Channels › Telegram and a Telegram ticket's chat. */
+  readonly telegram: TelegramApi;
 }
 
 /**
@@ -122,6 +127,7 @@ export function createApis(
       domains: new HttpDomainsApi(transport),
       reports: new HttpReportsApi(transport),
       system: new HttpSystemApi(() => transport.currentAccessToken()),
+      telegram: new HttpTelegramApi(transport),
     };
   }
 
@@ -162,5 +168,6 @@ export function createApis(
     // Playwright, which a fixture would sit in front of.
     reports: new HttpReportsApi(),
     system: new HttpSystemApi(),
+    telegram: new MockTelegramApi(),
   };
 }

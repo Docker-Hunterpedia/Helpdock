@@ -1,13 +1,17 @@
-import type { Env } from '@helpdock/config';
+import type { HttpTransport } from '@helpdock/ai';
+import type { Env, Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import { safeAiTransport } from '../ai/ai-http.js';
+import { createAiRuntime } from '../ai/db-ai-ports.js';
 import { RefreshStore } from '../auth/session/refresh-store.js';
 import type { SigningKeys } from '../auth/session/signing-keys.js';
 import type { BrandResolver } from '../context/brand-resolver.js';
+import { createQueryEmbedder } from '../knowledge/retrieval/retrieve.js';
 import type { Logger } from '../logging/logger.js';
 import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
-import { DB, HOST_PAGES } from '../runtime/tokens.js';
+import { DB, HOST_PAGES, SETTINGS } from '../runtime/tokens.js';
 import { HelpCenterArticlesService } from './articles.service.js';
 import { HelpCenterContentService } from './content.service.js';
 import { HelpCenterFeedbackService } from './feedback/feedback.service.js';
@@ -48,6 +52,8 @@ export interface HelpCenterModuleOptions {
   readonly hosts: BrandResolver;
   /** A bucket double for the suites; boot leaves it out and an S3 client is built. */
   readonly storage?: ObjectStorage;
+  /** M7-04: the embeddings HTTP behind semantic search. The SSRF-safe client unless a suite passes a fake. */
+  readonly aiHttp?: HttpTransport;
   /** A suite may pass its own; boot uses Redis. */
   readonly pageCache?: PageCache;
 }
@@ -114,8 +120,19 @@ export class HelpCenterModule {
         // M5-05, M5-08: the ports the help center pages and the widget read through.
         {
           provide: HELP_CENTER_SEARCH,
-          inject: [DB],
-          useFactory: (db: Db) => new HelpCenterSearchService(db),
+          inject: [DB, SETTINGS],
+          useFactory: (db: Db, settings: Settings) =>
+            new HelpCenterSearchService(db, {
+              embedQuery: createQueryEmbedder(
+                db,
+                createAiRuntime({
+                  db,
+                  settings,
+                  http: options.aiHttp ?? safeAiTransport(env.OUTBOUND_ALLOW_CIDRS),
+                }),
+                (error) => logger.warn({ err: error }, 'semantic search fell back to full text'),
+              ),
+            }),
         },
         {
           provide: HELP_CENTER_FEEDBACK,

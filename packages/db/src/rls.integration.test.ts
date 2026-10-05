@@ -10,6 +10,11 @@ import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
   accounts,
+  aiBudgetAlerts,
+  aiCalls,
+  aiSettings,
+  apiIdempotencyKeys,
+  apiKeys,
   assignmentAgents,
   assignmentSkills,
   attachments,
@@ -41,6 +46,10 @@ import {
   hcSettings,
   holidays,
   inboundParseSettings,
+  knowledgeChunks,
+  knowledgeDocuments,
+  knowledgeSources,
+  knowledgeSyncLog,
   mailboxes,
   notifications,
   outbox,
@@ -71,6 +80,8 @@ import {
   users,
   views,
   webFormSettings,
+  webhookDeliveries,
+  webhooks,
   widgetSettings,
   widgetVisitors,
   workflowRules,
@@ -134,6 +145,10 @@ const hcCategoryId = perBrand();
 const hcSectionId = perBrand();
 const hcArticleId = perBrand();
 const hcVersionId = perBrand();
+const knowledgeSourceId = perBrand();
+const knowledgeDocumentId = perBrand();
+const apiKeyId = perBrand();
+const webhookId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -752,6 +767,132 @@ const fixtures = [
         locale: 'en',
         visitorHash: `visitor-${nextNumber()}`,
         helpful: true,
+      }),
+  },
+  // M7-01, M7-08. AI configuration, the call log and budget alerts: brand-scoped.
+  {
+    name: 'ai_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiSettings).values({ brandId, systemPrompt: 'Answer briefly.' }),
+  },
+  {
+    name: 'ai_calls',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiCalls).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        feature: 'assist.suggest_reply',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        status: 'ok',
+        prompt: { messages: [{ role: 'user', text: 'Where is my refund?' }] },
+        response: 'Refunds take five days.',
+      }),
+  },
+  {
+    name: 'ai_budget_alerts',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiBudgetAlerts).values({
+        brandId,
+        period: 'day',
+        periodStart: '2026-10-05',
+        level: 'warning',
+        spentUsd: 8,
+        limitUsd: 10,
+      }),
+  },
+  // M7-02. Knowledge: brand-scoped; visibility is a retrieval filter, not a tenant rule.
+  {
+    name: 'knowledge_sources',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeSources).values({
+        id: knowledgeSourceId[brandId] ?? '',
+        brandId,
+        kind: 'file',
+        name: 'Returns policy.pdf',
+      }),
+  },
+  {
+    name: 'knowledge_documents',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeDocuments).values({
+        id: knowledgeDocumentId[brandId] ?? '',
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        externalId: 'returns-policy.pdf',
+        contentHash: 'sha256-fixture',
+      }),
+  },
+  {
+    name: 'knowledge_chunks',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeChunks).values({
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        documentId: knowledgeDocumentId[brandId] ?? '',
+        ordinal: 0,
+        locale: 'en',
+        visibility: 'internal',
+        content: 'Refunds are issued within five working days.',
+        contentHash: 'sha256-fixture-chunk',
+      }),
+  },
+  // M7-03. A source's sync log, under the brand's source.
+  {
+    name: 'knowledge_sync_log',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeSyncLog).values({
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        runId: knowledgeSourceId[brandId] ?? '',
+        level: 'info',
+        code: 'sync.started',
+      }),
+  },
+  // M8-01, M8-02, M8-03. The key hash is unique across the install, so each
+  // brand's needs its own; the children point at their brand's parent rows.
+  {
+    name: 'api_keys',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(apiKeys).values({
+        id: apiKeyId[brandId] ?? '',
+        brandId,
+        name: 'CRM sync',
+        prefix: 'hd_live_abcd',
+        keyHash: `fixture-${brandId}-${nextNumber()}`,
+        scopes: ['tickets:read'],
+      }),
+  },
+  {
+    name: 'api_idempotency_keys',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(apiIdempotencyKeys).values({
+        brandId,
+        apiKeyId: apiKeyId[brandId] ?? '',
+        key: `request-${nextNumber()}`,
+        requestHash: 'hash',
+      }),
+  },
+  {
+    name: 'webhooks',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(webhooks).values({
+        id: webhookId[brandId] ?? '',
+        brandId,
+        url: 'https://hooks.example.com/helpdock',
+        events: ['ticket.created'],
+        secret: 'v1.fixture.not-a-real-envelope',
+      }),
+  },
+  {
+    name: 'webhook_deliveries',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(webhookDeliveries).values({
+        brandId,
+        webhookId: webhookId[brandId] ?? '',
+        eventId: uuidv7(),
+        event: 'ticket.created',
+        payload: {},
       }),
   },
   // M6-01, M6-02.

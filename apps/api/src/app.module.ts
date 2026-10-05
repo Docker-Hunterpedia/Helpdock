@@ -10,6 +10,10 @@ import {
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
+import { AiModule, type AiModuleOptions } from './ai/ai.module.js';
+import { DbAiUsage } from './ai/db-ai-usage.js';
+import { ApiKeysModule } from './api-keys/api-keys.module.js';
+import { ApiV1Module } from './api-v1/api-v1.module.js';
 import { AssignmentModule } from './assignment/assignment.module.js';
 import { AuditLogModule } from './audit/audit-log.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
@@ -32,6 +36,7 @@ import type { SmtpTransportFactory } from './email/transport.js';
 import { HelpCenterModule } from './help-center/help-center.module.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
+import { KnowledgeModule, type KnowledgeOverrides } from './knowledge/knowledge.module.js';
 import type { Logger } from './logging/logger.js';
 import { MacrosModule } from './macros/macros.module.js';
 import { MediaModule } from './media/media.module.js';
@@ -63,6 +68,7 @@ import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/cont
 import { TicketsModule } from './tickets/tickets.module.js';
 import { ViewsModule } from './views/views.module.js';
 import { WebFormModule, type WebFormModuleOptions } from './web-form/web-form.module.js';
+import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { agentTypingRelay } from './widget/agent-typing.js';
 import { WidgetModule, type WidgetModuleOptions } from './widget/widget.module.js';
 import { RedisWidgetBroadcast } from './widget/widget-relay.js';
@@ -120,6 +126,10 @@ export interface AppModuleOptions {
   readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
   /** M4-09: the siteverify call, which suites replace. */
   readonly webForm?: Pick<WebFormModuleOptions, 'captchaTransport'>;
+  /** M7: model discovery's HTTP, which suites replace so nothing reaches a provider. */
+  readonly ai?: Pick<AiModuleOptions, 'http'>;
+  /** M7-03: the Notion and Google Drive APIs, which suites replace with fakes. */
+  readonly knowledge?: KnowledgeOverrides;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -165,7 +175,22 @@ export class AppModule implements NestModule {
       signingKeys: options.auth.signingKeys,
       hosts: options.brandResolver ?? hostResolver,
       ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+      ...(options.ai?.http === undefined ? {} : { aiHttp: options.ai.http }),
     });
+    // M1-04, built once and imported twice, by `AppModule` and by M8-02's
+    // public API, which writes contacts through the same service.
+    // M1-02 fills in two null providers left for the contact screens; they
+    // live in `tickets/` so that contacts never learn the ticket schema
+    // (`contacts/providers.ts` says why).
+    const contacts = ContactsModule.forRoot({
+      ticketStats: new DbTicketStatsProvider(),
+      timeline: new DbContactTimelineProvider(),
+      // M1-14: an erasure also removes the files the person sent.
+      erasure: new DbContactErasureProvider(),
+    });
+    // M8-03, the same pattern: the Admin's webhook settings here, and the
+    // public API's `webhooks:manage` routes in `ApiV1Module`.
+    const webhooks = WebhooksModule.forRoot({ env: options.env });
     // M0-13's gateway, imported by `AppModule` and by `WidgetModule` as one
     // module, so `/widget` shares the presence and publisher `/staff` runs.
     const realtime = RealtimeModule.forRoot({
@@ -194,15 +219,7 @@ export class AppModule implements NestModule {
         }),
         realtime,
         StaffModule.forRoot({ logger: options.logger }),
-        // M1-04 left two null providers behind for the contact screens; M1-02
-        // fills them in. They live in `tickets/` so that contacts never learn
-        // the ticket schema (`contacts/providers.ts` says why).
-        ContactsModule.forRoot({
-          ticketStats: new DbTicketStatsProvider(),
-          timeline: new DbContactTimelineProvider(),
-          // M1-14: an erasure also removes the files the person sent.
-          erasure: new DbContactErasureProvider(),
-        }),
+        contacts,
         ticketing,
         csat,
         sla,
@@ -220,7 +237,8 @@ export class AppModule implements NestModule {
         // M1-14: the Data retention form. The purge itself runs in the worker.
         RetentionModule.forRoot(),
         // M8-04: Reports. The rollups they read are written by the worker.
-        ReportsModule.forRoot(),
+        // M7 binds the AI seam of Reports and the System page to `ai_calls`.
+        ReportsModule.forRoot({ aiUsage: new DbAiUsage(options.settings) }),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
         // M2-05, M2-06: Channels › Outgoing email, signatures, the ticket
@@ -276,10 +294,25 @@ export class AppModule implements NestModule {
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...options.webForm,
         }),
+        // M7-01, M7-02, M7-08: providers, models, embeddings, a brand's AI
+        // settings and a ticket's AI log. Re-embedding runs in the worker.
+        AiModule.forRoot({ env: options.env, ...options.ai }),
+        // M7-03: knowledge sources, uploads, the sync log and connector
+        // sign-in. Syncing and embedding run in the worker.
+        KnowledgeModule.forRoot({
+          env: options.env,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...(options.knowledge === undefined ? {} : { overrides: options.knowledge }),
+        }),
         // M5-01, M5-02, M5-09: help center content, the editor and its images;
         // M5-03, M5-04, M5-06: the pages, SEO and the site settings;
         // M5-05, M5-08: search, feedback, views and Insights.
         helpCenter,
+        // M8-01: Settings › API keys. M8-02: `/api/v1` and `/api/docs`.
+        // M8-03: Settings › Webhooks; delivering runs in the worker.
+        ApiKeysModule.forRoot(),
+        webhooks,
+        ApiV1Module.forRoot({ tickets, contacts, helpCenter, webhooks }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger, hostPages: helpCenter }),
       ],

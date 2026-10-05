@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import AxeBuilder from '@axe-core/playwright';
-import { test as base, expect, type Page } from '@playwright/test';
+import { test as base, expect, type Locator, type Page } from '@playwright/test';
 import { type Catalog, createTranslator, type Translate } from '../src/i18n/translator.js';
 
 export type Locale = 'en' | 'ar';
@@ -15,8 +15,52 @@ export function strings(locale: Locale): Translate {
   return createTranslator(JSON.parse(readFileSync(file, 'utf8')) as Catalog, locale);
 }
 
+const QUIET_MS = 150;
+
+/**
+ * Resolves once the widget has stopped changing: its fonts are in, no finite
+ * animation or transition is running in its shadow root, and nothing in it has
+ * changed for {@link QUIET_MS}. Axe reads colours one element at a time, so a
+ * run that starts while the window is still updating can measure a state that
+ * never settles on screen (the header contrast flake recorded in M4, M9-04).
+ */
+export async function settled(page: Page): Promise<void> {
+  await page.evaluate(
+    async ({ quietMs, capMs }) => {
+      await document.fonts.ready;
+      const root = document.querySelector('helpdock-widget')?.shadowRoot ?? document;
+      const finite = root
+        .getAnimations()
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity);
+      await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
+      await new Promise<void>((resolve) => {
+        const cap = setTimeout(done, capMs);
+        let quiet = setTimeout(done, quietMs);
+        const observer = new MutationObserver(() => {
+          clearTimeout(quiet);
+          quiet = setTimeout(done, quietMs);
+        });
+        function done() {
+          clearTimeout(cap);
+          clearTimeout(quiet);
+          observer.disconnect();
+          resolve();
+        }
+        observer.observe(root, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          characterData: true,
+        });
+      });
+    },
+    { quietMs: QUIET_MS, capMs: 2_000 },
+  );
+}
+
 /** DESIGN §10 against WCAG 2.1 A and AA, one line per violation. Axe walks open shadow roots. */
 export async function violations(page: Page): Promise<string[]> {
+  await settled(page);
   const result = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
@@ -28,6 +72,12 @@ export async function violations(page: Page): Promise<string[]> {
   );
 }
 
+/** The window: a region beside the page, or a modal dialog where it fills a phone's screen. */
+export function widgetWindow(page: Page, locale: Locale): Locator {
+  const name = strings(locale)('window.label');
+  return page.getByRole('region', { name }).or(page.getByRole('dialog', { name }));
+}
+
 /** Opens the harness with the given settings and the window, using the keyboard only. */
 export async function openWidget(page: Page, locale: Locale, query = ''): Promise<void> {
   const t = strings(locale);
@@ -37,7 +87,7 @@ export async function openWidget(page: Page, locale: Locale, query = ''): Promis
   await page.keyboard.press('Tab');
   await expect(launcher).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('region', { name: t('window.label') })).toBeVisible();
+  await expect(widgetWindow(page, locale)).toBeVisible();
   // Opening moves focus into the window; typing before that would go nowhere.
   await expect(page.locator('helpdock-widget .hd-content :focus')).toHaveCount(1);
 }

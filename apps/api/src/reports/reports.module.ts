@@ -4,7 +4,7 @@ import { ReportsController } from './reports.controller.js';
 import { ReportsService } from './reports.service.js';
 
 export interface ReportsModuleOptions {
-  /** M7 binds its `ai_calls` reader here; until then every AI number reads "not available". */
+  /** The `ai_calls` reader (`DbAiUsage`); without one every AI number reads "not available". */
   readonly aiUsage?: AiUsageSource;
 }
 

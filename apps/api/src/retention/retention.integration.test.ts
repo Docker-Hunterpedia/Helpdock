@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
+  aiCalls,
   attachments,
   auditLog,
   brands,
@@ -597,6 +598,61 @@ describe.skipIf(!hasDocker)('data retention', () => {
             jobId: 'job-notifications-again',
           })
         ).notifications,
+      ).toBe(0);
+    });
+
+    it('nulls AI call bodies past the brand window and keeps their counts and cost (M7)', async () => {
+      const ticket = await seedTicket(brandA, { status: 'open' });
+      const call = (createdAt: Date) => ({
+        brandId: brandA.id,
+        ticketId: ticket.id,
+        feature: 'assist.suggest_reply',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        status: 'ok' as const,
+        tokensIn: 120,
+        tokensOut: 40,
+        costUsd: 0.0021,
+        promptHash: 'hash',
+        prompt: { system: '', messages: [{ role: 'user', text: 'Mail [EMAIL_1]' }] },
+        response: 'Done.',
+        redactions: [{ placeholder: '[EMAIL_1]', kind: 'email', original: 'mona@example.com' }],
+        sources: ['chunk-1'],
+        createdAt,
+      });
+      const [old, recent] = await withSystem(db(), brandA.id, (tx) =>
+        tx
+          .insert(aiCalls)
+          .values([call(daysAgo(91)), call(daysAgo(1))])
+          .returning({ id: aiCalls.id }),
+      );
+      const ticketB = await seedTicket(brandB, { status: 'open' });
+      await withSystem(db(), brandB.id, (tx) =>
+        tx
+          .insert(aiCalls)
+          .values({ ...call(daysAgo(200)), brandId: brandB.id, ticketId: ticketB.id }),
+      );
+
+      const counts = await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-ai' });
+
+      expect(counts.aiCalls).toBe(1);
+      const rows = await withSystem(db(), brandA.id, (tx) => tx.select().from(aiCalls));
+      expect(rows.find((row) => row.id === old?.id)).toMatchObject({
+        prompt: null,
+        response: null,
+        redactions: null,
+        sources: null,
+        tokensIn: 120,
+        tokensOut: 40,
+        costUsd: 0.0021,
+        promptHash: 'hash',
+        bodiesPurgedAt: expect.any(Date),
+      });
+      expect(rows.find((row) => row.id === recent?.id)?.response).toBe('Done.');
+      const [other] = await withSystem(db(), brandB.id, (tx) => tx.select().from(aiCalls));
+      expect(other?.response).toBe('Done.');
+      expect(
+        (await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-ai-again' })).aiCalls,
       ).toBe(0);
     });
 

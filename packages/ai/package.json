@@ -16,5 +16,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/ai"
+  },
+  "dependencies": {
+    "@helpdock/config": "workspace:*",
+    "@mariozechner/pi-ai": "0.73.1",
+    "@notionhq/client": "5.26.0",
+    "cheerio": "1.2.0",
+    "googleapis": "181.0.0",
+    "mammoth": "1.12.3",
+    "unpdf": "1.8.1",
+    "zod": "4.6.5"
   }
 }

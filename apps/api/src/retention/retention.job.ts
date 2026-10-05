@@ -25,7 +25,7 @@ import { retentionCutoffs, runDateOf, settingsFromRow } from './retention-rules.
  *
  * ```
  * 03:00 UTC  maintenance.retention.schedule   lists brands, adds one job each, purges job_receipts
- *            maintenance.retention (brand A)  closed tickets, spam, audit log, outbox → audit row
+ *            maintenance.retention (brand A)  closed tickets, spam, AI call bodies, audit log, outbox → audit row
  *            maintenance.retention (brand B)  …
  * ```
  *
@@ -75,6 +75,11 @@ export const runBrandRetention = async ({
     counts.closedTickets = await purgeTickets(purge, 'closed', cutoffs.closedTickets);
   }
   counts.spamTickets = await purgeTickets(purge, 'spam', cutoffs.spamTickets);
+  counts.aiCalls = await drainInBatches(
+    () =>
+      inBrand((tx) => repository.purgeAiCallBodiesBatch(tx, brandId, cutoffs.aiCalls, batchSize)),
+    batchSize,
+  );
   counts.searchLog = await drainInBatches(
     () =>
       inBrand((tx) => repository.purgeSearchLogBatch(tx, brandId, cutoffs.searchLog, batchSize)),

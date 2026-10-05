@@ -105,6 +105,11 @@ export const MOCK_TICKET_ARABIC = '0192c3f0-1a2b-7c3d-8e4f-000000001039';
 export const MOCK_TICKET_VAT = '0192c3f0-1a2b-7c3d-8e4f-000000001035';
 export const MOCK_TICKET_CLOSED = '0192c3f0-1a2b-7c3d-8e4f-000000001030';
 export const MOCK_TICKET_TRANSCRIPT = '0192c3f0-1a2b-7c3d-8e4f-000000001028';
+/** M6: the agent replies on the Telegram ticket, one delivered and one the customer's block refused. */
+export const MOCK_TELEGRAM_REPLY_SENT = '0192c3f0-1a2b-7c3d-8e4f-000000000715';
+export const MOCK_TELEGRAM_REPLY_FAILED = '0192c3f0-1a2b-7c3d-8e4f-000000000716';
+/** M6-03: the voice note on the Telegram ticket. */
+export const MOCK_TELEGRAM_VOICE = '0192c3f0-1a2b-7c3d-8e4f-0000000000ab';
 /** Named by HD-1041 and held by nobody: a linked ticket the viewer cannot open. */
 /** The seeded tags of `MockTicketingApi`, as a ticket carries them. */
 const MOCK_TAG_REFUND: Tag = {
@@ -417,6 +422,83 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       bodyText: 'أرجو تغيير عنوان الشحن إلى المكتب قبل الإرسال.',
       createdAt: at(-3 * DAY),
     }),
+    // M6: the rest of the `Admin/Ticket-Telegram` thread — a photo, a
+    // document, a voice note and a location from the customer, then two
+    // replies, the second of which Telegram refused.
+    message({
+      id: msgId(11),
+      ticketId: MOCK_TICKET_ARABIC,
+      seq: 2,
+      authorId: MOCK_CONTACT_ARABIC,
+      channel: 'telegram',
+      bodyText: 'هذه صورة الإيصال',
+      attachments: [
+        telegramFile(msgId(11), '0192c3f0-1a2b-7c3d-8e4f-0000000000a9', {
+          originalName: 'photo_2041.jpg',
+          mime: 'image/webp',
+          kind: 'image',
+          size: 182_272,
+        }),
+        telegramFile(msgId(11), '0192c3f0-1a2b-7c3d-8e4f-0000000000aa', {
+          originalName: 'bank-statement-sept.pdf',
+          mime: 'application/pdf',
+          kind: 'file',
+          size: 219_136,
+        }),
+      ],
+      createdAt: at(-3 * DAY + 2 * MINUTE),
+    }),
+    message({
+      id: msgId(12),
+      ticketId: MOCK_TICKET_ARABIC,
+      seq: 3,
+      authorId: MOCK_CONTACT_ARABIC,
+      channel: 'telegram',
+      bodyText: '',
+      bodyHtml: '',
+      attachments: [
+        telegramFile(msgId(12), MOCK_TELEGRAM_VOICE, {
+          originalName: 'voice.ogg',
+          mime: 'audio/ogg',
+          kind: 'audio',
+          size: 23_552,
+          variants: { opus: { mime: 'audio/ogg', size: 21_504, durationMs: 14_000 } },
+        }),
+      ],
+      createdAt: at(-3 * DAY + 4 * MINUTE),
+    }),
+    message({
+      id: msgId(13),
+      ticketId: MOCK_TICKET_ARABIC,
+      seq: 4,
+      authorId: MOCK_CONTACT_ARABIC,
+      channel: 'telegram',
+      bodyText:
+        'الموقع: 24.7136, 46.6753\nhttps://www.openstreetmap.org/?mlat=24.7136&mlon=46.6753#map=17/24.7136/46.6753',
+      bodyHtml:
+        '<p>الموقع: 24.7136, 46.6753<br><a href="https://www.openstreetmap.org/?mlat=24.7136&amp;mlon=46.6753#map=17/24.7136/46.6753" rel="noopener noreferrer nofollow">https://www.openstreetmap.org/?mlat=24.7136&amp;mlon=46.6753#map=17/24.7136/46.6753</a></p>',
+      createdAt: at(-3 * DAY + 5 * MINUTE),
+    }),
+    message({
+      id: MOCK_TELEGRAM_REPLY_SENT,
+      ticketId: MOCK_TICKET_ARABIC,
+      seq: 5,
+      authorType: 'staff',
+      authorId: MOCK_SELF_ID,
+      channel: 'telegram',
+      bodyText: 'شكرًا سارة، سنغيّر العنوان قبل الشحن.',
+      createdAt: at(-3 * HOUR),
+    }),
+    message({
+      id: MOCK_TELEGRAM_REPLY_FAILED,
+      ticketId: MOCK_TICKET_ARABIC,
+      seq: 6,
+      authorType: 'staff',
+      authorId: MOCK_SELF_ID,
+      channel: 'telegram',
+      bodyText: 'تم تحديث العنوان. رقم الشحنة RF-22917.',
+      createdAt: at(-90 * MINUTE),
+    }),
     // M2: the `Admin · ticket email` artboard's card — a header strip, two
     // blocked remote images, an inline screenshot, a file and quoted history.
     message({
@@ -562,6 +644,25 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
 
   return { tickets, messages, activity };
 };
+
+/** A ready file the customer sent on Telegram, as the media pipeline leaves it. */
+const telegramFile = (
+  messageId: string,
+  id: string,
+  fields: Pick<Attachment, 'originalName' | 'mime' | 'kind' | 'size'> & Partial<Attachment>,
+): Attachment => ({
+  id,
+  ticketId: MOCK_TICKET_ARABIC,
+  messageId,
+  uploaderType: 'contact',
+  status: 'ready',
+  rejectReason: null,
+  scanStatus: 'clean',
+  variants: {},
+  createdAt: '2026-10-02T09:00:00.000Z',
+  processedAt: '2026-10-02T09:00:05.000Z',
+  ...fields,
+});
 
 const msgId = (n: number): string =>
   `0192c3f0-1a2b-7c3d-8e4f-0000000${String(700 + n).padStart(5, '0')}`;

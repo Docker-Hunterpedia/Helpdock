@@ -161,6 +161,28 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'hc_search_log', departmentScoped: false },
   { name: 'hc_article_views', departmentScoped: false },
   { name: 'hc_article_feedback', departmentScoped: false },
+  // M7-01, M7-08. A brand's AI configuration and its budget alerts are the
+  // Admin's, like `retention_settings`. A call log row may have no ticket at
+  // all, and the budget sums every department's calls, so it is brand-scoped;
+  // its bodies are read only through the ticket, under the ticket's policy.
+  { name: 'ai_settings', departmentScoped: false },
+  { name: 'ai_calls', departmentScoped: false },
+  { name: 'ai_budget_alerts', departmentScoped: false },
+  // M7-02. Knowledge belongs to the brand, like its help center; who may use a
+  // chunk is its visibility, filtered in SQL before ranking (DOMAIN-RULES §5).
+  { name: 'knowledge_sources', departmentScoped: false },
+  { name: 'knowledge_documents', departmentScoped: false },
+  { name: 'knowledge_chunks', departmentScoped: false },
+  // M7-03. A source's sync log is the source's, and so the brand's.
+  { name: 'knowledge_sync_log', departmentScoped: false },
+  // M8-01, M8-02, M8-03. An API key acts for the whole brand, so its keys,
+  // their idempotency records, the webhook endpoints and their delivery log
+  // are the brand's. A delivery names a ticket in its payload, but it is a
+  // copy sent to the brand's own endpoint, not a ticket row an agent reads.
+  { name: 'api_keys', departmentScoped: false },
+  { name: 'api_idempotency_keys', departmentScoped: false },
+  { name: 'webhooks', departmentScoped: false },
+  { name: 'webhook_deliveries', departmentScoped: false },
   // M6-01, M6-02. A bot is configuration, like `mailboxes`; a chat names the
   // ticket it continues but holds none of it, like `notifications`. A reply's
   // delivery is a child of its ticket and follows the ticket's department, as
@@ -245,6 +267,11 @@ export const GLOBAL_TABLES: readonly { readonly name: string; readonly reason: s
   {
     name: 'push_subscriptions',
     reason: 'a browser subscribes once and hears about every brand its owner works in (ADR 0002)',
+  },
+  {
+    name: 'embedding_space',
+    reason:
+      'the one embedding model of the install (ADR 0005): a model name and a status, no brand data',
   },
 ];
 

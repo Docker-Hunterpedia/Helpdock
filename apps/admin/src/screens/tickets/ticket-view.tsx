@@ -53,6 +53,8 @@ import { MergeDialog } from './merge-dialog.tsx';
 import { MergedIntoBanner } from './merged-block.tsx';
 import { SplitDialog } from './split-dialog.tsx';
 import { StagedMacroChips } from './staged-macro.tsx';
+import { ChannelIdentityCard } from './telegram/channel-identity-card.tsx';
+import { useTicketTelegram } from './telegram/use-ticket-telegram.tsx';
 import { Thread, type ThreadNames } from './thread.tsx';
 import type { TicketAction } from './ticket-actions-menu.tsx';
 import { TicketHeader } from './ticket-header.tsx';
@@ -152,6 +154,8 @@ export function TicketView({
 
   // M2-05: the composer's email mode and the thread's delivery marks.
   const ticketEmail = useTicketEmail(brandId, ticketId, detail.data?.ticket.channel ?? '');
+  const ticketTelegram = useTicketTelegram(brandId, ticketId, detail.data?.ticket.channel ?? '');
+  const telegramChat = ticketTelegram.context;
 
   const mergeSearch = useQuery({
     queryKey: ticketKeys.list(brandId, { q: mergeTerm.trim(), limit: MERGE_SEARCH_LIMIT }),
@@ -321,6 +325,7 @@ export function TicketView({
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
       await ticketEmail.refresh();
+      await ticketTelegram.refresh();
       if (message.timeSpentSeconds !== undefined) {
         await time.refresh();
       }
@@ -682,6 +687,9 @@ export function TicketView({
       sla={detail.data?.sla}
       canConfigure={role === 'admin' || role === 'teamLeader'}
       cards={cards}
+      channelIdentity={
+        telegramChat === undefined ? undefined : <ChannelIdentityCard context={telegramChat} />
+      }
       brandTags={directory.tags}
       customFields={ticketFieldsFor(
         fieldDefs.data?.fields ?? [],
@@ -771,6 +779,7 @@ export function TicketView({
         <TicketHeader
           ticket={ticket}
           departmentName={departmentName}
+          channelHandle={telegramChat?.username ?? undefined}
           viewers={headerViewers}
           now={now}
           showDetailsButton={detailsInDrawer}
@@ -831,7 +840,10 @@ export function TicketView({
                 setDialog('merge');
               },
             }}
-            deliveryFooter={ticketEmail.deliveryFooter}
+            deliveryFooter={(message) =>
+              ticketEmail.deliveryFooter(message) ?? ticketTelegram.deliveryFooter(message)
+            }
+            telegram={ticketTelegram.thread}
             onRetry={(message) => {
               dispatch({ type: 'retried', clientId: message.clientId, now: Date.now() });
               send.mutate({ ...message, state: 'sending', sentAt: Date.now() });
@@ -920,6 +932,11 @@ export function TicketView({
               }}
               onSend={queueSend}
               email={ticketEmail.composer}
+              telegram={
+                telegramChat === undefined
+                  ? undefined
+                  : { bot: telegramChat.bot.username, username: telegramChat.username }
+              }
               macrosOpen={picking}
               {...(canWrite
                 ? {

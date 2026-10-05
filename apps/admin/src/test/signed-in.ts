@@ -12,6 +12,7 @@ import { MockNotificationsApi } from '../notifications/mock-api.js';
 import { HttpReportsApi } from '../reports/api.js';
 import { HttpSystemApi } from '../screens/admin/system/system-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import { MockTicketsApi } from '../tickets/mock-api.js';
@@ -57,5 +58,6 @@ export async function signedInMockApis(): Promise<AdminApis> {
     domains: new MockDomainsApi(),
     reports: new HttpReportsApi(),
     system: new HttpSystemApi(),
+    telegram: new MockTelegramApi(),
   };
 }

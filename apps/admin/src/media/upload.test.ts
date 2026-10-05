@@ -204,4 +204,22 @@ describe('HttpAttachmentUploader', () => {
     expect(attachment.status).toBe('ready');
     expect(requests[0]?.path).toBe(`/brands/${BRAND}/tickets/${TICKET}/attachments/${ATTACHMENT}`);
   });
+
+  it('asks for one variant’s URL when it is about to be used (M6-03)', async () => {
+    const { uploader, requests } = harness({
+      body: {
+        attachment: { ...row, status: 'ready' },
+        variant: 'opus',
+        url: 'https://bucket.test/opus',
+        expiresAt: new Date().toISOString(),
+      },
+    });
+
+    expect(await uploader.downloadUrl(BRAND, TICKET, ATTACHMENT, 'opus')).toBe(
+      'https://bucket.test/opus',
+    );
+    expect(requests[0]?.path).toBe(
+      `/brands/${BRAND}/tickets/${TICKET}/attachments/${ATTACHMENT}?variant=opus`,
+    );
+  });
 });

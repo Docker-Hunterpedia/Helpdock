@@ -37,6 +37,21 @@ function adopt(root: ShadowRoot, css: string): (next: string) => void {
   };
 }
 
+/**
+ * Applies a stylesheet only when its text differs from the last one. The
+ * controller notifies on every state change, and replacing an identical theme
+ * each time restyles the whole shadow tree while the window is updating.
+ */
+export function changesOnly(apply: (css: string) => void): (css: string) => void {
+  let last: string | null = null;
+  return (css) => {
+    if (css !== last) {
+      last = css;
+      apply(css);
+    }
+  };
+}
+
 /** Renders the widget into `host`'s shadow root and starts talking to the server. */
 export function mountWidget(host: HTMLElement, { transport, locale }: MountOptions): MountedWidget {
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
@@ -44,7 +59,7 @@ export function mountWidget(host: HTMLElement, { transport, locale }: MountOptio
   host.setAttribute('dir', dir);
   host.setAttribute('lang', locale);
   adopt(root, styles);
-  const setTheme = adopt(root, '');
+  const setTheme = changesOnly(adopt(root, ''));
 
   const controller = new WidgetController(transport, locale);
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');

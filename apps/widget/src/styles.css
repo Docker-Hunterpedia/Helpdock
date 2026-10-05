@@ -211,6 +211,11 @@ button:disabled {
     block-size: auto;
     border-radius: 0;
   }
+
+  /* The full-screen window has its own minimise; the launcher would cover Send. */
+  .hd-root-open .hd-launcher {
+    display: none;
+  }
 }
 
 .hd-header {

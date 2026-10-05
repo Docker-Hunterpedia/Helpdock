@@ -31,10 +31,7 @@ export type ClosedTicketRetention = z.infer<typeof closedTicketRetentionSchema>;
 export const retentionSettingsSchema = z.object({
   closedTickets: closedTicketRetentionSchema.default({ kind: 'never' }),
   spamTicketDays: days().default(30),
-  /**
-   * Bodies are nulled and counts kept. Stored now so the form is whole; the
-   * purge that acts on it arrives with `ai_calls` (M7).
-   */
+  /** Bodies (prompt, response, redactions, sources) are nulled; counts and cost are kept (M7). */
   aiCallDays: days().default(90),
   /** Stored now; acted on once the help center search log exists (M5). */
   searchLogDays: days().default(180),

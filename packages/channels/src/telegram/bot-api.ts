@@ -1,4 +1,4 @@
-import { Api, GrammyError, HttpError } from 'grammy';
+import { Api, GrammyError, HttpError, InputFile } from 'grammy';
 import type { InlineKeyboardMarkup } from 'grammy/types';
 
 /**
@@ -24,6 +24,14 @@ const TIMEOUT_SECONDS = 30;
 export interface TelegramBotIdentity {
   readonly id: number;
   readonly username: string;
+  /** The bot's display name in Telegram (`first_name`). */
+  readonly name: string;
+}
+
+/** A file an agent attached to a reply, as bytes, for `sendPhoto` or `sendDocument`. */
+export interface TelegramOutgoingFile {
+  readonly bytes: Buffer;
+  readonly fileName: string;
 }
 
 export interface TelegramWebhookInfo {
@@ -98,7 +106,7 @@ export class TelegramBotApi {
 
   async getMe(): Promise<TelegramBotIdentity> {
     const me = await this.#call(() => this.#api.getMe());
-    return { id: me.id, username: me.username };
+    return { id: me.id, username: me.username, name: me.first_name };
   }
 
   async setWebhook(url: string, secretToken: string): Promise<void> {
@@ -108,6 +116,11 @@ export class TelegramBotApi {
         allowed_updates: [...TELEGRAM_ALLOWED_UPDATES],
       }),
     );
+  }
+
+  /** Stops Telegram posting to this install; pending updates are dropped with it. */
+  async deleteWebhook(): Promise<void> {
+    await this.#call(() => this.#api.deleteWebhook({ drop_pending_updates: true }));
   }
 
   async getWebhookInfo(): Promise<TelegramWebhookInfo> {
@@ -144,6 +157,22 @@ export class TelegramBotApi {
         text,
         replyMarkup === undefined ? {} : { reply_markup: replyMarkup },
       ),
+    );
+    return String(sent.message_id);
+  }
+
+  /** Telegram's id for the photo message it accepted. */
+  async sendPhoto(chatId: string, file: TelegramOutgoingFile): Promise<string> {
+    const sent = await this.#call(() =>
+      this.#api.sendPhoto(chatId, new InputFile(file.bytes, file.fileName)),
+    );
+    return String(sent.message_id);
+  }
+
+  /** Telegram's id for the document message it accepted. */
+  async sendDocument(chatId: string, file: TelegramOutgoingFile): Promise<string> {
+    const sent = await this.#call(() =>
+      this.#api.sendDocument(chatId, new InputFile(file.bytes, file.fileName)),
     );
     return String(sent.message_id);
   }

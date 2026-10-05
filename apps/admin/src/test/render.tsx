@@ -28,6 +28,8 @@ import type { SystemApi } from '../screens/admin/system/system-api.js';
 import { fakeReportsApi } from '../screens/reports/fixtures.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import type { TicketsApi } from '../tickets/api.js';
@@ -54,6 +56,7 @@ export interface RenderAppOptions {
   readonly reportsApi?: ReportsApi;
   /** Defaults to the System fixture: a brand that is not being deleted. */
   readonly systemApi?: SystemApi;
+  readonly telegramApi?: TelegramApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -72,6 +75,7 @@ export interface RenderedApp extends RenderResult {
   readonly helpCenterApi: HelpCenterApi;
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
+  readonly telegramApi: TelegramApi;
 }
 
 /**
@@ -94,6 +98,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const helpCenterApi = options.helpCenterApi ?? new MockHelpCenterApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
+  const telegramApi = options.telegramApi ?? new MockTelegramApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -114,6 +119,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       domainsApi={domainsApi}
       reportsApi={options.reportsApi ?? fakeReportsApi()}
       systemApi={options.systemApi ?? fakeSystemApi()}
+      telegramApi={telegramApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -139,5 +145,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     helpCenterApi,
     browserPush,
     domainsApi,
+    telegramApi,
   };
 }

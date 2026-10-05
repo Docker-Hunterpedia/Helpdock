@@ -10,7 +10,9 @@ import {
 import type { CsatBrand, CsatSubmitRequest, CsatSurveyView, TicketCsat } from '@helpdock/schemas';
 import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
+import { publicHelpCenterUrl } from '../help-center/site/site-url.js';
 import type { CsatRepository, SurveyWithTicket } from './csat.repository.js';
+import { enqueueCsatReceived } from './csat-events.js';
 import { type CsatTokenSubject, type CsatTokens, hashCsatToken } from './tokens.js';
 
 /**
@@ -60,7 +62,10 @@ export interface CsatServiceOptions {
   readonly repository: CsatRepository;
   readonly tokens: CsatTokens;
   readonly limiter: RateLimiter;
-  /** `APP_URL`: the admin app hosts the rating page (ADR 0010). */
+  /**
+   * `APP_URL`: the admin app hosts the rating page (ADR 0010), and a help
+   * center without its own domain answers under it.
+   */
   readonly appUrl: string;
   readonly now?: () => Date;
 }
@@ -135,6 +140,10 @@ export class CsatService {
       }
 
       await this.#audit(tx, subject, found, 'csat.rated', { rating: request.rating });
+      await enqueueCsatReceived(tx, subject.brandId, {
+        ticketId: found.survey.ticketId,
+        surveyId: subject.surveyId,
+      });
 
       return { state: 'rated', brand, rating: request.rating };
     });
@@ -179,7 +188,12 @@ export class CsatService {
         throw new NotFoundException('No such rating link');
       }
 
-      return fn(tx, found, { name: brand.name, locale: brand.defaultLocale, accent: null });
+      return fn(tx, found, {
+        name: brand.name,
+        locale: brand.defaultLocale,
+        accent: null,
+        helpCenterUrl: await publicHelpCenterUrl(tx, subject.brandId, this.#options.appUrl),
+      });
     });
   }
 

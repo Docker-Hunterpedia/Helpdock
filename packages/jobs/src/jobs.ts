@@ -812,6 +812,138 @@ export const helpCenterMediaProcessJob = defineJob({
   idempotencyKey: (payload) => `help_center.media_process:${payload.mediaId}`,
 });
 
+/**
+ * M7-02: brings the install's embedding space in line with the `embedding.*`
+ * settings (DOMAIN-RULES §8, ADR 0005). Every minute it compares the settings
+ * with the `embedding_space` row; a new model or dimension drops the vector
+ * index, resizes `knowledge_chunks.embedding`, sets `reindexing` and adds
+ * {@link knowledgeReembedJob}. A settled space costs one read. A tick rather
+ * than an outbox event because the settings may change in the environment as
+ * well as in admin, and because the space is install-wide while every outbox
+ * row belongs to a brand.
+ */
+export const knowledgeConfigureJob = defineJob({
+  name: 'knowledge.configure',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: 100 },
+  schedule: { everyMs: 60_000 },
+});
+
+/**
+ * M7-02: embeds every chunk of every brand that is not yet in the target
+ * model, brand by brand and batch by batch, then builds the HNSW index and
+ * flips the space to `ready`. Added by {@link knowledgeConfigureJob} under the
+ * fixed id {@link KNOWLEDGE_REEMBED_JOB_ID}, so it runs once at a time; a run
+ * that fails leaves the space `reindexing` and the next tick resumes it from
+ * the chunks still left.
+ */
+export const knowledgeReembedJob = defineJob({
+  name: 'knowledge.reembed',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  // Removed on failure too: a failed job kept under the fixed id would make
+  // every later `add` a no-op, and the tick could never resume. The failure
+  // stays visible as `embedding_space.last_error`.
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: true },
+});
+
+export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
+
+export const knowledgeSyncPayloadSchema = z.object({
+  brandId: z.uuid(),
+  sourceId: z.uuid(),
+  /** What started it, for the first line of the sync log. */
+  trigger: z.enum(['upload', 'manual', 'schedule', 'created', 'changed']),
+  /** The staff member who pressed "Sync now" or saved the source. */
+  actorId: z.string().max(100).optional(),
+});
+export type KnowledgeSyncPayload = z.infer<typeof knowledgeSyncPayloadSchema>;
+
+/**
+ * M7-03: reads one source — an uploaded file, a website crawl, Notion pages,
+ * Drive folders — into documents and chunks, removes what the source no
+ * longer has, and embeds the new chunks. Added by the `knowledge.sync_requested`
+ * outbox handler (upload confirmed, "Sync now", source created or changed)
+ * with the outbox row's id, and by the source's own job scheduler for daily
+ * and weekly sources. Not one transaction: a crawl takes minutes, so each
+ * document is written in a short transaction of its own, and a second run
+ * that finds the source already syncing leaves it alone. Idempotent by
+ * content: a document whose hash is unchanged is skipped.
+ */
+export const knowledgeSyncJob = defineJob({
+  name: 'knowledge.sync',
+  queue: QUEUE_NAMES.knowledge,
+  schema: knowledgeSyncPayloadSchema,
+  options: {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The job scheduler that repeats a daily or weekly source's sync. */
+export const knowledgeSyncSchedulerId = (sourceId: string): string =>
+  `knowledge.sync.schedule.${sourceId}`;
+
+export const knowledgeEmbedPayloadSchema = z.object({ brandId: z.uuid() });
+export type KnowledgeEmbedPayload = z.infer<typeof knowledgeEmbedPayloadSchema>;
+
+/**
+ * M7-03: embeds every chunk of one brand that has no vector in the target
+ * model yet — the chunks an article publish just wrote, most often. Added by
+ * the article subscriber after it rewrites an article's chunks, with an id
+ * derived from the outbox row; a second run finds nothing left to embed. A
+ * failure (no embedding model, a provider down) leaves the chunks for the
+ * next run or for `knowledge.reembed`; full-text retrieval finds them meanwhile.
+ */
+export const knowledgeEmbedJob = defineJob({
+  name: 'knowledge.embed',
+  queue: QUEUE_NAMES.knowledge,
+  schema: knowledgeEmbedPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 3_600, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+export const webhookDeliverPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `webhook_deliveries` row: its frozen body, its endpoint, and its log. */
+  deliveryId: z.uuid(),
+});
+
+export type WebhookDeliverPayload = z.infer<typeof webhookDeliverPayloadSchema>;
+
+/** Attempts before a delivery is marked `failed` (M8-03). */
+export const WEBHOOK_DELIVER_ATTEMPTS = 8;
+
+/**
+ * M8-03: one event to one endpoint (ARCHITECTURE §13, `webhooks` queue). The
+ * delivery row is written by the `webhooks` subscriber of the domain event,
+ * beside a `webhook.delivery_requested` outbox row whose handler adds this job
+ * once the row has committed, as `email.send` does.
+ *
+ * Eight attempts, doubling from 30 seconds: the last one is 32 minutes after
+ * the one before it and about an hour after the first, so a receiver that is
+ * down for a deploy or a short outage still gets the event. Idempotent by
+ * delivery: a delivery that already succeeded is not sent again.
+ */
+export const webhookDeliverJob = defineJob({
+  name: 'webhook.deliver',
+  queue: QUEUE_NAMES.webhooks,
+  schema: webhookDeliverPayloadSchema,
+  options: {
+    attempts: WEBHOOK_DELIVER_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
+});
+
 export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('reply'),
@@ -1004,6 +1136,9 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterMediaProcessJob.name]: helpCenterMediaProcessJob,
   [helpCenterSearchReindexJob.name]: helpCenterSearchReindexJob,
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
+  [knowledgeConfigureJob.name]: knowledgeConfigureJob,
+  [knowledgeReembedJob.name]: knowledgeReembedJob,
+  [webhookDeliverJob.name]: webhookDeliverJob,
   [telegramSendJob.name]: telegramSendJob,
   [telegramPollJob.name]: telegramPollJob,
   [statsRollupJob.name]: statsRollupJob,

@@ -1,4 +1,5 @@
 import {
+  contacts,
   type Db,
   type DbTransaction,
   departments,
@@ -10,9 +11,11 @@ import {
   telegramBots,
   telegramChats,
   telegramDeliveries,
+  ticketStatuses,
+  tickets,
   users,
 } from '@helpdock/db';
-import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { withAllBrands } from '../tenant/all-brands.js';
 
 /**
@@ -140,14 +143,17 @@ export class TelegramRepository {
       readonly chatId: string;
       readonly contactId: string;
       readonly at: Date;
+      /** The customer's current `@username`; null when they have none. */
+      readonly username: string | null;
     },
   ): Promise<TelegramChatRow> {
+    const { at, ...values } = input;
     await tx
       .insert(telegramChats)
-      .values({ ...input, lastMessageAt: input.at })
+      .values({ ...values, lastMessageAt: at })
       .onConflictDoUpdate({
         target: [telegramChats.botId, telegramChats.chatId],
-        set: { contactId: input.contactId, lastMessageAt: input.at },
+        set: { contactId: input.contactId, username: input.username, lastMessageAt: at },
       });
     const rows = await tx
       .select()
@@ -160,6 +166,73 @@ export class TelegramRepository {
       throw new Error('The chat upsert left no row');
     }
     return row;
+  }
+
+  /** M6-04: the customer pressed a language button in this chat. */
+  async markLanguageChosen(tx: DbTransaction, chatRowId: string, at: Date): Promise<void> {
+    await tx
+      .update(telegramChats)
+      .set({ languageChosenAt: at })
+      .where(eq(telegramChats.id, chatRowId));
+  }
+
+  /**
+   * The chat a ticket's thread is with, its bot and its contact, for the
+   * ticket view (M6-02). The same choice of chat as a reply makes.
+   */
+  async ticketContext(
+    tx: DbTransaction,
+    ticket: { readonly id: string; readonly contactId: string | null },
+  ) {
+    const chat = await this.chatForTicket(tx, ticket);
+    if (chat === undefined) {
+      return undefined;
+    }
+    const rows = await tx
+      .select({
+        botUsername: telegramBots.username,
+        name: contacts.name,
+        locale: contacts.locale,
+      })
+      .from(telegramBots)
+      .innerJoin(contacts, eq(contacts.id, chat.contactId))
+      .where(eq(telegramBots.id, chat.botId))
+      .limit(1);
+    const row = rows[0];
+    return row === undefined ? undefined : { chat, ...row };
+  }
+
+  /** The Activity card of one bot: its last reply, recent failures and open tickets. */
+  async activity(tx: DbTransaction, botId: string, failedSince: Date) {
+    const [replies] = await tx
+      .select({
+        lastReplyAt: sql<Date | null>`max(${telegramDeliveries.sentAt})`.mapWith(
+          (value: string | Date | null) => (value === null ? null : new Date(value)),
+        ),
+        failed:
+          sql<number>`count(*) filter (where ${telegramDeliveries.status} = 'failed' and ${telegramDeliveries.failedAt} >= ${failedSince.toISOString()}::timestamptz)`.mapWith(
+            Number,
+          ),
+      })
+      .from(telegramDeliveries)
+      .where(eq(telegramDeliveries.botId, botId));
+    const [open] = await tx
+      .select({ count: sql<number>`count(distinct ${tickets.id})`.mapWith(Number) })
+      .from(telegramChats)
+      .innerJoin(tickets, eq(tickets.id, telegramChats.ticketId))
+      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+      .where(
+        and(
+          eq(telegramChats.botId, botId),
+          isNull(tickets.deletedAt),
+          ne(ticketStatuses.systemState, 'closed'),
+        ),
+      );
+    return {
+      lastReplyAt: replies?.lastReplyAt ?? null,
+      failedSends: replies?.failed ?? 0,
+      openTickets: open?.count ?? 0,
+    };
   }
 
   async setChatTicket(tx: DbTransaction, chatRowId: string, ticketId: string): Promise<void> {
@@ -228,12 +301,17 @@ export class TelegramRepository {
       .orderBy(asc(telegramDeliveries.createdAt));
   }
 
-  async recordPart(tx: DbTransaction, id: string, sentMessageId: string): Promise<void> {
+  /** One part done; `sentMessageId` is null for an attachment that was left out. */
+  async recordPart(tx: DbTransaction, id: string, sentMessageId: string | null): Promise<void> {
     await tx
       .update(telegramDeliveries)
       .set({
         partsSent: sql`${telegramDeliveries.partsSent} + 1`,
-        sentMessageIds: sql`array_append(${telegramDeliveries.sentMessageIds}, ${sentMessageId})`,
+        ...(sentMessageId === null
+          ? {}
+          : {
+              sentMessageIds: sql`array_append(${telegramDeliveries.sentMessageIds}, ${sentMessageId})`,
+            }),
       })
       .where(eq(telegramDeliveries.id, id));
   }

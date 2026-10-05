@@ -24,7 +24,10 @@ import {
   idempotencyKeyFor,
   JOB_DEFINITIONS,
   knowledgeConfigureJob,
+  knowledgeEmbedJob,
   knowledgeReembedJob,
+  knowledgeSyncJob,
+  knowledgeSyncSchedulerId,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -92,6 +95,19 @@ describe('the job registry', () => {
     expect(knowledgeConfigureJob.schedule).toEqual({ everyMs: 60_000 });
     expect(knowledgeReembedJob.schedule).toBeUndefined();
     expect(knowledgeReembedJob.queue).toBe('knowledge');
+  });
+
+  it('runs a source sync on the knowledge queue and names its schedule by source', () => {
+    expect(knowledgeSyncJob.queue).toBe('knowledge');
+    expect(knowledgeEmbedJob.queue).toBe('knowledge');
+    expect(knowledgeSyncSchedulerId('s1')).toBe('knowledge.sync.schedule.s1');
+    expect(
+      knowledgeSyncJob.schema.safeParse({
+        brandId: '0199b0a4-0000-7000-8000-000000000001',
+        sourceId: '0199b0a4-0000-7000-8000-000000000002',
+        trigger: 'whenever',
+      }).success,
+    ).toBe(false);
   });
 
   it('ticks retention nightly, and leaves the per-brand job to that tick', () => {

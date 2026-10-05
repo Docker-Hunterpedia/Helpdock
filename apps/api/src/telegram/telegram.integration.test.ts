@@ -8,6 +8,7 @@ import {
   attachments,
   auditLog,
   blockedSenders,
+  brands,
   contactIdentities,
   contacts,
   createDb,
@@ -483,6 +484,24 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
 
     it('refuses a body that is not an update', async () => {
       expect((await deliver({ hello: 'world' })).status).toBe(400);
+    });
+
+    it('answers 410 for a brand being deleted, but only after the secret (M8-07)', async () => {
+      const setStatus = (status: 'active' | 'deleting') =>
+        owner.db
+          .update(brands)
+          .set({ status, deletedAt: status === 'active' ? null : new Date() })
+          .where(eq(brands.id, seeded.brandId));
+      const update = textUpdate(nextUpdate(), CHAT, 'still there?');
+
+      await setStatus('deleting');
+      try {
+        expect((await deliver(update, 'wrong-secret')).status).toBe(401);
+        expect((await deliver(update)).status).toBe(410);
+      } finally {
+        await setStatus('active');
+      }
+      expect(await ticketForChat(CHAT)).toEqual([]);
     });
   });
 

@@ -132,7 +132,7 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
         WIDGET_EVENTS.presence,
         widgetEnvelope(
           WIDGET_EVENTS.presence,
-          { agentsOnline: await this.#config.agentsOnline(socket.data.brandId) },
+          await this.#config.presence(socket.data.brandId),
           null,
         ),
       );

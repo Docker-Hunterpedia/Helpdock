@@ -15,12 +15,17 @@ export interface LoadSession {
   /**
    * Read on every request, and deliberately writable: an access token lives
    * ten minutes (`ACCESS_TOKEN_TTL_SECONDS`), shorter than a §14 run, so the
-   * caller swaps in a fresh one the way a browser's refresh would.
+   * caller swaps in a fresh one the way a browser's refresh would. Null for
+   * a visitor, who sends no `Authorization` at all.
    */
-  token: string;
+  token: string | null;
 }
 
 export interface LoadScenario {
+  /**
+   * Scenarios of one session that share a name are reported as one: a suite
+   * that rotates through a hundred article pages asks about "an article page".
+   */
   readonly name: string;
   /** Which session sends it. */
   readonly session: LoadSession;
@@ -37,6 +42,12 @@ export interface LoadOptions {
   readonly durationMs: number;
   /** Pause between one response and the next request of the same session. */
   readonly thinkMs: number;
+  /**
+   * What a sample is: the whole response (`body`, the default), or the time to
+   * its status line and headers (`headers`), which is TTFB as a browser sees it.
+   * The body is read either way, so the connection is reused.
+   */
+  readonly until?: 'body' | 'headers';
 }
 
 export interface ScenarioResult extends LatencySummary {
@@ -63,9 +74,13 @@ export const runLoad = async ({
   warmupMs,
   durationMs,
   thinkMs,
+  until = 'body',
 }: LoadOptions): Promise<LoadResult> => {
-  const samples = new Map<LoadScenario, number[]>(scenarios.map((scenario) => [scenario, []]));
-  const errors = new Map<LoadScenario, number>(scenarios.map((scenario) => [scenario, 0]));
+  const keyOf = (scenario: LoadScenario): string =>
+    `${scenario.session.label}\u0000${scenario.name}`;
+  const groups = [...new Map(scenarios.map((scenario) => [keyOf(scenario), scenario])).values()];
+  const samples = new Map<string, number[]>(groups.map((scenario) => [keyOf(scenario), []]));
+  const errors = new Map<string, number>(groups.map((scenario) => [keyOf(scenario), 0]));
 
   const started = performance.now();
   const measureFrom = started + warmupMs;
@@ -81,17 +96,20 @@ export const runLoad = async ({
       const scenario = scenarios[next] as LoadScenario;
       next = (next + 1) % scenarios.length;
 
+      const { token } = scenario.session;
       const sent = performance.now();
       const response = await fetch(`${baseUrl}${scenario.path}`, {
-        headers: { authorization: `Bearer ${scenario.session.token}` },
+        headers: token === null ? {} : { authorization: `Bearer ${token}` },
       });
+      const headersAt = performance.now();
       await response.arrayBuffer();
-      const received = performance.now();
+      const received = until === 'headers' ? headersAt : performance.now();
 
       if (sent >= measureFrom && received <= stopAt) {
-        samples.get(scenario)?.push(received - sent);
+        const key = keyOf(scenario);
+        samples.get(key)?.push(received - sent);
         if (response.status !== 200) {
-          errors.set(scenario, (errors.get(scenario) ?? 0) + 1);
+          errors.set(key, (errors.get(key) ?? 0) + 1);
         }
       }
 
@@ -104,11 +122,11 @@ export const runLoad = async ({
   const all = [...samples.values()].flat();
 
   return {
-    scenarios: scenarios.map((scenario) => ({
+    scenarios: groups.map((scenario) => ({
       name: scenario.name,
       session: scenario.session.label,
-      errors: errors.get(scenario) ?? 0,
-      ...summarise(samples.get(scenario) ?? []),
+      errors: errors.get(keyOf(scenario)) ?? 0,
+      ...summarise(samples.get(keyOf(scenario)) ?? []),
     })),
     overall: summarise(all),
     requestsPerSecond: all.length / (durationMs / 1000),

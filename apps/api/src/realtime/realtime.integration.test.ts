@@ -27,13 +27,14 @@ import { Redis } from 'ioredis';
 import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
-import { revokedSessionKey } from '../auth/redis-keys.js';
+import { hashSubject, rateLimitKey, revokedSessionKey } from '../auth/redis-keys.js';
 import { REFRESH_COOKIE } from '../auth/session/cookies.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { PresenceService } from './presence.service.js';
 import { presenceSocketKey } from './presence.store.js';
+import { SOCKET_EVENT_RULES } from './socket-rate-limit.js';
 
 /**
  * M0-13 end to end: two api replicas on two ports over one Redis, real sockets,
@@ -479,6 +480,21 @@ describe.skipIf(!hasDocker)('the realtime gateway', () => {
       expect(told).toEqual([{ code: 'session_revoked', message: 'sign-out' }]);
     });
 
+    it('leaves the same person’s other browser connected', async () => {
+      const first = await signIn();
+      const second = await signIn({ at: 1 });
+      const signingOut = await connect(0, first.token);
+      const otherBrowser = await connect(1, second.token);
+
+      await signOut(0, first.token, first.refreshCookie);
+
+      expect(await eventually(() => !signingOut.connected)).toBe(true);
+      // The message has reached both replicas by now; give the second a beat to
+      // act on it if it were going to.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(otherBrowser.connected).toBe(true);
+    });
+
     it('refuses a room join on a session that was revoked, and closes the socket', async () => {
       const { token } = await signIn();
       const socket = await connect(0, token);
@@ -495,6 +511,31 @@ describe.skipIf(!hasDocker)('the realtime gateway', () => {
 
       expect(ack).toMatchObject({ ok: false, error: { code: 'session_revoked' } });
       expect(await eventually(() => !socket.connected)).toBe(true);
+    });
+  });
+
+  describe('event budgets', () => {
+    const rule = SOCKET_EVENT_RULES[REALTIME_EVENTS.presenceSet];
+
+    afterEach(async () => {
+      await redis.del(rateLimitKey(rule.bucket, hashSubject(seeded.userId)));
+    });
+
+    it('refuses presence:set over the per-person budget, across sockets and replicas', async () => {
+      const { token } = await signIn();
+      const onA = await connect(0, token);
+      const onB = await connect(1, token);
+      const away = { brandId: seeded.brandId, status: 'away' };
+
+      const acks: { ok: boolean; error?: { code: string } }[] = [];
+      for (let sent = 0; sent <= rule.limit; sent += 1) {
+        acks.push(
+          await (sent % 2 === 0 ? onA : onB).emitWithAck(REALTIME_EVENTS.presenceSet, away),
+        );
+      }
+
+      expect(acks.at(-1)).toMatchObject({ ok: false, error: { code: 'rate_limited' } });
+      expect(onA.connected && onB.connected).toBe(true);
     });
   });
 });

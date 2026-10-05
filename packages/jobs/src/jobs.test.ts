@@ -246,6 +246,14 @@ describe('assignment.offline_unassign', () => {
     );
   });
 
+  it('keys a run deferred to the next opening apart from the run that deferred it', () => {
+    const deferred = { ...payload, deferredTo: '2026-09-27T06:00:00.000Z' };
+
+    expect(idempotencyKeyFor(assignmentOfflineUnassignJob, deferred, 'first')).not.toBe(
+      idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first'),
+    );
+  });
+
   it('runs on a queue of its own', () => {
     expect(assignmentOfflineUnassignJob.queue).toBe('assignment');
   });

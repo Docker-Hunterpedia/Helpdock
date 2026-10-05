@@ -343,6 +343,8 @@ export const socketErrorCodeSchema = z.enum([
   'invalid_payload',
   /** The session was revoked while the socket was open (DOMAIN-RULES §1.4). */
   'session_revoked',
+  /** Too many of this event from this principal; try again in a minute. */
+  'rate_limited',
   /** Anything the server did not expect. Carries no detail on purpose. */
   'internal',
 ]);

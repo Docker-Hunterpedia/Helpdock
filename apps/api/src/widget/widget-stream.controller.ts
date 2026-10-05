@@ -132,11 +132,7 @@ export class WidgetStreamController {
     raw.write(
       frame(
         WIDGET_EVENTS.presence,
-        widgetEnvelope(
-          WIDGET_EVENTS.presence,
-          { agentsOnline: await this.#config.agentsOnline(brandId) },
-          null,
-        ),
+        widgetEnvelope(WIDGET_EVENTS.presence, await this.#config.presence(brandId), null),
       ),
     );
     write = (chunk) => raw.write(chunk);

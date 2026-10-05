@@ -44,6 +44,7 @@ import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import {
   createOfflineUnassignProcessor,
+  type OfflineUnassignQueue,
   registerAssignmentEventHandlers,
 } from '../assignment/assignment-events.js';
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
@@ -298,7 +299,18 @@ const assignmentReads = (redis: Redis) => {
   };
 };
 
-/** M3-01's calendar, for M2-06's out-of-hours reply. */
+/** M1-07's delayed timers, added under the id the caller derived from the departure. */
+const offlineUnassignQueue = (queue: Queue): OfflineUnassignQueue => ({
+  add: async ({ jobId, delayMs, payload }) => {
+    await queue.add(assignmentOfflineUnassignJob.name, payload, {
+      ...assignmentOfflineUnassignJob.options,
+      jobId,
+      delay: delayMs,
+    });
+  },
+});
+
+/** M3-01's calendar, for M2-06's out-of-hours reply and M1-07's offline timer. */
 const businessHoursService = (): BusinessHoursService => {
   const repository = new SlaRepository();
 
@@ -363,15 +375,7 @@ export const workerDependencies: WorkerDependencies = {
     const assignment = new Queue(QUEUE_NAMES.assignment, { connection: redis });
     registerAssignmentEventHandlers({
       ...assignmentReads(redis),
-      queue: {
-        add: async ({ jobId, delayMs, payload }) => {
-          await assignment.add(assignmentOfflineUnassignJob.name, payload, {
-            ...assignmentOfflineUnassignJob.options,
-            jobId,
-            delay: delayMs,
-          });
-        },
-      },
+      queue: offlineUnassignQueue(assignment),
     });
 
     // M2-05 and M2-06. `email.send` ends in a job on the `outbound` queue, under
@@ -586,12 +590,28 @@ export const workerDependencies: WorkerDependencies = {
     );
     return worker;
   },
-  createAssignmentWorker: ({ redis, db, log }) =>
-    createWorker(
+  createAssignmentWorker: ({ redis, db, log }) => {
+    const businessHours = businessHoursService();
+    // The timer re-adds itself to its own queue when it fires while the
+    // department is closed.
+    const deferrals = new Queue(QUEUE_NAMES.assignment, { connection: redis });
+    const worker = createWorker(
       assignmentOfflineUnassignJob,
-      createOfflineUnassignProcessor(assignmentReads(redis)),
+      createOfflineUnassignProcessor({
+        ...assignmentReads(redis),
+        calendarFor: (tx, brandId, departmentId) =>
+          businessHours.calendarFor(brandId, departmentId, tx),
+        queue: offlineUnassignQueue(deferrals),
+      }),
       { redis, db, log },
-    ),
+    );
+    return {
+      close: async () => {
+        await worker.close();
+        await deferrals.close();
+      },
+    };
+  },
   createMaintenanceWorker: ({ redis, db, log }) => {
     const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
     const scheduled = maintenance.upsertJobScheduler(

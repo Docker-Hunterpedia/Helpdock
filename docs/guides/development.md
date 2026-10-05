@@ -824,6 +824,7 @@ nobody reviews; Renovate proposes the bumps.
 | [`codeql.yml`](../../.github/workflows/codeql.yml) | pull requests, pushes to `main`, Mondays | Static analysis into the security tab. |
 | [`changesets.yml`](../../.github/workflows/changesets.yml) | pushes to `main` | Keeps the "version packages" pull request open. |
 | [`release.yml`](../../.github/workflows/release.yml) | a `v*` tag | Publishes the image and the GitHub Release. |
+| [`zap.yml`](../../.github/workflows/zap.yml) | pushes to `release/**`, `v*` tags, manually | The ZAP baseline scan against the Compose stack. |
 
 ### The `ci` workflow
 
@@ -834,7 +835,8 @@ command you can run locally:
 
 | Job | Steps |
 |---|---|
-| `checks` | `pnpm lint`, `pnpm check:boundaries`, `pnpm check:routes`, `pnpm check:validation`, `pnpm typecheck` |
+| `checks` | `pnpm lint`, `pnpm check:boundaries`, `pnpm check:routes`, `pnpm check:validation`, `pnpm typecheck`, `pnpm audit --audit-level high` |
+| `semgrep` | `semgrep scan --test .semgrep`, then Helpdock's rules over `apps`, `packages` and `scripts` ([security scanning](security-scanning.md#semgrep)) |
 | `unit` | `vitest run --coverage --project='!integration' --project='!@helpdock/api' --project='!@helpdock/admin'`: the `packages/*` 80 % gate |
 | `admin-unit` | `pnpm --filter @helpdock/admin test:coverage`: the admin's 85 % gate |
 | `api` | `pnpm --filter @helpdock/api test:coverage`: the api's unit and integration suites and its 90 % gate (Testcontainers) |
@@ -900,5 +902,6 @@ SBOM attached to the GitHub Release.
 
 `codeql.yml` analyses `javascript-typescript` with the `security-extended` query
 pack on every pull request, on pushes to `main`, and weekly — advisories appear
-for code that has not changed. Semgrep's Nest rules and a ZAP baseline scan
-against the Compose stack are **M9-05**, not part of M0.
+for code that has not changed. Semgrep's rules run in `ci.yml` and the ZAP
+baseline scan in `zap.yml`; [security scanning](security-scanning.md) covers all
+of them and what to do when one fails.

@@ -39,6 +39,9 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { BusinessHoursService } from '../sla/business-hours.service.js';
+import { SlaRepository } from '../sla/sla.repository.js';
+import { SlaService } from '../sla/sla.service.js';
 import { AssignmentRepository } from './assignment.repository.js';
 import {
   ASSIGNMENT_EVENTS,
@@ -860,13 +863,24 @@ describe.skipIf(!hasDocker)('assignment', () => {
     let status: PresenceStatus = 'offline';
     const lookup = { statusOf: async () => status };
 
-    const runOffline = (payload: AssignmentOfflineUnassignPayload) =>
+    // The seeded brand has no saved hours, so it counts Monday to Friday,
+    // 09:00–17:00 UTC. 2026-09-23 is a Wednesday and 2026-09-26 a Saturday.
+    const openAt = new Date('2026-09-23T12:00:00.000Z');
+    const closedAt = new Date('2026-09-26T12:00:00.000Z');
+    const slaRepository = new SlaRepository();
+    const businessHours = new BusinessHoursService(slaRepository, new SlaService(slaRepository));
+
+    const runOffline = (payload: AssignmentOfflineUnassignPayload, now = openAt) =>
       withSystem(runtime.db, seeded.brandId, (tx) =>
         createOfflineUnassignProcessor({
           repository,
           presence,
           lookup,
           offlineSince: offlineSince(),
+          calendarFor: (calendarTx, brandId, departmentId) =>
+            businessHours.calendarFor(brandId, departmentId, calendarTx),
+          queue,
+          now: () => now,
         })({ payload, brandId: seeded.brandId, tx, job: {} as Job, log: silentLogger }),
       );
 
@@ -925,6 +939,27 @@ describe.skipIf(!hasDocker)('assignment', () => {
 
       status = 'offline';
       await runOffline(job?.payload as AssignmentOfflineUnassignPayload);
+      expect(await assigneeOf(ticket.ticket.id)).toBe(sue.id);
+    });
+
+    it('waits for the department to open before unassigning', async () => {
+      await closeOut();
+      await configure(support, { mode: 'round_robin', autoUnassignOffline: true });
+      online = new Set([sue.id]);
+      status = 'offline';
+      const ticket = await createTicket(ada, { assigneeId: sam.id });
+      // The departure key never moves backwards, so it is the latest one; only
+      // the timer's clock is pinned to the weekend.
+      const since = new Date().toISOString();
+      await offlineSince().set(seeded.brandId, sam.id, since);
+      const payload = { brandId: seeded.brandId, userId: sam.id, departmentId: support, since };
+
+      await runOffline(payload, closedAt);
+      expect(await assigneeOf(ticket.ticket.id)).toBe(sam.id);
+      const deferred = added.find((entry) => entry.payload.deferredTo !== undefined);
+      expect(deferred?.payload.deferredTo).toBe('2026-09-28T09:00:00.000Z');
+
+      await runOffline(deferred?.payload as AssignmentOfflineUnassignPayload, openAt);
       expect(await assigneeOf(ticket.ticket.id)).toBe(sue.id);
     });
 

@@ -5,6 +5,7 @@ import type {
   WidgetConversationList,
   WidgetEnvelope,
   WidgetMessagePage,
+  WidgetPresence,
   WidgetQueue,
   WidgetReceipt,
   WidgetSendResponse,
@@ -256,9 +257,9 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
         return;
       }
       case EVENTS.presence: {
-        const { agentsOnline } = envelope.data as { agentsOnline: boolean };
+        const { agentsOnline, agents } = envelope.data as WidgetPresence;
         if (availability !== null) {
-          availability = { ...availability, agentsOnline };
+          availability = { ...availability, agentsOnline, agents };
           emit({ type: 'presence', availability: toAvailability(availability) });
         }
         return;

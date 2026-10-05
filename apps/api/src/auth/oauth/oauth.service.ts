@@ -79,6 +79,8 @@ const challengeFor = (verifier: string): string =>
 
 /** One timeout for every provider call, so a hung provider is not a hung request. */
 const postForm = async (url: string, body: URLSearchParams): Promise<unknown> => {
+  // The providers' fixed token endpoints, never a URL a user supplied.
+  // nosemgrep: helpdock-fetch-non-constant-url
   const response = await fetch(url, {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
@@ -94,6 +96,8 @@ const postForm = async (url: string, body: URLSearchParams): Promise<unknown> =>
 };
 
 const getJson = async (url: string, accessToken: string): Promise<unknown> => {
+  // The providers' fixed user endpoints, never a URL a user supplied.
+  // nosemgrep: helpdock-fetch-non-constant-url
   const response = await fetch(url, {
     headers: {
       accept: 'application/vnd.github+json',

@@ -286,7 +286,13 @@ describe('the remote transport', () => {
     const api = fakeApi({
       'GET /config': () => ({
         brandName: 'Acme',
-        availability: { open: true, agentsOnline: false, nextOpenAt: null, timezone: 'UTC' },
+        availability: {
+          open: true,
+          agentsOnline: false,
+          agents: [],
+          nextOpenAt: null,
+          timezone: 'UTC',
+        },
         popularArticles: [],
         theme: {
           colorScheme: 'auto',
@@ -338,7 +344,7 @@ describe('the remote transport', () => {
     live.envelope('queue', { conversationId: CONVERSATION, position: null });
     live.envelope('typing', { conversationId: CONVERSATION, typing: true, agentName: null });
     live.envelope('receipt', { conversationId: CONVERSATION, kind: 'read', seq: 1 });
-    live.envelope('presence', { agentsOnline: true });
+    live.envelope('presence', { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] });
     live.envelope('conversation', {
       conversationId: CONVERSATION,
       state: 'closed',
@@ -357,7 +363,11 @@ describe('the remote transport', () => {
       { type: 'receipt', kind: 'read', seq: 1 },
       {
         type: 'presence',
-        availability: expect.objectContaining({ state: 'online', timezone: 'UTC' }),
+        availability: expect.objectContaining({
+          state: 'online',
+          timezone: 'UTC',
+          agents_online: [{ id: 'online-0', name: 'Lina', avatar_url: null }],
+        }),
       },
       { type: 'conversation', conversation: expect.objectContaining({ status: 'ended' }) },
     ]);

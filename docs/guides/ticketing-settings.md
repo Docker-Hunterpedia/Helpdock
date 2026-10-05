@@ -605,9 +605,11 @@ department has turned the timer off since. Otherwise it unassigns their open
 tickets there and routes each again.
 
 DOMAIN-RULES §12 says the timer never fires "during business hours closed
-periods". Departments have business hours since M3-01, but the job does not
-read them yet, so every period counts as open
-([M3 gaps](../completed/M3-automation-and-slas.md#gaps-and-follow-ups)).
+periods". When it is due while the department is closed — its own hours and
+holidays if it has them, otherwise the brand's ([SLAs](slas.md#business-hours))
+— the job puts itself off to the next opening (a new delayed job whose payload
+carries `deferredTo`), and every check above runs again then. A department
+whose calendar never opens never unassigns.
 
 ### Agents in a department
 

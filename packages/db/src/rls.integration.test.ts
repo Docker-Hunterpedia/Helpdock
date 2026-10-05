@@ -49,6 +49,7 @@ import {
   knowledgeChunks,
   knowledgeDocuments,
   knowledgeSources,
+  knowledgeSyncLog,
   mailboxes,
   notifications,
   outbox,
@@ -834,6 +835,18 @@ const fixtures = [
         visibility: 'internal',
         content: 'Refunds are issued within five working days.',
         contentHash: 'sha256-fixture-chunk',
+      }),
+  },
+  // M7-03. A source's sync log, under the brand's source.
+  {
+    name: 'knowledge_sync_log',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeSyncLog).values({
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        runId: knowledgeSourceId[brandId] ?? '',
+        level: 'info',
+        code: 'sync.started',
       }),
   },
   // M8-01, M8-02, M8-03. The key hash is unique across the install, so each

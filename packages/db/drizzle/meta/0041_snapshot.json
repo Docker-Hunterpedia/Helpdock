@@ -1,5 +1,5 @@
 {
-  "id": "8c146f19-279c-417b-96a8-6819308ef49c",
+  "id": "f40b21bf-a0d5-4fef-b5bc-350bfb07a34a",
   "prevId": "bf1a74ca-ecc4-4253-bacf-bef437f330a8",
   "version": "7",
   "dialect": "postgresql",
@@ -375,19 +375,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "''"
-        },
-        "system_prompt_ar": {
-          "name": "system_prompt_ar",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "modes": {
-          "name": "modes",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "pii_redaction": {
           "name": "pii_redaction",
@@ -5375,6 +5362,33 @@
           "notNull": true,
           "default": "'idle'"
         },
+        "schedule": {
+          "name": "schedule",
+          "type": "knowledge_sync_schedule",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "sync_started_at": {
+          "name": "sync_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "progress_done": {
+          "name": "progress_done",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "progress_total": {
+          "name": "progress_total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_synced_at": {
           "name": "last_synced_at",
           "type": "timestamp with time zone",
@@ -5383,6 +5397,18 @@
         },
         "last_error": {
           "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error_code": {
+          "name": "last_error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -5417,6 +5443,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "knowledge_sources_article_key": {
+          "name": "knowledge_sources_article_key",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"knowledge_sources\".\"kind\" = 'article'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -5425,6 +5467,111 @@
           "tableFrom": "knowledge_sources",
           "tableTo": "brands",
           "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.knowledge_sync_log": {
+      "name": "knowledge_sync_log",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level": {
+          "name": "level",
+          "type": "knowledge_log_level",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "params": {
+          "name": "params",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "knowledge_sync_log_source_idx": {
+          "name": "knowledge_sync_log_source_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "knowledge_sync_log_brand_id_brands_id_fk": {
+          "name": "knowledge_sync_log_brand_id_brands_id_fk",
+          "tableFrom": "knowledge_sync_log",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "knowledge_sync_log_source_id_knowledge_sources_id_fk": {
+          "name": "knowledge_sync_log_source_id_knowledge_sources_id_fk",
+          "tableFrom": "knowledge_sync_log",
+          "tableTo": "knowledge_sources",
+          "columnsFrom": ["source_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -11578,10 +11725,20 @@
       "schema": "public",
       "values": ["public", "internal"]
     },
+    "public.knowledge_log_level": {
+      "name": "knowledge_log_level",
+      "schema": "public",
+      "values": ["info", "warn", "error", "done"]
+    },
     "public.knowledge_source_kind": {
       "name": "knowledge_source_kind",
       "schema": "public",
       "values": ["article", "file", "crawl", "notion", "gdrive"]
+    },
+    "public.knowledge_sync_schedule": {
+      "name": "knowledge_sync_schedule",
+      "schema": "public",
+      "values": ["automatic", "daily", "weekly", "manual"]
     },
     "public.knowledge_sync_status": {
       "name": "knowledge_sync_status",

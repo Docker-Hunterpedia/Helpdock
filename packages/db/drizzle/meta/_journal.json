@@ -278,8 +278,15 @@
     {
       "idx": 41,
       "version": "7",
-      "when": 1791203064602,
-      "tag": "0041_ai_assistant_modes",
+      "when": 1791202932776,
+      "tag": "0041_knowledge_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791203897182,
+      "tag": "0042_ai_assistant_modes",
       "breakpoints": true
     }
   ]

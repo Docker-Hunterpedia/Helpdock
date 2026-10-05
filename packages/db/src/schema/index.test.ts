@@ -66,6 +66,7 @@ describe('the schema', () => {
       'knowledge_chunks',
       'knowledge_documents',
       'knowledge_sources',
+      'knowledge_sync_log',
       'mailboxes',
       'notification_prefs',
       'notifications',

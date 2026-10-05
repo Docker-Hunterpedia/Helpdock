@@ -65,6 +65,10 @@ export const PERMISSIONS = [
   // Team Leader's ("Manages config … help center").
   'help_center:read',
   'help_center:manage',
+  // M7: a brand's AI assistant — its system prompt ("editable by Team Leader",
+  // REQUIREMENTS §4.7) and reading its model, guardrails and budget. Changing
+  // the model, the guardrails or the budget stays `brand:manage`.
+  'ai:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -93,6 +97,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'system:read',
     'help_center:read',
     'help_center:manage',
+    'ai:manage',
   ],
   // "Departments they lead: agents, SLAs, rules, macros, canned responses, help
   // center, widget theme, content policy, reopen policy" — brand-level
@@ -111,6 +116,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'settings:write',
     'help_center:read',
     'help_center:manage',
+    'ai:manage',
   ],
   agent: [
     'ticket:read',

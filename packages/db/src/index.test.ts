@@ -1,6 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import * as client from './client.js';
+import * as embeddingSpace from './embedding-space.js';
 import * as index from './index.js';
 import * as migrate from './migrate.js';
 import * as rls from './rls.js';
@@ -15,6 +16,7 @@ import * as views from './views.js';
 
 const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'client.ts': client,
+  'embedding-space.ts': embeddingSpace,
   'migrate.ts': migrate,
   'rls.ts': rls,
   'roles.ts': roles,

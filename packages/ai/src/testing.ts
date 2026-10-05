@@ -49,11 +49,8 @@ export interface FakeModel {
   unregister(): void;
 }
 
-/** Faux pricing, so a test can assert cost tracking: one dollar per million tokens each way. */
-const FAUX_COST = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 };
-
 export const createFakeModel = (): FakeModel => {
-  const registration = registerFauxProvider({ models: [{ id: 'fake-model', cost: FAUX_COST }] });
+  const registration = registerFauxProvider({ models: [{ id: 'fake-model' }] });
   const sent: SentRequest[] = [];
 
   return {

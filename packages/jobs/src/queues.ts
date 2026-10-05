@@ -14,7 +14,10 @@ export const QUEUE_NAMES = {
   rules: 'rules',
   /** `ai.assist`, `ai.autoreply`, `ai.classify`, `ai.transcribe`. */
   ai: 'ai',
-  /** `ingest.source`, `ingest.chunk_embed`, `crawl.page`; `help_center.publish_due` and its hourly sweep (M5-01). */
+  /**
+   * `ingest.source`, `ingest.chunk_embed`, `crawl.page`; `help_center.publish_due` and its hourly
+   * sweep (M5-01); `knowledge.configure` and `knowledge.reembed` (M7-02).
+   */
   knowledge: 'knowledge',
   /** `media.process`, `media.scan`; `help_center.media_process` (M5-02). */
   media: 'media',

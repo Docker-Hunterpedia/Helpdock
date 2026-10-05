@@ -109,7 +109,7 @@ export const aiCalls = pgTable(
     prompt: jsonb('prompt').$type<Record<string, unknown>>(),
     response: text('response'),
     redactions: jsonb('redactions').$type<Record<string, unknown>[]>(),
-    sources: jsonb('sources').$type<Record<string, unknown>[]>(),
+    sources: jsonb('sources').$type<unknown[]>(),
     /** The provider's message on failure, or why the call was refused. */
     error: text('error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

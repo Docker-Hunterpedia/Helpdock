@@ -1,4 +1,5 @@
 export * from './client.js';
+export * from './embedding-space.js';
 export * from './migrate.js';
 export * from './rls.js';
 export * from './roles.js';

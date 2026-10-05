@@ -184,6 +184,8 @@ export interface CreateApiAppOptions {
   readonly widget?: AppModuleOptions['widget'];
   /** M4-09's siteverify call, for suites. */
   readonly webForm?: AppModuleOptions['webForm'];
+  /** M7's model discovery HTTP, for suites. */
+  readonly ai?: AppModuleOptions['ai'];
 }
 
 export const createApiApp = async ({
@@ -194,6 +196,7 @@ export const createApiApp = async ({
   channels,
   widget,
   webForm,
+  ai,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -223,6 +226,7 @@ export const createApiApp = async ({
       ...(channels === undefined ? {} : { channels }),
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
+      ...(ai === undefined ? {} : { ai }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the

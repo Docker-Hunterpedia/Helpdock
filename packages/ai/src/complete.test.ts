@@ -67,7 +67,12 @@ describe('complete()', () => {
     });
     expect(call?.tokensIn).toBeGreaterThan(0);
     expect(call?.tokensOut).toBeGreaterThan(0);
-    expect(call?.costUsd).toBeCloseTo(((call?.tokensIn ?? 0) + (call?.tokensOut ?? 0)) / 1e6);
+    // gpt-4o-mini's price in pi-ai's registry: 0.15 in, 0.60 out, per million tokens.
+    expect(call?.costUsd).toBeCloseTo(
+      ((call?.tokensIn ?? 0) * 0.15 + (call?.tokensOut ?? 0) * 0.6) / 1e6,
+      12,
+    );
+    expect(call?.costUsd).toBeGreaterThan(0);
     expect(call?.promptHash).toMatch(/^[0-9a-f]{64}$/);
     expect(result.callId).toBe('call-1');
   });

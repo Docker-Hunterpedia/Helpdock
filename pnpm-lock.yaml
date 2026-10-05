@@ -317,6 +317,9 @@ importers:
       '@fastify/static':
         specifier: 10.1.4
         version: 10.1.4
+      '@helpdock/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@helpdock/channels':
         specifier: workspace:*
         version: link:../../packages/channels

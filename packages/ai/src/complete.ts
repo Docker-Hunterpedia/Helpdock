@@ -3,6 +3,7 @@ import {
   type Api,
   type AssistantMessage,
   type Context,
+  calculateCost,
   type Message,
   type Model,
   type ProviderStreamOptions,
@@ -254,7 +255,9 @@ export const createComplete =
     const fields = {
       tokensIn: answer.usage.input + answer.usage.cacheRead + answer.usage.cacheWrite,
       tokensOut: answer.usage.output,
-      costUsd: answer.usage.cost.total,
+      // Priced from the configured model's entry in pi-ai's registry (ADR 0016),
+      // on a copy: `calculateCost` writes into the usage it is given.
+      costUsd: calculateCost(model, structuredClone(answer.usage)).total,
     };
     const callId = await record({
       status: 'ok',

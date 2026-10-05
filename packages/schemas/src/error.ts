@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { aiRefusalSchema } from './ai.js';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { domainsRefusalSchema } from './domains.js';
@@ -89,6 +90,8 @@ export const errorResponseSchema = z.object({
     widget: z.object({ reason: widgetErrorCodeSchema }).optional(),
     /** Only on a refused help center change (M5-01). */
     helpCenter: z.object({ reason: hcRefusalSchema }).optional(),
+    /** Only on a refused AI settings change (M7-01, M7-02). */
+    ai: z.object({ reason: aiRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

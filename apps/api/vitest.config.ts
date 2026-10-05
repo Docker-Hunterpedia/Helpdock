@@ -12,6 +12,7 @@ export default defineConfig({
     // run only, which is the worst place for a difference to live.
     dedupe: ['zod', 'nestjs-zod'],
     alias: {
+      '@helpdock/ai': fileURLToPath(new URL('../../packages/ai/src/index.ts', import.meta.url)),
       // Workspace packages resolve to `dist/` through their `exports` map, which
       // would make a test run against the last build instead of the source.
       '@helpdock/config': fileURLToPath(

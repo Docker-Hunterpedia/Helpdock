@@ -169,6 +169,34 @@ test.describe('the System page', () => {
     await expect(pending.getByText(t('system:pending.daysLeft', { count: 3 }))).toBeVisible();
   });
 
+  test('draws LLM spend per brand, the Postgres size, the newest migrations and who deleted a brand', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openSystem(page, locale, measuredSystemStatus());
+
+    const llm = page.getByRole('table', { name: t('system:llm.title') });
+    await expect(llm.getByRole('row').filter({ hasText: 'Acme Store' })).toContainText(
+      t('system:llm.pastAlert', { percent: 86, budget: '$100.00', alert: 80 }),
+    );
+    await expect(llm.getByRole('row').last()).toContainText(t('system:llm.install'));
+    const storage = page.getByRole('region', { name: t('system:storage.title') });
+    await expect(storage.getByText(t('system:storage.postgresCaption'))).toBeVisible();
+    await expect(
+      page.getByRole('list', { name: t('system:versionCard.recent') }).getByRole('listitem'),
+    ).toHaveText([
+      '0003_outbox_notify_relay',
+      '0002_tenant_rls_policies',
+      '0001_app_role_and_ticket_sequences',
+    ]);
+    const pending = page.getByRole('region', { name: t('system:pending.title') });
+    await expect(pending.getByText(/Lina Haddad/)).toBeVisible();
+    await expect(pending.getByText(new RegExp(t('system:pending.removedAccount')))).toBeVisible();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('restores a brand pending deletion', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await openSystem(page, locale, measuredSystemStatus());

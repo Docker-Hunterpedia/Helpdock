@@ -162,7 +162,7 @@ describe('SystemPage', () => {
     const storage = await screen.findByRole('region', { name: 'Storage' });
     expect(within(storage).getByText(/^Not measured yet/)).toBeVisible();
     expect(within(storage).queryByText('0 B')).not.toBeInTheDocument();
-    const llm = screen.getByRole('region', { name: 'LLM spend' });
+    const llm = screen.getByRole('region', { name: 'LLM spend by brand' });
     expect(
       within(llm).getByText('Not available until the AI assistant is set up (M7).'),
     ).toBeVisible();
@@ -177,6 +177,41 @@ describe('SystemPage', () => {
     const table = within(storage).getByRole('table', { name: 'Storage by brand' });
     expect(within(table).getByText('· pending deletion')).toBeVisible();
     expect(within(table).getByText('11.2 GB')).toBeVisible();
+    // Postgres is the whole database; the artboard's per-brand column is not drawn.
+    expect(within(storage).getByText('3.2 GB')).toBeVisible();
+    expect(within(storage).getByText('The whole database · not measured per brand')).toBeVisible();
+  });
+
+  it('lists the newest migrations under the count', async () => {
+    renderSystem(apiReturning(healthySystemStatus()));
+
+    const version = await screen.findByRole('region', { name: 'Version and migrations' });
+    const recent = within(version).getByRole('list', { name: 'Newest migrations' });
+    expect(
+      within(recent)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      '0003_outbox_notify_relay',
+      '0002_tenant_rls_policies',
+      '0001_app_role_and_ticket_sequences',
+    ]);
+  });
+
+  it("draws each brand's LLM spend against its budget, and warns past the alert", async () => {
+    renderSystem(apiReturning(measuredSystemStatus()));
+
+    const llm = await screen.findByRole('region', { name: 'LLM spend by brand' });
+    const rows = within(llm).getAllByRole('row');
+    expect(rows.slice(1).map((row) => row.firstChild?.textContent)).toEqual([
+      'Acme Store',
+      'Helpdock',
+      'Old Store',
+      'Install',
+    ]);
+    expect(within(llm).getByText('86 % of $100.00 · past the 80 % alert')).toBeVisible();
+    expect(within(llm).getByText('48 % of $100.00')).toBeVisible();
+    expect(within(llm).getAllByText('No monthly budget')).toHaveLength(2);
   });
 
   it('lists the brands pending deletion with their countdown, and restores one', async () => {
@@ -187,6 +222,8 @@ describe('SystemPage', () => {
     expect(await within(card).findByText('26 days left')).toBeVisible();
     expect(within(card).getByText('3 days left')).toBeVisible();
     expect(within(card).getByText('2 brands · 30-day grace')).toBeVisible();
+    expect(within(card).getByText(/^Deleted by Lina Haddad on /)).toBeVisible();
+    expect(within(card).getByText(/^Deleted by a removed account on /)).toBeVisible();
 
     await user.click(within(card).getByRole('button', { name: 'Restore Old Store' }));
 

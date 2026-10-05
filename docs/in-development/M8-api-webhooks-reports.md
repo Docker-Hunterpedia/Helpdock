@@ -59,6 +59,7 @@ Copied from the PRD, ticked as they are met.
 ## Migrations
 
 - `0039_api_keys_and_webhooks.sql`: `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
+- `0042_report_daily_assignee.sql`: `report_daily.assignee_id`, the ticket's assignee in the rollup's grain, for the Agent filter and per-agent times, SLA and CSAT (M8-04).
 
 ## Deliverable notes
 
@@ -101,17 +102,30 @@ Copied from the PRD, ticked as they are met.
   label, share rows and Heatmap, per DESIGN §9 (legend, direct labels, Table
   view, Tooltip naming the series). The adapter is `ReportsApi`
   (`apps/admin/src/reports/`), on the shared transport.
-- **Where the screen differs from the artboard**, because the summary does not
-  carry it: volume per day is one series (created) with the Channel, Status or
-  Priority breakdown as totals beside it rather than stacked per day; response
-  and resolution times are the period's median and p90, not a line per day;
-  SLA is by clock, not by priority; Agent workload has open, solved and replies
-  (no per-agent times, SLA or CSAT, no Unassigned row); there is no Agent
-  filter; CSAT has no "% of surveys answered" or comment count. The heatmap
-  runs Monday to Sunday (brands have no week-start setting).
-- Tests: `reports-page.test.tsx`, `report-math.test.ts`,
+- **Closing the artboard gaps** (migration `0042_report_daily_assignee`):
+  `report_daily` gains the ticket's assignee in its grain, so the summary
+  carries volume per day by channel, priority and status (the last from the
+  tickets, as the status totals are), SLA by priority (both clocks), and per
+  agent the median first response and resolution, SLA met and CSAT average of
+  the tickets assigned to them, with `unassignedOpen` and `agentChoices`. The
+  query takes `agentId` (the ticket's assignee for ticket figures, the agent
+  for workload). The screen stacks the volume columns per day (five series,
+  the rest as "Other", legend, 2 px gaps, a Tooltip naming every series), adds
+  "By priority" to SLA, the four columns and the Unassigned row to Agent
+  workload, and the Agent filter. New export `volume_by_status`; the ticket
+  exports gain `agent_id` and `agent`, and `agents` gains the per-agent
+  figures and an unassigned row. Days rolled up before 0042 carry no assignee
+  (the migration does not empty the rollups); the trailing week is rebuilt
+  every hour.
+- **Where the screen still differs from the artboard:** response and
+  resolution times are the period's median and p90, not a line per day; CSAT
+  has no "% of surveys answered" or comment count. The heatmap runs Monday to
+  Sunday (brands have no week-start setting).
+- Tests: `reports-page.test.tsx`, `report-math.test.ts`, `volume-stack.test.ts`,
   `reports/api.test.ts`, `ui/usage-meter.test.tsx`; Playwright
-  `e2e/reports.spec.ts` (en and ar, axe, the api failing).
+  `e2e/reports.spec.ts` (en and ar, axe, the api failing, the stacked
+  breakdowns and the Agent filter); `reports.integration.test.ts` checks the
+  new figures and exports against the seeded tickets.
 - Guide: [reports](../guides/reports.md).
 
 ### M8-05 System page
@@ -122,7 +136,11 @@ Copied from the PRD, ticked as they are met.
 - **Storage:** measured per brand by `stats.rollup` when the reading is over 6
   hours old (`S3BrandObjects.usage`, prefix `brands/<id>/`), kept in the Redis
   hash `hd:storage:usage`, shown in total and per brand.
-- **LLM spend:** `AiUsageSource.installSpend`.
+- **LLM spend:** `AiUsageSource.installSpend`, per brand (`brands`, each
+  against its own monthly budget) and in total.
+- **Migrations and Postgres:** the api replica names the migrations it finds
+  recorded at boot (`MigrationResult.recorded`, newest first) beside the count;
+  `pg_database_size` gives the database's size, install-wide.
 - **Bull Board** at `/api/install/queues/board/`, reached through
   `POST /api/install/system/queue-board` (a one-use pass) and an `hd_queue_board`
   session that re-checks the admin's refresh family and install-admin status on
@@ -138,13 +156,16 @@ Copied from the PRD, ticked as they are met.
   request, so popup blockers let it through. The page's api adapter now sends
   the access token (it did not before, which a real install would have
   refused); `SystemApi` is provided by `SystemApiProvider` from `createApis`.
-- **Where the screen differs from the artboard:** LLM spend is install-wide
-  (the seam has no per-brand spend or budgets); Storage has no Postgres
-  column; Version has no image name or migration list; Channels show no brand
-  name or Widget rows; the queue button is in the header only. Each needs the
-  api to report it.
+- **Where the screen differs from the artboard:** Storage shows Postgres as
+  one install-wide figure, not per brand (a brand's share would mean reading
+  every row; see [operations](../guides/operations.md#where-the-numbers-come-from));
+  Version has no image name, and the migration list has names without times
+  (Drizzle records none); Channels show no brand name or Widget rows; the
+  queue button is in the header only.
 - Tests: `system-page.test.tsx`, `side-cards.test.tsx`, `system-api.test.ts`,
-  `product-metrics.test.ts`; Playwright `e2e/system.spec.ts`.
+  `product-metrics.test.ts`; Playwright `e2e/system.spec.ts` (en and ar, axe);
+  `system.service.test.ts`, `migrate.test.ts`, and in integration
+  `observability`, `migrate` and `ai` (spend per brand).
 - Guide: [operations](../guides/operations.md#the-system-page).
 
 ### M8-07 Brand deletion and product metrics
@@ -179,9 +200,10 @@ Copied from the PRD, ticked as they are met.
   for the prefix ("Type HD to confirm"). During the grace every Brand tab shows
   a warning Banner "Scheduled for deletion on …" with Restore and is
   read-only (a disabled fieldset). System lists the pending brands with
-  PendingDeletionRow; "Deleted by" is not drawn, since the deletion read does
-  not name who asked. Tests: `brand-page.test.tsx`; Playwright
-  `e2e/brand-deletion.spec.ts`.
+  PendingDeletionRow, "Deleted by" from the deletion read's `requestedBy`
+  (the install-scope `brand.deletion_requested` audit row). Tests:
+  `brand-page.test.tsx`, `brand-deletion.integration.test.ts`; Playwright
+  `e2e/brand-deletion.spec.ts`, `e2e/system.spec.ts`.
 - Guides: [data retention](../guides/data-retention.md#deleting-a-brand),
   [operations](../guides/operations.md#product-metrics).
 

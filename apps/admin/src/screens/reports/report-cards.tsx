@@ -1,4 +1,12 @@
-import type { ReportExport, ReportSummary } from '@helpdock/schemas';
+import {
+  type ReportExport,
+  type ReportSummary,
+  type SlaOutcome,
+  type TicketChannel,
+  type TicketPriority,
+  ticketChannelSchema,
+  ticketPrioritySchema,
+} from '@helpdock/schemas';
 import { Box, Link, Typography } from '@mui/material';
 import { type ReactNode, useState } from 'react';
 import { Link as RouterLink } from 'react-router';
@@ -10,25 +18,26 @@ import { formatDayMonth, formatShare } from '../../ui/format.js';
 import { formatCount, formatUsd } from '../admin/system/format.js';
 import { ChartCard } from './chart-card.js';
 import {
-  ColumnChart,
   Heatmap,
   LineChart,
   SERIES_PRIMARY,
   SERIES_SECONDARY,
   type ShareRow,
   ShareRows,
+  StackedColumnChart,
+  seriesColour,
 } from './charts.js';
-import { DataTable } from './data-table.js';
+import { DataTable, type Row } from './data-table.js';
 import { HOURS, heatmapGrid, WEEKDAYS } from './heatmap-scale.js';
 import { csatShares, slaTotals } from './kpis.js';
 import { formatAverage, formatDuration } from './report-format.js';
+import { OTHER_SERIES, type StackCell, stackByDay } from './volume-stack.js';
 
 /**
  * Every card of `Admin/Reports` (M8-04) but the KPI tiles, each drawn from
  * `GET /api/brands/:brandId/reports` and exporting its rows through the CSV
- * route. Where the artboard draws something the summary does not carry (a
- * series per channel per day, SLA by priority, per-agent times) the card
- * draws what the api has and the milestone doc lists the difference.
+ * route. Where the artboard draws something the summary does not carry the
+ * card draws what the api has and the milestone doc lists the difference.
  */
 
 export interface CardProps {
@@ -53,6 +62,44 @@ const useDayLabel = (): ((day: string) => string) => {
 
 type VolumeBreakdown = 'channel' | 'status' | 'priority';
 
+const VOLUME_EXPORT: Record<VolumeBreakdown, ReportExport> = {
+  channel: 'volume',
+  priority: 'volume',
+  status: 'volume_by_status',
+};
+
+/** The day-by-slice cells and the names of one breakdown, in the api's order. */
+const useVolumeSlices = (
+  volume: ReportSummary['volume'],
+  breakdown: VolumeBreakdown,
+): { cells: StackCell[]; order: string[]; labelOf: (key: string) => string } => {
+  const t = useT();
+  if (breakdown === 'channel') {
+    return {
+      cells: volume.byDayAndChannel.map((c) => ({ day: c.day, key: c.channel, count: c.created })),
+      order: [...ticketChannelSchema.options],
+      labelOf: (key) => t(`tickets:channel.${key as TicketChannel}`),
+    };
+  }
+  if (breakdown === 'priority') {
+    return {
+      cells: volume.byDayAndPriority.map((c) => ({
+        day: c.day,
+        key: c.priority,
+        count: c.created,
+      })),
+      order: [...ticketPrioritySchema.options].reverse(),
+      labelOf: (key) => t(`tickets:priority.${key as TicketPriority}`),
+    };
+  }
+  const names = new Map(volume.byStatus.map((row) => [row.statusId, row.name]));
+  return {
+    cells: volume.byDayAndStatus.map((c) => ({ day: c.day, key: c.statusId, count: c.tickets })),
+    order: volume.byStatus.map((row) => row.statusId),
+    labelOf: (key) => names.get(key) ?? key,
+  };
+};
+
 export function VolumeCard(props: CardProps): ReactNode {
   const t = useT();
   const dayLabel = useDayLabel();
@@ -60,32 +107,26 @@ export function VolumeCard(props: CardProps): ReactNode {
   const { volume } = props.summary;
   const days = volume.byDay;
   const title = t('reports:volume.title');
-
-  const shares: ShareRow[] = (() => {
-    const total = Math.max(1, volume.created);
-    if (breakdown === 'channel') {
-      return volume.byChannel.map((row) => ({
-        key: row.channel,
-        label: t(`tickets:channel.${row.channel}`),
-        share: row.created / total,
-        value: formatCount(row.created),
-      }));
-    }
-    if (breakdown === 'priority') {
-      return volume.byPriority.map((row) => ({
-        key: row.priority,
-        label: t(`tickets:priority.${row.priority}`),
-        share: row.created / total,
-        value: formatCount(row.created),
-      }));
-    }
-    return volume.byStatus.map((row) => ({
-      key: row.statusId,
-      label: row.name,
-      share: row.tickets / total,
-      value: formatCount(row.tickets),
-    }));
-  })();
+  const slices = useVolumeSlices(volume, breakdown);
+  const stack = stackByDay(
+    days.map((day) => day.day),
+    slices.cells,
+    slices.order,
+  );
+  const series = stack.series.map((entry) => ({
+    key: entry.key,
+    label: entry.key === OTHER_SERIES ? t('reports:volume.other') : slices.labelOf(entry.key),
+    colour: seriesColour(entry.index),
+    total: entry.total,
+  }));
+  const total = series.reduce((sum, entry) => sum + entry.total, 0);
+  const shares: ShareRow[] = series.map((entry) => ({
+    key: entry.key,
+    label: entry.label,
+    share: entry.total / Math.max(1, total),
+    value: formatCount(entry.total),
+    colour: entry.colour,
+  }));
   const breakdownLabel = t(`reports:volume.by.${breakdown}`);
 
   return (
@@ -102,7 +143,11 @@ export function VolumeCard(props: CardProps): ReactNode {
         })),
         onChange: setBreakdown,
       }}
-      {...exportProps(props, 'volume')}
+      legend={series.map((entry) => ({ label: entry.label, colour: entry.colour }))}
+      onExport={() => {
+        props.onExport(VOLUME_EXPORT[breakdown]);
+      }}
+      exporting={props.exporting === VOLUME_EXPORT[breakdown]}
       chart={
         <Box
           sx={{
@@ -112,18 +157,21 @@ export function VolumeCard(props: CardProps): ReactNode {
             alignItems: 'start',
           }}
         >
-          <ColumnChart
+          <StackedColumnChart
             label={t('reports:volume.chartLabel', {
               created: volume.created,
               resolved: volume.resolved,
               days: days.length,
+              breakdown: breakdownLabel,
+              figures: shares.map((row) => `${row.label} ${row.value}`).join(', '),
             })}
             dayLabels={days.map((day) => dayLabel(day.day))}
-            values={days.map((day) => day.created)}
-            tooltipOf={(index) =>
+            series={series}
+            counts={stack.days.map((day) => day.counts)}
+            tooltipTitleOf={(index) =>
               t('reports:volume.tooltip', {
                 day: dayLabel(days[index]?.day ?? ''),
-                count: days[index]?.created ?? 0,
+                count: (stack.days[index]?.counts ?? []).reduce((sum, value) => sum + value, 0),
               })
             }
           />
@@ -138,6 +186,9 @@ export function VolumeCard(props: CardProps): ReactNode {
               })}
               rows={shares}
             />
+            <Typography variant="mono" component="p" sx={{ fontSize: 12, textAlign: 'end' }}>
+              {t('reports:volume.total', { count: formatCount(total) })}
+            </Typography>
           </Box>
         </Box>
       }
@@ -147,12 +198,23 @@ export function VolumeCard(props: CardProps): ReactNode {
           empty={t('reports:empty')}
           columns={[
             { key: 'day', label: t('reports:columns.day') },
+            ...series.map((entry) => ({
+              key: `s:${entry.key}`,
+              label: entry.label,
+              numeric: true,
+            })),
             { key: 'created', label: t('reports:columns.created'), numeric: true },
             { key: 'resolved', label: t('reports:columns.resolved'), numeric: true },
           ]}
-          rows={days.map((day) => ({
+          rows={days.map((day, index) => ({
             id: day.day,
             day: dayLabel(day.day),
+            ...Object.fromEntries(
+              series.map((entry, segment) => [
+                `s:${entry.key}`,
+                formatCount(stack.days[index]?.counts[segment] ?? 0),
+              ]),
+            ),
             created: formatCount(day.created),
             resolved: formatCount(day.resolved),
           }))}
@@ -251,16 +313,33 @@ export function SlaCard(props: CardProps): ReactNode {
     { key: 'response', label: t('reports:sla.response'), outcome: sla.response },
     { key: 'resolution', label: t('reports:sla.resolution'), outcome: sla.resolution },
   ] as const;
-  const rows: ShareRow[] = clocks.map((clock) => {
-    const finished = clock.outcome.met + clock.outcome.breached;
-    return {
-      key: clock.key,
-      label: clock.label,
-      share: clock.outcome.compliance ?? 0,
-      value: clock.outcome.compliance === null ? '—' : formatShare(clock.outcome.compliance),
-      of: t('reports:of', { count: finished }),
-      colour: tokens['status.success'],
-    };
+  const priorities = sla.byPriority.map((row) => ({
+    key: row.priority,
+    label: t(`tickets:priority.${row.priority}`),
+    outcome: row,
+  }));
+  const shareRow = (entry: {
+    readonly key: string;
+    readonly label: string;
+    readonly outcome: SlaOutcome;
+  }): ShareRow => ({
+    key: entry.key,
+    label: entry.label,
+    share: entry.outcome.compliance ?? 0,
+    value: entry.outcome.compliance === null ? '—' : formatShare(entry.outcome.compliance),
+    of: t('reports:of', { count: entry.outcome.met + entry.outcome.breached }),
+    colour: tokens['status.success'],
+  });
+  const rows = clocks.map(shareRow);
+  const priorityRows = priorities.map(shareRow);
+  const figuresOf = (shareRows: readonly ShareRow[]): string =>
+    shareRows.map((row) => `${row.label} ${row.value} ${row.of ?? ''}`).join(', ');
+  const tableRow = (entry: (typeof clocks)[number] | (typeof priorities)[number]) => ({
+    id: entry.key,
+    clock: entry.label,
+    met: formatCount(entry.outcome.met),
+    breached: formatCount(entry.outcome.breached),
+    compliance: entry.outcome.compliance === null ? '—' : formatShare(entry.outcome.compliance),
   });
 
   return (
@@ -278,13 +357,22 @@ export function SlaCard(props: CardProps): ReactNode {
       {...exportProps(props, 'sla')}
       chart={
         <Box sx={{ display: 'grid', gap: 2 }}>
+          {priorityRows.length === 0 ? null : (
+            <>
+              <Typography variant="caption" component="h3" sx={{ margin: 0 }}>
+                {t('reports:sla.byPriority')}
+              </Typography>
+              <ShareRows
+                label={t('reports:sla.priorityChartLabel', { figures: figuresOf(priorityRows) })}
+                rows={priorityRows}
+              />
+            </>
+          )}
           <Typography variant="caption" component="h3" sx={{ margin: 0 }}>
             {t('reports:sla.byClock')}
           </Typography>
           <ShareRows
-            label={t('reports:sla.chartLabel', {
-              figures: rows.map((row) => `${row.label} ${row.value} ${row.of ?? ''}`).join(', '),
-            })}
+            label={t('reports:sla.chartLabel', { figures: figuresOf(rows) })}
             rows={rows}
           />
           <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 400 }}>
@@ -297,19 +385,12 @@ export function SlaCard(props: CardProps): ReactNode {
           label={title}
           empty={t('reports:empty')}
           columns={[
-            { key: 'clock', label: t('reports:columns.clock') },
+            { key: 'clock', label: t('reports:columns.slice') },
             { key: 'met', label: t('reports:sla.met'), numeric: true },
             { key: 'breached', label: t('reports:sla.breached'), numeric: true },
             { key: 'compliance', label: t('reports:columns.compliance'), numeric: true },
           ]}
-          rows={clocks.map((clock) => ({
-            id: clock.key,
-            clock: clock.label,
-            met: formatCount(clock.outcome.met),
-            breached: formatCount(clock.outcome.breached),
-            compliance:
-              clock.outcome.compliance === null ? '—' : formatShare(clock.outcome.compliance),
-          }))}
+          rows={[...priorities.map(tableRow), ...clocks.map(tableRow)]}
         />
       }
     />
@@ -445,6 +526,33 @@ export function CsatCard(props: CardProps): ReactNode {
 export function AgentsCard(props: CardProps): ReactNode {
   const t = useT();
   const title = t('reports:agents.title');
+  const { agents, unassignedOpen, filters } = props.summary;
+  const durationOf = (ms: number | null): string => (ms === null ? '—' : formatDuration(ms));
+  const rows: Row[] = agents.map((agent) => ({
+    id: agent.agentId,
+    agent: agent.name ?? t('reports:agents.removed'),
+    open: formatCount(agent.assignedOpen),
+    resolved: formatCount(agent.resolved),
+    replies: formatCount(agent.replies),
+    firstResponse: durationOf(agent.firstResponse.medianMs),
+    resolution: durationOf(agent.resolution.medianMs),
+    sla: agent.sla.compliance === null ? '—' : formatShare(agent.sla.compliance),
+    csat: agent.csat.average === null ? '—' : formatAverage(agent.csat.average),
+  }));
+  // The open tickets nobody has: a row of its own, unless the report is one agent's.
+  if (filters.agentId === null && (agents.length > 0 || unassignedOpen > 0)) {
+    rows.push({
+      id: 'unassigned',
+      agent: t('reports:agents.unassigned'),
+      open: formatCount(unassignedOpen),
+      resolved: '—',
+      replies: '—',
+      firstResponse: '—',
+      resolution: '—',
+      sla: '—',
+      csat: '—',
+    });
+  }
 
   return (
     <ChartCard
@@ -461,14 +569,12 @@ export function AgentsCard(props: CardProps): ReactNode {
             { key: 'open', label: t('reports:columns.openAssigned'), numeric: true },
             { key: 'resolved', label: t('reports:columns.solved'), numeric: true },
             { key: 'replies', label: t('reports:columns.replies'), numeric: true },
+            { key: 'firstResponse', label: t('reports:times.firstResponse'), numeric: true },
+            { key: 'resolution', label: t('reports:times.resolution'), numeric: true },
+            { key: 'sla', label: t('reports:columns.slaMet'), numeric: true },
+            { key: 'csat', label: t('reports:columns.csat'), numeric: true },
           ]}
-          rows={props.summary.agents.map((agent) => ({
-            id: agent.agentId,
-            agent: agent.name ?? t('reports:agents.removed'),
-            open: formatCount(agent.assignedOpen),
-            resolved: formatCount(agent.resolved),
-            replies: formatCount(agent.replies),
-          }))}
+          rows={rows}
         />
       }
     />

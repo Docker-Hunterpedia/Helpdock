@@ -10,16 +10,21 @@ import { formatBytes, percentOf } from './format.js';
 
 /**
  * Storage on `Admin/System-1.0` (M8-05): attachments and article images in
- * the bucket, against the soft limit, and per brand. The worker measures it
- * (`stats.rollup`), so until its first reading there is nothing to draw and the
- * card says so. The artboard's Postgres column is not drawn: the api does not
- * measure the database per brand.
+ * the bucket, against the soft limit, and per brand; and the Postgres
+ * database as a whole. The worker measures the bucket (`stats.rollup`), so
+ * until its first reading there is nothing to draw for it and the card says
+ * so. The artboard's per-brand Postgres column is not drawn: a brand's rows
+ * share every table and index, and the api does not read every row to size
+ * them.
  */
 export function StorageCard({
   storage,
+  databaseBytes,
   pendingBrandIds,
 }: {
   readonly storage: SystemStorage;
+  /** `pg_database_size`, or null when Postgres did not answer. */
+  readonly databaseBytes: number | null;
   /** Brands in their deletion grace, which the table marks. */
   readonly pendingBrandIds: ReadonlySet<string>;
 }): ReactNode {
@@ -29,9 +34,12 @@ export function StorageCard({
   if (!storage.configured) {
     return (
       <Card title={t('system:storage.title')}>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {t('system:storage.pending')}
-        </Typography>
+        <Box sx={{ display: 'grid', gap: 4 }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {t('system:storage.pending')}
+          </Typography>
+          <DatabaseSize bytes={databaseBytes} />
+        </Box>
       </Card>
     );
   }
@@ -81,6 +89,8 @@ export function StorageCard({
           />
         )}
 
+        <DatabaseSize bytes={databaseBytes} />
+
         {brands.length === 0 ? null : (
           <Table size="small" aria-label={t('system:storage.byBrand')}>
             <TableHead>
@@ -112,5 +122,28 @@ export function StorageCard({
         )}
       </Box>
     </Card>
+  );
+}
+
+/** The Postgres figure beside the bucket's: the whole database, never per brand. */
+function DatabaseSize({ bytes }: { readonly bytes: number | null }): ReactNode {
+  const t = useT();
+
+  if (bytes === null) {
+    return null;
+  }
+
+  return (
+    <Box>
+      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        {t('system:storage.postgres')}
+      </Typography>
+      <Typography variant="mono" component="p" sx={{ fontSize: 20, lineHeight: '28px' }}>
+        <bdi dir="ltr">{formatBytes(bytes)}</bdi>
+      </Typography>
+      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+        {t('system:storage.postgresCaption')}
+      </Typography>
+    </Box>
   );
 }

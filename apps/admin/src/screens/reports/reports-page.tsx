@@ -42,6 +42,7 @@ const queryOf = (filters: ReportFilters, range = filters.range): ReportQuery => 
   to: range.to,
   ...(filters.departmentId === undefined ? {} : { departmentId: filters.departmentId }),
   ...(filters.channel === undefined ? {} : { channel: filters.channel }),
+  ...(filters.agentId === undefined ? {} : { agentId: filters.agentId }),
 });
 
 /** Saves a CSV the api answered with, under the name the api gives it. */
@@ -66,6 +67,7 @@ export function ReportsPage(): ReactNode {
     range: presetRange(DEFAULT_PRESET),
     departmentId: undefined,
     channel: undefined,
+    agentId: undefined,
   }));
   const query = queryOf(filters);
   const previous = previousRange(filters.range);
@@ -139,6 +141,7 @@ export function ReportsPage(): ReactNode {
           <ReportFilterBar
             filters={filters}
             departments={departments.data?.departments ?? []}
+            agents={summary.data?.agentChoices ?? []}
             onChange={setFilters}
           />
           {summary.data === undefined ? null : (

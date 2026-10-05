@@ -5,10 +5,14 @@ import { useT } from '../../../app/i18n.js';
 import { Card } from './card.js';
 import { StatusDot } from './status-dot.js';
 
+/** The newest migrations listed under the count, as the artboard draws them. */
+const RECENT_MIGRATIONS = 3;
+
 /**
  * "Version and migrations" of `Admin/System-1.0` (M8-05): the build, what it
- * runs on, and how far the schema has been brought. The artboard's image name
- * and migration list are not drawn: the status read carries neither.
+ * runs on, how far the schema has been brought and its newest migrations. The
+ * artboard's image name is not drawn: the status read does not carry it, and
+ * Drizzle records no time a migration was applied, so the list is names.
  */
 export function VersionCard({ status }: { readonly status: SystemStatus }): ReactNode {
   const t = useT();
@@ -33,11 +37,26 @@ export function VersionCard({ status }: { readonly status: SystemStatus }): Reac
             {t('system:versionCard.migrationsUnknown')}
           </Typography>
         ) : (
-          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-            <StatusDot status="ok" />
-            <Typography variant="body2" component="span">
-              {t('system:versionCard.migrationsApplied', { count: database.migrationsApplied })}
-            </Typography>
+          <Box sx={{ display: 'grid', gap: 1 }}>
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <StatusDot status="ok" />
+              <Typography variant="body2" component="span">
+                {t('system:versionCard.migrationsApplied', { count: database.migrationsApplied })}
+              </Typography>
+            </Box>
+            {database.migrations === null || database.migrations.length === 0 ? null : (
+              <Box
+                component="ul"
+                aria-label={t('system:versionCard.recent')}
+                sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 1 }}
+              >
+                {database.migrations.slice(0, RECENT_MIGRATIONS).map((tag) => (
+                  <Box component="li" key={tag}>
+                    <Mono>{tag}</Mono>
+                  </Box>
+                ))}
+              </Box>
+            )}
           </Box>
         ),
     },

@@ -14,9 +14,8 @@ import { brandDeletionQueryKey, INSTALL_BRANDS_QUERY_KEY, type SystemApi } from 
 
 /**
  * "Brands pending deletion" on `Admin/System-1.0` (M8-07): every brand in its
- * 30-day grace as a PendingDeletionRow (DESIGN §6.3), with Restore. The
- * artboard's "Deleted by" is drawn as the date alone: the deletion read does
- * not name who asked.
+ * 30-day grace as a PendingDeletionRow (DESIGN §6.3), with who deleted it and
+ * when, and Restore.
  */
 export function PendingDeletionsCard({
   api,
@@ -125,7 +124,12 @@ function PendingDeletionRow({
           </Typography>
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-          {t('system:pending.requested', { date: formatDay(deletion.requestedAt, locale) })}
+          {deletion.requestedBy === null
+            ? t('system:pending.requested', { date: formatDay(deletion.requestedAt, locale) })
+            : t('system:pending.requestedBy', {
+                name: deletion.requestedBy.name ?? t('system:pending.removedAccount'),
+                date: formatDay(deletion.requestedAt, locale),
+              })}
         </Typography>
       </Box>
       <Box>

@@ -20,9 +20,10 @@ describe('reportSearch', () => {
         to: '2026-10-04',
         departmentId: '0192c3f0-1a2b-7c3d-8e4f-0000000000e1',
         channel: 'telegram',
+        agentId: '0192c3f0-1a2b-7c3d-8e4f-0000000000e2',
       }),
     ).toBe(
-      'from=2026-09-05&to=2026-10-04&departmentId=0192c3f0-1a2b-7c3d-8e4f-0000000000e1&channel=telegram',
+      'from=2026-09-05&to=2026-10-04&departmentId=0192c3f0-1a2b-7c3d-8e4f-0000000000e1&channel=telegram&agentId=0192c3f0-1a2b-7c3d-8e4f-0000000000e2',
     );
   });
 });

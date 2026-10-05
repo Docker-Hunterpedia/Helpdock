@@ -43,7 +43,7 @@ Copied from the PRD, ticked as they are met.
 | `0038_ai_and_knowledge.sql` | `vector` extension; `ai_settings`, `ai_calls`, `ai_budget_alerts`; `knowledge_sources`, `knowledge_documents`, `knowledge_chunks` (with the generated `search` tsvector, no vector column); the global `embedding_space` row; the owner-rights functions `helpdock_set_embedding_dims(int)` and `helpdock_build_embedding_index()`; RLS on the six tenant tables |
 | `0041_knowledge_ingest.sql` | `knowledge_sources.schedule`, `sync_started_at`, `progress_done`, `progress_total`, `last_error_code`, `created_by`; one help center source per brand (partial unique index); the `knowledge_sync_log` tenant table with RLS |
 | `0042_ai_assistant_modes.sql` | `ai_settings.system_prompt_ar` and `ai_settings.modes` (jsonb, null = every mode off) for M7-10 |
-| `0043_auto_reply_handoff.sql` | M7-06 on `tickets`: `ai_paused_at`, `ai_paused_until`, `ai_pause_reason` (handoff persistence, DOMAIN-RULES §9) and `ai_eligible_at`, `ai_answered_at`, `ai_handed_off_at` (deflection, §15), with a partial index for the report. No new table |
+| `0045_auto_reply_handoff.sql` | M7-06 on `tickets`: `ai_paused_at`, `ai_paused_until`, `ai_pause_reason` (handoff persistence, DOMAIN-RULES §9) and `ai_eligible_at`, `ai_answered_at`, `ai_handed_off_at` (deflection, §15), with a partial index for the report. No new table |
 
 ## Deliverable notes
 

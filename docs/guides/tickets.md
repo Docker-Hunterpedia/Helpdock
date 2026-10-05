@@ -766,7 +766,7 @@ session — see [satisfaction surveys](#satisfaction-surveys):
 
 | Route | Declares | Answers |
 |---|---|---|
-| `GET /api/public/csat/:token` | `@Public()` | The rating page's state: `open` with the brand, reference and subject; or `used` / `expired` with the brand alone |
+| `GET /api/public/csat/:token` | `@Public()` | The rating page's state: `open` with the brand, reference and subject; or `used` / `expired` with the brand alone. The brand carries `helpCenterUrl` (below) |
 | `POST /api/public/csat/:token` | `@Public()` | `{ rating: 1–5, comment? }`. Answers `rated` once, then `used`; `expired` after 30 days |
 | `POST /tickets/:ticketId/merge` | `ticket:write` | Closes it into another ticket (M1-09, [below](#merge-and-split)) |
 | `POST /tickets/:ticketId/unmerge` | `ticket:write` | Undoes a merge inside 24 hours (M1-09) |
@@ -1558,7 +1558,15 @@ set only when that person is still active in the brand and wrote a public reply
 on the ticket, so the page names nobody the customer has not already heard
 from. That keeps it inside §4.6's "nothing beyond their purpose". An api key, a
 rule, or a staff member who never replied is not named. A spent link sends no
-name. "Browse the help center" is not drawn yet.
+name.
+
+**Browse the help center.** The thanks and the spent-link screens end with
+"Browse the help center" (`CsatEN`), linking to `brand.helpCenterUrl`: the
+brand's help center on its primary verified domain, or `APP_URL/hc/<brandId>/`
+until it has one. The api sends it only while the help center has something
+public to read: at least one published public article and access not set to
+internal-only. Otherwise it is null and the link is left out. The preview never
+shows it, as it reads nothing.
 
 **The preview.** Ticketing › Feedback › **Open the rating page as a customer
 sees it** opens `/csat/preview?lang=<admin's language>` in a new tab. That is

@@ -285,8 +285,15 @@
     {
       "idx": 42,
       "version": "7",
-      "when": 1791203769761,
-      "tag": "0042_ai_assist_and_transcripts",
+      "when": 1791203897182,
+      "tag": "0042_ai_assistant_modes",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1791206801581,
+      "tag": "0043_ai_assist_and_transcripts",
       "breakpoints": true
     }
   ]

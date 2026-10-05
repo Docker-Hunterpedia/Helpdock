@@ -74,7 +74,7 @@ export function DraftArticleDialog({
   const sections = (structure?.sections ?? []).map((section) => {
     const category = structure?.categories.find((entry) => entry.id === section.categoryId);
     const name = (names: { en: string; ar: string } | undefined) =>
-      names === undefined ? '' : (uiLocale === 'ar' && names.ar !== '' ? names.ar : names.en);
+      names === undefined ? '' : uiLocale === 'ar' && names.ar !== '' ? names.ar : names.en;
     return { id: section.id, label: `${name(category?.names)} › ${name(section.names)}` };
   });
 
@@ -186,7 +186,12 @@ export function DraftArticleDialog({
               />
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Typography component="label" htmlFor={`${titleId}-body`} variant="body2" sx={{ fontWeight: 500 }}>
+                  <Typography
+                    component="label"
+                    htmlFor={`${titleId}-body`}
+                    variant="body2"
+                    sx={{ fontWeight: 500 }}
+                  >
                     {t('tickets:assist.draft.body')}
                   </Typography>
                   <AIBadge />

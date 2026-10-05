@@ -1,11 +1,11 @@
 import {
+  aiTriageFieldSchema,
+  aiTriageModeSchema,
   RULE_NOTE_MAX_LENGTH,
   RULE_NOTIFY_MESSAGE_MAX_LENGTH,
   type RuleAction,
   type RuleActionType,
   type RuleBuilderOptions,
-  aiTriageFieldSchema,
-  aiTriageModeSchema,
   ticketPrioritySchema,
 } from '@helpdock/schemas';
 import { Box, Checkbox, IconButton, TextField, Typography } from '@mui/material';
@@ -334,7 +334,8 @@ export function ActionRow({
                         ...action,
                         fields: event.target.checked
                           ? aiTriageFieldSchema.options.filter(
-                              (candidate) => candidate === field || action.fields.includes(candidate),
+                              (candidate) =>
+                                candidate === field || action.fields.includes(candidate),
                             )
                           : action.fields.filter((candidate) => candidate !== field),
                       });

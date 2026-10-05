@@ -84,82 +84,82 @@ export function VoiceNote({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 3,
-        paddingBlock: 2,
-        paddingInline: 3,
-        borderRadius: '6px',
-        border: `1px solid ${tokens['border.default']}`,
-        backgroundColor: tokens['bg.surface'],
-      }}
-    >
-      <IconButton
-        aria-label={t(playing ? 'tickets:telegram.voice.pause' : 'tickets:telegram.voice.play', {
-          duration,
-        })}
-        disabled={loading}
-        onClick={() => {
-          void toggle();
-        }}
+      <Box
         sx={{
-          width: 32,
-          height: 32,
-          border: `1px solid ${tokens['border.strong']}`,
-          borderRadius: '999px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 3,
+          paddingBlock: 2,
+          paddingInline: 3,
+          borderRadius: '6px',
+          border: `1px solid ${tokens['border.default']}`,
+          backgroundColor: tokens['bg.surface'],
         }}
       >
-        {loading ? (
-          <CircularProgress size={14} aria-hidden="true" />
-        ) : playing ? (
-          <Pause size={14} aria-hidden="true" />
-        ) : (
-          <Play size={14} aria-hidden="true" />
-        )}
-      </IconButton>
-      <Box aria-hidden="true" sx={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-        {waveform(attachment.id).map((height, index) => (
-          <Box
-            // The bars are a fixed picture; their order is their identity.
-            // biome-ignore lint/suspicious/noArrayIndexKey: see above.
-            key={index}
-            sx={{
-              width: 2,
-              height,
-              borderRadius: '999px',
-              backgroundColor: tokens['text.disabled'],
-            }}
-          />
-        ))}
+        <IconButton
+          aria-label={t(playing ? 'tickets:telegram.voice.pause' : 'tickets:telegram.voice.play', {
+            duration,
+          })}
+          disabled={loading}
+          onClick={() => {
+            void toggle();
+          }}
+          sx={{
+            width: 32,
+            height: 32,
+            border: `1px solid ${tokens['border.strong']}`,
+            borderRadius: '999px',
+          }}
+        >
+          {loading ? (
+            <CircularProgress size={14} aria-hidden="true" />
+          ) : playing ? (
+            <Pause size={14} aria-hidden="true" />
+          ) : (
+            <Play size={14} aria-hidden="true" />
+          )}
+        </IconButton>
+        <Box aria-hidden="true" sx={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {waveform(attachment.id).map((height, index) => (
+            <Box
+              // The bars are a fixed picture; their order is their identity.
+              // biome-ignore lint/suspicious/noArrayIndexKey: see above.
+              key={index}
+              sx={{
+                width: 2,
+                height,
+                borderRadius: '999px',
+                backgroundColor: tokens['text.disabled'],
+              }}
+            />
+          ))}
+        </Box>
+        <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
+          {duration}
+        </Typography>
+        <Typography
+          variant="mono"
+          component="span"
+          sx={{ fontSize: 12, color: 'text.secondary', marginInlineStart: 'auto' }}
+        >
+          {time}
+        </Typography>
+        {/* biome-ignore lint/a11y/useMediaCaption: a customer's voice note has no captions; its transcript (M7-09) is the text alternative. */}
+        <audio
+          ref={audio}
+          preload="none"
+          onPlay={() => {
+            setPlaying(true);
+          }}
+          onPause={() => {
+            setPlaying(false);
+          }}
+          onEnded={() => {
+            setPlaying(false);
+          }}
+        />
       </Box>
-      <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
-        {duration}
-      </Typography>
-      <Typography
-        variant="mono"
-        component="span"
-        sx={{ fontSize: 12, color: 'text.secondary', marginInlineStart: 'auto' }}
-      >
-        {time}
-      </Typography>
-      {/* biome-ignore lint/a11y/useMediaCaption: a customer's voice note has no captions; its transcript (M7-09) is the text alternative. */}
-      <audio
-        ref={audio}
-        preload="none"
-        onPlay={() => {
-          setPlaying(true);
-        }}
-        onPause={() => {
-          setPlaying(false);
-        }}
-        onEnded={() => {
-          setPlaying(false);
-        }}
-      />
-    </Box>
-    <VoiceTranscript attachmentId={attachment.id} />
+      <VoiceTranscript attachmentId={attachment.id} />
     </Box>
   );
 }

@@ -8,6 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { BrowserRouter } from 'react-router';
+import type { AiApi } from '../ai/api.js';
+import { AiApiProvider } from '../ai/context.tsx';
 import type { AssistApi } from '../assist/api.js';
 import { AssistApiProvider } from '../assist/context.tsx';
 import type { AuthApi } from '../auth/api.js';
@@ -22,10 +24,16 @@ import { DomainsApiProvider } from '../domains/context.tsx';
 import type { EmailApi } from '../email/api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { HelpCenterApiProvider } from '../help-center/context.tsx';
+import type { KnowledgeApi } from '../knowledge/api.js';
+import { KnowledgeApiProvider } from '../knowledge/context.tsx';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import type { BrowserPush } from '../notifications/browser-push.js';
 import { NotificationsProvider } from '../notifications/context.tsx';
+import type { ReportsApi } from '../reports/api.js';
+import { ReportsApiProvider } from '../reports/context.tsx';
+import type { SystemApi } from '../screens/admin/system/system-api.js';
+import { SystemApiProvider } from '../screens/admin/system/system-api-context.tsx';
 import type { StaffApi } from '../staff/api.js';
 import type { TelegramApi } from '../telegram/api.js';
 import { TelegramApiProvider } from '../telegram/context.tsx';
@@ -122,6 +130,14 @@ export interface AppProvidersProps {
   readonly browserPush?: BrowserPush;
   /** Defaults to the matching adapter. Only Brand › Domains reads it (M5-07). */
   readonly domainsApi?: DomainsApi;
+  /** Defaults to the matching adapter. Only `Admin/AI` reads it (M7-10). */
+  readonly aiApi?: AiApi;
+  /** Defaults to the matching adapter. Only AI › Knowledge reads it (M7-10). */
+  readonly knowledgeApi?: KnowledgeApi;
+  /** Defaults to the matching adapter. Only `Admin/Reports` reads it (M8-04). */
+  readonly reportsApi?: ReportsApi;
+  /** Defaults to the matching adapter. System and Brand › Danger zone read it. */
+  readonly systemApi?: SystemApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
   /** Defaults to the matching adapter. The ticket view and Help center › Proposals read it (M7). */
@@ -159,6 +175,10 @@ export function AppProviders({
   notificationsApi,
   browserPush,
   domainsApi,
+  aiApi,
+  knowledgeApi,
+  reportsApi,
+  systemApi,
   telegramApi,
   assistApi,
   queryClient,
@@ -188,6 +208,10 @@ export function AppProviders({
   const notifications = notificationsApi ?? fallback.notifications;
   const push = browserPush ?? fallback.browserPush;
   const domains = domainsApi ?? fallback.domains;
+  const ai = aiApi ?? fallback.ai;
+  const knowledge = knowledgeApi ?? fallback.knowledge;
+  const reports = reportsApi ?? fallback.reports;
+  const system = systemApi ?? fallback.system;
   const telegram = telegramApi ?? fallback.telegram;
   const assist = assistApi ?? fallback.assist;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
@@ -256,17 +280,25 @@ export function AppProviders({
               >
                 <AutomationApiProvider api={automation}>
                   <DomainsApiProvider api={domains}>
-                    <TelegramApiProvider api={telegram}>
-                      <AssistApiProvider api={assist}>
-                        <HelpCenterApiProvider api={helpCenter}>
-                          <NotificationsProvider api={notifications} push={push}>
-                            <ToastProvider>
-                              <Router>{children}</Router>
-                            </ToastProvider>
-                          </NotificationsProvider>
-                        </HelpCenterApiProvider>
-                      </AssistApiProvider>
-                    </TelegramApiProvider>
+                    <AiApiProvider api={ai}>
+                      <KnowledgeApiProvider api={knowledge}>
+                        <TelegramApiProvider api={telegram}>
+                          <HelpCenterApiProvider api={helpCenter}>
+                            <AssistApiProvider api={assist}>
+                              <ReportsApiProvider api={reports}>
+                                <SystemApiProvider api={system}>
+                                  <NotificationsProvider api={notifications} push={push}>
+                                    <ToastProvider>
+                                      <Router>{children}</Router>
+                                    </ToastProvider>
+                                  </NotificationsProvider>
+                                </SystemApiProvider>
+                              </ReportsApiProvider>
+                            </AssistApiProvider>
+                          </HelpCenterApiProvider>
+                        </TelegramApiProvider>
+                      </KnowledgeApiProvider>
+                    </AiApiProvider>
                   </DomainsApiProvider>
                 </AutomationApiProvider>
               </AuthApiProvider>

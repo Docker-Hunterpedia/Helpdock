@@ -132,10 +132,16 @@ export function SuggestedFieldsCard({
           {t('tickets:assist.fields.acceptAll')}
         </Button>
       </Box>
-      <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 2 }}>
+      <Box
+        component="ul"
+        sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 2 }}
+      >
         {rows.map((row) => (
           <Box component="li" key={row.key} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="caption" sx={{ width: 72, flexShrink: 0, color: 'text.secondary' }}>
+            <Typography
+              variant="caption"
+              sx={{ width: 72, flexShrink: 0, color: 'text.secondary' }}
+            >
               {row.label}
             </Typography>
             <Typography component="span" sx={{ fontSize: 13, flex: 1, minWidth: 0 }}>

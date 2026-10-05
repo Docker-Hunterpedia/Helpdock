@@ -175,5 +175,21 @@
   "erasure": {
     "heading": "Erasing one person",
     "body": "Contact erasure lives on the contact page (Anonymise). It is immediate and not subject to these windows."
+  },
+  "deletion": {
+    "heading": "Delete this brand",
+    "body": "Channels, widget and help center stop answering immediately (410). Everything is purged after 30 days, including attachments and knowledge. Ticket numbers are never reused.",
+    "confirm": "Type {{prefix}} to confirm",
+    "placeholder": "Ticket prefix",
+    "submit": "Delete brand",
+    "installAdminsOnly": "Install admins only. Reversible from the System page during the grace period.",
+    "requested": "{{name}} is scheduled for deletion. Restore it from here or from System within 30 days.",
+    "wrongPrefix": "That is not this brand's ticket prefix.",
+    "alreadyDeleting": "This brand is already being deleted.",
+    "failed": "The brand could not be deleted. Try again.",
+    "scheduled": "Scheduled for deletion on {{date}}. Every tab is read-only until then.",
+    "restore": "Restore",
+    "restored": "{{name}} is restored.",
+    "restoreFailed": "The brand could not be restored. Try again."
   }
 }

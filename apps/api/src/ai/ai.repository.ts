@@ -5,8 +5,12 @@ import {
   aiBudgetAlerts,
   aiCalls,
   aiSettings,
+  brands,
   type DbTransaction,
+  tickets,
 } from '@helpdock/db';
+import type { AiAssistantModes, BrandSettings } from '@helpdock/schemas';
+import { parseBrandSettings } from '@helpdock/schemas';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 
 /**
@@ -26,6 +30,16 @@ export type AiSettingsValues = Pick<
   | 'dailyBudgetUsd'
   | 'monthlyBudgetUsd'
 >;
+
+export interface BrandCallRow
+  extends Pick<
+    AiCall,
+    'id' | 'feature' | 'model' | 'status' | 'tokensIn' | 'tokensOut' | 'costUsd' | 'createdAt'
+  > {
+  readonly ticketId: string | null;
+  readonly ticketPrefix: string | null;
+  readonly ticketNumber: number | null;
+}
 
 export interface BudgetAlertRow {
   readonly brandId: string;
@@ -62,14 +76,45 @@ export class AiRepository {
   async savePrompt(
     tx: DbTransaction,
     brandId: string,
-    systemPrompt: string,
+    prompts: { readonly systemPrompt: string; readonly systemPromptAr: string },
     actorId: string,
   ): Promise<void> {
-    const changes = { systemPrompt, updatedBy: actorId, updatedAt: new Date() };
+    const changes = { ...prompts, updatedBy: actorId, updatedAt: new Date() };
     await tx
       .insert(aiSettings)
       .values({ brandId, ...changes })
       .onConflictDoUpdate({ target: aiSettings.brandId, set: changes });
+  }
+
+  async saveModes(
+    tx: DbTransaction,
+    brandId: string,
+    modes: AiAssistantModes,
+    actorId: string,
+  ): Promise<void> {
+    const changes = { modes: { ...modes }, updatedBy: actorId, updatedAt: new Date() };
+    await tx
+      .insert(aiSettings)
+      .values({ brandId, ...changes })
+      .onConflictDoUpdate({ target: aiSettings.brandId, set: changes });
+  }
+
+  /** `brands.settings`, where `aiCountsAsFirstResponse` lives beside the SLA settings. */
+  async brandSettings(tx: DbTransaction, brandId: string): Promise<BrandSettings> {
+    const [row] = await tx
+      .select({ settings: brands.settings })
+      .from(brands)
+      .where(eq(brands.id, brandId))
+      .limit(1);
+    return parseBrandSettings(row?.settings);
+  }
+
+  async saveBrandSettings(
+    tx: DbTransaction,
+    brandId: string,
+    settings: BrandSettings,
+  ): Promise<void> {
+    await tx.update(brands).set({ settings }).where(eq(brands.id, brandId));
   }
 
   /** Brands whose override names this provider. Run in a widened install scope. */
@@ -134,6 +179,47 @@ export class AiRepository {
       throw new Error('The ai_calls insert returned no row');
     }
     return row.id;
+  }
+
+  /**
+   * One page of the brand's calls, newest first by `(created_at, id)`. The
+   * ticket is a left join under the reader's own policy, so a call on a
+   * ticket in a department they cannot open lists without its reference.
+   */
+  async callsOfBrand(
+    tx: DbTransaction,
+    brandId: string,
+    page: {
+      readonly before: { readonly at: string; readonly id: string } | undefined;
+      readonly limit: number;
+    },
+  ): Promise<BrandCallRow[]> {
+    return tx
+      .select({
+        id: aiCalls.id,
+        feature: aiCalls.feature,
+        model: aiCalls.model,
+        status: aiCalls.status,
+        tokensIn: aiCalls.tokensIn,
+        tokensOut: aiCalls.tokensOut,
+        costUsd: aiCalls.costUsd,
+        createdAt: aiCalls.createdAt,
+        ticketId: tickets.id,
+        ticketPrefix: tickets.prefix,
+        ticketNumber: tickets.number,
+      })
+      .from(aiCalls)
+      .leftJoin(tickets, eq(tickets.id, aiCalls.ticketId))
+      .where(
+        and(
+          eq(aiCalls.brandId, brandId),
+          page.before === undefined
+            ? undefined
+            : sql`(${aiCalls.createdAt}, ${aiCalls.id}) < (${page.before.at}::timestamptz, ${page.before.id}::uuid)`,
+        ),
+      )
+      .orderBy(desc(aiCalls.createdAt), desc(aiCalls.id))
+      .limit(page.limit);
   }
 
   async callsOfTicket(tx: DbTransaction, brandId: string, ticketId: string): Promise<AiCall[]> {

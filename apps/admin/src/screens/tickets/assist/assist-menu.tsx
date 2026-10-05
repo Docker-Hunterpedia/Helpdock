@@ -142,7 +142,9 @@ export function AssistMenu({
             <AlertBanner tone="danger">
               {stopped
                 ? t('tickets:assist.budget.stopped', { date: dateOf(exceeded.resetsAt, locale) })
-                : t('tickets:assist.budget.keepsAssist', { date: dateOf(exceeded.resetsAt, locale) })}
+                : t('tickets:assist.budget.keepsAssist', {
+                    date: dateOf(exceeded.resetsAt, locale),
+                  })}
             </AlertBanner>
           </Box>
         )}

@@ -64,7 +64,11 @@ export function CitationList({
                 lineHeight: '18px',
               }}
             >
-              <Typography variant="mono" component="span" sx={{ color: 'text.secondary', fontSize: size }}>
+              <Typography
+                variant="mono"
+                component="span"
+                sx={{ color: 'text.secondary', fontSize: size }}
+              >
                 {citation.marker}
               </Typography>
               <Icon size={14} aria-hidden="true" />
@@ -78,7 +82,12 @@ export function CitationList({
               {citation.visibility === 'public' ? (
                 <Box
                   component="span"
-                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    color: 'text.secondary',
+                  }}
                 >
                   <Globe size={14} aria-hidden="true" />
                   {t('tickets:assist.public')}

@@ -11,6 +11,7 @@ import {
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   aiCalls,
+  aiSettings,
   attachments,
   auditLog,
   createDb,
@@ -346,6 +347,9 @@ describe.skipIf(!hasDocker)('agent assist, triage and transcription', () => {
         .from(ticketStatuses)
         .where(eq(ticketStatuses.systemState, 'closed'));
       closedStatusId = closed?.id ?? '';
+      await tx
+        .insert(aiSettings)
+        .values({ brandId, modes: { agentAssist: true, keepAssistAfterHardStop: true } });
     });
 
     ({ id: ticketId, message: messageId } = await newTicket(
@@ -514,6 +518,49 @@ describe.skipIf(!hasDocker)('agent assist, triage and transcription', () => {
       );
 
       expect(response.status).toBe(404);
+    });
+
+    it('refuses while the brand has assist off, and at the hard stop unless it keeps assist on', async () => {
+      const setModes = (modes: Record<string, unknown>, monthlyBudgetUsd: number | null = null) =>
+        withSystem(db(), brandId, (tx) =>
+          tx
+            .update(aiSettings)
+            .set({ modes, monthlyBudgetUsd })
+            .where(eq(aiSettings.brandId, brandId)),
+        );
+      await setModes({ agentAssist: false });
+      const off = await call<ErrorResponse>('POST', ticketPath('assist/suggest-reply'), agentToken);
+      expect(off.body.error.assist?.reason).toBe('assist-off');
+
+      // Every call so far cost 0 under the faux model; a budget of a cent
+      // is spent once one priced call is logged.
+      await withSystem(db(), brandId, (tx) =>
+        tx.insert(aiCalls).values({
+          brandId,
+          feature: 'assist.rewrite',
+          provider: 'local',
+          model: 'fake-model',
+          status: 'ok',
+          costUsd: 1,
+        }),
+      );
+      await setModes({ agentAssist: true, keepAssistAfterHardStop: false }, 0.01);
+      const stopped = await call<ErrorResponse>('POST', ticketPath('assist/rewrite'), agentToken, {
+        text: 'hello',
+        tone: 'shorter',
+      });
+      expect(stopped.body.error.assist?.reason).toBe('budget-exceeded');
+      const state = await call<AssistState>('GET', ticketPath('assist'), agentToken);
+      expect(state.body.blocked).toBe('budget-exceeded');
+
+      await setModes({ agentAssist: true, keepAssistAfterHardStop: true }, 0.01);
+      fake.reply('Hello.');
+      const kept = await call<RewriteResult>('POST', ticketPath('assist/rewrite'), agentToken, {
+        text: 'hello',
+        tone: 'shorter',
+      });
+      expect(kept.status).toBe(200);
+      await setModes({ agentAssist: true, keepAssistAfterHardStop: true });
     });
 
     it('refuses a model failure with a reason and logs it', async () => {

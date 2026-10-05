@@ -1,3 +1,4 @@
+import { MockAiApi } from '../ai/mock-api.js';
 import { MockAssistApi } from '../assist/mock-api.js';
 import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE, MockAuthApi } from '../auth/mock-api.js';
 import type { AdminApis } from '../auth/select-api.js';
@@ -7,9 +8,12 @@ import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { HttpReportsApi } from '../reports/api.js';
+import { HttpSystemApi } from '../screens/admin/system/system-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import { MockTelegramApi } from '../telegram/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -55,6 +59,10 @@ export async function signedInMockApis(): Promise<AdminApis> {
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    ai: new MockAiApi(),
+    knowledge: new MockKnowledgeApi(),
+    reports: new HttpReportsApi(),
+    system: new HttpSystemApi(),
     telegram: new MockTelegramApi(),
     assist: new MockAssistApi(),
   };

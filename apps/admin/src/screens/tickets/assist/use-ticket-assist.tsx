@@ -512,7 +512,11 @@ const suggestionRows = (
     {
       tagName: (id) => {
         const tag = tags.find((candidate) => candidate.id === id);
-        return tag === undefined ? undefined : locale === 'ar' && tag.nameAr ? tag.nameAr : tag.name;
+        return tag === undefined
+          ? undefined
+          : locale === 'ar' && tag.nameAr
+            ? tag.nameAr
+            : tag.name;
       },
       departmentName: (id) => {
         const department = departments.find((candidate) => candidate.id === id);

@@ -56,6 +56,13 @@ export const REPORT_EXPORTS = [
 export const reportExportSchema = z.enum(REPORT_EXPORTS);
 export type ReportExport = z.infer<typeof reportExportSchema>;
 
+/**
+ * `helpdock-volume-2026-09-01-2026-09-30.csv`: what the export route names its
+ * attachment and what the admin saves the download as.
+ */
+export const reportExportFileName = (report: ReportExport, from: string, to: string): string =>
+  `helpdock-${report.replaceAll('_', '-')}-${from}-${to}.csv`;
+
 export const reportExportParamSchema = z.object({
   brandId: z.uuid(),
   report: reportExportSchema,

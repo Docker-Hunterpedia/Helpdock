@@ -9,6 +9,12 @@ import type { Settings } from '@helpdock/config';
 export type TranscriptionConfigReader = () => Promise<TranscriptionConfig | null>;
 
 export const transcriptionConfigFrom =
-  (_settings: Pick<Settings, 'get'>): TranscriptionConfigReader =>
-  async () =>
-    null;
+  (settings: Pick<Settings, 'get'>): TranscriptionConfigReader =>
+  async () => {
+    const [endpoint, model, apiKey] = await Promise.all([
+      settings.get('transcription.endpoint'),
+      settings.get('transcription.model'),
+      settings.get('transcription.apiKey'),
+    ]);
+    return endpoint === '' ? null : { endpoint, model, apiKey };
+  };

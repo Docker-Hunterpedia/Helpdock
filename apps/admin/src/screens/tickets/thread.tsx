@@ -355,7 +355,9 @@ function SentMessage({
             attachments: message.attachments.map(
               (attachment) =>
                 telegram?.attachmentFor(attachment, time) ??
-                (attachment.kind === 'audio' && attachment.status === 'ready' && assist !== undefined ? (
+                (attachment.kind === 'audio' &&
+                attachment.status === 'ready' &&
+                assist !== undefined ? (
                   // M7-09: a voice note from any channel plays, with its transcript under it.
                   <VoiceNote
                     key={attachment.id}

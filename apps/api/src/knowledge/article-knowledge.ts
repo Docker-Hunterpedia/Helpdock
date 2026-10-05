@@ -29,7 +29,8 @@ export interface ArticleSyncCounts {
 export const articleExternalId = (articleId: string, locale: string): string =>
   `${articleId}:${locale}`;
 
-const injectionFilterOf = async (tx: DbTransaction, brandId: string): Promise<boolean> => {
+/** The brand's injection filter toggle (M7-08), on unless the brand turned it off. */
+export const injectionFilterOf = async (tx: DbTransaction, brandId: string): Promise<boolean> => {
   const [row] = await tx
     .select({ injectionFilter: aiSettings.injectionFilter })
     .from(aiSettings)

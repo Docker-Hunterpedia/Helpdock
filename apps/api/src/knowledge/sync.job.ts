@@ -1,5 +1,5 @@
 import { type Ai, ConnectorAuthError } from '@helpdock/ai';
-import { aiSettings, type Db, type DbTransaction, uuidv7 } from '@helpdock/db';
+import { type Db, type DbTransaction, type KnowledgeSource, uuidv7 } from '@helpdock/db';
 import {
   type JobDefinition,
   type JobLogger,
@@ -10,12 +10,16 @@ import {
 } from '@helpdock/jobs';
 import type { KnowledgeLogCode, KnowledgeLogLevel } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
-import { eq } from 'drizzle-orm';
 import { withSystemJob } from '../tenant/system-job.js';
-import { syncArticleKnowledge } from './article-knowledge.js';
+import { injectionFilterOf, syncArticleKnowledge } from './article-knowledge.js';
 import { embedPending } from './embed-pending.js';
 import { KnowledgeRepository } from './knowledge.repository.js';
-import { type LoadOutcome, loadSource, type SourceLoaderDeps } from './load-source.js';
+import {
+  type LoadEvent,
+  loadSource,
+  SourceLoadError,
+  type SourceLoaderDeps,
+} from './load-source.js';
 import { prepareDocument } from './prepare.js';
 
 /**
@@ -46,182 +50,229 @@ export interface SyncDeps {
   readonly now?: () => Date;
 }
 
+interface SyncCounts {
+  documents: number;
+  changed: number;
+  chunks: number;
+  removed: number;
+}
+
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : 'the sync failed';
 
-const embedQuietly = async (
-  deps: SyncDeps,
-  brandId: string,
-  jobId: string,
-): Promise<{ embedded: number; error: string | null }> => {
-  try {
-    return {
-      embedded: await embedPending({ db: deps.db, ai: deps.ai, brandId, jobId }),
-      error: null,
-    };
-  } catch (error) {
-    deps.log.warn({ err: error, brandId }, 'knowledge chunks stored but not embedded');
-    return { embedded: 0, error: errorText(error) };
+/** One run of one source: where it writes, and its log. */
+class SyncRun {
+  readonly #deps: SyncDeps;
+  readonly #repository: KnowledgeRepository;
+  readonly #brandId: string;
+  readonly #sourceId: string;
+  readonly #jobId: string;
+  readonly #runId = uuidv7();
+
+  constructor(deps: SyncDeps, payload: KnowledgeSyncPayload, jobId: string) {
+    this.#deps = deps;
+    this.#repository = deps.repository ?? new KnowledgeRepository();
+    this.#brandId = payload.brandId;
+    this.#sourceId = payload.sourceId;
+    this.#jobId = jobId;
   }
-};
+
+  inBrand<T>(fn: (tx: DbTransaction) => Promise<T>): Promise<T> {
+    return withSystemJob(this.#deps.db, this.#brandId, this.#jobId, fn);
+  }
+
+  log(
+    level: KnowledgeLogLevel,
+    code: KnowledgeLogCode,
+    params: Record<string, unknown> = {},
+  ): Promise<void> {
+    return this.inBrand((tx) =>
+      this.#repository.log(tx, {
+        brandId: this.#brandId,
+        sourceId: this.#sourceId,
+        runId: this.#runId,
+        level,
+        code,
+        params,
+      }),
+    );
+  }
+
+  setStatus(changes: Parameters<KnowledgeRepository['update']>[2]): Promise<void> {
+    return this.inBrand((tx) => this.#repository.update(tx, this.#sourceId, changes));
+  }
+
+  /** The source, claimed for this run, with the brand's injection filter; or why not. */
+  claim(
+    now: Date,
+  ): Promise<
+    | { readonly state: 'missing' | 'busy' }
+    | { readonly state: 'claimed'; readonly source: KnowledgeSource; readonly filter: boolean }
+  > {
+    return this.inBrand(async (tx) => {
+      const source = await this.#repository.find(tx, this.#sourceId);
+      if (source === undefined) {
+        return { state: 'missing' };
+      }
+      if (!(await this.#repository.claim(tx, this.#sourceId, now))) {
+        return { state: 'busy' };
+      }
+      return { state: 'claimed', source, filter: await injectionFilterOf(tx, this.#brandId) };
+    });
+  }
+
+  async #store(
+    source: KnowledgeSource,
+    event: Extract<LoadEvent, { type: 'document' }>,
+    injectionFilter: boolean,
+  ): Promise<{ chunks: number; changed: boolean }> {
+    const prepared = prepareDocument(event.document, { injectionFilter });
+    const outcome = await this.inBrand((tx) =>
+      this.#repository.writeDocument(tx, {
+        brandId: this.#brandId,
+        sourceId: this.#sourceId,
+        externalId: event.externalId,
+        title: event.document.title,
+        url: event.url,
+        articleId: null,
+        contentHash: prepared.contentHash,
+        visibility: source.visibility,
+        chunks: prepared.chunks,
+      }),
+    );
+    const where = { url: event.url, title: event.document.title };
+    await this.log('info', event.code, {
+      ...where,
+      chunks: prepared.chunks.length,
+      changed: outcome === 'written',
+    });
+    if (prepared.findings.length > 0) {
+      await this.log('warn', 'injection.stripped', {
+        ...where,
+        chunks: prepared.suspiciousChunks,
+        rules: prepared.findings,
+      });
+    }
+    return { chunks: prepared.chunks.length, changed: outcome === 'written' };
+  }
+
+  /** Every document of a file, crawl or connector source, then what it no longer has. */
+  async ingest(source: KnowledgeSource, injectionFilter: boolean): Promise<SyncCounts> {
+    const counts: SyncCounts = { documents: 0, changed: 0, chunks: 0, removed: 0 };
+    const seen: string[] = [];
+    const loader = loadSource(source, this.#deps.loaders);
+    let step = await loader.next();
+    while (step.done !== true) {
+      const event = step.value;
+      if (event.type === 'log') {
+        await this.log(event.level, event.code, event.params);
+      } else if (event.type === 'progress') {
+        await this.setStatus({ progressDone: event.done, progressTotal: event.total });
+      } else {
+        const stored = await this.#store(source, event, injectionFilter);
+        seen.push(event.externalId);
+        counts.documents += 1;
+        counts.chunks += stored.chunks;
+        counts.changed += stored.changed ? 1 : 0;
+      }
+      step = await loader.next();
+    }
+    if (step.value.complete) {
+      counts.removed = await this.inBrand((tx) =>
+        this.#repository.removeDocumentsExcept(tx, this.#sourceId, seen),
+      );
+      if (counts.removed > 0) {
+        await this.log('info', 'documents.removed', { count: counts.removed });
+      }
+    }
+    return counts;
+  }
+
+  /** The help center source: every published article of the brand, reconciled. */
+  async ingestArticles(): Promise<SyncCounts> {
+    const counts = await this.inBrand((tx) =>
+      syncArticleKnowledge(tx, this.#brandId, undefined, this.#repository),
+    );
+    return {
+      documents: counts.written,
+      changed: counts.written,
+      chunks: 0,
+      removed: counts.removed,
+    };
+  }
+
+  /** New chunks into the target model; a failure leaves them for the next run, logged. */
+  async embed(): Promise<number> {
+    try {
+      return await embedPending({
+        db: this.#deps.db,
+        ai: this.#deps.ai,
+        brandId: this.#brandId,
+        jobId: this.#jobId,
+      });
+    } catch (error) {
+      this.#deps.log.warn({ err: error, brandId: this.#brandId }, 'knowledge chunks not embedded');
+      await this.log('warn', 'embedding.deferred', { reason: errorText(error) });
+      return 0;
+    }
+  }
+
+  async fail(error: unknown): Promise<void> {
+    const auth = error instanceof ConnectorAuthError;
+    await this.setStatus({
+      syncStatus: 'failed',
+      syncStartedAt: null,
+      lastError: errorText(error),
+      lastErrorCode: auth ? 'auth' : null,
+    });
+    await this.log('error', error instanceof SourceLoadError ? error.code : 'sync.failed', {
+      reason: errorText(error),
+      auth,
+    });
+    this.#deps.log.warn(
+      { jobId: this.#jobId, brandId: this.#brandId, sourceId: this.#sourceId, err: error },
+      'knowledge sync failed',
+    );
+  }
+}
 
 export const runSourceSync = async (
   deps: SyncDeps,
   payload: KnowledgeSyncPayload,
   jobId: string,
 ): Promise<'synced' | 'busy' | 'missing' | 'failed'> => {
-  const repository = deps.repository ?? new KnowledgeRepository();
   const now = deps.now ?? (() => new Date());
-  const { brandId, sourceId } = payload;
-  const inBrand = <T>(fn: (tx: DbTransaction) => Promise<T>): Promise<T> =>
-    withSystemJob(deps.db, brandId, jobId, fn);
-  const runId = uuidv7();
-  const log = (
-    level: KnowledgeLogLevel,
-    code: KnowledgeLogCode,
-    params: Record<string, unknown> = {},
-  ): Promise<void> =>
-    inBrand((tx) => repository.log(tx, { brandId, sourceId, runId, level, code, params }));
-
-  const claimed = await inBrand(async (tx) => {
-    const source = await repository.find(tx, sourceId);
-    if (source === undefined) {
-      return { state: 'missing' as const };
-    }
-    if (!(await repository.claim(tx, sourceId, now()))) {
-      return { state: 'busy' as const };
-    }
-    const [settings] = await tx
-      .select({ injectionFilter: aiSettings.injectionFilter })
-      .from(aiSettings)
-      .where(eq(aiSettings.brandId, brandId))
-      .limit(1);
-    return {
-      state: 'claimed' as const,
-      source,
-      injectionFilter: settings?.injectionFilter ?? true,
-    };
-  });
+  const run = new SyncRun(deps, payload, jobId);
+  const claimed = await run.claim(now());
   if (claimed.state !== 'claimed') {
-    deps.log.info({ jobId, brandId, sourceId, state: claimed.state }, 'knowledge sync skipped');
+    deps.log.info({ jobId, ...payload, state: claimed.state }, 'knowledge sync skipped');
     return claimed.state;
   }
-  const { source, injectionFilter } = claimed;
-  await log('info', 'sync.started', {
+  await run.log('info', 'sync.started', {
     trigger: payload.trigger,
     ...(payload.actorId === undefined ? {} : { actorId: payload.actorId }),
   });
 
-  let documents = 0;
-  let changed = 0;
-  let chunks = 0;
-  let removed = 0;
+  let counts: SyncCounts;
   try {
-    if (source.kind === 'article') {
-      const counts = await inBrand((tx) =>
-        syncArticleKnowledge(tx, brandId, undefined, repository),
-      );
-      changed = counts.written;
-      removed = counts.removed;
-    } else {
-      const seen: string[] = [];
-      const loader = loadSource(source, deps.loaders);
-      let step = await loader.next();
-      while (step.done !== true) {
-        const event = step.value;
-        if (event.type === 'log') {
-          await log(event.level, event.code, event.params);
-        } else if (event.type === 'progress') {
-          await inBrand((tx) =>
-            repository.update(tx, sourceId, {
-              progressDone: event.done,
-              progressTotal: event.total,
-            }),
-          );
-        } else {
-          const prepared = prepareDocument(event.document, { injectionFilter });
-          const outcome = await inBrand((tx) =>
-            repository.writeDocument(tx, {
-              brandId,
-              sourceId,
-              externalId: event.externalId,
-              title: event.document.title,
-              url: event.url,
-              articleId: null,
-              contentHash: prepared.contentHash,
-              visibility: source.visibility,
-              chunks: prepared.chunks,
-            }),
-          );
-          seen.push(event.externalId);
-          documents += 1;
-          chunks += prepared.chunks.length;
-          if (outcome === 'written') {
-            changed += 1;
-          }
-          await log('info', event.code, {
-            url: event.url,
-            title: event.document.title,
-            chunks: prepared.chunks.length,
-            changed: outcome === 'written',
-          });
-          if (prepared.findings.length > 0) {
-            await log('warn', 'injection.stripped', {
-              url: event.url,
-              title: event.document.title,
-              chunks: prepared.suspiciousChunks,
-              rules: prepared.findings,
-            });
-          }
-        }
-        step = await loader.next();
-      }
-      if ((step.value as LoadOutcome).complete) {
-        removed = await inBrand((tx) => repository.removeDocumentsExcept(tx, sourceId, seen));
-        if (removed > 0) {
-          await log('info', 'documents.removed', { count: removed });
-        }
-      }
-    }
+    counts =
+      claimed.source.kind === 'article'
+        ? await run.ingestArticles()
+        : await run.ingest(claimed.source, claimed.filter);
   } catch (error) {
-    const auth = error instanceof ConnectorAuthError;
-    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : null;
-    await inBrand((tx) =>
-      repository.update(tx, sourceId, {
-        syncStatus: 'failed',
-        syncStartedAt: null,
-        lastError: errorText(error),
-        lastErrorCode: auth ? 'auth' : null,
-      }),
-    );
-    await log('error', code === 'file.rejected' ? 'file.rejected' : 'sync.failed', {
-      reason: errorText(error),
-      auth,
-    });
-    deps.log.warn({ jobId, brandId, sourceId, err: error }, 'knowledge sync failed');
+    await run.fail(error);
     return 'failed';
   }
 
-  const embedding = await embedQuietly(deps, brandId, jobId);
-  if (embedding.error !== null) {
-    await log('warn', 'embedding.deferred', { reason: embedding.error });
-  }
-  await inBrand((tx) =>
-    repository.update(tx, sourceId, {
-      syncStatus: 'ok',
-      syncStartedAt: null,
-      lastSyncedAt: now(),
-      lastError: null,
-      lastErrorCode: null,
-    }),
-  );
-  await log('done', 'sync.finished', {
-    documents,
-    changed,
-    chunks,
-    removed,
-    embedded: embedding.embedded,
+  const embedded = await run.embed();
+  await run.setStatus({
+    syncStatus: 'ok',
+    syncStartedAt: null,
+    lastSyncedAt: now(),
+    lastError: null,
+    lastErrorCode: null,
   });
+  await run.log('done', 'sync.finished', { ...counts, embedded });
   return 'synced';
 };
 

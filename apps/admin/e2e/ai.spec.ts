@@ -142,3 +142,86 @@ test.describe('AI assistant', () => {
     expect(await violations(page)).toEqual([]);
   });
 });
+
+test.describe('AI knowledge', () => {
+  const openKnowledge = async (page: Page, locale: Locale): Promise<void> => {
+    const t = strings(locale);
+    await openAi(page, locale);
+    await page.getByRole('tab', { name: t('aiSettings:tabs.knowledge') }).click();
+    await page.getByRole('table', { name: t('aiSettings:knowledge.tableLabel') }).waitFor();
+  };
+
+  test('opens a source with its sync log, and queues a sync', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openKnowledge(page, locale);
+
+    await page.getByRole('button', { name: 'docs.helpdock.io', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'docs.helpdock.io' });
+    await expect(
+      drawer.getByText(t('aiSettings:knowledge.logLines.sitemapRead', { found: 538, kept: 520 })),
+    ).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+    await drawer.getByRole('button', { name: t('aiSettings:knowledge.drawer.close') }).click();
+
+    await page
+      .getByRole('button', {
+        name: t('aiSettings:knowledge.syncNowLabel', { name: 'Billing FAQ.pdf' }),
+      })
+      .click();
+    await expect(
+      page.getByText(t('aiSettings:knowledge.syncQueued', { name: 'Billing FAQ.pdf' })),
+    ).toBeVisible();
+  });
+
+  test('refuses a crawl without a web address, then adds it', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openKnowledge(page, locale);
+
+    await page.getByRole('button', { name: t('aiSettings:knowledge.add') }).click();
+    const dialog = page.getByRole('dialog', { name: t('aiSettings:knowledge.addDialog.title') });
+    const url = dialog.getByLabel(t('aiSettings:knowledge.addDialog.sitemapUrl'));
+    await url.fill('not a url');
+    const submit = dialog.getByRole('button', {
+      name: t('aiSettings:knowledge.addDialog.submit.crawl'),
+    });
+    await submit.click();
+    await expect(dialog.getByText(t('aiSettings:knowledge.addDialog.urlInvalid'))).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+
+    await url.fill('https://help.acme.test/sitemap.xml');
+    await submit.click();
+    await expect(
+      page.getByText(t('aiSettings:knowledge.addDialog.added', { name: 'help.acme.test' })),
+    ).toBeVisible();
+  });
+
+  test('removes a source after the confirmation', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await openKnowledge(page, locale);
+
+    await page
+      .getByRole('button', { name: t('aiSettings:knowledge.menu', { name: 'Billing FAQ.pdf' }) })
+      .click();
+    await page.getByRole('menuitem', { name: t('aiSettings:knowledge.remove') }).click();
+    const dialog = page.getByRole('dialog', {
+      name: t('aiSettings:knowledge.removeDialog.title', { name: 'Billing FAQ.pdf' }),
+    });
+    await dialog
+      .getByRole('button', { name: t('aiSettings:knowledge.removeDialog.confirm') })
+      .click();
+    await expect(
+      page.getByText(t('aiSettings:knowledge.removeDialog.removed', { name: 'Billing FAQ.pdf' })),
+    ).toBeVisible();
+  });
+
+  test('has no accessibility violations', async ({ page, appLocale: locale }) => {
+    await openKnowledge(page, locale);
+    expect(await violations(page)).toEqual([]);
+  });
+});

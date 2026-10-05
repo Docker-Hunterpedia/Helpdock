@@ -7,6 +7,7 @@ import { MockContactsApi } from '../contacts/mock-api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
@@ -56,6 +57,7 @@ export async function signedInMockApis(): Promise<AdminApis> {
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
     ai: new MockAiApi(),
+    knowledge: new MockKnowledgeApi(),
     telegram: new MockTelegramApi(),
   };
 }

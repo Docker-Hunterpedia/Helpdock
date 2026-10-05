@@ -6,6 +6,7 @@ import type {
   DomainsRefusal,
   HcRefusal,
   IdentityProblem,
+  KnowledgeRefusal,
   StaffRefusal,
   TelegramRefusal,
   TicketingRefusal,
@@ -17,6 +18,7 @@ import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
 import { DomainsError } from '../domains/api.js';
 import { HelpCenterError } from '../help-center/api.js';
+import { KnowledgeError } from '../knowledge/api.js';
 import { StaffError } from '../staff/api.js';
 import { TelegramError } from '../telegram/api.js';
 import { TicketingError } from '../ticketing/api.js';
@@ -208,6 +210,7 @@ const toError = async (
   | ContactError
   | DomainsError
   | HelpCenterError
+  | KnowledgeError
   | StaffError
   | TelegramError
   | TicketingError
@@ -222,6 +225,7 @@ const toError = async (
   let domains: DomainsRefusal | undefined;
   let helpCenter: HcRefusal | undefined;
   let ai: AiRefusal | undefined;
+  let knowledge: KnowledgeRefusal | undefined;
   let telegram: TelegramRefusal | undefined;
 
   try {
@@ -235,6 +239,7 @@ const toError = async (
     domains = body.domains?.reason;
     helpCenter = body.helpCenter?.reason;
     ai = body.ai?.reason;
+    knowledge = body.knowledge?.reason;
     telegram = body.telegram?.reason;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
@@ -271,6 +276,10 @@ const toError = async (
 
   if (ai !== undefined) {
     return new AiError(ai);
+  }
+
+  if (knowledge !== undefined) {
+    return new KnowledgeError(knowledge);
   }
 
   if (telegram !== undefined) {

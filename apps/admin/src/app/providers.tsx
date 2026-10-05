@@ -22,6 +22,8 @@ import { DomainsApiProvider } from '../domains/context.tsx';
 import type { EmailApi } from '../email/api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { HelpCenterApiProvider } from '../help-center/context.tsx';
+import type { KnowledgeApi } from '../knowledge/api.js';
+import { KnowledgeApiProvider } from '../knowledge/context.tsx';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import type { BrowserPush } from '../notifications/browser-push.js';
@@ -124,6 +126,8 @@ export interface AppProvidersProps {
   readonly domainsApi?: DomainsApi;
   /** Defaults to the matching adapter. Only `Admin/AI` reads it (M7-10). */
   readonly aiApi?: AiApi;
+  /** Defaults to the matching adapter. Only AI › Knowledge reads it (M7-10). */
+  readonly knowledgeApi?: KnowledgeApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
   readonly queryClient?: QueryClient;
@@ -160,6 +164,7 @@ export function AppProviders({
   browserPush,
   domainsApi,
   aiApi,
+  knowledgeApi,
   telegramApi,
   queryClient,
   router: Router = BrowserRouter,
@@ -189,6 +194,7 @@ export function AppProviders({
   const push = browserPush ?? fallback.browserPush;
   const domains = domainsApi ?? fallback.domains;
   const ai = aiApi ?? fallback.ai;
+  const knowledge = knowledgeApi ?? fallback.knowledge;
   const telegram = telegramApi ?? fallback.telegram;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
@@ -257,15 +263,17 @@ export function AppProviders({
                 <AutomationApiProvider api={automation}>
                   <DomainsApiProvider api={domains}>
                     <AiApiProvider api={ai}>
-                      <TelegramApiProvider api={telegram}>
-                        <HelpCenterApiProvider api={helpCenter}>
-                          <NotificationsProvider api={notifications} push={push}>
-                            <ToastProvider>
-                              <Router>{children}</Router>
-                            </ToastProvider>
-                          </NotificationsProvider>
-                        </HelpCenterApiProvider>
-                      </TelegramApiProvider>
+                      <KnowledgeApiProvider api={knowledge}>
+                        <TelegramApiProvider api={telegram}>
+                          <HelpCenterApiProvider api={helpCenter}>
+                            <NotificationsProvider api={notifications} push={push}>
+                              <ToastProvider>
+                                <Router>{children}</Router>
+                              </ToastProvider>
+                            </NotificationsProvider>
+                          </HelpCenterApiProvider>
+                        </TelegramApiProvider>
+                      </KnowledgeApiProvider>
                     </AiApiProvider>
                   </DomainsApiProvider>
                 </AutomationApiProvider>

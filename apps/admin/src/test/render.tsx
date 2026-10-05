@@ -19,6 +19,8 @@ import type { EmailApi } from '../email/api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import type { KnowledgeApi } from '../knowledge/api.js';
+import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
@@ -51,6 +53,7 @@ export interface RenderAppOptions {
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
   readonly aiApi?: AiApi;
+  readonly knowledgeApi?: KnowledgeApi;
   readonly telegramApi?: TelegramApi;
   readonly initialEntries?: readonly string[];
 }
@@ -71,6 +74,7 @@ export interface RenderedApp extends RenderResult {
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
   readonly aiApi: AiApi;
+  readonly knowledgeApi: KnowledgeApi;
   readonly telegramApi: TelegramApi;
 }
 
@@ -95,6 +99,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
   const aiApi = options.aiApi ?? new MockAiApi();
+  const knowledgeApi = options.knowledgeApi ?? new MockKnowledgeApi();
   const telegramApi = options.telegramApi ?? new MockTelegramApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
@@ -115,6 +120,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       browserPush={browserPush}
       domainsApi={domainsApi}
       aiApi={aiApi}
+      knowledgeApi={knowledgeApi}
       telegramApi={telegramApi}
       queryClient={queryClient}
       router={({ children }) => (
@@ -142,6 +148,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     browserPush,
     domainsApi,
     aiApi,
+    knowledgeApi,
     telegramApi,
   };
 }

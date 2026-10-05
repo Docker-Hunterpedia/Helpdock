@@ -457,7 +457,19 @@ declares, or for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`). 
   dimension asks first and says what happens; more than 2000 dimensions is
   refused under the field. Anything an `HD_*` variable pins is drawn locked,
   with the variable named, and listed in a banner at the top.
-- **Knowledge**: the brand's knowledge sources arrive with M7-03.
+- **Knowledge** (Admins and Team Leaders, `Admin/AI-Knowledge`): the brand's
+  sources — the help center (automatic, each article keeps its own
+  visibility), files, website crawls, Notion and Google Drive — with
+  visibility, chunks, last sync, schedule and state, **Sync now** per source,
+  and a search. **Add source** uploads files (one source per file, through a
+  presigned upload), starts a crawl from a sitemap or a seed URL with its page
+  cap, schedule, include and exclude patterns, or creates a Notion or Drive
+  source and sends you to the service to connect it (Notion also takes an
+  internal integration token). New sources are internal unless you choose
+  public. Opening a source shows its facts — visibility and schedule are
+  changed there — the Notion pages or Drive folders it reads, and its sync log
+  in your language, with a Warnings filter. Removing a source deletes its
+  chunks at once.
 - **Assistant** (`Admin/AI-Assistant`): the modes, guardrails, budget (today
   and this month against the limits, and what happens at the hard stop),
   the system prompt in English and Arabic, and the brand's recent AI calls.

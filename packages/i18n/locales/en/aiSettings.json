@@ -11,7 +11,239 @@
     "assistant": "Assistant"
   },
   "knowledge": {
-    "placeholder": "Knowledge sources arrive with milestone M7-03."
+    "subtitle": "{{brand}} brand · what the assistant may read and cite",
+    "add": "Add source",
+    "heading": "Knowledge sources",
+    "caption_one": "{{brand}} brand · {{count}} source · {{chunks}} chunks embedded with {{model}}",
+    "caption_other": "{{brand}} brand · {{count}} sources · {{chunks}} chunks embedded with {{model}}",
+    "noModel": "no embedding model yet",
+    "search": "Search sources",
+    "tableLabel": "Knowledge sources",
+    "empty": "No source matches.",
+    "footer": "Only Public sources can answer visitors. Internal sources help agents only, and agent assist marks their citations as internal. Articles follow their own visibility.",
+    "columns": {
+      "source": "Source",
+      "visibility": "Visibility",
+      "chunks": "Chunks",
+      "lastSync": "Last sync",
+      "schedule": "Schedule",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "kinds": {
+      "article": "Automatic",
+      "file": "File",
+      "crawl": "Website crawl",
+      "notion": "Notion",
+      "gdrive": "Google Drive"
+    },
+    "detail": {
+      "article": "Automatic · published articles of the help center",
+      "file": "File · {{type}} · {{size}} · uploaded by {{who}}",
+      "crawlSitemap": "Website crawl · sitemap · max {{max}} pages",
+      "crawlSeed": "Website crawl · seed URL · max {{max}} pages",
+      "notion": "Notion · {{pages}} pages, {{databases}} databases",
+      "gdrive": "Google Drive · {{folders}} folders",
+      "notConnected": "not connected"
+    },
+    "visibility": {
+      "public": "Public",
+      "internal": "Internal",
+      "perArticle": "Per article"
+    },
+    "schedule": {
+      "automaticArticle": "On publish",
+      "automaticFile": "On upload",
+      "daily": "Daily 03:00",
+      "weekly": "Weekly · Sun",
+      "manual": "Manual"
+    },
+    "never": "Never",
+    "state": {
+      "idle": "Not synced yet",
+      "queued": "Queued",
+      "syncing": "Syncing",
+      "syncingProgress": "Syncing {{done}} / {{total}}",
+      "syncingCount": "Syncing {{done}}",
+      "ok": "Synced",
+      "failed": "Failed"
+    },
+    "notConnected": "Not connected",
+    "connect": "Connect",
+    "reconnect": "Reconnect",
+    "syncNow": "Sync now",
+    "syncNowLabel": "Sync {{name}} now",
+    "syncing": "Syncing",
+    "syncQueued": "Sync of {{name}} queued.",
+    "open": "Open {{name}}",
+    "menu": "More for {{name}}",
+    "remove": "Remove source",
+    "progressLabel": "Sync progress of {{name}}",
+    "oauth": {
+      "connected": "Connected. The first sync has started.",
+      "failed": "The connection was not completed. Try Connect again."
+    },
+    "refusals": {
+      "article-source-fixed": "Help center articles are managed by publishing; this source cannot be changed or removed.",
+      "invalid-config": "Those settings do not fit this kind of source.",
+      "not-a-file": "Only a file source is confirmed.",
+      "upload-missing": "The file did not reach storage. Try again.",
+      "rendering-disabled": "JavaScript rendering is turned off on this install.",
+      "oauth-not-configured": "This install has no OAuth app for that service yet. Ask an install admin to set it in .env.",
+      "oauth-state-invalid": "That sign-in answer did not match a request from here. Try Connect again.",
+      "not-connected": "Connect the source first.",
+      "connection-refused": "The service refused the stored access. Reconnect it.",
+      "service-unavailable": "The service could not be reached. Try again later."
+    },
+    "addDialog": {
+      "title": "Add knowledge source",
+      "type": "Source type",
+      "types": {
+        "file": {
+          "title": "Files",
+          "body": "PDF, DOCX, MD or TXT, up to 25 MB each"
+        },
+        "crawl": {
+          "title": "Website crawl",
+          "body": "A sitemap or seed URL"
+        },
+        "notion": {
+          "title": "Notion",
+          "body": "Sign in to Notion and pick pages or databases"
+        },
+        "gdrive": {
+          "title": "Google Drive",
+          "body": "Sign in to Google and pick folders"
+        }
+      },
+      "articlesNote": "Help center articles are added automatically and need no source.",
+      "files": "Files",
+      "filesHint": "PDF, DOCX, MD or TXT, up to 25 MB each. One source per file.",
+      "filesRequired": "Choose at least one file.",
+      "fileTooBig": "{{name}} is larger than 25 MB.",
+      "fileType": "{{name}} is not a PDF, DOCX, MD or TXT file.",
+      "startFrom": "Start from",
+      "sitemap": "Sitemap",
+      "seed": "Seed URL (follow links)",
+      "sitemapUrl": "Sitemap URL",
+      "seedUrl": "Seed URL",
+      "urlHint": "Fetched through the outbound safety client: private and internal addresses are refused. robots.txt is always respected.",
+      "urlInvalid": "Enter an address starting with http:// or https://.",
+      "maxPages": "Max pages",
+      "maxPagesHint": "Up to 10 MB per page.",
+      "maxPagesInvalid": "Enter a whole number from 1 to 5000.",
+      "scheduleLabel": "Sync schedule",
+      "scheduleHint": "Times in the brand's time zone.",
+      "schedules": {
+        "daily": "Daily at 03:00",
+        "weekly": "Weekly on Sunday at 03:00",
+        "manual": "Only when synced by hand"
+      },
+      "include": "Include patterns (optional)",
+      "includeHint": "One per line. Empty includes everything.",
+      "exclude": "Exclude patterns (optional)",
+      "excludeHint": "Exclude wins over include.",
+      "render": "Render JavaScript",
+      "renderHint": "For sites that build pages in the browser. Uses a headless browser and is much slower.",
+      "renderOff": "Turned off on this install.",
+      "name": "Name",
+      "nameRequired": "Give the source a name.",
+      "token": "Internal integration token (optional)",
+      "tokenHint": "Instead of signing in, paste a Notion internal integration token. It is encrypted and never shown again.",
+      "oauthMissing": "This install has no OAuth app for this service, so it cannot be connected yet.",
+      "visibility": "Visibility",
+      "internal": {
+        "title": "Internal",
+        "default": "(default)",
+        "body": "Used by agent assist only. Never shown or quoted to visitors."
+      },
+      "public": {
+        "title": "Public",
+        "body": "Can answer visitors in the widget, Telegram and email, with citations. Choose this only for content you would publish."
+      },
+      "submit": {
+        "file": "Upload and index",
+        "crawl": "Add and start crawl",
+        "notion": "Add and connect",
+        "gdrive": "Add and connect"
+      },
+      "uploaded_one": "{{count}} file uploaded.",
+      "uploaded_other": "{{count}} files uploaded.",
+      "added": "{{name}} added."
+    },
+    "drawer": {
+      "close": "Close",
+      "visibility": "Visibility",
+      "chunks": "Chunks",
+      "pages": "Pages",
+      "pagesValue": "{{done}} of max {{max}}",
+      "schedule": "Schedule",
+      "next": "next {{date}}",
+      "rendering": "Rendering",
+      "renderingOn": "JavaScript",
+      "renderingOff": "HTML only",
+      "added": "Added",
+      "addedValue": "{{date}} by {{who}}",
+      "started": "started {{time}}",
+      "saved": "{{name}} saved.",
+      "pick": {
+        "notion": "Pages and databases",
+        "gdrive": "Folders"
+      },
+      "pickSearch": "Search Notion",
+      "pickSave": "Save selection",
+      "pickEmpty": "Nothing found.",
+      "log": "Sync log",
+      "logFilter": "Show",
+      "logAll": "All lines",
+      "logWarn": "Warnings",
+      "logEmpty": "No sync has written to the log yet.",
+      "logLabel": "Sync log of {{name}}",
+      "levels": {
+        "info": "info",
+        "warn": "warn",
+        "error": "error",
+        "done": "done"
+      }
+    },
+    "removeDialog": {
+      "title": "Remove “{{name}}”?",
+      "body_one": "Its {{count}} chunk is deleted immediately and the assistant stops citing it at once. Replies already sent keep their text and citations. This cannot be undone.",
+      "body_other": "Its {{count}} chunks are deleted immediately and the assistant stops citing it at once. Replies already sent keep their text and citations. This cannot be undone.",
+      "confirm": "Remove source",
+      "removed": "{{name}} removed."
+    },
+    "logLines": {
+      "syncStarted": "Sync started",
+      "syncStartedBy": {
+        "manual": "Sync started by hand (Sync now)",
+        "schedule": "Scheduled sync started",
+        "changed": "Sync started after a change",
+        "upload": "Sync started after the upload"
+      },
+      "syncFinished": "Sync finished · {{documents}} documents, {{chunks}} chunks · {{changed}} changed",
+      "syncFailed": "Sync failed: {{reason}}",
+      "robotsRead": "robots.txt: {{rules}} disallow rules applied",
+      "robotsUnreadable": "robots.txt could not be read",
+      "sitemapRead": "Sitemap read · {{found}} URLs, {{kept}} after patterns",
+      "pageIndexed": "{{where}} · {{chunks}} chunks",
+      "pageSkipped": "{{where}} skipped: {{why}}",
+      "pageSkippedCount": "Skipped {{count}} pages: {{why}}",
+      "documentIndexed": "{{where}} · {{chunks}} chunks",
+      "documentSkipped": "{{where}} skipped: {{why}}",
+      "documentsRemoved": "{{count}} documents removed: no longer in the source",
+      "injectionStripped": "Injection filter: {{chunks}} chunks on {{where}} marked suspicious, instructions stripped",
+      "fileRejected": "The file was not read: {{reason}}",
+      "embeddingDeferred": "Stored but not embedded yet: {{reason}}. Full-text search finds it meanwhile.",
+      "skip": {
+        "robots": "disallowed by robots.txt",
+        "excluded": "matching an exclude pattern",
+        "not-included": "matching no include pattern",
+        "status": "the page returned {{detail}}",
+        "not-html": "not an HTML page",
+        "error": "it could not be fetched"
+      }
+    }
   },
   "loadFailed": "This could not be loaded. Check your connection and try again.",
   "actionFailed": "That did not work. Check your connection and try again.",

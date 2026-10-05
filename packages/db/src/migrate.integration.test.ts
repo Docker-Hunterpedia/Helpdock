@@ -52,7 +52,6 @@ const MIGRATION_TAGS = [
   '0037_report_rollups',
   '0038_ai_and_knowledge',
   '0039_api_keys_and_webhooks',
-  '0040_knowledge_ingest',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

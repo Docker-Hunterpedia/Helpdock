@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Contact support · web form (EN)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; background: #F7F5F0; font-size: 16px; line-height: 24px; overflow: hidden;">
+  <header style="height: 64px; flex-shrink: 0; box-sizing: border-box; padding: 0 64px; display: flex; align-items: center; gap: 24px; border-bottom: 1px solid #E3DFD6; background: #FFFFFF;">
+    <a href="#home-en" style="display: flex; align-items: center; gap: 10px; color: #16181C; font-weight: 600;"><span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 6px; background: {{accent}}; color: #FFFFFF; font-size: 14px; display: inline-flex; align-items: center; justify-content: center;">H</span>Helpdock</a>
+    <nav aria-label="Site" style="display: flex; gap: 20px; font-size: 14px; margin-inline-start: auto;"><a href="#hc-en" style="color: #5C564C; min-height: 44px; display: inline-flex; align-items: center;">Help center</a><a href="#contact-en" aria-current="page" style="color: #16181C; font-weight: 500; min-height: 44px; display: inline-flex; align-items: center;">Contact support</a></nav>
+    <a href="#lang-en" lang="ar" style="font-size: 14px; color: #5C564C; min-height: 44px; display: inline-flex; align-items: center; font-family: 'IBM Plex Sans Arabic', 'IBM Plex Sans', sans-serif;">العربية</a>
+  </header>
+  <main style="flex-grow: 1; min-height: 0; padding: 32px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 48px;">
+  <form aria-labelledby="wf-h-en" novalidate style="display: flex; flex-direction: column; gap: 16px; padding: 24px 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; align-self: start;">
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <h1 id="wf-h-en" style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600;">Contact support</h1>
+      <p style="margin: 0; color: #5C564C;">Tell us what you need. We reply by email, usually within one business day.</p>
+    </div>
+    <div role="alert" tabindex="-1" aria-labelledby="wf-es-en" style="display: flex; gap: 10px; padding: 12px 16px; border-radius: 6px; background: #FBE7E5; border: 1px solid #B3261E; color: #8A1B15; font-size: 14px; line-height: 20px;">
+      <span style="display: inline-flex; padding-top: 2px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></span>
+      <div style="display: flex; flex-direction: column; gap: 4px;"><span id="wf-es-en" style="font-weight: 600;">2 fields need attention</span><span style="display: flex; gap: 16px;"><a href="#wf-email-en" style="color: #8A1B15; text-decoration: underline;">Email</a><a href="#wf-msg-en" style="color: #8A1B15; text-decoration: underline;">Message</a></span></div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="wf-name-en" style="font-size: 14px; line-height: 20px; font-weight: 500;">Name <span style="font-weight: 400; color: #5C564C;">required</span></label><input id="wf-name-en" type="text" autocomplete="name" value="Omar Khalil" style="height: 44px; box-sizing: border-box; width: 100%; padding: 0 12px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 16px; color: #16181C;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="wf-email-en" style="font-size: 14px; line-height: 20px; font-weight: 500;">Email <span style="font-weight: 400; color: #5C564C;">required</span></label><input id="wf-email-en" type="email" aria-invalid="true" aria-describedby="wf-email-e-en" autocomplete="email" value="omar.k@example" dir="ltr" style="height: 44px; box-sizing: border-box; width: 100%; padding: 0 12px; border-radius: 6px; border: 1px solid #B3261E; background: #FFFFFF; font-size: 16px; color: #16181C;"><p id="wf-email-e-en" role="alert" style="margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #8A1B15;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>Enter an email like name@example.com.</p></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="wf-subj-en" style="font-size: 14px; line-height: 20px; font-weight: 500;">Subject <span style="font-weight: 400; color: #5C564C;">required</span></label><input id="wf-subj-en" type="text" value="Refund for order 8841 not received" style="height: 44px; box-sizing: border-box; width: 100%; padding: 0 12px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 16px; color: #16181C;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;"><label for="wf-order-en" style="font-size: 14px; line-height: 20px; font-weight: 500;">Order number <span style="font-weight: 400; color: #5C564C;">(optional)</span></label><input id="wf-order-en" type="text" aria-describedby="wf-order-h-en" value="8841" dir="ltr" style="height: 44px; box-sizing: border-box; width: 100%; padding: 0 12px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 16px; color: #16181C;"><p id="wf-order-h-en" style="margin: 0; font-size: 12px; line-height: 16px; color: #5C564C;">Eight digits, on your confirmation email.</p></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px;"><label for="wf-msg-en" style="font-size: 14px; line-height: 20px; font-weight: 500;">Message <span style="font-weight: 400; color: #5C564C;">required</span></label><textarea id="wf-msg-en" rows="3" aria-invalid="true" aria-describedby="wf-msg-e-en" style="box-sizing: border-box; width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid #B3261E; background: #FFFFFF; font-size: 16px; line-height: 24px; color: #16181C; resize: vertical;"></textarea><p id="wf-msg-e-en" role="alert" style="margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #8A1B15;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>Tell us what happened.</p></div>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span id="wf-att-l-en" style="font-size: 14px; line-height: 20px; font-weight: 500;">Attachments <span style="font-weight: 400; color: #5C564C;">(optional)</span></span>
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <input id="wf-files-en" type="file" multiple aria-describedby="wf-att-h-en" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;">
+        <label for="wf-files-en" style="height: 44px; box-sizing: border-box; padding: 0 16px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 15px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/></svg>Choose files</label>
+        <span style="height: 44px; box-sizing: border-box; padding-inline: 12px 0; border-radius: 6px; background: #EFECE5; border: 1px solid #E3DFD6; display: inline-flex; align-items: center; gap: 8px; font-size: 14px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5C564C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 9H8M16 13H8M16 17H8"/></svg><bdi>receipt-8841.pdf</bdi><span style="color: #5C564C; font-size: 12px;">84 KB</span><button type="button" aria-label="Remove receipt-8841.pdf" style="width: 44px; height: 42px; border: 0; background: transparent; color: #403C35; display: inline-flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
+      </div>
+      <p id="wf-att-h-en" style="margin: 0; font-size: 12px; line-height: 16px; color: #5C564C;">Up to 5 files, 10 MB each. JPG, PNG, WebP or PDF.</p>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+      <div role="group" aria-label="Security check" style="width: 300px; height: 64px; box-sizing: border-box; padding: 0 12px; border-radius: 6px; border: 1px solid #CFC9BD; background: #F7F5F0; display: flex; align-items: center; gap: 12px; font-size: 14px; line-height: 20px; color: #403C35;">
+        <span style="display: inline-flex; color: #2E7D4F;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span><span style="flex-grow: 1;">Verified</span><span style="font-size: 12px; line-height: 16px; color: #5C564C;">Turnstile</span>
+      </div>
+      <button type="submit" style="height: 44px; padding: 0 24px; border-radius: 6px; border: 0; background: {{accent}}; color: #FFFFFF; font-size: 16px; font-weight: 500;">Send message</button>
+    </div>
+  </form>
+  <div style="display: flex; flex-direction: column; gap: 24px;">
+    <section aria-labelledby="wf-ok-en" style="display: flex; flex-direction: column; gap: 16px; padding: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6;">
+      <div role="status" style="display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 6px; background: #E7F3EC; border: 1px solid #2E7D4F; color: #1F5A38; font-size: 13px; line-height: 20px;"><span style="display: inline-flex; padding-top: 2px; flex-shrink: 0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span>We got it. Thanks for writing to us.</span></div>
+      <h2 id="wf-ok-en" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600;">Your reference is <span style="font-family: 'IBM Plex Mono', monospace;">HD-1042</span></h2>
+      <p style="margin: 0; color: #5C564C;">We sent a confirmation to omar.k@example.com. Reply to that email to add details or files.</p>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;"><a href="#hc-en" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px;">Browse the help center</a><a href="#new-en" style="min-height: 44px; display: inline-flex; align-items: center; font-size: 14px;">Send another message</a></div>
+    </section>
+    <div style="font-size: 13px; line-height: 18px; color: #5C564C; padding: 0 4px; display: flex; flex-direction: column; gap: 8px;">
+      <span>Left: Send pressed with a bad email and no message. The summary takes focus and links to each field; each field names its error with aria-describedby. Right: the success state replaces the form.</span>
+      <span>Custom fields come from the brand’s ticket fields marked “Show on web form”. The CAPTCHA box appears only when the brand turns it on (Turnstile or hCaptcha). Served at /contact on the help center domain, or embedded.</span>
+    </div>
+  </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0F766E","options":["#0F766E","#2B5FB3","#B45309","#16181C"]},"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return { accent: this.props.accent ?? '#0F766E' }; }
+}
+</script>
+</body>
+</html>

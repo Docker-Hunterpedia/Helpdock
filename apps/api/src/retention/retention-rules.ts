@@ -60,12 +60,14 @@ export const rowValuesFrom = (settings: RetentionSettings): RetentionWindowColum
  * for "never", which is §11's default and means the category is skipped
  * entirely rather than purged with an infinitely old cutoff.
  *
- * AI calls are absent until M7 adds their purge. The search log's (M5-05) covers the help
- * center's article views too (M5-08), which are kept exactly as long.
+ * AI calls (M7) lose their bodies at theirs and keep their counts. The search
+ * log's (M5-05) covers the help center's article views too (M5-08), which are
+ * kept exactly as long.
  */
 export interface RetentionCutoffs {
   readonly closedTickets: Date | null;
   readonly spamTickets: Date;
+  readonly aiCalls: Date;
   readonly searchLog: Date;
   readonly auditLog: Date;
   readonly visitorSessions: Date;
@@ -82,6 +84,7 @@ export const retentionCutoffs = (settings: RetentionSettings, now: Date): Retent
       ? null
       : retentionCutoff(settings.closedTickets.days, now),
   spamTickets: retentionCutoff(settings.spamTicketDays, now),
+  aiCalls: retentionCutoff(settings.aiCallDays, now),
   searchLog: retentionCutoff(settings.searchLogDays, now),
   auditLog: retentionCutoff(settings.auditLogDays, now),
   visitorSessions: retentionCutoff(settings.visitorSessionDays, now),

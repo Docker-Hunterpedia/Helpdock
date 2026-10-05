@@ -60,6 +60,8 @@ describe('the settings registry', () => {
       'auth.jwtSigningKey',
       'captcha.secret',
       'push.vapidPrivateKey',
+      'embedding.apiKey',
+      'ai.providers',
     ]);
   });
 });

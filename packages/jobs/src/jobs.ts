@@ -812,6 +812,43 @@ export const helpCenterMediaProcessJob = defineJob({
   idempotencyKey: (payload) => `help_center.media_process:${payload.mediaId}`,
 });
 
+/**
+ * M7-02: brings the install's embedding space in line with the `embedding.*`
+ * settings (DOMAIN-RULES §8, ADR 0005). Every minute it compares the settings
+ * with the `embedding_space` row; a new model or dimension drops the vector
+ * index, resizes `knowledge_chunks.embedding`, sets `reindexing` and adds
+ * {@link knowledgeReembedJob}. A settled space costs one read. A tick rather
+ * than an outbox event because the settings may change in the environment as
+ * well as in admin, and because the space is install-wide while every outbox
+ * row belongs to a brand.
+ */
+export const knowledgeConfigureJob = defineJob({
+  name: 'knowledge.configure',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: 100 },
+  schedule: { everyMs: 60_000 },
+});
+
+/**
+ * M7-02: embeds every chunk of every brand that is not yet in the target
+ * model, brand by brand and batch by batch, then builds the HNSW index and
+ * flips the space to `ready`. Added by {@link knowledgeConfigureJob} under the
+ * fixed id {@link KNOWLEDGE_REEMBED_JOB_ID}, so it runs once at a time; a run
+ * that fails leaves the space `reindexing` and the next tick resumes it from
+ * the chunks still left.
+ */
+export const knowledgeReembedJob = defineJob({
+  name: 'knowledge.reembed',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  // Removed on failure too: a failed job kept under the fixed id would make
+  // every later `add` a no-op, and the tick could never resume. The failure
+  // stays visible as `embedding_space.last_error`.
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: true },
+});
+
+export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
 export const webhookDeliverPayloadSchema = z.object({
   brandId: z.uuid(),
   /** The `webhook_deliveries` row: its frozen body, its endpoint, and its log. */
@@ -1039,6 +1076,8 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterMediaProcessJob.name]: helpCenterMediaProcessJob,
   [helpCenterSearchReindexJob.name]: helpCenterSearchReindexJob,
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
+  [knowledgeConfigureJob.name]: knowledgeConfigureJob,
+  [knowledgeReembedJob.name]: knowledgeReembedJob,
   [webhookDeliverJob.name]: webhookDeliverJob,
   [telegramSendJob.name]: telegramSendJob,
   [telegramPollJob.name]: telegramPollJob,

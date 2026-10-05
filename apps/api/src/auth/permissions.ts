@@ -66,6 +66,10 @@ export const PERMISSIONS = [
   // Team Leader's ("Manages config … help center").
   'help_center:read',
   'help_center:manage',
+  // M7: a brand's AI assistant — its system prompt ("editable by Team Leader",
+  // REQUIREMENTS §4.7) and reading its model, guardrails and budget. Changing
+  // the model, the guardrails or the budget stays `brand:manage`.
+  'ai:manage',
   // M8-04: the brand's reports. An Admin's, a Team Leader's (their departments,
   // by row-level security on the rollups) and a Viewer's, who "may read
   // reports" (DOMAIN-RULES §1.2). Not an Agent's: their work is tickets.
@@ -102,6 +106,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'system:read',
     'help_center:read',
     'help_center:manage',
+    'ai:manage',
     'report:read',
   ],
   // "Departments they lead: agents, SLAs, rules, macros, canned responses, help
@@ -121,6 +126,7 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'settings:write',
     'help_center:read',
     'help_center:manage',
+    'ai:manage',
     'report:read',
   ],
   agent: [

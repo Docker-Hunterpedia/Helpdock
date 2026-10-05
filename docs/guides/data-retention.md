@@ -14,7 +14,7 @@ retention card. Only an Admin sees the page and only an Admin may change it
 |---|---|---|---|
 | Closed tickets and their messages | **Forever** | Forever, or 1 to 3650 days after close | Hard-deletes the ticket, its messages, activity, tags and attachments, and queues the attachments' objects for deletion from the bucket |
 | Spam tickets | **30 days** | 1 to 3650 | The same hard delete, on its own clock |
-| AI call logs | **90 days** | 1 to 3650 | Stored only. `ai_calls` arrives with M7, which adds the purge |
+| AI call logs | **90 days** | 1 to 3650 | Nulls the prompt, response, redaction map and sources of older `ai_calls` rows and stamps `bodies_purged_at`. The row stays with its tokens, cost, latency and prompt hash, for reports and the budget meter (M7) |
 | Help center search log | **180 days** | 1 to 3650 | Hard-deletes the search log (M5-05) and, in the same window, the article view rows that dedupe view counts (M5-08). The count is the search log's |
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Hard-deletes inactive `widget_visitors` only when no ticket references them; a visitor with a conversation keeps its session |
@@ -33,7 +33,8 @@ after, in days.
 The third column is how many rows the next run would remove under the **saved**
 windows. It is counted with the same conditions the job deletes by, so it is
 the number that goes. "—" means there is nothing to count: closed tickets kept
-forever, or a table that does not exist yet.
+forever, or a table that does not exist yet. For AI call logs it is the number
+of rows whose bodies would be nulled.
 
 ### What counts as closed, and as spam
 
@@ -48,8 +49,8 @@ forever, or a table that does not exist yet.
 
 ```
 03:00 UTC  maintenance.retention.schedule   one job per brand, then job_receipts
-           maintenance.retention (brand)    closed, spam, search log and views, audit log,
-                                            idle visitors, notifications, outbox → audit row
+           maintenance.retention (brand)    closed, spam, AI call bodies, search log and views,
+                                            audit log, idle visitors, notifications, outbox → audit row
 ```
 
 The worker registers the schedule on every boot, so a Redis that lost it gets
@@ -154,7 +155,6 @@ answer `{ brandId, status, requestedAt, purgeAfter }` (`brandDeletionSchema`).
 
 ## Known gaps
 
-- AI call logs are stored but not purged yet. M7 adds their table and purge.
 - Composer uploads that were never sent (`message_id` still null) are not swept.
   They are deleted with their ticket.
 - Brand deletion has its api and its job; the Danger zone's "Delete brand"

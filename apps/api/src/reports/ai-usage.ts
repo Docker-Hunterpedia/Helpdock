@@ -6,16 +6,16 @@ import type { ReportAi, SystemAiSpend } from '@helpdock/schemas';
  * Reports, LLM spend on the System page, and the AI deflection product metric
  * of DOMAIN-RULES §15.
  *
- * All three are read from `ai_calls` (ARCHITECTURE §5), which the AI
- * subsystem (M7) adds. Until it does, there is nothing honest to show, so the
- * one implementation here answers "not available" and every consumer says so
- * instead of printing zeroes. M7 provides an implementation that reads its
- * table and binds it to {@link AI_USAGE_SOURCE}; nothing else changes.
+ * All three are read from `ai_calls` (ARCHITECTURE §5). The app binds
+ * `DbAiUsage` (`ai/db-ai-usage.ts`) to {@link AI_USAGE_SOURCE}; {@link NoAiUsage}
+ * stays for suites and processes that have no AI data to show, and answers
+ * "not available" rather than zeroes.
  *
  * `report` and `deflectionRate` run in the caller's transaction: the
- * report's, narrowed to the brand and the reader's departments by row-level
- * security (`ai_calls` is department-scoped, DOMAIN-RULES §1.3), or a system
- * transaction of one brand for the product metrics.
+ * report's, narrowed to the brand by row-level security (`ai_calls` is
+ * brand-scoped; a department filter goes through the call's ticket, under
+ * the reader's department policy), or a system transaction of one brand for
+ * the product metrics.
  */
 
 export interface AiUsageRange {
@@ -45,7 +45,7 @@ export interface AiUsageSource {
 
 export const AI_USAGE_SOURCE = Symbol('helpdock.ai-usage-source');
 
-/** What every AI number reads as until M7 records calls. */
+/** What every AI number reads as where no `ai_calls` reader is bound. */
 export class NoAiUsage implements AiUsageSource {
   async report(): Promise<ReportAi> {
     return { available: false };

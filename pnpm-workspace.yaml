@@ -25,3 +25,6 @@ allowBuilds:
   # builds an optional native accelerator; without it msgpackr uses its
   # JavaScript implementation, which is what BullMQ is published against.
   msgpackr-extract: false
+  # A transitive dependency of `@mariozechner/pi-ai`. Its only install script
+  # is a no-op `preinstall` echo; the published package is already built.
+  '@google/genai': false

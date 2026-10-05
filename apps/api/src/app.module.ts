@@ -10,6 +10,8 @@ import {
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
+import { AiModule, type AiModuleOptions } from './ai/ai.module.js';
+import { DbAiUsage } from './ai/db-ai-usage.js';
 import { ApiKeysModule } from './api-keys/api-keys.module.js';
 import { ApiV1Module } from './api-v1/api-v1.module.js';
 import { AssignmentModule } from './assignment/assignment.module.js';
@@ -123,6 +125,8 @@ export interface AppModuleOptions {
   readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
   /** M4-09: the siteverify call, which suites replace. */
   readonly webForm?: Pick<WebFormModuleOptions, 'captchaTransport'>;
+  /** M7: model discovery's HTTP, which suites replace so nothing reaches a provider. */
+  readonly ai?: Pick<AiModuleOptions, 'http'>;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -229,7 +233,8 @@ export class AppModule implements NestModule {
         // M1-14: the Data retention form. The purge itself runs in the worker.
         RetentionModule.forRoot(),
         // M8-04: Reports. The rollups they read are written by the worker.
-        ReportsModule.forRoot(),
+        // M7 binds the AI seam of Reports and the System page to `ai_calls`.
+        ReportsModule.forRoot({ aiUsage: new DbAiUsage(options.settings) }),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
         // M2-05, M2-06: Channels › Outgoing email, signatures, the ticket
@@ -285,6 +290,9 @@ export class AppModule implements NestModule {
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...options.webForm,
         }),
+        // M7-01, M7-02, M7-08: providers, models, embeddings, a brand's AI
+        // settings and a ticket's AI log. Re-embedding runs in the worker.
+        AiModule.forRoot({ env: options.env, ...options.ai }),
         // M5-01, M5-02, M5-09: help center content, the editor and its images;
         // M5-03, M5-04, M5-06: the pages, SEO and the site settings;
         // M5-05, M5-08: search, feedback, views and Insights.

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import {
+  aiCalls,
   brands,
   csatResponses,
   type Db,
@@ -565,8 +566,38 @@ describe.skipIf(!hasDocker)('reports', () => {
       });
     });
 
-    it('says AI is not available until the AI subsystem records calls', async () => {
-      expect((await report()).ai).toEqual({ available: false });
+    it('reports AI cost from ai_calls in the range, and no deflection before auto-reply exists', async () => {
+      const call = (brandId: string, createdAt: Date, costUsd: number) => ({
+        brandId,
+        feature: 'assist.summarize',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        status: 'ok' as const,
+        tokensIn: 100,
+        tokensOut: 20,
+        costUsd,
+        createdAt,
+      });
+      await withSystem(db(), BRAND_A, (tx) =>
+        tx.insert(aiCalls).values([
+          call(BRAND_A, at(0, '09:00'), 0.01),
+          call(BRAND_A, at(2, '23:00'), 0.02),
+          // The day after the range.
+          call(BRAND_A, new Date(at(2, '23:00').getTime() + 2 * 3_600_000), 5),
+        ]),
+      );
+      await withSystem(db(), BRAND_B, (tx) =>
+        tx.insert(aiCalls).values(call(BRAND_B, at(1, '12:00'), 7)),
+      );
+
+      const { ai } = await report();
+
+      expect(ai).toMatchObject({
+        available: true,
+        deflection: { eligible: 0, deflected: 0, rate: null },
+        cost: { calls: 2, tokensIn: 200, tokensOut: 40 },
+      });
+      expect(ai.available && ai.cost.costUsd).toBeCloseTo(0.03, 6);
     });
 
     it('never shows another brand’s tickets', async () => {

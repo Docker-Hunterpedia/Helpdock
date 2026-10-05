@@ -23,6 +23,8 @@ import {
   helpCenterSearchReindexSweepJob,
   idempotencyKeyFor,
   JOB_DEFINITIONS,
+  knowledgeConfigureJob,
+  knowledgeReembedJob,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -84,6 +86,12 @@ describe('the job registry', () => {
 
   it('gives the relay the poll cadence ARCHITECTURE §13 fixes', () => {
     expect(outboxRelayJob.schedule).toEqual({ everyMs: OUTBOX_RELAY_INTERVAL_MS });
+  });
+
+  it('reconciles the embedding space every minute, and leaves the re-embed to that tick', () => {
+    expect(knowledgeConfigureJob.schedule).toEqual({ everyMs: 60_000 });
+    expect(knowledgeReembedJob.schedule).toBeUndefined();
+    expect(knowledgeReembedJob.queue).toBe('knowledge');
   });
 
   it('ticks retention nightly, and leaves the per-brand job to that tick', () => {

@@ -34,6 +34,7 @@
     "@fastify/cookie": "11.1.2",
     "@fastify/helmet": "13.1.1",
     "@fastify/static": "10.1.4",
+    "@helpdock/ai": "workspace:*",
     "@helpdock/channels": "workspace:*",
     "@helpdock/config": "workspace:*",
     "@helpdock/db": "workspace:*",

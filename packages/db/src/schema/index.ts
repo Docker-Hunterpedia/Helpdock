@@ -1,4 +1,5 @@
 export * from './accounts.js';
+export * from './ai.js';
 export * from './api-keys.js';
 export * from './assignment.js';
 export * from './attachments.js';
@@ -22,6 +23,7 @@ export * from './enums.js';
 export * from './help-center.js';
 export * from './help-center-search.js';
 export * from './job-receipts.js';
+export * from './knowledge.js';
 export * from './mailboxes.js';
 export * from './notifications.js';
 export * from './outbox.js';

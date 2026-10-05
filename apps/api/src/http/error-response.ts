@@ -1,5 +1,6 @@
 import { TenantContextError } from '@helpdock/db';
 import type {
+  AiRefusal,
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
@@ -19,6 +20,7 @@ import type {
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
+import { AiFailure } from '../ai/ai-failure.js';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ChannelsFailure } from '../channels/channels-failure.js';
@@ -69,6 +71,8 @@ export interface MappedError {
   readonly widget?: WidgetErrorCode;
   /** Only on a refused help center change; see `help-center/help-center-failure.ts`. */
   readonly helpCenter?: HcRefusal;
+  /** Only on a refused AI settings change; see `ai/ai-failure.ts`. */
+  readonly ai?: AiRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -240,6 +244,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M7. Before the generic branch, for the reason the ones above give.
+  if (error instanceof AiFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      ai: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -292,5 +307,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.telegram === undefined ? {} : { telegram: { reason: mapped.telegram } }),
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
     ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
+    ...(mapped.ai === undefined ? {} : { ai: { reason: mapped.ai } }),
   },
 });

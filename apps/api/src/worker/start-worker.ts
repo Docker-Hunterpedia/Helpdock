@@ -22,6 +22,8 @@ import {
   helpCenterSearchReindexJob,
   helpCenterSearchReindexSweepJob,
   type JobLogger,
+  knowledgeConfigureJob,
+  knowledgeReembedJob,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -49,6 +51,9 @@ import {
 } from '@helpdock/jobs';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { safeAiTransport } from '../ai/ai-http.js';
+import { registerAiEventHandlers } from '../ai/budget-alert.handler.js';
+import { createAiRuntime } from '../ai/db-ai-ports.js';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import {
   createOfflineUnassignProcessor,
@@ -96,6 +101,7 @@ import {
 } from '../help-center/search/search-events.js';
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
+import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { S3BrandObjects } from '../media/brand-objects.js';
 import { createMediaTools } from '../media/ffmpeg.js';
@@ -227,9 +233,16 @@ export interface WorkerDependencies {
   /**
    * M5-01's `knowledge` consumer: the scheduled publish, and the hourly sweep
    * that re-adds it per brand, whose schedule is upserted on every boot for
-   * the reason the retention schedule is.
+   * the reason the retention schedule is. M7-02 adds the embedding space's
+   * minute tick and the re-embed it starts.
    */
-  createHelpCenterWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  createHelpCenterWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+    settings: WorkerSettings;
+  }): Closable;
   /** M3-07's `notify` consumer: notification emails and web pushes, and the auth emails. */
   createNotifyWorker(options: {
     redis: Redis;
@@ -286,8 +299,12 @@ export type WorkerEnv = Pick<
   | 'TELEGRAM_API_ROOT'
 >;
 
-/** What the worker reads from settings: the SMTP sender and the VAPID key pair (M3-07). */
-export type WorkerSettings = Pick<Settings, 'get'>;
+/**
+ * What the worker reads from settings: the SMTP sender and the VAPID key pair
+ * (M3-07), the AI providers and the embedding model (M7). It writes one thing:
+ * OAuth tokens a provider call refreshed.
+ */
+export type WorkerSettings = Pick<Settings, 'get' | 'set'>;
 
 /**
  * The scanner, or nothing. ARCHITECTURE §17 makes ClamAV optional and
@@ -371,6 +388,8 @@ export const workerDependencies: WorkerDependencies = {
     registerWidgetEventHandlers(new RedisWidgetBroadcast(redis));
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
     registerObjectPurgeHandler(storageFor(env));
+    // M7-08: a brand reached 80 % or 100 % of an AI budget window.
+    registerAiEventHandlers();
     registerCsatEventHandlers({
       repository: new CsatRepository(),
       tokens: new CsatTokens(createKeyring(env)),
@@ -897,8 +916,17 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
-  createHelpCenterWorker: ({ redis, db, log }) => {
+  createHelpCenterWorker: ({ redis, db, log, env, settings }) => {
     const knowledge = new Queue(QUEUE_NAMES.knowledge, { connection: redis });
+    knowledge
+      .upsertJobScheduler(
+        knowledgeConfigureJob.name,
+        { every: 60_000 },
+        { name: knowledgeConfigureJob.name, data: {}, opts: knowledgeConfigureJob.options },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the embedding space tick'),
+      );
     knowledge
       .upsertJobScheduler(
         helpCenterPublishDueSweepJob.name,
@@ -951,10 +979,35 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+    // M7-02's configure tick and re-embed share the queue too.
+    const embedding = createEmbeddingSpaceProcessor({
+      db,
+      settings,
+      log,
+      ai: createAiRuntime({
+        db,
+        settings,
+        http: safeAiTransport(env.OUTBOUND_ALLOW_CIDRS, (event) =>
+          log.warn(
+            { host: event.host, address: event.address },
+            'embeddings endpoint resolves to a blocked address (DOMAIN-RULES §13)',
+          ),
+        ),
+      }),
+      queue: {
+        add: async (jobId) => {
+          await knowledge.add(
+            knowledgeReembedJob.name,
+            {},
+            { ...knowledgeReembedJob.options, jobId },
+          );
+        },
+      },
+    });
     const worker = new Worker(
       QUEUE_NAMES.knowledge,
       async (job) => {
-        await (search(job) ?? publishing(job));
+        await (embedding(job) ?? search(job) ?? publishing(job));
       },
       { connection: redis },
     );
@@ -1107,7 +1160,7 @@ export const startWorker = ({
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });
-  const helpCenter = deps.createHelpCenterWorker({ redis: connection, db, log });
+  const helpCenter = deps.createHelpCenterWorker({ redis: connection, db, log, env, settings });
   const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   const domains = deps.createDomainsWorker({ redis: connection, db, log, env });
   const webhooks = deps.createWebhooksWorker({ redis: connection, db, log, env });

@@ -58,7 +58,7 @@ Copied from the PRD, ticked as they are met.
 
 ## Migrations
 
-- `0038_api_keys_and_webhooks.sql` (to become 0039 once M7's 0038 lands): `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
+- `0039_api_keys_and_webhooks.sql`: `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
 
 ## Deliverable notes
 

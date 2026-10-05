@@ -8,6 +8,8 @@ import type {
   RenderedMacro,
   Ticket,
   TicketActivityList,
+  TicketAiCalls,
+  TicketAiState,
   TicketCcRequest,
   TicketChannel,
   TicketCreateRequest,
@@ -116,6 +118,13 @@ export interface TicketsApi {
   unmerge(brandId: string, ticketId: string): Promise<TicketMergeResult>;
   /** M1-09. Copies messages of `ticketId` onto a new ticket, and answers with it. */
   split(brandId: string, ticketId: string, request: TicketSplitRequest): Promise<TicketDetail>;
+
+  // ---------------------------------------------------------------- M7-06
+
+  /** The ticket's AI log: every model call, for the AILogDisclosure and the "AI on this ticket" card. */
+  aiCalls(brandId: string, ticketId: string): Promise<TicketAiCalls>;
+  /** "Return to assistant": ends the pause of DOMAIN-RULES §9, audited. */
+  resumeAssistant(brandId: string, ticketId: string): Promise<TicketAiState>;
 
   // ---------------------------------------------------------------- M1-05
 

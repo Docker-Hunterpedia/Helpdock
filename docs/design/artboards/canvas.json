@@ -610,6 +610,13 @@
       "w": 1312,
       "h": 944,
       "title": "Widget/CSAT-AR"
+    },
+    "AdminPasswordField.dc.html": {
+      "x": 4080,
+      "y": 4600,
+      "w": 1280,
+      "h": 760,
+      "title": "Admin/PasswordField"
     }
   },
   "createdOnFiles": {
@@ -856,7 +863,8 @@
     "AdminSystemV1.dc.html",
     "EmailCsat.dc.html",
     "WidgetCsatEN.dc.html",
-    "WidgetCsatAR.dc.html"
+    "WidgetCsatAR.dc.html",
+    "AdminPasswordField.dc.html"
   ],
   "pages": [],
   "title": "Helpdock Design System"

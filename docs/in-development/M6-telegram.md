@@ -45,7 +45,7 @@ Copied from the PRD, ticked as they are met.
   (department, moved with its ticket by a trigger of its own), the
   `telegram_delivery_status` enum. All three are in `TENANT_TABLES` and the RLS negative
   suite.
-- `0037_telegram_chat_identity`: `telegram_chats.username` (the customer's `@username` as
+- `0040_telegram_chat_identity`: `telegram_chats.username` (the customer's `@username` as
   of their last message) and `telegram_chats.language_chosen_at` (set when they press a
   language button), for the ticket view's identity card. No new table.
 

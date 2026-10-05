@@ -120,9 +120,8 @@ export const systemRelaySchema = z.discriminatedUnion('reporting', [
 export type SystemRelay = z.infer<typeof systemRelaySchema>;
 
 /**
- * A channel's connection health. The list is empty in M0; M2 (email) and M6
- * (Telegram) fill it from `channels.status` and the adapter's `health()`
- * (ARCHITECTURE §8).
+ * A channel's connection health, for every brand: its mailboxes (M2) and
+ * Telegram bots (M6), read by `apps/api/src/channels/channel-status.ts`.
  */
 export const channelStatusSchema = z.object({
   id: z.uuid(),
@@ -135,10 +134,22 @@ export const channelStatusSchema = z.object({
 });
 export type ChannelStatus = z.infer<typeof channelStatusSchema>;
 
+/** One brand's share of the bucket: everything under `brands/<id>/`. */
+export const brandStorageSchema = z.object({
+  brandId: z.uuid(),
+  name: z.string(),
+  usedBytes: z.number().nonnegative(),
+  objects: z.int().nonnegative(),
+  measuredAt: z.iso.datetime(),
+});
+export type BrandStorage = z.infer<typeof brandStorageSchema>;
+
 /**
- * Attachment storage. S3 is configured in `.env` but nothing measures the
- * bucket until the media pipeline lands with M1, so M0 always reports
- * `configured: false` rather than a zero that looks like an empty bucket.
+ * Attachment and article image storage (M8-05). Measuring is listing the
+ * bucket, so the worker's hourly `stats.rollup` does it per brand at most
+ * every six hours and the page reads the last readings. Until the first one
+ * there is nothing to report, and the answer is `configured: false` rather
+ * than a zero that looks like an empty bucket.
  */
 export const systemStorageSchema = z.discriminatedUnion('configured', [
   z.object({ configured: z.literal(false) }),
@@ -147,11 +158,13 @@ export const systemStorageSchema = z.discriminatedUnion('configured', [
     usedBytes: z.number().nonnegative(),
     /** The soft limit an operator set, or `null` when there is none. */
     softLimitBytes: z.number().positive().nullable(),
+    /** Per brand, largest first. */
+    brands: z.array(brandStorageSchema).optional(),
   }),
 ]);
 export type SystemStorage = z.infer<typeof systemStorageSchema>;
 
-/** LLM spend for the current budget window. Filled in by M7. */
+/** LLM spend for the current budget window, install-wide. Filled in by M7 through `AiUsageSource`. */
 export const systemAiSpendSchema = z.discriminatedUnion('configured', [
   z.object({ configured: z.literal(false) }),
   z.object({
@@ -209,3 +222,46 @@ export const systemQueuePageSchema = systemQueuesSchema.extend({
   pageSize: z.number().int().min(1),
 });
 export type SystemQueuePage = z.infer<typeof systemQueuePageSchema>;
+
+/**
+ * The product metrics of DOMAIN-RULES §15 that the install can measure about
+ * itself (M8-07). Agent efficiency and handoff quality are measured by people
+ * in the M9 usability pass, not here.
+ */
+export const productMetricsSchema = z.object({
+  observedAt: z.iso.datetime(),
+  activation: z.object({
+    /** When the first brand was created: the end of the first-run wizard. */
+    wizardCompletedAt: z.iso.datetime().nullable(),
+    /** The first ticket from any channel but a manual one, in any brand. */
+    firstChannelTicketAt: z.iso.datetime().nullable(),
+    /** Whether that ticket came within 7 days of the wizard. */
+    activated: z.boolean(),
+  }),
+  /** The window the per-brand rates are over, in days, ending today. */
+  windowDays: z.int().positive(),
+  brands: z.array(
+    z.object({
+      brandId: z.uuid(),
+      name: z.string(),
+      selfService: z.object({
+        articleViews: z.int().nonnegative(),
+        /** Views a ticket could be traced to: those made in the widget. */
+        widgetViews: z.int().nonnegative(),
+        followedByTicket: z.int().nonnegative(),
+        /** Widget views not followed by a ticket within an hour, over widget views. */
+        rate: z.number().min(0).max(1).nullable(),
+      }),
+      /** Null until the AI subsystem records auto-replies (M7). */
+      aiDeflectionRate: z.number().min(0).max(1).nullable(),
+    }),
+  ),
+});
+export type ProductMetrics = z.infer<typeof productMetricsSchema>;
+
+/**
+ * The one-time address that opens Bull Board in a new tab (M8-05, ADR 0017).
+ * Spent on first use and good for a minute.
+ */
+export const queueBoardPassSchema = z.object({ url: z.string().startsWith('/') });
+export type QueueBoardPass = z.infer<typeof queueBoardPassSchema>;

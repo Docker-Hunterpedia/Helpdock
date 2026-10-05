@@ -150,6 +150,17 @@ export class ContactsRepository {
     return rows[0];
   }
 
+  /** The live contact the brand's own system knows by this id (M8-02's upsert). */
+  async findByExternalId(tx: DbTransaction, externalId: string): Promise<ContactRow | undefined> {
+    const rows = await tx
+      .select()
+      .from(contacts)
+      .where(and(eq(contacts.externalId, externalId), isNull(contacts.mergedIntoId)))
+      .limit(1);
+
+    return rows[0];
+  }
+
   /** The identifiers of one or more contacts, oldest first so the list is stable. */
   async identitiesOf(
     tx: DbTransaction,

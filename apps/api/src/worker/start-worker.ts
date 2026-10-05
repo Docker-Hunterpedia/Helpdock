@@ -3,6 +3,9 @@ import type { Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
   authEmailJob,
+  BRAND_PURGE_CRON,
+  brandPurgeJob,
+  brandPurgeScheduleJob,
   createJobProcessor,
   createOutboxEventHandler,
   createQueueConnection,
@@ -11,6 +14,7 @@ import {
   domainVerifyJob,
   domainVerifyScheduleJob,
   emailPollJob,
+  emailPollSchedulerId,
   emailSendJob,
   helpCenterMediaProcessJob,
   helpCenterPublishDueJob,
@@ -18,6 +22,8 @@ import {
   helpCenterSearchReindexJob,
   helpCenterSearchReindexSweepJob,
   type JobLogger,
+  knowledgeConfigureJob,
+  knowledgeReembedJob,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -34,21 +40,30 @@ import {
   rulesEvaluateJobId,
   rulesTimeBasedJob,
   rulesTimeBasedScheduleJob,
+  STATS_ROLLUP_CRON,
   slaRebuildJob,
   startOutboxRelay,
+  statsRollupJob,
+  statsRollupScheduleJob,
   telegramPollJob,
   telegramSendJob,
+  webhookDeliverJob,
 } from '@helpdock/jobs';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { safeAiTransport } from '../ai/ai-http.js';
+import { registerAiEventHandlers } from '../ai/budget-alert.handler.js';
+import { createAiRuntime } from '../ai/db-ai-ports.js';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import {
   createOfflineUnassignProcessor,
+  type OfflineUnassignQueue,
   registerAssignmentEventHandlers,
 } from '../assignment/assignment-events.js';
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
 import { createAuthEmailEventHandler, createAuthEmailProcessor } from '../auth/auth-email.job.js';
 import { AUTH_EMAIL_EVENT } from '../auth/auth-email.js';
+import { createBrandPurgeProcessor } from '../brands/brand-purge.job.js';
 import {
   createEmailPollProcessor,
   createMailboxChangedHandler,
@@ -59,6 +74,7 @@ import {
 import { imapConnectOptions } from '../channels/imap-connector.js';
 import { createInboundEmailService } from '../channels/inbound/factory.js';
 import { MailboxesRepository } from '../channels/mailboxes.repository.js';
+import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { CsatRepository } from '../csat/csat.repository.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
 import { CsatTokens } from '../csat/tokens.js';
@@ -85,7 +101,9 @@ import {
 } from '../help-center/search/search-events.js';
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
+import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
+import { S3BrandObjects } from '../media/brand-objects.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
@@ -96,8 +114,10 @@ import { InstallChannels } from '../notifications/install-channels.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { WebPushSender } from '../notifications/push.js';
+import { StorageUsageStore } from '../observability/storage-usage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
+import { createStatsProcessor } from '../reports/rollup.job.js';
 import { createMaintenanceProcessor } from '../retention/retention.job.js';
 import { createRulesEngineDeps } from '../rules/engine-deps.js';
 import { createRulesProcessor, registerRulesEventHandlers } from '../rules/rules-jobs.js';
@@ -126,6 +146,9 @@ import {
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
+import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
+import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
 import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
 
@@ -183,7 +206,12 @@ export interface WorkerDependencies {
    * schedule is upserted on every boot, so a Redis that lost it gets it back
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
    */
-  createMaintenanceWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  createMaintenanceWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+  }): Closable;
   /**
    * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox, and in
    * development M6-01's `telegram.poll` per bot. Every scheduler is upserted
@@ -205,9 +233,16 @@ export interface WorkerDependencies {
   /**
    * M5-01's `knowledge` consumer: the scheduled publish, and the hourly sweep
    * that re-adds it per brand, whose schedule is upserted on every boot for
-   * the reason the retention schedule is.
+   * the reason the retention schedule is. M7-02 adds the embedding space's
+   * minute tick and the re-embed it starts.
    */
-  createHelpCenterWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  createHelpCenterWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+    settings: WorkerSettings;
+  }): Closable;
   /** M3-07's `notify` consumer: notification emails and web pushes, and the auth emails. */
   createNotifyWorker(options: {
     redis: Redis;
@@ -222,6 +257,8 @@ export interface WorkerDependencies {
    * the retention schedule is.
    */
   createDomainsWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
+  /** M8-03's `webhooks` consumer: one signed POST per delivery, through `@helpdock/net`. */
+  createWebhooksWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -262,8 +299,12 @@ export type WorkerEnv = Pick<
   | 'TELEGRAM_API_ROOT'
 >;
 
-/** What the worker reads from settings: the SMTP sender and the VAPID key pair (M3-07). */
-export type WorkerSettings = Pick<Settings, 'get'>;
+/**
+ * What the worker reads from settings: the SMTP sender and the VAPID key pair
+ * (M3-07), the AI providers and the embedding model (M7). It writes one thing:
+ * OAuth tokens a provider call refreshed.
+ */
+export type WorkerSettings = Pick<Settings, 'get' | 'set'>;
 
 /**
  * The scanner, or nothing. ARCHITECTURE §17 makes ClamAV optional and
@@ -298,7 +339,18 @@ const assignmentReads = (redis: Redis) => {
   };
 };
 
-/** M3-01's calendar, for M2-06's out-of-hours reply. */
+/** M1-07's delayed timers, added under the id the caller derived from the departure. */
+const offlineUnassignQueue = (queue: Queue): OfflineUnassignQueue => ({
+  add: async ({ jobId, delayMs, payload }) => {
+    await queue.add(assignmentOfflineUnassignJob.name, payload, {
+      ...assignmentOfflineUnassignJob.options,
+      jobId,
+      delay: delayMs,
+    });
+  },
+});
+
+/** M3-01's calendar, for M2-06's out-of-hours reply and M1-07's offline timer. */
 const businessHoursService = (): BusinessHoursService => {
   const repository = new SlaRepository();
 
@@ -336,6 +388,8 @@ export const workerDependencies: WorkerDependencies = {
     registerWidgetEventHandlers(new RedisWidgetBroadcast(redis));
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
     registerObjectPurgeHandler(storageFor(env));
+    // M7-08: a brand reached 80 % or 100 % of an AI budget window.
+    registerAiEventHandlers();
     registerCsatEventHandlers({
       repository: new CsatRepository(),
       tokens: new CsatTokens(createKeyring(env)),
@@ -363,15 +417,7 @@ export const workerDependencies: WorkerDependencies = {
     const assignment = new Queue(QUEUE_NAMES.assignment, { connection: redis });
     registerAssignmentEventHandlers({
       ...assignmentReads(redis),
-      queue: {
-        add: async ({ jobId, delayMs, payload }) => {
-          await assignment.add(assignmentOfflineUnassignJob.name, payload, {
-            ...assignmentOfflineUnassignJob.options,
-            jobId,
-            delay: delayMs,
-          });
-        },
-      },
+      queue: offlineUnassignQueue(assignment),
     });
 
     // M2-05 and M2-06. `email.send` ends in a job on the `outbound` queue, under
@@ -493,6 +539,24 @@ export const workerDependencies: WorkerDependencies = {
     // event drops the brand's cached pages, under its own subscriber name.
     registerPageCacheHandlers(new RedisPageCache(redis));
 
+    // M8-03. `contact.created` is the contacts module's; the webhooks module
+    // subscribes to it below. Last, so every other subscriber of a ticket event has run before
+    // its deliveries are written. `webhook.delivery_requested` adds the
+    // `webhook.deliver` job under the delivery's id, once that row committed.
+    registerContactEventHandlers();
+    const webhooks = new Queue(QUEUE_NAMES.webhooks, { connection: redis });
+    registerWebhookEventHandlers({
+      repository: new WebhooksRepository(),
+      queue: {
+        add: async (payload, jobId) => {
+          await webhooks.add(webhookDeliverJob.name, payload, {
+            ...webhookDeliverJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+
     return {
       close: async () => {
         await media.close();
@@ -504,6 +568,7 @@ export const workerDependencies: WorkerDependencies = {
         await rules.close();
         await notify.close();
         await domains.close();
+        await webhooks.close();
       },
     };
   },
@@ -587,41 +652,102 @@ export const workerDependencies: WorkerDependencies = {
     );
     return worker;
   },
-  createAssignmentWorker: ({ redis, db, log }) =>
-    createWorker(
+  createAssignmentWorker: ({ redis, db, log }) => {
+    const businessHours = businessHoursService();
+    // The timer re-adds itself to its own queue when it fires while the
+    // department is closed.
+    const deferrals = new Queue(QUEUE_NAMES.assignment, { connection: redis });
+    const worker = createWorker(
       assignmentOfflineUnassignJob,
-      createOfflineUnassignProcessor(assignmentReads(redis)),
+      createOfflineUnassignProcessor({
+        ...assignmentReads(redis),
+        calendarFor: (tx, brandId, departmentId) =>
+          businessHours.calendarFor(brandId, departmentId, tx),
+        queue: offlineUnassignQueue(deferrals),
+      }),
       { redis, db, log },
-    ),
-  createMaintenanceWorker: ({ redis, db, log }) => {
-    const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
-    const scheduled = maintenance.upsertJobScheduler(
-      maintenanceRetentionScheduleJob.name,
-      { pattern: RETENTION_CRON, tz: 'UTC' },
-      {
-        name: maintenanceRetentionScheduleJob.name,
-        data: {},
-        opts: maintenanceRetentionScheduleJob.options,
+    );
+    return {
+      close: async () => {
+        await worker.close();
+        await deferrals.close();
       },
-    );
-    scheduled.catch((error: unknown) =>
-      log.error({ err: error }, 'could not register the nightly retention schedule'),
-    );
+    };
+  },
+  createMaintenanceWorker: ({ redis, db, log, env }) => {
+    const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
+    // M1-14's nightly retention, M8-04's hourly rollup and M8-07's nightly
+    // purge tick, each upserted on every boot for the reason above.
+    for (const { job, cron } of [
+      { job: maintenanceRetentionScheduleJob, cron: RETENTION_CRON },
+      { job: statsRollupScheduleJob, cron: STATS_ROLLUP_CRON },
+      { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
+    ]) {
+      maintenance
+        .upsertJobScheduler(
+          job.name,
+          { pattern: cron, tz: 'UTC' },
+          { name: job.name, data: {}, opts: job.options },
+        )
+        .catch((error: unknown) =>
+          log.error({ err: error, job: job.name }, 'could not register a maintenance schedule'),
+        );
+    }
+
+    const objects = new S3BrandObjects(createS3Client(env), env.S3_BUCKET);
+    const storageUsage = new StorageUsageStore(redis);
+    const inbound = new Queue(QUEUE_NAMES.inbound, { connection: redis });
+    const stats = createStatsProcessor({
+      db,
+      log,
+      storage: { objects, store: storageUsage },
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(statsRollupJob.name, payload, {
+            ...statsRollupJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+    const purge = createBrandPurgeProcessor({
+      db,
+      log,
+      objects,
+      redis,
+      storageUsage,
+      removePollers: async (mailboxIds) => {
+        for (const mailboxId of mailboxIds) {
+          await inbound.removeJobScheduler(emailPollSchedulerId(mailboxId));
+        }
+      },
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(brandPurgeJob.name, payload, {
+            ...brandPurgeJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+    const retention = createMaintenanceProcessor({
+      db,
+      log,
+      queue: {
+        add: async (payload, jobId) => {
+          await maintenance.add(maintenanceRetentionJob.name, payload, {
+            ...maintenanceRetentionJob.options,
+            jobId,
+          });
+        },
+      },
+    });
 
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
-      createMaintenanceProcessor({
-        db,
-        log,
-        queue: {
-          add: async (payload, jobId) => {
-            await maintenance.add(maintenanceRetentionJob.name, payload, {
-              ...maintenanceRetentionJob.options,
-              jobId,
-            });
-          },
-        },
-      }),
+      async (job) => {
+        await (stats(job) ?? purge(job) ?? retention(job));
+      },
       // One brand at a time: retention is background housekeeping, and two
       // brands purging at once would only compete for the same disk.
       { connection: redis, concurrency: 1 },
@@ -634,6 +760,7 @@ export const workerDependencies: WorkerDependencies = {
       close: async () => {
         await worker.close();
         await maintenance.close();
+        await inbound.close();
       },
     };
   },
@@ -790,8 +917,17 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
-  createHelpCenterWorker: ({ redis, db, log }) => {
+  createHelpCenterWorker: ({ redis, db, log, env, settings }) => {
     const knowledge = new Queue(QUEUE_NAMES.knowledge, { connection: redis });
+    knowledge
+      .upsertJobScheduler(
+        knowledgeConfigureJob.name,
+        { every: 60_000 },
+        { name: knowledgeConfigureJob.name, data: {}, opts: knowledgeConfigureJob.options },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the embedding space tick'),
+      );
     knowledge
       .upsertJobScheduler(
         helpCenterPublishDueSweepJob.name,
@@ -844,10 +980,35 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+    // M7-02's configure tick and re-embed share the queue too.
+    const embedding = createEmbeddingSpaceProcessor({
+      db,
+      settings,
+      log,
+      ai: createAiRuntime({
+        db,
+        settings,
+        http: safeAiTransport(env.OUTBOUND_ALLOW_CIDRS, (event) =>
+          log.warn(
+            { host: event.host, address: event.address },
+            'embeddings endpoint resolves to a blocked address (DOMAIN-RULES §13)',
+          ),
+        ),
+      }),
+      queue: {
+        add: async (jobId) => {
+          await knowledge.add(
+            knowledgeReembedJob.name,
+            {},
+            { ...knowledgeReembedJob.options, jobId },
+          );
+        },
+      },
+    });
     const worker = new Worker(
       QUEUE_NAMES.knowledge,
       async (job) => {
-        await (search(job) ?? publishing(job));
+        await (embedding(job) ?? search(job) ?? publishing(job));
       },
       { connection: redis },
     );
@@ -931,6 +1092,34 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createWebhooksWorker: ({ redis, db, log, env }) => {
+    const worker = new Worker(
+      QUEUE_NAMES.webhooks,
+      createWebhookDeliverProcessor({
+        db,
+        log,
+        repository: new WebhooksRepository(),
+        keyring: createKeyring(env),
+        policy: {
+          allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+          onBlocked: (event) =>
+            log.warn(
+              { host: event.host, address: event.address, reason: event.reason },
+              'webhook destination blocked (DOMAIN-RULES §13)',
+            ),
+        },
+      }),
+      // A few at once: each delivery is mostly waiting on somebody's server.
+      { connection: redis, concurrency: 5 },
+    );
+    worker.on('failed', (job, error) =>
+      log.warn(
+        { job: job?.name, jobId: job?.id, attemptsMade: job?.attemptsMade, err: error },
+        'webhook.deliver attempt failed',
+      ),
+    );
+    return worker;
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -968,13 +1157,14 @@ export const startWorker = ({
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
-  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log });
+  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log, env });
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });
-  const helpCenter = deps.createHelpCenterWorker({ redis: connection, db, log });
+  const helpCenter = deps.createHelpCenterWorker({ redis: connection, db, log, env, settings });
   const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   const domains = deps.createDomainsWorker({ redis: connection, db, log, env });
+  const webhooks = deps.createWebhooksWorker({ redis: connection, db, log, env });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -1006,6 +1196,7 @@ export const startWorker = ({
     await helpCenter.close();
     await notify.close();
     await domains.close();
+    await webhooks.close();
     await producers.close();
     await connection.quit();
   };

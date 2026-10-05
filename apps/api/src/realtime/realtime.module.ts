@@ -2,6 +2,7 @@ import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { OutboxStaffOfflineHook } from '../assignment/staff-offline.hook.js';
+import { RateLimiter } from '../auth/rate-limit.js';
 import type { Logger } from '../logging/logger.js';
 import type { Metrics } from '../observability/metrics.js';
 import { METRICS } from '../observability/tokens.js';
@@ -15,6 +16,7 @@ import { PresenceStore } from './presence.store.js';
 import { RealtimePublisher } from './publisher.js';
 import { RevocationSubscriber } from './revocation.subscriber.js';
 import { DbRoomScopeReader, type RoomScopeReader } from './room-reader.js';
+import { RedisSocketEventLimiter, type SocketEventLimiter } from './socket-rate-limit.js';
 import { SocketRegistry } from './socket-registry.js';
 import { type SessionRevocations, StaffGateway, type StaffSocketOptions } from './staff.gateway.js';
 import type { StaffOfflineHook } from './staff-offline.hook.js';
@@ -22,6 +24,7 @@ import {
   ROOM_SCOPE_READER,
   SESSION_REVOCATIONS,
   SOCKET_CONNECTIONS_GAUGE,
+  SOCKET_EVENT_LIMITER,
   SOCKET_SESSION_RESOLVER,
   STAFF_OFFLINE_HOOK,
   STAFF_SOCKET_OPTIONS,
@@ -94,6 +97,12 @@ export class RealtimeModule {
         {
           provide: PresenceStore,
           useFactory: (redis: Redis) => new PresenceStore(redis),
+          inject: [REDIS],
+        },
+        {
+          provide: SOCKET_EVENT_LIMITER,
+          useFactory: (redis: Redis): SocketEventLimiter =>
+            new RedisSocketEventLimiter(new RateLimiter(redis)),
           inject: [REDIS],
         },
         PresenceService,

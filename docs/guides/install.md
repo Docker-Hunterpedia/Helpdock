@@ -198,6 +198,10 @@ and the wizard leaves it alone rather than storing a value nothing reads.
 
 ### Once it is finished
 
+Finishing generates the install's web push key pair, unless `.env` pins one
+with `HD_PUSH_VAPID_*` ([notifications](notifications.md#browser-push)). Keep it:
+a new pair signs every agent's browser out of push.
+
 The wizard is closed for good. `/setup` is no longer a route, and every setup
 endpoint answers `409 Conflict` — including to whoever finds the URL later.
 There is no way to reopen it: the install is "set up" exactly while the `users`

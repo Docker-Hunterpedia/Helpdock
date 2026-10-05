@@ -39,7 +39,7 @@ import { FakeStorage } from '../../testing/media.js';
 import { reindexArticles } from '../search/search-index.js';
 import { createPageCacheHandler } from './cache-events.js';
 import { generationKey, RedisPageCache } from './page-cache.js';
-import { PRIVATE_CACHE_CONTROL, PUBLIC_CACHE_CONTROL } from './site.js';
+import { PRIVATE_CACHE_CONTROL, PUBLIC_CACHE_CONTROL, VISITOR_COOKIE } from './site.js';
 import { STAFF_COOKIE } from './staff-access.js';
 
 /**
@@ -517,6 +517,52 @@ describe.skipIf(!hasDocker)('the help center pages (M5-03, M5-04, M5-06)', () =>
       expect(logged[0]?.openedAt).not.toBeNull();
       expect(views.length).toBeGreaterThan(0);
       expect(votes.map((row) => row.helpful)).toEqual([true]);
+    });
+
+    it('records a "No", then the note from the "What was missing?" step on the same vote (M9-04)', async () => {
+      const post = (fields: Record<string, string>, cookie?: string) =>
+        app.inject({
+          method: 'POST',
+          url: '/_hd/feedback',
+          headers: {
+            host: HOST,
+            'content-type': 'application/x-www-form-urlencoded',
+            ...(cookie === undefined ? {} : { cookie }),
+          },
+          payload: new URLSearchParams({
+            article: publicArticle.id,
+            locale: 'en',
+            slug: publicArticle.slug,
+            helpful: 'no',
+            ...fields,
+          }).toString(),
+        });
+
+      const first = await post({});
+      expect(first.headers.location).toMatch(/\?feedback=no#hd-feedback-comment$/);
+      const visitor = first.cookies.find((cookie) => cookie.name === VISITOR_COOKIE);
+      expect(visitor).toBeDefined();
+      const asking = await page(`/en/articles/${publicArticle.slug}?feedback=no`);
+      expect(asking.body).toContain('name="comment"');
+
+      const second = await post(
+        { comment: '  Nothing about Apple Pay.  ' },
+        `${VISITOR_COOKIE}=${String(visitor?.value)}`,
+      );
+      expect(second.headers.location).toMatch(/\?feedback=1#feedback$/);
+
+      const votes = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select()
+          .from(hcArticleFeedback)
+          .where(
+            and(
+              eq(hcArticleFeedback.articleId, publicArticle.id),
+              eq(hcArticleFeedback.helpful, false),
+            ),
+          ),
+      );
+      expect(votes.map((row) => row.comment)).toEqual(['Nothing about Apple Pay.']);
     });
   });
 

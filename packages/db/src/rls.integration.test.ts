@@ -3,12 +3,18 @@ import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { brandOwnedTables, purgeBrandRows } from './brand-purge.js';
 import { createDb, type Db, type DbHandle, type DbTransaction } from './client.js';
 import { runMigrations } from './migrate.js';
 import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
   accounts,
+  aiBudgetAlerts,
+  aiCalls,
+  aiSettings,
+  apiIdempotencyKeys,
+  apiKeys,
   assignmentAgents,
   assignmentSkills,
   attachments,
@@ -40,9 +46,16 @@ import {
   hcSettings,
   holidays,
   inboundParseSettings,
+  knowledgeChunks,
+  knowledgeDocuments,
+  knowledgeSources,
   mailboxes,
   notifications,
   outbox,
+  reportAgentDaily,
+  reportDaily,
+  reportHelpCenterDaily,
+  reportSearchDaily,
   retentionSettings,
   settings,
   slaPolicies,
@@ -66,6 +79,8 @@ import {
   users,
   views,
   webFormSettings,
+  webhookDeliveries,
+  webhooks,
   widgetSettings,
   widgetVisitors,
   workflowRules,
@@ -129,6 +144,10 @@ const hcCategoryId = perBrand();
 const hcSectionId = perBrand();
 const hcArticleId = perBrand();
 const hcVersionId = perBrand();
+const knowledgeSourceId = perBrand();
+const knowledgeDocumentId = perBrand();
+const apiKeyId = perBrand();
+const webhookId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -749,6 +768,120 @@ const fixtures = [
         helpful: true,
       }),
   },
+  // M7-01, M7-08. AI configuration, the call log and budget alerts: brand-scoped.
+  {
+    name: 'ai_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiSettings).values({ brandId, systemPrompt: 'Answer briefly.' }),
+  },
+  {
+    name: 'ai_calls',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiCalls).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        feature: 'assist.suggest_reply',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        status: 'ok',
+        prompt: { messages: [{ role: 'user', text: 'Where is my refund?' }] },
+        response: 'Refunds take five days.',
+      }),
+  },
+  {
+    name: 'ai_budget_alerts',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiBudgetAlerts).values({
+        brandId,
+        period: 'day',
+        periodStart: '2026-10-05',
+        level: 'warning',
+        spentUsd: 8,
+        limitUsd: 10,
+      }),
+  },
+  // M7-02. Knowledge: brand-scoped; visibility is a retrieval filter, not a tenant rule.
+  {
+    name: 'knowledge_sources',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeSources).values({
+        id: knowledgeSourceId[brandId] ?? '',
+        brandId,
+        kind: 'file',
+        name: 'Returns policy.pdf',
+      }),
+  },
+  {
+    name: 'knowledge_documents',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeDocuments).values({
+        id: knowledgeDocumentId[brandId] ?? '',
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        externalId: 'returns-policy.pdf',
+        contentHash: 'sha256-fixture',
+      }),
+  },
+  {
+    name: 'knowledge_chunks',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeChunks).values({
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        documentId: knowledgeDocumentId[brandId] ?? '',
+        ordinal: 0,
+        locale: 'en',
+        visibility: 'internal',
+        content: 'Refunds are issued within five working days.',
+        contentHash: 'sha256-fixture-chunk',
+      }),
+  },
+  // M8-01, M8-02, M8-03. The key hash is unique across the install, so each
+  // brand's needs its own; the children point at their brand's parent rows.
+  {
+    name: 'api_keys',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(apiKeys).values({
+        id: apiKeyId[brandId] ?? '',
+        brandId,
+        name: 'CRM sync',
+        prefix: 'hd_live_abcd',
+        keyHash: `fixture-${brandId}-${nextNumber()}`,
+        scopes: ['tickets:read'],
+      }),
+  },
+  {
+    name: 'api_idempotency_keys',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(apiIdempotencyKeys).values({
+        brandId,
+        apiKeyId: apiKeyId[brandId] ?? '',
+        key: `request-${nextNumber()}`,
+        requestHash: 'hash',
+      }),
+  },
+  {
+    name: 'webhooks',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(webhooks).values({
+        id: webhookId[brandId] ?? '',
+        brandId,
+        url: 'https://hooks.example.com/helpdock',
+        events: ['ticket.created'],
+        secret: 'v1.fixture.not-a-real-envelope',
+      }),
+  },
+  {
+    name: 'webhook_deliveries',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(webhookDeliveries).values({
+        brandId,
+        webhookId: webhookId[brandId] ?? '',
+        eventId: uuidv7(),
+        event: 'ticket.created',
+        payload: {},
+      }),
+  },
   // M6-01, M6-02.
   {
     name: 'telegram_bots',
@@ -790,6 +923,42 @@ const fixtures = [
         botId: telegramBotId[brandId] ?? '',
         chatId: '42',
       }),
+  },
+  {
+    name: 'report_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(reportDaily).values({
+        brandId,
+        day: '2026-10-01',
+        departmentId: departmentId[brandId] ?? '',
+        channel: 'email',
+        priority: 'medium',
+        created: 1,
+      }),
+  },
+  {
+    name: 'report_agent_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(reportAgentDaily).values({
+        brandId,
+        day: '2026-10-01',
+        departmentId: departmentId[brandId] ?? '',
+        channel: 'email',
+        agentId: userId,
+        replies: 1,
+      }),
+  },
+  {
+    name: 'report_search_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx
+        .insert(reportSearchDaily)
+        .values({ brandId, day: '2026-10-01', locale: 'en', query: 'refund', searches: 1 }),
+  },
+  {
+    name: 'report_help_center_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(reportHelpCenterDaily).values({ brandId, day: '2026-10-01', articleViews: 1 }),
   },
 ] as const;
 
@@ -1284,5 +1453,56 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       );
 
     expect(rejection?.cause?.message).toMatch(/row-level security/i);
+  });
+
+  /**
+   * M8-07, last because it empties brand A. Every tenant table holds a row of
+   * each brand by now — the fixtures above, plus the personal rows the owner
+   * suites added — so a purge that missed a table, or could not delete from
+   * one in the order it chose, fails here.
+   */
+  describe('the brand purge (M8-07)', () => {
+    /** Rows per table for a brand, read as the superuser, which row security does not narrow. */
+    const rowsOf = async (brandId: string): Promise<Record<string, number>> => {
+      const tables = await withSystem(db, brandId, brandOwnedTables);
+      const counts: Record<string, number> = {};
+      for (const table of tables) {
+        const [row] = await owner.db.execute<{ count: number }>(
+          sql`SELECT count(*)::int AS count FROM ${sql.identifier(table)} WHERE brand_id = ${brandId}`,
+        );
+        counts[table] = row?.count ?? 0;
+      }
+      return counts;
+    };
+
+    it('reaches every tenant table, because it reads them from the schema', async () => {
+      const purged = await withSystem(db, brandA, brandOwnedTables);
+
+      expect(purged).toEqual(expect.arrayContaining(TENANT_TABLES.map((table) => table.name)));
+    });
+
+    it('deletes every row of the brand, its owners’ personal rows included, and nothing of another brand', async () => {
+      const before = await rowsOf(brandA);
+      const otherBefore = await rowsOf(brandB);
+      expect(before.views).toBeGreaterThan(otherBefore.views ?? 0);
+      for (const table of TENANT_TABLES) {
+        expect(before[table.name], `${table.name} has a row to purge`).toBeGreaterThan(0);
+      }
+
+      // A batch of two, so every table with more than one row is drained in several.
+      const removed = await purgeBrandRows({
+        db,
+        brandId: brandA,
+        principalId: 'brand.purge.test',
+        batchSize: 2,
+      });
+
+      const after = await rowsOf(brandA);
+      expect(Object.entries(after).filter(([, count]) => count > 0)).toEqual([]);
+      // A foreign key's cascade takes some rows before their own table's turn,
+      // so the counts are what the purge's own statements removed.
+      expect(Object.keys(removed)).toEqual(expect.arrayContaining(Object.keys(before)));
+      expect(await rowsOf(brandB)).toEqual(otherBefore);
+    });
   });
 });

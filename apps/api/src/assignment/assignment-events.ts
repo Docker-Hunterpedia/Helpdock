@@ -7,7 +7,12 @@ import {
   type OutboxEventHandler,
   registerEventHandler,
 } from '@helpdock/jobs';
-import { type PresenceStatus, RULE_MAX_DEPTH } from '@helpdock/schemas';
+import {
+  type BusinessCalendar,
+  nextOpening,
+  type PresenceStatus,
+  RULE_MAX_DEPTH,
+} from '@helpdock/schemas';
 import { z } from 'zod';
 import { type AutoAssignDeps, autoAssign, unassignTicket } from './auto-assign.js';
 import { canWorkDepartment } from './rotation.js';
@@ -23,10 +28,11 @@ import { canWorkDepartment } from './rotation.js';
  * | `assignment.access_changed` | staff deactivated, removed, or re-scoped | unassigns what they can no longer work, then applies `on_unassign` |
  * | `assignment.staff_offline` | presence: somebody's last socket in a brand went | schedules `assignment.offline_unassign` per department that asks for it |
  *
- * Nothing here enqueues a BullMQ job from a request. The one `queue.add` is in
- * the `staff_offline` handler, which runs after the outbox row committed, with
- * a job id derived from the departure so a redelivery adds nothing new — the
- * same shape `attachment.uploaded` uses for `media.process`.
+ * Nothing here enqueues a BullMQ job from a request. The `queue.add` calls are
+ * in the `staff_offline` handler, which runs after the outbox row committed,
+ * and in the timer itself when it puts itself off to the next opening, each
+ * with a job id derived from the departure so a redelivery adds nothing new —
+ * the same shape `attachment.uploaded` uses for `media.process`.
  */
 
 export const ASSIGNMENT_EVENTS = {
@@ -116,12 +122,32 @@ export interface AssignmentHandlerDeps extends AutoAssignDeps {
   readonly now?: () => Date;
 }
 
+/** M3-01's calendar for a department: its own hours, or the brand's. */
+export type DepartmentCalendar = (
+  tx: DbTransaction,
+  brandId: string,
+  departmentId: string,
+) => Promise<BusinessCalendar>;
+
 /** What the delayed `assignment.offline_unassign` job needs. */
 export interface OfflineUnassignDeps extends AutoAssignDeps {
   readonly lookup: PresenceLookup;
   readonly offlineSince: OfflineSinceStore;
+  readonly calendarFor: DepartmentCalendar;
+  /** Where a timer that fired while the department was closed is put off to. */
+  readonly queue: OfflineUnassignQueue;
   readonly now?: () => Date;
 }
+
+/** BullMQ refuses a custom id with a colon in it. */
+const offlineUnassignJobId = (payload: AssignmentOfflineUnassignPayload): string =>
+  [
+    'offline-unassign',
+    payload.userId,
+    payload.departmentId,
+    Date.parse(payload.since),
+    ...(payload.deferredTo === undefined ? [] : [Date.parse(payload.deferredTo)]),
+  ].join('-');
 
 const clock = (deps: { now?: () => Date }): Date => deps.now?.() ?? new Date();
 
@@ -197,11 +223,11 @@ export const createStaffOfflineHandler =
         continue;
       }
 
+      const job = { brandId, userId, departmentId: department.id, since };
       await deps.queue.add({
-        // BullMQ refuses a custom id with a colon in it.
-        jobId: `offline-unassign-${userId}-${department.id}-${Date.parse(since)}`,
+        jobId: offlineUnassignJobId(job),
         delayMs: Math.max(0, department.autoUnassignAfterMinutes * 60_000 - elapsed),
-        payload: { brandId, userId, departmentId: department.id, since },
+        payload: job,
       });
     }
   };
@@ -211,9 +237,10 @@ export const createStaffOfflineHandler =
  * same departure* and the department still asks for it; anything else means
  * the world moved on while the job waited.
  *
- * Business hours are M3's (DOMAIN-RULES §12 says "never during business hours
- * closed periods"). No department has any before then, so every period is an
- * open one; M3 adds the check here and reschedules to the next opening.
+ * DOMAIN-RULES §12: "never during business hours closed periods". A timer
+ * that fires while the department is closed is put off to its next opening,
+ * where every check above runs again; a department whose calendar never opens
+ * never unassigns.
  */
 export const createOfflineUnassignProcessor =
   (deps: OfflineUnassignDeps): JobHandler<AssignmentOfflineUnassignPayload> =>
@@ -234,6 +261,23 @@ export const createOfflineUnassignProcessor =
       return;
     }
 
+    const now = clock(deps);
+    const opening = nextOpening(await deps.calendarFor(tx, brandId, departmentId), now);
+    if (opening === null) {
+      log.info({ brandId, userId, departmentId }, 'offline unassign skipped: never open');
+      return;
+    }
+    if (opening.getTime() > now.getTime()) {
+      const deferred = { ...payload, deferredTo: opening.toISOString() };
+      await deps.queue.add({
+        jobId: offlineUnassignJobId(deferred),
+        delayMs: opening.getTime() - now.getTime(),
+        payload: deferred,
+      });
+      log.info({ brandId, userId, departmentId, opening }, 'offline unassign deferred: closed');
+      return;
+    }
+
     const tickets = await deps.repository.openTicketsOf(tx, brandId, userId, departmentId);
     for (const ticket of tickets) {
       await unassignTicket(deps.repository, tx, { brandId, ticket, userId, reason: 'offline' });
@@ -241,7 +285,7 @@ export const createOfflineUnassignProcessor =
         brandId,
         ticketId: ticket.id,
         trigger: 'routed',
-        now: clock(deps),
+        now,
       });
     }
   };

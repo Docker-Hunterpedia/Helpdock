@@ -1,7 +1,7 @@
 # Data retention
 
-How long a brand keeps its data, how the nightly purge removes the rest, and
-what erasing one person does (M1-14,
+How long a brand keeps its data, how the nightly purge removes the rest, what
+erasing one person does (M1-14), and how a whole brand is deleted (M8-07,
 [DOMAIN-RULES §11](../planning/DOMAIN-RULES.md#11-data-lifecycle)).
 
 ## The windows
@@ -14,7 +14,7 @@ retention card. Only an Admin sees the page and only an Admin may change it
 |---|---|---|---|
 | Closed tickets and their messages | **Forever** | Forever, or 1 to 3650 days after close | Hard-deletes the ticket, its messages, activity, tags and attachments, and queues the attachments' objects for deletion from the bucket |
 | Spam tickets | **30 days** | 1 to 3650 | The same hard delete, on its own clock |
-| AI call logs | **90 days** | 1 to 3650 | Stored only. `ai_calls` arrives with M7, which adds the purge |
+| AI call logs | **90 days** | 1 to 3650 | Nulls the prompt, response, redaction map and sources of older `ai_calls` rows and stamps `bodies_purged_at`. The row stays with its tokens, cost, latency and prompt hash, for reports and the budget meter (M7) |
 | Help center search log | **180 days** | 1 to 3650 | Hard-deletes the search log (M5-05) and, in the same window, the article view rows that dedupe view counts (M5-08). The count is the search log's |
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Hard-deletes inactive `widget_visitors` only when no ticket references them; a visitor with a conversation keeps its session |
@@ -33,7 +33,8 @@ after, in days.
 The third column is how many rows the next run would remove under the **saved**
 windows. It is counted with the same conditions the job deletes by, so it is
 the number that goes. "—" means there is nothing to count: closed tickets kept
-forever, or a table that does not exist yet.
+forever, or a table that does not exist yet. For AI call logs it is the number
+of rows whose bodies would be nulled.
 
 ### What counts as closed, and as spam
 
@@ -48,8 +49,8 @@ forever, or a table that does not exist yet.
 
 ```
 03:00 UTC  maintenance.retention.schedule   one job per brand, then job_receipts
-           maintenance.retention (brand)    closed, spam, search log and views, audit log,
-                                            idle visitors, notifications, outbox → audit row
+           maintenance.retention (brand)    closed, spam, AI call bodies, search log and views,
+                                            audit log, idle visitors, notifications, outbox → audit row
 ```
 
 The worker registers the schedule on every boot, so a Redis that lost it gets
@@ -91,19 +92,73 @@ full. What it removes from tickets:
   `Message-ID` names the sender's mail host). The message bodies stay, under the
   brand's retention.
 
+## Deleting a brand
+
+An install admin deletes a brand; a brand's own Admin cannot, because a brand
+is the tenant boundary and deleting one removes everybody's work in it.
+
+1. **Asking.** `POST /api/install/brands/:id/deletion` with the brand's prefix
+   typed out (`{ "confirmPrefix": "ACME" }`) sets the brand to `deleting` and
+   starts a **30-day grace**. From that moment:
+   - every public route of the brand answers **410 Gone** — the widget, the
+     help center (on its own domain and under `/hc/<brandId>/`), its images and
+     the web form — through one guard on every `@Public()` route, so a public
+     route added later is covered too;
+   - inbound mail stops: IMAP mailboxes are no longer polled, and the
+     inbound-parse endpoint answers 410 once the shared secret checks out;
+   - staff sessions stop naming the brand at their next refresh (at most ten
+     minutes), as for any brand that is not active;
+   - nothing is deleted yet, which is what makes a restore whole.
+2. **Restoring.** `DELETE /api/install/brands/:id/deletion`, any time before the
+   grace ends, sets it back to `active`. After the grace it answers 409.
+3. **Purging.** At 04:00 UTC every night `brand.purge.schedule` adds a
+   `brand.purge` job for each brand whose grace is over. The job removes:
+   - **every row the brand owns**, in every table with a `brand_id` column —
+     read from the database, not from a list, so a table a later migration adds
+     is purged without anybody remembering it — in foreign-key order, in
+     batches, as the system principal of that brand alone. Personal rows (a
+     saved view, a personal canned response) are deleted in their owner's name,
+     since row-level security shows them to nobody else;
+   - **every object under `brands/<id>/`** in the bucket: ticket attachments
+     and their variants, and the help center's article images, logo and favicon
+     (`hc_media`);
+   - **every Redis key with the brand's id in its name** — cached help center
+     pages, rate-limit counters — except BullMQ's own, which age out on their
+     queues' schedules and would corrupt a queue if pulled from under it;
+   - **its custom domains**: the `brand_domains` rows Caddy's on-demand TLS
+     asks about, so no new certificate is issued for them;
+   - its IMAP pollers and its storage reading on the System page.
+
+   The `brands` row stays, as `deleted`, so the **ticket prefix stays taken**:
+   a new brand cannot reuse it, and an old ticket number can never name a new
+   brand's ticket. Its public routes keep answering 410.
+
+Every step is audited in install scope, where the record outlives the brand:
+`brand.deletion_requested` and `brand.deletion_cancelled` name the admin, the
+brand's name and prefix; `brand.purged` names the job and carries counts only —
+rows per table, objects and Redis keys. A purge that dies halfway is retried and
+finishes, since every step deletes what is left.
+
 ## API
 
 | Route | Permission | |
 |---|---|---|
 | `GET /api/brands/:brandId/retention` | `brand:manage` | The windows, the "next purge" counts and the last run |
 | `PUT /api/brands/:brandId/retention` | `brand:manage` | The whole form. 400 for a missing field, a window outside its range or an audit log under 90 days |
+| `GET /api/install/brands/:id/deletion` | `install:admin` | Where the brand is in its deletion |
+| `POST /api/install/brands/:id/deletion` | `install:admin` | Starts the grace. 400 unless `confirmPrefix` is the brand's prefix, 409 if it is already being deleted |
+| `DELETE /api/install/brands/:id/deletion` | `install:admin` | Restores the brand. 409 once the grace is over |
 
-Both answer `{ settings, preview, lastRun }`, as `retentionOverviewSchema` in
-`@helpdock/schemas` declares.
+The retention routes answer `{ settings, preview, lastRun }`, as
+`retentionOverviewSchema` in `@helpdock/schemas` declares; the deletion routes
+answer `{ brandId, status, requestedAt, purgeAfter }` (`brandDeletionSchema`).
 
 ## Known gaps
 
-- AI call logs are stored but not purged yet. M7 adds their table and purge.
 - Composer uploads that were never sent (`message_id` still null) are not swept.
   They are deleted with their ticket.
-- Brand deletion (the other half of the Danger zone) is its own deliverable.
+- Brand deletion has its api and its job; the Danger zone's "Delete brand"
+  button waits for its artboard.
+- A CSAT rating link mailed before the deletion still opens during the grace.
+  It names no brand in its address, so the 410 guard cannot see one; the purge
+  removes the survey it points at.

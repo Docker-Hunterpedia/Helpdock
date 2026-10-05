@@ -244,6 +244,12 @@ export const assignmentOfflineUnassignPayloadSchema = z.object({
   departmentId: z.uuid(),
   /** When presence noticed they went offline; the timer counts from here. */
   since: z.iso.datetime(),
+  /**
+   * Set when the timer fired while the department was closed and was put off
+   * to its next opening (DOMAIN-RULES §12). Part of the key, so the deferred
+   * run is a delivery of its own rather than a duplicate of the first.
+   */
+  deferredTo: z.iso.datetime().optional(),
 });
 
 export type AssignmentOfflineUnassignPayload = z.infer<
@@ -270,7 +276,8 @@ export const assignmentOfflineUnassignJob = defineJob({
     removeOnFail: false,
   },
   idempotencyKey: (payload) =>
-    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
+    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}` +
+    (payload.deferredTo === undefined ? '' : `:${payload.deferredTo}`),
 });
 
 export const emailSendPayloadSchema = z.object({
@@ -805,6 +812,78 @@ export const helpCenterMediaProcessJob = defineJob({
   idempotencyKey: (payload) => `help_center.media_process:${payload.mediaId}`,
 });
 
+/**
+ * M7-02: brings the install's embedding space in line with the `embedding.*`
+ * settings (DOMAIN-RULES §8, ADR 0005). Every minute it compares the settings
+ * with the `embedding_space` row; a new model or dimension drops the vector
+ * index, resizes `knowledge_chunks.embedding`, sets `reindexing` and adds
+ * {@link knowledgeReembedJob}. A settled space costs one read. A tick rather
+ * than an outbox event because the settings may change in the environment as
+ * well as in admin, and because the space is install-wide while every outbox
+ * row belongs to a brand.
+ */
+export const knowledgeConfigureJob = defineJob({
+  name: 'knowledge.configure',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: 100 },
+  schedule: { everyMs: 60_000 },
+});
+
+/**
+ * M7-02: embeds every chunk of every brand that is not yet in the target
+ * model, brand by brand and batch by batch, then builds the HNSW index and
+ * flips the space to `ready`. Added by {@link knowledgeConfigureJob} under the
+ * fixed id {@link KNOWLEDGE_REEMBED_JOB_ID}, so it runs once at a time; a run
+ * that fails leaves the space `reindexing` and the next tick resumes it from
+ * the chunks still left.
+ */
+export const knowledgeReembedJob = defineJob({
+  name: 'knowledge.reembed',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  // Removed on failure too: a failed job kept under the fixed id would make
+  // every later `add` a no-op, and the tick could never resume. The failure
+  // stays visible as `embedding_space.last_error`.
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: true },
+});
+
+export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
+export const webhookDeliverPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `webhook_deliveries` row: its frozen body, its endpoint, and its log. */
+  deliveryId: z.uuid(),
+});
+
+export type WebhookDeliverPayload = z.infer<typeof webhookDeliverPayloadSchema>;
+
+/** Attempts before a delivery is marked `failed` (M8-03). */
+export const WEBHOOK_DELIVER_ATTEMPTS = 8;
+
+/**
+ * M8-03: one event to one endpoint (ARCHITECTURE §13, `webhooks` queue). The
+ * delivery row is written by the `webhooks` subscriber of the domain event,
+ * beside a `webhook.delivery_requested` outbox row whose handler adds this job
+ * once the row has committed, as `email.send` does.
+ *
+ * Eight attempts, doubling from 30 seconds: the last one is 32 minutes after
+ * the one before it and about an hour after the first, so a receiver that is
+ * down for a deploy or a short outage still gets the event. Idempotent by
+ * delivery: a delivery that already succeeded is not sent again.
+ */
+export const webhookDeliverJob = defineJob({
+  name: 'webhook.deliver',
+  queue: QUEUE_NAMES.webhooks,
+  schema: webhookDeliverPayloadSchema,
+  options: {
+    attempts: WEBHOOK_DELIVER_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
+});
+
 export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('reply'),
@@ -892,6 +971,86 @@ export const telegramPollJob = defineJob({
 /** The scheduler id of one bot's poller. */
 export const telegramPollSchedulerId = (botId: string): string => `telegram.poll.${botId}`;
 
+export const statsRollupPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The hour of the tick that added it, as an ISO instant; the job id is built from it. */
+  tick: z.iso.datetime(),
+});
+export type StatsRollupPayload = z.infer<typeof statsRollupPayloadSchema>;
+
+/**
+ * M8-04: rebuilds **one** brand's report rollups for the trailing days, and
+ * backfills a brand that has none. Added hourly per active brand by
+ * {@link statsRollupScheduleJob} (ARCHITECTURE §13, `maintenance` queue). No
+ * receipt: a run deletes the days it covers and writes them again, so a
+ * repeat leaves the same rows behind.
+ */
+export const statsRollupJob = defineJob({
+  name: 'stats.rollup',
+  queue: QUEUE_NAMES.maintenance,
+  schema: statsRollupPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The BullMQ job id of one brand's rollup for one tick. Dots, for the reason {@link retentionJobId} gives. */
+export const statsRollupJobId = ({ brandId, tick }: StatsRollupPayload): string =>
+  `stats.rollup.${brandId}.${Date.parse(tick)}`;
+
+/** Seven minutes past every hour, off the top of the hour the other crons use. */
+export const STATS_ROLLUP_CRON = '7 * * * *';
+
+/** The hourly tick that fans {@link statsRollupJob} out per active brand. */
+export const statsRollupScheduleJob = defineJob({
+  name: 'stats.rollup.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: STATS_ROLLUP_CRON },
+});
+
+export const brandPurgePayloadSchema = z.object({ brandId: z.uuid() });
+export type BrandPurgePayload = z.infer<typeof brandPurgePayloadSchema>;
+
+/**
+ * M8-07: the hard purge of a brand whose 30-day grace is over (DOMAIN-RULES
+ * §11) — every tenant row, the brand's object prefix and its Redis keys. Added
+ * by {@link brandPurgeScheduleJob} for each brand that is due, keyed by the
+ * brand, so it runs once however often the tick sees it. Every step deletes
+ * "what is left", so a retry after a crash finishes the job rather than
+ * repeating it.
+ */
+export const brandPurgeJob = defineJob({
+  name: 'brand.purge',
+  queue: QUEUE_NAMES.maintenance,
+  schema: brandPurgePayloadSchema,
+  options: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 300_000 },
+    removeOnComplete: { age: 30 * 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+});
+
+/** One purge per brand: a brand is purged once. */
+export const brandPurgeJobId = ({ brandId }: BrandPurgePayload): string => `brand.purge.${brandId}`;
+
+/** 04:00 UTC every night, an hour after retention, so the two never compete for the disk. */
+export const BRAND_PURGE_CRON = '0 4 * * *';
+
+/** The nightly tick that adds {@link brandPurgeJob} for each brand whose grace is over. */
+export const brandPurgeScheduleJob = defineJob({
+  name: 'brand.purge.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: BRAND_PURGE_CRON },
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -917,8 +1076,15 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterMediaProcessJob.name]: helpCenterMediaProcessJob,
   [helpCenterSearchReindexJob.name]: helpCenterSearchReindexJob,
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
+  [knowledgeConfigureJob.name]: knowledgeConfigureJob,
+  [knowledgeReembedJob.name]: knowledgeReembedJob,
+  [webhookDeliverJob.name]: webhookDeliverJob,
   [telegramSendJob.name]: telegramSendJob,
   [telegramPollJob.name]: telegramPollJob,
+  [statsRollupJob.name]: statsRollupJob,
+  [statsRollupScheduleJob.name]: statsRollupScheduleJob,
+  [brandPurgeJob.name]: brandPurgeJob,
+  [brandPurgeScheduleJob.name]: brandPurgeScheduleJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

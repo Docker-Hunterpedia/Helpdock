@@ -37,11 +37,13 @@ import { isStaffOrigin } from './redis-io.adapter.js';
 import type { RoomScopeReader } from './room-reader.js';
 import { authorizeRoom } from './rooms.js';
 import { HandshakeRefusal, type StaffSocket, userIdOf } from './socket.js';
+import type { RateLimitedSocketEvent, SocketEventLimiter } from './socket-rate-limit.js';
 import { SocketRegistry } from './socket-registry.js';
 import {
   ROOM_SCOPE_READER,
   SESSION_REVOCATIONS,
   SOCKET_CONNECTIONS_GAUGE,
+  SOCKET_EVENT_LIMITER,
   SOCKET_SESSION_RESOLVER,
   STAFF_SOCKET_OPTIONS,
 } from './tokens.js';
@@ -107,6 +109,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   readonly #gauge: SocketConnectionsGauge;
   readonly #rooms: RoomScopeReader;
   readonly #logger: Logger;
+  readonly #limiter: SocketEventLimiter;
   readonly #options: StaffSocketOptions;
 
   constructor(
@@ -118,6 +121,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     @Inject(SOCKET_CONNECTIONS_GAUGE) gauge: SocketConnectionsGauge,
     @Inject(ROOM_SCOPE_READER) rooms: RoomScopeReader,
     @Inject(LOGGER) logger: Logger,
+    @Inject(SOCKET_EVENT_LIMITER) limiter: SocketEventLimiter,
     @Optional() @Inject(STAFF_SOCKET_OPTIONS) options: StaffSocketOptions | null = null,
   ) {
     this.#options = options ?? { appUrl: null };
@@ -129,6 +133,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     this.#gauge = gauge;
     this.#rooms = rooms;
     this.#logger = logger;
+    this.#limiter = limiter;
   }
 
   afterInit(namespace: Namespace): void {
@@ -207,6 +212,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     @ConnectedSocket() socket: StaffSocket,
     @MessageBody() body: unknown,
   ): Promise<RoomAck> {
+    await this.#throttle(socket, REALTIME_EVENTS.roomJoin);
     const { brandId, room } = parseMessage(roomJoinSchema, body);
     await this.#requireLiveSession(socket);
 
@@ -257,6 +263,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     @ConnectedSocket() socket: StaffSocket,
     @MessageBody() body: unknown,
   ): Promise<PresenceAck> {
+    await this.#throttle(socket, REALTIME_EVENTS.presenceSet);
     const { brandId, status } = parseMessage(presenceSetSchema, body);
     await this.#requireLiveSession(socket);
 
@@ -273,6 +280,7 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   @SubscribeMessage(REALTIME_EVENTS.presenceHeartbeat)
   @Authenticated()
   async heartbeat(@ConnectedSocket() socket: StaffSocket): Promise<HeartbeatAck> {
+    await this.#throttle(socket, REALTIME_EVENTS.presenceHeartbeat);
     await this.#requireLiveSession(socket);
 
     const userId = userIdOf(socket.data);
@@ -336,6 +344,17 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     );
 
     return ok({ ticketId });
+  }
+
+  /**
+   * Counted before the message is even parsed, so a stream of malformed ones
+   * spends the budget too. The socket stays open: a client over its budget is
+   * told so and may try again once the window moves.
+   */
+  async #throttle(socket: StaffSocket, event: RateLimitedSocketEvent): Promise<void> {
+    if (!(await this.#limiter.consume(event, userIdOf(socket.data)))) {
+      throw socketRefusal('rate_limited', 'Too many of these; try again in a minute');
+    }
   }
 
   /**

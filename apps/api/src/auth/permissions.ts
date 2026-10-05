@@ -1,3 +1,4 @@
+import { API_SCOPES } from '@helpdock/schemas';
 import type { BrandRole, Principal } from './principal.js';
 
 /**
@@ -65,6 +66,18 @@ export const PERMISSIONS = [
   // Team Leader's ("Manages config … help center").
   'help_center:read',
   'help_center:manage',
+  // M7: a brand's AI assistant — its system prompt ("editable by Team Leader",
+  // REQUIREMENTS §4.7) and reading its model, guardrails and budget. Changing
+  // the model, the guardrails or the budget stays `brand:manage`.
+  'ai:manage',
+  // M8-04: the brand's reports. An Admin's, a Team Leader's (their departments,
+  // by row-level security on the rollups) and a Viewer's, who "may read
+  // reports" (DOMAIN-RULES §1.2). Not an Agent's: their work is tickets.
+  'report:read',
+  // M8-02: the API scopes of REQUIREMENTS §4.11, which are the permissions the
+  // `/api/v1` routes require. No role grants one, so a staff session never
+  // reaches the public API and an API key never reaches a staff route.
+  ...API_SCOPES,
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -93,6 +106,8 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'system:read',
     'help_center:read',
     'help_center:manage',
+    'ai:manage',
+    'report:read',
   ],
   // "Departments they lead: agents, SLAs, rules, macros, canned responses, help
   // center, widget theme, content policy, reopen policy" — brand-level
@@ -111,6 +126,8 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'settings:write',
     'help_center:read',
     'help_center:manage',
+    'ai:manage',
+    'report:read',
   ],
   agent: [
     'ticket:read',
@@ -121,7 +138,14 @@ export const rolePermissions: Readonly<Record<BrandRole, readonly Permission[]>>
     'staff:read',
     'help_center:read',
   ],
-  viewer: ['ticket:read', 'contact:read', 'brand:read', 'staff:read', 'help_center:read'],
+  viewer: [
+    'ticket:read',
+    'contact:read',
+    'brand:read',
+    'staff:read',
+    'help_center:read',
+    'report:read',
+  ],
 });
 
 export const roleHasPermission = (role: BrandRole, permission: Permission): boolean =>

@@ -33,6 +33,7 @@ import {
   type TicketDetail,
   WIDGET_EVENTS,
   WIDGET_NAMESPACE,
+  type WidgetAvailability,
   type WidgetConfig,
   type WidgetConversationList,
   type WidgetEnvelope,
@@ -54,8 +55,10 @@ import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
+import { PresenceService } from '../realtime/presence.service.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
@@ -371,6 +374,8 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
 
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    // M8-03: every contact the suite makes writes `contact.created`.
+    registerContactEventHandlers();
     registerWidgetEventHandlers(new RedisWidgetBroadcast(worker));
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
@@ -1090,6 +1095,42 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       );
       expect(availability.status).toBe(200);
       expect(typeof availability.body.open).toBe('boolean');
+    });
+
+    it('names the agents online by first name, unless the brand hides who they are', async () => {
+      const conversation = {
+        prechatEnabled: false,
+        prechatFields: [],
+        whenUnavailable: 'keep_chat',
+        transcriptEnabled: false,
+      };
+      const presence = app.get(PresenceService);
+      const membership = {
+        brandId: seeded.brandId,
+        userId: tia.id,
+        socketId: 'widget-test-socket',
+      };
+      await presence.join(membership);
+      try {
+        await staff('PUT', `/api/brands/${seeded.brandId}/widget/conversation`, tia, {
+          ...conversation,
+          showAgentIdentity: true,
+        });
+        const shown = await widget<WidgetAvailability>('GET', '/availability');
+        expect(shown.body).toMatchObject({
+          agentsOnline: true,
+          agents: [{ name: 'Tia', avatarUrl: null }],
+        });
+
+        await staff('PUT', `/api/brands/${seeded.brandId}/widget/conversation`, tia, {
+          ...conversation,
+          showAgentIdentity: false,
+        });
+        const hidden = await widget<WidgetAvailability>('GET', '/availability');
+        expect(hidden.body).toMatchObject({ agentsOnline: true, agents: [] });
+      } finally {
+        await presence.leave(membership);
+      }
     });
   });
   // ------------------------------------------------ what the widget loads

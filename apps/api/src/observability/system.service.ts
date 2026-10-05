@@ -1,8 +1,9 @@
-import { auditLog, type Db } from '@helpdock/db';
+import { auditLog, brands, type Db } from '@helpdock/db';
 import { readRelayStatus } from '@helpdock/jobs';
 import type {
   AuditEntry,
   ChannelStatus,
+  ProductMetrics,
   SystemQueuePage,
   SystemQueuesQuery,
   SystemStatus,
@@ -11,11 +12,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import { desc } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { getTx } from '../context/request-context.js';
+import { AI_USAGE_SOURCE, type AiUsageSource } from '../reports/ai-usage.js';
 import { ReadinessService } from '../runtime/readiness.service.js';
 import { DB, REDIS } from '../runtime/tokens.js';
 import type { BootFacts } from './boot-facts.js';
 import { buildInfo } from './build-info.js';
+import { ProductMetricsService } from './product-metrics.js';
 import type { QueueRegistry } from './queues.js';
+import type { StorageUsageStore } from './storage-usage.js';
 import { readPostgresFacts, readRedisFacts } from './system-facts.js';
 import {
   checkNamed,
@@ -24,8 +28,9 @@ import {
   queuePageView,
   queuesView,
   relayView,
+  storageView,
 } from './system-view.js';
-import { BOOT_FACTS, CHANNEL_STATUS, QUEUE_REGISTRY } from './tokens.js';
+import { BOOT_FACTS, CHANNEL_STATUS, QUEUE_REGISTRY, STORAGE_USAGE } from './tokens.js';
 
 /** Every brand's mailboxes and bots with their health (`channels/channel-status.ts`). */
 export type ChannelStatusReader = () => Promise<readonly ChannelStatus[]>;
@@ -43,9 +48,14 @@ export type ChannelStatusReader = () => Promise<readonly ChannelStatus[]>;
  * exists to prevent. The relay already has the system context it needs, so it
  * says what it saw and this route repeats it.
  *
- * **Subsystems that do not exist yet say so.** Storage and AI spend answer
+ * **Subsystems that have nothing to report say so.** Storage before its first
+ * measurement, and AI spend until M7 records calls, answer
  * `{ configured: false }` rather than zeroes, because a zero on a status page
  * is a measurement and this would be a guess.
+ *
+ * **Storage is read from the readings the worker keeps in Redis** (M8-05,
+ * `storage-usage.ts`): measuring the bucket is not something a page load
+ * should wait on.
  */
 
 /** The queues the summary card lists before "All queues" (DESIGN artboard `Admin/System`). */
@@ -62,6 +72,8 @@ export class SystemService {
   readonly #queues: QueueRegistry;
   readonly #boot: BootFacts;
   readonly #channels: ChannelStatusReader;
+  readonly #storage: StorageUsageStore;
+  readonly #ai: AiUsageSource;
 
   constructor(
     @Inject(DB) db: Db,
@@ -70,6 +82,8 @@ export class SystemService {
     @Inject(QUEUE_REGISTRY) queues: QueueRegistry,
     @Inject(BOOT_FACTS) boot: BootFacts,
     @Inject(CHANNEL_STATUS) channels: ChannelStatusReader,
+    @Inject(STORAGE_USAGE) storage: StorageUsageStore,
+    @Inject(AI_USAGE_SOURCE) ai: AiUsageSource,
   ) {
     this.#db = db;
     this.#redis = redis;
@@ -77,6 +91,8 @@ export class SystemService {
     this.#queues = queues;
     this.#boot = boot;
     this.#channels = channels;
+    this.#storage = storage;
+    this.#ai = ai;
   }
 
   async status(): Promise<SystemStatus> {
@@ -85,19 +101,23 @@ export class SystemService {
     // scope decides what they can see.
     const audit = await this.#auditPreview();
 
-    const [checks, postgres, redis, relayStatus, queueCounts, channels] = await Promise.all([
-      this.#readiness.detail(),
-      readPostgresFacts(this.#db),
-      readRedisFacts(this.#redis),
-      readRelayStatus(this.#redis).catch(() => null),
-      this.#queues.counts().catch(() => []),
-      this.#channels().catch(() => []),
-    ]);
+    const now = new Date();
+    const [checks, postgres, redis, relayStatus, queueCounts, channels, storage, aiSpend] =
+      await Promise.all([
+        this.#readiness.detail(),
+        readPostgresFacts(this.#db),
+        readRedisFacts(this.#redis),
+        readRelayStatus(this.#redis).catch(() => null),
+        this.#queues.counts().catch(() => []),
+        this.#channels().catch(() => []),
+        this.#storageReading(),
+        this.#ai.installSpend(this.#db).catch(() => ({ configured: false as const })),
+      ]);
 
     const databaseCheck = checkNamed(checks, 'database');
 
     return {
-      observedAt: new Date().toISOString(),
+      observedAt: now.toISOString(),
       build: buildInfo(),
       api: { status: checksStatus(checks), checks: [...checks] },
       database: {
@@ -129,10 +149,26 @@ export class SystemService {
       queues: queuesView(queueCounts, SUMMARY_QUEUE_LIMIT),
       // M2's mailboxes and M6's bots, each with the health its own list shows.
       channels: [...channels],
-      storage: { configured: false },
-      aiSpend: { configured: false },
+      storage,
+      aiSpend,
       audit: [...audit],
     };
+  }
+
+  /** DOMAIN-RULES §15's product metrics (M8-07); see `product-metrics.ts`. */
+  async productMetrics(): Promise<ProductMetrics> {
+    return new ProductMetricsService(this.#db, this.#ai).read();
+  }
+
+  /** Fail-soft like the rest: a Redis blip shows "not measured", not a 500. */
+  async #storageReading(): Promise<SystemStatus['storage']> {
+    try {
+      const readings = await this.#storage.all();
+      const names = await this.#db.select({ id: brands.id, name: brands.name }).from(brands);
+      return storageView(readings, new Map(names.map((brand) => [brand.id, brand.name])));
+    } catch {
+      return { configured: false };
+    }
   }
 
   /**

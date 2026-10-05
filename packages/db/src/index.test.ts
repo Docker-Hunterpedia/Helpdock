@@ -1,6 +1,8 @@
 import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import * as brandPurge from './brand-purge.js';
 import * as client from './client.js';
+import * as embeddingSpace from './embedding-space.js';
 import * as index from './index.js';
 import * as migrate from './migrate.js';
 import * as rls from './rls.js';
@@ -14,7 +16,9 @@ import * as uuid from './uuid.js';
 import * as views from './views.js';
 
 const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  'brand-purge.ts': brandPurge,
   'client.ts': client,
+  'embedding-space.ts': embeddingSpace,
   'migrate.ts': migrate,
   'rls.ts': rls,
   'roles.ts': roles,
@@ -54,6 +58,8 @@ describe('@helpdock/db', () => {
   it('has a schema barrel that knows about every table file', () => {
     expect(sourceFilesIn(new URL('schema/', import.meta.url))).toEqual([
       'accounts.ts',
+      'ai.ts',
+      'api-keys.ts',
       'assignment.ts',
       'attachments.ts',
       'audit-log.ts',
@@ -76,9 +82,11 @@ describe('@helpdock/db', () => {
       'help-center-search.ts',
       'help-center.ts',
       'job-receipts.ts',
+      'knowledge.ts',
       'mailboxes.ts',
       'notifications.ts',
       'outbox.ts',
+      'reports.ts',
       'retention-settings.ts',
       'settings.ts',
       'sla-policies.ts',
@@ -100,6 +108,7 @@ describe('@helpdock/db', () => {
       'users.ts',
       'views.ts',
       'web-form-settings.ts',
+      'webhooks.ts',
       'widget-settings.ts',
       'widget-visitors.ts',
       'workflow-rules.ts',

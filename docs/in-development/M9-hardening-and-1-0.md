@@ -14,15 +14,42 @@ Depends on everything above. Code-side deliverables (security scanning, load tes
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
 | M9-01 | External pentest of widget + API; fix all High and Medium findings | | planned |
-| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | planned |
-| M9-03 | Load tests | | planned |
-| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | | planned |
-| M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | | planned |
+| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | in review: walked; 11 gaps to file |
+| M9-03 | Load tests | | in progress: suites built and smoke-run; the §14 host run is outstanding |
+| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | | built in branch (M9-04): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); screen-reader pass outstanding |
+| M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | | in review |
 | M9-06 | User docs under `docs/guides/` | | planned |
 | M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outs | | planned |
-| M9-08 | Release pipeline | | planned |
+| M9-08 | Release pipeline | | verified; external dependency (GHCR visibility, signing key) open |
 | M9-09 | Tag `1.0.0` | | planned |
 | M9-10 | Restore drill | | planned |
+
+## M9-04 Accessibility audit
+
+- **Automated.** `apps/widget/e2e/a11y-audit.spec.ts` runs axe (WCAG 2.1 A and AA)
+  on every widget mode and state, and `apps/api/e2e/help-center-a11y.spec.ts`
+  on every help center page type, including the 404, 410 and internal-only
+  wall. Both run in `en` and `ar`, light and dark, and both are in the CI jobs
+  that already run those Playwright projects.
+- **Keyboard.** Tab order and a visible ring on every stop, the skip link,
+  Escape, and the widget's focus trap at phone width.
+- **Fixed.**
+  - The help center has a skip link, and every `<main>` can take focus.
+  - Article body links are underlined. Axe found them told apart by colour
+    alone in dark mode.
+  - At phone width the widget is a modal dialog that keeps Tab inside it, and
+    the launcher no longer covers Send.
+  - The widget's theme sheet is replaced only when it changes, and the e2e axe
+    helper waits for the widget to settle. This addresses the M4 flake.
+- **Closed M5 gaps** with existing artboards:
+  - "What was missing?" after a "No" (`HelpCenter/Article-AR` panels 2 and 3).
+    The form takes an optional `comment` (`hcFeedbackFormSchema`), and the
+    step travels in `?feedback=no`.
+  - The CSAT page's "Browse the help center" (`CsatEN`).
+    `csatBrandSchema.helpCenterUrl` comes from `publicHelpCenterUrl`
+    (`apps/api/src/help-center/site/site-url.ts`).
+- **Outstanding:** the screen-reader, zoom and forced-colours pass listed in
+  the [audit](../completed/accessibility-audit.md#still-to-do-by-a-person).
 
 ## Exit criteria
 
@@ -33,7 +60,97 @@ Copied from the PRD, ticked as they are met.
 
 ## Open questions
 
-- None yet.
+- **Outbox event concurrency.** `perf:realtime` showed the worker's
+  `outbox.event` consumer, at BullMQ's default concurrency of one, falling
+  behind at five agent replies a second on a loaded sandbox (p95 4.9 s; 257 ms
+  at one reply a second). Whether §14's load needs more is for the §14 host
+  run to say; raising it needs the SLA and rules handlers reviewed for two
+  events of one ticket running at once ([performance](../guides/performance.md#what-the-realtime-runs-showed)).
+- **ZAP's first release run** will tell which passive alerts need a line in
+  `.zap/rules.tsv`. The image could not be built in the development sandbox
+  (Docker Hub rate limit), so the stack script has not run end to end yet.
+
+## M9-02 ASVS Level 2
+
+[`docs/completed/asvs-l2.md`](../completed/asvs-l2.md): 258 requirements, each
+Met, Partial, Gap, N/A or Operator with the code, test or configuration that
+answers it. The gaps to file as issues before 1.0, in the order an attacker
+would meet them: no email on a credential change (2.2.3, 2.5.5), no
+breached-password check (2.1.7), TOTP codes not remembered as used (2.8.4),
+no strength meter or show-password toggle (2.1.8, 2.1.12; needs an artboard),
+no idle expiry on a session (3.3.2), no `__Host-` cookie prefix (3.4.4), a
+second factor for admins that is a setting rather than a rule (4.3.1), sign-in
+failures not audited (7.1.3, 7.2.1), no alert on rate-limit refusals (8.1.4),
+no contact export (8.3.2) and no `Content-Disposition` on JSON (14.4.2). M6,
+M7 and M8 each re-walk the chapters they touch.
+
+## M9-03 Load tests
+
+`apps/api/src/testing/perf/`, explained in
+[performance](../guides/performance.md). The stack table has no load tool and
+none was added: the M1-15 harness (`fetch`, Testcontainers, the api from
+`dist/`) already drives real HTTP, so it was extended rather than replaced.
+
+- `stack.ts`: the containers, migrations, seed and api processes every suite
+  shares, now with an optional worker. `perf:tickets` moved onto it unchanged.
+- `load.ts`: visitors without a token, TTFB (`until: 'headers'`), and
+  scenarios that share a name reported as one. Unit-tested against a local
+  server (`load.test.ts`).
+- `perf:help-center`: 2 000 articles in `en` and `ar` (`help-center-dataset.ts`),
+  cold render gated at 800 ms p95, cached TTFB at 200 ms p95 per page kind.
+- `perf:realtime`: api replicas and a worker, 200 widget visitors each sending
+  a message a minute, agents replying; agent reply → widget socket gated at
+  500 ms p95, any lost reply fails.
+
+Smoke runs on the shared sandbox passed the help center gates with a wide
+margin and the realtime gate at one reply a second; no index or cache change
+was made. Still to do: the full run on the §14 host for all three suites,
+recorded in the guide's Results table.
+
+## M9-05 Semgrep, ZAP, SBOM
+
+- **Semgrep**: `.semgrep/helpdock.yml`, six rules for the engineering rules a
+  type checker cannot see — undeclared route, `fetch` on a non-constant URL
+  outside `packages/net`, BullMQ in a request-path module, a job added in a
+  handler or listener, `any` without a reason, a secret-looking key in a log
+  call. Fixtures in `.semgrep/helpdock.ts`; the `semgrep` job in `ci.yml` runs
+  them, then the scan, and is part of the required `ci` check. The two OAuth
+  provider calls carry a `nosemgrep` with their reason. Renovate tracks the
+  pinned CLI.
+- **ZAP**: `.github/workflows/zap.yml` on `release/**`, `v*` tags and by hand —
+  the image from the commit, `scripts/zap-stack.sh` (the smoke test's stack,
+  sharing `scripts/compose-env.sh`), past the first-run wizard, ZAP's baseline
+  scan with `.zap/rules.tsv`. The release procedure runs it on the version pull
+  request's branch before merging ([release](../guides/release.md#the-short-version)).
+- **SBOM**: already in `release.yml` (`anchore/sbom-action`, CycloneDX, from the
+  pushed image, attached to the Release).
+- **Dependency audit**: `pnpm audit --audit-level high` added to `ci.yml`'s
+  `checks`, which ARCHITECTURE §15 lists and CI did not run.
+- Guide: [security scanning](../guides/security-scanning.md).
+
+## M9-08 Release pipeline
+
+Verified against ARCHITECTURE §16; nothing was missing in the workflows.
+`changesets.yml` keeps the version pull request open and, once it merges, tags
+`v<version>` and calls `release.yml`, which builds `linux/amd64` and
+`linux/arm64` with QEMU and Buildx, pushes `:<version>` and `:latest` (not for
+pre-releases) to GHCR with the run's own token, generates the CycloneDX SBOM
+from the pushed image and creates the Release from the `CHANGELOG.md` section
+plus GitHub's generated notes. What remains is the external dependency in the
+PRD: making the GHCR package public and the image signing key.
+
+## Gaps carried from earlier milestones
+
+Closed on this branch, each with unit and integration tests and its guide
+updated:
+
+| Gap | From | Now |
+|---|---|---|
+| Auto-unassign ignored business hours | M1, M3 | `assignment.offline_unassign` reads the department's calendar and, while it is closed, puts itself off to the next opening (`deferredTo` in the payload) |
+| The first-run wizard did not generate the VAPID pair | M3, ADR 0002 | Finishing the wizard generates it when the install has none and nothing is pinned in `.env`; audited as `install.setup.push` |
+| `agents_online` was always empty against a real api | M4 | Availability and the `presence` frame carry `agents` (first names, up to five, empty when the brand hides agents); `apps/widget/src/transport/map.ts` maps them |
+| Socket events were not rate-limited | M0 | `room:join` 120, `presence:set` 30, `presence:heartbeat` 60 per person per minute in Redis; over budget answers `rate_limited` |
+| Revocation was per person, not per browser | M0 | `principal.revoked` carries `familyIds`; only those browsers' sockets close |
 
 ## Pull requests
 

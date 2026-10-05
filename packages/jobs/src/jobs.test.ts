@@ -3,6 +3,10 @@ import {
   assignmentOfflineUnassignJob,
   authEmailJob,
   authEmailJobId,
+  BRAND_PURGE_CRON,
+  brandPurgeJob,
+  brandPurgeJobId,
+  brandPurgeScheduleJob,
   DOMAIN_VERIFY_CRON,
   domainVerifyJob,
   domainVerifyJobId,
@@ -19,6 +23,8 @@ import {
   helpCenterSearchReindexSweepJob,
   idempotencyKeyFor,
   JOB_DEFINITIONS,
+  knowledgeConfigureJob,
+  knowledgeReembedJob,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -35,12 +41,18 @@ import {
   rulesTimeBasedJob,
   rulesTimeBasedJobId,
   rulesTimeBasedScheduleJob,
+  STATS_ROLLUP_CRON,
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
+  statsRollupJob,
+  statsRollupJobId,
+  statsRollupScheduleJob,
   telegramPollJob,
   telegramPollSchedulerId,
   telegramSendJob,
+  WEBHOOK_DELIVER_ATTEMPTS,
+  webhookDeliverJob,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
 import { PayloadValidationError } from './validation.js';
@@ -74,6 +86,12 @@ describe('the job registry', () => {
 
   it('gives the relay the poll cadence ARCHITECTURE §13 fixes', () => {
     expect(outboxRelayJob.schedule).toEqual({ everyMs: OUTBOX_RELAY_INTERVAL_MS });
+  });
+
+  it('reconciles the embedding space every minute, and leaves the re-embed to that tick', () => {
+    expect(knowledgeConfigureJob.schedule).toEqual({ everyMs: 60_000 });
+    expect(knowledgeReembedJob.schedule).toBeUndefined();
+    expect(knowledgeReembedJob.queue).toBe('knowledge');
   });
 
   it('ticks retention nightly, and leaves the per-brand job to that tick', () => {
@@ -185,6 +203,27 @@ describe('email.send', () => {
   });
 });
 
+describe('webhook.deliver', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000dd';
+
+  it('keys every attempt of a delivery by its row, so a redelivered job sends once', () => {
+    expect(idempotencyKeyFor(webhookDeliverJob, { brandId, deliveryId }, 'a')).toBe(
+      `webhook.deliver:${deliveryId}`,
+    );
+  });
+
+  it('runs on the webhooks queue with eight attempts and exponential backoff', () => {
+    expect(webhookDeliverJob.queue).toBe('webhooks');
+    expect(webhookDeliverJob.options.attempts).toBe(WEBHOOK_DELIVER_ATTEMPTS);
+    expect(WEBHOOK_DELIVER_ATTEMPTS).toBe(8);
+    expect(webhookDeliverJob.options.backoff).toEqual({ type: 'exponential', delay: 30_000 });
+  });
+
+  it('refuses a payload with no delivery', () => {
+    expect(() => parseJobPayload(webhookDeliverJob, { brandId })).toThrow(PayloadValidationError);
+  });
+});
+
 describe('media.process payloads', () => {
   it('accepts the brand and the attachment', () => {
     const payload = { brandId, attachmentId: '01924f00-0000-7000-8000-0000000000bb' };
@@ -243,6 +282,14 @@ describe('assignment.offline_unassign', () => {
     );
     expect(idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first')).not.toBe(
       idempotencyKeyFor(assignmentOfflineUnassignJob, later, 'first'),
+    );
+  });
+
+  it('keys a run deferred to the next opening apart from the run that deferred it', () => {
+    const deferred = { ...payload, deferredTo: '2026-09-27T06:00:00.000Z' };
+
+    expect(idempotencyKeyFor(assignmentOfflineUnassignJob, deferred, 'first')).not.toBe(
+      idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first'),
     );
   });
 
@@ -519,5 +566,33 @@ describe('the Telegram jobs (M6)', () => {
     expect(telegramPollJob.queue).toBe('inbound');
     expect(telegramPollJob.options.attempts).toBe(1);
     expect(telegramPollSchedulerId(botId)).toBe(`telegram.poll.${botId}`);
+  });
+});
+
+describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
+  it('rolls up hourly off the top of the hour, one job per brand and tick', () => {
+    const payload = parseJobPayload(statsRollupJob, { brandId, tick: '2026-10-05T09:07:00.000Z' });
+
+    expect(statsRollupScheduleJob.schedule).toEqual({ cron: STATS_ROLLUP_CRON });
+    expect(STATS_ROLLUP_CRON).toBe('7 * * * *');
+    expect(statsRollupJob.queue).toBe('maintenance');
+    expect(statsRollupJobId(payload)).toBe(
+      `stats.rollup.${brandId}.${Date.parse('2026-10-05T09:07:00.000Z')}`,
+    );
+  });
+
+  it('purges a brand once, under an id that names only the brand', () => {
+    const payload = parseJobPayload(brandPurgeJob, { brandId });
+
+    expect(brandPurgeJobId(payload)).toBe(`brand.purge.${brandId}`);
+    expect(brandPurgeJob.options.removeOnFail).toBe(false);
+    expect(() => parseJobPayload(brandPurgeJob, { brandId: 'nope' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('looks for brands past their grace nightly, an hour after retention', () => {
+    expect(brandPurgeScheduleJob.schedule).toEqual({ cron: BRAND_PURGE_CRON });
+    expect(BRAND_PURGE_CRON).toBe('0 4 * * *');
   });
 });

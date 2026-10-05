@@ -29,11 +29,13 @@ type DepartmentScope = readonly string[] | 'all';
 /**
  * Which departments the principal reaches: `'all'` for an Admin, and for a Team
  * Leader or Viewer with no department restriction (DOMAIN-RULES §1.1). A worker
- * runs with every department (§1.4); a visitor or an api key has none of its
- * own, so the department-scoped policies see an empty list.
+ * runs with every department (§1.4), and so does an API key (M8-01): it is
+ * issued by an Admin to act for the whole brand, and its scopes, not a
+ * department, are what narrow it. A visitor has none of its own, so the
+ * department-scoped policies see an empty list.
  */
 const departmentsIn = (principal: Principal, brandIds: readonly string[]): DepartmentScope => {
-  if (principal.type === 'system') {
+  if (principal.type === 'system' || principal.type === 'apikey') {
     return 'all';
   }
   if (principal.type !== 'staff') {

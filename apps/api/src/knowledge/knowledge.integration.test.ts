@@ -44,10 +44,10 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { FakeStorage, silentJobLogger } from '../testing/media.js';
+import { readOAuthApps } from './credentials.js';
 import { embedPending } from './embed-pending.js';
 import { configureEmbeddingSpace, reembedChunks } from './embedding-space.job.js';
 import { type KnowledgeQueues, registerKnowledgeEventHandlers } from './knowledge-events.js';
-import { readOAuthApps } from './credentials.js';
 import { knowledgeFileKey, type SourceLoaderDeps } from './load-source.js';
 import {
   createQueryEmbedder,
@@ -183,7 +183,10 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       queued.push({ kind: 'embed', id: jobId });
     },
     schedule: async (sourceId, cron) => {
-      queued.push({ kind: cron === null ? 'unschedule' : `schedule ${cron.pattern}`, id: sourceId });
+      queued.push({
+        kind: cron === null ? 'unschedule' : `schedule ${cron.pattern}`,
+        id: sourceId,
+      });
     },
   };
   const dispatcher = createOutboxDispatcher();
@@ -580,7 +583,10 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
         await ok('PUT', hc(`/articles/${article.id}/versions/en/status`), { status: 'published' });
         return article;
       };
-      publicArticle = await publish('Student discount', 'Students get ten percent off with a card.');
+      publicArticle = await publish(
+        'Student discount',
+        'Students get ten percent off with a card.',
+      );
       internalArticle = await publish('Staff discount', 'Employees get a staff discount voucher.');
       await ok('PUT', hc(`/articles/${internalArticle.id}/versions/en/visibility`), {
         visibility: 'internal',
@@ -627,7 +633,10 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       const staff = await retrieve('staff discount voucher employees', 'staff');
 
       expect(visitor.chunks.map((chunk) => chunk.articleId)).not.toContain(internalArticle.id);
-      expect(staff.chunks[0]).toMatchObject({ articleId: internalArticle.id, visibility: 'internal' });
+      expect(staff.chunks[0]).toMatchObject({
+        articleId: internalArticle.id,
+        visibility: 'internal',
+      });
     });
 
     it('drops an archived article from visitor answers at the commit, before any sync', async () => {
@@ -652,20 +661,33 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       if (vector === null) {
         throw new Error('the embedding space is not ready');
       }
-      const scope = { brandId: brandId(), locale: 'en', defaultLocale: 'en', queryVector: vector } as const;
+      const scope = {
+        brandId: brandId(),
+        locale: 'en',
+        defaultLocale: 'en',
+        queryVector: vector,
+      } as const;
       const [forVisitors, forStaff] = await withSystem(runtime.db, brandId(), async (tx) => [
-        await semanticSource.candidates(tx, { ...scope, audience: 'public' }, {
-          words: [],
-          all: '',
-          any: '',
-          fuzzy: '',
-        }),
-        await semanticSource.candidates(tx, { ...scope, audience: 'internal' }, {
-          words: [],
-          all: '',
-          any: '',
-          fuzzy: '',
-        }),
+        await semanticSource.candidates(
+          tx,
+          { ...scope, audience: 'public' },
+          {
+            words: [],
+            all: '',
+            any: '',
+            fuzzy: '',
+          },
+        ),
+        await semanticSource.candidates(
+          tx,
+          { ...scope, audience: 'internal' },
+          {
+            words: [],
+            all: '',
+            any: '',
+            fuzzy: '',
+          },
+        ),
       ]);
       const hits = await search.search({
         brandId: brandId(),
@@ -861,7 +883,10 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
 
   it('keeps sources of one brand out of another', async () => {
     const outsider = await withSystem(runtime.db, uuidv7(), (tx) =>
-      tx.select().from(knowledgeSources).where(and(eq(knowledgeSources.brandId, brandId()))),
+      tx
+        .select()
+        .from(knowledgeSources)
+        .where(and(eq(knowledgeSources.brandId, brandId()))),
     );
 
     expect(outsider).toEqual([]);

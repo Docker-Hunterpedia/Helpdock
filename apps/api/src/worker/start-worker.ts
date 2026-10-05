@@ -1,5 +1,5 @@
 import { createKeyring, type Env, type Settings } from '@helpdock/config';
-import type { Db } from '@helpdock/db';
+import { brands, type Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
   authEmailJob,
@@ -23,7 +23,10 @@ import {
   helpCenterSearchReindexSweepJob,
   type JobLogger,
   knowledgeConfigureJob,
+  knowledgeEmbedJob,
   knowledgeReembedJob,
+  knowledgeSyncJob,
+  knowledgeSyncSchedulerId,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -49,7 +52,9 @@ import {
   telegramSendJob,
   webhookDeliverJob,
 } from '@helpdock/jobs';
+import type { BlockedEvent } from '@helpdock/net';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
+import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { safeAiTransport } from '../ai/ai-http.js';
 import { registerAiEventHandlers } from '../ai/budget-alert.handler.js';
@@ -101,7 +106,21 @@ import {
 } from '../help-center/search/search-events.js';
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
+import { createPlaywrightRenderer } from '../knowledge/crawl-renderer.js';
+import { readOAuthApps } from '../knowledge/credentials.js';
 import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
+import {
+  type KnowledgeQueues,
+  registerKnowledgeEventHandlers,
+  scheduleBrandSources,
+} from '../knowledge/knowledge-events.js';
+import type { SourceLoaderDeps } from '../knowledge/load-source.js';
+import {
+  safeCrawlFetch,
+  safeFetchFunction,
+  safeRenderFetch,
+} from '../knowledge/safe-transports.js';
+import { createKnowledgeSyncProcessor } from '../knowledge/sync.job.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { S3BrandObjects } from '../media/brand-objects.js';
 import { createMediaTools } from '../media/ffmpeg.js';
@@ -145,6 +164,7 @@ import {
   createTelegramSendHandler,
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
+import { withSystemJob } from '../tenant/system-job.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
 import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
@@ -297,6 +317,8 @@ export type WorkerEnv = Pick<
   // M6: whether bots are polled, and where the Bot API is.
   | 'TELEGRAM_POLLING'
   | 'TELEGRAM_API_ROOT'
+  // M7-03: whether a website crawl may render pages in a headless browser.
+  | 'KNOWLEDGE_CRAWL_RENDER'
 >;
 
 /**
@@ -373,6 +395,65 @@ const slaDeps = (queue: Queue): SlaWorkerDeps => {
     sla: new SlaService(repository),
     assignment: new AssignmentRepository(),
     timers: bullTimerQueue(queue),
+  };
+};
+
+/** M7-03's handlers and boot reach the `knowledge` queue through this. */
+const knowledgeQueuesOf = (queue: Queue): KnowledgeQueues => ({
+  addSync: async (payload, jobId) => {
+    await queue.add(knowledgeSyncJob.name, payload, { ...knowledgeSyncJob.options, jobId });
+  },
+  addEmbed: async (payload, jobId) => {
+    await queue.add(knowledgeEmbedJob.name, payload, { ...knowledgeEmbedJob.options, jobId });
+  },
+  schedule: async (sourceId, cron, payload) => {
+    const id = knowledgeSyncSchedulerId(sourceId);
+    if (cron === null) {
+      await queue.removeJobScheduler(id);
+      return;
+    }
+    await queue.upsertJobScheduler(
+      id,
+      { pattern: cron.pattern, tz: cron.tz },
+      { name: knowledgeSyncJob.name, data: payload, opts: knowledgeSyncJob.options },
+    );
+  },
+});
+
+/** Every brand's daily and weekly sources, re-registered on boot (DOMAIN-RULES §10). */
+const scheduleAllKnowledgeSources = async (db: Db, queues: KnowledgeQueues): Promise<void> => {
+  const active = await db.select({ id: brands.id }).from(brands).where(eq(brands.status, 'active'));
+  for (const { id: brandId } of active) {
+    await withSystemJob(db, brandId, 'knowledge.schedule.boot', (tx) =>
+      scheduleBrandSources(tx, brandId, queues),
+    );
+  }
+};
+
+/** What a source sync reads through: the bucket, and the SSRF-safe client for everything else. */
+const knowledgeLoaders = (
+  env: WorkerEnv,
+  settings: WorkerSettings,
+  log: JobLogger,
+): SourceLoaderDeps => {
+  const transport = {
+    allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+    onBlocked: (event: BlockedEvent) =>
+      log.warn(
+        { host: event.host, address: event.address, url: event.url },
+        'knowledge fetch blocked (DOMAIN-RULES §13)',
+      ),
+  };
+  return {
+    storage: storageFor(env),
+    crawlFetch: safeCrawlFetch(transport),
+    renderer:
+      env.KNOWLEDGE_CRAWL_RENDER === true
+        ? () => createPlaywrightRenderer(safeRenderFetch(transport))
+        : null,
+    fetch: safeFetchFunction(transport),
+    keyring: createKeyring(env),
+    oauthApps: () => readOAuthApps(settings),
   };
 };
 
@@ -534,6 +615,9 @@ export const workerDependencies: WorkerDependencies = {
     // M5-05. The search index follows the same three events under its own
     // subscriber name, in the event's transaction.
     registerSearchEventHandlers();
+    // M7-03. So do the knowledge base's article chunks; and a source added,
+    // re-scheduled, synced or removed adds its job or moves its scheduler.
+    registerKnowledgeEventHandlers(knowledgeQueuesOf(knowledge), storageFor(env));
 
     // M5-03. After the content module's own handlers: every help center
     // event drops the brand's cached pages, under its own subscriber name.
@@ -979,21 +1063,22 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+    const ai = createAiRuntime({
+      db,
+      settings,
+      http: safeAiTransport(env.OUTBOUND_ALLOW_CIDRS, (event) =>
+        log.warn(
+          { host: event.host, address: event.address },
+          'embeddings endpoint resolves to a blocked address (DOMAIN-RULES §13)',
+        ),
+      ),
+    });
     // M7-02's configure tick and re-embed share the queue too.
     const embedding = createEmbeddingSpaceProcessor({
       db,
       settings,
       log,
-      ai: createAiRuntime({
-        db,
-        settings,
-        http: safeAiTransport(env.OUTBOUND_ALLOW_CIDRS, (event) =>
-          log.warn(
-            { host: event.host, address: event.address },
-            'embeddings endpoint resolves to a blocked address (DOMAIN-RULES §13)',
-          ),
-        ),
-      }),
+      ai,
       queue: {
         add: async (jobId) => {
           await knowledge.add(
@@ -1004,12 +1089,25 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+    // M7-03's source syncs and embeds, and every source's schedule re-registered on boot.
+    const queues = knowledgeQueuesOf(knowledge);
+    scheduleAllKnowledgeSources(db, queues).catch((error: unknown) =>
+      log.error({ err: error }, 'could not register the knowledge sync schedules'),
+    );
+    const sync = createKnowledgeSyncProcessor({
+      db,
+      ai,
+      log,
+      loaders: knowledgeLoaders(env, settings, log),
+    });
     const worker = new Worker(
       QUEUE_NAMES.knowledge,
       async (job) => {
-        await (embedding(job) ?? search(job) ?? publishing(job));
+        await (sync(job) ?? embedding(job) ?? search(job) ?? publishing(job));
       },
-      { connection: redis },
+      // A crawl takes minutes; a few at once keeps one from holding up a
+      // scheduled publish behind it.
+      { connection: redis, concurrency: 4 },
     );
     worker.on('failed', (job, error) =>
       log.error({ job: job?.name, jobId: job?.id, err: error }, 'knowledge job failed'),

@@ -106,6 +106,8 @@ export const knowledgeSourceCreateSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 export type KnowledgeSourceCreate = z.input<typeof knowledgeSourceCreateSchema>;
+/** As the route's validation pipe hands it over, defaults applied. */
+export type KnowledgeSourceCreateInput = z.output<typeof knowledgeSourceCreateSchema>;
 
 /** Every field optional; `config` is checked against the source's own kind. */
 export const knowledgeSourceUpdateSchema = z.object({
@@ -238,6 +240,8 @@ export const knowledgeLogCodeSchema = z.enum([
   'documents.removed',
   'injection.stripped',
   'file.rejected',
+  /** The chunks are stored but could not be embedded yet; full text finds them meanwhile. */
+  'embedding.deferred',
 ]);
 export type KnowledgeLogCode = z.infer<typeof knowledgeLogCodeSchema>;
 

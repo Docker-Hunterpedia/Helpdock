@@ -1,18 +1,20 @@
 import { type Db, type DbTransaction, hcSearchLog, systemContext, withTenant } from '@helpdock/db';
 import { HC_SEARCH_LIMIT_MAX } from '@helpdock/schemas';
+import type { QueryEmbedder } from '../../knowledge/retrieval/retrieve.js';
 import { defaultLocaleOf, nameIn } from '../content-reader.js';
 import type { HelpCenterSearch, SearchHit, SearchQuery, SearchResult } from '../ports.js';
 import { type HitRow, hitDetailsSql, lexicalSource } from './lexical.js';
 import { normalizeQuery, searchTerms } from './query-terms.js';
 import { type Candidate, type CandidateSource, mergeRankings } from './ranking.js';
+import { semanticSource } from './semantic.js';
 
 /**
  * `HelpCenterSearch` (M5-05): the help center's search box, the widget's
  * search and its suggestions.
  *
  * Every source filters by the audience in SQL before it ranks (`lexical.ts`);
- * the sources' lists are merged (`ranking.ts`, where M7's semantic source
- * plugs in); the page asked for is read back with its snippets; and the query
+ * the sources' lists are merged (`ranking.ts`) — the lexical one and, once
+ * the install has an embedding model, M7-04's semantic one (`semantic.ts`); the page asked for is read back with its snippets; and the query
  * is written to `hc_search_log` with how many articles it found, zero
  * included, in the same transaction.
  *
@@ -27,9 +29,22 @@ export class HelpCenterSearchService implements HelpCenterSearch {
   readonly #db: Db;
   readonly #sources: readonly CandidateSource[];
 
-  constructor(db: Db, sources: readonly CandidateSource[] = [lexicalSource]) {
+  readonly #embedQuery: QueryEmbedder | undefined;
+
+  /**
+   * `embedQuery` turns on the semantic source (M7-04); without it, or while it
+   * answers null, search is the lexical source alone.
+   */
+  constructor(
+    db: Db,
+    {
+      sources = [lexicalSource, semanticSource],
+      embedQuery,
+    }: { readonly sources?: readonly CandidateSource[]; readonly embedQuery?: QueryEmbedder } = {},
+  ) {
     this.#db = db;
     this.#sources = sources;
+    this.#embedQuery = embedQuery;
   }
 
   async search(query: SearchQuery): Promise<SearchResult> {
@@ -40,6 +55,9 @@ export class HelpCenterSearchService implements HelpCenterSearch {
     }
     const limit = Math.min(Math.max(query.limit, 1), HC_SEARCH_LIMIT_MAX);
     const offset = Math.max(query.offset, 0);
+    // Before the transaction: a provider call takes a while and holds nothing.
+    const queryVector =
+      this.#embedQuery === undefined ? null : await this.#embedQuery(query.brandId, q);
 
     return withTenant(this.#db, systemContext(query.brandId, SEARCH_PRINCIPAL), async (tx) => {
       const scope = {
@@ -47,6 +65,7 @@ export class HelpCenterSearchService implements HelpCenterSearch {
         audience: query.audience,
         locale: query.locale,
         defaultLocale: await defaultLocaleOf(tx, query.brandId),
+        ...(queryVector === null ? {} : { queryVector }),
       };
       const lists: (readonly Candidate[])[] = [];
       for (const source of this.#sources) {

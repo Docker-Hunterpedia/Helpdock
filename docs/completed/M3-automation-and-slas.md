@@ -124,7 +124,7 @@ Written down and carried forward. None of them blocks M4, M5, M6 or M8.
 | **`workflow_runs` keep the department the ticket had when the rule ran** | A run is a record of that moment, so a moved ticket's earlier runs stay readable to the old department's readers. | This doc |
 | **A Team Leader narrower than the brand cannot change a rule** | A rule acts on every department of the brand. They can read rules and their departments' log. | [automation](../guides/automation.md#who-may-do-what) |
 | **Nothing emits `csat.received` yet** | Rules can name the event. It fires once survey delivery (M8-06) emits it. | [automation](../guides/automation.md#a-rule) |
-| **Auto-unassign still ignores business hours** | M1 left this for M3. M3-01 built the calendar, but `assignment.offline_unassign` does not read it yet. | [ticketing settings](../guides/ticketing-settings.md#assignment) |
+| ~~Auto-unassign still ignores business hours~~ | Closed in M9: `assignment.offline_unassign` reads the department's calendar and puts itself off to the next opening. | [ticketing settings](../guides/ticketing-settings.md#assignment) |
 | **No screenshot baselines for the M3 screens** | The screenshots spec covers M0 and M1 screens; the shell baselines predate the Automation link and the bell. | [development guide](../guides/development.md#browser-tests) |
 
 ## What an operator can do with this milestone

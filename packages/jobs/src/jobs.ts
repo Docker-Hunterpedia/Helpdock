@@ -244,6 +244,12 @@ export const assignmentOfflineUnassignPayloadSchema = z.object({
   departmentId: z.uuid(),
   /** When presence noticed they went offline; the timer counts from here. */
   since: z.iso.datetime(),
+  /**
+   * Set when the timer fired while the department was closed and was put off
+   * to its next opening (DOMAIN-RULES §12). Part of the key, so the deferred
+   * run is a delivery of its own rather than a duplicate of the first.
+   */
+  deferredTo: z.iso.datetime().optional(),
 });
 
 export type AssignmentOfflineUnassignPayload = z.infer<
@@ -270,7 +276,8 @@ export const assignmentOfflineUnassignJob = defineJob({
     removeOnFail: false,
   },
   idempotencyKey: (payload) =>
-    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
+    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}` +
+    (payload.deferredTo === undefined ? '' : `:${payload.deferredTo}`),
 });
 
 export const emailSendPayloadSchema = z.object({

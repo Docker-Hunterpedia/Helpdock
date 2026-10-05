@@ -42,6 +42,7 @@ import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import {
   createOfflineUnassignProcessor,
+  type OfflineUnassignQueue,
   registerAssignmentEventHandlers,
 } from '../assignment/assignment-events.js';
 import { RedisOfflineSinceStore, StorePresenceReader } from '../assignment/presence-adapters.js';
@@ -278,7 +279,18 @@ const assignmentReads = (redis: Redis) => {
   };
 };
 
-/** M3-01's calendar, for M2-06's out-of-hours reply. */
+/** M1-07's delayed timers, added under the id the caller derived from the departure. */
+const offlineUnassignQueue = (queue: Queue): OfflineUnassignQueue => ({
+  add: async ({ jobId, delayMs, payload }) => {
+    await queue.add(assignmentOfflineUnassignJob.name, payload, {
+      ...assignmentOfflineUnassignJob.options,
+      jobId,
+      delay: delayMs,
+    });
+  },
+});
+
+/** M3-01's calendar, for M2-06's out-of-hours reply and M1-07's offline timer. */
 const businessHoursService = (): BusinessHoursService => {
   const repository = new SlaRepository();
 
@@ -340,18 +352,9 @@ export const workerDependencies: WorkerDependencies = {
 
     // M1-07. `assignment.staff_offline` ends in a delayed job, for the same
     // reason and under the same rule as the media one above.
-    const assignment = new Queue(QUEUE_NAMES.assignment, { connection: redis });
     registerAssignmentEventHandlers({
       ...assignmentReads(redis),
-      queue: {
-        add: async ({ jobId, delayMs, payload }) => {
-          await assignment.add(assignmentOfflineUnassignJob.name, payload, {
-            ...assignmentOfflineUnassignJob.options,
-            jobId,
-            delay: delayMs,
-          });
-        },
-      },
+      queue: offlineUnassignQueue(new Queue(QUEUE_NAMES.assignment, { connection: redis })),
     });
 
     // M2-05 and M2-06. `email.send` ends in a job on the `outbound` queue, under
@@ -537,12 +540,19 @@ export const workerDependencies: WorkerDependencies = {
     );
     return worker;
   },
-  createAssignmentWorker: ({ redis, db, log }) =>
-    createWorker(
+  createAssignmentWorker: ({ redis, db, log }) => {
+    const businessHours = businessHoursService();
+    return createWorker(
       assignmentOfflineUnassignJob,
-      createOfflineUnassignProcessor(assignmentReads(redis)),
+      createOfflineUnassignProcessor({
+        ...assignmentReads(redis),
+        calendarFor: (tx, brandId, departmentId) =>
+          businessHours.calendarFor(brandId, departmentId, tx),
+        queue: offlineUnassignQueue(new Queue(QUEUE_NAMES.assignment, { connection: redis })),
+      }),
       { redis, db, log },
-    ),
+    );
+  },
   createMaintenanceWorker: ({ redis, db, log }) => {
     const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
     const scheduled = maintenance.upsertJobScheduler(

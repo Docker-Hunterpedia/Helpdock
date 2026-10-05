@@ -1,6 +1,6 @@
 import type { DbTransaction } from '@helpdock/db';
 import { type AssignmentOfflineUnassignPayload, outboxEvents, silentLogger } from '@helpdock/jobs';
-import type { PresenceStatus } from '@helpdock/schemas';
+import { alwaysOpenCalendar, type BusinessCalendar, type PresenceStatus } from '@helpdock/schemas';
 import type { Job } from 'bullmq';
 import { describe, expect, it, vi } from 'vitest';
 import type {
@@ -329,12 +329,26 @@ describe('assignment.offline_unassign', () => {
     since,
   };
 
+  // 2026-09-24T10:15Z, the timer's due time, is a Thursday: 13:15 in Riyadh.
+  const firedAt = new Date('2026-09-24T10:15:00.000Z');
+  const sundayToThursday = (holidays: BusinessCalendar['holidays'] = []): BusinessCalendar => {
+    const day = [{ start: '09:00', end: '17:00' }];
+    return { timezone: 'Asia/Riyadh', weekly: [day, day, day, day, day, [], []], holidays };
+  };
+
   const run = async (
     repository: AssignmentRepository,
     {
       status = 'offline',
       latest = since,
-    }: { status?: PresenceStatus; latest?: string | null } = {},
+      calendar = alwaysOpenCalendar('UTC'),
+      add = vi.fn(async () => {}),
+    }: {
+      status?: PresenceStatus;
+      latest?: string | null;
+      calendar?: BusinessCalendar;
+      add?: ReturnType<typeof vi.fn>;
+    } = {},
   ) => {
     const { tx, inserted } = fakeTx();
     await createOfflineUnassignProcessor({
@@ -342,6 +356,9 @@ describe('assignment.offline_unassign', () => {
       presence: { online: async () => new Set([sue]) },
       lookup: { statusOf: async () => status },
       offlineSince: { set: async () => {}, get: async () => latest },
+      calendarFor: async () => calendar,
+      queue: { add },
+      now: () => firedAt,
     })({ payload, brandId, tx, job: {} as Job, log: silentLogger });
 
     return inserted;
@@ -371,6 +388,41 @@ describe('assignment.offline_unassign', () => {
     const repository = fakeRepository();
     await run(repository, state);
 
+    expect(repository.openTicketsOf).not.toHaveBeenCalled();
+  });
+
+  it('puts itself off to the next opening while the department is closed', async () => {
+    const repository = fakeRepository();
+    const add = vi.fn(async () => {});
+    // Thursday is a holiday, so the next opening is Sunday 09:00 in Riyadh.
+    const calendar = sundayToThursday([{ startsOn: '2026-09-24', endsOn: '2026-09-24' }]);
+    await run(repository, { calendar, add });
+
+    const opening = '2026-09-27T06:00:00.000Z';
+    expect(repository.openTicketsOf).not.toHaveBeenCalled();
+    expect(add).toHaveBeenCalledWith({
+      jobId: `offline-unassign-${sam}-${support}-${Date.parse(since)}-${Date.parse(opening)}`,
+      delayMs: Date.parse(opening) - firedAt.getTime(),
+      payload: { ...payload, deferredTo: opening },
+    });
+  });
+
+  it('acts at once when the department is open', async () => {
+    const repository = fakeRepository();
+    const add = vi.fn(async () => {});
+    await run(repository, { calendar: sundayToThursday(), add });
+
+    expect(add).not.toHaveBeenCalled();
+    expect(repository.openTicketsOf).toHaveBeenCalled();
+  });
+
+  it('never unassigns in a department whose calendar never opens', async () => {
+    const repository = fakeRepository();
+    const add = vi.fn(async () => {});
+    const closed = { timezone: 'UTC', weekly: [[], [], [], [], [], [], []], holidays: [] };
+    await run(repository, { calendar: closed, add });
+
+    expect(add).not.toHaveBeenCalled();
     expect(repository.openTicketsOf).not.toHaveBeenCalled();
   });
 

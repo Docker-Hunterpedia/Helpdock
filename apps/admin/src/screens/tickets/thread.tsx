@@ -401,6 +401,10 @@ export const describeEvent = (
   if (entry.action === 'ticket.macro_applied') {
     return `${t('macros:event.applied', { actor, name: String(entry.to?.macroName ?? '') })} · ${at}`;
   }
+  // M7-05: an article drafted from this ticket, sent for approval.
+  if (entry.action === 'ticket.article_proposed') {
+    return `${t('tickets:event.articleProposed', { actor })} · ${at}`;
+  }
   // M5-08: "Still need help?" from a help center article.
   if (entry.action === 'ticket.source_article') {
     return `${t('tickets:event.sourceArticle', { title: String(entry.to?.title ?? '') })} · ${at}`;

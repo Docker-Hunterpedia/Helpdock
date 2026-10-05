@@ -30,6 +30,9 @@ import { MockNotificationsApi } from '../notifications/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { HttpTelegramApi } from '../telegram/http-api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { HttpTicketingApi } from '../ticketing/http-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -68,6 +71,8 @@ export interface AdminApis {
   readonly browserPush: BrowserPush;
   /** M5-07: Brand › Domains. */
   readonly domains: DomainsApi;
+  /** M6: Channels › Telegram and a Telegram ticket's chat. */
+  readonly telegram: TelegramApi;
 }
 
 /**
@@ -114,6 +119,7 @@ export function createApis(
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
       domains: new HttpDomainsApi(transport),
+      telegram: new HttpTelegramApi(transport),
     };
   }
 
@@ -150,5 +156,6 @@ export function createApis(
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    telegram: new MockTelegramApi(),
   };
 }

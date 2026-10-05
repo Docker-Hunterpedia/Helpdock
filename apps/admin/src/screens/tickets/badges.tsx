@@ -224,12 +224,19 @@ const CHANNEL_ICONS = {
 export function ChannelLabel({
   channel,
   departmentName,
+  handle,
 }: {
   readonly channel: TicketChannel;
   readonly departmentName?: string | undefined;
+  /** Who on the channel, when it is not an address: Telegram's "@mona_k" (M6-02). */
+  readonly handle?: string | undefined;
 }): ReactNode {
   const t = useT();
   const Icon = CHANNEL_ICONS[channel];
+  const name =
+    handle === undefined
+      ? t(`tickets:channel.${channel}`)
+      : t('tickets:telegram.chip', { channel: t(`tickets:channel.${channel}`), username: handle });
 
   return (
     <Typography
@@ -237,9 +244,7 @@ export function ChannelLabel({
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}
     >
       <Icon size={14} aria-hidden="true" />
-      {departmentName === undefined
-        ? t(`tickets:channel.${channel}`)
-        : `${t(`tickets:channel.${channel}`)} · ${departmentName}`}
+      <bdi>{departmentName === undefined ? name : `${name} · ${departmentName}`}</bdi>
     </Typography>
   );
 }

@@ -547,5 +547,48 @@
     "none": "لا تنطبق سياسة مستوى خدمة",
     "noneDetail": "لا سياسة تطابق {{department}} بأولوية {{priority}}.",
     "policiesLink": "سياسات مستوى الخدمة"
+  },
+  "telegram": {
+    "chip": "{{channel}} · @{{username}}",
+    "via": "عبر @{{bot}}",
+    "toChat": "إلى محادثة تيليغرام",
+    "sent": "أُرسل",
+    "queued": "يُرسل",
+    "notDelivered": "لم يُسلَّم",
+    "notDeliveredDetail": "{{error}} · {{attempts}} محاولات",
+    "retry": "إعادة المحاولة",
+    "retryLabel": "إعادة إرسال هذا الرد إلى تيليغرام",
+    "retried": "يُعاد إرسال الرد",
+    "retryFailed": "لم ينجح ذلك. حاول مرة أخرى.",
+    "composerTo": "إلى محادثة تيليغرام",
+    "composerFoot": "يرسله @{{bot}} نصًا عاديًا؛ بلا توقيع.",
+    "voice": {
+      "play": "تشغيل الرسالة الصوتية، {{duration}}",
+      "pause": "إيقاف الرسالة الصوتية، {{duration}}",
+      "loadFailed": "تعذّر تشغيل الرسالة الصوتية."
+    },
+    "location": {
+      "label": "الموقع",
+      "open": "فتح الخريطة",
+      "openLabel": "فتح الموقع {{coordinates}} على OpenStreetMap"
+    },
+    "identity": {
+      "heading": "هوية تيليغرام",
+      "chatId": "معرّف المحادثة",
+      "copy": "نسخ معرّف المحادثة",
+      "copied": "نُسخ معرّف المحادثة",
+      "username": "اسم المستخدم",
+      "name": "الاسم",
+      "language": "اللغة",
+      "chosen": "{{language}}، اختيرت عند ‎/start",
+      "notChosen": "لم تُختر بعد",
+      "bot": "البوت",
+      "none": "—",
+      "footer": "معرّف المحادثة موثّق من تيليغرام ويعرّف جهة الاتصال هذه. أسماء المستخدمين قد تتغير."
+    },
+    "languages": {
+      "en": "الإنجليزية",
+      "ar": "العربية"
+    }
   }
 }

@@ -26,6 +26,7 @@ export function MessageBubble({
   author,
   meta,
   bodyHtml,
+  extra,
   attachments,
   footer,
 }: {
@@ -34,6 +35,8 @@ export function MessageBubble({
   /** The caption after the name: address, channel and time. */
   readonly meta: ReactNode;
   readonly bodyHtml: string;
+  /** Drawn under the body: a shared location's LocationLine (M6-03). */
+  readonly extra?: ReactNode;
   /** The chips under the body, when the message came with files (M1-10). */
   readonly attachments?: ReactNode;
   /** The sending / not-sent row under an optimistic bubble. */
@@ -136,6 +139,7 @@ export function MessageBubble({
           // biome-ignore lint/security/noDangerouslySetInnerHtml: `body_html` is sanitised by the api before it is stored (ADR 0007); see the note at the top of this file.
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
         />
+        {extra === undefined ? null : <Box sx={{ marginBlockStart: 2 }}>{extra}</Box>}
         {attachments === undefined ? null : (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, marginBlockStart: 3 }}>
             {attachments}

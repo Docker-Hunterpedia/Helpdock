@@ -69,7 +69,9 @@ const TRANSCRIPT_POLL_MS = 5_000;
 
 export interface TicketAssistInput {
   readonly brandId: string;
-  readonly ticket: Ticket;
+  readonly ticketId: string;
+  /** Undefined while the ticket is being read; nothing is drawn until it is. */
+  readonly ticket: Ticket | undefined;
   readonly reference: string;
   readonly canWrite: boolean;
   readonly mode: 'reply' | 'note';
@@ -94,8 +96,7 @@ export interface TicketAssist {
 }
 
 export function useTicketAssist(input: TicketAssistInput): TicketAssist {
-  const { brandId, ticket, canWrite } = input;
-  const ticketId = ticket.id;
+  const { brandId, ticketId, ticket, canWrite } = input;
   const t = useT();
   const { locale } = usePreferences();
   const api = useAssistApi();
@@ -113,7 +114,7 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
   const state = useQuery({
     queryKey: assistKeys.state(brandId, ticketId),
     queryFn: () => api.state(brandId, ticketId),
-    enabled: canWrite,
+    enabled: canWrite && ticket !== undefined,
   });
   const enabled = state.data?.enabled === true;
   const redactions = useQuery({
@@ -257,7 +258,7 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
   /** Accepting goes through the ticket's own endpoints, then the field leaves the card. */
   const accept = async (row: SuggestedRow): Promise<void> => {
     if (row.target.field === 'tag') {
-      await input.setTags([...(ticket.tags ?? []).map((tag) => tag.id), row.target.tagId]);
+      await input.setTags([...(ticket?.tags ?? []).map((tag) => tag.id), row.target.tagId]);
     } else if (row.target.field === 'priority') {
       const priority = state.data?.suggestions?.priority;
       if (priority !== undefined && priority !== null) {
@@ -274,7 +275,7 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
 
   const rows = useMemo(
     () =>
-      suggestionRows(state.data?.suggestions ?? null, {
+      suggestionRows(state.data?.suggestions, {
         tags: input.tags,
         departments: input.departments,
         ticket,
@@ -486,7 +487,7 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
 }
 
 const suggestionRows = (
-  suggestions: FieldSuggestions | null,
+  suggestions: FieldSuggestions | null | undefined,
   {
     tags,
     departments,
@@ -497,13 +498,13 @@ const suggestionRows = (
   }: {
     readonly tags: readonly TagSummary[];
     readonly departments: readonly Department[];
-    readonly ticket: Ticket;
+    readonly ticket: Ticket | undefined;
     readonly locale: 'en' | 'ar';
     readonly priorityName: (priority: TicketPriority) => string;
     readonly labels: { tag: string; priority: string; department: string };
   },
 ): SuggestedRow[] => {
-  if (suggestions === null) {
+  if (suggestions === null || suggestions === undefined || ticket === undefined) {
     return [];
   }
   const onTicket = new Set((ticket.tags ?? []).map((tag) => tag.id));
@@ -519,12 +520,7 @@ const suggestionRows = (
             : tag.name;
       },
       departmentName: (id) => {
-        const department = departments.find((candidate) => candidate.id === id);
-        return department === undefined
-          ? undefined
-          : locale === 'ar' && department.nameAr
-            ? department.nameAr
-            : department.name;
+        return departments.find((candidate) => candidate.id === id)?.name;
       },
       priorityName,
       current: { priority: ticket.priority, departmentId: ticket.departmentId },

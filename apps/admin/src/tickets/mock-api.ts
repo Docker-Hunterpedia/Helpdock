@@ -410,7 +410,8 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       authorId: MOCK_CONTACT_GMAIL,
       channel: 'chat',
       bodyText:
-        'The portal keeps telling me my password is wrong, but the reset email never comes.',
+        // M7-08: a phone number and an address, which "Show redacted" masks.
+        'The portal keeps telling me my password is wrong, but the reset email never comes. Write to omar.a@gmail.com or call +49 30 1234567.',
       createdAt: at(-5 * HOUR),
     }),
     message({

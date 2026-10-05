@@ -42,6 +42,8 @@ import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { useToast } from '../../ui/toasts.tsx';
+import { useTicketAssist } from './assist/use-ticket-assist.tsx';
+import { TranscriptsProvider } from './assist/voice-transcript.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
 import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
@@ -51,6 +53,7 @@ import { LogTimeDialog } from './log-time-dialog.tsx';
 import { MacroPicker } from './macro-picker.tsx';
 import { MergeDialog } from './merge-dialog.tsx';
 import { MergedIntoBanner } from './merged-block.tsx';
+import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 import { SplitDialog } from './split-dialog.tsx';
 import { StagedMacroChips } from './staged-macro.tsx';
 import { ChannelIdentityCard } from './telegram/channel-identity-card.tsx';
@@ -502,6 +505,23 @@ export function TicketView({
     [directory, viewer, contact.data, detail.data],
   );
 
+  // M7-05, M7-08, M7-09: agent assist, "Show redacted" and voice transcripts.
+  const assist = useTicketAssist({
+    brandId,
+    ticketId,
+    ticket: detail.data?.ticket,
+    reference: detail.data === undefined ? '' : ticketReference(detail.data.ticket),
+    canWrite,
+    mode,
+    body,
+    setBody,
+    contactLocale: contact.data?.locale ?? brand.data?.defaultLocale ?? 'en',
+    tags: directory.tags,
+    departments: directory.departments,
+    updateTicket: (patch) => update.mutateAsync(patch),
+    setTags: (tagIds) => tags.mutateAsync([...tagIds]),
+  });
+
   const headerViewers = viewers.map(({ userId, activity }) => ({
     name: directory.staff.find((member) => member.userId === userId)?.name ?? userId.slice(0, 8),
     activity,
@@ -643,6 +663,7 @@ export function TicketView({
           }}
         />
       ) : null}
+      {assist.fieldsCard}
       {csat === null ? null : (
         <CsatCard
           csat={csat}
@@ -822,36 +843,44 @@ export function TicketView({
           aria-label={t('tickets:thread.label')}
           sx={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 5 }}
         >
-          <Thread
-            items={items}
-            names={names}
-            now={now}
-            merges={{
-              ticketId,
-              merged,
-              links: visibleLinks(detail.data?.related ?? []),
-              busy: unmerge.isPending,
-              onUnmerge: (secondaryId) => {
-                unmerge.mutate(secondaryId);
-              },
-              // M2-04: "Merge into HD-1042…" on the threading-mismatch line.
-              onMergeInto: (reference) => {
-                setMergeTerm(reference);
-                setDialog('merge');
-              },
-            }}
-            deliveryFooter={(message) =>
-              ticketEmail.deliveryFooter(message) ?? ticketTelegram.deliveryFooter(message)
-            }
-            telegram={ticketTelegram.thread}
-            onRetry={(message) => {
-              dispatch({ type: 'retried', clientId: message.clientId, now: Date.now() });
-              send.mutate({ ...message, state: 'sending', sentAt: Date.now() });
-            }}
-            onDiscard={(message) => {
-              dispatch({ type: 'discarded', clientId: message.clientId });
-            }}
-          />
+          {assist.summary === null ? null : (
+            <Box sx={{ maxWidth: MESSAGE_MAX_WIDTH, marginInline: 'auto', marginBlockEnd: 4 }}>
+              {assist.summary}
+            </Box>
+          )}
+          <TranscriptsProvider value={assist.transcripts}>
+            <Thread
+              items={items}
+              names={names}
+              now={now}
+              merges={{
+                ticketId,
+                merged,
+                links: visibleLinks(detail.data?.related ?? []),
+                busy: unmerge.isPending,
+                onUnmerge: (secondaryId) => {
+                  unmerge.mutate(secondaryId);
+                },
+                // M2-04: "Merge into HD-1042…" on the threading-mismatch line.
+                onMergeInto: (reference) => {
+                  setMergeTerm(reference);
+                  setDialog('merge');
+                },
+              }}
+              deliveryFooter={(message) =>
+                ticketEmail.deliveryFooter(message) ?? ticketTelegram.deliveryFooter(message)
+              }
+              telegram={ticketTelegram.thread}
+              assist={assist.thread}
+              onRetry={(message) => {
+                dispatch({ type: 'retried', clientId: message.clientId, now: Date.now() });
+                send.mutate({ ...message, state: 'sending', sentAt: Date.now() });
+              }}
+              onDiscard={(message) => {
+                dispatch({ type: 'discarded', clientId: message.clientId });
+              }}
+            />
+          </TranscriptsProvider>
         </Box>
 
         {mergedInto === null ? (
@@ -938,6 +967,8 @@ export function TicketView({
                   : { bot: telegramChat.bot.username, username: telegramChat.username }
               }
               macrosOpen={picking}
+              assist={assist.menu}
+              suggestion={assist.composerCard}
               {...(canWrite
                 ? {
                     onOpenMacros: () => {
@@ -956,6 +987,7 @@ export function TicketView({
       </Box>
 
       {spam.dialog}
+      {assist.dialog}
 
       <MergeDialog
         open={dialog === 'merge'}

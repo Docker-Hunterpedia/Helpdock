@@ -116,7 +116,8 @@
       "ai": "بالذكاء الاصطناعي",
       "system": "من النظام"
     },
-    "sourceArticle": "جاء من مقالة مركز المساعدة «{{title}}»"
+    "sourceArticle": "جاء من مقالة مركز المساعدة «{{title}}»",
+    "articleProposed": "اقترح {{actor}} مقالًا · بانتظار الموافقة"
   },
   "composer": {
     "label": "رد أو ملاحظة داخلية",
@@ -133,8 +134,6 @@
     "attach": "إرفاق ملف",
     "attachFiles": "اختر ملفات للإرفاق",
     "canned": "الماكرو والردود الجاهزة",
-    "translate": "ترجمة إلى العربية",
-    "translateUnavailable": "تصل الترجمة مع M7.",
     "thenSetStatus": "ثم اضبط الحالة",
     "keepStatus": "اترك الحالة",
     "suggestion": "رد مقترح",
@@ -589,6 +588,160 @@
     "languages": {
       "en": "الإنجليزية",
       "ar": "العربية"
+    }
+  },
+  "assist": {
+    "badge": "ذكاء اصطناعي",
+    "button": "المساعد",
+    "discard": "تجاهل",
+    "sources": "المصادر",
+    "public": "عام",
+    "internal": "داخلي",
+    "removedOnInsert": "يُحذف عند الإدراج",
+    "titleWithPage": "{{title}} · ص {{page}}",
+    "translate": "ترجمة",
+    "showOriginal": "عرض الأصل",
+    "showRedacted": "عرض المحجوب",
+    "writtenIn": "مكتوبة بال{{language}}",
+    "translatedFrom": "مترجمة من ال{{language}} بالذكاء الاصطناعي",
+    "redactedBeforeAi_zero": "لم يُحجب شيء قبل الذكاء الاصطناعي",
+    "redactedBeforeAi_one": "حُجب عنصر واحد قبل الذكاء الاصطناعي",
+    "redactedBeforeAi_two": "حُجب عنصران قبل الذكاء الاصطناعي",
+    "redactedBeforeAi_few": "حُجبت {{count}} عناصر قبل الذكاء الاصطناعي",
+    "redactedBeforeAi_many": "حُجب {{count}} عنصرًا قبل الذكاء الاصطناعي",
+    "redactedBeforeAi_other": "حُجب {{count}} عنصر قبل الذكاء الاصطناعي",
+    "languages": {
+      "en": "إنجليزية",
+      "ar": "عربية"
+    },
+    "tones": {
+      "friendlier": "أكثر ودًّا",
+      "formal": "أكثر رسمية",
+      "shorter": "أقصر"
+    },
+    "piiKinds": {
+      "email": "بريد",
+      "phone": "هاتف",
+      "card": "بطاقة",
+      "iban": "IBAN"
+    },
+    "menu": {
+      "suggestReply": "اقتراح رد",
+      "summarize": "تلخيص التذكرة",
+      "suggestFields": "اقتراح الوسوم والأولوية والقسم",
+      "translate": "ترجمة الرد إلى ال{{language}}",
+      "writeFirst": "اكتب ردًا أولًا",
+      "rewrite": "إعادة صياغة النبرة",
+      "draftArticle": "مسودة مقال من التذكرة",
+      "onceClosed": "متاح بعد إغلاق التذكرة",
+      "sentForApproval": "أُرسل للموافقة",
+      "viewProposal": "عرض المقترح",
+      "footnote": "يستخدم المعرفة العامة والداخلية. تُحجب بيانات العميل قبل إرسال أي شيء."
+    },
+    "budget": {
+      "warning": "استُخدم {{percent}} % من ميزانية الذكاء الاصطناعي هذا الشهر. نُبّه المسؤولون.",
+      "stopped": "بلغت ميزانية الذكاء الاصطناعي حدها. المساعد والرد التلقائي متوقفان حتى {{date}}، أو حتى يرفع مسؤول الميزانية في الذكاء الاصطناعي › المساعد.",
+      "keepsAssist": "الرد التلقائي متوقف حتى {{date}}. يبقى المساعد متاحًا للموظفين."
+    },
+    "reply": {
+      "title": "رد مقترح",
+      "caption_zero": "{{language}} · بلا مصادر",
+      "caption_one": "{{language}} · يستشهد بمصدر واحد",
+      "caption_two": "{{language}} · يستشهد بمصدرين",
+      "caption_few": "{{language}} · يستشهد بـ {{count}} مصادر",
+      "caption_many": "{{language}} · يستشهد بـ {{count}} مصدرًا",
+      "caption_other": "{{language}} · يستشهد بـ {{count}} مصدر",
+      "insert": "إدراج"
+    },
+    "rewrite": {
+      "title": "معاد صياغته",
+      "tone": "النبرة",
+      "keep": "الإبقاء على نصي",
+      "replace": "استبدال النص"
+    },
+    "translation": {
+      "title": "مترجم إلى ال{{language}}"
+    },
+    "summary": {
+      "title": "الملخص",
+      "caption_zero": "بلا رسائل · {{time}}",
+      "caption_one": "من رسالة واحدة · {{time}}",
+      "caption_two": "من رسالتين · {{time}}",
+      "caption_few": "من {{count}} رسائل · {{time}}",
+      "caption_many": "من {{count}} رسالة · {{time}}",
+      "caption_other": "من {{count}} رسالة · {{time}}",
+      "refresh": "تحديث",
+      "hide": "إخفاء الملخص"
+    },
+    "fields": {
+      "title": "حقول مقترحة",
+      "acceptAll": "قبول الكل",
+      "tag": "وسم",
+      "priority": "الأولوية",
+      "department": "القسم",
+      "accept": "قبول {{field}} {{value}}",
+      "dismiss": "تجاهل {{field}} {{value}}",
+      "caption": "لا يتغير شيء حتى تقبل. النقل إلى قسم لست فيه يخفي التذكرة عنك."
+    },
+    "log": {
+      "title": "سجل الذكاء الاصطناعي",
+      "model": "النموذج",
+      "tokens": "الرموز",
+      "tokensValue": "{{in}} داخل · {{out}} خارج",
+      "cost": "التكلفة",
+      "redactions": "المحجوبات"
+    },
+    "transcript": {
+      "toggle": "النص المكتوب",
+      "pending": "جارٍ التفريغ…",
+      "caption": "النص المكتوب · ذكاء اصطناعي · {{language}} · للموظفين فقط",
+      "unknown": "لم تُكتشف اللغة"
+    },
+    "draft": {
+      "title": "مسودة مقال من",
+      "caption": "يكتب المساعد المسودة من رسائل التذكرة العامة بعد الحجب. يراجعها قائد فريق، ولا يُضاف شيء إلى مركز المساعدة حتى يوافق وينشر.",
+      "close": "إغلاق",
+      "section": "القسم الفرعي",
+      "reviewerChooses": "دع المراجع يختار",
+      "language": "اللغة",
+      "drafting": "جارٍ كتابة المسودة…",
+      "articleTitle": "العنوان",
+      "body": "المسودة",
+      "from_zero": "بلا رسائل.",
+      "from_one": "من رسالة واحدة.",
+      "from_two": "من رسالتين.",
+      "from_few": "من {{count}} رسائل.",
+      "from_many": "من {{count}} رسالة.",
+      "from_other": "من {{count}} رسالة.",
+      "fromCiting_zero": "بلا رسائل · يستشهد بـ {{titles}}.",
+      "fromCiting_one": "من رسالة واحدة · يستشهد بـ {{titles}}.",
+      "fromCiting_two": "من رسالتين · يستشهد بـ {{titles}}.",
+      "fromCiting_few": "من {{count}} رسائل · يستشهد بـ {{titles}}.",
+      "fromCiting_many": "من {{count}} رسالة · يستشهد بـ {{titles}}.",
+      "fromCiting_other": "من {{count}} رسالة · يستشهد بـ {{titles}}.",
+      "check": "تأكد أنها نصيحة عامة بلا بيانات عملاء.",
+      "note": "ملاحظة للمراجع (اختيارية)",
+      "again": "مسودة جديدة",
+      "cancel": "إلغاء",
+      "send": "إرسال للموافقة",
+      "sent": "أُرسل للموافقة. سيراجعه قادة الفرق."
+    },
+    "paused": {
+      "label": "المساعد متوقف",
+      "since": "حُوّل إلى شخص عند",
+      "return": "إعادة إلى المساعد"
+    },
+    "failed": {
+      "generic": "تعذّر على المساعد ذلك. حاول مرة أخرى.",
+      "assist-off": "مساعد الوكلاء متوقف لهذه العلامة.",
+      "budget-exceeded": "نفدت ميزانية الذكاء الاصطناعي. المساعد متوقف حتى تتجدد.",
+      "not-configured": "لم يُعدّ نموذج ذكاء اصطناعي بعد. يمكن للمسؤول اختياره في الذكاء الاصطناعي › المزوّدون.",
+      "provider-failed": "لم يستجب مزوّد الذكاء الاصطناعي. حاول مرة أخرى؛ المحاولة مسجلة في سجل الذكاء الاصطناعي.",
+      "ticket-not-closed": "يمكن كتابة مسودة مقال بعد إغلاق التذكرة.",
+      "proposal-exists": "لهذه التذكرة مقال ينتظر الموافقة بالفعل.",
+      "proposal-decided": "سبق قبول هذا المقترح أو رفضه.",
+      "nothing-to-work-from": "لا توجد رسالة من العميل ليعمل عليها المساعد.",
+      "unreadable-answer": "تعذّرت قراءة إجابة المساعد. حاول مرة أخرى."
     }
   }
 }

@@ -292,6 +292,27 @@ describe.skipIf(!hasDocker)('the first-run wizard', () => {
     expect(row?.value).not.toContain('relay-secret');
   }, 120_000);
 
+  it('generates the VAPID pair when the wizard finishes, with the private half encrypted', async () => {
+    const { setupToken } = await createAdmin();
+    await post('/api/install/setup/brand', BRAND, setupToken);
+
+    const done = await post('/api/install/setup/complete', undefined, setupToken);
+
+    expect(done.statusCode).toBe(201);
+    const publicKey = await runtime.settings.get('push.vapidPublicKey');
+    const privateKey = await runtime.settings.get('push.vapidPrivateKey');
+    expect(publicKey).toMatch(/^[A-Za-z0-9_-]{87}$/);
+    expect(done.body).not.toContain(privateKey);
+    const stored = await owner.db.execute(
+      sql`SELECT value FROM settings WHERE key = 'push.vapidPrivateKey' AND brand_id = ${INSTALL_SCOPE_BRAND_ID}`,
+    );
+    expect((stored as unknown as { value: string }[])[0]?.value).toMatch(/^v1\./);
+    const audit = await owner.db.execute(
+      sql`SELECT meta FROM audit_log WHERE action = 'install.setup.push'`,
+    );
+    expect(JSON.stringify([...audit])).not.toContain(privateKey);
+  }, 120_000);
+
   it('reports a relay that is not listening as a connection failure, not a crash', async () => {
     const { setupToken } = await createAdmin();
 

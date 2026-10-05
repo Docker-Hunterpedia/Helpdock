@@ -116,7 +116,7 @@ Written down and carried forward. None of them blocks M4, M5, M6 or M8.
 
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
-| **The first-run wizard does not generate the VAPID pair** | ADR 0002 expects it to. Keys come from `HD_PUSH_VAPID_*` or the settings table; without them push reads "Not set up on this install". | [notifications](../guides/notifications.md#known-gaps) |
+| ~~The first-run wizard does not generate the VAPID pair~~ | Closed in M9: finishing the wizard generates the pair when the install has none. | [notifications](../guides/notifications.md#known-gaps) |
 | ~~Notification rows are not purged by retention~~ | Closed by follow-up #144: the nightly job deletes rows older than the panel's 30-day window. | [notifications](../guides/notifications.md#the-bell) |
 | **A rule's Notify shares the Escalation preference** | A preference row of its own would need an artboard. | [M3-07 notes](#m3-07-notifications) |
 | **Compliance reports for `slaCountReopens` wait for M8** | The setting is stored and served. Time waiting on the customer (`paused_total_ms`) is stored too, and nothing reports it yet. | [SLA guide](../guides/slas.md#known-gaps) |

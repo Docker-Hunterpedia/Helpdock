@@ -52,8 +52,8 @@ Copied from the PRD, ticked as they are met.
 ## M6-01 grammY adapter
 
 - `packages/channels/src/telegram/`: `TelegramBotApi` over grammY's `Api` (`getMe`,
-  `setWebhook`, `getWebhookInfo`, `getUpdates`, `sendMessage`, `answerCallbackQuery`,
-  `getFile` plus a capped download), `classifyUpdate` (a Zod schema of the update subset
+  `setWebhook`, `deleteWebhook`, `getWebhookInfo`, `getUpdates`, `sendMessage`,
+  `sendPhoto`, `sendDocument`, `answerCallbackQuery`, `getFile` plus a capped download), `classifyUpdate` (a Zod schema of the update subset
   Helpdock reads), `TelegramChannelAdapter` / `toTelegramInboundMessage`, and the text
   helpers (`splitTelegramText`, `locationText`, `languageKeyboard`).
 - The Bot API host is fixed; `TELEGRAM_API_ROOT` (default `https://api.telegram.org`) exists

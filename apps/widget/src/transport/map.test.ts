@@ -97,6 +97,7 @@ const wireConfig: WireConfig = {
     nextOpenAt: null,
     timezone: 'Asia/Dubai',
     agentsOnline: false,
+    agents: [],
   },
   popularArticles: [
     { id: 'a1', title: 'Refunds', excerpt: 'Card refunds…', section: null, url: 'https://hc/a1' },
@@ -177,12 +178,30 @@ describe('toConfig', () => {
 describe('toAvailability', () => {
   it('derives the three header states from the calendar and the people', () => {
     const at = (open: boolean, agentsOnline: boolean) =>
-      toAvailability({ open, agentsOnline, nextOpenAt: null, timezone: 'UTC' }).state;
+      toAvailability({ open, agentsOnline, agents: [], nextOpenAt: null, timezone: 'UTC' }).state;
 
     expect(at(true, true)).toBe('online');
     expect(at(true, false)).toBe('open_offline');
     expect(at(false, true)).toBe('closed');
     expect(at(false, false)).toBe('closed');
+  });
+
+  it('carries who is online, keyed by position because the api sends no staff id', () => {
+    const availability = toAvailability({
+      open: true,
+      agentsOnline: true,
+      agents: [
+        { name: 'Lina', avatarUrl: null },
+        { name: 'Sara', avatarUrl: 'https://cdn.acme.test/sara.webp' },
+      ],
+      nextOpenAt: null,
+      timezone: 'UTC',
+    });
+
+    expect(availability.agents_online).toEqual([
+      { id: 'online-0', name: 'Lina', avatar_url: null },
+      { id: 'online-1', name: 'Sara', avatar_url: 'https://cdn.acme.test/sara.webp' },
+    ]);
   });
 });
 

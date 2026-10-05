@@ -1,7 +1,6 @@
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import type { Redis } from 'ioredis';
-import { z } from 'zod';
-import { PRINCIPAL_REVOKED_CHANNEL } from '../auth/redis-keys.js';
+import { PRINCIPAL_REVOKED_CHANNEL, principalRevokedSchema } from '../auth/redis-keys.js';
 import type { Logger } from '../logging/logger.js';
 import { LOGGER, REDIS } from '../runtime/tokens.js';
 import { quietly } from './redis-io.adapter.js';
@@ -12,8 +11,10 @@ import { SocketRegistry } from './socket-registry.js';
  * `principal.revoked` over Redis and every replica disconnects that principal's
  * sockets within 5 seconds" (DOMAIN-RULES §1.4).
  *
- * M0-05 publishes; this subscribes. The budget is five seconds and the actual
- * latency is one Redis round trip, because the work is local: the registry
+ * M0-05 publishes; this subscribes. A message that names refresh families
+ * closes only the sockets opened with tokens of those families — one browser
+ * signing out leaves the person's others connected. The budget is five seconds
+ * and the actual latency is one Redis round trip, because the work is local: the registry
  * already knows which of this replica's sockets belong to that person.
  *
  * The connection is a dedicated one. A subscribed ioredis client may run no
@@ -65,13 +66,17 @@ export class RevocationSubscriber implements OnModuleInit, OnModuleDestroy {
    * anything with `PUBLISH` on this Redis can write to the channel.
    */
   disconnectRevoked(message: string): void {
-    const parsed = revokedSchema.safeParse(safeJson(message));
+    const parsed = principalRevokedSchema.safeParse(safeJson(message));
     if (!parsed.success) {
       this.#logger.warn('Ignored a malformed principal.revoked message');
       return;
     }
 
-    const sockets = this.#registry.socketsOf(parsed.data.principalId);
+    const { principalId, familyIds } = parsed.data;
+    const families = familyIds === undefined ? null : new Set(familyIds);
+    const sockets = this.#registry
+      .socketsOf(principalId)
+      .filter((socket) => families === null || families.has(socket.data.familyId));
     for (const socket of sockets) {
       // `emit` before `disconnect`, so the client knows why it is being closed
       // and shows "signed out elsewhere" rather than reconnecting in a loop.
@@ -87,13 +92,6 @@ export class RevocationSubscriber implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
-
-/** The payload `SessionService` publishes. */
-const revokedSchema = z.object({
-  principalType: z.literal('staff'),
-  principalId: z.uuid(),
-  reason: z.string(),
-});
 
 const safeJson = (message: string): unknown => {
   try {

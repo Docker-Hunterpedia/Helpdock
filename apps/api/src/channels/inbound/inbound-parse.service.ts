@@ -12,11 +12,13 @@ import { type Db, mailboxes } from '@helpdock/db';
 import type { InboundParseOutcome, InboundParseProvider } from '@helpdock/schemas';
 import {
   BadRequestException,
+  GoneException,
   HttpException,
   HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
+import { isBrandGone } from '../../brands/brand-availability.js';
 import { withSystemJob } from '../../tenant/system-job.js';
 import type { MailboxesRepository, MailboxLocator } from '../mailboxes.repository.js';
 import type { InboundEmailService } from './inbound-email.service.js';
@@ -82,6 +84,11 @@ export class InboundParseService {
     if (presented === undefined || !(await this.#secretMatches(mailbox, presented))) {
       await this.#record(mailbox, request.provider, 'refused');
       throw refused();
+    }
+    // M8-07: after the secret, so a stranger cannot learn which addresses
+    // belong to a brand being deleted.
+    if (await isBrandGone(this.#db, mailbox.brandId)) {
+      throw new GoneException('This brand is no longer available');
     }
 
     const result = await this.#inbound.receive(

@@ -1,0 +1,172 @@
+# Helpdock's own Semgrep rules (M9-05, ARCHITECTURE §15). Each one is a rule from
+# AGENTS.md "Engineering rules" that a type checker cannot see. CI runs them in
+# `.github/workflows/semgrep.yml`; locally:
+#
+#   semgrep scan --config .semgrep/helpdock.yml --error apps packages scripts
+#   semgrep scan --test .semgrep        # the fixtures in .semgrep/helpdock.ts
+#
+# A finding that is deliberate is silenced on its line with
+# `// nosemgrep: <rule id>` and a comment that says why. See
+# docs/guides/security-scanning.md.
+rules:
+  - id: helpdock-route-without-declaration
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Every route and socket-event handler declares what it needs with
+      @Requires(permission), @Authenticated() or @Public(), on the handler or its
+      class (DOMAIN-RULES §1.3). The permission guard refuses an undeclared
+      handler at runtime; this catches it in review.
+    paths:
+      include:
+        - /apps/*/src/
+      exclude:
+        - '*.test.ts'
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              @Controller(...)
+              class $CLASS { ... }
+          - pattern-inside: |
+              @WebSocketGateway(...)
+              class $CLASS { ... }
+      - pattern-not-inside: |
+          @Requires(...)
+          class $CLASS { ... }
+      - pattern-not-inside: |
+          @Authenticated(...)
+          class $CLASS { ... }
+      - pattern-not-inside: |
+          @Public(...)
+          class $CLASS { ... }
+      - pattern: |
+          @$ROUTE(...)
+          $METHOD(...) { ... }
+      - metavariable-regex:
+          metavariable: $ROUTE
+          regex: ^(Get|Post|Put|Patch|Delete|Head|Options|All|SubscribeMessage)$
+      - pattern-not: |
+          @Requires(...)
+          $METHOD(...) { ... }
+      - pattern-not: |
+          @Authenticated(...)
+          $METHOD(...) { ... }
+      - pattern-not: |
+          @Public(...)
+          $METHOD(...) { ... }
+
+  - id: helpdock-fetch-non-constant-url
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      fetch() on a URL that is not a constant. A user-supplied URL goes through
+      safeFetch from @helpdock/net (DOMAIN-RULES §13), which refuses private
+      networks and re-checks every redirect. If the URL is install
+      configuration rather than user input, say so in a nosemgrep comment.
+    paths:
+      include:
+        - /apps/api/src/
+        - /packages/*/src/
+      exclude:
+        - /packages/net/
+        - /apps/api/src/testing/
+        - '*.test.ts'
+        - '*.perf.ts'
+    patterns:
+      - pattern: fetch($URL, ...)
+      - pattern-not: fetch("...", ...)
+
+  - id: helpdock-enqueue-from-request-path
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      A BullMQ queue in a controller, gateway or service. Side effects are
+      written to the transactional outbox in the same transaction as the domain
+      change and enqueued by the worker (DOMAIN-RULES §6), never from a request
+      handler or an event listener.
+    paths:
+      include:
+        - '*.controller.ts'
+        - '*.gateway.ts'
+        - '*.service.ts'
+        - '*.listener.ts'
+      exclude:
+        - '*.test.ts'
+    pattern-either:
+      - pattern: import { ... } from 'bullmq'
+      - pattern: import $Q from 'bullmq'
+
+  - id: helpdock-enqueue-in-handler
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      A job added from a request handler or an event listener. Write an outbox
+      row in the request's transaction instead (enqueueOutbox from
+      @helpdock/jobs); the worker turns it into the job (DOMAIN-RULES §6).
+    paths:
+      include:
+        - /apps/api/src/
+      exclude:
+        - '*.test.ts'
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              @Controller(...)
+              class $CLASS { ... }
+          - pattern-inside: |
+              @WebSocketGateway(...)
+              class $CLASS { ... }
+          - pattern-inside: |
+              @OnEvent(...)
+              $METHOD(...) { ... }
+      # `queue.add(someJob.name, payload)` is how this codebase adds a job; a
+      # service's own `add(context, body)` is not one.
+      - pattern-either:
+          - pattern: new Queue(...)
+          - pattern: $QUEUE.add($JOB.name, ...)
+          - pattern: $QUEUE.add("...", $DATA, ...)
+          - pattern: $QUEUE.addBulk(...)
+
+  - id: helpdock-any-without-comment
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      `any` without a comment saying why (AGENTS.md "Style"). Put the reason on
+      the line above, or use `unknown` and narrow.
+    paths:
+      include:
+        - /apps/*/src/
+        - /packages/*/src/
+        - /scripts/
+      exclude:
+        - '*.d.ts'
+    patterns:
+      - pattern-regex: (?m)^(?![ \t]*(//|\*|/\*)).*(\bas any\b|:\s*any\s*([;,)=|\]>{]|$)|<any>|\bany\[\]).*$
+      # A comment on the line above, or at the end of the line, is the reason.
+      # Semgrep's own test annotations (`// ruleid:`, `// ok:`) are not.
+      - pattern-not-regex: (?m)^[ \t]*//(?![ \t]*(ruleid|ok|todoruleid|todook):).*\n.*(\bas any\b|:\s*any\s*([;,)=|\]>{]|$)|<any>|\bany\[\]).*$
+      - pattern-not-regex: (?m)^.*(\bas any\b|:\s*any\s*([;,)=|\]>{]|$)|<any>|\bany\[\]).*//(?![ \t]*(ruleid|ok|todoruleid|todook):).*$
+
+  - id: helpdock-secret-in-log
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      A secret-looking field in a log call. Secrets are never logged
+      (REQUIREMENTS §5.1); log an id, a hash prefix or a boolean instead.
+    paths:
+      include:
+        - /apps/*/src/
+        - /packages/*/src/
+      exclude:
+        - '*.test.ts'
+    patterns:
+      - pattern-either:
+          - pattern: '$LOG.$LEVEL({..., $KEY: $VALUE, ...}, ...)'
+          - pattern: $LOG.$LEVEL({..., $KEY, ...}, ...)
+      - metavariable-regex:
+          metavariable: $LEVEL
+          regex: ^(trace|debug|info|warn|error|fatal|log)$
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: >-
+            (?i)^["']?(password|passwd|passphrase|secret|clientsecret|client_secret|token|accesstoken|access_token|refreshtoken|refresh_token|apikey|api_key|privatekey|private_key|masterkey|totpsecret|authorization|cookie|signingsecret|setupkey)["']?$

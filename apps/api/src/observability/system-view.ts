@@ -5,7 +5,9 @@ import type {
   SystemCheck,
   SystemQueues,
   SystemRelay,
+  SystemStorage,
 } from '@helpdock/schemas';
+import type { StorageUsageRecord } from './storage-usage.js';
 
 /**
  * The readings turned into the states the System page draws: a hue per card and
@@ -114,3 +116,33 @@ export const queuePageView = (
   page,
   pageSize,
 });
+
+/**
+ * The storage card from the worker's per-brand readings: the total, and each
+ * brand largest first. No reading at all is "not measured yet", not an empty
+ * bucket.
+ */
+export const storageView = (
+  readings: readonly StorageUsageRecord[],
+  brandNames: ReadonlyMap<string, string>,
+): SystemStorage => {
+  if (readings.length === 0) {
+    return { configured: false };
+  }
+  const perBrand = readings
+    .map((reading) => ({
+      brandId: reading.brandId,
+      name: brandNames.get(reading.brandId) ?? '',
+      usedBytes: reading.bytes,
+      objects: reading.objects,
+      measuredAt: reading.measuredAt,
+    }))
+    .sort((a, b) => b.usedBytes - a.usedBytes || a.name.localeCompare(b.name));
+
+  return {
+    configured: true,
+    usedBytes: perBrand.reduce((total, brand) => total + brand.usedBytes, 0),
+    softLimitBytes: null,
+    brands: perBrand,
+  };
+};

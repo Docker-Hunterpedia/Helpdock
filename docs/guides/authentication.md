@@ -297,6 +297,8 @@ revoked session ids can never grow without bound.
 Every revocation publishes `principal.revoked` on Redis. M0-13 is the subscriber
 that disconnects that principal's sockets within five seconds
 ([DOMAIN-RULES §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets)).
+A revocation of particular families names them in `familyIds`, and only the
+sockets of those browsers close ([realtime](realtime.md#revocation)).
 
 ## Rate limits
 

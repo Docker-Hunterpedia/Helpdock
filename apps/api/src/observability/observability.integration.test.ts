@@ -2,17 +2,32 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import { auditLog, brands, type Db, userBrandRoles, users, uuidv7 } from '@helpdock/db';
-import { createQueueConnection, QUEUE_NAMES, RELAY_STATUS_KEY } from '@helpdock/jobs';
-import type { Principal, SystemQueuePage, SystemStatus } from '@helpdock/schemas';
+import {
+  createQueueConnection,
+  QUEUE_NAME_LIST,
+  QUEUE_NAMES,
+  RELAY_STATUS_KEY,
+} from '@helpdock/jobs';
+import {
+  type Principal,
+  type ProductMetrics,
+  productMetricsSchema,
+  type SystemQueuePage,
+  type SystemStatus,
+} from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEV_PRINCIPAL_ENV_KEY, DEV_PRINCIPAL_HEADER } from '../auth/principal-resolver.js';
+import { issueAccessToken } from '../auth/session/access-token.js';
+import { RefreshStore } from '../auth/session/refresh-store.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { ObservabilityGauges } from './observability.module.js';
+import { QUEUE_BOARD_COOKIE, QUEUE_BOARD_PATH } from './queue-board.js';
+import { StorageUsageStore } from './storage-usage.js';
 
 /**
  * M0-10 against the real thing: a real Postgres with the real migrations, a
@@ -420,6 +435,111 @@ describe.skipIf(!hasDocker)('observability', () => {
       expect((await get('/api/install/system/queues', asPrincipal(brandAdmin))).statusCode).toBe(
         403,
       );
+    });
+  });
+
+  describe('M8-05: storage, product metrics and the queue dashboard', () => {
+    it("reports storage from the worker's readings, with the brand's name", async () => {
+      await new StorageUsageStore(runtime.redis).write({
+        brandId: BRAND,
+        bytes: 5_000,
+        objects: 2,
+        measuredAt: new Date().toISOString(),
+      });
+
+      const status = (
+        await get('/api/install/system', asPrincipal(installAdmin))
+      ).json<SystemStatus>();
+
+      expect(status.storage).toMatchObject({
+        configured: true,
+        usedBytes: 5_000,
+        brands: [{ brandId: BRAND, name: 'Acme', usedBytes: 5_000, objects: 2 }],
+      });
+    });
+
+    it('serves the product metrics to an install admin alone', async () => {
+      const response = await get('/api/install/system/metrics', asPrincipal(installAdmin));
+
+      expect(response.statusCode).toBe(200);
+      const metrics = response.json<ProductMetrics>();
+      expect(productMetricsSchema.safeParse(metrics).success).toBe(true);
+      expect(metrics.activation).toMatchObject({ firstChannelTicketAt: null, activated: false });
+      expect(metrics.brands).toEqual([
+        {
+          brandId: BRAND,
+          name: 'Acme',
+          selfService: { articleViews: 0, widgetViews: 0, followedByTicket: 0, rate: null },
+          aiDeflectionRate: null,
+        },
+      ]);
+      expect((await get('/api/install/system/metrics', asPrincipal(brandAdmin))).statusCode).toBe(
+        403,
+      );
+    });
+
+    describe('the queue dashboard', () => {
+      const board = (url: string, cookie?: string) =>
+        app.inject({
+          method: 'GET',
+          url,
+          ...(cookie === undefined ? {} : { cookies: { [QUEUE_BOARD_COOKIE]: cookie } }),
+        });
+      const askForPass = (headers: Record<string, string>) =>
+        app.inject({ method: 'POST', url: '/api/install/system/queue-board', headers });
+
+      it('is refused to a brand admin, and to an install admin with no browser session', async () => {
+        expect((await askForPass(asPrincipal(brandAdmin))).statusCode).toBe(403);
+        expect((await askForPass(asPrincipal(installAdmin))).statusCode).toBe(403);
+      });
+
+      it('answers 401 to a request without a board session, and to a pass that is not one', async () => {
+        expect((await board(`${QUEUE_BOARD_PATH}/`)).statusCode).toBe(401);
+        expect(
+          (await board(`${QUEUE_BOARD_PATH}/api/queues`, 'made-up-session-id')).statusCode,
+        ).toBe(401);
+        expect((await board(`${QUEUE_BOARD_PATH}/_session?pass=nope`)).statusCode).toBe(401);
+      });
+
+      it('opens every queue for an install admin signed in to the admin, and closes on sign-out', async () => {
+        const refresh = new RefreshStore(runtime.redis);
+        const { familyId } = await refresh.createFamily({
+          userId: installAdminId,
+          userAgent: 'test',
+        });
+        const token = await issueAccessToken(
+          { userId: installAdminId, sessionId: uuidv7(), familyId, brands: {}, installAdmin: true },
+          runtime.signingKeys,
+        );
+
+        // This suite signs in through the development header; the bearer token is
+        // what names the browser session the dashboard follows.
+        const passed = await askForPass({
+          ...asPrincipal(installAdmin),
+          authorization: `Bearer ${token}`,
+        });
+        expect(passed.statusCode).toBe(200);
+        const { url } = passed.json<{ url: string }>();
+
+        const opened = await board(url);
+        expect(opened.statusCode).toBe(303);
+        const cookie = opened.cookies.find((c) => c.name === QUEUE_BOARD_COOKIE);
+        expect(cookie).toMatchObject({
+          httpOnly: true,
+          sameSite: 'Strict',
+          path: QUEUE_BOARD_PATH,
+        });
+        expect((await board(url)).statusCode).toBe(401);
+
+        const page = await board(`${QUEUE_BOARD_PATH}/`, cookie?.value);
+        expect(page.statusCode).toBe(200);
+        expect(page.headers['content-security-policy']).toContain("script-src 'self'");
+        const queues = await board(`${QUEUE_BOARD_PATH}/api/queues`, cookie?.value);
+        expect(queues.json<{ queues: unknown[] }>().queues).toHaveLength(QUEUE_NAME_LIST.length);
+
+        await refresh.revokeFamily(familyId);
+        expect((await board(`${QUEUE_BOARD_PATH}/api/queues`, cookie?.value)).statusCode).toBe(401);
+      });
     });
   });
 });

@@ -2,11 +2,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 /**
- * `pnpm --filter @helpdock/api perf:tickets`: the ticket list's performance
- * gate (M1-15, DOMAIN-RULES §14). Its own config because it is neither a unit
- * nor an integration suite — it takes a quarter of an hour, and its numbers
- * mean something only on the §14 host — so neither `pnpm test` nor
- * `pnpm test:integration` picks it up. See `docs/guides/tickets.md`.
+ * The performance gates of DOMAIN-RULES §14: `perf:tickets` (M1-15),
+ * `perf:help-center` and `perf:realtime` (M9-03), each a file filter on the
+ * same suite. Its own config because it is neither a unit nor an integration
+ * suite — a run takes a quarter of an hour, and its numbers mean something
+ * only on the §14 host — so neither `pnpm test` nor `pnpm test:integration`
+ * picks it up. See `docs/guides/performance.md`.
  */
 export default defineConfig({
   resolve: {

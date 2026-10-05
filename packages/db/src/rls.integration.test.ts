@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { brandOwnedTables, purgeBrandRows } from './brand-purge.js';
 import { createDb, type Db, type DbHandle, type DbTransaction } from './client.js';
 import { runMigrations } from './migrate.js';
 import { TENANT_TABLES } from './rls.js';
@@ -45,6 +46,10 @@ import {
   mailboxes,
   notifications,
   outbox,
+  reportAgentDaily,
+  reportDaily,
+  reportHelpCenterDaily,
+  reportSearchDaily,
   retentionSettings,
   settings,
   slaPolicies,
@@ -843,6 +848,42 @@ const fixtures = [
         chatId: '42',
       }),
   },
+  {
+    name: 'report_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(reportDaily).values({
+        brandId,
+        day: '2026-10-01',
+        departmentId: departmentId[brandId] ?? '',
+        channel: 'email',
+        priority: 'medium',
+        created: 1,
+      }),
+  },
+  {
+    name: 'report_agent_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(reportAgentDaily).values({
+        brandId,
+        day: '2026-10-01',
+        departmentId: departmentId[brandId] ?? '',
+        channel: 'email',
+        agentId: userId,
+        replies: 1,
+      }),
+  },
+  {
+    name: 'report_search_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx
+        .insert(reportSearchDaily)
+        .values({ brandId, day: '2026-10-01', locale: 'en', query: 'refund', searches: 1 }),
+  },
+  {
+    name: 'report_help_center_daily',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(reportHelpCenterDaily).values({ brandId, day: '2026-10-01', articleViews: 1 }),
+  },
 ] as const;
 
 const brandIdsIn = async (tx: DbTransaction, table: string): Promise<string[]> => {
@@ -1336,5 +1377,56 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       );
 
     expect(rejection?.cause?.message).toMatch(/row-level security/i);
+  });
+
+  /**
+   * M8-07, last because it empties brand A. Every tenant table holds a row of
+   * each brand by now — the fixtures above, plus the personal rows the owner
+   * suites added — so a purge that missed a table, or could not delete from
+   * one in the order it chose, fails here.
+   */
+  describe('the brand purge (M8-07)', () => {
+    /** Rows per table for a brand, read as the superuser, which row security does not narrow. */
+    const rowsOf = async (brandId: string): Promise<Record<string, number>> => {
+      const tables = await withSystem(db, brandId, brandOwnedTables);
+      const counts: Record<string, number> = {};
+      for (const table of tables) {
+        const [row] = await owner.db.execute<{ count: number }>(
+          sql`SELECT count(*)::int AS count FROM ${sql.identifier(table)} WHERE brand_id = ${brandId}`,
+        );
+        counts[table] = row?.count ?? 0;
+      }
+      return counts;
+    };
+
+    it('reaches every tenant table, because it reads them from the schema', async () => {
+      const purged = await withSystem(db, brandA, brandOwnedTables);
+
+      expect(purged).toEqual(expect.arrayContaining(TENANT_TABLES.map((table) => table.name)));
+    });
+
+    it('deletes every row of the brand, its owners’ personal rows included, and nothing of another brand', async () => {
+      const before = await rowsOf(brandA);
+      const otherBefore = await rowsOf(brandB);
+      expect(before.views).toBeGreaterThan(otherBefore.views ?? 0);
+      for (const table of TENANT_TABLES) {
+        expect(before[table.name], `${table.name} has a row to purge`).toBeGreaterThan(0);
+      }
+
+      // A batch of two, so every table with more than one row is drained in several.
+      const removed = await purgeBrandRows({
+        db,
+        brandId: brandA,
+        principalId: 'brand.purge.test',
+        batchSize: 2,
+      });
+
+      const after = await rowsOf(brandA);
+      expect(Object.entries(after).filter(([, count]) => count > 0)).toEqual([]);
+      // A foreign key's cascade takes some rows before their own table's turn,
+      // so the counts are what the purge's own statements removed.
+      expect(Object.keys(removed)).toEqual(expect.arrayContaining(Object.keys(before)));
+      expect(await rowsOf(brandB)).toEqual(otherBefore);
+    });
   });
 });

@@ -25,6 +25,7 @@ export * from './job-receipts.js';
 export * from './mailboxes.js';
 export * from './notifications.js';
 export * from './outbox.js';
+export * from './reports.js';
 export * from './retention-settings.js';
 export * from './settings.js';
 export * from './sla-policies.js';

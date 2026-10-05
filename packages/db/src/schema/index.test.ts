@@ -64,6 +64,10 @@ describe('the schema', () => {
       'notifications',
       'outbox',
       'push_subscriptions',
+      'report_agent_daily',
+      'report_daily',
+      'report_help_center_daily',
+      'report_search_daily',
       'retention_settings',
       'settings',
       'sla_policies',
@@ -125,7 +129,7 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but fifteen has a uuid primary key; `settings` is keyed by
+    // Every table but nineteen has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
     // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
     // they join, `retention_settings`, `email_outbound_settings`,
@@ -133,8 +137,9 @@ describe('the schema', () => {
     // `hc_settings` by their brand, `ticket_search_tokens` by the ticket and
     // the word, `notification_prefs` by its person, `hc_search_documents` by
     // the article version it indexes and `hc_article_views` by the article,
-    // the visitor and the day.
-    expect(generated).toHaveLength(byName.size - 15);
+    // the visitor and the day. The four report rollups of M8-04 have no key:
+    // a run deletes and rewrites a brand's days whole.
+    expect(generated).toHaveLength(byName.size - 19);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

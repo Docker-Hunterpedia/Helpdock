@@ -1,6 +1,6 @@
 # Public REST API
 
-Tickets, contacts, help center articles and webhook endpoints of one brand, for an integration: a CRM, an order system, a script (M8-01, M8-02, [REQUIREMENTS §4.11](../planning/REQUIREMENTS.md#411-public-rest-api-tenant), [ADR 0017](../decisions/0017-api-scopes-and-openapi-from-zod.md)). Outbound events are in [Webhooks](webhooks.md).
+Tickets, contacts, help center articles and webhook endpoints of one brand, for an integration: a CRM, an order system, a script (M8-01, M8-02, [REQUIREMENTS §4.11](../planning/REQUIREMENTS.md#411-public-rest-api-tenant), [ADR 0019](../decisions/0019-api-scopes-and-openapi-from-zod.md)). Outbound events are in [Webhooks](webhooks.md).
 
 ## The OpenAPI document
 

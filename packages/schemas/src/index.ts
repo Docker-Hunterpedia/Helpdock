@@ -29,6 +29,7 @@ export * from './participants.js';
 export * from './placeholders.js';
 export * from './principal.js';
 export * from './realtime.js';
+export * from './reports.js';
 export * from './retention.js';
 export * from './rule-conditions.js';
 export * from './sla.js';

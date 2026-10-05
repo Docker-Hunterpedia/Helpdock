@@ -1,5 +1,5 @@
 {
-  "id": "46ae5292-c6f0-4534-9ebd-3ea36e0af277",
+  "id": "3009a8cd-a7bf-4824-bdd9-08a202db86af",
   "prevId": "85279627-266f-4f5e-8fb8-696cfb19af2f",
   "version": "7",
   "dialect": "postgresql",
@@ -74,277 +74,6 @@
           "columns": ["brand_id", "domain"]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.api_idempotency_keys": {
-      "name": "api_idempotency_keys",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "api_key_id": {
-          "name": "api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_hash": {
-          "name": "request_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "response": {
-          "name": "response",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "api_idempotency_keys_key": {
-          "name": "api_idempotency_keys_key",
-          "columns": [
-            {
-              "expression": "api_key_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "api_idempotency_keys_brand_created_idx": {
-          "name": "api_idempotency_keys_brand_created_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "api_idempotency_keys_brand_id_brands_id_fk": {
-          "name": "api_idempotency_keys_brand_id_brands_id_fk",
-          "tableFrom": "api_idempotency_keys",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "api_idempotency_keys_api_key_id_api_keys_id_fk": {
-          "name": "api_idempotency_keys_api_key_id_api_keys_id_fk",
-          "tableFrom": "api_idempotency_keys",
-          "tableTo": "api_keys",
-          "columnsFrom": ["api_key_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.api_keys": {
-      "name": "api_keys",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "prefix": {
-          "name": "prefix",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_hash": {
-          "name": "key_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scopes": {
-          "name": "scopes",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "rate_limit_per_minute": {
-          "name": "rate_limit_per_minute",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 600
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revoked_by": {
-          "name": "revoked_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "api_keys_key_hash_key": {
-          "name": "api_keys_key_hash_key",
-          "columns": [
-            {
-              "expression": "key_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "api_keys_brand_created_idx": {
-          "name": "api_keys_brand_created_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "api_keys_brand_id_brands_id_fk": {
-          "name": "api_keys_brand_id_brands_id_fk",
-          "tableFrom": "api_keys",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "api_keys_created_by_users_id_fk": {
-          "name": "api_keys_created_by_users_id_fk",
-          "tableFrom": "api_keys",
-          "tableTo": "users",
-          "columnsFrom": ["created_by"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "api_keys_revoked_by_users_id_fk": {
-          "name": "api_keys_revoked_by_users_id_fk",
-          "tableFrom": "api_keys",
-          "tableTo": "users",
-          "columnsFrom": ["revoked_by"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -5239,6 +4968,482 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.report_agent_daily": {
+      "name": "report_agent_daily",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "ticket_channel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "replies": {
+          "name": "replies",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "resolved": {
+          "name": "resolved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "assigned_open": {
+          "name": "assigned_open",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "report_agent_daily_brand_day_idx": {
+          "name": "report_agent_daily_brand_day_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "report_agent_daily_brand_id_brands_id_fk": {
+          "name": "report_agent_daily_brand_id_brands_id_fk",
+          "tableFrom": "report_agent_daily",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.report_daily": {
+      "name": "report_daily",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "ticket_channel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "priority": {
+          "name": "priority",
+          "type": "ticket_priority",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created": {
+          "name": "created",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "resolved": {
+          "name": "resolved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "backlog": {
+          "name": "backlog",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "first_response_ms": {
+          "name": "first_response_ms",
+          "type": "bigint[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::bigint[]"
+        },
+        "resolution_ms": {
+          "name": "resolution_ms",
+          "type": "bigint[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::bigint[]"
+        },
+        "sla_response_met": {
+          "name": "sla_response_met",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sla_response_breached": {
+          "name": "sla_response_breached",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sla_resolution_met": {
+          "name": "sla_resolution_met",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sla_resolution_breached": {
+          "name": "sla_resolution_breached",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "csat_1": {
+          "name": "csat_1",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "csat_2": {
+          "name": "csat_2",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "csat_3": {
+          "name": "csat_3",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "csat_4": {
+          "name": "csat_4",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "csat_5": {
+          "name": "csat_5",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_by_hour": {
+          "name": "created_by_hour",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::integer[]"
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "report_daily_brand_day_idx": {
+          "name": "report_daily_brand_day_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "report_daily_brand_id_brands_id_fk": {
+          "name": "report_daily_brand_id_brands_id_fk",
+          "tableFrom": "report_daily",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.report_help_center_daily": {
+      "name": "report_help_center_daily",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "article_views": {
+          "name": "article_views",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "widget_views": {
+          "name": "widget_views",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "widget_views_followed_by_ticket": {
+          "name": "widget_views_followed_by_ticket",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "report_help_center_daily_brand_day_idx": {
+          "name": "report_help_center_daily_brand_day_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "report_help_center_daily_brand_id_brands_id_fk": {
+          "name": "report_help_center_daily_brand_id_brands_id_fk",
+          "tableFrom": "report_help_center_daily",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.report_search_daily": {
+      "name": "report_search_daily",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "locale": {
+          "name": "locale",
+          "type": "locale",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "query": {
+          "name": "query",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "searches": {
+          "name": "searches",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "zero_results": {
+          "name": "zero_results",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "opened": {
+          "name": "opened",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "report_search_daily_brand_day_idx": {
+          "name": "report_search_daily_brand_day_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "report_search_daily_brand_id_brands_id_fk": {
+          "name": "report_search_daily_brand_id_brands_id_fk",
+          "tableFrom": "report_search_daily",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.retention_settings": {
       "name": "retention_settings",
       "schema": "",
@@ -9083,326 +9288,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.webhook_deliveries": {
-      "name": "webhook_deliveries",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "webhook_id": {
-          "name": "webhook_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event": {
-          "name": "event",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "webhook_delivery_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "response_status": {
-          "name": "response_status",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "response_excerpt": {
-          "name": "response_excerpt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "duration_ms": {
-          "name": "duration_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "error": {
-          "name": "error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "replay_of": {
-          "name": "replay_of",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "last_attempt_at": {
-          "name": "last_attempt_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "delivered_at": {
-          "name": "delivered_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "webhook_deliveries_event_key": {
-          "name": "webhook_deliveries_event_key",
-          "columns": [
-            {
-              "expression": "webhook_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"webhook_deliveries\".\"replay_of\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "webhook_deliveries_webhook_created_idx": {
-          "name": "webhook_deliveries_webhook_created_idx",
-          "columns": [
-            {
-              "expression": "webhook_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "webhook_deliveries_brand_id_brands_id_fk": {
-          "name": "webhook_deliveries_brand_id_brands_id_fk",
-          "tableFrom": "webhook_deliveries",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "webhook_deliveries_webhook_id_webhooks_id_fk": {
-          "name": "webhook_deliveries_webhook_id_webhooks_id_fk",
-          "tableFrom": "webhook_deliveries",
-          "tableTo": "webhooks",
-          "columnsFrom": ["webhook_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.webhooks": {
-      "name": "webhooks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "brand_id": {
-          "name": "brand_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "url": {
-          "name": "url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "events": {
-          "name": "events",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "secret": {
-          "name": "secret",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "secret_rotated_at": {
-          "name": "secret_rotated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "consecutive_failures": {
-          "name": "consecutive_failures",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "disabled_at": {
-          "name": "disabled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "disabled_reason": {
-          "name": "disabled_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "webhooks_brand_created_idx": {
-          "name": "webhooks_brand_created_idx",
-          "columns": [
-            {
-              "expression": "brand_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "webhooks_brand_id_brands_id_fk": {
-          "name": "webhooks_brand_id_brands_id_fk",
-          "tableFrom": "webhooks",
-          "tableTo": "brands",
-          "columnsFrom": ["brand_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "webhooks_created_by_users_id_fk": {
-          "name": "webhooks_created_by_users_id_fk",
-          "tableFrom": "webhooks",
-          "tableTo": "users",
-          "columnsFrom": ["created_by"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.widget_settings": {
       "name": "widget_settings",
       "schema": "",
@@ -10250,11 +10135,6 @@
       "name": "user_status",
       "schema": "public",
       "values": ["invited", "active", "deactivated"]
-    },
-    "public.webhook_delivery_status": {
-      "name": "webhook_delivery_status",
-      "schema": "public",
-      "values": ["pending", "succeeded", "failed", "skipped"]
     },
     "public.workflow_rule_kind": {
       "name": "workflow_rule_kind",

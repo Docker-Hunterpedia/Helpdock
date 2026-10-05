@@ -59,6 +59,7 @@ describe('@helpdock/db', () => {
     expect(sourceFilesIn(new URL('schema/', import.meta.url))).toEqual([
       'accounts.ts',
       'ai.ts',
+      'api-keys.ts',
       'assignment.ts',
       'attachments.ts',
       'audit-log.ts',
@@ -107,6 +108,7 @@ describe('@helpdock/db', () => {
       'users.ts',
       'views.ts',
       'web-form-settings.ts',
+      'webhooks.ts',
       'widget-settings.ts',
       'widget-visitors.ts',
       'workflow-rules.ts',

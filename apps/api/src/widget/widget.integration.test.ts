@@ -55,6 +55,7 @@ import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceService } from '../realtime/presence.service.js';
@@ -373,6 +374,8 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
 
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    // M8-03: every contact the suite makes writes `contact.created`.
+    registerContactEventHandlers();
     registerWidgetEventHandlers(new RedisWidgetBroadcast(worker));
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });

@@ -7,7 +7,7 @@ import { HttpCsatApi } from './http-api.js';
  */
 
 const TOKEN = `${'A'.repeat(43)}.${'o'.repeat(43)}`;
-const BRAND = { name: 'Helpdock', locale: 'en', accent: null };
+const BRAND = { name: 'Helpdock', locale: 'en', accent: null, helpCenterUrl: null };
 
 const answering = (status: number, body: unknown = {}) =>
   vi.fn(() =>

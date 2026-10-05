@@ -48,6 +48,7 @@ const MIGRATION_TAGS = [
   '0033_help_center',
   '0034_help_center_search',
   '0035_help_center_site',
+  '0036_ai_and_knowledge',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

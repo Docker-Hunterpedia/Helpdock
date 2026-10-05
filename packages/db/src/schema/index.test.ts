@@ -25,6 +25,9 @@ describe('the schema', () => {
   it('declares the tables shipped so far (ARCHITECTURE §5)', () => {
     expect([...byName.keys()].sort()).toEqual([
       'accounts',
+      'ai_budget_alerts',
+      'ai_calls',
+      'ai_settings',
       'assignment_agents',
       'assignment_skills',
       'attachments',
@@ -44,6 +47,7 @@ describe('the schema', () => {
       'departments',
       'email_deliveries',
       'email_outbound_settings',
+      'embedding_space',
       'hc_article_feedback',
       'hc_article_versions',
       'hc_article_views',
@@ -57,6 +61,9 @@ describe('the schema', () => {
       'holidays',
       'inbound_parse_settings',
       'job_receipts',
+      'knowledge_chunks',
+      'knowledge_documents',
+      'knowledge_sources',
       'mailboxes',
       'notification_prefs',
       'notifications',
@@ -118,7 +125,7 @@ describe('the schema', () => {
       .filter((column) => column !== undefined)
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but fifteen has a uuid primary key; `settings` is keyed by
+    // Every table but eighteen has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
     // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
     // they join, `retention_settings`, `email_outbound_settings`,
@@ -126,8 +133,9 @@ describe('the schema', () => {
     // `hc_settings` by their brand, `ticket_search_tokens` by the ticket and
     // the word, `notification_prefs` by its person, `hc_search_documents` by
     // the article version it indexes and `hc_article_views` by the article,
-    // the visitor and the day.
-    expect(generated).toHaveLength(byName.size - 15);
+    // the visitor and the day, `ai_settings` by its brand, `ai_budget_alerts`
+    // by the brand, window and level, and `embedding_space` is a single row.
+    expect(generated).toHaveLength(byName.size - 18);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

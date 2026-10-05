@@ -9,6 +9,9 @@ import { TENANT_TABLES } from './rls.js';
 import { APP_ROLE_NAME } from './roles.js';
 import {
   accounts,
+  aiBudgetAlerts,
+  aiCalls,
+  aiSettings,
   assignmentAgents,
   assignmentSkills,
   attachments,
@@ -40,6 +43,9 @@ import {
   hcSettings,
   holidays,
   inboundParseSettings,
+  knowledgeChunks,
+  knowledgeDocuments,
+  knowledgeSources,
   mailboxes,
   notifications,
   outbox,
@@ -124,6 +130,8 @@ const hcCategoryId = perBrand();
 const hcSectionId = perBrand();
 const hcArticleId = perBrand();
 const hcVersionId = perBrand();
+const knowledgeSourceId = perBrand();
+const knowledgeDocumentId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -741,6 +749,74 @@ const fixtures = [
         locale: 'en',
         visitorHash: `visitor-${nextNumber()}`,
         helpful: true,
+      }),
+  },
+  // M7-01, M7-08. AI configuration, the call log and budget alerts: brand-scoped.
+  {
+    name: 'ai_settings',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiSettings).values({ brandId, systemPrompt: 'Answer briefly.' }),
+  },
+  {
+    name: 'ai_calls',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiCalls).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        feature: 'assist.suggest_reply',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        status: 'ok',
+        prompt: { messages: [{ role: 'user', text: 'Where is my refund?' }] },
+        response: 'Refunds take five days.',
+      }),
+  },
+  {
+    name: 'ai_budget_alerts',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(aiBudgetAlerts).values({
+        brandId,
+        period: 'day',
+        periodStart: '2026-10-05',
+        level: 'warning',
+        spentUsd: 8,
+        limitUsd: 10,
+      }),
+  },
+  // M7-02. Knowledge: brand-scoped; visibility is a retrieval filter, not a tenant rule.
+  {
+    name: 'knowledge_sources',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeSources).values({
+        id: knowledgeSourceId[brandId] ?? '',
+        brandId,
+        kind: 'file',
+        name: 'Returns policy.pdf',
+      }),
+  },
+  {
+    name: 'knowledge_documents',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeDocuments).values({
+        id: knowledgeDocumentId[brandId] ?? '',
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        externalId: 'returns-policy.pdf',
+        contentHash: 'sha256-fixture',
+      }),
+  },
+  {
+    name: 'knowledge_chunks',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeChunks).values({
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        documentId: knowledgeDocumentId[brandId] ?? '',
+        ordinal: 0,
+        locale: 'en',
+        visibility: 'internal',
+        content: 'Refunds are issued within five working days.',
+        contentHash: 'sha256-fixture-chunk',
       }),
   },
 ] as const;

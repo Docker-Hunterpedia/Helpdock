@@ -54,6 +54,7 @@ describe('@helpdock/db', () => {
   it('has a schema barrel that knows about every table file', () => {
     expect(sourceFilesIn(new URL('schema/', import.meta.url))).toEqual([
       'accounts.ts',
+      'ai.ts',
       'assignment.ts',
       'attachments.ts',
       'audit-log.ts',
@@ -76,6 +77,7 @@ describe('@helpdock/db', () => {
       'help-center-search.ts',
       'help-center.ts',
       'job-receipts.ts',
+      'knowledge.ts',
       'mailboxes.ts',
       'notifications.ts',
       'outbox.ts',

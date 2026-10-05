@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Helpdock components</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E}a:hover{color:#0C5F59}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1200px; height: 1000px; box-sizing: border-box; padding: 48px; display: flex; flex-direction: column; gap: 28px; background: #F7F5F0;">
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #5C564C;">Foundations · 03</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600;">Components</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #5C564C; max-width: 760px;">Radius 6 px on controls, 10 px on cards and dialogs, full on pills and avatars. Borders do the work; shadows only lift overlays. Focus is a 2 px teal ring, 2 px out.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px;">
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="font-size: 13px; font-weight: 600;">Buttons · md 36 px · sm 28 px · lg 44 px</div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500;">Send reply</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; color: #16181C; font-size: 14px; font-weight: 500;">Add note</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #16181C; font-size: 14px; font-weight: 500;">Cancel</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #B3261E; background: #FFFFFF; color: #B3261E; font-size: 14px; font-weight: 500;">Mark as spam</button>
+        <button type="button" aria-label="Attach file" style="width: 36px; height: 36px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; color: #5C564C; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #0C5F59; background: #0C5F59; color: #FFFFFF; font-size: 14px; font-weight: 500;">Hover</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500; outline: 2px solid #0F766E; outline-offset: 2px;">Focused</button>
+        <button type="button" disabled style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #E3DFD6; background: #EFECE5; color: #A8A196; font-size: 14px; font-weight: 500;">Disabled</button>
+        <button type="button" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; color: #16181C; font-size: 13px; font-weight: 500;">Small</button>
+        <button type="button" style="height: 44px; padding: 0 18px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 15px; font-weight: 500;">Large (widget)</button>
+      </div>
+
+      <div style="font-size: 13px; font-weight: 600; margin-top: 8px;">Inputs</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;"><label for="c-subject" style="font-size: 13px; font-weight: 500;">Subject</label><input id="c-subject" type="text" value="Refund not received" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"></div>
+        <div style="display: flex; flex-direction: column; gap: 6px;"><label for="c-email" style="font-size: 13px; font-weight: 500;">Email</label><input id="c-email" type="email" value="mona@" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #B3261E; background: #FFFFFF; font-size: 14px; color: #16181C; outline: 2px solid #B3261E; outline-offset: 2px;"><div style="font-size: 12px; line-height: 16px; color: #B3261E;">Enter a full email address.</div></div>
+        <div style="display: flex; flex-direction: column; gap: 6px;"><label for="c-dept" style="font-size: 13px; font-weight: 500;">Department</label><select id="c-dept" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; color: #16181C;"><option>Billing</option><option>Technical</option></select></div>
+        <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 24px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 14px;"><input type="checkbox" checked style="width: 16px; height: 16px; accent-color: #0F766E; margin: 0;">Notify customer</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 14px;"><input type="radio" name="c-r" checked style="width: 16px; height: 16px; accent-color: #0F766E; margin: 0;">Public reply</label>
+        </div>
+      </div>
+
+      <div style="font-size: 13px; font-weight: 600; margin-top: 8px;">Message kinds</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="align-self: flex-start; max-width: 420px; padding: 10px 12px; border-radius: 10px; border: 1px solid #E3DFD6; background: #FFFFFF; font-size: 14px; line-height: 20px;">Hi, I still haven't received my refund for order 8841.</div>
+        <div style="align-self: flex-end; max-width: 420px; padding: 10px 12px; border-radius: 10px; background: #ECF7F5; border: 1px solid #CDEBE6; font-size: 14px; line-height: 20px;">Sorry about that, Mona. Refund HD-1042 was issued on the 4th; banks take up to 5 business days.</div>
+        <div style="align-self: stretch; padding: 10px 12px; border-radius: 10px; background: #FBEEDF; border: 1px dashed #B45309; font-size: 14px; line-height: 20px; color: #5C564C;"><span style="font-size: 12px; font-weight: 600; color: #B45309; margin-right: 8px;">INTERNAL NOTE</span>Checked Stripe: payout batch delayed, not our fault.</div>
+        <div style="align-self: flex-end; max-width: 420px; padding: 10px 12px; border-radius: 10px; background: #FFFFFF; border: 1px solid #9DD6CD; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 6px;"><div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #0F766E;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.2 2.2m8.4 8.4 2.2 2.2M5.6 18.4l2.2-2.2m8.4-8.4 2.2-2.2"/></svg>AI · answered from knowledge</div>Refunds take 3–5 business days after issue. <a href="#c" style="font-size: 12px;">Refund policy ↗</a></div>
+        <div style="align-self: center; font-size: 12px; line-height: 16px; color: #5C564C;">Lina changed priority Medium → High · 14:02</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="font-size: 13px; font-weight: 600;">Status and priority badges · 22 px</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+        <span style="height: 22px; padding: 0 8px; border-radius: 999px; background: #ECF7F5; color: #0A4A45; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #0F766E;"></span>Open</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 999px; background: #FBEEDF; color: #7C3A06; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #B45309;"></span>Awaiting customer</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 999px; background: #EEEAF8; color: #46307F; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #6B4FBB;"></span>Escalated</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 999px; background: #EFECE5; color: #5C564C; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #A8A196;"></span>Closed</span>
+      </div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid #CFC9BD; color: #5C564C; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">Low</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid #2B5FB3; color: #2B5FB3; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">Medium</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid #B45309; color: #B45309; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">High</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #B3261E; border: 1px solid #B3261E; color: #FFFFFF; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">Urgent</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #E3DFD6; color: #16181C; font-family: 'IBM Plex Mono', monospace; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2E7D4F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>1h 20m</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #FBE7E5; border: 1px solid #B3261E; color: #B3261E; font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Breached 2h</span>
+      </div>
+
+      <div style="font-size: 13px; font-weight: 600; margin-top: 8px;">Tags, avatars, channels</div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #E6EEF9; color: #1E4483; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">refund</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #E7F3EC; color: #1F5A38; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">vip</span>
+        <span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #EFECE5; color: #5C564C; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">+2</span>
+        <span style="width: 28px; height: 28px; border-radius: 999px; background: #CDEBE6; color: #0A4A45; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">MK</span>
+        <span style="width: 28px; height: 28px; border-radius: 999px; background: #0F766E; color: #FFFFFF; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">L</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5C564C;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5C564C;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.2L4 21l1.8-5.4A8 8 0 1 1 21 12z"/></svg>Widget</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #5C564C;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>Telegram</span>
+      </div>
+
+      <div style="font-size: 13px; font-weight: 600; margin-top: 8px;">Ticket list row · 56 px</div>
+      <div style="border: 1px solid #E3DFD6; border-radius: 10px; background: #FFFFFF; overflow: hidden;">
+        <div style="height: 56px; padding: 0 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #EFECE5;">
+          <input type="checkbox" aria-label="Select HD-1042" style="width: 16px; height: 16px; accent-color: #0F766E; margin: 0;">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #B3261E;"></span>
+          <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0;"><div style="font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Refund not received after 10 days</div><div style="font-size: 12px; color: #5C564C; display: flex; gap: 8px;"><span style="font-family: 'IBM Plex Mono', monospace;">HD-1042</span><span>Mona K.</span><span>Billing</span></div></div>
+          <span style="height: 22px; padding: 0 8px; border-radius: 999px; background: #ECF7F5; color: #0A4A45; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">Open</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #B3261E; font-weight: 500;">-2h</span>
+          <span style="width: 24px; height: 24px; border-radius: 999px; background: #0F766E; color: #FFFFFF; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">L</span>
+        </div>
+        <div style="height: 56px; padding: 0 14px; display: flex; align-items: center; gap: 12px; background: #ECF7F5;">
+          <input type="checkbox" checked aria-label="Select HD-1041" style="width: 16px; height: 16px; accent-color: #0F766E; margin: 0;">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #2B5FB3;"></span>
+          <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0;"><div style="font-size: 14px; font-weight: 500;">Cannot log in from the mobile app</div><div style="font-size: 12px; color: #5C564C; display: flex; gap: 8px;"><span style="font-family: 'IBM Plex Mono', monospace;">HD-1041</span><span>Omar A.</span><span>Technical</span></div></div>
+          <span style="height: 22px; padding: 0 8px; border-radius: 999px; background: #FBEEDF; color: #7C3A06; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;">Awaiting customer</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C564C;">paused</span>
+          <span style="width: 24px; height: 24px; border-radius: 999px; border: 1px dashed #A8A196; display: inline-flex;"></span>
+        </div>
+      </div>
+
+      <div style="font-size: 13px; font-weight: 600; margin-top: 8px;">Overlays</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+        <div style="border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; box-shadow: 0 12px 32px rgba(22,24,28,0.16); padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 16px; font-weight: 600;">Merge into HD-1038?</div>
+          <div style="font-size: 13px; line-height: 18px; color: #5C564C;">HD-1042 will be closed and shown inside HD-1038. You can undo for 24 hours.</div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px;"><button type="button" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-size: 13px; font-weight: 500;">Cancel</button><button type="button" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 13px; font-weight: 500;">Merge</button></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="border-radius: 6px; background: #16181C; color: #ECEBE6; padding: 10px 12px; font-size: 13px; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 12px rgba(22,24,28,0.10);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5FB8AC" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Reply sent to mona@example.com<button type="button" style="margin-left: auto; background: transparent; border: 0; color: #5FB8AC; font-size: 13px; font-weight: 500; padding: 0;">Undo</button></div>
+          <div style="border-radius: 6px; background: #FFFFFF; border: 1px solid #E3DFD6; padding: 6px; display: flex; flex-direction: column; box-shadow: 0 4px 12px rgba(22,24,28,0.10); font-size: 13px;">
+            <div style="padding: 6px 8px; border-radius: 4px;">Assign to me</div>
+            <div style="padding: 6px 8px; border-radius: 4px; background: #EFECE5;">Apply macro…</div>
+            <div style="padding: 6px 8px; border-radius: 4px;">Split messages</div>
+            <div style="height: 1px; background: #EFECE5; margin: 4px 0;"></div>
+            <div style="padding: 6px 8px; border-radius: 4px; color: #B3261E;">Mark as spam</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

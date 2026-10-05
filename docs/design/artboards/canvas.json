@@ -1,0 +1,863 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "AdminAcceptInvite.dc.html": {
+      "h": 800,
+      "title": "Admin/AcceptInvite",
+      "w": 1280,
+      "x": 2720,
+      "y": 4600
+    },
+    "AdminBrand.dc.html": {
+      "h": 900,
+      "title": "Admin/Brand",
+      "w": 1440,
+      "x": 0,
+      "y": 6900
+    },
+    "AdminBrandDanger.dc.html": {
+      "h": 900,
+      "title": "Admin/Brand-Danger",
+      "w": 1440,
+      "x": 0,
+      "y": 7920
+    },
+    "AdminContact.dc.html": {
+      "h": 900,
+      "title": "Admin/Contact",
+      "w": 1440,
+      "x": 1520,
+      "y": 5880
+    },
+    "AdminContactDialogs.dc.html": {
+      "h": 1000,
+      "title": "Admin/Contact-Dialogs",
+      "w": 1574,
+      "x": 1520,
+      "y": 10220
+    },
+    "AdminContacts.dc.html": {
+      "h": 900,
+      "title": "Admin/Contacts",
+      "w": 1440,
+      "x": 0,
+      "y": 5880
+    },
+    "AdminEnrol2FA.dc.html": {
+      "h": 640,
+      "title": "Admin/Enrol2FA",
+      "w": 1120,
+      "x": 1520,
+      "y": 4600
+    },
+    "AdminLogin.dc.html": {
+      "h": 800,
+      "title": "Admin/Login",
+      "w": 1280,
+      "x": 0,
+      "y": 2660
+    },
+    "AdminLoginAR.dc.html": {
+      "h": 800,
+      "title": "Admin/Login-AR",
+      "w": 1280,
+      "x": 1360,
+      "y": 2660
+    },
+    "AdminSettings.dc.html": {
+      "h": 900,
+      "title": "Admin/Settings",
+      "w": 1440,
+      "x": 1360,
+      "y": 3580
+    },
+    "AdminStaff.dc.html": {
+      "h": 900,
+      "title": "Admin/Staff",
+      "w": 1440,
+      "x": 2880,
+      "y": 3580
+    },
+    "AdminSystem.dc.html": {
+      "h": 900,
+      "title": "Admin/System",
+      "w": 1440,
+      "x": 0,
+      "y": 4600
+    },
+    "AdminTicket.dc.html": {
+      "h": 900,
+      "title": "Admin · ticket view",
+      "w": 1440,
+      "x": 0,
+      "y": 1360
+    },
+    "AdminTicketDialogs.dc.html": {
+      "h": 1480,
+      "title": "Admin/Ticket-Dialogs",
+      "w": 1440,
+      "x": 0,
+      "y": 10220
+    },
+    "AdminTicketing.dc.html": {
+      "h": 900,
+      "title": "Admin/Ticketing",
+      "w": 1440,
+      "x": 3040,
+      "y": 5880
+    },
+    "AdminTicketingAssignment.dc.html": {
+      "h": 900,
+      "title": "Admin/Ticketing-Assignment",
+      "w": 1440,
+      "x": 0,
+      "y": 9200
+    },
+    "AdminTicketingFeedback.dc.html": {
+      "h": 900,
+      "title": "Admin/Ticketing-Feedback",
+      "w": 1440,
+      "x": 3040,
+      "y": 9200
+    },
+    "AdminTicketingSpam.dc.html": {
+      "h": 900,
+      "title": "Admin/Ticketing-Spam",
+      "w": 1440,
+      "x": 1520,
+      "y": 9200
+    },
+    "AdminTotp.dc.html": {
+      "h": 560,
+      "title": "Admin/TOTP",
+      "w": 520,
+      "x": 2720,
+      "y": 2660
+    },
+    "AdminWizard.dc.html": {
+      "h": 800,
+      "title": "Admin/Wizard",
+      "w": 1280,
+      "x": 0,
+      "y": 3580
+    },
+    "Components.dc.html": {
+      "h": 1000,
+      "title": "03 Components",
+      "w": 1200,
+      "x": 2560,
+      "y": 0
+    },
+    "CsatAR.dc.html": {
+      "h": 760,
+      "title": "Public/CSAT-AR",
+      "w": 1200,
+      "x": 2800,
+      "y": 6900
+    },
+    "CsatEN.dc.html": {
+      "h": 760,
+      "title": "Public/CSAT-EN",
+      "w": 1200,
+      "x": 1520,
+      "y": 6900
+    },
+    "HelpCenter.dc.html": {
+      "h": 900,
+      "title": "Help center · article",
+      "w": 1280,
+      "x": 2560,
+      "y": 1360
+    },
+    "Main.dc.html": {
+      "h": 760,
+      "title": "01 Color",
+      "w": 1200,
+      "x": 0,
+      "y": 0
+    },
+    "Typography.dc.html": {
+      "h": 760,
+      "title": "02 Typography",
+      "w": 1200,
+      "x": 1280,
+      "y": 0
+    },
+    "WidgetAR.dc.html": {
+      "h": 760,
+      "title": "Widget · AR (RTL)",
+      "w": 440,
+      "x": 2040,
+      "y": 1360
+    },
+    "WidgetEN.dc.html": {
+      "h": 760,
+      "title": "Widget · EN",
+      "w": 440,
+      "x": 1520,
+      "y": 1360
+    },
+    "AdminTicketingViews.dc.html": {
+      "x": 0,
+      "y": 12080,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Ticketing-Views"
+    },
+    "AdminViewDialogs.dc.html": {
+      "x": 1520,
+      "y": 12080,
+      "w": 1440,
+      "h": 1160,
+      "title": "Admin/View-Dialogs"
+    },
+    "AdminTicketTags.dc.html": {
+      "x": 3040,
+      "y": 12080,
+      "w": 1200,
+      "h": 760,
+      "title": "Admin/Ticket-Tags"
+    },
+    "AdminWizardSetupKey.dc.html": {
+      "x": 4400,
+      "y": 3580,
+      "w": 1280,
+      "h": 800,
+      "title": "Admin/Wizard-SetupKey"
+    },
+    "AdminEmail.dc.html": {
+      "x": 0,
+      "y": 13720,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Email"
+    },
+    "AdminEmailOutgoing.dc.html": {
+      "x": 1520,
+      "y": 13720,
+      "w": 1440,
+      "h": 1640,
+      "title": "Admin/Email-Outgoing"
+    },
+    "AdminEmailMailbox.dc.html": {
+      "x": 3040,
+      "y": 13720,
+      "w": 1440,
+      "h": 1240,
+      "title": "Admin/Email-Mailbox"
+    },
+    "AdminTicketEmail.dc.html": {
+      "x": 4560,
+      "y": 13720,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Ticket-Email"
+    },
+    "EmailCustomer.dc.html": {
+      "x": 0,
+      "y": 15480,
+      "w": 1280,
+      "h": 1340,
+      "title": "Email/Customer-EN-AR"
+    },
+    "AdminSignature.dc.html": {
+      "x": 1360,
+      "y": 15480,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Profile-Signature"
+    },
+    "AdminTicketingBusinessHours.dc.html": {
+      "x": 0,
+      "y": 17300,
+      "w": 1440,
+      "h": 1240,
+      "title": "Admin/Ticketing-BusinessHours"
+    },
+    "AdminTicketingSLAs.dc.html": {
+      "x": 1520,
+      "y": 17300,
+      "w": 1440,
+      "h": 1420,
+      "title": "Admin/Ticketing-SLAs"
+    },
+    "AdminTicketSLA.dc.html": {
+      "x": 3040,
+      "y": 17300,
+      "w": 1200,
+      "h": 960,
+      "title": "Admin/Ticket-SLA"
+    },
+    "AdminAutomationRules.dc.html": {
+      "x": 0,
+      "y": 18840,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Automation-Rules"
+    },
+    "AdminRuleBuilder.dc.html": {
+      "x": 1520,
+      "y": 18840,
+      "w": 1440,
+      "h": 1400,
+      "title": "Admin/Rule-Builder"
+    },
+    "AdminAutomationMacros.dc.html": {
+      "x": 3040,
+      "y": 18840,
+      "w": 1440,
+      "h": 960,
+      "title": "Admin/Automation-Macros"
+    },
+    "AdminComposerMacros.dc.html": {
+      "x": 4560,
+      "y": 18840,
+      "w": 1200,
+      "h": 760,
+      "title": "Admin/Composer-Macros"
+    },
+    "AdminNotifications.dc.html": {
+      "x": 0,
+      "y": 20360,
+      "w": 1440,
+      "h": 1880,
+      "title": "Admin/Notifications"
+    },
+    "EmailStaffNotification.dc.html": {
+      "x": 1520,
+      "y": 20360,
+      "w": 1280,
+      "h": 1400,
+      "title": "Email/Staff-Notification"
+    },
+    "AdminAuditLog.dc.html": {
+      "x": 2880,
+      "y": 20360,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Audit-Log"
+    },
+    "WidgetStatesEN.dc.html": {
+      "x": 0,
+      "y": 22720,
+      "w": 2464,
+      "h": 1040,
+      "title": "Widget/States-EN"
+    },
+    "WidgetStatesAR.dc.html": {
+      "x": 2544,
+      "y": 22720,
+      "w": 2464,
+      "h": 1040,
+      "title": "Widget/States-AR"
+    },
+    "WidgetModesEN.dc.html": {
+      "x": 0,
+      "y": 23880,
+      "w": 1268,
+      "h": 1860,
+      "title": "Widget/Modes-EN"
+    },
+    "WidgetModesAR.dc.html": {
+      "x": 1348,
+      "y": 23880,
+      "w": 1268,
+      "h": 1860,
+      "title": "Widget/Modes-AR"
+    },
+    "WebFormEN.dc.html": {
+      "x": 2696,
+      "y": 23880,
+      "w": 1280,
+      "h": 900,
+      "title": "Public/WebForm-EN"
+    },
+    "WebFormAR.dc.html": {
+      "x": 4056,
+      "y": 23880,
+      "w": 1280,
+      "h": 900,
+      "title": "Public/WebForm-AR"
+    },
+    "AdminWidget.dc.html": {
+      "x": 0,
+      "y": 25860,
+      "w": 1440,
+      "h": 2880,
+      "title": "Admin/Channels-Widget"
+    },
+    "AdminWebForm.dc.html": {
+      "x": 1520,
+      "y": 25860,
+      "w": 1440,
+      "h": 1040,
+      "title": "Admin/Channels-WebForm"
+    },
+    "HelpCenterHomeEN.dc.html": {
+      "x": 0,
+      "y": 29340,
+      "w": 1280,
+      "h": 1440,
+      "title": "HelpCenter/Home-EN"
+    },
+    "HelpCenterHomeAR.dc.html": {
+      "x": 1360,
+      "y": 29340,
+      "w": 1280,
+      "h": 1440,
+      "title": "HelpCenter/Home-AR"
+    },
+    "HelpCenterCategoryEN.dc.html": {
+      "x": 2720,
+      "y": 29340,
+      "w": 1280,
+      "h": 1020,
+      "title": "HelpCenter/Category-EN"
+    },
+    "HelpCenterCategoryAR.dc.html": {
+      "x": 4080,
+      "y": 29340,
+      "w": 1280,
+      "h": 1020,
+      "title": "HelpCenter/Category-AR"
+    },
+    "HelpCenterArticleAR.dc.html": {
+      "x": 0,
+      "y": 30900,
+      "w": 1280,
+      "h": 1480,
+      "title": "HelpCenter/Article-AR"
+    },
+    "HelpCenterSearchEN.dc.html": {
+      "x": 1360,
+      "y": 30900,
+      "w": 1280,
+      "h": 1600,
+      "title": "HelpCenter/Search-EN"
+    },
+    "HelpCenterSearchAR.dc.html": {
+      "x": 2720,
+      "y": 30900,
+      "w": 1280,
+      "h": 1520,
+      "title": "HelpCenter/Search-AR"
+    },
+    "HelpCenterStatesEN.dc.html": {
+      "x": 4080,
+      "y": 30900,
+      "w": 1280,
+      "h": 1980,
+      "title": "HelpCenter/States-EN"
+    },
+    "AdminHelpCenter.dc.html": {
+      "x": 0,
+      "y": 33000,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/HelpCenter"
+    },
+    "AdminArticleEditor.dc.html": {
+      "x": 1520,
+      "y": 33000,
+      "w": 1440,
+      "h": 1880,
+      "title": "Admin/HelpCenter-Editor"
+    },
+    "AdminHelpCenterSettings.dc.html": {
+      "x": 3040,
+      "y": 33000,
+      "w": 1440,
+      "h": 2580,
+      "title": "Admin/HelpCenter-Settings"
+    },
+    "AdminBrandDomains.dc.html": {
+      "x": 4560,
+      "y": 33000,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Brand-Domains"
+    },
+    "AdminChannelsTelegram.dc.html": {
+      "x": 0,
+      "y": 36160,
+      "w": 1440,
+      "h": 2700,
+      "title": "Admin/Channels-Telegram"
+    },
+    "AdminTicketTelegram.dc.html": {
+      "x": 1520,
+      "y": 36160,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Ticket-Telegram"
+    },
+    "TelegramChatEN.dc.html": {
+      "x": 3040,
+      "y": 36160,
+      "w": 1280,
+      "h": 1240,
+      "title": "Telegram/Chat-EN"
+    },
+    "TelegramChatAR.dc.html": {
+      "x": 4400,
+      "y": 36160,
+      "w": 1280,
+      "h": 1240,
+      "title": "Telegram/Chat-AR"
+    },
+    "AdminAIProviders.dc.html": {
+      "x": 0,
+      "y": 39500,
+      "w": 1440,
+      "h": 2620,
+      "title": "Admin/AI-Providers"
+    },
+    "AdminAIKnowledge.dc.html": {
+      "x": 1520,
+      "y": 39500,
+      "w": 1440,
+      "h": 1820,
+      "title": "Admin/AI-Knowledge"
+    },
+    "AdminAIAssistant.dc.html": {
+      "x": 3040,
+      "y": 39500,
+      "w": 1440,
+      "h": 2140,
+      "title": "Admin/AI-Assistant"
+    },
+    "AdminWizardAI.dc.html": {
+      "x": 4560,
+      "y": 39500,
+      "w": 1280,
+      "h": 800,
+      "title": "Admin/Wizard-AI"
+    },
+    "AdminTicketAI.dc.html": {
+      "x": 0,
+      "y": 42500,
+      "w": 1440,
+      "h": 3280,
+      "title": "Admin/Ticket-AI"
+    },
+    "WidgetAIEN.dc.html": {
+      "x": 1520,
+      "y": 42500,
+      "w": 2060,
+      "h": 1040,
+      "title": "Widget/AI-EN"
+    },
+    "WidgetAIAR.dc.html": {
+      "x": 3660,
+      "y": 42500,
+      "w": 2060,
+      "h": 1040,
+      "title": "Widget/AI-AR"
+    },
+    "AdminArticleApproval.dc.html": {
+      "x": 1520,
+      "y": 43660,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/HelpCenter-ArticleApproval"
+    },
+    "AdminDevelopersApiKeys.dc.html": {
+      "x": 0,
+      "y": 46400,
+      "w": 1440,
+      "h": 1760,
+      "title": "Admin/Developers-ApiKeys"
+    },
+    "AdminDevelopersWebhooks.dc.html": {
+      "x": 1520,
+      "y": 46400,
+      "w": 1440,
+      "h": 2560,
+      "title": "Admin/Developers-Webhooks"
+    },
+    "AdminReports.dc.html": {
+      "x": 3040,
+      "y": 46400,
+      "w": 1440,
+      "h": 3320,
+      "title": "Admin/Reports"
+    },
+    "AdminSystemV1.dc.html": {
+      "x": 4560,
+      "y": 46400,
+      "w": 1440,
+      "h": 1840,
+      "title": "Admin/System-1.0"
+    },
+    "EmailCsat.dc.html": {
+      "x": 6080,
+      "y": 46400,
+      "w": 1280,
+      "h": 1280,
+      "title": "Email/CSAT-EN-AR"
+    },
+    "WidgetCsatEN.dc.html": {
+      "x": 6080,
+      "y": 47800,
+      "w": 1312,
+      "h": 944,
+      "title": "Widget/CSAT-EN"
+    },
+    "WidgetCsatAR.dc.html": {
+      "x": 6080,
+      "y": 48864,
+      "w": 1312,
+      "h": 944,
+      "title": "Widget/CSAT-AR"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-18T10:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "applications": {
+      "kind": "title1",
+      "maxW": 3840,
+      "text": "Applications — admin, widget, help center",
+      "w": 240,
+      "x": 0,
+      "y": 1100
+    },
+    "brand-note": {
+      "color": "teal",
+      "text": "The accent tweak on the widget and help center artboards is what a brand can change. Everything else is fixed by the system so every brand still reads as Helpdock underneath.",
+      "w": 420,
+      "x": 1520,
+      "y": 1000
+    },
+    "foundations": {
+      "kind": "title1",
+      "maxW": 3760,
+      "text": "Foundations — Quiet desk",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    },
+    "m0": {
+      "kind": "title1",
+      "maxW": 4320,
+      "text": "M0 Skeleton — auth, wizard, settings, staff",
+      "w": 240,
+      "x": 0,
+      "y": 2400
+    },
+    "m0-note": {
+      "color": "teal",
+      "text": "Deliverables: M0-05 auth (Login, Login-AR, TOTP), M0-08 wizard, M0-02 settings page with env-locked keys, M0-06 staff and roles with the invite dialog, M0-10/M0-11 System page (health, queues, channels, storage, AI spend, audit). Implementing agents build from these and DESIGN.md.",
+      "w": 460,
+      "x": 3300,
+      "y": 2660
+    },
+    "m1": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "M1 Ticketing core — contacts, ticketing settings (ticket view above)",
+      "w": 240,
+      "x": 0,
+      "y": 5620
+    },
+    "m1b": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "M1 Ticketing core — assignment, spam, feedback, merge and split, contact identity",
+      "w": 240,
+      "x": 0,
+      "y": 8940
+    },
+    "m1c": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "M1 Ticketing core — views, and the workspace remainder (M1-05, M1-15 part 2)",
+      "w": 240,
+      "x": 0,
+      "y": 11820
+    },
+    "m2": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "M2 Email channel — mailboxes, outgoing email, the email thread, customer emails",
+      "w": 240,
+      "x": 0,
+      "y": 13480
+    },
+    "m3": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "M3 Automation and SLAs — business hours, SLAs, rules, macros, notifications, audit log",
+      "w": 240,
+      "x": 0,
+      "y": 17060
+    },
+    "m23-nav": {
+      "color": "teal",
+      "text": "Admin sidebar once M2 and M3 both land: Brand, Settings, Ticketing, Automation, Channels, Staff and roles, System, with the notification bell in the brand row. M2 boards show Channels without Automation and M3 boards the reverse; build the combined order.",
+      "w": 460,
+      "x": 4560,
+      "y": 15480
+    },
+    "m4": {
+      "kind": "title1",
+      "maxW": 5200,
+      "text": "M4 Widget and realtime — widget states and modes, web form, widget settings",
+      "w": 240,
+      "x": 0,
+      "y": 22480
+    },
+    "m5": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "M5 Help center — public pages, content admin, editor, settings, domains",
+      "w": 240,
+      "x": 0,
+      "y": 29100
+    },
+    "m45-note": {
+      "color": "teal",
+      "text": "M4/M5 decisions: widget origins live on Channels › Widget (not Brand › Domains); Brand tabs are General · Domains · Danger zone (theming moves to the Widget and Help center pages); Team Leaders see widget appearance and content policy, Admins only see origins and signed identity; \"chat + suggested articles\" is available from M5-10 via help center search (M7 upgrades it) — not disabled; article history is Activity only (versioning is v1.1). Size caps and domain values on these boards are sample values.",
+      "w": 520,
+      "x": 3040,
+      "y": 25860
+    },
+    "m6": {
+      "kind": "title1",
+      "maxW": 5680,
+      "text": "M6 Telegram — bots, Telegram tickets, the chat",
+      "w": 240,
+      "x": 0,
+      "y": 35900
+    },
+    "m7": {
+      "kind": "title1",
+      "maxW": 5840,
+      "text": "M7 AI — providers, knowledge, assistant settings, wizard step",
+      "w": 240,
+      "x": 0,
+      "y": 39240
+    },
+    "m7b": {
+      "kind": "title1",
+      "maxW": 5720,
+      "text": "M7 AI — agent assist, auto-reply in the widget, article approval",
+      "w": 240,
+      "x": 0,
+      "y": 42260
+    },
+    "m8": {
+      "kind": "title1",
+      "maxW": 7400,
+      "text": "M8 API, webhooks, reports, System 1.0, CSAT delivery",
+      "w": 240,
+      "x": 0,
+      "y": 46140
+    },
+    "m8-note": {
+      "color": "teal",
+      "text": "M8 decisions: webhook events, signature header and retry schedule follow docs/guides/webhooks.md (the boards show sample values). CSAT email links only open the rating page with the score preselected; nothing is recorded until Send, so mail scanners cannot rate. Telegram buttons record in one tap.",
+      "w": 460,
+      "x": 7480,
+      "y": 46400
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Typography.dc.html",
+    "Components.dc.html",
+    "AdminTicket.dc.html",
+    "WidgetEN.dc.html",
+    "WidgetAR.dc.html",
+    "HelpCenter.dc.html",
+    "AdminLogin.dc.html",
+    "AdminLoginAR.dc.html",
+    "AdminTotp.dc.html",
+    "AdminWizard.dc.html",
+    "AdminSettings.dc.html",
+    "AdminStaff.dc.html",
+    "AdminSystem.dc.html",
+    "AdminEnrol2FA.dc.html",
+    "AdminAcceptInvite.dc.html",
+    "AdminContacts.dc.html",
+    "AdminContact.dc.html",
+    "AdminTicketing.dc.html",
+    "AdminBrand.dc.html",
+    "CsatEN.dc.html",
+    "CsatAR.dc.html",
+    "AdminBrandDanger.dc.html",
+    "AdminTicketingAssignment.dc.html",
+    "AdminTicketingSpam.dc.html",
+    "AdminTicketingFeedback.dc.html",
+    "AdminTicketDialogs.dc.html",
+    "AdminContactDialogs.dc.html",
+    "AdminTicketingViews.dc.html",
+    "AdminViewDialogs.dc.html",
+    "AdminTicketTags.dc.html",
+    "AdminWizardSetupKey.dc.html",
+    "AdminEmail.dc.html",
+    "AdminEmailOutgoing.dc.html",
+    "AdminEmailMailbox.dc.html",
+    "AdminTicketEmail.dc.html",
+    "EmailCustomer.dc.html",
+    "AdminSignature.dc.html",
+    "AdminTicketingBusinessHours.dc.html",
+    "AdminTicketingSLAs.dc.html",
+    "AdminTicketSLA.dc.html",
+    "AdminAutomationRules.dc.html",
+    "AdminRuleBuilder.dc.html",
+    "AdminAutomationMacros.dc.html",
+    "AdminComposerMacros.dc.html",
+    "AdminNotifications.dc.html",
+    "EmailStaffNotification.dc.html",
+    "AdminAuditLog.dc.html",
+    "WidgetStatesEN.dc.html",
+    "WidgetStatesAR.dc.html",
+    "WidgetModesEN.dc.html",
+    "WidgetModesAR.dc.html",
+    "WebFormEN.dc.html",
+    "WebFormAR.dc.html",
+    "AdminWidget.dc.html",
+    "AdminWebForm.dc.html",
+    "HelpCenterHomeEN.dc.html",
+    "HelpCenterHomeAR.dc.html",
+    "HelpCenterCategoryEN.dc.html",
+    "HelpCenterCategoryAR.dc.html",
+    "HelpCenterArticleAR.dc.html",
+    "HelpCenterSearchEN.dc.html",
+    "HelpCenterSearchAR.dc.html",
+    "HelpCenterStatesEN.dc.html",
+    "AdminHelpCenter.dc.html",
+    "AdminArticleEditor.dc.html",
+    "AdminHelpCenterSettings.dc.html",
+    "AdminBrandDomains.dc.html",
+    "AdminChannelsTelegram.dc.html",
+    "AdminTicketTelegram.dc.html",
+    "TelegramChatEN.dc.html",
+    "TelegramChatAR.dc.html",
+    "AdminAIProviders.dc.html",
+    "AdminAIKnowledge.dc.html",
+    "AdminAIAssistant.dc.html",
+    "AdminWizardAI.dc.html",
+    "AdminTicketAI.dc.html",
+    "WidgetAIEN.dc.html",
+    "WidgetAIAR.dc.html",
+    "AdminArticleApproval.dc.html",
+    "AdminDevelopersApiKeys.dc.html",
+    "AdminDevelopersWebhooks.dc.html",
+    "AdminReports.dc.html",
+    "AdminSystemV1.dc.html",
+    "EmailCsat.dc.html",
+    "WidgetCsatEN.dc.html",
+    "WidgetCsatAR.dc.html"
+  ],
+  "pages": [],
+  "title": "Helpdock Design System"
+}

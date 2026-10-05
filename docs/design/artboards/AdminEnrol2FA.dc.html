@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin · set up two-factor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1120px; height: 640px; box-sizing: border-box; padding: 48px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; background: #F7F5F0; font-size: 14px; line-height: 20px;">
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #5C564C;">Step 1 of 2</div>
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600;">Set up two-factor authentication</h1>
+      <p style="margin: 0; color: #5C564C;">This install requires it for all staff. Scan the code with any authenticator app, then enter the 6-digit code it shows.</p>
+    </div>
+    <form style="display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6;">
+      <div style="display: flex; gap: 20px; align-items: flex-start;">
+        <div role="img" aria-label="QR code for the authenticator app" style="width: 160px; height: 160px; flex-shrink: 0; border-radius: 6px; border: 1px solid #E3DFD6; background: repeating-conic-gradient(#16181C 0 25%, #FFFFFF 0 50%) 0 0 / 16px 16px; display: flex; align-items: center; justify-content: center;"><span style="background: #FFFFFF; padding: 4px 8px; font-size: 11px; font-weight: 500; border-radius: 4px;">QR</span></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0;">
+          <span style="font-size: 13px; font-weight: 500;">Can't scan? Enter this key</span>
+          <code style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 20px; padding: 8px 10px; border-radius: 6px; background: #EFECE5; word-break: break-all;">JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP</code>
+          <button type="button" style="align-self: flex-start; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 13px; font-weight: 500;">Copy key</button>
+          <span style="font-size: 12px; line-height: 16px; color: #5C564C;">Account: lina@helpdock.com · Issuer: Helpdock</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label for="enrol-code" style="font-size: 13px; font-weight: 500;">Code from the app</label>
+        <input id="enrol-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" style="height: 44px; padding: 0 14px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-family: 'IBM Plex Mono', monospace; font-size: 20px; letter-spacing: 0.18em; color: #16181C; text-align: center;">
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;"><a href="#signout" style="font-size: 13px; color: #5C564C;">Sign out instead</a><button type="submit" style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500;">Turn on two-factor</button></div>
+    </form>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #5C564C;">Step 2 of 2</div>
+      <h2 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600;">Save your recovery codes</h2>
+      <p style="margin: 0; color: #5C564C;">Each code signs you in once if you lose your phone. They are shown only now.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px; background: #E7F3EC; border: 1px solid #2E7D4F; color: #1F5A38; font-size: 13px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Two-factor is on for lina@helpdock.com</div>
+      <ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 14px; line-height: 20px;">
+        <li>RC-4K7Q-9M2X</li><li>RC-B3ZP-71HD</li><li>RC-QW8N-5L4C</li><li>RC-T2VF-8R6J</li><li>RC-H9DM-3K1S</li><li>RC-P6XN-2G7B</li><li>RC-M4JR-6W9T</li><li>RC-Z1CV-4Q8L</li><li>RC-D7GK-1N3P</li><li>RC-S5LB-7X2M</li>
+      </ol>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Download .txt</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 14px; font-weight: 500;">Copy all</button>
+      </div>
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 14px;"><input type="checkbox" style="width: 16px; height: 16px; accent-color: #0F766E; margin: 0;">I have saved these codes somewhere safe</label>
+      <button type="button" disabled style="height: 36px; padding: 0 16px; border-radius: 6px; border: 1px solid #E3DFD6; background: #EFECE5; color: #A8A196; font-size: 14px; font-weight: 500; align-self: flex-end;">Continue to Helpdock</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1120,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

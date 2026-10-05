@@ -344,7 +344,7 @@
     "sent": "Survey sent",
     "rated": "Rated {{rating}} of 5",
     "expired": "Survey expired",
-    "shareHint": "Channels do not deliver the link yet. Share it with the customer.",
+    "shareHint": "The survey goes out on the ticket's channel. Copy the link to share it another way.",
     "copyLink": "Copy survey link",
     "copied": "Survey link copied",
     "copyFailed": "The link could not be copied."

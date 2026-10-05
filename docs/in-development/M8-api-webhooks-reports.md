@@ -18,7 +18,7 @@ Depends on M1 and M3, both shipped. Runs in parallel with M7.
 | M8-03 | Outbound webhooks | | planned |
 | M8-04 | Reports | | built, PR pending: [Reports](#m8-04-reports) |
 | M8-05 | System page | | built (api), PR pending: [System page](#m8-05-system-page) |
-| M8-06 | CSAT delivery wired on close for email, widget, Telegram | | planned |
+| M8-06 | CSAT delivery wired on close for email, widget, Telegram | | built, PR pending: [CSAT delivery](#m8-06-csat-delivery) |
 | M8-07 | Brand deletion with 30-day grace and full purge (rows, S3 prefix, Redis keys, Caddy domain); product metrics on the System page | | built (api), PR pending: [Brand deletion](#m8-07-brand-deletion-and-product-metrics) |
 
 ## Exit criteria
@@ -82,6 +82,58 @@ Copied from the PRD, ticked as they are met.
 - The admin screen's new cards (per-brand storage, product metrics, the board
   button) wait for their artboards; the api is done.
 - Guide: [operations](../guides/operations.md#the-system-page).
+
+### M8-06 CSAT delivery
+
+- **On close** (artboards `Email/CSAT-EN-AR`, `Widget/CSAT-EN`, `Widget/CSAT-AR`,
+  `Telegram/Chat-EN` and `Telegram/Chat-AR` panels 5 and 6): the
+  `csat.requested` job that creates the survey also sends it, in its
+  transaction, on the ticket's channel (`apps/api/src/csat/csat-delivery.ts`).
+  `chat` → a `csat` widget frame and the card over REST; `telegram` → a
+  `telegram.notice` of kind `csat_survey`; any other channel → an
+  `email_deliveries` row of kind `csat` and its `email.send`. Spam, merged and
+  CSAT-off closes still get no survey, and only the run that inserts the survey
+  sends it, so a redelivered job sends nothing.
+- **Feedback settings.** `AdminTicketingFeedback` has one toggle and no delay or
+  channel choice, so the survey goes out at once on the ticket's own channel.
+  The tab's delivery note now says so.
+- **Email** (`packages/channels/src/email/csat-survey.ts`, the CustomerEmail
+  survey variant): five link cells, each the single-use link with
+  `?rating=<n>&lang=<locale>`. The rating page opens with that score pressed and
+  records nothing until Send, so link scanners cannot rate. `Message-ID`
+  `<hd.c.<surveyId>@…>`, `Auto-Submitted: auto-generated`, no CCs. `sent_at`
+  is set when the relay accepts it.
+- **Widget**: `GET`, `POST …/conversations/:id/csat` and `POST …/csat/skip`
+  (`widget-csat.controller.ts`), and the `csat` server event. The card
+  (`apps/widget/src/ui/CsatCard.tsx`, DESIGN §6.6) replaces the composer until
+  answered or skipped. Skip stores `skipped_at` and records no answer. The
+  entry is 27.24 KB gzipped (was 25.85).
+- **Telegram**: score buttons carry `csat:<surveyId>:<n>`. A tap is recorded
+  only from the ticket's contact's chat, then answered with a `csat_rated`
+  notice (the score buttons go, **Add a comment** stays, a thanks line with the
+  link's expiry date) or `csat_closed` ("This survey has closed."). A tap
+  leaves the link open once for a comment: `rate` accepts a link answer over a
+  Telegram one with no comment, and the page opens with the tapped score.
+- **`csat.received`** is written by every recorded answer
+  (`apps/api/src/csat/csat-answers.ts`) with `{ ticketId, surveyId, rating,
+  via, ratedAt }`, beside a `csat.rated` audit row. Rules subscribe already
+  (M3-03), which closes the M3 gap. The default slot only logs; M8-03's
+  webhooks subscribe under their own name.
+- **Migration** `0039_csat_delivery`: `csat_responses.rated_via`
+  (`csat_answer_channel`: `link`, `widget`, `telegram`; earlier answers are
+  backfilled `link`) and `skipped_at`; `email_delivery_kind` gains `csat`;
+  `email_deliveries.csat_response_id` with a unique partial index. No new
+  tenant table.
+- **Tests**: unit tests for every new module; `csat/delivery.integration.test.ts`
+  (Postgres, Redis, Mailpit, the Telegram stand-in and a widget socket) for each
+  channel, the link-scanner rule and the rules job; email snapshots in both
+  languages (`email/render-survey.test.ts`); Playwright for the widget card
+  (`apps/widget/e2e/csat.spec.ts`, en and ar, light and dark, axe) and the
+  rating page's `?rating=` (`apps/admin/e2e/csat.spec.ts`).
+- Guides: [tickets](../guides/tickets.md#satisfaction-surveys),
+  [widget protocol](../guides/widget-protocol.md#satisfaction-card),
+  [Telegram](../guides/telegram.md#the-satisfaction-survey),
+  [automation](../guides/automation.md#a-rule).
 
 ### M8-07 Brand deletion and product metrics
 

@@ -151,5 +151,15 @@
     "you": "You",
     "agent": "{{brandName}} support",
     "note": "This email holds this conversation only. Nothing in it opens your chat."
+  },
+  "csat": {
+    "subject": "[{{reference}}] How did we do?",
+    "greeting": "Hi {{name}},",
+    "introBy": "{{agent}} closed your request {{reference}} today. We would like to know how it went.",
+    "intro": "Your request {{reference}} was closed today. We would like to know how it went.",
+    "question": "How would you rate the help you received?",
+    "choice": "Rate {{rating}} out of 5, {{label}}",
+    "hint": "Choose a number to open the survey page with it already selected. You can add a comment there before sending.",
+    "note": "This link works once and expires in {{days}} days. It is an automatic message; replying to it adds to your request."
   }
 }

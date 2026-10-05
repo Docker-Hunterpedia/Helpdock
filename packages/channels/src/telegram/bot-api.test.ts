@@ -135,6 +135,20 @@ describe('TelegramBotApi', () => {
     });
   });
 
+  it('replaces a message’s buttons, or removes them', async () => {
+    const keyboard = { inline_keyboard: [[{ text: 'Add a comment', url: 'https://x.test/c' }]] };
+    await api().editMessageReplyMarkup('42', '77', keyboard);
+    expect(calls.at(-1)).toEqual({
+      method: 'editMessageReplyMarkup',
+      body: { chat_id: '42', message_id: 77, reply_markup: keyboard },
+    });
+    await api().editMessageReplyMarkup('42', '77');
+    expect(calls.at(-1)).toEqual({
+      method: 'editMessageReplyMarkup',
+      body: { chat_id: '42', message_id: 77 },
+    });
+  });
+
   it('polls from an offset without waiting', async () => {
     expect(await api().getUpdates(5)).toEqual([{ update_id: 5 }]);
     expect(calls.at(-1)?.body).toMatchObject({ offset: 5, timeout: 0 });

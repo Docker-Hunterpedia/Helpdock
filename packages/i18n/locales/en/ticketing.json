@@ -594,7 +594,7 @@
     "discard": "Discard",
     "save": "Save changes",
     "deliveryHeading": "Delivery",
-    "deliveryBody": "The link goes out with the closing message on the ticket's channel. Email, widget and Telegram delivery arrive with those channels; until then the link is shown on the ticket for the agent to share."
+    "deliveryBody": "The survey goes out when the ticket closes, on the ticket's channel: an email with the five scores, a card in the widget conversation, or a Telegram message with score buttons. The link is also shown on the ticket for the agent to share."
   },
   "views": {
     "heading": "Shared views",

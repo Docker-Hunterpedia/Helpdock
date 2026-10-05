@@ -25,6 +25,7 @@ import {
 import { TELEGRAM_ERROR_MAX_LENGTH } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { eq } from 'drizzle-orm';
+import type { CsatTelegramNotices } from '../csat/telegram-csat.js';
 import { apiForBot, type TelegramApiFactory } from './bot-api-factory.js';
 import type { TelegramRepository } from './telegram.repository.js';
 
@@ -51,6 +52,8 @@ export interface TelegramSendDependencies {
   readonly repository: TelegramRepository;
   readonly keyring: Keyring;
   readonly api: TelegramApiFactory;
+  /** M8-06: the survey, the thanks after a tap, and "This survey has closed." */
+  readonly csat: Pick<CsatTelegramNotices, 'send'>;
   readonly now?: () => Date;
 }
 
@@ -71,6 +74,10 @@ export const createTelegramSendHandler =
     }
     const api = apiForBot(bot, deps.keyring, deps.api);
     await withPermanentAsFinal(async () => {
+      if (payload.notice.startsWith('csat_')) {
+        await deps.csat.send(api, tx, payload, log);
+        return;
+      }
       if (payload.notice === 'welcome') {
         await sendWelcome(api, bot, payload.chatId, payload.locale);
         return;

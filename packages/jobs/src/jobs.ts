@@ -849,6 +849,30 @@ export const knowledgeReembedJob = defineJob({
 });
 
 export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
+/**
+ * What a bot sends that is not an agent's reply: M6-04's welcome and language
+ * confirmation, and M8-06's survey on close, the thanks after a tap and "This
+ * survey has closed." for a tap that came too late.
+ */
+export const telegramNoticeKindSchema = z.enum([
+  'welcome',
+  'language_set',
+  'csat_survey',
+  'csat_rated',
+  'csat_closed',
+]);
+export type TelegramNoticeKind = z.infer<typeof telegramNoticeKindSchema>;
+
+/** M8-06: the survey a `csat_*` notice is about, and the tap it answers. */
+export const telegramCsatNoticeSchema = z.object({
+  surveyId: z.uuid(),
+  /** The score a `csat_rated` thanks the contact for. */
+  rating: z.int().min(1).max(5).optional(),
+  /** The survey message whose buttons a tap's answer replaces. */
+  messageId: z.string().min(1).max(32).optional(),
+});
+export type TelegramCsatNotice = z.infer<typeof telegramCsatNoticeSchema>;
+
 export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('reply'),
@@ -863,10 +887,11 @@ export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
     sourceOutboxId: z.uuid(),
     botId: z.uuid(),
     chatId: z.string().min(1).max(32),
-    notice: z.enum(['welcome', 'language_set']),
+    notice: telegramNoticeKindSchema,
     locale: z.enum(['en', 'ar']),
-    /** The button press a `language_set` answers, so the spinner on it stops. */
+    /** The button press a `language_set` or `csat_*` notice answers, so the spinner on it stops. */
     callbackQueryId: z.string().min(1).max(128).optional(),
+    csat: telegramCsatNoticeSchema.optional(),
   }),
 ]);
 

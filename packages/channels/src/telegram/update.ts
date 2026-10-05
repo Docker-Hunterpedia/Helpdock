@@ -67,7 +67,7 @@ export const telegramUpdateSchema = z.looseObject({
     .looseObject({
       id: z.string(),
       from: userSchema,
-      message: z.looseObject({ chat: chatSchema }).optional(),
+      message: z.looseObject({ message_id: z.number().int(), chat: chatSchema }).optional(),
       data: z.string().optional(),
     })
     .optional(),
@@ -117,6 +117,17 @@ export type TelegramEvent =
       readonly sender: TelegramSender;
       readonly callbackQueryId: string;
       readonly locale: 'en' | 'ar';
+    }
+  | {
+      /** M8-06: a score button under the satisfaction survey. */
+      readonly kind: 'csat';
+      readonly updateId: number;
+      readonly sender: TelegramSender;
+      readonly callbackQueryId: string;
+      readonly surveyId: string;
+      readonly rating: number;
+      /** The survey message the button is under. */
+      readonly messageId: string;
     }
   | { readonly kind: 'ignored'; readonly updateId: number; readonly reason: IgnoredReason };
 
@@ -222,6 +233,23 @@ const pointOf = (message: TelegramMessage): TelegramPoint | null => {
 /** `/start`, or `/start <payload>` from a deep link. */
 const START = /^\/start(?:@\w+)?(?:\s|$)/;
 
+const CSAT_CALLBACK =
+  /^csat:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([1-5])$/;
+
+/**
+ * M8-06: the data of a survey button, `csat:<surveyId>:<score>` — 43 bytes,
+ * inside Telegram's 64. It names a survey but proves nothing: the api checks
+ * that the survey belongs to the chat that pressed it.
+ */
+export const csatCallbackData = (surveyId: string, rating: number): string =>
+  `csat:${surveyId}:${String(rating)}`;
+
+const parseCsatCallback = (data: string): { surveyId: string; rating: number } | null => {
+  const match = CSAT_CALLBACK.exec(data);
+
+  return match === null ? null : { surveyId: match[1] ?? '', rating: Number(match[2]) };
+};
+
 /**
  * What to do with one update. Throws a `ZodError` when the body is not an
  * update at all, which the webhook answers 400.
@@ -236,6 +264,22 @@ export const classifyUpdate = (raw: unknown): TelegramEvent => {
     if (chat === undefined || chat.type !== 'private') {
       return { kind: 'ignored', updateId, reason: 'not-private' };
     }
+    const sender = {
+      chatId: String(chat.id),
+      name: nameOf(query.from),
+      languageCode: query.from.language_code ?? null,
+    };
+    const survey = parseCsatCallback(query.data ?? '');
+    if (survey !== null && query.message !== undefined) {
+      return {
+        kind: 'csat',
+        updateId,
+        callbackQueryId: query.id,
+        ...survey,
+        messageId: String(query.message.message_id),
+        sender,
+      };
+    }
     const match = /^lang:(en|ar)$/.exec(query.data ?? '');
     if (match === null) {
       return { kind: 'ignored', updateId, reason: 'unknown-callback' };
@@ -246,11 +290,7 @@ export const classifyUpdate = (raw: unknown): TelegramEvent => {
       updateId,
       callbackQueryId: query.id,
       locale: match[1] === 'ar' ? 'ar' : 'en',
-      sender: {
-        chatId: String(chat.id),
-        name: nameOf(query.from),
-        languageCode: query.from.language_code ?? null,
-      },
+      sender,
     };
   }
 

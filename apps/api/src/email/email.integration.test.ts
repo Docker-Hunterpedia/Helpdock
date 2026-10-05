@@ -34,6 +34,7 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { noSurveyEmails } from '../testing/csat-doubles.js';
 import { AutoReplyService } from './auto-reply.service.js';
 import { EmailRepository } from './email.repository.js';
 import { createEmailSendEventHandler, EMAIL_EVENTS } from './email-events.js';
@@ -296,6 +297,7 @@ describe.skipIf(!hasDocker)('outbound email', () => {
         keyring: createKeyring(envFor()),
         installSmtp: NO_INSTALL_SMTP,
         transports: smtpTransportFactory,
+        surveys: noSurveyEmails,
       }),
     });
   };

@@ -46,6 +46,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { readChannelStatuses } from '../channels/channel-status.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { noCsatNotices } from '../testing/csat-doubles.js';
 import { FakeTelegram, textUpdate } from '../testing/fake-telegram.js';
 import { FakeStorage } from '../testing/media.js';
 import { telegramApiFactory } from './bot-api-factory.js';
@@ -243,6 +244,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
         repository,
         keyring: createKeyring(envFor()),
         api: telegramApiFactory(telegram.url),
+        csat: noCsatNotices,
       }),
     });
     for (const row of rows.filter((candidate) => !handled.has(candidate.id))) {

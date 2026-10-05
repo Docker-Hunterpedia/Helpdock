@@ -9,9 +9,9 @@ import { useSemanticTokens } from '../../app/tokens.js';
  * Where the ticket's satisfaction survey stands (M1-12): pending, sent, rated
  * with its score and comment, or expired.
  *
- * Channels do not deliver the link yet (M8-06), so while it is usable the card
- * offers it to copy — `AdminTicketingFeedback`'s delivery note: "until then the
- * link is shown on the ticket for the agent to share". No artboard draws this
+ * The survey goes out on the ticket's channel when it closes (M8-06); while
+ * the link is usable the card also offers it to copy, for sharing it another
+ * way (DESIGN §6.3's SatisfactionCard). No artboard draws this
  * card; it follows the SLA card beside it (DESIGN §6.3), and is flagged in the
  * milestone doc for the canvas.
  */

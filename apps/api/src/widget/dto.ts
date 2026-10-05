@@ -16,6 +16,8 @@ import {
   widgetConversationParamSchema,
   widgetConversationSchema,
   widgetConversationSettingsSchema,
+  widgetCsatRequestSchema,
+  widgetCsatResponseSchema,
   widgetMessagePageSchema,
   widgetMessagesQuerySchema,
   widgetQueueSchema,
@@ -73,6 +75,8 @@ export class WidgetReadRequestDto extends createZodDto(widgetReadRequestSchema) 
 export class WidgetTypingRequestDto extends createZodDto(widgetTypingRequestSchema) {}
 export class WidgetTranscriptRequestDto extends createZodDto(widgetTranscriptRequestSchema) {}
 export class WidgetQueueDto extends createZodDto(widgetQueueSchema) {}
+export class WidgetCsatResponseDto extends createZodDto(widgetCsatResponseSchema) {}
+export class WidgetCsatRequestDto extends createZodDto(widgetCsatRequestSchema) {}
 export class WidgetStreamQueryDto extends createZodDto(widgetStreamQuerySchema) {}
 export class WidgetUploadRequestDto extends createZodDto(attachmentPresignRequestSchema) {}
 export class WidgetUploadResponseDto extends createZodDto(attachmentPresignResponseSchema) {}

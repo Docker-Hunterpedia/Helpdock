@@ -74,7 +74,10 @@ import { imapConnectOptions } from '../channels/imap-connector.js';
 import { createInboundEmailService } from '../channels/inbound/factory.js';
 import { MailboxesRepository } from '../channels/mailboxes.repository.js';
 import { CsatRepository } from '../csat/csat.repository.js';
+import { CsatDelivery } from '../csat/csat-delivery.js';
+import { CsatEmailSource } from '../csat/csat-email.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
+import { CsatTelegramNotices } from '../csat/telegram-csat.js';
 import { CsatTokens } from '../csat/tokens.js';
 import { cnameTargetOf, createDomainProbes } from '../domains/domain-config.js';
 import {
@@ -143,6 +146,7 @@ import {
   createTelegramSendHandler,
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
+import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
 import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
@@ -383,9 +387,18 @@ export const workerDependencies: WorkerDependencies = {
     registerObjectPurgeHandler(storageFor(env));
     // M7-08: a brand reached 80 % or 100 % of an AI budget window.
     registerAiEventHandlers();
+    // M8-06: the survey goes out on the ticket's channel in the survey job.
+    const csatRepository = new CsatRepository();
     registerCsatEventHandlers({
-      repository: new CsatRepository(),
+      repository: csatRepository,
       tokens: new CsatTokens(createKeyring(env)),
+      delivery: new CsatDelivery({
+        repository: csatRepository,
+        email: new OutboundEmailService(new EmailRepository(), installSmtp),
+        telegram: new TelegramRepository(),
+        locales: new TicketLifecycleRepository(),
+        widget: new RedisWidgetBroadcast(redis),
+      }),
     });
 
     // `attachment.uploaded` ends in a job on the `media` queue, so its handler
@@ -551,6 +564,8 @@ export const workerDependencies: WorkerDependencies = {
   createOutboundWorker: ({ redis, db, log, env, installSmtp }) => {
     const keyring = createKeyring(env);
     const emailRepository = new EmailRepository();
+    const csatRepository = new CsatRepository();
+    const csatTokens = new CsatTokens(keyring);
     const email = createEmailSendProcessor({
       db,
       log,
@@ -560,6 +575,7 @@ export const workerDependencies: WorkerDependencies = {
         keyring,
         installSmtp,
         transports: smtpTransportFactory,
+        surveys: new CsatEmailSource(csatRepository, csatTokens, env.APP_URL),
       }),
     });
     const telegramRepository = new TelegramRepository();
@@ -572,6 +588,11 @@ export const workerDependencies: WorkerDependencies = {
         repository: telegramRepository,
         keyring,
         api: telegramApiFactory(env.TELEGRAM_API_ROOT),
+        csat: new CsatTelegramNotices({
+          repository: csatRepository,
+          tokens: csatTokens,
+          appUrl: env.APP_URL,
+        }),
       }),
     });
     const worker = new Worker(

@@ -2,6 +2,8 @@ import { type RenderResult, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
+import type { AiApi } from '../ai/api.js';
+import { MockAiApi } from '../ai/mock-api.js';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
@@ -17,6 +19,8 @@ import type { EmailApi } from '../email/api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import type { KnowledgeApi } from '../knowledge/api.js';
+import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
@@ -52,6 +56,8 @@ export interface RenderAppOptions {
   readonly helpCenterApi?: HelpCenterApi;
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
+  readonly aiApi?: AiApi;
+  readonly knowledgeApi?: KnowledgeApi;
   /** Defaults to the reports fixture, so no test reaches for a real api. */
   readonly reportsApi?: ReportsApi;
   /** Defaults to the System fixture: a brand that is not being deleted. */
@@ -75,6 +81,8 @@ export interface RenderedApp extends RenderResult {
   readonly helpCenterApi: HelpCenterApi;
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
+  readonly aiApi: AiApi;
+  readonly knowledgeApi: KnowledgeApi;
   readonly telegramApi: TelegramApi;
 }
 
@@ -98,6 +106,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const helpCenterApi = options.helpCenterApi ?? new MockHelpCenterApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
+  const aiApi = options.aiApi ?? new MockAiApi();
+  const knowledgeApi = options.knowledgeApi ?? new MockKnowledgeApi();
   const telegramApi = options.telegramApi ?? new MockTelegramApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
@@ -117,6 +127,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       helpCenterApi={helpCenterApi}
       browserPush={browserPush}
       domainsApi={domainsApi}
+      aiApi={aiApi}
+      knowledgeApi={knowledgeApi}
       reportsApi={options.reportsApi ?? fakeReportsApi()}
       systemApi={options.systemApi ?? fakeSystemApi()}
       telegramApi={telegramApi}
@@ -145,6 +157,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     helpCenterApi,
     browserPush,
     domainsApi,
+    aiApi,
+    knowledgeApi,
     telegramApi,
   };
 }

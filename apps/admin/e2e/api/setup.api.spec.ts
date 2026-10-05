@@ -65,13 +65,15 @@ test.describe('the first-run wizard against the real api', () => {
 
     // No relay to point at here, and skipping is a decision the api records.
     await page.getByRole('button', { name: t('wizard:email.skip') }).click();
+    // The AI step is optional (M7-10); there is no provider to point at here.
+    await page.getByRole('button', { name: t('wizard:ai.skip') }).click();
 
     await expect(page.getByRole('heading', { name: t('wizard:done.title') })).toBeVisible();
     await expect(page.getByText(ADMIN_EMAIL)).toBeVisible();
     await expect(
       page.getByText(t('wizard:done.brandValue', { name: BRAND_NAME, prefix: BRAND_PREFIX })),
     ).toBeVisible();
-    await expect(page.getByText(t('wizard:done.emailSkipped'))).toBeVisible();
+    await expect(page.getByText(t('wizard:done.emailSkipped'))).toHaveCount(2);
 
     await page.getByRole('button', { name: t('wizard:done.submit') }).click();
 

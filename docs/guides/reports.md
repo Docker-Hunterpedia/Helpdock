@@ -130,7 +130,7 @@ rebuilds hourly, at seven minutes past, for every active brand:
 The rollup tables are `report_daily` and `report_agent_daily`
 (department-scoped), and `report_search_daily` and `report_help_center_daily`
 (brand-scoped), from migration `0037_report_rollups`. Migration
-`0042_report_daily_assignee` added the assignee to `report_daily`'s grain (day,
+`0043_report_daily_assignee` added the assignee to `report_daily`'s grain (day,
 department, channel, priority and assignee). Days rolled up before it have no
 assignee: on an install upgraded across it, the Agent filter and the per-agent
 times, SLA and CSAT cover the days rebuilt since (the trailing week, every

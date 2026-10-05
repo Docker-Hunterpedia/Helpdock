@@ -3,6 +3,7 @@ import type {
   AiProvidersOverview,
   AiProviderView,
   EmbeddingSettingsView,
+  TranscriptionSettingsView,
 } from '@helpdock/schemas';
 import {
   Body,
@@ -28,12 +29,15 @@ import {
   AiProviderViewDto,
   EmbeddingSettingsUpdateDto,
   EmbeddingSettingsViewDto,
+  TranscriptionSettingsUpdateDto,
+  TranscriptionSettingsViewDto,
 } from './dto.js';
 import { EmbeddingSettingsService } from './embedding-settings.service.js';
 import { InstallAiService } from './install-ai.service.js';
+import { TranscriptionSettingsService } from './transcription-settings.service.js';
 
 /**
- * Settings › AI › Providers and Embeddings (M7-01, M7-02; screen in M7-10 from
+ * Settings › AI › Providers, Embeddings and voice transcription (M7-01, M7-02; screen in M7-10 from
  * the `Admin/AI-Providers` artboard). Install-wide, so every route is
  * `install:admin`, runs in install scope and is audited on entry.
  */
@@ -41,13 +45,16 @@ import { InstallAiService } from './install-ai.service.js';
 export class InstallAiController {
   readonly #ai: InstallAiService;
   readonly #embedding: EmbeddingSettingsService;
+  readonly #transcription: TranscriptionSettingsService;
 
   constructor(
     @Inject(InstallAiService) ai: InstallAiService,
     @Inject(EmbeddingSettingsService) embedding: EmbeddingSettingsService,
+    @Inject(TranscriptionSettingsService) transcription: TranscriptionSettingsService,
   ) {
     this.#ai = ai;
     this.#embedding = embedding;
+    this.#transcription = transcription;
   }
 
   @Get('providers')
@@ -108,6 +115,23 @@ export class InstallAiController {
     @Body(new ZodValidationPipe(EmbeddingSettingsUpdateDto)) body: EmbeddingSettingsUpdateDto,
   ): Promise<EmbeddingSettingsView> {
     return this.#embedding.update(getTx(), this.#context().actorId, body);
+  }
+
+  @Get('transcription')
+  @Requires('install:admin')
+  @ZodSerializerDto(TranscriptionSettingsViewDto)
+  transcription(): Promise<TranscriptionSettingsView> {
+    return this.#transcription.view();
+  }
+
+  @Put('transcription')
+  @Requires('install:admin')
+  @ZodSerializerDto(TranscriptionSettingsViewDto)
+  updateTranscription(
+    @Body(new ZodValidationPipe(TranscriptionSettingsUpdateDto))
+    body: TranscriptionSettingsUpdateDto,
+  ): Promise<TranscriptionSettingsView> {
+    return this.#transcription.update(getTx(), this.#context().actorId, body);
   }
 
   #context() {

@@ -39,10 +39,13 @@ import type {
   AiCallView,
   AiProvidersOverview,
   AiProviderView,
+  BrandAiCallsPage,
+  BrandAiModesUpdate,
   BrandAiSettings,
   EmbeddingSettingsView,
   ErrorResponse,
   TicketAiCalls,
+  TranscriptionSettingsView,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -70,7 +73,9 @@ import { DbAiUsage } from './db-ai-usage.js';
  * 3. **`complete()`** logs every call to `ai_calls` with its cost, redacts PII
  *    and shows the agent the original on the ticket's AI log; the budget
  *    alerts once at 80 % and stops the brand at 100 %.
- * 4. **The embedding space** moves from one model to another through
+ * 4. **M7-10's additions**: the modes, the Arabic prompt, the brand's AI
+ *    activity list and the transcription endpoint.
+ * 5. **The embedding space** moves from one model to another through
  *    `knowledge.configure` and `knowledge.reembed` without ever serving two.
  */
 
@@ -472,6 +477,80 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       expect(response.body.systemPrompt).toBe(prompt.systemPrompt);
     });
 
+    it('starts every mode off, with the first-response rule from the brand settings', async () => {
+      const response = await call<BrandAiSettings>('GET', `${path()}/settings`, leaderToken);
+
+      expect(response.body.modes).toEqual({
+        agentAssist: false,
+        keepAssistAfterHardStop: true,
+        autoReply: {
+          widget: { enabled: false, threshold: 0.7 },
+          email: { enabled: false, threshold: 0.7 },
+          telegram: { enabled: false, threshold: 0.7 },
+        },
+        handoffMessage: { en: '', ar: '' },
+      });
+      expect(response.body.aiCountsAsFirstResponse).toBe(true);
+    });
+
+    it('lets the Admin set the modes, writing the first-response rule where the SLAs read it', async () => {
+      const modes: BrandAiModesUpdate = {
+        agentAssist: true,
+        keepAssistAfterHardStop: false,
+        autoReply: {
+          widget: { enabled: true, threshold: 0.8 },
+          email: { enabled: false, threshold: 0.7 },
+          telegram: { enabled: true, threshold: 0.55 },
+        },
+        handoffMessage: { en: 'A person will reply here.', ar: 'سيرد عليك أحد الموظفين هنا.' },
+        aiCountsAsFirstResponse: false,
+      };
+      expect((await call('PUT', `${path()}/modes`, leaderToken, modes)).status).toBe(403);
+
+      const response = await call<BrandAiSettings>('PUT', `${path()}/modes`, adminToken, modes);
+
+      expect(response.status).toBe(200);
+      expect(response.body.modes.autoReply.telegram).toEqual({ enabled: true, threshold: 0.55 });
+      expect(response.body.modes.handoffMessage.ar).toBe(modes.handoffMessage.ar);
+      expect(response.body.aiCountsAsFirstResponse).toBe(false);
+      const [brand] = await withSystem(db(), brandId, (tx) =>
+        tx.select({ settings: brands.settings }).from(brands).where(eq(brands.id, brandId)),
+      );
+      expect(brand?.settings).toMatchObject({ aiCountsAsFirstResponse: false });
+
+      await call('PUT', `${path()}/modes`, adminToken, { ...modes, aiCountsAsFirstResponse: true });
+    });
+
+    it('refuses a threshold outside 0 to 1', async () => {
+      const response = await call('PUT', `${path()}/modes`, adminToken, {
+        agentAssist: false,
+        keepAssistAfterHardStop: true,
+        autoReply: {
+          widget: { enabled: true, threshold: 1.5 },
+          email: { enabled: false, threshold: 0.7 },
+          telegram: { enabled: false, threshold: 0.7 },
+        },
+        handoffMessage: { en: '', ar: '' },
+        aiCountsAsFirstResponse: true,
+      });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('keeps the Arabic prompt when an edit leaves it out', async () => {
+      const both = {
+        systemPrompt: 'Answer in the language of the question.',
+        systemPromptAr: 'أجب بلغة السؤال.',
+      };
+      await call('PUT', `${path()}/prompt`, leaderToken, both);
+
+      const response = await call<BrandAiSettings>('PUT', `${path()}/prompt`, leaderToken, {
+        systemPrompt: both.systemPrompt,
+      });
+
+      expect(response.body).toMatchObject(both);
+    });
+
     it('refuses a provider that does not exist', async () => {
       const response = await call<ErrorResponse>('PUT', `${path()}/settings`, adminToken, {
         ...update,
@@ -602,6 +681,103 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       await withSystem(db(), brandId, (tx) =>
         tx.update(aiSettings).set({ dailyBudgetUsd: null }).where(eq(aiSettings.brandId, brandId)),
       );
+    });
+  });
+
+  // ------------------------------------------------- the brand's activity
+
+  describe("the brand's AI activity", () => {
+    const path = () => `/api/brands/${brandId}/ai/calls`;
+
+    it('pages the calls newest first, naming the ticket, without bodies', async () => {
+      const first = await call<BrandAiCallsPage>('GET', `${path()}?limit=2`, leaderToken);
+
+      expect(first.status).toBe(200);
+      expect(first.body.items).toHaveLength(2);
+      expect(first.body.nextCursor).not.toBeNull();
+      expect(JSON.stringify(first.body)).not.toContain('mona@example.com');
+
+      const all = await call<BrandAiCallsPage>('GET', `${path()}?limit=100`, leaderToken);
+      const times = all.body.items.map((item) => item.createdAt);
+      expect(times).toEqual([...times].sort().reverse());
+      expect(all.body.items).toContainEqual(
+        expect.objectContaining({
+          feature: 'assist.suggest_reply',
+          ticket: { id: ticketId, reference: 'AI-1' },
+        }),
+      );
+
+      const second = await call<BrandAiCallsPage>(
+        'GET',
+        `${path()}?limit=2&cursor=${first.body.nextCursor ?? ''}`,
+        leaderToken,
+      );
+      expect(second.body.items.map((item) => item.id)).toEqual(
+        all.body.items.slice(2, 4).map((item) => item.id),
+      );
+    });
+
+    it("lists none of another brand's calls", async () => {
+      await withSystem(db(), otherBrandId, (tx) =>
+        tx.insert(aiCalls).values({
+          brandId: otherBrandId,
+          feature: 'globex.only',
+          provider: 'ollama',
+          model: 'qwen3:8b',
+          status: 'ok',
+        }),
+      );
+
+      const response = await call<BrandAiCallsPage>('GET', `${path()}?limit=100`, adminToken);
+
+      expect(response.body.items.map((item) => item.feature)).not.toContain('globex.only');
+    });
+
+    it('is refused to an Agent, and a forged cursor is a 400', async () => {
+      expect((await call('GET', path(), agentToken)).status).toBe(403);
+      expect((await call('GET', `${path()}?cursor=bm90LWEtY3Vyc29y`, adminToken)).status).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------- transcription
+
+  describe('voice transcription settings', () => {
+    const path = '/api/install/ai/transcription';
+
+    it('saves the endpoint and key, and never returns the key', async () => {
+      const before = await call<TranscriptionSettingsView>('GET', path, adminToken);
+      expect(before.body).toEqual({
+        endpoint: '',
+        model: 'whisper-1',
+        hasApiKey: false,
+        lockedKeys: [],
+      });
+
+      const saved = await call<TranscriptionSettingsView>('PUT', path, adminToken, {
+        endpoint: 'https://api.openai.com/v1/audio/transcriptions',
+        model: 'whisper-1',
+        apiKey: 'sk-transcribe-secret',
+      });
+
+      expect(saved.body).toMatchObject({
+        hasApiKey: true,
+        endpoint: 'https://api.openai.com/v1/audio/transcriptions',
+      });
+      expect(JSON.stringify(saved.body)).not.toContain('sk-transcribe-secret');
+      const [audit] = await withSystem(db(), '00000000-0000-0000-0000-000000000000', (tx) =>
+        tx.select().from(auditLog).where(eq(auditLog.action, 'ai.transcription.updated')),
+      );
+      expect(JSON.stringify(audit?.meta)).not.toContain('sk-transcribe-secret');
+
+      const off = await call<TranscriptionSettingsView>('PUT', path, adminToken, {
+        endpoint: '',
+        model: 'whisper-1',
+      });
+      expect(off.body).toMatchObject({ endpoint: '', hasApiKey: true });
+    });
+
+    it('is refused to anyone but the install admin', async () => {
+      expect((await call('GET', path, leaderToken)).status).toBe(403);
     });
   });
 

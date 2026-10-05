@@ -59,7 +59,7 @@ Copied from the PRD, ticked as they are met.
 ## Migrations
 
 - `0039_api_keys_and_webhooks.sql`: `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
-- `0042_report_daily_assignee.sql`: `report_daily.assignee_id`, the ticket's assignee in the rollup's grain, for the Agent filter and per-agent times, SLA and CSAT (M8-04).
+- `0043_report_daily_assignee.sql`: `report_daily.assignee_id`, the ticket's assignee in the rollup's grain, for the Agent filter and per-agent times, SLA and CSAT (M8-04).
 
 ## Deliverable notes
 
@@ -102,7 +102,7 @@ Copied from the PRD, ticked as they are met.
   label, share rows and Heatmap, per DESIGN §9 (legend, direct labels, Table
   view, Tooltip naming the series). The adapter is `ReportsApi`
   (`apps/admin/src/reports/`), on the shared transport.
-- **Closing the artboard gaps** (migration `0042_report_daily_assignee`):
+- **Closing the artboard gaps** (migration `0043_report_daily_assignee`):
   `report_daily` gains the ticket's assignee in its grain, so the summary
   carries volume per day by channel, priority and status (the last from the
   tickets, as the status totals are), SLA by priority (both clocks), and per
@@ -114,7 +114,7 @@ Copied from the PRD, ticked as they are met.
   "By priority" to SLA, the four columns and the Unassigned row to Agent
   workload, and the Agent filter. New export `volume_by_status`; the ticket
   exports gain `agent_id` and `agent`, and `agents` gains the per-agent
-  figures and an unassigned row. Days rolled up before 0042 carry no assignee
+  figures and an unassigned row. Days rolled up before 0043 carry no assignee
   (the migration does not empty the rollups); the trailing week is rebuilt
   every hour.
 - **Where the screen still differs from the artboard:** response and

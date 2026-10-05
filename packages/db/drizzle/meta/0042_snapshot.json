@@ -1,5 +1,5 @@
 {
-  "id": "0afddc8a-aab6-4d1c-924b-0bc09a7077fb",
+  "id": "425e3157-4a4c-45da-899e-a942d7d1106a",
   "prevId": "f40b21bf-a0d5-4fef-b5bc-350bfb07a34a",
   "version": "7",
   "dialect": "postgresql",
@@ -375,6 +375,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": "''"
+        },
+        "system_prompt_ar": {
+          "name": "system_prompt_ar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "modes": {
+          "name": "modes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "pii_redaction": {
           "name": "pii_redaction",
@@ -6449,12 +6462,6 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
-        },
-        "assignee_id": {
-          "name": "assignee_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         },
         "created": {
           "name": "created",

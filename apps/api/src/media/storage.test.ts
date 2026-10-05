@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contentDisposition, PRESIGN_TTL_SECONDS } from './storage.js';
+import { contentDisposition, PRESIGN_TTL_SECONDS, storageOrigin } from './storage.js';
 
 describe('contentDisposition', () => {
   it('offers a download by default', () => {
@@ -43,5 +43,21 @@ describe('contentDisposition', () => {
 describe('the presign window', () => {
   it('is the five minutes DOMAIN-RULES §4.5 fixes', () => {
     expect(PRESIGN_TTL_SECONDS).toBe(300);
+  });
+});
+
+describe('storageOrigin', () => {
+  const base = { S3_ENDPOINT: 'https://s3.example.com:9000/', S3_BUCKET: 'helpdock' };
+
+  it('is the endpoint when the bucket is a path', () => {
+    expect(storageOrigin({ ...base, S3_FORCE_PATH_STYLE: true })).toBe(
+      'https://s3.example.com:9000',
+    );
+  });
+
+  it('puts the bucket in front of the host when it is a subdomain', () => {
+    expect(storageOrigin({ ...base, S3_FORCE_PATH_STYLE: false })).toBe(
+      'https://helpdock.s3.example.com:9000',
+    );
   });
 });

@@ -30,21 +30,26 @@ const row = (fields: Partial<TelegramBotRow> = {}): TelegramBotRow => ({
   ...fields,
 });
 
+const TOKEN = '7000001:AAEsecretPartOfTheTokenAbcdefgh4f2a';
+
 describe('toTelegramBot', () => {
-  it('says a token is set without ever carrying it or the webhook secret', () => {
+  it('says a token is set and shows its last four characters, never the rest or the webhook secret', () => {
     const view = toTelegramBot(
       { bot: row(), departmentName: 'Support', tokenUpdatedByName: 'Ada' },
       { appUrl: 'https://support.example.com', polling: false },
+      TOKEN,
     );
 
     expect(view).toMatchObject({
       tokenSet: true,
+      tokenHint: '4f2a',
       welcome: { en: null, ar: 'أهلا' },
       mode: 'webhook',
       health: { state: 'waiting' },
       webhook: { expectedUrl: `https://support.example.com/api/telegram/${botId}/webhook` },
     });
     expect(JSON.stringify(view)).not.toContain('sealed');
+    expect(JSON.stringify(view)).not.toContain('secretPart');
   });
 
   it('reports polling mode and a failing bot', () => {
@@ -55,6 +60,7 @@ describe('toTelegramBot', () => {
         tokenUpdatedByName: null,
       },
       { appUrl: 'https://support.example.com', polling: true },
+      TOKEN,
     );
     expect(view.mode).toBe('polling');
     expect(view.health).toEqual({

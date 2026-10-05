@@ -2,7 +2,7 @@ import type { EmailOutgoingSettings } from '@helpdock/schemas';
 import { Box, Button, Tab, Tabs } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { channelsRoute, ROUTES } from '../../../app/route-paths.js';
@@ -17,26 +17,31 @@ import { MailboxesTab } from './mailboxes-tab.tsx';
 import { SendersCard } from './senders-card.tsx';
 import { SmtpCard } from './smtp-card.tsx';
 import { type ChannelsTab, channelsTabForSegment, channelsTabsFor } from './tabs.js';
+import { TelegramBotPage } from './telegram/bot-page.tsx';
+import { TelegramTab } from './telegram/telegram-tab.tsx';
 import { WebFormTab } from './web-form-tab.tsx';
 import { WidgetTab } from './widget/widget-tab.tsx';
 
 /**
  * `Admin/Channels` (M2-08; artboards `Admin · email channel` for Mailboxes,
  * `AdminEmailOutgoing` for Outgoing email, `AdminWidget` for Widget, M4, and
- * `AdminWebForm` for Web form, M4-09):
+ * `AdminWebForm` for Web form, M4-09, `Admin/Channels-Telegram` for Telegram,
+ * M6-05):
  * the page header, the tab row of the tabs the viewer's role may open, and
  * the tab the url names. The tabs are links, as on Ticketing, so a tab is a
- * url and back works. "Add mailbox" belongs to the Mailboxes tab alone.
+ * url and back works. "Add mailbox" belongs to the Mailboxes tab alone, and
+ * "Add bot" to the Telegram list; a bot's page is the Telegram tab too.
  */
 export function ChannelsPage(): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
-  const { tab: segment } = useParams();
+  const { tab: segment, botId } = useParams();
   const tabs = channelsTabsFor(session.user.role);
+  const [addingBot, setAddingBot] = useState(false);
 
-  const tab = channelsTabForSegment(segment, session.user.role);
+  const tab = channelsTabForSegment(botId === undefined ? segment : 'telegram', session.user.role);
   const landing = tabs[0];
   if (tab === undefined) {
     return landing === undefined ? null : <Navigate to={channelsRoute(landing.segment)} replace />;
@@ -56,6 +61,17 @@ export function ChannelsPage(): ReactNode {
               startIcon={<Plus size={16} aria-hidden="true" />}
             >
               {t('channels:addMailbox')}
+            </Button>
+          ) : tab.key === 'telegram' && botId === undefined ? (
+            <Button
+              variant="contained"
+              aria-haspopup="dialog"
+              startIcon={<Plus size={16} aria-hidden="true" />}
+              onClick={() => {
+                setAddingBot(true);
+              }}
+            >
+              {t('channels:addBot')}
             </Button>
           ) : undefined
         }
@@ -78,7 +94,13 @@ export function ChannelsPage(): ReactNode {
         </Tabs>
       </Box>
 
-      <TabBody tab={tab} brandId={brand.id} />
+      <TabBody
+        tab={tab}
+        brandId={brand.id}
+        botId={botId}
+        addingBot={addingBot}
+        onAddingBotChange={setAddingBot}
+      />
     </>
   );
 }
@@ -86,9 +108,16 @@ export function ChannelsPage(): ReactNode {
 function TabBody({
   tab,
   brandId,
+  botId,
+  addingBot,
+  onAddingBotChange,
 }: {
   readonly tab: ChannelsTab;
   readonly brandId: string;
+  /** A bot's page, under the Telegram tab. */
+  readonly botId: string | undefined;
+  readonly addingBot: boolean;
+  onAddingBotChange(open: boolean): void;
 }): ReactNode {
   switch (tab.key) {
     case 'mailboxes':
@@ -99,6 +128,12 @@ function TabBody({
       return <WidgetTab />;
     case 'webForm':
       return <WebFormTab />;
+    case 'telegram':
+      return botId === undefined ? (
+        <TelegramTab adding={addingBot} onAddingChange={onAddingBotChange} />
+      ) : (
+        <TelegramBotPage botId={botId} />
+      );
   }
 }
 

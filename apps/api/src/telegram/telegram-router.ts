@@ -107,6 +107,7 @@ export class TelegramConversationRouter {
       chatId: message.telegram.chatId,
       contactId: contact.id,
       at: context.now,
+      username: message.telegram.username,
     });
 
     const current = chat.ticketId === null ? undefined : await this.#follow(tx, chat.ticketId);

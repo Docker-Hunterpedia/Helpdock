@@ -10,6 +10,7 @@ import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import { MockTicketsApi } from '../tickets/mock-api.js';
@@ -53,5 +54,6 @@ export async function signedInMockApis(): Promise<AdminApis> {
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    telegram: new MockTelegramApi(),
   };
 }

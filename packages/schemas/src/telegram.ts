@@ -43,6 +43,9 @@ export const telegramBotHealth = (facts: TelegramBotHealthFacts): TelegramBotHea
 export const TELEGRAM_TOKEN_PATTERN = /^\d{3,20}:[A-Za-z0-9_-]{30,100}$/;
 const TOKEN = z.string().trim().regex(TELEGRAM_TOKEN_PATTERN, 'must be a BotFather token');
 
+/** How much of a stored token the bot form shows. */
+export const TELEGRAM_TOKEN_HINT_LENGTH = 4;
+
 /** Longer than any welcome needs and well inside Telegram's 4096 characters. */
 export const TELEGRAM_WELCOME_MAX_LENGTH = 2_000;
 const WELCOME = z.string().trim().max(TELEGRAM_WELCOME_MAX_LENGTH);
@@ -68,6 +71,11 @@ export const telegramBotSchema = z.object({
   departmentName: z.string(),
   /** Whether a token is stored. The token itself never leaves the server. */
   tokenSet: z.boolean(),
+  /**
+   * The token's last four characters, so two tokens can be told apart on the
+   * screen (`•••• 4f2a`). Nothing else of it leaves the server.
+   */
+  tokenHint: z.string().max(TELEGRAM_TOKEN_HINT_LENGTH),
   tokenUpdatedAt: z.iso.datetime(),
   tokenUpdatedByName: z.string().nullable(),
   /** M6-04. Null is the default text in the contact's language. */
@@ -124,9 +132,22 @@ export const telegramRefusalSchema = z.enum([
 ]);
 export type TelegramRefusal = z.infer<typeof telegramRefusalSchema>;
 
-/** "Test connection": `getMe` with the stored token. */
+/**
+ * "Test" in the Add bot dialog: `getMe` with a token that is not stored yet,
+ * so Add stays off until Telegram has recognised it.
+ */
+export const telegramTokenTestRequestSchema = z.object({ token: TOKEN });
+export type TelegramTokenTestRequest = z.infer<typeof telegramTokenTestRequestSchema>;
+
+/** "Test connection": `getMe` with the stored token, or with a typed one. */
 export const telegramTestResultSchema = z.discriminatedUnion('ok', [
-  z.object({ ok: z.literal(true), username: z.string(), telegramId: z.int() }),
+  z.object({
+    ok: z.literal(true),
+    username: z.string(),
+    /** The bot's name in Telegram, which a new bot is listed under. */
+    name: z.string(),
+    telegramId: z.int(),
+  }),
   z.object({
     ok: z.literal(false),
     kind: z.enum(['token', 'connect']),
@@ -160,6 +181,14 @@ export const telegramBotStatusSchema = z.object({
     .nullable(),
   /** Why `webhook` is null: Telegram could not be asked. */
   webhookError: z.string().nullable(),
+  /** The Activity card beside the bot form. */
+  activity: z.object({
+    lastReplyAt: z.iso.datetime().nullable(),
+    /** Replies that ended `failed` in the last 24 hours. */
+    failedSends24h: z.int().nonnegative(),
+    /** Open tickets of the chats this bot talks in. */
+    openTickets: z.int().nonnegative(),
+  }),
 });
 export type TelegramBotStatus = z.infer<typeof telegramBotStatusSchema>;
 
@@ -207,6 +236,29 @@ export const telegramDeliveryParamSchema = telegramTicketParamSchema.extend({
   deliveryId: z.uuid(),
 });
 export type TelegramDeliveryParam = z.infer<typeof telegramDeliveryParamSchema>;
+
+/**
+ * The ticket view's Telegram half (M6-02): who the chat is with and through
+ * which bot, for the channel chip, the "via @bot" line and the
+ * ChannelIdentityCard. Null when no chat belongs to the ticket.
+ */
+export const telegramTicketContextSchema = z.object({
+  bot: z.object({ id: z.uuid(), username: z.string() }),
+  chatId: z.string(),
+  /** The contact's Telegram username, without the `@`; it can change. */
+  username: z.string().nullable(),
+  name: z.string().nullable(),
+  locale: localeSchema.nullable(),
+  /** When the contact pressed a language button; null when it was inferred. */
+  languageChosenAt: z.iso.datetime().nullable(),
+});
+export type TelegramTicketContext = z.infer<typeof telegramTicketContextSchema>;
+
+export const telegramTicketContextResponseSchema = z.object({
+  context: telegramTicketContextSchema.nullable(),
+  deliveries: z.array(telegramDeliverySchema),
+});
+export type TelegramTicketContextResponse = z.infer<typeof telegramTicketContextResponseSchema>;
 
 // --------------------------------------------------------------------------
 // The language pick (M6-04)

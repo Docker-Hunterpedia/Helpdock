@@ -96,6 +96,8 @@ export interface TelegramPoint {
 export interface TelegramSender {
   readonly chatId: string;
   readonly name: string | null;
+  /** `@username` without the `@`, when the customer has one. */
+  readonly username: string | null;
   readonly languageCode: string | null;
 }
 
@@ -249,6 +251,7 @@ export const classifyUpdate = (raw: unknown): TelegramEvent => {
       sender: {
         chatId: String(chat.id),
         name: nameOf(query.from),
+        username: query.from.username ?? null,
         languageCode: query.from.language_code ?? null,
       },
     };
@@ -268,6 +271,7 @@ export const classifyUpdate = (raw: unknown): TelegramEvent => {
   const sender: TelegramSender = {
     chatId: String(message.chat.id),
     name: nameOf(message.from ?? message.chat),
+    username: (message.from ?? message.chat).username ?? null,
     languageCode: message.from?.language_code ?? null,
   };
   const text = (message.text ?? message.caption ?? '').trim();

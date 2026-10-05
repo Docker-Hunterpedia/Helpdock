@@ -31,18 +31,28 @@ export const inlineScriptHashes = (html: string): readonly string[] =>
     (script) => `'sha256-${createHash('sha256').update(script, 'utf8').digest('base64')}'`,
   );
 
-export const adminContentSecurityPolicy = (html: string): string =>
-  [
+/**
+ * `mediaOrigin` is the bucket's ({@link storageOrigin}). The browser talks to
+ * it directly through presigned URLs: an upload is a `PUT` to it, an image or
+ * thumbnail is an `<img>` from it, and a voice note is an `<audio>` from it. No
+ * other origin is allowed for any of the three.
+ */
+export const adminContentSecurityPolicy = (html: string, mediaOrigin?: string): string => {
+  const bucket = mediaOrigin === undefined ? '' : ` ${mediaOrigin}`;
+  return [
     "default-src 'none'",
     `script-src 'self' ${inlineScriptHashes(html).join(' ')}`.trimEnd(),
     // Emotion writes MUI's styles into `<style>` elements at runtime. Removing
     // this means giving that cache a nonce, which is a change in `apps/admin`.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    `img-src 'self' data:${bucket}`,
+    `media-src 'self'${bucket}`,
     "font-src 'self'",
-    // The admin talks to its own origin: Caddy sends the admin host to the api.
-    "connect-src 'self'",
+    // The api is the admin's own origin (Caddy sends the admin host to it);
+    // the bucket takes the presigned upload PUTs.
+    `connect-src 'self'${bucket}`,
     "base-uri 'none'",
     "form-action 'self'",
     "frame-ancestors 'none'",
   ].join('; ');
+};

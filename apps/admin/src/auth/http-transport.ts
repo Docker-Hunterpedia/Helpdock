@@ -6,6 +6,7 @@ import type {
   HcRefusal,
   IdentityProblem,
   StaffRefusal,
+  TelegramRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
 } from '@helpdock/schemas';
@@ -15,6 +16,7 @@ import { ContactError } from '../contacts/api.js';
 import { DomainsError } from '../domains/api.js';
 import { HelpCenterError } from '../help-center/api.js';
 import { StaffError } from '../staff/api.js';
+import { TelegramError } from '../telegram/api.js';
 import { TicketingError } from '../ticketing/api.js';
 import { TicketLifecycleError } from '../tickets/api.js';
 import { AuthError } from './api.js';
@@ -204,6 +206,7 @@ const toError = async (
   | DomainsError
   | HelpCenterError
   | StaffError
+  | TelegramError
   | TicketingError
   | TicketLifecycleError
 > => {
@@ -215,6 +218,7 @@ const toError = async (
   let channels: ChannelsRefusal | undefined;
   let domains: DomainsRefusal | undefined;
   let helpCenter: HcRefusal | undefined;
+  let telegram: TelegramRefusal | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -226,6 +230,7 @@ const toError = async (
     channels = body.channels?.reason;
     domains = body.domains?.reason;
     helpCenter = body.helpCenter?.reason;
+    telegram = body.telegram?.reason;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -257,6 +262,10 @@ const toError = async (
 
   if (helpCenter !== undefined) {
     return new HelpCenterError(helpCenter);
+  }
+
+  if (telegram !== undefined) {
+    return new TelegramError(telegram);
   }
 
   if (auth === undefined) {

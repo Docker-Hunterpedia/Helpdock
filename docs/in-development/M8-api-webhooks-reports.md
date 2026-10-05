@@ -66,10 +66,9 @@ Copied from the PRD, ticked as they are met.
 
 ### M8-05 System page
 
-- **Channels:** every active brand's mailboxes with M2's health rule
-  (`apps/api/src/observability/channel-status.ts`). Telegram adds a
-  `ChannelStatusSource` to `CHANNEL_STATUS_SOURCES` in
-  `observability.module.ts`.
+- **Channels:** every brand's mailboxes and Telegram bots, through M6's
+  reader (`apps/api/src/channels/channel-status.ts`, bound to
+  `CHANNEL_STATUS`).
 - **Storage:** measured per brand by `stats.rollup` when the reading is over 6
   hours old (`S3BrandObjects.usage`, prefix `brands/<id>/`), kept in the Redis
   hash `hd:storage:usage`, shown in total and per brand.

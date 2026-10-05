@@ -37,6 +37,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'install:admin': false,
     'help_center:read': true,
     'help_center:manage': true,
+    'report:read': true,
   },
   team_leader: {
     'ticket:read': true,
@@ -58,6 +59,8 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     // DOMAIN-RULES §1.2: a Team Leader manages "help center" content.
     'help_center:read': true,
     'help_center:manage': true,
+    // M8-04: their departments' reports, narrowed by row-level security.
+    'report:read': true,
   },
   agent: {
     'ticket:read': true,
@@ -76,6 +79,8 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     // Reads articles to answer with them; changes none.
     'help_center:read': true,
     'help_center:manage': false,
+    // Agents work tickets; reading the brand's reports is not part of that.
+    'report:read': false,
   },
   viewer: {
     'ticket:read': true,
@@ -94,6 +99,8 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     // §1.2: a Viewer "may read … help center content".
     'help_center:read': true,
     'help_center:manage': false,
+    // §1.2: a Viewer "may read reports".
+    'report:read': true,
   },
 };
 

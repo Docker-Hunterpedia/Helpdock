@@ -11,10 +11,17 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import { RefreshStore } from '../auth/session/refresh-store.js';
+import type { SigningKeys } from '../auth/session/signing-keys.js';
 import type { Logger } from '../logging/logger.js';
 import { ReadinessService } from '../runtime/readiness.service.js';
 import { DB, ENV, REDIS } from '../runtime/tokens.js';
 import type { BootFacts } from './boot-facts.js';
+import {
+  CHANNEL_STATUS_SOURCES,
+  type ChannelStatusSource,
+  MailboxChannelStatus,
+} from './channel-status.js';
 import { MetricsController } from './metrics.controller.js';
 import { createMetrics, type Metrics } from './metrics.js';
 import {
@@ -24,12 +31,21 @@ import {
   recordQueueCounts,
   recordRelayStatus,
 } from './metrics-sampler.js';
+import { QueueBoardAccess } from './queue-board.js';
 import { QueueRegistry } from './queues.js';
+import { StorageUsageStore } from './storage-usage.js';
 import { SystemController } from './system.controller.js';
 import { SystemService } from './system.service.js';
 import { readPostgresFacts } from './system-facts.js';
 import { checkReached } from './system-view.js';
-import { BOOT_FACTS, METRICS, OBSERVABILITY_LOGGER, QUEUE_REGISTRY } from './tokens.js';
+import {
+  BOOT_FACTS,
+  METRICS,
+  OBSERVABILITY_LOGGER,
+  OBSERVABILITY_SIGNING_KEYS,
+  QUEUE_REGISTRY,
+  STORAGE_USAGE,
+} from './tokens.js';
 
 /**
  * M0-10: `/health`, `/ready`, `/metrics`, the gauges behind them and the System
@@ -45,6 +61,8 @@ export interface ObservabilityModuleOptions {
   readonly logger: Logger;
   /** What boot learned: the verified runtime role and the migration count. */
   readonly bootFacts: BootFacts;
+  /** The session keys: "Open queue dashboard" follows the admin's browser session (M8-05). */
+  readonly signingKeys: SigningKeys;
 }
 
 /**
@@ -117,13 +135,20 @@ export class ObservabilityGauges implements OnModuleInit, OnApplicationShutdown 
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class ObservabilityModule {
-  static forRoot({ logger, bootFacts }: ObservabilityModuleOptions): DynamicModule {
+  static forRoot({ logger, bootFacts, signingKeys }: ObservabilityModuleOptions): DynamicModule {
     return {
       module: ObservabilityModule,
       controllers: [MetricsController, SystemController],
       providers: [
         { provide: OBSERVABILITY_LOGGER, useValue: logger },
         { provide: BOOT_FACTS, useValue: bootFacts },
+        { provide: OBSERVABILITY_SIGNING_KEYS, useValue: signingKeys },
+        {
+          provide: QueueBoardAccess,
+          inject: [REDIS, DB],
+          useFactory: (redis: Redis, db: Db) =>
+            new QueueBoardAccess({ redis, db, families: new RefreshStore(redis) }),
+        },
         { provide: METRICS, useFactory: createMetrics },
         {
           provide: QUEUE_REGISTRY,
@@ -131,13 +156,25 @@ export class ObservabilityModule {
           useFactory: (env: Env) => new QueueRegistry(env.REDIS_URL),
         },
         ReadinessService,
+        // M8-05: the channel list's sources. M6 adds its Telegram bots here.
+        {
+          provide: CHANNEL_STATUS_SOURCES,
+          useFactory: (): readonly ChannelStatusSource[] => [new MailboxChannelStatus()],
+        },
+        {
+          provide: STORAGE_USAGE,
+          inject: [REDIS],
+          useFactory: (redis: Redis) => new StorageUsageStore(redis),
+        },
         SystemService,
         ObservabilityGauges,
       ],
       // `ReadinessService` is owned here because `/ready` is observability, and
       // exported because `HealthController` — which answers it — belongs to the
       // app's own route table.
-      exports: [METRICS, ReadinessService],
+      // `QUEUE_REGISTRY` and `QueueBoardAccess` are read by boot, which mounts
+      // Bull Board on the Fastify instance with them (`queue-board.ts`).
+      exports: [METRICS, ReadinessService, QUEUE_REGISTRY, QueueBoardAccess],
     };
   }
 }

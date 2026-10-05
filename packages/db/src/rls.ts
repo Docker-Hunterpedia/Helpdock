@@ -161,6 +161,13 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'hc_search_log', departmentScoped: false },
   { name: 'hc_article_views', departmentScoped: false },
   { name: 'hc_article_feedback', departmentScoped: false },
+  // M8-04. The ticket rollups carry the department they describe, so a Team
+  // Leader's report is narrowed by the same policy as their ticket list. The
+  // help center rollups are the brand's, like the search log they summarise.
+  { name: 'report_daily', departmentScoped: true },
+  { name: 'report_agent_daily', departmentScoped: true },
+  { name: 'report_search_daily', departmentScoped: false },
+  { name: 'report_help_center_daily', departmentScoped: false },
 ];
 
 /**

@@ -1,11 +1,14 @@
 import type { Db, DbTransaction } from '@helpdock/db';
 import { RELAY_STATUS_KEY } from '@helpdock/jobs';
-import { systemQueuePageSchema, systemStatusSchema } from '@helpdock/schemas';
+import { type ChannelStatus, systemQueuePageSchema, systemStatusSchema } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
+import { NoAiUsage } from '../reports/ai-usage.js';
 import type { ReadinessService } from '../runtime/readiness.service.js';
 import type { BootFacts } from './boot-facts.js';
+import type { ChannelStatusSource } from './channel-status.js';
 import type { QueueRegistry } from './queues.js';
+import type { StorageUsageRecord, StorageUsageStore } from './storage-usage.js';
 import { SystemService } from './system.service.js';
 
 /**
@@ -38,8 +41,27 @@ const fakeTx = (rows: readonly (typeof AUDIT_ROW)[]): DbTransaction =>
     }),
   }) as unknown as DbTransaction;
 
+const BRAND_ID = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+
+/** `execute` for the server facts; `select … from` for the brand names storage is shown with. */
 const fakeDb = (rows: Record<string, unknown>[]): Db =>
-  ({ execute: async () => rows }) as unknown as Db;
+  ({
+    execute: async () => rows,
+    select: () => ({ from: async () => [{ id: BRAND_ID, name: 'Acme' }] }),
+  }) as unknown as Db;
+
+const fakeStorage = (readings: readonly StorageUsageRecord[]): StorageUsageStore =>
+  ({ all: async () => readings }) as unknown as StorageUsageStore;
+
+const MAILBOX: ChannelStatus = {
+  id: '0192c3f0-1a2b-7c3d-8e4f-0000000000c1',
+  name: 'support@acme.example',
+  brandName: 'Acme',
+  kind: 'email',
+  status: 'error',
+  detail: 'failing',
+  checkedAt: '2026-10-05T08:00:00.000Z',
+};
 
 const fakeRedis = (relay: string | null) =>
   ({
@@ -76,9 +98,13 @@ const QUEUE_NAMES = ['inbound', 'outbound', 'sla', 'rules', 'ai', 'knowledge', '
 const serviceWith = ({
   relay = null,
   rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2 }],
+  channels = [],
+  readings = [],
 }: {
   relay?: string | null;
   rows?: Record<string, unknown>[];
+  channels?: readonly ChannelStatusSource[];
+  readings?: readonly StorageUsageRecord[];
 } = {}) =>
   new SystemService(
     fakeDb(rows),
@@ -86,6 +112,9 @@ const serviceWith = ({
     fakeReadiness(),
     fakeQueues(QUEUE_NAMES),
     BOOT_FACTS,
+    channels,
+    fakeStorage(readings),
+    new NoAiUsage(),
   );
 
 const inRequest = <T>(run: () => Promise<T>): Promise<T> => {
@@ -158,6 +187,45 @@ describe('SystemService.status', () => {
     expect(status.channels).toEqual([]);
   });
 
+  it("lists every source's channels and leaves out a source that failed", async () => {
+    const channels: ChannelStatusSource[] = [
+      { statuses: async () => [MAILBOX] },
+      {
+        statuses: async () => {
+          throw new Error('the bot API is down');
+        },
+      },
+    ];
+
+    const status = await inRequest(() => serviceWith({ channels }).status());
+
+    expect(status.channels).toEqual([MAILBOX]);
+  });
+
+  it("reports storage from the worker's readings, per brand, once there are any", async () => {
+    const readings = [
+      { brandId: BRAND_ID, bytes: 2048, objects: 3, measuredAt: '2026-10-05T07:07:00.000Z' },
+    ];
+
+    const status = await inRequest(() => serviceWith({ readings }).status());
+
+    expect(systemStatusSchema.safeParse(status).success).toBe(true);
+    expect(status.storage).toEqual({
+      configured: true,
+      usedBytes: 2048,
+      softLimitBytes: null,
+      brands: [
+        {
+          brandId: BRAND_ID,
+          name: 'Acme',
+          usedBytes: 2048,
+          objects: 3,
+          measuredAt: '2026-10-05T07:07:00.000Z',
+        },
+      ],
+    });
+  });
+
   it('carries the install-scope audit rows as ISO timestamps', async () => {
     const status = await inRequest(() => serviceWith().status());
 
@@ -179,6 +247,13 @@ describe('SystemService.status', () => {
         },
       } as unknown as QueueRegistry,
       BOOT_FACTS,
+      [],
+      {
+        all: async () => {
+          throw new Error('redis went away');
+        },
+      } as unknown as StorageUsageStore,
+      new NoAiUsage(),
     );
 
     const status = await inRequest(() => service.status());
@@ -187,6 +262,7 @@ describe('SystemService.status', () => {
     expect(status.database.version).toBeNull();
     expect(status.database.migrationsApplied).toBe(4);
     expect(status.queues).toEqual({ queues: [], total: 0, deadLettered: 0 });
+    expect(status.storage).toEqual({ configured: false });
   });
 });
 

@@ -47,6 +47,7 @@ import {
   statsRollupScheduleJob,
   telegramPollJob,
   telegramSendJob,
+  webhookDeliverJob,
 } from '@helpdock/jobs';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
@@ -73,6 +74,7 @@ import {
 import { imapConnectOptions } from '../channels/imap-connector.js';
 import { createInboundEmailService } from '../channels/inbound/factory.js';
 import { MailboxesRepository } from '../channels/mailboxes.repository.js';
+import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { CsatRepository } from '../csat/csat.repository.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
 import { CsatTokens } from '../csat/tokens.js';
@@ -144,6 +146,9 @@ import {
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
+import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
+import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
 import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
 
@@ -252,6 +257,8 @@ export interface WorkerDependencies {
    * the retention schedule is.
    */
   createDomainsWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
+  /** M8-03's `webhooks` consumer: one signed POST per delivery, through `@helpdock/net`. */
+  createWebhooksWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -532,6 +539,24 @@ export const workerDependencies: WorkerDependencies = {
     // event drops the brand's cached pages, under its own subscriber name.
     registerPageCacheHandlers(new RedisPageCache(redis));
 
+    // M8-03. `contact.created` is the contacts module's; the webhooks module
+    // subscribes to it below. Last, so every other subscriber of a ticket event has run before
+    // its deliveries are written. `webhook.delivery_requested` adds the
+    // `webhook.deliver` job under the delivery's id, once that row committed.
+    registerContactEventHandlers();
+    const webhooks = new Queue(QUEUE_NAMES.webhooks, { connection: redis });
+    registerWebhookEventHandlers({
+      repository: new WebhooksRepository(),
+      queue: {
+        add: async (payload, jobId) => {
+          await webhooks.add(webhookDeliverJob.name, payload, {
+            ...webhookDeliverJob.options,
+            jobId,
+          });
+        },
+      },
+    });
+
     return {
       close: async () => {
         await media.close();
@@ -543,6 +568,7 @@ export const workerDependencies: WorkerDependencies = {
         await rules.close();
         await notify.close();
         await domains.close();
+        await webhooks.close();
       },
     };
   },
@@ -572,6 +598,7 @@ export const workerDependencies: WorkerDependencies = {
         repository: telegramRepository,
         keyring,
         api: telegramApiFactory(env.TELEGRAM_API_ROOT),
+        storage: storageFor(env),
       }),
     });
     const worker = new Worker(
@@ -1065,6 +1092,34 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createWebhooksWorker: ({ redis, db, log, env }) => {
+    const worker = new Worker(
+      QUEUE_NAMES.webhooks,
+      createWebhookDeliverProcessor({
+        db,
+        log,
+        repository: new WebhooksRepository(),
+        keyring: createKeyring(env),
+        policy: {
+          allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+          onBlocked: (event) =>
+            log.warn(
+              { host: event.host, address: event.address, reason: event.reason },
+              'webhook destination blocked (DOMAIN-RULES §13)',
+            ),
+        },
+      }),
+      // A few at once: each delivery is mostly waiting on somebody's server.
+      { connection: redis, concurrency: 5 },
+    );
+    worker.on('failed', (job, error) =>
+      log.warn(
+        { job: job?.name, jobId: job?.id, attemptsMade: job?.attemptsMade, err: error },
+        'webhook.deliver attempt failed',
+      ),
+    );
+    return worker;
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -1109,6 +1164,7 @@ export const startWorker = ({
   const helpCenter = deps.createHelpCenterWorker({ redis: connection, db, log, env, settings });
   const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   const domains = deps.createDomainsWorker({ redis: connection, db, log, env });
+  const webhooks = deps.createWebhooksWorker({ redis: connection, db, log, env });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -1140,6 +1196,7 @@ export const startWorker = ({
     await helpCenter.close();
     await notify.close();
     await domains.close();
+    await webhooks.close();
     await producers.close();
     await connection.quit();
   };

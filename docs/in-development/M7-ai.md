@@ -40,7 +40,7 @@ Copied from the PRD, ticked as they are met.
 
 | File | What |
 |---|---|
-| `0039_ai_assistant_modes.sql` | `ai_settings.system_prompt_ar` and `ai_settings.modes` (jsonb, null = every mode off) for M7-10 |
+| `0041_ai_assistant_modes.sql` | `ai_settings.system_prompt_ar` and `ai_settings.modes` (jsonb, null = every mode off) for M7-10 |
 | `0038_ai_and_knowledge.sql` | `vector` extension; `ai_settings`, `ai_calls`, `ai_budget_alerts`; `knowledge_sources`, `knowledge_documents`, `knowledge_chunks` (with the generated `search` tsvector, no vector column); the global `embedding_space` row; the owner-rights functions `helpdock_set_embedding_dims(int)` and `helpdock_build_embedding_index()`; RLS on the six tenant tables |
 
 ## Deliverable notes

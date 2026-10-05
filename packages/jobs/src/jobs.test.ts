@@ -51,6 +51,8 @@ import {
   telegramPollJob,
   telegramPollSchedulerId,
   telegramSendJob,
+  WEBHOOK_DELIVER_ATTEMPTS,
+  webhookDeliverJob,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
 import { PayloadValidationError } from './validation.js';
@@ -198,6 +200,27 @@ describe('email.send', () => {
 
   it('refuses a payload with no delivery', () => {
     expect(() => parseJobPayload(emailSendJob, { brandId })).toThrow(PayloadValidationError);
+  });
+});
+
+describe('webhook.deliver', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000dd';
+
+  it('keys every attempt of a delivery by its row, so a redelivered job sends once', () => {
+    expect(idempotencyKeyFor(webhookDeliverJob, { brandId, deliveryId }, 'a')).toBe(
+      `webhook.deliver:${deliveryId}`,
+    );
+  });
+
+  it('runs on the webhooks queue with eight attempts and exponential backoff', () => {
+    expect(webhookDeliverJob.queue).toBe('webhooks');
+    expect(webhookDeliverJob.options.attempts).toBe(WEBHOOK_DELIVER_ATTEMPTS);
+    expect(WEBHOOK_DELIVER_ATTEMPTS).toBe(8);
+    expect(webhookDeliverJob.options.backoff).toEqual({ type: 'exponential', delay: 30_000 });
+  });
+
+  it('refuses a payload with no delivery', () => {
+    expect(() => parseJobPayload(webhookDeliverJob, { brandId })).toThrow(PayloadValidationError);
   });
 });
 

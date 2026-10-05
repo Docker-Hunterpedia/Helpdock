@@ -51,7 +51,13 @@ const requestedLocale = (search: string): Locale | undefined => {
 /** The preview's sample, in whichever language the page settled on. */
 const sampleSurvey = (i18n: ReturnType<typeof createI18n>, lng: Locale): CsatSample => ({
   state: 'open',
-  brand: { name: i18n.t('csat:preview.brand', { lng }), locale: lng, accent: null },
+  brand: {
+    name: i18n.t('csat:preview.brand', { lng }),
+    locale: lng,
+    accent: null,
+    // The preview reads nothing, so it cannot know whether the brand's help center is published.
+    helpCenterUrl: null,
+  },
   ticket: {
     reference: 'HD-1042',
     subject: i18n.t('csat:preview.subject', { lng }),

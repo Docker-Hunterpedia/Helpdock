@@ -38,6 +38,21 @@ if (!hasDocker) {
 // GreenMail's certificate is self-signed. Only the suite says so.
 const TEST_TLS: ImapConnectOptions = { tls: { rejectUnauthorized: false }, timeoutMs: 10_000 };
 
+/**
+ * GreenMail starts its servers, waits up to `greenmail.startup.timeout` (2 s by
+ * default) for all of them, and only then creates the users. On a busy Docker
+ * host a server misses that window: GreenMail's main thread throws, the users
+ * are never created, and the servers it did start stay up, so the ports listen
+ * and every login is "Invalid login/password". A generous timeout keeps that
+ * from happening, and waiting for the API server's log line — written after
+ * the users exist, never after a failed start — makes a failed start fail the
+ * suite's setup instead of its IMAP tests.
+ */
+const GREENMAIL_READY = Wait.forAll([
+  Wait.forListeningPorts(),
+  Wait.forLogMessage(/Starting GreenMail API server/),
+]);
+
 describe.skipIf(!hasDocker)('IMAP polling against GreenMail', () => {
   let container: StartedTestContainer;
   let settings: ImapSettings;
@@ -63,10 +78,10 @@ describe.skipIf(!hasDocker)('IMAP polling against GreenMail', () => {
     container = await new GenericContainer(GREENMAIL_IMAGE)
       .withEnvironment({
         GREENMAIL_OPTS:
-          '-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=agent:secret@helpdock.test',
+          '-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.startup.timeout=60000 -Dgreenmail.users=agent:secret@helpdock.test',
       })
       .withExposedPorts(SMTP_PORT, IMAPS_PORT)
-      .withWaitStrategy(Wait.forListeningPorts())
+      .withWaitStrategy(GREENMAIL_READY)
       .withStartupTimeout(CONTAINER_STARTUP_MS)
       .start();
 

@@ -849,6 +849,41 @@ export const knowledgeReembedJob = defineJob({
 });
 
 export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
+export const webhookDeliverPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `webhook_deliveries` row: its frozen body, its endpoint, and its log. */
+  deliveryId: z.uuid(),
+});
+
+export type WebhookDeliverPayload = z.infer<typeof webhookDeliverPayloadSchema>;
+
+/** Attempts before a delivery is marked `failed` (M8-03). */
+export const WEBHOOK_DELIVER_ATTEMPTS = 8;
+
+/**
+ * M8-03: one event to one endpoint (ARCHITECTURE §13, `webhooks` queue). The
+ * delivery row is written by the `webhooks` subscriber of the domain event,
+ * beside a `webhook.delivery_requested` outbox row whose handler adds this job
+ * once the row has committed, as `email.send` does.
+ *
+ * Eight attempts, doubling from 30 seconds: the last one is 32 minutes after
+ * the one before it and about an hour after the first, so a receiver that is
+ * down for a deploy or a short outage still gets the event. Idempotent by
+ * delivery: a delivery that already succeeded is not sent again.
+ */
+export const webhookDeliverJob = defineJob({
+  name: 'webhook.deliver',
+  queue: QUEUE_NAMES.webhooks,
+  schema: webhookDeliverPayloadSchema,
+  options: {
+    attempts: WEBHOOK_DELIVER_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
+});
+
 export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('reply'),
@@ -1043,6 +1078,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
   [knowledgeConfigureJob.name]: knowledgeConfigureJob,
   [knowledgeReembedJob.name]: knowledgeReembedJob,
+  [webhookDeliverJob.name]: webhookDeliverJob,
   [telegramSendJob.name]: telegramSendJob,
   [telegramPollJob.name]: telegramPollJob,
   [statsRollupJob.name]: statsRollupJob,

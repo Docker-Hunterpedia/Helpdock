@@ -1,4 +1,5 @@
-import type { HcLocale } from '@helpdock/schemas';
+import { HC_FEEDBACK_COMMENT_MAX, type HcLocale } from '@helpdock/schemas';
+import { FEEDBACK_TARGET, type FeedbackStep } from '../feedback-step.js';
 import { icon } from './icons.js';
 import type { NavLink } from './layout.js';
 import { esc, inLanguage, type Translate } from './text.js';
@@ -159,7 +160,7 @@ export const homeMain = (view: HomeView): string => {
 <p class="hd-lead">${esc(t('home.intro'))}</p>
 ${searchForm(view, { action: view.searchAction, value: '', clearHref: null, large: true, id: 'hd-q' })}
 </section>
-<main class="hd-main" id="hd-main">
+<main class="hd-main" id="hd-main" tabindex="-1">
 ${cards}
 ${lists.length === 0 ? '' : `<div class="hd-cards hd-cards-2">${lists.join('')}</div>`}
 ${helpBanner(view.help, view, 'help.body')}
@@ -219,7 +220,7 @@ export const categoryMain = (view: CategoryView): string => {
           .map((link) => `<a href="${esc(link.href)}">${esc(link.label)}</a>`)
           .join('')}</nav>`;
   return `<div class="hd-page hd-page-2">
-<main class="hd-stack-lg" id="hd-main">
+<main class="hd-stack-lg" id="hd-main" tabindex="-1">
 <div class="hd-stack hd-gap-12">
 ${breadcrumb(view.crumbs, view)}
 <div class="hd-row hd-row-center"><span class="hd-tile hd-tile-lg" aria-hidden="true">${icon('folder', 24)}</span><h1 class="hd-display">${esc(view.title)}</h1></div>
@@ -242,8 +243,9 @@ export interface FeedbackView {
   readonly articleId: string;
   readonly locale: HcLocale;
   readonly slug: string;
-  /** Set after the visitor answered. */
-  readonly answered: boolean;
+  readonly step: FeedbackStep;
+  /** "Skip" on the comment step: the thanks, without sending anything more. */
+  readonly skipHref: string;
 }
 
 export interface ArticleView extends PageText {
@@ -267,18 +269,40 @@ export interface ArticleView extends PageText {
   readonly help: HelpView;
 }
 
+const feedbackButtons = (t: Translate, pressed: 'no' | null): string => {
+  const state = (answer: 'yes' | 'no') =>
+    pressed === null ? '' : ` aria-pressed="${String(answer === pressed)}"`;
+  return `<fieldset><legend>${esc(t('article.feedback.question'))}</legend>
+<button class="hd-button-secondary" type="submit" name="helpful" value="yes"${state('yes')}>${icon('thumbsUp')}${esc(t('article.feedback.yes'))}</button>
+<button class="hd-button-secondary" type="submit" name="helpful" value="no"${state('no')}>${icon('thumbsDown')}${esc(t('article.feedback.no'))}</button>
+</fieldset>`;
+};
+
+/**
+ * "Was this helpful?" (`Help center · article`, `HelpCenter/Article-AR`
+ * panels 2 and 3). A "Yes" goes straight to the thanks; a "No" is recorded
+ * and opens the optional "What was missing?", whose Send records it again
+ * with the note and whose Skip only moves on.
+ */
 const feedbackCard = (feedback: FeedbackView, t: Translate): string => {
-  if (feedback.answered) {
-    return `<div class="hd-feedback hd-feedback-done" id="feedback" role="status" tabindex="-1">${icon('check', 16)}<span><strong>${esc(t('article.feedback.thanks'))}</strong> ${esc(t('article.feedback.thanksBody'))}</span></div>`;
+  if (feedback.step === 'thanks') {
+    return `<div class="hd-feedback hd-feedback-done" id="${FEEDBACK_TARGET.thanks}" role="status" tabindex="-1">${icon('check', 16)}<span><strong>${esc(t('article.feedback.thanks'))}</strong> ${esc(t('article.feedback.thanksBody'))}</span></div>`;
   }
-  return `<form class="hd-feedback" id="feedback" method="post" action="${esc(feedback.action)}">
-<input type="hidden" name="article" value="${esc(feedback.articleId)}">
+  const hidden = `<input type="hidden" name="article" value="${esc(feedback.articleId)}">
 <input type="hidden" name="locale" value="${feedback.locale}">
-<input type="hidden" name="slug" value="${esc(feedback.slug)}">
-<fieldset><legend>${esc(t('article.feedback.question'))}</legend>
-<button class="hd-button-secondary" type="submit" name="helpful" value="yes">${icon('thumbsUp')}${esc(t('article.feedback.yes'))}</button>
-<button class="hd-button-secondary" type="submit" name="helpful" value="no">${icon('thumbsDown')}${esc(t('article.feedback.no'))}</button>
-</fieldset>
+<input type="hidden" name="slug" value="${esc(feedback.slug)}">`;
+  if (feedback.step === 'ask') {
+    return `<form class="hd-feedback" id="feedback" method="post" action="${esc(feedback.action)}">
+${hidden}
+${feedbackButtons(t, null)}
+</form>`;
+  }
+  return `<form class="hd-feedback hd-feedback-comment" id="feedback" method="post" action="${esc(feedback.action)}">
+${hidden}
+${feedbackButtons(t, 'no')}
+<label class="hd-feedback-label" for="${FEEDBACK_TARGET.comment}">${esc(t('article.feedback.missing'))} <span class="hd-muted">${esc(t('article.feedback.optional'))}</span></label>
+<textarea id="${FEEDBACK_TARGET.comment}" name="comment" rows="3" maxlength="${String(HC_FEEDBACK_COMMENT_MAX)}" aria-describedby="hd-feedback-hint"></textarea>
+<div class="hd-feedback-actions"><span class="hd-caption" id="hd-feedback-hint">${esc(t('article.feedback.hint'))}</span><a class="hd-button-ghost" href="${esc(feedback.skipHref)}">${esc(t('article.feedback.skip'))}</a><button class="hd-button" type="submit" name="helpful" value="no">${esc(t('article.feedback.send'))}</button></div>
 </form>`;
 };
 
@@ -311,7 +335,7 @@ export const articleMain = (view: ArticleView): string => {
 
   return `<div class="hd-page hd-page-3">
 ${nav}
-<main class="hd-article" id="hd-main">
+<main class="hd-article" id="hd-main" tabindex="-1">
 ${note}
 ${breadcrumb(view.crumbs, view)}
 <article class="hd-stack hd-gap-20"${langAttributes}>
@@ -383,14 +407,14 @@ export const searchMain = (view: SearchView): string => {
   });
 
   if (view.q === '') {
-    return `<main class="hd-main hd-gap-16" id="hd-main"><h1 class="hd-display">${esc(t('search.title'))}</h1>${form}<p class="hd-status">${esc(t('search.prompt'))}</p></main>`;
+    return `<main class="hd-main hd-gap-16" id="hd-main" tabindex="-1"><h1 class="hd-display">${esc(t('search.title'))}</h1>${form}<p class="hd-status">${esc(t('search.prompt'))}</p></main>`;
   }
 
   if (view.results.length === 0) {
     const chips = view.topics
       .map((topic) => `<a class="hd-chip" href="${esc(topic.href)}">${esc(topic.label)}</a>`)
       .join('');
-    return `<main class="hd-main hd-gap-24" id="hd-main">
+    return `<main class="hd-main hd-gap-24" id="hd-main" tabindex="-1">
 <h1 class="hd-display">${esc(t('search.title'))}</h1>
 ${form}
 <div class="hd-empty"><span class="hd-tile hd-tile-lg" aria-hidden="true">${icon('search', 24)}</span><div class="hd-stack hd-gap-4">
@@ -419,7 +443,7 @@ ${helpBanner(view.help, view, 'help.searchBody')}
           .join('')}</nav>`;
 
   return `<div class="hd-page hd-page-2">
-<main class="hd-stack" id="hd-main">
+<main class="hd-stack" id="hd-main" tabindex="-1">
 <h1 class="hd-display">${esc(t('search.title'))}</h1>
 ${form}
 <p class="hd-caption" role="status">${esc(t('search.count', { count: view.total, language: view.language }))}</p>
@@ -448,7 +472,7 @@ export const notFoundMain = (view: NotFoundView): string => {
               `<a href="${esc(item.href)}">${inLanguage(item.title, item.lang, view.locale)}</a>`,
           )
           .join(' · ')}</span>`;
-  return `<main class="hd-state" id="hd-main">
+  return `<main class="hd-state" id="hd-main" tabindex="-1">
 <span class="hd-tile hd-tile-lg" aria-hidden="true">${icon('alert', 24)}</span>
 <div class="hd-stack hd-gap-8"><h1 class="hd-display">${esc(t('states.notFound.heading'))}</h1><p class="hd-lead">${esc(t('states.notFound.body'))}</p></div>
 ${searchForm(view, { action: view.searchAction, value: '', clearHref: null, large: false, id: 'hd-nq' })}
@@ -482,7 +506,7 @@ export const goneMain = (view: GoneView): string => {
               `<a class="hd-link" href="${esc(item.href)}">${inLanguage(item.title, item.lang, view.locale)}</a>`,
           )
           .join('')}</nav>`;
-  return `<main class="hd-state" id="hd-main">
+  return `<main class="hd-state" id="hd-main" tabindex="-1">
 <span class="hd-tile hd-tile-lg" aria-hidden="true">${icon('archive', 24)}</span>
 <div class="hd-stack hd-gap-8"><h1 class="hd-display">${esc(t('states.gone.heading'))}</h1>${body}</div>
 ${more}
@@ -497,7 +521,7 @@ export interface WallView extends PageText {
 
 export const wallMain = (view: WallView): string => {
   const { t } = view;
-  return `<main class="hd-state" id="hd-main">
+  return `<main class="hd-state" id="hd-main" tabindex="-1">
 <span class="hd-tile hd-tile-lg" aria-hidden="true">${icon('lock', 24)}</span>
 <div class="hd-stack hd-gap-8"><h1 class="hd-display">${esc(t('states.wall.heading'))}</h1><p class="hd-lead">${esc(t('states.wall.body', { brand: view.brandName }))}</p></div>
 <a class="hd-button hd-button-lg" href="${esc(view.signInHref)}">${icon('lock')}${esc(t('states.wall.button'))}</a>

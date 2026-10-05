@@ -2,7 +2,12 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { type CsatApi, CsatLinkError } from '../../csat/api.js';
-import { MOCK_CSAT_TICKET, MOCK_CSAT_TOKENS, MockCsatApi } from '../../csat/mock-api.js';
+import {
+  MOCK_CSAT_HELP_CENTER,
+  MOCK_CSAT_TICKET,
+  MOCK_CSAT_TOKENS,
+  MockCsatApi,
+} from '../../csat/mock-api.js';
 import { CSAT_PREVIEW_TOKEN } from '../../csat/preview-api.js';
 import { CsatApp } from './csat-app.tsx';
 
@@ -46,7 +51,7 @@ describe('an open link', () => {
     const api: CsatApi = {
       survey: async () => ({
         state: 'open',
-        brand: { name: 'Helpdock', locale: 'en', accent: null },
+        brand: { name: 'Helpdock', locale: 'en', accent: null, helpCenterUrl: null },
         ticket: { ...MOCK_CSAT_TICKET, closedBy: null },
       }),
       rate: () => Promise.reject(new CsatLinkError('unavailable')),
@@ -90,6 +95,10 @@ describe('an open link', () => {
 
     expect(await screen.findByText('Thanks, your rating was sent.')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'You rated this request 4 · Good' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Browse the help center' })).toHaveAttribute(
+      'href',
+      MOCK_CSAT_HELP_CENTER,
+    );
   });
 
   it('says so when the rating could not be sent, and keeps the form', async () => {
@@ -120,6 +129,30 @@ describe('a spent link', () => {
     );
     expect(screen.queryByText(MOCK_CSAT_TICKET.subject, { exact: false })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Send rating' })).toBeNull();
+  });
+});
+
+describe('"Browse the help center"', () => {
+  it('links a spent link to the brand’s help center when it is published', async () => {
+    renderPage(MOCK_CSAT_TOKENS.used);
+
+    expect(await screen.findByRole('link', { name: 'Browse the help center' })).toHaveAttribute(
+      'href',
+      MOCK_CSAT_HELP_CENTER,
+    );
+  });
+
+  it('is left out while the brand has no published help center', async () => {
+    renderPage(MOCK_CSAT_TOKENS.expired);
+    expect(await screen.findByRole('alert')).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Browse the help center' })).toBeNull();
+  });
+
+  it('is not on the rating form', async () => {
+    renderPage(MOCK_CSAT_TOKENS.open);
+
+    expect(await screen.findByRole('button', { name: 'Send rating' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Browse the help center' })).toBeNull();
   });
 });
 

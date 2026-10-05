@@ -26,6 +26,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0016](0016-telegram-updates-filed-in-the-webhook-request.md) | File Telegram updates in the webhook request, and poll only in development | accepted |
 | [0017](0017-bull-board-behind-a-one-use-pass.md) | Mount Bull Board as a Fastify plugin, opened with a one-use pass (amends 0004) | accepted |
 | [0018](0018-pi-ai-provider-layer.md) | The AI provider layer: pi-ai behind one facade, credentials in one secret setting, cost from pi-ai's model registry | accepted |
+| [0019](0019-api-scopes-and-openapi-from-zod.md) | API keys act brand-wide through their own permissions, and OpenAPI is generated from Zod | accepted |
 
 ## Template
 

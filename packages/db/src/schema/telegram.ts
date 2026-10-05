@@ -112,6 +112,10 @@ export const telegramChats = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: 'cascade' }),
     ticketId: uuid('ticket_id').references(() => tickets.id, { onDelete: 'set null' }),
+    /** The customer's `@username`, without the `@`, as of their last message. It can change. */
+    username: text('username'),
+    /** M6-04: when the customer pressed a language button. Null: the language was inferred. */
+    languageChosenAt: timestamp('language_chosen_at', { withTimezone: true }),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

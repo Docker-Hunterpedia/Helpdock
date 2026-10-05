@@ -539,5 +539,48 @@
     "none": "No SLA policy applies",
     "noneDetail": "No policy matches {{department}} at {{priority}} priority.",
     "policiesLink": "SLA policies"
+  },
+  "telegram": {
+    "chip": "{{channel}} · @{{username}}",
+    "via": "via @{{bot}}",
+    "toChat": "to the Telegram chat",
+    "sent": "Sent",
+    "queued": "Sending",
+    "notDelivered": "Not delivered",
+    "notDeliveredDetail": "{{error}} · {{attempts}} tries",
+    "retry": "Retry",
+    "retryLabel": "Retry sending this reply to Telegram",
+    "retried": "Sending the reply again",
+    "retryFailed": "That did not work. Try again.",
+    "composerTo": "To the Telegram chat",
+    "composerFoot": "Sent by @{{bot}} as plain text; no signature.",
+    "voice": {
+      "play": "Play voice note, {{duration}}",
+      "pause": "Pause voice note, {{duration}}",
+      "loadFailed": "The voice note could not be played."
+    },
+    "location": {
+      "label": "Location",
+      "open": "Open map",
+      "openLabel": "Open the location {{coordinates}} on OpenStreetMap"
+    },
+    "identity": {
+      "heading": "Telegram identity",
+      "chatId": "Chat id",
+      "copy": "Copy chat id",
+      "copied": "Chat id copied",
+      "username": "Username",
+      "name": "Name",
+      "language": "Language",
+      "chosen": "{{language}}, chosen at /start",
+      "notChosen": "Not chosen yet",
+      "bot": "Bot",
+      "none": "—",
+      "footer": "The chat id is verified by Telegram and identifies this contact. Usernames can change."
+    },
+    "languages": {
+      "en": "English",
+      "ar": "Arabic"
+    }
   }
 }

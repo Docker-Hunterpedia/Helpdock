@@ -26,6 +26,8 @@ import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push
 import { MockNotificationsApi } from '../notifications/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import type { TicketsApi } from '../tickets/api.js';
@@ -49,6 +51,7 @@ export interface RenderAppOptions {
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
   readonly aiApi?: AiApi;
+  readonly telegramApi?: TelegramApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -68,6 +71,7 @@ export interface RenderedApp extends RenderResult {
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
   readonly aiApi: AiApi;
+  readonly telegramApi: TelegramApi;
 }
 
 /**
@@ -91,6 +95,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
   const aiApi = options.aiApi ?? new MockAiApi();
+  const telegramApi = options.telegramApi ?? new MockTelegramApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -110,6 +115,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       browserPush={browserPush}
       domainsApi={domainsApi}
       aiApi={aiApi}
+      telegramApi={telegramApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -136,5 +142,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     browserPush,
     domainsApi,
     aiApi,
+    telegramApi,
   };
 }

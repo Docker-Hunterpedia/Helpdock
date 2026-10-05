@@ -19,6 +19,7 @@
   "ratedHeading": "You rated this request {{rating}} · {{label}}",
   "ratedBody": "If anything is still unresolved, reply to the last message from {{brand}} and we will reopen it.",
   "spent": "This rating link has expired or was already used.",
+  "browseHelpCenter": "Browse the help center",
   "unavailable": "This page could not be loaded. Try again in a few minutes.",
   "failed": "Your rating could not be sent. Try again.",
   "loading": "Loading",

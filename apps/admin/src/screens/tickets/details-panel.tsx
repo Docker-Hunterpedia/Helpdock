@@ -80,6 +80,11 @@ export interface DetailsPanelProps {
    * know what they read.
    */
   readonly cards?: ReactNode;
+  /**
+   * M6-02: the ChannelIdentityCard under the contact, for a channel whose
+   * identity is not an address. Composed by the ticket view, as `cards` is.
+   */
+  readonly channelIdentity?: ReactNode;
   /** M1-15: the brand's tags, which the tag picker offers. */
   readonly brandTags: readonly TagSummary[];
   /** M1-15: the ticket's custom fields this reader may see, in the brand's order. */
@@ -110,6 +115,7 @@ export function DetailsPanel({
   sla,
   canConfigure = false,
   cards,
+  channelIdentity,
   brandTags,
   customFields,
   canWrite,
@@ -210,6 +216,8 @@ export function DetailsPanel({
           </Box>
         )}
       </Box>
+
+      {channelIdentity}
 
       {/* M1-13: the contact, the CCs and a field to copy somebody in. */}
       <ParticipantsCard ticketId={ticket.id} />

@@ -1,7 +1,7 @@
 import type { CsatSubmitRequest, CsatSurveyView } from '@helpdock/schemas';
 import { CSAT_COMMENT_MAX } from '@helpdock/schemas';
 import type { SemanticTokens } from '@helpdock/ui';
-import { Box, Button, TextField, Typography } from '@mui/material';
+import { Box, Button, Link, TextField, Typography } from '@mui/material';
 import { Check, Clock, Eye, TriangleAlert } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
@@ -22,8 +22,9 @@ import type { LoadState } from './csat-app.tsx';
  *
  * - "closed by Lina" is the first name of the staff member who closed the
  *   ticket, which the api sends only while the link is open (M1-15 part 2).
- * - "Browse the help center" is left out: there is no help center to link to
- *   until M5.
+ * - "Browse the help center" follows the thanks and the spent sentence when
+ *   the api sends the brand's help center address, which it does only while
+ *   that help center has something public to read.
  * - `preview` is the Feedback tab's sample: the same page with an info line
  *   above it saying nothing sent from it is recorded.
  */
@@ -124,6 +125,10 @@ export function CsatPage({
 
         {view?.state === 'rated' ? (
           <Rated rating={view.rating} brandName={view.brand.name} tokens={tokens} />
+        ) : null}
+
+        {view !== null && view.state !== 'open' && view.brand.helpCenterUrl !== null ? (
+          <HelpCenterLink href={view.brand.helpCenterUrl} />
         ) : null}
 
         {view?.state === 'open' ? (
@@ -352,6 +357,25 @@ function Rated({
         {t('csat:ratedBody', { brand: brandName })}
       </Typography>
     </Box>
+  );
+}
+
+function HelpCenterLink({ href }: { readonly href: string }): ReactNode {
+  const t = useT();
+
+  return (
+    <Link
+      href={href}
+      sx={{
+        alignSelf: 'flex-start',
+        minHeight: 44,
+        display: 'inline-flex',
+        alignItems: 'center',
+        fontSize: 14,
+      }}
+    >
+      {t('csat:browseHelpCenter')}
+    </Link>
   );
 }
 

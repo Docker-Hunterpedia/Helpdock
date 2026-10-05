@@ -3,7 +3,7 @@ import { brands, type Db, type DbTransaction, withTenant } from '@helpdock/db';
 /**
  * A transaction over every brand, as the system principal, for the questions
  * asked *before* a brand is known: which brand an inbound-parse recipient or a
- * Telegram webhook belongs to, which pollers a booting worker re-registers,
+ * Telegram webhook belongs to, whose an API key is (M8-01), which pollers a booting worker re-registers,
  * what the install's System page lists. `brands` is a global table, so reading
  * its ids needs no context; the context is then set to exactly those ids, the
  * way ARCHITECTURE §6 asks an all-brands path to.

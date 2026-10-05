@@ -24,6 +24,20 @@ An article not written in the language asked for is shown in the brand's default
 
 "Still need help?" links to the [web form](web-form.md). Where the brand's widget may run on the help center's address (Channels › Widget, allowed origins, for example `https://support.acme.com`), the page loads the widget and "Chat with us" opens it.
 
+Every page starts with a **Skip to content** link, hidden until a keyboard user reaches it, that moves focus past the header to the page's content (M9-04).
+
+### Was this helpful?
+
+The card at the end of an article takes one answer per visitor and article version, and a second answer replaces the first. The pages have no script, so each step is its own page load:
+
+1. **Yes** is recorded and the card turns into the thanks (`?feedback=1`).
+2. **No** is recorded and the card asks **What was missing from this article? (optional)** (`?feedback=no`), with focus in the note field. The note holds up to 1,000 characters, and the hint under it asks for no card details and says nobody replies to it.
+   - **Send** records the "No" again with the note and shows the thanks.
+   - **Skip** shows the thanks and sends nothing more.
+   - **Yes** on this step changes the answer, and any note typed is dropped.
+
+Notes are counted on Help center › Insights. Staff answering on their own help center are thanked but not counted.
+
 ## Staff on the help center
 
 Staff read internal articles, with an **Internal** badge, and an internal-only help center, once they open it from the admin:

@@ -22,8 +22,25 @@ export interface SharedLocation {
   readonly url: string;
 }
 
-const MAP_LINK =
-  /^https:\/\/www\.openstreetmap\.org\/\?mlat=(-?\d+(?:\.\d+)?)&mlon=(-?\d+(?:\.\d+)?)(?:#.*)?$/;
+const COORDINATE = /^-?\d{1,3}(?:\.\d+)?$/;
+
+/** The coordinates of an OpenStreetMap marker link the api wrote; undefined for any other URL. */
+const markerOf = (href: string): { latitude: string; longitude: string } | undefined => {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return undefined;
+  }
+  const latitude = url.searchParams.get('mlat') ?? '';
+  const longitude = url.searchParams.get('mlon') ?? '';
+  return url.origin === 'https://www.openstreetmap.org' &&
+    url.pathname === '/' &&
+    COORDINATE.test(latitude) &&
+    COORDINATE.test(longitude)
+    ? { latitude, longitude }
+    : undefined;
+};
 
 /** The body without its location paragraph, and the location; undefined when there is none. */
 export const splitLocation = (
@@ -35,15 +52,12 @@ export const splitLocation = (
   const document = new DOMParser().parseFromString(bodyHtml, 'text/html');
   for (const anchor of document.body.querySelectorAll('a[href]')) {
     const url = anchor.getAttribute('href') ?? '';
-    const match = MAP_LINK.exec(url);
-    if (match === null) {
+    const marker = markerOf(url);
+    if (marker === undefined) {
       continue;
     }
     (anchor.closest('p') ?? anchor).remove();
-    return {
-      html: document.body.innerHTML,
-      location: { latitude: match[1] ?? '', longitude: match[2] ?? '', url },
-    };
+    return { html: document.body.innerHTML, location: { ...marker, url } };
   }
   return undefined;
 };

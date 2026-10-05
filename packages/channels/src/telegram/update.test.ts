@@ -132,7 +132,7 @@ describe('classifyUpdate', () => {
       surveyId,
       rating: 4,
       messageId: '77',
-      sender: { chatId: '4242', name: 'Mona Khalil', languageCode: 'ar' },
+      sender: { chatId: '4242', name: 'Mona Khalil', username: null, languageCode: 'ar' },
     });
   });
 

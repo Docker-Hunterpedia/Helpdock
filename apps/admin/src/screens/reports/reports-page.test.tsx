@@ -1,3 +1,4 @@
+import type { ReportQuery } from '@helpdock/schemas';
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
@@ -5,7 +6,7 @@ import { AuthError } from '../../auth/api.js';
 import type { ReportsApi } from '../../reports/api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
-import { fakeReportsApi, reportSummary } from './fixtures.js';
+import { fakeReportsApi, OMAR, reportSummary } from './fixtures.js';
 import { isoDay } from './report-range.js';
 
 const renderReports = async (reportsApi: ReportsApi = fakeReportsApi()) => {
@@ -92,7 +93,7 @@ describe('ReportsPage (M8-04)', () => {
     const volume = await screen.findByRole('region', { name: 'Ticket volume' });
     expect(
       within(volume).getByRole('img', {
-        name: 'Tickets created per day: 1020 created and 900 resolved over 30 days.',
+        name: 'Tickets created per day: 1020 created and 900 resolved over 30 days. By Channel: Email 450, Chat 360, Telegram 201.',
       }),
     ).toBeInTheDocument();
     const hours = screen.getByRole('region', { name: 'Busiest hours' });
@@ -117,15 +118,126 @@ describe('ReportsPage (M8-04)', () => {
     expect(within(backlog).getByRole('img')).toBeInTheDocument();
   });
 
-  it('breaks the volume down by status and by priority', async () => {
+  it('stacks the volume by priority and by status, with a legend and a column per series', async () => {
     const { user } = await renderReports();
     const volume = await screen.findByRole('region', { name: 'Ticket volume' });
 
     await user.click(within(volume).getByRole('button', { name: 'Priority' }));
 
     expect(
-      within(volume).getByRole('img', { name: /^Tickets created by Priority: Urgent 90/ }),
+      within(volume).getByRole('img', {
+        name: 'Tickets created by Priority: Medium 921, Urgent 90.',
+      }),
     ).toBeInTheDocument();
+    const legend = within(volume).getByRole('list');
+    expect(
+      within(legend)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Medium', 'Urgent']);
+
+    await user.click(within(volume).getByRole('button', { name: 'Status' }));
+    await user.click(within(volume).getByRole('button', { name: 'Table · Ticket volume' }));
+
+    const table = within(volume).getByRole('table', { name: 'Ticket volume' });
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Day', 'Closed', 'Open', 'Created', 'Resolved']);
+  });
+
+  it('exports the volume by status when the status breakdown is shown', async () => {
+    const exportCsv = vi.fn(fakeReportsApi().exportCsv);
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:report'), revokeObjectURL: vi.fn() }),
+    );
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { user } = await renderReports(fakeReportsApi({ exportCsv }));
+    const volume = await screen.findByRole('region', { name: 'Ticket volume' });
+
+    await user.click(within(volume).getByRole('button', { name: 'Status' }));
+    await user.click(within(volume).getByRole('button', { name: 'Export CSV · Ticket volume' }));
+
+    await waitFor(() => {
+      expect(exportCsv.mock.calls[0]?.[1]).toBe('volume_by_status');
+    });
+  });
+
+  it('shows SLA compliance by priority as well as by clock', async () => {
+    await renderReports();
+    const sla = await screen.findByRole('region', { name: 'SLA compliance' });
+
+    expect(within(sla).getByRole('heading', { name: 'By priority' })).toBeVisible();
+    expect(
+      within(sla).getByRole('img', {
+        name: 'SLA met by priority: Urgent 86.2 % of 94, Medium 94.6 % of 598.',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("lists each agent's times, SLA and CSAT, and the open tickets nobody has", async () => {
+    await renderReports();
+    const agents = await screen.findByRole('region', { name: 'Agent workload' });
+    const rows = within(agents).getAllByRole('row');
+
+    expect(
+      within(rows[0] as HTMLElement)
+        .getAllByRole('columnheader')
+        .map((c) => c.textContent),
+    ).toEqual([
+      'Agent',
+      'Open assigned',
+      'Solved',
+      'Replies',
+      'First response',
+      'Resolution',
+      'SLA met',
+      'CSAT',
+    ]);
+    expect(
+      within(rows[1] as HTMLElement)
+        .getAllByRole('cell')
+        .map((c) => c.textContent),
+    ).toEqual(['Lina Haddad', '18', '214', '486', '31m', '7h 20m', '95.1 %', '4.7']);
+    // An agent with nothing measured reads as a dash, not a zero.
+    expect(
+      within(rows[2] as HTMLElement)
+        .getAllByRole('cell')
+        .at(4),
+    ).toHaveTextContent('—');
+    expect(
+      within(rows[3] as HTMLElement)
+        .getAllByRole('cell')
+        .map((c) => c.textContent),
+    ).toEqual(['Unassigned', '57', '—', '—', '—', '—', '—', '—']);
+  });
+
+  it("asks for one agent's report, and leaves the Unassigned row out of it", async () => {
+    const summary = vi.fn(async (brandId: string, query: ReportQuery) =>
+      query.agentId === undefined
+        ? fakeReportsApi().summary(brandId, query)
+        : reportSummary(query, {
+            filters: { departmentId: null, channel: null, agentId: query.agentId },
+          }),
+    );
+    const { user } = await renderReports(fakeReportsApi({ summary }));
+    await screen.findByRole('region', { name: 'Agent workload' });
+
+    await user.click(screen.getByRole('combobox', { name: 'Agent' }));
+    await user.click(await screen.findByRole('option', { name: 'Omar' }));
+
+    await waitFor(() => {
+      expect(summary).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ agentId: OMAR }),
+      );
+    });
+    const agents = screen.getByRole('region', { name: 'Agent workload' });
+    await waitFor(() => {
+      expect(within(agents).queryByRole('cell', { name: 'Unassigned' })).not.toBeInTheDocument();
+    });
   });
 
   it('exports a card as CSV with the filters in force', async () => {

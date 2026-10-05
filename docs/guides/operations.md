@@ -125,6 +125,7 @@ misconfigured — it is a backstop, not a reason to skip the exclusion.
 | `db_pool_connections` | gauge | `state` | Sessions the runtime role holds on the server, by the state Postgres reports — `active`, `idle`, `idle_in_transaction`, `idle_in_transaction_(aborted)`, and `unknown` for a session Postgres reports no state for. Install-wide, not per replica. |
 | `db_up`, `redis_up` | gauge | — | `1` when the readiness probe reached it, `0` when it did not. |
 | `socket_connections` | gauge | `namespace` | Open Socket.IO connections on this replica, per namespace (`/staff` and `/widget`). |
+| `rate_limit_refusals_total` | counter | `bucket` | Requests and socket events a rate limit refused, by the limit's name: `signin-email`, `signin-ip`, `email-dispatch`, `step-up`, `invite-lookup`, the widget and web-form budgets, the socket-event budgets, `inbound-parse`, `telegram-webhook`, `domain-check`. Never the address or account it refused. Counted per api replica. |
 
 `prom-client`'s default Node metrics are on the same registry: event-loop lag,
 heap, handles, GC and process start time.
@@ -143,6 +144,12 @@ the install; the log line describes the request.
 - `outbox_unpublished_rows` above zero and not falling while `outbox_relay_up`
   is `1` — the relay is running but behind.
 - `db_up == 0` or `redis_up == 0`.
+- `sum by (bucket) (rate(rate_limit_refusals_total[5m])) * 300 > 50` — more than
+  fifty refusals in five minutes on one limit. On `signin-email` or `signin-ip`
+  it is somebody guessing passwords or spraying addresses; on a widget bucket it
+  is a script, not a visitor (ASVS 8.1.4, 11.1.8). Look up the matching
+  `auth.sign_in.failed` rows in the [audit log](audit-log.md) for the addresses
+  they came from.
 
 ---
 
@@ -230,11 +237,11 @@ anything a stranger could not learn by trying the port.
 | Product metrics | Activation, AI deflection and help center self-service ([below](#product-metrics)) |
 | Queues | The first few, with waiting, active, failed, delayed and the age of the oldest waiting job; "All queues" fetches the rest. A failed count is a dead-letter count. |
 | Channels | Every brand's mailboxes and Telegram bots, grouped by kind, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red ([email](email.md), [Telegram](telegram.md)). The header counts the connections that need attention. |
-| Version and migrations | The version and commit, the runtime (Node, Postgres, Redis) and the migrations this replica applied at boot |
-| Storage | The bucket's size against its soft limit, and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. A brand in its deletion grace is marked "pending deletion". "Not measured yet" until the worker has measured once. |
+| Version and migrations | The version and commit, the runtime (Node, Postgres, Redis), how many migrations the database has recorded and the newest three by name. Drizzle records no time of application, so they are names alone. |
+| Storage | The bucket's size against its soft limit, and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. A brand in its deletion grace is marked "pending deletion". "Not measured yet" until the worker has measured once. Beside it, the Postgres database's size on disk (`pg_database_size`), install-wide only ([below](#where-the-numbers-come-from)). |
 | Audit log | The most recent install-scope entries |
-| LLM spend | Install-wide tokens and cost against the monthly budget; "not available" until M7 records LLM calls. A subsystem that is not measured says so rather than showing a zero. |
-| Brands pending deletion | Every brand in its 30-day grace, with the date it was asked for, the days left (amber in the last three) and **Restore** ([deleting a brand](data-retention.md#deleting-a-brand)) |
+| LLM spend by brand | This UTC month's tokens and cost per brand from `ai_calls`, largest first, each against its own monthly budget ("48 % of $100.00"; amber with an icon from the 80 % alert, "No monthly budget" for a brand without one), then the install's total, whose budget is the sum of the brands' and none as soon as one brand has none. "Not available" until an AI provider is set up. A subsystem that is not measured says so rather than showing a zero. |
+| Brands pending deletion | Every brand in its 30-day grace, with who asked and when ("Deleted by Lina Haddad on 1 Oct 2026", from the install-scope `brand.deletion_requested` audit row; "a removed account" when that account is gone), the days left (amber in the last three) and **Restore** ([deleting a brand](data-retention.md#deleting-a-brand)) |
 
 The endpoint is `@Requires('install:admin')`: everything on it is install-wide,
 so it runs in install scope and writes an `install.scope.access` audit row on
@@ -254,10 +261,15 @@ Three are worth knowing:
   exists to prevent. The relay already runs with the system context it needs, so
   after every cycle it writes `hd:relay:last` to Redis and the api repeats it.
   Nothing durable lives only in Redis: losing the key costs one line on a page.
-- **The migration count is read at boot by the owner connection.** The migration
+- **The migrations are read at boot by the owner connection.** The migration
   log lives in the `drizzle` schema, which the runtime role is deliberately not
-  granted. An api replica counts the migrations while it is applying them and
-  carries the number; a worker never migrates, so it reports nothing.
+  granted. An api replica counts and names the migrations while it is applying
+  them and carries the list; a worker never migrates, so it reports nothing.
+- **Postgres is sized as a whole, not per brand.** `pg_database_size` is one
+  catalog read the runtime role may make. A brand's rows share every table and
+  index with the other brands', so its share could only be had by reading and
+  measuring every row, which a status page should not do; the artboard's
+  per-brand Postgres column is not drawn.
 - **Storage is measured by the worker, not by the page.** Measuring a brand is
   listing every object under its prefix, which on a large bucket is thousands
   of requests. The hourly `stats.rollup` job measures a brand when its reading
@@ -316,8 +328,29 @@ usability pass, not by the install.
 | `LOG_LEVEL` | `info` | pino's level for both roles |
 | `METRICS_TOKEN` | unset | Bearer token for `/metrics`. Required for any request that arrives through the reverse proxy. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Turns tracing on and says where spans go |
+| `OUTBOX_CONCURRENCY` | `8` | Outbox events one worker runs at once ([Scaling the worker](#scaling-the-worker)) |
 
-`.env.example` documents all three.
+`.env.example` documents all four.
+
+## Scaling the worker
+
+Every side effect — a socket frame to a visitor, an SLA clock, a rule, a
+notification, an email — is an `outbox.event` job. A worker runs
+`OUTBOX_CONCURRENCY` of them at once (8 by default), with one rule: **events
+of one ticket run one at a time, in the order they were written**, and events
+of different tickets run side by side. An event that names no ticket is
+ordered with the other ticket-less events of its brand
+([ADR 0023](../decisions/0023-outbox-events-ordered-per-ticket.md)).
+
+Each running event holds one of the worker's ten database connections, so
+raise `OUTBOX_CONCURRENCY` with care; a second `worker` replica is the other
+way to add throughput. Between replicas, an advisory lock per ticket keeps two
+processes from running events of one ticket at the same moment.
+
+If `queue_jobs{queue="outbox",state="waiting"}` keeps growing while
+`outbox_relay_up` is `1`, the worker is behind: raise the concurrency, add a
+replica, or look for one ticket with a burst of events, which runs no faster
+than one at a time.
 
 ---
 
@@ -355,8 +388,7 @@ the two keys can coexist when it does.
 
 ## Still to come
 
-- The artboard's per-brand LLM spend and budgets, its Postgres size per brand
-  and its migration list need the api to report them; the System page draws
-  the install-wide spend, the bucket per brand and the migration count.
+- The artboard's Postgres size per brand is not drawn ([above](#where-the-numbers-come-from)),
+  nor its image name, which the status read does not carry.
 - **M9-06** adds backup, restore, upgrade and key rotation to this guide, and
   **M9-10** rehearses them (DOMAIN-RULES §10).

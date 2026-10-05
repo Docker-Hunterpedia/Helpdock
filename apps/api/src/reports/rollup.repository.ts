@@ -18,8 +18,10 @@ import type { DayRange } from './rollup-window.js';
  * **What counts.** A ticket counts unless it is soft-deleted, merged into
  * another, or in a status excluded from reports — Spam and Merged (M1-11,
  * DOMAIN-RULES §2.1, `ticket_statuses.excluded_from_reports`). Every metric
- * is attributed to the ticket's department, channel and priority *now*: a
- * ticket moved last week reports under the department that has it.
+ * is attributed to the ticket's department, channel, priority and assignee
+ * *now*: a ticket moved last week reports under the department that has it,
+ * and a reassigned ticket's times, SLA outcomes and rating are its new
+ * assignee's (Agent workload, the Agent filter).
  *
  * **When it counts.** Each event lands on the local day it happened: created
  * on creation, resolved on `closed_at`, a response time on the response, a
@@ -46,6 +48,26 @@ export interface RollupScope {
   readonly range: DayRange;
   readonly countReopens: boolean;
 }
+
+/**
+ * Stands in for "no assignee" while the day's events and its backlog are
+ * joined: a FULL JOIN matches on equality, and NULL never equals NULL. It
+ * goes back to NULL on the way into the table.
+ */
+const NO_ASSIGNEE = '00000000-0000-0000-0000-000000000000';
+const assigneeKey = (column: SQL): SQL =>
+  sql`coalesce(${column}, ${NO_ASSIGNEE}::uuid) AS assignee_key`;
+
+/**
+ * The grain `report_daily` rows are built at. 2 added the assignee
+ * (`0044_report_daily_assignee`). Raise it whenever the grain or a column's
+ * meaning changes: a brand with older rows in its backfill window is then
+ * rebuilt in full by its next run, with no data rewritten in SQL.
+ */
+export const REPORT_ROLLUP_VERSION = 2;
+
+/** Whether a brand's rollups exist, and whether they are at {@link REPORT_ROLLUP_VERSION}. */
+export type RollupState = 'none' | 'stale' | 'current';
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
@@ -116,15 +138,25 @@ export class RollupRepository {
     await this.#rebuildHelpCenter(tx, scope);
   }
 
-  /** Whether the brand has been rolled up before; a brand that has not is backfilled. */
-  async hasRollups(tx: DbTransaction, brandId: string): Promise<boolean> {
-    const rows = await tx
-      .select({ day: reportDaily.day })
-      .from(reportDaily)
-      .where(eq(reportDaily.brandId, brandId))
-      .limit(1);
+  /**
+   * `none` for a brand never rolled up, `stale` when a row from `since` on was
+   * built at an older {@link REPORT_ROLLUP_VERSION}, `current` otherwise. Both
+   * of the first two are backfilled. Rows before `since` are left out: the
+   * backfill does not reach them, so they would read as stale for ever.
+   */
+  async rollupState(tx: DbTransaction, brandId: string, since: string): Promise<RollupState> {
+    const [row] = await tx.execute<{ any_row: boolean; stale: boolean }>(sql`
+      SELECT EXISTS (SELECT 1 FROM report_daily WHERE brand_id = ${brandId}) AS any_row,
+        EXISTS (
+          SELECT 1 FROM report_daily
+          WHERE brand_id = ${brandId} AND day >= ${since}::date
+            AND rollup_version < ${REPORT_ROLLUP_VERSION}
+        ) AS stale`);
+    if (row?.any_row !== true) {
+      return 'none';
+    }
 
-    return rows.length > 0;
+    return row.stale ? 'stale' : 'current';
   }
 
   /** The local day of the brand's first ticket, or null when it has none. */
@@ -146,21 +178,21 @@ export class RollupRepository {
     await tx.execute(sql`
       WITH ${boundsCte(scope)}, ${countedCte(scope)}, ${clocksCte(scope)},
       events AS (
-        SELECT c.created_at AS at, c.department_id, c.channel, c.priority,
+        SELECT c.created_at AS at, c.department_id, c.channel, c.priority, c.assignee_id,
           1 AS created, 0 AS resolved, NULL::bigint AS frt, NULL::bigint AS res,
           0 AS rsp_met, 0 AS rsp_breached, 0 AS res_met, 0 AS res_breached, NULL::int AS rating
         FROM counted c
         UNION ALL
-        SELECT c.closed_at, c.department_id, c.channel, c.priority,
+        SELECT c.closed_at, c.department_id, c.channel, c.priority, c.assignee_id,
           0, 1, NULL, NULL, 0, 0, 0, 0, NULL
         FROM counted c WHERE c.closed_at IS NOT NULL
         UNION ALL
-        SELECT k.satisfied_at, c.department_id, c.channel, c.priority,
+        SELECT k.satisfied_at, c.department_id, c.channel, c.priority, c.assignee_id,
           0, 0, k.taken_ms, NULL, 0, 0, 0, 0, NULL
         FROM clocks k JOIN counted c ON c.id = k.ticket_id
         WHERE k.kind IN ('first_response', 'next_response') AND k.satisfied_at IS NOT NULL
         UNION ALL
-        SELECT r.at, c.department_id, c.channel, c.priority,
+        SELECT r.at, c.department_id, c.channel, c.priority, c.assignee_id,
           0, 0, (extract(epoch FROM (r.at - c.created_at)) * 1000)::bigint, NULL, 0, 0, 0, 0, NULL
         FROM counted c
         CROSS JOIN LATERAL (
@@ -172,29 +204,29 @@ export class RollupRepository {
             SELECT 1 FROM clocks k WHERE k.ticket_id = c.id AND k.kind = 'first_response'
           )
         UNION ALL
-        SELECT k.satisfied_at, c.department_id, c.channel, c.priority,
+        SELECT k.satisfied_at, c.department_id, c.channel, c.priority, c.assignee_id,
           0, 0, NULL, k.taken_ms, 0, 0, 0, 0, NULL
         FROM clocks k JOIN counted c ON c.id = k.ticket_id
         WHERE k.kind = 'resolution' AND k.satisfied_at IS NOT NULL
         UNION ALL
-        SELECT c.closed_at, c.department_id, c.channel, c.priority,
+        SELECT c.closed_at, c.department_id, c.channel, c.priority, c.assignee_id,
           0, 0, NULL, (extract(epoch FROM (c.closed_at - c.created_at)) * 1000)::bigint,
           0, 0, 0, 0, NULL
         FROM counted c
         WHERE c.closed_at IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM clocks k WHERE k.ticket_id = c.id AND k.kind = 'resolution')
         UNION ALL
-        SELECT k.satisfied_at, c.department_id, c.channel, c.priority, 0, 0, NULL, NULL,
+        SELECT k.satisfied_at, c.department_id, c.channel, c.priority, c.assignee_id, 0, 0, NULL, NULL,
           (k.kind <> 'resolution')::int, 0, (k.kind = 'resolution')::int, 0, NULL
         FROM clocks k JOIN counted c ON c.id = k.ticket_id
         WHERE k.satisfied_at IS NOT NULL AND k.breached_at IS NULL
         UNION ALL
-        SELECT k.breached_at, c.department_id, c.channel, c.priority, 0, 0, NULL, NULL,
+        SELECT k.breached_at, c.department_id, c.channel, c.priority, c.assignee_id, 0, 0, NULL, NULL,
           0, (k.kind <> 'resolution')::int, 0, (k.kind = 'resolution')::int, NULL
         FROM clocks k JOIN counted c ON c.id = k.ticket_id
         WHERE k.breached_at IS NOT NULL
         UNION ALL
-        SELECT r.rated_at, c.department_id, c.channel, c.priority,
+        SELECT r.rated_at, c.department_id, c.channel, c.priority, c.assignee_id,
           0, 0, NULL, NULL, 0, 0, 0, 0, r.rating::int
         FROM csat_responses r JOIN counted c ON c.id = r.ticket_id
         WHERE r.rating IS NOT NULL AND r.rated_at IS NOT NULL
@@ -206,7 +238,7 @@ export class RollupRepository {
         WHERE e.at >= b.starts_at AND e.at < b.ends_at
       ),
       grouped AS (
-        SELECT day, department_id, channel, priority,
+        SELECT day, department_id, channel, priority, ${assigneeKey(sql.raw('assignee_id'))},
           sum(created)::int AS created, sum(resolved)::int AS resolved,
           array_agg(frt ORDER BY frt) FILTER (WHERE frt IS NOT NULL) AS frt,
           array_agg(res ORDER BY res) FILTER (WHERE res IS NOT NULL) AS res,
@@ -219,30 +251,32 @@ export class RollupRepository {
           count(*) FILTER (WHERE rating = 5)::int AS csat_5,
           ARRAY[${hourCounts()}] AS hours
         FROM dated
-        GROUP BY day, department_id, channel, priority
+        GROUP BY day, department_id, channel, priority, assignee_key
       ),
       backlog AS (
-        SELECT d.day, c.department_id, c.channel, c.priority, count(*)::int AS open
+        SELECT d.day, c.department_id, c.channel, c.priority,
+          ${assigneeKey(sql.raw('c.assignee_id'))}, count(*)::int AS open
         FROM days d
         JOIN counted c ON c.created_at < d.ends_at AND (c.closed_at IS NULL OR c.closed_at >= d.ends_at)
-        GROUP BY d.day, c.department_id, c.channel, c.priority
+        GROUP BY d.day, c.department_id, c.channel, c.priority, assignee_key
       )
       INSERT INTO report_daily (
-        brand_id, day, department_id, channel, priority, created, resolved, backlog,
+        brand_id, day, department_id, channel, priority, assignee_id, created, resolved, backlog,
         first_response_ms, resolution_ms, sla_response_met, sla_response_breached,
         sla_resolution_met, sla_resolution_breached, csat_1, csat_2, csat_3, csat_4, csat_5,
-        created_by_hour
+        created_by_hour, rollup_version
       )
       SELECT ${brandId}, day, department_id, channel, priority,
+        nullif(assignee_key, ${NO_ASSIGNEE}::uuid),
         coalesce(g.created, 0), coalesce(g.resolved, 0), coalesce(b.open, 0),
         coalesce(g.frt, '{}'), coalesce(g.res, '{}'),
         coalesce(g.rsp_met, 0), coalesce(g.rsp_breached, 0),
         coalesce(g.res_met, 0), coalesce(g.res_breached, 0),
         coalesce(g.csat_1, 0), coalesce(g.csat_2, 0), coalesce(g.csat_3, 0),
         coalesce(g.csat_4, 0), coalesce(g.csat_5, 0),
-        coalesce(g.hours, array_fill(0, ARRAY[24]))
+        coalesce(g.hours, array_fill(0, ARRAY[24])), ${REPORT_ROLLUP_VERSION}
       FROM grouped g
-      FULL JOIN backlog b USING (day, department_id, channel, priority)`);
+      FULL JOIN backlog b USING (day, department_id, channel, priority, assignee_key)`);
   }
 
   async #rebuildAgents(tx: DbTransaction, scope: RollupScope): Promise<void> {

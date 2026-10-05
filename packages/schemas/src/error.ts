@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { aiRefusalSchema } from './ai.js';
 import { assistRefusalSchema } from './assist.js';
+import { webhooksRefusalSchema } from './api.js';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { domainsRefusalSchema } from './domains.js';
@@ -101,6 +102,13 @@ export const errorResponseSchema = z.object({
     knowledge: z.object({ reason: knowledgeRefusalSchema }).optional(),
     /** Only on a refused Telegram bot action (M6-05). */
     telegram: z.object({ reason: telegramRefusalSchema }).optional(),
+    /**
+     * Only on a refused webhook endpoint (M8-03): `address` is what the name
+     * resolved to, so the form can say which private address it was.
+     */
+    webhooks: z
+      .object({ reason: webhooksRefusalSchema, address: z.string().optional() })
+      .optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

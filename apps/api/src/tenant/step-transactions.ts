@@ -5,7 +5,7 @@ import { NoRequestContextError, requireRequestContext } from '../context/request
 /**
  * A route that calls a model (M7-05 agent assist) must not hold the request's
  * transaction open for the seconds a model takes (docs/guides/ai.md, ADR
- * 0021). `@StepTransactions()` tells the {@link ./tenant.interceptor.js
+ * 0024). `@StepTransactions()` tells the {@link ./tenant.interceptor.js
  * TenantInterceptor} to resolve the same tenant context — the same brand, the
  * same department policy, the same principal — and open no transaction; the
  * handler opens a short one per step with {@link inRequestTenant}: read and

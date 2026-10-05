@@ -1,6 +1,9 @@
 import {
   authMethodsSchema,
   authSessionResponseSchema,
+  enrolmentCompleteResponseSchema,
+  enrolmentConfirmRequestSchema,
+  enrolmentStartRequestSchema,
   exchangeRequestSchema,
   magicLinkRequestSchema,
   magicLinkTokenParamSchema,
@@ -48,3 +51,6 @@ export class SessionDto extends createZodDto(sessionSchema) {}
 export class AuthMethodsDto extends createZodDto(authMethodsSchema) {}
 export class TotpEnrolmentDto extends createZodDto(totpEnrolmentSchema) {}
 export class RecoveryCodesDto extends createZodDto(recoveryCodesSchema) {}
+export class EnrolmentStartRequestDto extends createZodDto(enrolmentStartRequestSchema) {}
+export class EnrolmentConfirmRequestDto extends createZodDto(enrolmentConfirmRequestSchema) {}
+export class EnrolmentCompleteResponseDto extends createZodDto(enrolmentCompleteResponseSchema) {}

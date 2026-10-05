@@ -27,7 +27,12 @@ export class TelegramWebhookController {
    * Generous: a busy bot delivers bursts. It bounds a stranger hammering the
    * route without a secret, not Telegram doing its job.
    */
-  readonly #limiter = createIpRateLimiter({ limit: 1_200, windowMs: 60_000, maxTrackedIps: 4096 });
+  readonly #limiter = createIpRateLimiter({
+    bucket: 'telegram-webhook',
+    limit: 1_200,
+    windowMs: 60_000,
+    maxTrackedIps: 4096,
+  });
   readonly #webhooks: TelegramWebhookService;
 
   constructor(@Inject(TelegramWebhookService) webhooks: TelegramWebhookService) {

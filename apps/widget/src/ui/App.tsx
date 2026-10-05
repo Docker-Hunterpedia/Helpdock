@@ -90,7 +90,12 @@ export function App() {
       <>
         <Banners />
         <Thread />
-        {conversation?.status === 'ended' ? <Ended /> : <Composer onOpenArticle={setArticle} />}
+        {conversation?.status !== 'ended' ? (
+          <Composer onOpenArticle={setArticle} />
+        ) : state.csat?.state === 'open' ? null : (
+          // The card replaces the composer area until it is answered or skipped (M8-06).
+          <Ended />
+        )}
       </>
     );
   }

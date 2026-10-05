@@ -1,8 +1,9 @@
 import type {
   Webhook,
   WebhookDelivery,
+  WebhookDeliveryDetail,
   WebhookDeliveryList,
-  WebhookList,
+  WebhookOverviewList,
   WebhookWithSecret,
 } from '@helpdock/schemas';
 import {
@@ -24,12 +25,13 @@ import { brandActor } from '../context/brand-actor.js';
 import {
   WebhookBrandParamDto,
   WebhookCreateRequestDto,
+  WebhookDeliveryDetailDto,
   WebhookDeliveryDto,
   WebhookDeliveryListDto,
   WebhookDeliveryParamDto,
   WebhookDeliveryQueryDto,
   WebhookDto,
-  WebhookListDto,
+  WebhookOverviewListDto,
   WebhookParamDto,
   WebhookUpdateRequestDto,
   WebhookWithSecretDto,
@@ -40,8 +42,8 @@ import { WebhooksService } from './webhooks.service.js';
  * M8-03: Settings › Webhooks, for the brand's Admin (`brand:manage`): an
  * endpoint receives the brand's tickets and contacts, every department's, so
  * adding one is a brand-level decision. The public API's `webhooks:manage`
- * routes (`api-v1/v1-webhooks.controller.ts`) are the same service. The screen
- * is a later task; this is its contract.
+ * routes (`api-v1/v1-webhooks.controller.ts`) are the same service; the list
+ * here is the Developers page's, with each endpoint's last day of deliveries.
  */
 @Controller('api/brands/:brandId/webhooks')
 export class WebhooksController {
@@ -53,11 +55,11 @@ export class WebhooksController {
 
   @Get()
   @Requires('brand:manage')
-  @ZodSerializerDto(WebhookListDto)
+  @ZodSerializerDto(WebhookOverviewListDto)
   list(
     @Param(new ZodValidationPipe(WebhookBrandParamDto)) _params: WebhookBrandParamDto,
-  ): Promise<WebhookList> {
-    return this.#webhooks.list(brandActor());
+  ): Promise<WebhookOverviewList> {
+    return this.#webhooks.overview(brandActor());
   }
 
   /** The one response besides a rotation that carries the signing secret. */
@@ -108,6 +110,17 @@ export class WebhooksController {
     return this.#webhooks.rotateSecret(brandActor(), webhookId);
   }
 
+  /** A `ping` through the same job as every delivery; the answer is the delivery to watch. */
+  @Post(':webhookId/test')
+  @Requires('brand:manage')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ZodSerializerDto(WebhookDeliveryDto)
+  sendTest(
+    @Param(new ZodValidationPipe(WebhookParamDto)) { webhookId }: WebhookParamDto,
+  ): Promise<WebhookDelivery> {
+    return this.#webhooks.sendTest(brandActor(), webhookId);
+  }
+
   @Get(':webhookId/deliveries')
   @Requires('brand:manage')
   @ZodSerializerDto(WebhookDeliveryListDto)
@@ -116,6 +129,16 @@ export class WebhooksController {
     @Query(new ZodValidationPipe(WebhookDeliveryQueryDto)) query: WebhookDeliveryQueryDto,
   ): Promise<WebhookDeliveryList> {
     return this.#webhooks.deliveries(brandActor(), webhookId, query);
+  }
+
+  @Get(':webhookId/deliveries/:deliveryId')
+  @Requires('brand:manage')
+  @ZodSerializerDto(WebhookDeliveryDetailDto)
+  delivery(
+    @Param(new ZodValidationPipe(WebhookDeliveryParamDto))
+    { webhookId, deliveryId }: WebhookDeliveryParamDto,
+  ): Promise<WebhookDeliveryDetail> {
+    return this.#webhooks.delivery(brandActor(), webhookId, deliveryId);
   }
 
   @Post(':webhookId/deliveries/:deliveryId/replay')

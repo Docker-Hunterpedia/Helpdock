@@ -233,7 +233,7 @@ describe.skipIf(!hasDocker)('the first-run wizard', () => {
     });
     // The admin is signed in from here on: the brand exists, so a session has
     // somewhere to land.
-    expect(String(brand.headers['set-cookie'])).toContain('hd_refresh=');
+    expect(String(brand.headers['set-cookie'])).toContain('__Secure-hd_refresh=');
 
     const test = await post('/api/install/setup/smtp/test', credentials(), setupToken);
     expect(test.statusCode).toBe(201);

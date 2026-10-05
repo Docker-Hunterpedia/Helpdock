@@ -13,12 +13,12 @@ Depends on M1 and M3, both shipped. Runs in parallel with M7.
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M8-01 | Tenant API keys | | built, in review |
+| M8-01 | Tenant API keys | | built, in review; screen built: [Developers page](#m8-01-m8-03-developers-page) |
 | M8-02 | REST v1 | | built, in review |
-| M8-03 | Outbound webhooks | | built, in review |
+| M8-03 | Outbound webhooks | | built, in review; screen built: [Developers page](#m8-01-m8-03-developers-page) |
 | M8-04 | Reports | | built (api and screen), PR pending: [Reports](#m8-04-reports) |
 | M8-05 | System page | | built (api and screen), PR pending: [System page](#m8-05-system-page) |
-| M8-06 | CSAT delivery wired on close for email, widget, Telegram | | planned |
+| M8-06 | CSAT delivery wired on close for email, widget, Telegram | | built, PR pending: [CSAT delivery](#m8-06-csat-delivery) |
 | M8-07 | Brand deletion with 30-day grace and full purge (rows, S3 prefix, Redis keys, Caddy domain); product metrics on the System page | | built (api and screens), PR pending: [Brand deletion](#m8-07-brand-deletion-and-product-metrics) |
 
 ## Exit criteria
@@ -59,6 +59,7 @@ Copied from the PRD, ticked as they are met.
 ## Migrations
 
 - `0039_api_keys_and_webhooks.sql`: `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
+- `0044_report_daily_assignee.sql`: `report_daily.assignee_id`, the ticket's assignee in the rollup's grain, for the Agent filter and per-agent times, SLA and CSAT, and `report_daily.rollup_version` (existing rows 1) (M8-04).
 
 ## Deliverable notes
 
@@ -101,18 +102,83 @@ Copied from the PRD, ticked as they are met.
   label, share rows and Heatmap, per DESIGN §9 (legend, direct labels, Table
   view, Tooltip naming the series). The adapter is `ReportsApi`
   (`apps/admin/src/reports/`), on the shared transport.
-- **Where the screen differs from the artboard**, because the summary does not
-  carry it: volume per day is one series (created) with the Channel, Status or
-  Priority breakdown as totals beside it rather than stacked per day; response
-  and resolution times are the period's median and p90, not a line per day;
-  SLA is by clock, not by priority; Agent workload has open, solved and replies
-  (no per-agent times, SLA or CSAT, no Unassigned row); there is no Agent
-  filter; CSAT has no "% of surveys answered" or comment count. The heatmap
-  runs Monday to Sunday (brands have no week-start setting).
-- Tests: `reports-page.test.tsx`, `report-math.test.ts`,
+- **Closing the artboard gaps** (migration `0044_report_daily_assignee`):
+  `report_daily` gains the ticket's assignee in its grain, so the summary
+  carries volume per day by channel, priority and status (the last from the
+  tickets, as the status totals are), SLA by priority (both clocks), and per
+  agent the median first response and resolution, SLA met and CSAT average of
+  the tickets assigned to them, with `unassignedOpen` and `agentChoices`. The
+  query takes `agentId` (the ticket's assignee for ticket figures, the agent
+  for workload). The screen stacks the volume columns per day (five series,
+  the rest as "Other", legend, 2 px gaps, a Tooltip naming every series), adds
+  "By priority" to SLA, the four columns and the Unassigned row to Agent
+  workload, and the Agent filter. New export `volume_by_status`; the ticket
+  exports gain `agent_id` and `agent`, and `agents` gains the per-agent
+  figures and an unassigned row. Rows built before 0044 are
+  `rollup_version` 1; `stats.rollup` compares the brand's rows in its 400-day
+  backfill window with `REPORT_ROLLUP_VERSION` (2) and rebuilds the whole
+  window once when any is older, so an upgraded install gets per-agent
+  history without rewriting data in SQL (`reports.integration.test.ts`).
+- **Where the screen still differs from the artboard:** response and
+  resolution times are the period's median and p90, not a line per day; CSAT
+  has no "% of surveys answered" or comment count. The heatmap runs Monday to
+  Sunday (brands have no week-start setting).
+- Tests: `reports-page.test.tsx`, `report-math.test.ts`, `volume-stack.test.ts`,
   `reports/api.test.ts`, `ui/usage-meter.test.tsx`; Playwright
-  `e2e/reports.spec.ts` (en and ar, axe, the api failing).
+  `e2e/reports.spec.ts` (en and ar, axe, the api failing, the stacked
+  breakdowns and the Agent filter); `reports.integration.test.ts` checks the
+  new figures and exports against the seeded tickets.
 - Guide: [reports](../guides/reports.md).
+
+### M8-01, M8-03 Developers page
+
+- **Screen:** `Admin/Developers` (`apps/admin/src/screens/admin/developers/`), from
+  the artboards `Admin/Developers-ApiKeys` and `Admin/Developers-Webhooks`, with the
+  nav item **Developers** (Lucide `Code`) after Channels, offered to Admins only.
+  Tabs **API keys** (table, Create dialog, SecretReveal, Revoke confirm, empty
+  state, curl and "How keys work" cards) and **Webhooks** (turned-off Banner,
+  Endpoints table, the open endpoint with its signing secret and Rotate,
+  DeliveryLog, delivery detail with Replay, retry schedule). The `developers`
+  i18n namespace in `en` and `ar`. The adapter is `apps/admin/src/developers/`
+  (`DevelopersApi`, mock and http).
+- **Api additions for the screen** (all `brand:manage`):
+  - `GET /api/brands/:brandId/webhooks` now answers the overview: each endpoint
+    with `createdByName`, `last24h` (finished and succeeded deliveries) and its
+    newest delivery. `/api/v1/webhooks` keeps the plain list.
+  - `POST …/webhooks/:webhookId/test`: a `ping` delivery through the
+    `webhook.delivery_requested` outbox row and the `webhook.deliver` job, like
+    any event; audited as `webhook.tested`. `ping` joins the delivery event enum
+    (`webhookDeliveryEventSchema`), so it can appear in the v1 delivery log.
+  - `GET …/webhooks/:webhookId/deliveries/:deliveryId`: the delivery with
+    `request` (URL, body, and the headers of the last attempt). The headers come
+    from one builder (`webhooks/webhook-request.ts`) that the job sends with too,
+    and the job now signs with the clock reading it records as
+    `last_attempt_at`, so the signature shown is the one sent.
+  - API keys answer `createdByName` and `revokedByName`.
+  - Adding or changing an endpoint resolves its name first
+    (`webhooks/webhook-destination.ts`): a blocked range is `400` with
+    `error.webhooks = { reason: 'webhook-destination-blocked', address }`; plain
+    `http` is `webhook-https-required` unless the address is in
+    `OUTBOUND_ALLOW_CIDRS`. This applies to `/api/v1/webhooks` too.
+  - `WEBHOOK_DELIVERY_ATTEMPTS`, `WEBHOOK_RETRY_BASE_MS` and `WEBHOOK_TIMEOUT_MS`
+    in `@helpdock/schemas` describe the retry schedule the page draws; a test in
+    `webhook-deliver.job.test.ts` holds them to the job's options.
+- **Where the screen differs from the artboard, and why:** the retry schedule
+  and the headers are the real ones (30 s doubling to 32 min, a 15 s timeout,
+  `X-Helpdock-Signature: t=…,v1=…`) rather than the artboard's illustration; a
+  key has no description line, because keys have no description field; the
+  delivery log's caption is the delivery time without the ticket reference,
+  which the log does not carry; the attempt chips show each earlier attempt as
+  failed, because only the last attempt's answer is stored.
+- **Tests:** unit (`format`, both adapters, `api-keys-tab`, `webhooks-tab`),
+  Playwright `e2e/developers.spec.ts` (en and ar, axe) and
+  `e2e/api/developers.api.spec.ts` (a created key answers `/api/v1` and is
+  refused once revoked; an endpoint refused for a private address and for
+  `http`, then added and pinged through the worker). Api: `webhooks.service`,
+  `webhook-destination`, `error-response` and `api-v1.integration.test.ts`
+  (overview, ping, delivery detail, refusals).
+- Guides: [API keys](../guides/api.md#api-keys),
+  [the Webhooks page](../guides/webhooks.md#the-developers--webhooks-page).
 
 ### M8-05 System page
 
@@ -122,7 +188,11 @@ Copied from the PRD, ticked as they are met.
 - **Storage:** measured per brand by `stats.rollup` when the reading is over 6
   hours old (`S3BrandObjects.usage`, prefix `brands/<id>/`), kept in the Redis
   hash `hd:storage:usage`, shown in total and per brand.
-- **LLM spend:** `AiUsageSource.installSpend`.
+- **LLM spend:** `AiUsageSource.installSpend`, per brand (`brands`, each
+  against its own monthly budget) and in total.
+- **Migrations and Postgres:** the api replica names the migrations it finds
+  recorded at boot (`MigrationResult.recorded`, newest first) beside the count;
+  `pg_database_size` gives the database's size, install-wide.
 - **Bull Board** at `/api/install/queues/board/`, reached through
   `POST /api/install/system/queue-board` (a one-use pass) and an `hd_queue_board`
   session that re-checks the admin's refresh family and install-admin status on
@@ -138,14 +208,69 @@ Copied from the PRD, ticked as they are met.
   request, so popup blockers let it through. The page's api adapter now sends
   the access token (it did not before, which a real install would have
   refused); `SystemApi` is provided by `SystemApiProvider` from `createApis`.
-- **Where the screen differs from the artboard:** LLM spend is install-wide
-  (the seam has no per-brand spend or budgets); Storage has no Postgres
-  column; Version has no image name or migration list; Channels show no brand
-  name or Widget rows; the queue button is in the header only. Each needs the
-  api to report it.
+- **Where the screen differs from the artboard:** Storage shows Postgres as
+  one install-wide figure, not per brand (a brand's share would mean reading
+  every row; see [operations](../guides/operations.md#where-the-numbers-come-from));
+  Version has no image name, and the migration list has names without times
+  (Drizzle records none); Channels show no brand name or Widget rows; the
+  queue button is in the header only.
 - Tests: `system-page.test.tsx`, `side-cards.test.tsx`, `system-api.test.ts`,
-  `product-metrics.test.ts`; Playwright `e2e/system.spec.ts`.
+  `product-metrics.test.ts`; Playwright `e2e/system.spec.ts` (en and ar, axe);
+  `system.service.test.ts`, `migrate.test.ts`, and in integration
+  `observability`, `migrate` and `ai` (spend per brand).
 - Guide: [operations](../guides/operations.md#the-system-page).
+
+### M8-06 CSAT delivery
+
+- **On close** (artboards `Email/CSAT-EN-AR`, `Widget/CSAT-EN`, `Widget/CSAT-AR`,
+  `Telegram/Chat-EN` and `Telegram/Chat-AR` panels 5 and 6): the
+  `csat.requested` job that creates the survey also sends it, in its
+  transaction, on the ticket's channel (`apps/api/src/csat/csat-delivery.ts`).
+  `chat` → a `csat` widget frame and the card over REST; `telegram` → a
+  `telegram.notice` of kind `csat_survey`; any other channel → an
+  `email_deliveries` row of kind `csat` and its `email.send`. Spam, merged and
+  CSAT-off closes still get no survey, and only the run that inserts the survey
+  sends it, so a redelivered job sends nothing.
+- **Feedback settings.** `AdminTicketingFeedback` has one toggle and no delay or
+  channel choice, so the survey goes out at once on the ticket's own channel.
+  The tab's delivery note now says so.
+- **Email** (`packages/channels/src/email/csat-survey.ts`, the CustomerEmail
+  survey variant): five link cells, each the single-use link with
+  `?rating=<n>&lang=<locale>`. The rating page opens with that score pressed and
+  records nothing until Send, so link scanners cannot rate. `Message-ID`
+  `<hd.c.<surveyId>@…>`, `Auto-Submitted: auto-generated`, no CCs. `sent_at`
+  is set when the relay accepts it.
+- **Widget**: `GET`, `POST …/conversations/:id/csat` and `POST …/csat/skip`
+  (`widget-csat.controller.ts`), and the `csat` server event. The card
+  (`apps/widget/src/ui/CsatCard.tsx`, DESIGN §6.6) replaces the composer until
+  answered or skipped. Skip stores `skipped_at` and records no answer. The
+  entry is 27.24 KB gzipped (was 25.85).
+- **Telegram**: score buttons carry `csat:<surveyId>:<n>`. A tap is recorded
+  only from the ticket's contact's chat, then answered with a `csat_rated`
+  notice (the score buttons go, **Add a comment** stays, a thanks line with the
+  link's expiry date) or `csat_closed` ("This survey has closed."). A tap
+  leaves the link open once for a comment: `rate` accepts a link answer over a
+  Telegram one with no comment, and the page opens with the tapped score.
+- **`csat.received`** is written by every recorded answer
+  (`apps/api/src/csat/csat-answers.ts`) with `{ ticketId, surveyId, rating,
+  via, ratedAt }`, beside a `csat.rated` audit row. Rules subscribe already
+  (M3-03), which closes the M3 gap. The default slot only logs; M8-03's
+  webhooks subscribe under their own name.
+- **Migration** `0043_csat_delivery`: `csat_responses.rated_via`
+  (`csat_answer_channel`: `link`, `widget`, `telegram`; earlier answers are
+  backfilled `link`) and `skipped_at`; `email_delivery_kind` gains `csat`;
+  `email_deliveries.csat_response_id` with a unique partial index. No new
+  tenant table.
+- **Tests**: unit tests for every new module; `csat/delivery.integration.test.ts`
+  (Postgres, Redis, Mailpit, the Telegram stand-in and a widget socket) for each
+  channel, the link-scanner rule and the rules job; email snapshots in both
+  languages (`email/render-survey.test.ts`); Playwright for the widget card
+  (`apps/widget/e2e/csat.spec.ts`, en and ar, light and dark, axe) and the
+  rating page's `?rating=` (`apps/admin/e2e/csat.spec.ts`).
+- Guides: [tickets](../guides/tickets.md#satisfaction-surveys),
+  [widget protocol](../guides/widget-protocol.md#satisfaction-card),
+  [Telegram](../guides/telegram.md#the-satisfaction-survey),
+  [automation](../guides/automation.md#a-rule).
 
 ### M8-07 Brand deletion and product metrics
 
@@ -179,9 +304,10 @@ Copied from the PRD, ticked as they are met.
   for the prefix ("Type HD to confirm"). During the grace every Brand tab shows
   a warning Banner "Scheduled for deletion on …" with Restore and is
   read-only (a disabled fieldset). System lists the pending brands with
-  PendingDeletionRow; "Deleted by" is not drawn, since the deletion read does
-  not name who asked. Tests: `brand-page.test.tsx`; Playwright
-  `e2e/brand-deletion.spec.ts`.
+  PendingDeletionRow, "Deleted by" from the deletion read's `requestedBy`
+  (the install-scope `brand.deletion_requested` audit row). Tests:
+  `brand-page.test.tsx`, `brand-deletion.integration.test.ts`; Playwright
+  `e2e/brand-deletion.spec.ts`, `e2e/system.spec.ts`.
 - Guides: [data retention](../guides/data-retention.md#deleting-a-brand),
   [operations](../guides/operations.md#product-metrics).
 

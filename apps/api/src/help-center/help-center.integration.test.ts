@@ -45,6 +45,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { FakeStorage, silentJobLogger } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { HelpCenterContentService } from './content.service.js';
 import { HelpCenterRepository } from './help-center.repository.js';
 import { hcMediaKey } from './media.service.js';
@@ -166,19 +167,8 @@ describe.skipIf(!hasDocker)('the help center content (M5-01, M5-02, M5-09)', () 
 
   const hc = (suffix: string) => `/api/brands/${seeded.brandId}/help-center${suffix}`;
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addPerson = async (db: Db, who: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);

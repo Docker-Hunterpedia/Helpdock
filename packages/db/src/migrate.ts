@@ -45,6 +45,17 @@ export const newlyAppliedTags = (
     .map((entry) => entry.tag);
 
 /**
+ * Every migration the database has recorded, newest first: the System page's
+ * migration list (M8-05). Drizzle keeps no time of application, only the
+ * journal's `when`, so the list is names alone.
+ */
+export const recordedTags = (journal: Journal, after: ReadonlySet<number>): readonly string[] =>
+  journal.entries
+    .filter((entry) => after.has(entry.when))
+    .map((entry) => entry.tag)
+    .reverse();
+
+/**
  * The runtime role's password, taken from `DATABASE_URL` so that one secret
  * describes one role. The migration provisions `helpdock_app` with it on a
  * fresh database and leaves an existing role alone.
@@ -93,6 +104,8 @@ export interface MigrationResult {
    * it counts them while it is here (ARCHITECTURE §14, the System page).
    */
   readonly total: number;
+  /** The names behind {@link total}, newest first, for the same reason it is returned. */
+  readonly recorded: readonly string[];
 }
 
 type Client = ReturnType<typeof postgres>;
@@ -120,10 +133,12 @@ const applyMigrations = async (client: Client): Promise<MigrationResult> => {
   const before = await appliedMillis(client);
   await migrate(drizzle(client), { migrationsFolder: MIGRATIONS_FOLDER });
   const after = await appliedMillis(client);
+  const journal = await readJournal();
 
   return {
-    applied: newlyAppliedTags(await readJournal(), before, after),
+    applied: newlyAppliedTags(journal, before, after),
     total: after.size,
+    recorded: recordedTags(journal, after),
   };
 };
 

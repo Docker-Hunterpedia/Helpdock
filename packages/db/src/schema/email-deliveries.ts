@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
+import { csatResponses } from './csat-responses.js';
 import { departments } from './departments.js';
 import { emailDeliveryKindEnum, emailDeliveryStatusEnum, localeEnum } from './enums.js';
 import { ticketMessages } from './ticket-messages.js';
@@ -46,6 +47,10 @@ export const emailDeliveries = pgTable(
       onDelete: 'cascade',
     }),
     kind: emailDeliveryKindEnum('kind').notNull(),
+    /** The survey a `csat` email asks about (M8-06); null for every other kind. */
+    csatResponseId: uuid('csat_response_id').references(() => csatResponses.id, {
+      onDelete: 'cascade',
+    }),
     fromName: text('from_name').notNull(),
     fromAddress: text('from_address').notNull(),
     replyTo: text('reply_to'),
@@ -78,6 +83,10 @@ export const emailDeliveries = pgTable(
     uniqueIndex('email_deliveries_auto_reply_key')
       .on(table.ticketId, table.kind)
       .where(sql`${table.kind} in ('acknowledgment', 'out_of_hours')`),
+    // One survey email per survey, however often the job that asks for it runs.
+    uniqueIndex('email_deliveries_csat_key')
+      .on(table.csatResponseId)
+      .where(sql`${table.csatResponseId} is not null`),
     uniqueIndex('email_deliveries_brand_message_id_key').on(table.brandId, table.messageId),
     index('email_deliveries_brand_status_idx').on(table.brandId, table.status),
     // The per-sender cap counts auto-replies to one address in the last hour.

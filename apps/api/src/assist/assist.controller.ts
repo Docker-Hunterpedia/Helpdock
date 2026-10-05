@@ -48,7 +48,7 @@ import { ProposalsService } from './proposals.service.js';
  * Every model call is `ticket:write` — assist is the composer's, an agent's
  * tool, and a Viewer is never offered it — and runs under
  * `@StepTransactions()`: the ticket is read under the agent's own department
- * policy, then the model is asked with no transaction open (ADR 0021).
+ * policy, then the model is asked with no transaction open (ADR 0024).
  * Reading transcripts and redactions is `ticket:read`, under the ticket's
  * policy like the thread itself.
  */

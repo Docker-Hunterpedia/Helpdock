@@ -23,6 +23,8 @@ const categorical = (index: number): string =>
 /** The first two series: teal500 and info. */
 export const SERIES_PRIMARY = categorical(0);
 export const SERIES_SECONDARY = categorical(1);
+/** The hue of the n-th series of a chart; the sixth, "Other", is n500. */
+export const seriesColour = (index: number): string => categorical(Math.min(index, 5));
 /** The Heatmap's six steps, teal100 to teal500 and teal700. */
 const SEQUENTIAL = [
   PALETTE.teal.teal100,
@@ -41,6 +43,7 @@ const TOP = 8;
 const END = 72;
 const GRID_LINES = 4;
 const BAR_GAP = 2;
+const SEGMENT_GAP = 2;
 const X_LABELS = 6;
 
 /** A round ceiling for the y axis: 1, 2 or 5 times a power of ten. */
@@ -157,29 +160,41 @@ const svgStyle = {
   direction: 'ltr',
 } as const;
 
+/** One series of a stacked column: its name, hue and the day's figure. */
+export interface StackSegment {
+  readonly label: string;
+  readonly colour: string;
+}
+
 /**
- * One series of columns, a day each (Ticket volume). The api gives created
- * tickets per day, not per channel per day, so the breakdown the artboard
- * stacks is drawn beside the plot as share rows instead.
+ * Columns a day each, stacked a segment per series (Ticket volume), with a
+ * 2 px `bg.surface` gap between segments as §9 asks. The hover Tooltip lists
+ * every series with its swatch and that day's figure.
  */
-export function ColumnChart({
+export function StackedColumnChart({
   label,
   dayLabels,
-  values,
-  tooltipOf,
+  series,
+  counts,
+  tooltipTitleOf,
 }: {
   readonly label: string;
   /** One axis label per column. */
   readonly dayLabels: readonly string[];
-  readonly values: readonly number[];
-  /** The hover Tooltip's text for one column, naming the series. */
-  readonly tooltipOf: (index: number) => string;
+  /** Bottom to top, in the order of the legend. */
+  readonly series: readonly StackSegment[];
+  /** Per day, a count per series. */
+  readonly counts: readonly (readonly number[])[];
+  /** The Tooltip's first line for one column ("Tue 22 Sep · 38 tickets"). */
+  readonly tooltipTitleOf: (index: number) => string;
 }): ReactNode {
   const semantic = useSemanticTokens();
   const [hovered, setHovered] = useState<number | null>(null);
-  const axes = axesFor(Math.max(0, ...values));
-  const slot = axes.plotWidth / Math.max(1, values.length);
+  const totals = counts.map((day) => day.reduce((sum, value) => sum + value, 0));
+  const axes = axesFor(Math.max(0, ...totals));
+  const slot = axes.plotWidth / Math.max(1, counts.length);
   const xOf = (index: number): number => AXIS_START + slot * index + slot / 2;
+  const bottom = TOP + axes.plotHeight;
 
   return (
     <svg role="img" aria-label={label} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={svgStyle}>
@@ -193,20 +208,38 @@ export function ColumnChart({
         />
       )}
       <Grid axes={axes} />
-      {values.map((value, index) => {
-        const y = axes.yOf(value);
+      {counts.map((day, index) => {
+        let base = 0;
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: one column per day of a fixed range.
           <g key={index}>
-            <rect
-              x={AXIS_START + slot * index + BAR_GAP / 2}
-              y={y}
-              width={Math.max(1, slot - BAR_GAP)}
-              height={TOP + axes.plotHeight - y}
-              fill={SERIES_PRIMARY}
-            />
+            {day.map((value, segment) => {
+              const lower = axes.yOf(base);
+              base += value;
+              const upper = axes.yOf(base);
+              const height = Math.max(0, lower - upper - (segment === 0 ? 0 : SEGMENT_GAP));
+              return value === 0 ? null : (
+                <rect
+                  // biome-ignore lint/suspicious/noArrayIndexKey: the series' place in the stack.
+                  key={segment}
+                  x={AXIS_START + slot * index + BAR_GAP / 2}
+                  y={upper}
+                  width={Math.max(1, slot - BAR_GAP)}
+                  height={height}
+                  fill={series[segment]?.colour ?? SERIES_PRIMARY}
+                />
+              );
+            })}
             <Tooltip
-              title={tooltipOf(index)}
+              title={
+                <SeriesTooltip
+                  title={tooltipTitleOf(index)}
+                  rows={series.map((entry, segment) => ({
+                    ...entry,
+                    value: String(day[segment] ?? 0),
+                  }))}
+                />
+              }
               placement="top"
               disableInteractive
               describeChild
@@ -221,7 +254,7 @@ export function ColumnChart({
                 x={AXIS_START + slot * index}
                 y={TOP}
                 width={slot}
-                height={axes.plotHeight}
+                height={bottom - TOP}
                 fill="transparent"
               />
             </Tooltip>
@@ -230,6 +263,41 @@ export function ColumnChart({
       })}
       <DayAxis labels={dayLabels} xOf={xOf} />
     </svg>
+  );
+}
+
+/** §6.3's chart Tooltip: a title, then each series with an 8 px swatch and its value in mono. */
+function SeriesTooltip({
+  title,
+  rows,
+}: {
+  readonly title: string;
+  readonly rows: readonly (StackSegment & { readonly value: string })[];
+}): ReactNode {
+  return (
+    <Box sx={{ display: 'grid', gap: 1 }}>
+      <Typography component="span" sx={{ fontSize: 12, lineHeight: '16px', fontWeight: 500 }}>
+        {title}
+      </Typography>
+      {rows.map((row) => (
+        <Box
+          key={row.label}
+          sx={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12, lineHeight: '16px' }}
+        >
+          <Box
+            component="span"
+            aria-hidden="true"
+            sx={{ width: 8, height: 8, flexShrink: 0, backgroundColor: row.colour }}
+          />
+          <Box component="span" sx={{ flex: 1 }}>
+            {row.label}
+          </Box>
+          <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
+            {row.value}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
   );
 }
 

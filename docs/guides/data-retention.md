@@ -158,7 +158,10 @@ finishes, since every step deletes what is left.
 
 The retention routes answer `{ settings, preview, lastRun }`, as
 `retentionOverviewSchema` in `@helpdock/schemas` declares; the deletion routes
-answer `{ brandId, status, requestedAt, purgeAfter }` (`brandDeletionSchema`).
+answer `{ brandId, status, requestedAt, purgeAfter, requestedBy }`
+(`brandDeletionSchema`). `requestedBy` is `{ userId, name }` of whoever asked,
+read from the install-scope `brand.deletion_requested` audit row (`name` null
+for an account that no longer exists), and null for an active brand.
 
 ## Known gaps
 

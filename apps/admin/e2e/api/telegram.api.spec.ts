@@ -1,8 +1,8 @@
 import { expect, type Page, test } from '@playwright/test';
-import { generate } from 'otplib';
 import { strings } from '../strings.js';
 import { E2E_BOT_TOKEN, E2E_BOT_USERNAME, E2E_REFUSED_TOKEN } from './fake-telegram.js';
 import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import { freshTotpCode } from './totp.js';
 
 /**
  * M6-05 against the real api, with a local stand-in for api.telegram.org: a
@@ -34,7 +34,7 @@ const signInAsAdmin = async (page: Page): Promise<void> => {
 
   await page
     .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
+    .fill(await freshTotpCode(process.env[TOTP_SECRET_ENV] ?? ''));
   await page.getByRole('button', { name: t('auth:totp.submit') }).click();
   await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
 };

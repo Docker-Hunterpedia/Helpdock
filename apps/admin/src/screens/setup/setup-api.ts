@@ -48,6 +48,14 @@ export class SetupKeyInvalidError extends Error {
   }
 }
 
+/** Step 1 was refused because the password is on the api's breached-password list. */
+export class SetupPasswordBreachedError extends Error {
+  constructor() {
+    super('setup: password on the breached list');
+    this.name = 'SetupPasswordBreachedError';
+  }
+}
+
 export class SetupThrottledError extends Error {
   constructor() {
     super('setup: throttled');
@@ -154,6 +162,9 @@ const toSetupError = async (response: Response): Promise<Error> => {
   if (response.status === 400) {
     try {
       const body = errorResponseSchema.parse(await response.json());
+      if (body.error.auth?.code === 'password-breached') {
+        return new SetupPasswordBreachedError();
+      }
       return new SetupValidationError((body.error.fields ?? []).map((field) => field.path));
     } catch {
       return new SetupValidationError([]);

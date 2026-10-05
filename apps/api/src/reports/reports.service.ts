@@ -10,7 +10,7 @@ import { NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { AiUsageSource } from './ai-usage.js';
 import { exportLines } from './report-exports.js';
-import { csatSummary, fillDays, openedRate, slaOutcome } from './report-math.js';
+import { agentSummary, csatSummary, fillDays, openedRate, slaOutcome } from './report-math.js';
 import { type ReportScope, ReportsRepository } from './reports.repository.js';
 
 /**
@@ -40,7 +40,11 @@ export class ReportsService {
 
     return {
       range: { from: query.from, to: query.to, timezone: brand.timezone },
-      filters: { departmentId: query.departmentId ?? null, channel: query.channel ?? null },
+      filters: {
+        departmentId: query.departmentId ?? null,
+        channel: query.channel ?? null,
+        agentId: query.agentId ?? null,
+      },
       computedAt: totals.computedAt?.toISOString() ?? null,
       volume: {
         created: days.reduce((sum, day) => sum + day.created, 0),
@@ -55,17 +59,32 @@ export class ReportsService {
           ...row,
         })),
         byStatus: await repository.byStatus(tx, scope),
+        byDayAndChannel: (await repository.byDayAndChannel(tx, scope)).map(
+          ({ day, key, created }) => ({ day, channel: key, created }),
+        ),
+        byDayAndPriority: (await repository.byDayAndPriority(tx, scope)).map(
+          ({ day, key, created }) => ({ day, priority: key, created }),
+        ),
+        byDayAndStatus: (await repository.byDayAndStatus(tx, scope)).map(
+          ({ day, key, created }) => ({ day, statusId: key, tickets: created }),
+        ),
       },
       firstResponse: await repository.durations(tx, scope, 'first_response_ms'),
       resolution: await repository.durations(tx, scope, 'resolution_ms'),
       sla: {
         response: slaOutcome(totals.slaResponseMet, totals.slaResponseBreached),
         resolution: slaOutcome(totals.slaResolutionMet, totals.slaResolutionBreached),
+        byPriority: (await repository.slaByPriority(tx, scope)).map((row) => ({
+          priority: row.priority,
+          ...slaOutcome(row.met, row.breached),
+        })),
         countsReopens: brand.countsReopens,
       },
       backlog: days.map(({ day, backlog }) => ({ day, open: backlog })),
       csat: csatSummary(totals.csat),
-      agents: await repository.agents(tx, scope, REPORT_LIST_ROWS),
+      agents: (await repository.agents(tx, scope, REPORT_LIST_ROWS)).map(agentSummary),
+      unassignedOpen: await repository.unassignedOpen(tx, scope),
+      agentChoices: await repository.agentChoices(tx, scope),
       busiestHours: await repository.busiestHours(tx, scope),
       searches: {
         top: top.map((row) => ({

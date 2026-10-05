@@ -20,6 +20,7 @@ import { SystemService } from './system.service.js';
 const BOOT_FACTS: BootFacts = {
   runtimeRole: { roleName: 'helpdock_app', superuser: false, bypassRls: false, ownedTables: 0 },
   migrationsApplied: 4,
+  migrations: ['0003_outbox_notify_relay', '0002_tenant_rls_policies'],
 };
 
 const AUDIT_ROW = {
@@ -96,7 +97,7 @@ const CHANNEL: ChannelStatus = {
 const serviceWith = ({
   relay = null,
   channels = async () => [CHANNEL],
-  rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2 }],
+  rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2, bytes: '3200' }],
   readings = [],
 }: {
   relay?: string | null;
@@ -139,6 +140,11 @@ describe('SystemService.status', () => {
     expect(status.build.nodeVersion).toBe(process.version);
     expect(status.database.version).toBe('17.6');
     expect(status.database.migrationsApplied).toBe(4);
+    expect(status.database.migrations).toEqual([
+      '0003_outbox_notify_relay',
+      '0002_tenant_rls_policies',
+    ]);
+    expect(status.database.sizeBytes).toBe(3200);
     expect(status.database.runtimeRole).toEqual({
       name: 'helpdock_app',
       superuser: false,
@@ -250,6 +256,7 @@ describe('SystemService.status', () => {
 
     expect(systemStatusSchema.safeParse(status).success).toBe(true);
     expect(status.database.version).toBeNull();
+    expect(status.database.sizeBytes).toBeNull();
     expect(status.database.migrationsApplied).toBe(4);
     expect(status.queues).toEqual({ queues: [], total: 0, deadLettered: 0 });
     expect(status.storage).toEqual({ configured: false });

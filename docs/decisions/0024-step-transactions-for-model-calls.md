@@ -1,4 +1,4 @@
-# 0021 Agent assist calls the model between short transactions, not inside the request's
+# 0024 Agent assist calls the model between short transactions, not inside the request's
 
 Status: accepted
 Date: 2026-10-05

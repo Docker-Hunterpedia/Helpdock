@@ -74,15 +74,27 @@ describe('deletionOf', () => {
       status: 'active',
       requestedAt: null,
       purgeAfter: null,
+      requestedBy: null,
     });
   });
 
+  it('names nobody for an active brand, even when handed a requester', () => {
+    const requestedBy = { userId: 'user-1', name: 'Lina' };
+
+    expect(
+      deletionOf({ ...row, status: 'active', deletedAt: null }, requestedBy).requestedBy,
+    ).toBeNull();
+  });
+
   it('ends the grace thirty days after the request', () => {
-    expect(deletionOf({ ...row, status: 'deleting', deletedAt: REQUESTED })).toEqual({
+    const requestedBy = { userId: 'user-1', name: 'Lina' };
+
+    expect(deletionOf({ ...row, status: 'deleting', deletedAt: REQUESTED }, requestedBy)).toEqual({
       brandId: BRAND,
       status: 'deleting',
       requestedAt: '2026-09-01T10:00:00.000Z',
       purgeAfter: '2026-10-01T10:00:00.000Z',
+      requestedBy,
     });
   });
 });

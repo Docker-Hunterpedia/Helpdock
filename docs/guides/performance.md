@@ -128,6 +128,7 @@ are smoke runs and say so.
 | 2026-10-05 | development sandbox, 4 vCPU shared with other builds (load average ~20), `PERF_SCALE=0.02`, 10 visitors, 20 s | `perf:help-center` | cold p95 391 ms; cached, one visitor, p95 73 ms; cached under load p95 54–93 ms per page kind. Passes. |
 | 2026-10-05 | the same | `perf:realtime`, 20 visitors, 2 agents, one reply a second, 40 s | p50 84 ms, p95 257 ms, nothing lost. Passes. |
 | 2026-10-05 | the same | `perf:realtime`, 20 visitors, 2 agents, five replies a second, 30 s | p50 196 ms, **p95 4.9 s**, nothing lost. See below. |
+| 2026-10-05 | the same, load average 13–47 | `perf:realtime`, 20 visitors, 2 agents, five replies a second, 30 s, `PERF_SCALE=0.02`, `OUTBOX_CONCURRENCY` 1 and 8 interleaved | see [the concurrency runs](#outbox-concurrency-on-the-sandbox) |
 
 ### What the realtime runs showed
 
@@ -139,12 +140,39 @@ loaded sandbox, five replies a second plus the visitors' messages was more
 than one consumer could take, the queue grew, and the tail grew with it to the
 length of the backlog. At one reply a second it stayed under the gate.
 
-This was not tuned in M9-03: raising that concurrency lets two events of the
-same ticket run at once, which the SLA and rules handlers have not been
-reviewed for, and the sandbox was not the §14 host. The §14 run decides
-whether it is needed; if it is, the change is per-event concurrency with the
-handlers' ordering assumptions checked first, and a scaled-out worker in the
-meantime (more `worker` replicas consume the same queue).
+The handlers' ordering assumptions were then reviewed and the worker now runs
+`OUTBOX_CONCURRENCY` events at once (8 by default), one ticket's events still
+one at a time and in order ([ADR 0023](../decisions/0023-outbox-events-ordered-per-ticket.md),
+[operations › Scaling the worker](operations.md#scaling-the-worker)).
+
+### Outbox concurrency on the sandbox
+
+The same five-replies-a-second run, with one event at a time and with eight,
+alternated so each pair saw the same machine. Load average is the sandbox's at
+the end of the run, on 4 vCPU shared with other agents' builds.
+
+| `OUTBOX_CONCURRENCY` | Load | p50 | p95 | p99 | Lost |
+|---|---|---|---|---|---|
+| 1 | ~21 | 179 ms | 708 ms | 1.3 s | 0 |
+| 8 | ~15 | 78 ms | 194 ms | 501 ms | 0 |
+| 8 | ~25 | 126 ms | 871 ms | 1.9 s | 0 |
+| 1 | ~30 | 330 ms | 7.4 s | 8.5 s | 0 |
+| 8 | ~47 | 3.6 s | 12.2 s | 12.7 s | 2 |
+| 1 | ~30 | 379 ms | 7.6 s | 9.3 s | 0 |
+| 8 | ~30 | 543 ms | 6.6 s | 8.3 s | 0 |
+| 1 | ~32 | 345 ms | 6.7 s | 8.8 s | 0 |
+| 8 | ~28 | 111 ms | 822 ms | 2.5 s | 0 |
+
+At ten replies a second (load ~13–20), one at a time gave p95 277 ms and eight
+gave 1.1 s.
+
+What this shows is mostly the sandbox: consecutive runs of the same setting
+differ by more than the settings do. Under a load near 30, one at a time
+reproduced the original finding in all three runs (p95 6.7–7.6 s) and eight at
+a time ranged from 0.8 s to 6.6 s; at the highest load eight at a time lost two
+replies to the five-second cut-off. Nothing here is a reason to keep one at a
+time, and nothing here proves the 500 ms gate holds; the §14 host run is what
+decides both, and it is still to do.
 
 No index or cache change was made: the help center served cached pages at a
 fraction of its budget on a host far busier than §14's, and the ticket list

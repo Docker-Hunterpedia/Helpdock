@@ -13,13 +13,18 @@ import type { PasswordStrength } from './password-strength.js';
  */
 export function PasswordStrengthBar({
   strength,
+  refused = false,
 }: {
   readonly strength: PasswordStrength;
+  /** The api refused the password: one danger segment, whatever it looked like. */
+  readonly refused?: boolean;
 }): ReactNode {
   const tokens = useSemanticTokens();
+  const score = refused ? 0 : strength.score;
 
-  const hue =
-    strength.score >= 3
+  const hue = refused
+    ? tokens['status.danger']
+    : strength.score >= 3
       ? tokens['status.success']
       : strength.score === 2
         ? tokens['status.info']
@@ -31,7 +36,7 @@ export function PasswordStrengthBar({
     <Box
       aria-hidden="true"
       sx={{ display: 'flex', gap: 1, marginBlockStart: '6px' }}
-      data-strength={strength.level}
+      data-strength={refused ? 'refused' : strength.level}
     >
       {[0, 1, 2, 3].map((segment) => (
         <Box
@@ -40,7 +45,7 @@ export function PasswordStrengthBar({
             height: 4,
             flex: 1,
             borderRadius: '2px',
-            backgroundColor: segment <= strength.score ? hue : tokens['border.default'],
+            backgroundColor: segment <= score ? hue : tokens['border.default'],
           }}
         />
       ))}

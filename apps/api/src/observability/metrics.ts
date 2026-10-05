@@ -48,6 +48,8 @@ export interface Metrics {
   readonly redisUp: Gauge<never>;
   /** `namespace` is the Socket.IO one: `/staff`, and `/widget` from M4. */
   readonly socketConnections: Gauge<'namespace'>;
+  /** `bucket` is the limit's name (`signin-ip`, `widget-message`, …), never its subject. */
+  readonly rateLimitRefusals: Counter<'bucket'>;
 }
 
 /**
@@ -119,6 +121,12 @@ export const createMetrics = (): Metrics => {
       name: 'socket_connections',
       help: 'Open Socket.IO connections on this replica, by namespace.',
       labelNames: ['namespace'],
+      registers,
+    }),
+    rateLimitRefusals: new Counter({
+      name: 'rate_limit_refusals_total',
+      help: 'Requests and socket events a rate limit refused, by the limit that refused them.',
+      labelNames: ['bucket'],
       registers,
     }),
   };

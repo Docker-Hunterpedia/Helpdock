@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMetrics } from '../observability/metrics.js';
+import { countRateLimitRefusalsIn } from '../observability/rate-limit-refusals.js';
 import { authRedis } from '../testing/auth-redis.js';
 import type { RedisStub } from '../testing/redis-stub.js';
 import {
@@ -44,6 +46,18 @@ const spend = async (count: number, subject = 'lina@helpdock.com'): Promise<bool
 describe('RateLimiter', () => {
   it('allows exactly the limit and then refuses', async () => {
     expect(await spend(4)).toEqual([true, true, true, false]);
+  });
+
+  it('counts every refusal in rate_limit_refusals_total under its bucket (ASVS 8.1.4)', async () => {
+    const metrics = createMetrics();
+    countRateLimitRefusalsIn(metrics.rateLimitRefusals);
+
+    await spend(5);
+
+    expect((await metrics.rateLimitRefusals.get()).values).toEqual([
+      { value: 2, labels: { bucket: 'test' } },
+    ]);
+    countRateLimitRefusalsIn(createMetrics().rateLimitRefusals);
   });
 
   it('counts each subject separately', async () => {

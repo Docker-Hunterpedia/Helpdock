@@ -28,6 +28,8 @@ import { RefreshStore } from './auth/session/refresh-store.js';
 import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
 import { INBOUND_PARSE_ROUTE, registerFormBodies } from './channels/inbound/inbound-parse-body.js';
+import { registerClientFacts } from './context/client-facts.js';
+import { registerJsonDisposition } from './http/json-disposition.js';
 import { securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
@@ -35,6 +37,7 @@ import { registerHttpMetrics } from './observability/http-metrics.js';
 import type { Metrics } from './observability/metrics.js';
 import { QueueBoardAccess, registerQueueBoard } from './observability/queue-board.js';
 import type { QueueRegistry } from './observability/queues.js';
+import { countRateLimitRefusalsIn } from './observability/rate-limit-refusals.js';
 import { METRICS, QUEUE_REGISTRY } from './observability/tokens.js';
 import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
@@ -89,14 +92,16 @@ export const createRuntime = async ({
   // read (DOMAIN-RULES §1.5). The System page is served by an api replica,
   // which does.
   let migrationsApplied: number | null = null;
+  let migrations: readonly string[] | null = null;
 
   if (env.APP_ROLE === 'api') {
-    const migrations = await runMigrations({
+    const result = await runMigrations({
       migrationUrl: env.DATABASE_MIGRATION_URL,
       appRolePassword: appRolePasswordFromUrl(env.DATABASE_URL),
       log: (message) => logger.info(message),
     });
-    migrationsApplied = migrations.total;
+    migrationsApplied = result.total;
+    migrations = result.recorded;
   }
 
   const { db, close: closeDb } = createDb({ url: env.DATABASE_URL });
@@ -150,7 +155,7 @@ export const createRuntime = async ({
       settings,
       logger,
       signingKeys,
-      bootFacts: { runtimeRole: facts, migrationsApplied },
+      bootFacts: { runtimeRole: facts, migrationsApplied, migrations },
       close: async () => {
         for (const close of closers) {
           await close();
@@ -296,6 +301,9 @@ export const createApiApp = async ({
   // ready, and on the Fastify instance rather than as a Nest interceptor so
   // that 401s, 403s and 404s are counted too (see `http-metrics.ts`).
   registerHttpMetrics(app.getHttpAdapter().getInstance(), app.get<Metrics>(METRICS));
+  registerClientFacts(app.getHttpAdapter().getInstance());
+  countRateLimitRefusalsIn(app.get<Metrics>(METRICS).rateLimitRefusals);
+  registerJsonDisposition(app.getHttpAdapter().getInstance());
 
   // M2-03 and M4-09. Before `init()`, which is when Nest adds its routes: the
   // `onRoute` hook that raises their body limit only sees routes added after it.

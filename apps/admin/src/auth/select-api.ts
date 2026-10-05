@@ -13,6 +13,9 @@ import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { HttpDevelopersApi } from '../developers/http-api.js';
+import { MockDevelopersApi } from '../developers/mock-api.js';
 import type { DomainsApi } from '../domains/api.js';
 import { HttpDomainsApi } from '../domains/http-api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
@@ -94,6 +97,8 @@ export interface AdminApis {
   readonly telegram: TelegramApi;
   /** M7-05, M7-09: agent assist and transcripts on a ticket, Help center › Proposals. */
   readonly assist: AssistApi;
+  /** M8-01, M8-03: the Developers page. */
+  readonly developers: DevelopersApi;
 }
 
 /**
@@ -146,6 +151,7 @@ export function createApis(
       system: new HttpSystemApi(() => transport.currentAccessToken()),
       telegram: new HttpTelegramApi(transport),
       assist: new HttpAssistApi(transport),
+      developers: new HttpDevelopersApi(transport),
     };
   }
 
@@ -194,5 +200,6 @@ export function createApis(
     // It reads the ticket fixture for closed tickets and their messages, and
     // files an approved proposal's draft in the help center fixture.
     assist: new MockAssistApi({ tickets, helpCenter }),
+    developers: new MockDevelopersApi(),
   };
 }

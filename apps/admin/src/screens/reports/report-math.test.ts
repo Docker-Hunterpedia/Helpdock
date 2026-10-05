@@ -83,11 +83,20 @@ describe('the KPI arithmetic', () => {
     const outcome = (met: number, breached: number) => ({ met, breached, compliance: null });
 
     expect(
-      slaTotals({ response: outcome(597, 31), resolution: outcome(520, 48), countsReopens: false }),
+      slaTotals({
+        response: outcome(597, 31),
+        resolution: outcome(520, 48),
+        byPriority: [],
+        countsReopens: false,
+      }),
     ).toEqual({ met: 1117, breached: 79, compliance: 1117 / 1196 });
     expect(
-      slaTotals({ response: outcome(0, 0), resolution: outcome(0, 0), countsReopens: true })
-        .compliance,
+      slaTotals({
+        response: outcome(0, 0),
+        resolution: outcome(0, 0),
+        byPriority: [],
+        countsReopens: true,
+      }).compliance,
     ).toBeNull();
   });
 

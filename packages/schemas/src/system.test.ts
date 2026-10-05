@@ -35,8 +35,31 @@ describe('systemAiSpendSchema', () => {
         costUsd: 0,
         budgetUsd: 10,
         alertAtPercent: 80,
+        brands: [],
       }).success,
     ).toBe(true);
+  });
+
+  it('carries each brand against its own budget, null for none', () => {
+    const brand = {
+      brandId: '0192c3f0-1a2b-7c3d-8e4f-0000000000b1',
+      name: 'Acme',
+      tokens: 1200,
+      costUsd: 0.5,
+      budgetUsd: null,
+    };
+    const spend = { configured: true, tokens: 1200, costUsd: 0.5, budgetUsd: null };
+
+    expect(
+      systemAiSpendSchema.safeParse({ ...spend, alertAtPercent: 80, brands: [brand] }).success,
+    ).toBe(true);
+    expect(
+      systemAiSpendSchema.safeParse({
+        ...spend,
+        alertAtPercent: 80,
+        brands: [{ ...brand, budgetUsd: 0 }],
+      }).success,
+    ).toBe(false);
   });
 
   it('refuses an alert threshold outside a percentage', () => {
@@ -47,6 +70,7 @@ describe('systemAiSpendSchema', () => {
         costUsd: 0,
         budgetUsd: 10,
         alertAtPercent: 140,
+        brands: [],
       }).success,
     ).toBe(false);
   });

@@ -12,7 +12,7 @@ transcription (M7-05, M7-07, M7-09;
 [ADR 0005](../decisions/0005-single-embedding-model-per-install.md),
 [ADR 0018](../decisions/0018-pi-ai-provider-layer.md),
 [ADR 0020](../decisions/0020-knowledge-chunking-and-fusion.md),
-[ADR 0021](../decisions/0021-step-transactions-for-model-calls.md)).
+[ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)).
 
 Auto-reply arrives with its own deliverable (M7-06). Everything
 below is configured in admin under **AI** (M7-10, see [The screens](#the-screens)),
@@ -277,7 +277,7 @@ default), in which case assist calls `complete()` with `allowOverBudget` and
 only auto-reply stops. The call is still logged and counted.
 
 **How a call runs.** The assist routes hold no transaction while the model
-answers ([ADR 0021](../decisions/0021-step-transactions-for-model-calls.md)):
+answers ([ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)):
 the ticket is read under the agent's own department policy, then the model is
 called, then — for suggested fields only — the result is written, each step in
 a short transaction of its own. An agent cannot assist on a ticket they cannot
@@ -613,7 +613,7 @@ const { text } = await ai.complete({
 Do not call `complete()` inside a request's transaction: a model call takes
 seconds, and every port opens its own short transaction for the brand. A route
 that calls a model declares `@StepTransactions()` and opens its steps with
-`inRequestTenant` (`tenant/step-transactions.ts`, ADR 0021); work that follows
+`inRequestTenant` (`tenant/step-transactions.ts`, ADR 0024); work that follows
 a domain change goes through the outbox to the `ai` queue instead. The task
 prompts and the parsers of their answers are in `@helpdock/ai`
 (`assist/prompts.ts`, `assist/answers.ts`). Tests

@@ -1,11 +1,12 @@
 import {
   type DbTransaction,
+  users,
   type WebhookDeliveryRow,
   type WebhookRow,
   webhookDeliveries,
   webhooks,
 } from '@helpdock/db';
-import { and, arrayContains, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, arrayContains, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 
 /**
  * The `webhooks` and `webhook_deliveries` tables (M8-03). Every method takes
@@ -52,9 +53,60 @@ export interface AttemptRecord {
   readonly at: Date;
 }
 
+/** One endpoint for the Developers page: who added it, its recent record, its last delivery. */
+export interface WebhookOverviewRow {
+  readonly webhook: WebhookRow;
+  readonly createdByName: string | null;
+  /** Deliveries since `since` that finished, and how many of those succeeded. */
+  readonly finished: number;
+  readonly succeeded: number;
+  readonly lastDelivery: WebhookDeliveryRow | null;
+}
+
 export class WebhooksRepository {
   async list(tx: DbTransaction): Promise<WebhookRow[]> {
     return tx.select().from(webhooks).orderBy(desc(webhooks.createdAt));
+  }
+
+  /** Three reads rather than one join, so no endpoint's log is scanned more than once. */
+  async overview(tx: DbTransaction, since: Date): Promise<WebhookOverviewRow[]> {
+    const endpoints = await tx
+      .select({ webhook: webhooks, createdByName: users.name })
+      .from(webhooks)
+      .leftJoin(users, eq(users.id, webhooks.createdBy))
+      .orderBy(desc(webhooks.createdAt));
+    if (endpoints.length === 0) {
+      return [];
+    }
+    const ids = endpoints.map(({ webhook }) => webhook.id);
+
+    const counts = await tx
+      .select({
+        webhookId: webhookDeliveries.webhookId,
+        finished: sql<number>`count(*) filter (where ${webhookDeliveries.status} in ('succeeded', 'failed'))::int`,
+        succeeded: sql<number>`count(*) filter (where ${webhookDeliveries.status} = 'succeeded')::int`,
+      })
+      .from(webhookDeliveries)
+      .where(
+        and(inArray(webhookDeliveries.webhookId, ids), gte(webhookDeliveries.createdAt, since)),
+      )
+      .groupBy(webhookDeliveries.webhookId);
+    const latest = await tx
+      .selectDistinctOn([webhookDeliveries.webhookId])
+      .from(webhookDeliveries)
+      .where(inArray(webhookDeliveries.webhookId, ids))
+      .orderBy(webhookDeliveries.webhookId, desc(webhookDeliveries.id));
+
+    return endpoints.map(({ webhook, createdByName }) => {
+      const count = counts.find((row) => row.webhookId === webhook.id);
+      return {
+        webhook,
+        createdByName,
+        finished: count?.finished ?? 0,
+        succeeded: count?.succeeded ?? 0,
+        lastDelivery: latest.find((row) => row.webhookId === webhook.id) ?? null,
+      };
+    });
   }
 
   async find(tx: DbTransaction, webhookId: string): Promise<WebhookRow | undefined> {

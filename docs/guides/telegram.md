@@ -115,6 +115,12 @@ Under each reply: "to the Telegram chat · 14:24 · Sent" once Telegram has it. 
 
 `GET /api/brands/:brandId/tickets/:ticketId/telegram` (`ticket:read`) is what the ticket view reads: the chat (`bot`, `chatId`, `username`, `name`, `locale`, `languageChosenAt`, or `context: null` for a ticket no chat belongs to) and every reply's delivery. `GET …/telegram/deliveries` lists the deliveries alone: `queued`, `sent` or `failed`, with Telegram's refusal. A reply is retried five times; one Telegram refuses for good (the customer blocked the bot, the chat no longer exists) fails at once. `POST …/deliveries/:deliveryId/retry` (`ticket:write`) puts a failed one back in the queue.
 
+## The satisfaction survey
+
+When a Telegram ticket closes and the brand asks for ratings, the bot sends the survey in the contact's language: "Your request HD-1042 is closed. How was our help? Tap a number: 1 is very bad, 5 is excellent.", five buttons 1 to 5, and **Add a comment**, a link to the rating page (M8-06, `Telegram/Chat-EN` panel 5). It is a `telegram.notice` of kind `csat_survey`, sent by `telegram.send` like the welcome.
+
+A tap records the score at once. The bot then removes the score buttons, keeps **Add a comment**, and thanks the contact with the score and the date the link expires. A second tap, a tap after 30 days, or a tap from a chat that is not the ticket's contact's records nothing and gets "This survey has closed." The answer reaches the ticket's Satisfaction card and fires `csat.received`. See [satisfaction surveys](tickets.md#satisfaction-surveys).
+
 ## `/start` and the language pick
 
 When a customer opens the bot, Telegram sends `/start`. Helpdock records the contact and the chat, opens no ticket, and the bot answers with the welcome in the contact's language — the one they chose before, else the language of their Telegram app if it is English or Arabic, else the brand's default language. With `languagePick` on, the welcome ends with "Which language should we answer in?" and two buttons.

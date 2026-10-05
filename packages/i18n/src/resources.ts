@@ -6,6 +6,7 @@ import arChannels from '../locales/ar/channels.json' with { type: 'json' };
 import arCommon from '../locales/ar/common.json' with { type: 'json' };
 import arContacts from '../locales/ar/contacts.json' with { type: 'json' };
 import arCsat from '../locales/ar/csat.json' with { type: 'json' };
+import arDevelopers from '../locales/ar/developers.json' with { type: 'json' };
 import arEmail from '../locales/ar/email.json' with { type: 'json' };
 import arHcSite from '../locales/ar/hcSite.json' with { type: 'json' };
 import arHelpCenter from '../locales/ar/helpCenter.json' with { type: 'json' };
@@ -31,6 +32,7 @@ import enChannels from '../locales/en/channels.json' with { type: 'json' };
 import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enContacts from '../locales/en/contacts.json' with { type: 'json' };
 import enCsat from '../locales/en/csat.json' with { type: 'json' };
+import enDevelopers from '../locales/en/developers.json' with { type: 'json' };
 import enEmail from '../locales/en/email.json' with { type: 'json' };
 import enHcSite from '../locales/en/hcSite.json' with { type: 'json' };
 import enHelpCenter from '../locales/en/helpCenter.json' with { type: 'json' };
@@ -97,6 +99,8 @@ export const NAMESPACES = [
   'aiSettings',
   // `Admin/Reports` (M8-04).
   'reports',
+  // `Admin/Developers` (M8-01, M8-03): API keys and outbound webhooks.
+  'developers',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -129,6 +133,7 @@ export const resources = {
     telegram: enTelegram,
     aiSettings: enAiSettings,
     reports: enReports,
+    developers: enDevelopers,
   },
   ar: {
     common: arCommon,
@@ -156,6 +161,7 @@ export const resources = {
     telegram: arTelegram,
     aiSettings: arAiSettings,
     reports: arReports,
+    developers: arDevelopers,
   },
 };
 

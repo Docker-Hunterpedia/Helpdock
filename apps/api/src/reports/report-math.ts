@@ -1,5 +1,5 @@
 import type { ReportSummary, SlaOutcome } from '@helpdock/schemas';
-import type { DayRow } from './reports.repository.js';
+import type { AgentRow, DayRow } from './reports.repository.js';
 import { daysOf } from './rollup-window.js';
 
 /**
@@ -47,3 +47,23 @@ export const fillDays = (from: string, to: string, rows: readonly DayRow[]): Day
 /** Opened over searched, null when nothing was searched. */
 export const openedRate = (opened: number, searches: number): number | null =>
   searches === 0 ? null : Math.min(1, opened / searches);
+
+/** The average rating from the sum of ratings and how many there were; null for none. */
+export const csatAverage = (points: number, responses: number): number | null =>
+  responses === 0 ? null : points / responses;
+
+/** One Agent workload row as the summary carries it. */
+export const agentSummary = (row: AgentRow): ReportSummary['agents'][number] => ({
+  agentId: row.agentId,
+  name: row.name,
+  replies: row.replies,
+  resolved: row.resolved,
+  assignedOpen: row.assignedOpen,
+  firstResponse: row.firstResponse,
+  resolution: row.resolution,
+  sla: slaOutcome(row.slaMet, row.slaBreached),
+  csat: {
+    responses: row.csatResponses,
+    average: csatAverage(row.csatPoints, row.csatResponses),
+  },
+});

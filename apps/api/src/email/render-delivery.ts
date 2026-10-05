@@ -3,12 +3,19 @@ import {
   type EmailMessage,
   escapeHtml,
   paragraphsToHtml,
+  renderCsatSurveyBody,
   renderCustomerEmail,
 } from '@helpdock/channels';
 import type { EmailDelivery } from '@helpdock/db';
-import type { AutoReplyTemplates } from '@helpdock/schemas';
+import { type AutoReplyTemplates, CSAT_TOKEN_TTL_DAYS } from '@helpdock/schemas';
 import type { SendFacts } from './email.repository.js';
-import { customerCopy, fillPlaceholders, firstNameOf, transcriptCopy } from './email-copy.js';
+import {
+  csatSurveyCopy,
+  customerCopy,
+  fillPlaceholders,
+  firstNameOf,
+  transcriptCopy,
+} from './email-copy.js';
 
 /**
  * One delivery row, rendered to the message Nodemailer sends (artboard
@@ -32,7 +39,21 @@ export interface RenderInput {
   };
   /** The brand's auto-reply wording; only read for an auto-reply. */
   readonly templates: (kind: 'acknowledgment' | 'outOfHours') => AutoReplyTemplates;
+  /** M8-06: what a survey email links to and names. Only read for a `csat` delivery. */
+  readonly survey?: CsatSurveyEmail | undefined;
 }
+
+export interface CsatSurveyEmail {
+  /** The rating page with each score pressed, 1 first. */
+  readonly links: readonly string[];
+  /** The first name of the agent who closed the ticket, when the page may name them. */
+  readonly closedBy: string | null;
+}
+
+/** RFC 3834: a survey is sent by the system, not in reply to anything the customer sent. */
+const SURVEY_HEADERS: Readonly<Record<string, string>> = Object.freeze({
+  'Auto-Submitted': 'auto-generated',
+});
 
 /** The signature in the customer's language; an Arabic reply falls back to the English one. */
 export const signatureFor = (author: SendFacts['author'], locale: 'en' | 'ar'): string | null => {
@@ -45,12 +66,10 @@ export const signatureFor = (author: SendFacts['author'], locale: 'en' | 'ar'): 
   return chosen === null || chosen.trim() === '' ? null : chosen;
 };
 
-export const renderDelivery = ({
-  delivery,
-  facts,
-  thread,
-  templates,
-}: RenderInput): EmailMessage => {
+export const renderDelivery = (input: RenderInput): EmailMessage =>
+  input.delivery.kind === 'csat' ? renderSurvey(input) : renderMessage(input);
+
+const renderMessage = ({ delivery, facts, thread, templates }: RenderInput): EmailMessage => {
   const locale = delivery.locale;
   const copy = customerCopy(locale, facts.brandName);
   const auto = delivery.kind !== 'reply';
@@ -109,6 +128,70 @@ export const renderDelivery = ({
     // A transcript is asked for, not automatic; RFC 3834's headers are for
     // mail nobody asked for.
     ...(auto && !transcript ? { headers: AUTO_REPLY_HEADERS } : {}),
+  };
+};
+
+/**
+ * M8-06 (`Email/CSAT-EN-AR`): the question as the h1, five link cells, the
+ * once-only validity line as the note. No reply marker — it asks for a click —
+ * though a reply still threads into the request by its reference.
+ */
+const renderSurvey = ({ delivery, facts, thread, survey }: RenderInput): EmailMessage => {
+  if (survey === undefined) {
+    throw new Error(`The survey email ${delivery.id} was rendered without its survey.`);
+  }
+  const locale = delivery.locale;
+  const copy = customerCopy(locale, facts.brandName);
+  const words = csatSurveyCopy(locale, {
+    reference: facts.ticket.reference,
+    contactName: delivery.toName ?? facts.contactName,
+    closedBy: survey.closedBy,
+    days: CSAT_TOKEN_TTL_DAYS,
+  });
+  const body = renderCsatSurveyBody({
+    greeting: words.greeting,
+    intro: words.intro,
+    reference: facts.ticket.reference,
+    question: words.question,
+    choices: survey.links.map((href, index) => ({
+      rating: index + 1,
+      word: words.words[index] ?? '',
+      href,
+      label: words.choice(index + 1),
+    })),
+    hint: words.hint,
+  });
+  const { html, text } = renderCustomerEmail({
+    locale,
+    dir: copy.dir,
+    brandName: facts.brandName,
+    replyMarker: null,
+    bodyHtml: body.bodyHtml,
+    bodyText: body.bodyText,
+    signature: null,
+    note: words.note,
+    reference: {
+      label: copy.referenceLabel,
+      token: `[${facts.ticket.reference}]`,
+      subject: facts.ticket.subject,
+      hint: copy.replyHint,
+    },
+    footer: copy.footer,
+  });
+
+  return {
+    from: { address: delivery.fromAddress, name: delivery.fromName },
+    to: { address: delivery.toAddress, ...(delivery.toName ? { name: delivery.toName } : {}) },
+    cc: [],
+    ...(delivery.replyTo === null ? {} : { replyTo: delivery.replyTo }),
+    subject: words.subject,
+    text,
+    html,
+    locale,
+    messageId: delivery.messageId,
+    ...(thread.inReplyTo === undefined ? {} : { inReplyTo: thread.inReplyTo }),
+    references: [...thread.references],
+    headers: SURVEY_HEADERS,
   };
 };
 

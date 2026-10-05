@@ -12,12 +12,14 @@ import type {
   TelegramRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
+  WebhooksRefusal,
 } from '@helpdock/schemas';
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
 import { AiError } from '../ai/api.js';
 import { AssistError } from '../assist/api.js';
 import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
+import { WebhooksError } from '../developers/api.js';
 import { DomainsError } from '../domains/api.js';
 import { HelpCenterError } from '../help-center/api.js';
 import { KnowledgeError } from '../knowledge/api.js';
@@ -218,6 +220,7 @@ const toError = async (
   | TelegramError
   | TicketingError
   | TicketLifecycleError
+  | WebhooksError
 > => {
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
@@ -231,6 +234,7 @@ const toError = async (
   let knowledge: KnowledgeRefusal | undefined;
   let telegram: TelegramRefusal | undefined;
   let assist: AssistRefusal | undefined;
+  let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -246,6 +250,7 @@ const toError = async (
     knowledge = body.knowledge?.reason;
     telegram = body.telegram?.reason;
     assist = body.assist?.reason;
+    webhooks = body.webhooks;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -293,6 +298,10 @@ const toError = async (
 
   if (assist !== undefined) {
     return new AssistError(assist);
+  }
+
+  if (webhooks !== undefined) {
+    return new WebhooksError(webhooks.reason, webhooks.address);
   }
 
   if (auth === undefined) {

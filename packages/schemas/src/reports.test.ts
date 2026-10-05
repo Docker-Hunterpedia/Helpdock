@@ -21,6 +21,18 @@ describe('reportQuerySchema', () => {
     expect(query.channel).toBe('email');
   });
 
+  it('accepts an agent filter and refuses one that is not an id', () => {
+    const agentId = '01924f00-0000-7000-8000-0000000000bb';
+
+    expect(reportQuerySchema.parse({ from: '2026-09-01', to: '2026-09-30', agentId }).agentId).toBe(
+      agentId,
+    );
+    expect(
+      reportQuerySchema.safeParse({ from: '2026-09-01', to: '2026-09-30', agentId: 'lina' })
+        .success,
+    ).toBe(false);
+  });
+
   it('refuses a range that ends before it starts', () => {
     expect(reportQuerySchema.safeParse({ from: '2026-09-30', to: '2026-09-01' }).success).toBe(
       false,
@@ -79,6 +91,19 @@ describe('reportSummarySchema', () => {
     const ai = reportSummarySchema.shape.ai.parse({ available: false });
 
     expect(ai).toEqual({ available: false });
+  });
+
+  it('keeps a priority on each SLA outcome of the per-priority breakdown', () => {
+    const byPriority = reportSummarySchema.shape.sla.shape.byPriority.parse([
+      { priority: 'urgent', met: 3, breached: 1, compliance: 0.75 },
+    ]);
+
+    expect(byPriority[0]?.priority).toBe('urgent');
+    expect(
+      reportSummarySchema.shape.sla.shape.byPriority.safeParse([
+        { priority: 'critical', met: 1, breached: 0, compliance: 1 },
+      ]).success,
+    ).toBe(false);
   });
 });
 

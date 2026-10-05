@@ -36,6 +36,7 @@ import {
   notifyPushJob,
   type OutboxRelay,
   outboxEventJob,
+  outboxJobOrderingKeys,
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
@@ -83,7 +84,10 @@ import { createInboundEmailService } from '../channels/inbound/factory.js';
 import { MailboxesRepository } from '../channels/mailboxes.repository.js';
 import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { CsatRepository } from '../csat/csat.repository.js';
+import { CsatDelivery } from '../csat/csat-delivery.js';
+import { CsatEmailSource } from '../csat/csat-email.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
+import { CsatTelegramNotices } from '../csat/telegram-csat.js';
 import { CsatTokens } from '../csat/tokens.js';
 import { cnameTargetOf, createDomainProbes } from '../domains/domain-config.js';
 import {
@@ -167,6 +171,8 @@ import {
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
 import { withSystemJob } from '../tenant/system-job.js';
+
+import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { createTranscribeProcessor } from '../transcription/transcribe.job.js';
 import { transcriptionConfigFrom } from '../transcription/transcription-config.js';
@@ -215,7 +221,7 @@ export interface WorkerDependencies {
     settings: WorkerSettings;
     installSmtp: InstallSmtp;
   }): Closable;
-  createEventWorker(options: { redis: Redis; db: Db; log: JobLogger }): Closable;
+  createEventWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** The `outbound` queue: M2-05's `email.send` and M6-02's `telegram.send`. */
   createOutboundWorker(options: {
     redis: Redis;
@@ -334,7 +340,16 @@ export type WorkerEnv = Pick<
   | 'TELEGRAM_API_ROOT'
   // M7-03: whether a website crawl may render pages in a headless browser.
   | 'KNOWLEDGE_CRAWL_RENDER'
+  // M9: how many outbox events run at once.
+  | 'OUTBOX_CONCURRENCY'
 >;
+
+/**
+ * Outbox events one worker runs at once when `OUTBOX_CONCURRENCY` is unset.
+ * Each holds a database connection while it runs, out of the pool's ten, and
+ * the other consumers need theirs.
+ */
+export const DEFAULT_OUTBOX_CONCURRENCY = 8;
 
 /**
  * What the worker reads from settings: the SMTP sender and the VAPID key pair
@@ -486,9 +501,18 @@ export const workerDependencies: WorkerDependencies = {
     registerObjectPurgeHandler(storageFor(env));
     // M7-08: a brand reached 80 % or 100 % of an AI budget window.
     registerAiEventHandlers();
+    // M8-06: the survey goes out on the ticket's channel in the survey job.
+    const csatRepository = new CsatRepository();
     registerCsatEventHandlers({
-      repository: new CsatRepository(),
+      repository: csatRepository,
       tokens: new CsatTokens(createKeyring(env)),
+      delivery: new CsatDelivery({
+        repository: csatRepository,
+        email: new OutboundEmailService(new EmailRepository(), installSmtp),
+        telegram: new TelegramRepository(),
+        locales: new TicketLifecycleRepository(),
+        widget: new RedisWidgetBroadcast(redis),
+      }),
     });
 
     // `attachment.uploaded` ends in a job on the `media` queue, so its handler
@@ -689,8 +713,16 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
-  createEventWorker: ({ redis, db, log }) =>
-    createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
+  // Events of one ticket one at a time and in order; different tickets side by
+  // side (`@helpdock/jobs` ordering.ts, docs/guides/operations.md).
+  createEventWorker: ({ redis, db, log, env }) =>
+    createWorker(outboxEventJob, createOutboxEventHandler(), {
+      redis,
+      db,
+      log,
+      concurrency: env.OUTBOX_CONCURRENCY ?? DEFAULT_OUTBOX_CONCURRENCY,
+      serialize: outboxJobOrderingKeys,
+    }),
   createAiWorker: ({ redis, db, log, env, settings }) => {
     const ai = createAiRuntime({
       db,
@@ -735,6 +767,8 @@ export const workerDependencies: WorkerDependencies = {
   createOutboundWorker: ({ redis, db, log, env, installSmtp }) => {
     const keyring = createKeyring(env);
     const emailRepository = new EmailRepository();
+    const csatRepository = new CsatRepository();
+    const csatTokens = new CsatTokens(keyring);
     const email = createEmailSendProcessor({
       db,
       log,
@@ -744,6 +778,7 @@ export const workerDependencies: WorkerDependencies = {
         keyring,
         installSmtp,
         transports: smtpTransportFactory,
+        surveys: new CsatEmailSource(csatRepository, csatTokens, env.APP_URL),
       }),
     });
     const telegramRepository = new TelegramRepository();
@@ -757,6 +792,12 @@ export const workerDependencies: WorkerDependencies = {
         keyring,
         api: telegramApiFactory(env.TELEGRAM_API_ROOT),
         storage: storageFor(env),
+
+        csat: new CsatTelegramNotices({
+          repository: csatRepository,
+          tokens: csatTokens,
+          appUrl: env.APP_URL,
+        }),
       }),
     });
     const worker = new Worker(
@@ -1325,7 +1366,7 @@ export const startWorker = ({
     settings,
     installSmtp,
   });
-  const worker = deps.createEventWorker({ redis: connection, db, log });
+  const worker = deps.createEventWorker({ redis: connection, db, log, env });
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });

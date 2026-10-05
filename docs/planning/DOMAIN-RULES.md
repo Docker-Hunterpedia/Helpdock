@@ -347,7 +347,7 @@ Per brand, set by Admin (defaults in bold):
 | Event | Effect |
 |---|---|
 | Invite | Email with single-use 7-day token; role and departments set on invite; pending invites listed in admin and revocable |
-| Activate | Sets password or OAuth link; TOTP enrolment forced if install requires 2FA |
+| Activate | Sets password or OAuth link; TOTP enrolment forced if install requires 2FA, and always for an Admin or install admin (ASVS 4.3.1) |
 | Role or department change | Refresh token family revoked so the next access token carries new claims (≤ 10 min lag); sockets disconnected (§1.4); tickets they can no longer see are unassigned per department setting `on_unassign: round_robin \| leave_unassigned` |
 | Deactivate | Sessions and API keys they created revoked, sockets disconnected, removed from round-robin and presence, open tickets handled per `on_unassign`, notifications stop. Reversible. |
 | Delete | Only after deactivation; personal data replaced, content kept as "Former staff" |

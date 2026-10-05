@@ -15,6 +15,8 @@ import type { ChannelsApi } from '../channels/api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { MockDevelopersApi } from '../developers/mock-api.js';
 import type { DomainsApi } from '../domains/api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
 import type { EmailApi } from '../email/api.js';
@@ -66,6 +68,7 @@ export interface RenderAppOptions {
   readonly systemApi?: SystemApi;
   readonly telegramApi?: TelegramApi;
   readonly assistApi?: AssistApi;
+  readonly developersApi?: DevelopersApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -88,6 +91,7 @@ export interface RenderedApp extends RenderResult {
   readonly knowledgeApi: KnowledgeApi;
   readonly telegramApi: TelegramApi;
   readonly assistApi: AssistApi;
+  readonly developersApi: DevelopersApi;
 }
 
 /**
@@ -115,6 +119,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const telegramApi = options.telegramApi ?? new MockTelegramApi();
   const assistApi =
     options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
+  const developersApi = options.developersApi ?? new MockDevelopersApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -139,6 +144,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       systemApi={options.systemApi ?? fakeSystemApi()}
       telegramApi={telegramApi}
       assistApi={assistApi}
+      developersApi={developersApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -168,5 +174,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     knowledgeApi,
     telegramApi,
     assistApi,
+    developersApi,
   };
 }

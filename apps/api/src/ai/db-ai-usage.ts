@@ -1,7 +1,7 @@
 import { budgetWindows } from '@helpdock/ai';
 import type { Settings } from '@helpdock/config';
 import { aiCalls, aiSettings, brands, type Db, type DbTransaction, tickets } from '@helpdock/db';
-import type { ReportAi, SystemAiSpend } from '@helpdock/schemas';
+import type { BrandAiSpend, ReportAi, SystemAiSpend } from '@helpdock/schemas';
 import { and, eq, exists, gte, ne, type SQL, sql } from 'drizzle-orm';
 import type { AiUsageRange, AiUsageSource } from '../reports/ai-usage.js';
 import { withSystemJob } from '../tenant/system-job.js';
@@ -20,9 +20,11 @@ import { withSystemJob } from '../tenant/system-job.js';
  *   eligible and the rate is null rather than a zero that would read as "AI
  *   never helped".
  * - **Install spend** is the current UTC month across every brand, one system
- *   transaction per brand. The budget is the sum of the brands' monthly
- *   limits, and null as soon as one brand has none, since an install with an
- *   unlimited brand has no install-wide ceiling.
+ *   transaction per brand, with each brand's own spend against its own
+ *   monthly limit (the System page's "LLM spend by brand"). The install
+ *   budget is the sum of the brands' monthly limits, and null as soon as one
+ *   brand has none, since an install with an unlimited brand has no
+ *   install-wide ceiling.
  */
 
 /** The share of the budget at which the System page warns, as the budget meter does. */
@@ -73,13 +75,11 @@ export class DbAiUsage implements AiUsageSource {
 
     const since = budgetWindows(this.#now()).month;
     const live = await db
-      .select({ id: brands.id })
+      .select({ id: brands.id, name: brands.name })
       .from(brands)
       .where(ne(brands.status, 'deleted'));
-    let tokens = 0;
-    let costUsd = 0;
-    let budgetUsd: number | null = live.length === 0 ? null : 0;
-    for (const { id: brandId } of live) {
+    const perBrand: BrandAiSpend[] = [];
+    for (const { id: brandId, name } of live) {
       const brand = await withSystemJob(db, brandId, USAGE_PRINCIPAL_ID, async (tx) => {
         const [spend] = await tx
           .select({
@@ -98,17 +98,30 @@ export class DbAiUsage implements AiUsageSource {
           monthly: limits?.monthly ?? null,
         };
       });
-      tokens += brand.tokens;
-      costUsd += brand.costUsd;
-      budgetUsd = budgetUsd === null || brand.monthly === null ? null : budgetUsd + brand.monthly;
+      perBrand.push({
+        brandId,
+        name,
+        tokens: brand.tokens,
+        costUsd: brand.costUsd,
+        budgetUsd: brand.monthly,
+      });
     }
+    const budgetUsd =
+      perBrand.length === 0 || perBrand.some((brand) => brand.budgetUsd === null)
+        ? null
+        : perBrand.reduce((sum, brand) => sum + (brand.budgetUsd ?? 0), 0);
 
     return {
       configured: true,
-      tokens,
-      costUsd,
+      tokens: perBrand.reduce((sum, brand) => sum + brand.tokens, 0),
+      costUsd: perBrand.reduce((sum, brand) => sum + brand.costUsd, 0),
       budgetUsd,
-      alertAtPercent: budgetUsd === null ? null : ALERT_AT_PERCENT,
+      // Each brand's row warns against its own budget, so the threshold is
+      // given even when the install as a whole has no ceiling.
+      alertAtPercent: ALERT_AT_PERCENT,
+      brands: perBrand.sort(
+        (a, b) => b.costUsd - a.costUsd || b.tokens - a.tokens || a.name.localeCompare(b.name),
+      ),
     };
   }
 

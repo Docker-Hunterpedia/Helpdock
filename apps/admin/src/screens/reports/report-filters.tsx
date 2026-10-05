@@ -14,15 +14,16 @@ import {
 } from './report-range.js';
 
 /**
- * The filter row of `Admin/Reports` (M8-04): date range, department and
- * channel, each sent to the api. The artboard's Agent filter is not drawn:
- * the report routes take no agent, and Agent workload already lists everyone.
+ * The filter row of `Admin/Reports` (M8-04): date range, department, channel
+ * and agent, each sent to the api. The agents offered are the summary's
+ * `agentChoices`, so a Viewer, who may not list staff, gets them too.
  */
 
 export interface ReportFilters {
   readonly range: DateRange;
   readonly departmentId: string | undefined;
   readonly channel: TicketChannel | undefined;
+  readonly agentId: string | undefined;
 }
 
 const ALL = 'all';
@@ -43,10 +44,12 @@ export function useRangeLabel(): (range: DateRange) => string {
 export function ReportFilterBar({
   filters,
   departments,
+  agents,
   onChange,
 }: {
   readonly filters: ReportFilters;
   readonly departments: readonly { readonly id: string; readonly name: string }[];
+  readonly agents: readonly { readonly agentId: string; readonly name: string | null }[];
   onChange(filters: ReportFilters): void;
 }): ReactNode {
   const t = useT();
@@ -127,6 +130,25 @@ export function ReportFilterBar({
         {ticketChannelSchema.options.map((channel) => (
           <MenuItem key={channel} value={channel}>
             {t(`tickets:channel.${channel}`)}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <TextField
+        select
+        size="small"
+        label={t('reports:filters.agent')}
+        value={filters.agentId ?? ALL}
+        onChange={(event) => {
+          const value = event.target.value;
+          onChange({ ...filters, agentId: value === ALL ? undefined : value });
+        }}
+        sx={{ minWidth: 180 }}
+      >
+        <MenuItem value={ALL}>{t('reports:filters.allAgents')}</MenuItem>
+        {agents.map((agent) => (
+          <MenuItem key={agent.agentId} value={agent.agentId}>
+            {agent.name ?? t('reports:agents.removed')}
           </MenuItem>
         ))}
       </TextField>

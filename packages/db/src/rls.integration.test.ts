@@ -975,6 +975,7 @@ const fixtures = [
         departmentId: departmentId[brandId] ?? '',
         channel: 'email',
         priority: 'medium',
+        assigneeId: userId,
         created: 1,
       }),
   },

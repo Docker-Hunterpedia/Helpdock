@@ -114,6 +114,50 @@ export const transcriptCopy = (
   };
 };
 
+/** M8-06's survey email (`Email/CSAT-EN-AR`), in the contact's language. */
+export interface CsatSurveyCopy {
+  readonly subject: string;
+  readonly greeting: string;
+  readonly intro: string;
+  readonly question: string;
+  readonly hint: string;
+  readonly note: string;
+  /** The five scores' words, 1 first. */
+  readonly words: readonly string[];
+  /** "Rate 4 out of 5, Good". */
+  readonly choice: (rating: number) => string;
+}
+
+export const csatSurveyCopy = (
+  locale: Locale,
+  values: {
+    readonly reference: string;
+    readonly contactName: string | null;
+    readonly closedBy: string | null;
+    readonly days: number;
+  },
+): CsatSurveyCopy => {
+  const t = i18n.getFixedT(locale, 'email');
+  const scale = i18n.getFixedT(locale, 'csat');
+  const words = (['ratings.1', 'ratings.2', 'ratings.3', 'ratings.4', 'ratings.5'] as const).map(
+    (key) => scale(key),
+  );
+
+  return {
+    subject: t('csat.subject', { reference: values.reference }),
+    greeting: t('csat.greeting', { name: firstNameOf(values.contactName, locale) }),
+    intro:
+      values.closedBy === null
+        ? t('csat.intro', { reference: values.reference })
+        : t('csat.introBy', { reference: values.reference, agent: values.closedBy }),
+    question: t('csat.question'),
+    hint: t('csat.hint'),
+    note: t('csat.note', { days: values.days }),
+    words,
+    choice: (rating) => t('csat.choice', { rating, label: words[rating - 1] ?? '' }),
+  };
+};
+
 export interface TestMessageCopy {
   readonly subject: string;
   readonly heading: string;

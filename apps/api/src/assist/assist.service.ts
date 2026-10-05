@@ -43,7 +43,7 @@ import { retrievalQuery, threadLines } from './thread-lines.js';
 /**
  * Agent assist (M7-05): one model call per request, made between two short
  * transactions under the agent's own tenant context (`@StepTransactions`,
- * ADR 0021) — never inside one, because a model takes seconds.
+ * ADR 0024) — never inside one, because a model takes seconds.
  *
  * ```
  * step 1  (agent's transaction)  read the ticket under their department policy,

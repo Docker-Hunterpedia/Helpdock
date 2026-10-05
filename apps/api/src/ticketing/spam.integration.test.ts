@@ -37,6 +37,7 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { isSenderBlocked } from './sender-gate.js';
 
 /**
@@ -154,21 +155,8 @@ describe.skipIf(!hasDocker)('spam and the sender block list', () => {
 
   const brandPath = () => `/api/brands/${seeded.brandId}`;
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addPerson = async (db: Db, who: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);

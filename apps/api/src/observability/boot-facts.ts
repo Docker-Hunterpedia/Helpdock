@@ -19,4 +19,6 @@ export interface BootFacts {
    * does not migrate — a worker, which never runs them (ARCHITECTURE §17).
    */
   readonly migrationsApplied: number | null;
+  /** Their names, newest first; null where {@link migrationsApplied} is. */
+  readonly migrations: readonly string[] | null;
 }

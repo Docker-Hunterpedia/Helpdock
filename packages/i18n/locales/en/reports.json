@@ -27,7 +27,9 @@
     "department": "Department",
     "allDepartments": "All departments",
     "channel": "Channel",
-    "allChannels": "All channels"
+    "allChannels": "All channels",
+    "agent": "Agent",
+    "allAgents": "All agents"
   },
   "card": {
     "tableShort": "Table",
@@ -99,7 +101,10 @@
     "query": "Query",
     "searches": "Searches",
     "clicked": "Clicked",
-    "action": "Action"
+    "action": "Action",
+    "slice": "Priority or clock",
+    "slaMet": "SLA met",
+    "csat": "CSAT"
   },
   "volume": {
     "title": "Ticket volume",
@@ -111,10 +116,12 @@
       "status": "Status",
       "priority": "Priority"
     },
-    "chartLabel": "Tickets created per day: {{created}} created and {{resolved}} resolved over {{days}} days.",
+    "chartLabel": "Tickets created per day: {{created}} created and {{resolved}} resolved over {{days}} days. By {{breakdown}}: {{figures}}.",
     "breakdownLabel": "Tickets created by {{breakdown}}: {{figures}}.",
     "tooltip_one": "{{day}} · {{count}} ticket created",
-    "tooltip_other": "{{day}} · {{count}} tickets created"
+    "tooltip_other": "{{day}} · {{count}} tickets created",
+    "other": "Other",
+    "total": "Total {{count}}"
   },
   "times": {
     "title": "First response and resolution time",
@@ -138,7 +145,9 @@
     "breached": "Breached",
     "chartLabel": "SLA met by clock: {{figures}}.",
     "countsReopens": "A reopened ticket's clocks count again, as this brand's SLA settings say.",
-    "ignoresReopens": "A reopened ticket's clocks are not counted again, as this brand's SLA settings say."
+    "ignoresReopens": "A reopened ticket's clocks are not counted again, as this brand's SLA settings say.",
+    "byPriority": "By priority",
+    "priorityChartLabel": "SLA met by priority: {{figures}}."
   },
   "backlog": {
     "title": "Backlog trend",
@@ -163,9 +172,10 @@
   },
   "agents": {
     "title": "Agent workload",
-    "caption": "Per agent in the period · open count is at the end of the range",
+    "caption": "Per agent in the period · open count is at the end of the range · times, SLA and CSAT are of the tickets assigned to them",
     "empty": "No agent replied or resolved in this period.",
-    "removed": "Removed account"
+    "removed": "Removed account",
+    "unassigned": "Unassigned"
   },
   "hours": {
     "title": "Busiest hours",

@@ -3,6 +3,8 @@ import type { Db } from '@helpdock/db';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { StorageAttachmentSink } from '../channels/inbound/attachment-sink.js';
 import type { InboundLog } from '../channels/inbound/inbound-email.service.js';
+import { CsatRepository } from '../csat/csat.repository.js';
+import { CsatTelegramTaps } from '../csat/telegram-csat.js';
 import { MediaRepository } from '../media/media.repository.js';
 import type { ObjectStorage } from '../media/storage.js';
 import { SlaRepository } from '../sla/sla.repository.js';
@@ -51,6 +53,7 @@ export const createTelegramInboundService = (options: {
     repository: telegram,
     router,
     lifecycleReads,
+    csatTaps: new CsatTelegramTaps(new CsatRepository()),
     keyring: options.keyring,
     api: options.api,
     sink: () => new StorageAttachmentSink(options.storage, media),

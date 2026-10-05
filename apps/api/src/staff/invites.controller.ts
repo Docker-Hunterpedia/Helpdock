@@ -6,11 +6,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import type { SignInOutcome } from '../auth/auth.service.js';
 import { Public } from '../auth/route-declaration.js';
-import {
-  encodeRefreshCookie,
-  REFRESH_COOKIE,
-  refreshCookieAttributes,
-} from '../auth/session/cookies.js';
+import { encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { requireRequestContext } from '../context/request-context.js';
 import { ENV } from '../runtime/tokens.js';
 import { InviteAcceptRequestDto, InviteTokenParamDto, PublicInviteDto } from './dto.js';
@@ -83,10 +79,12 @@ export class InvitesController {
       return signInResponseSchema.parse(outcome);
     }
 
+    const cookie = refreshCookieOf(this.#env);
+
     reply.setCookie(
-      REFRESH_COOKIE,
+      cookie.name,
       encodeRefreshCookie(outcome.issued.refreshCookieValue),
-      refreshCookieAttributes(this.#env.APP_URL),
+      cookie.attributes,
     );
 
     return signInResponseSchema.parse({

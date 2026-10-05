@@ -91,10 +91,10 @@ Update this table in the same PR that changes a milestone's status.
 | 1 Core desk | M3 Automation and SLAs | M1 | 4–5 | shipped | 2026-09-27 | 2026-09-27 |
 | 2 Customer surfaces | M4 Widget and realtime | M1, M3 | 5–6 | shipped | 2026-09-27 | 2026-09-27 |
 | 2 Customer surfaces | M5 Help center | M1 | 5–6 | shipped | 2026-09-27 | 2026-09-27 |
-| 2 Customer surfaces | M6 Telegram | M2 | 2 | planned | | |
-| 3 Intelligence | M7 AI | M3, M4, M5, M6 | 7–9 | planned | | |
-| 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | planned | | |
-| 4 Release | M9 Hardening and 1.0 | all | 5–7 | planned | | |
+| 2 Customer surfaces | M6 Telegram | M2 | 2 | in progress | 2026-10-05 | |
+| 3 Intelligence | M7 AI | M3, M4, M5, M6 | 7–9 | in progress | 2026-10-05 | |
+| 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | in progress | 2026-10-05 | |
+| 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress | 2026-10-05 | |
 | | **Total** | | **46–59** | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.

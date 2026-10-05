@@ -2,7 +2,10 @@ import { budgetWindows } from '@helpdock/ai';
 import type { Settings } from '@helpdock/config';
 import { aiCalls, aiSettings, brands, type Db, type DbTransaction, tickets } from '@helpdock/db';
 import type { ReportAi, SystemAiSpend } from '@helpdock/schemas';
-import { and, eq, exists, gte, ne, type SQL, sql } from 'drizzle-orm';
+
+type ReportAiDeflection = Extract<ReportAi, { available: true }>['deflection'];
+
+import { and, eq, exists, gte, isNotNull, isNull, lt, ne, or, type SQL, sql } from 'drizzle-orm';
 import type { AiUsageRange, AiUsageSource } from '../reports/ai-usage.js';
 import { withSystemJob } from '../tenant/system-job.js';
 
@@ -50,9 +53,10 @@ export class DbAiUsage implements AiUsageSource {
       .from(aiCalls)
       .where(inRange(tx, range));
 
+    const deflection = await this.#deflection(tx, range);
     return {
       available: true,
-      deflection: { eligible: 0, deflected: 0, rate: null },
+      deflection,
       cost: {
         calls: row?.calls ?? 0,
         tokensIn: row?.tokensIn ?? 0,
@@ -112,11 +116,40 @@ export class DbAiUsage implements AiUsageSource {
     };
   }
 
-  /** Null until auto-reply (M7-06) records which conversations it closed alone. */
-  async deflectionRate(): Promise<number | null> {
-    return null;
+  async deflectionRate(tx: DbTransaction, range: AiUsageRange): Promise<number | null> {
+    return (await this.#deflection(tx, range)).rate;
+  }
+
+  async #deflection(tx: DbTransaction, range: AiUsageRange): Promise<ReportAiDeflection> {
+    const quietSince = new Date(this.#now().getTime() - QUIET_MS);
+    const localDay = sql`(${tickets.aiEligibleAt} AT TIME ZONE ${range.timezone})::date`;
+    const conditions: SQL[] = [
+      eq(tickets.brandId, range.brandId),
+      isNotNull(tickets.aiEligibleAt),
+      sql`${localDay} BETWEEN ${range.from}::date AND ${range.to}::date`,
+    ];
+    if (range.departmentId !== undefined) {
+      conditions.push(eq(tickets.departmentId, range.departmentId));
+    }
+    const [row] = await tx
+      .select({
+        eligible: sql<number>`count(*)::int`,
+        deflected: sql<number>`count(*) filter (where ${and(
+          isNotNull(tickets.aiAnsweredAt),
+          isNull(tickets.aiHandedOffAt),
+          or(isNotNull(tickets.closedAt), lt(tickets.updatedAt, quietSince)),
+        )})::int`,
+      })
+      .from(tickets)
+      .where(and(...conditions));
+    const eligible = row?.eligible ?? 0;
+    const deflected = row?.deflected ?? 0;
+    return { eligible, deflected, rate: eligible === 0 ? null : deflected / eligible };
   }
 }
+
+/** "Closed or went inactive for 24 hours" (DOMAIN-RULES §15). */
+const QUIET_MS = 24 * 60 * 60 * 1000;
 
 const inRange = (tx: DbTransaction, range: AiUsageRange): SQL => {
   const localDay = sql`(${aiCalls.createdAt} AT TIME ZONE ${range.timezone})::date`;

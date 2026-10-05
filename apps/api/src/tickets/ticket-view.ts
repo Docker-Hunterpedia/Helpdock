@@ -14,6 +14,8 @@ import type {
   TicketSlaSummary,
   TicketStatus,
 } from '@helpdock/schemas';
+import { toTicketMessageAi } from '../ai/auto-reply/ai-meta.js';
+import { toTicketAiState } from '../ai/auto-reply/ai-pause.js';
 import { toEmailView } from '../channels/email-view.js';
 import { toAttachment } from '../media/attachment-view.js';
 
@@ -31,10 +33,10 @@ import { toAttachment } from '../media/attachment-view.js';
  * | `tickets.search` | A tsvector is an index, not content |
  * | `ticket_messages.department_id` | Denormalised for the policy; the ticket already carries the department |
  *
- * `ticket_messages.external_message_id` and `ai_meta` are also absent: the
- * first is a channel's internal handle for threading and the second is cost
- * accounting. Neither belongs in a thread a person reads, and M8's public API
- * will decide separately what it exposes.
+ * `ticket_messages.external_message_id` is also absent: it is a channel's
+ * internal handle for threading. `ai_meta` is mapped only for what auto-reply
+ * wrote (M7-06) — its sources and the figures of its AI log — through
+ * `toTicketMessageAi`, which parses it rather than passing the column on.
  */
 
 /**
@@ -108,6 +110,9 @@ export const toTicket = (
   ...(contact === undefined ? {} : { contact }),
   // M3-02: the list's SlaTimer, judged by the api against the brand's hours.
   ...(sla === undefined ? {} : { sla }),
+  // M7-06: only on a conversation the assistant has taken part in, so a
+  // brand without auto-reply never sees an assistant state.
+  ...(ticket.aiEligibleAt === null ? {} : { ai: toTicketAiState(ticket) }),
   createdAt: ticket.createdAt.toISOString(),
   updatedAt: ticket.updatedAt.toISOString(),
 });
@@ -133,8 +138,15 @@ export const toTicketMessage = (
   channel: row.channel,
   attachments: attachments.map(toAttachment),
   ...emailOf(row),
+  ...aiOf(row),
   createdAt: row.createdAt.toISOString(),
 });
+
+/** M7-06: an auto-reply's sources and AI log, or the pause a System event records. */
+const aiOf = (row: TicketMessageRow): Pick<TicketMessage, 'ai'> => {
+  const ai = toTicketMessageAi(row.aiMeta);
+  return ai === undefined ? {} : { ai };
+};
 
 /** M2: the email card's part, when the message arrived by email. */
 const emailOf = (row: TicketMessageRow): Pick<TicketMessage, 'email'> => {

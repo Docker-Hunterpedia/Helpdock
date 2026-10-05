@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { aiFeedbackSchema } from './ai.js';
 import { customFieldTypeSchema } from './custom-fields.js';
 import {
   ATTACHMENT_NAME_MAX,
@@ -96,6 +97,12 @@ export const widgetAttachmentParamSchema = widgetConversationParamSchema.extend(
   attachmentId: z.uuid(),
 });
 export type WidgetAttachmentParam = z.infer<typeof widgetAttachmentParamSchema>;
+
+/** M7-06: `…/messages/:messageId/feedback`. */
+export const widgetMessageParamSchema = widgetConversationParamSchema.extend({
+  messageId: z.uuid(),
+});
+export type WidgetMessageParam = z.infer<typeof widgetMessageParamSchema>;
 
 // ---------------------------------------------------------------- config
 
@@ -390,6 +397,13 @@ export const widgetConversationSchema = z.object({
   lastSeq: z.int().nonnegative(),
   /** The conversation a reply after closing continued on (§2.3), if any. */
   continuedById: z.uuid().nullable(),
+  /**
+   * M7-06: the assistant has handed this conversation to the team — by the
+   * visitor's "Talk to a human", by its own handoff, or because a person
+   * replied — and will not answer in it again (DOMAIN-RULES §9). Optional for
+   * clients built before M7.
+   */
+  aiHandedOff: z.boolean().optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -434,6 +448,24 @@ export const widgetMessageSchema = z.object({
   /** Sanitised HTML for agent replies; null for a visitor's plain text. */
   html: z.string().nullable(),
   attachments: z.array(widgetAttachmentSchema),
+  /** M7-06: on the assistant's messages only. */
+  ai: z
+    .object({
+      /** `handoff`: the brand's handoff text, after which the team takes over. */
+      kind: z.enum(['answer', 'handoff']),
+      /** Public help center articles and sources only (DOMAIN-RULES §5). */
+      citations: z.array(
+        z.object({
+          marker: z.int().positive(),
+          title: z.string(),
+          url: z.string().nullable(),
+          /** A help center article, which the widget opens in place (M5-10). */
+          articleId: z.uuid().nullable(),
+        }),
+      ),
+      feedback: aiFeedbackSchema.nullable(),
+    })
+    .optional(),
   createdAt: z.iso.datetime(),
 });
 export type WidgetMessage = z.infer<typeof widgetMessageSchema>;
@@ -536,6 +568,10 @@ export type WidgetMessagePage = z.infer<typeof widgetMessagePageSchema>;
 export const widgetReadRequestSchema = z.object({ seq: z.int().positive() });
 export type WidgetReadRequest = z.infer<typeof widgetReadRequestSchema>;
 
+/** M7-06: "Was this helpful?" on an assistant answer. */
+export const widgetFeedbackRequestSchema = z.object({ feedback: aiFeedbackSchema });
+export type WidgetFeedbackRequest = z.infer<typeof widgetFeedbackRequestSchema>;
+
 export const widgetTypingRequestSchema = z.object({ typing: z.boolean() });
 export type WidgetTypingRequest = z.infer<typeof widgetTypingRequestSchema>;
 
@@ -632,6 +668,8 @@ export const widgetConversationEventSchema = z.object({
   conversationId: z.uuid(),
   state: widgetConversationStateSchema,
   continuedById: z.uuid().nullable(),
+  /** M7-06: as on {@link widgetConversationSchema}. */
+  aiHandedOff: z.boolean().optional(),
 });
 export type WidgetConversationEvent = z.infer<typeof widgetConversationEventSchema>;
 

@@ -130,6 +130,14 @@ describe('TelegramBotApi', () => {
     });
   });
 
+  it('removes the webhook and what was pending for it', async () => {
+    await api().deleteWebhook();
+    expect(calls.at(-1)).toEqual({
+      method: 'deleteWebhook',
+      body: { drop_pending_updates: true },
+    });
+  });
+
   it('reads the webhook’s state', async () => {
     expect(await api().getWebhookInfo()).toEqual({
       url: 'https://support.example.com/hook',

@@ -140,11 +140,16 @@ export class TelegramBotsService {
   }
 
   /**
-   * The row and its chats go; tickets stay. The webhook is left registered
-   * with Telegram, which then gets 401s; deleting the bot in BotFather or
-   * pressing "Set webhook" on its replacement is the operator's step.
+   * The row and its chats go; tickets stay. The webhook is removed from
+   * Telegram first, as far as Telegram lets it be: a revoked token or an
+   * unreachable Telegram must not keep a bot the Admin is deleting, and a
+   * webhook left behind only earns 401s.
    */
   async remove(context: TicketingContext, id: string): Promise<void> {
+    const { bot } = await this.#require(context.tx, id);
+    await apiForBot(bot, this.#keyring, this.#api)
+      .deleteWebhook()
+      .catch(() => undefined);
     const removed = await this.#repository.delete(context.tx, id);
     if (removed === undefined) {
       throw new NotFoundException('No such Telegram bot');

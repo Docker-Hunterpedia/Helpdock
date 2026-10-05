@@ -118,6 +118,11 @@ export class TelegramBotApi {
     );
   }
 
+  /** Stops Telegram posting to this install; pending updates are dropped with it. */
+  async deleteWebhook(): Promise<void> {
+    await this.#call(() => this.#api.deleteWebhook({ drop_pending_updates: true }));
+  }
+
   async getWebhookInfo(): Promise<TelegramWebhookInfo> {
     const info = await this.#call(() => this.#api.getWebhookInfo());
     return {

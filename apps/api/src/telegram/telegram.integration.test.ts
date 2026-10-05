@@ -968,9 +968,10 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     );
   });
 
-  it('removes a bot and its chats, and keeps the tickets', async () => {
+  it('removes a bot, its webhook and its chats, and keeps the tickets', async () => {
     const removed = await call('DELETE', `${botsPath()}/${bot.id}`, ada);
     expect(removed.status).toBe(204);
+    expect(telegram.callsOf('deleteWebhook').at(-1)).toMatchObject({ token: TOKEN });
     expect(await ticketForChat(CHAT)).toHaveLength(1);
     const deliveries = await owner.db.select().from(telegramDeliveries);
     expect(deliveries).toEqual([]);

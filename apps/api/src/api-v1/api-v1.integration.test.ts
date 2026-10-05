@@ -607,9 +607,11 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
         'ticket.replied',
       ]);
       const created = envelopes.find((envelope) => envelope.event === 'contact.created');
-      expect((created?.data.contact as { id: string }).id).toBe(contact.body.contact.id);
+      expect(created?.data.contact).toMatchObject({ id: contact.body.contact.id });
       const replied = envelopes.find((envelope) => envelope.event === 'ticket.replied');
-      expect((replied?.data.message as { bodyText: string }).bodyText).toContain('On its way.');
+      expect(replied?.data.message).toMatchObject({
+        bodyText: expect.stringContaining('On its way.'),
+      });
       expect(JSON.stringify(envelopes)).not.toContain('Internal only');
     });
   });

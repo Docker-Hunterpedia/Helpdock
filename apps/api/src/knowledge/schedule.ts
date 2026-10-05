@@ -4,7 +4,7 @@ import type { KnowledgeSchedule } from '@helpdock/schemas';
  * When a daily or weekly source next syncs, for the drawer's "next 6 Oct":
  * 03:00 in the brand's zone, Sundays for weekly — the instant BullMQ's job
  * scheduler fires for the cron of `knowledge-events.ts`. Found by walking
- * forward hour by hour in the zone, which is exact across daylight-saving
+ * forward a quarter hour at a time in the zone, which is exact across daylight-saving
  * changes without a calendar library.
  */
 

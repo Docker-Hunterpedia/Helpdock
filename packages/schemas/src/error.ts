@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { aiRefusalSchema } from './ai.js';
-import { assistRefusalSchema } from './assist.js';
 import { webhooksRefusalSchema } from './api.js';
+import { assistRefusalSchema } from './assist.js';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { domainsRefusalSchema } from './domains.js';

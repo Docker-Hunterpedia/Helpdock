@@ -183,7 +183,7 @@ Copied from the PRD, ticked as they are met.
   via, ratedAt }`, beside a `csat.rated` audit row. Rules subscribe already
   (M3-03), which closes the M3 gap. The default slot only logs; M8-03's
   webhooks subscribe under their own name.
-- **Migration** `0042_csat_delivery`: `csat_responses.rated_via`
+- **Migration** `0043_csat_delivery`: `csat_responses.rated_via`
   (`csat_answer_channel`: `link`, `widget`, `telegram`; earlier answers are
   backfilled `link`) and `skipped_at`; `email_delivery_kind` gains `csat`;
   `email_deliveries.csat_response_id` with a unique partial index. No new

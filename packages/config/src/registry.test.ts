@@ -64,6 +64,7 @@ describe('the settings registry', () => {
       'ai.providers',
       'knowledge.notion.clientSecret',
       'knowledge.google.clientSecret',
+      'transcription.apiKey',
     ]);
   });
 });

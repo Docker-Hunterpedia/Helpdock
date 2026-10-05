@@ -10,6 +10,7 @@ import { BudgetMeter } from './budget-meter.js';
 import { EmbeddingSettingsService } from './embedding-settings.service.js';
 import { InstallAiController } from './install-ai.controller.js';
 import { InstallAiService } from './install-ai.service.js';
+import { TranscriptionSettingsService } from './transcription-settings.service.js';
 
 export interface AiModuleOptions {
   readonly env: Pick<Env, 'OUTBOUND_ALLOW_CIDRS'>;
@@ -43,6 +44,12 @@ export class AiModule {
           inject: [SETTINGS],
           useFactory: (settings: Settings): EmbeddingSettingsService =>
             new EmbeddingSettingsService(settings),
+        },
+        {
+          provide: TranscriptionSettingsService,
+          inject: [SETTINGS],
+          useFactory: (settings: Settings): TranscriptionSettingsService =>
+            new TranscriptionSettingsService(settings),
         },
         {
           provide: BrandAiService,

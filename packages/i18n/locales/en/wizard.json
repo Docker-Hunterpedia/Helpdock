@@ -13,6 +13,7 @@
     "account": "Admin account",
     "brand": "First brand",
     "email": "Outgoing email",
+    "ai": "AI provider",
     "done": "Done"
   },
   "account": {
@@ -97,6 +98,28 @@
       "unknown": "The test could not be completed. Check the details and try again."
     }
   },
+  "ai": {
+    "title": "Connect an AI provider",
+    "optional": "Optional",
+    "description": "Powers agent assist and auto-reply. Every AI mode starts off. Embeddings and transcription, and this step if you skip it, are in AI › Providers.",
+    "providerLabel": "Provider",
+    "signInWith": "Sign in with",
+    "apiKey": "API key",
+    "subscription": "Subscription",
+    "apiKeyLabel": "API key",
+    "credentialsLabel": "Credentials from auth.json",
+    "hint": "Encrypted with APP_MASTER_KEY and never shown again. Subscription sign-in is at your own risk; check the provider's terms.",
+    "test": "Test and find models",
+    "connected_one": "Connected · {{count}} model found",
+    "connected_other": "Connected · {{count}} models found",
+    "modelLabel": "Default chat model",
+    "modelPlaceholder": "Test the connection first",
+    "apiKeyRequired": "Enter the API key, then test it.",
+    "credentialsInvalid": "Paste the auth.json with access, refresh and expires, then test it.",
+    "modelRequired": "Choose the default chat model.",
+    "skip": "Skip for now",
+    "submit": "Save and continue"
+  },
   "done": {
     "title": "Helpdock is ready",
     "description": "Your install is set up. Everything below can be changed later in Settings.",
@@ -105,6 +128,8 @@
     "brandValue": "{{name}} · {{prefix}}",
     "emailLabel": "Outgoing email",
     "emailSkipped": "Not configured yet",
+    "aiLabel": "AI provider",
+    "aiSkipped": "Not configured yet",
     "twoFactor": "This install requires two-factor authentication, so you will set up an authenticator app next.",
     "submit": "Open Helpdock"
   },

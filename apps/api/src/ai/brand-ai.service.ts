@@ -1,14 +1,23 @@
 import { type AiSettingsRow, auditLog, type DbTransaction, tickets } from '@helpdock/db';
 import type {
   AiCallView,
+  BrandAiCallsPage,
+  BrandAiCallsQuery,
+  BrandAiModesUpdate,
   BrandAiPromptUpdate,
   BrandAiSettings,
   BrandAiSettingsUpdate,
   TicketAiCalls,
 } from '@helpdock/schemas';
-import { aiCallViewSchema } from '@helpdock/schemas';
-import { NotFoundException } from '@nestjs/common';
+import { aiCallViewSchema, parseAiAssistantModes } from '@helpdock/schemas';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
+import {
+  type AuditCursor,
+  decodeAuditCursor,
+  encodeAuditCursor,
+  InvalidAuditCursorError,
+} from '../audit/audit-cursor.js';
 import type { AiRepository, AiSettingsValues } from './ai.repository.js';
 import type { BudgetMeter } from './budget-meter.js';
 import type { InstallAiService } from './install-ai.service.js';
@@ -58,13 +67,17 @@ export class BrandAiService {
     const row = await this.#repository.settings(tx, brandId);
     const values = valuesOf(row);
     const reading = await this.#budget.read(tx, brandId);
+    const brandSettings = await this.#repository.brandSettings(tx, brandId);
     return {
       providerId: values.providerId,
       modelId: values.modelId,
       systemPrompt: row?.systemPrompt ?? '',
+      systemPromptAr: row?.systemPromptAr ?? '',
       piiRedaction: values.piiRedaction,
       injectionFilter: values.injectionFilter,
       budget: { dailyUsd: values.dailyBudgetUsd, monthlyUsd: values.monthlyBudgetUsd },
+      modes: parseAiAssistantModes(row?.modes),
+      aiCountsAsFirstResponse: brandSettings.aiCountsAsFirstResponse,
       usage: {
         todayUsd: reading.spend.todayUsd,
         monthUsd: reading.spend.monthUsd,
@@ -103,13 +116,77 @@ export class BrandAiService {
     { tx, brandId, actorId }: BrandAiContext,
     body: BrandAiPromptUpdate,
   ): Promise<BrandAiSettings> {
-    const before = (await this.#repository.settings(tx, brandId))?.systemPrompt ?? '';
-    await this.#repository.savePrompt(tx, brandId, body.systemPrompt, actorId);
-    await this.#audit(tx, brandId, actorId, 'ai.prompt.updated', {
-      before,
-      after: body.systemPrompt,
+    const row = await this.#repository.settings(tx, brandId);
+    const before = { en: row?.systemPrompt ?? '', ar: row?.systemPromptAr ?? '' };
+    const after = { en: body.systemPrompt, ar: body.systemPromptAr ?? before.ar };
+    await this.#repository.savePrompt(
+      tx,
+      brandId,
+      { systemPrompt: after.en, systemPromptAr: after.ar },
+      actorId,
+    );
+    await this.#audit(tx, brandId, actorId, 'ai.prompt.updated', { before, after });
+    return this.view(tx, brandId);
+  }
+
+  /**
+   * The modes, and `aiCountsAsFirstResponse`, which is kept in
+   * `brands.settings` with the SLA settings rather than copied here: two
+   * copies of one rule would drift.
+   */
+  async updateModes(
+    { tx, brandId, actorId }: BrandAiContext,
+    { aiCountsAsFirstResponse, ...modes }: BrandAiModesUpdate,
+  ): Promise<BrandAiSettings> {
+    const before = parseAiAssistantModes((await this.#repository.settings(tx, brandId))?.modes);
+    const brandSettings = await this.#repository.brandSettings(tx, brandId);
+    await this.#repository.saveModes(tx, brandId, modes, actorId);
+    if (brandSettings.aiCountsAsFirstResponse !== aiCountsAsFirstResponse) {
+      await this.#repository.saveBrandSettings(tx, brandId, {
+        ...brandSettings,
+        aiCountsAsFirstResponse,
+      });
+    }
+    await this.#audit(tx, brandId, actorId, 'ai.modes.updated', {
+      before: { ...before, aiCountsAsFirstResponse: brandSettings.aiCountsAsFirstResponse },
+      after: { ...modes, aiCountsAsFirstResponse },
     });
     return this.view(tx, brandId);
+  }
+
+  /** The brand's AI activity: counts and cost, never bodies, which stay behind the ticket. */
+  async calls(
+    tx: DbTransaction,
+    brandId: string,
+    query: BrandAiCallsQuery,
+  ): Promise<BrandAiCallsPage> {
+    const rows = await this.#repository.callsOfBrand(tx, brandId, {
+      before: cursorOf(query.cursor),
+      // One more than a page, to know whether there is another without counting.
+      limit: query.limit + 1,
+    });
+    const page = rows.slice(0, query.limit);
+    const last = page.at(-1);
+    return {
+      items: page.map((row) => ({
+        id: row.id,
+        feature: row.feature,
+        model: row.model,
+        status: row.status,
+        tokensIn: row.tokensIn,
+        tokensOut: row.tokensOut,
+        costUsd: row.costUsd,
+        createdAt: row.createdAt.toISOString(),
+        ticket:
+          row.ticketId === null || row.ticketPrefix === null || row.ticketNumber === null
+            ? null
+            : { id: row.ticketId, reference: `${row.ticketPrefix}-${String(row.ticketNumber)}` },
+      })),
+      nextCursor:
+        rows.length > query.limit && last !== undefined
+          ? encodeAuditCursor({ at: last.createdAt.toISOString(), id: last.id })
+          : null,
+    };
   }
 
   /**
@@ -171,3 +248,19 @@ export class BrandAiService {
     });
   }
 }
+
+/** The audit log's keyset cursor: the same `(created_at, id)` order. */
+const cursorOf = (cursor: string | undefined): AuditCursor | undefined => {
+  if (cursor === undefined) {
+    return undefined;
+  }
+  try {
+    return decodeAuditCursor(cursor);
+  } catch (error) {
+    if (error instanceof InvalidAuditCursorError) {
+      throw new BadRequestException(error.message);
+    }
+    /* c8 ignore next 2 -- decoding throws nothing else. */
+    throw error;
+  }
+};

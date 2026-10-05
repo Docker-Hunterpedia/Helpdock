@@ -183,6 +183,31 @@ export const embeddingSettingsUpdateSchema = z.strictObject({
 });
 export type EmbeddingSettingsUpdate = z.infer<typeof embeddingSettingsUpdateSchema>;
 
+// -------------------------------------------------------------- transcription
+
+/**
+ * Voice transcription (M7-09's endpoint, configured on `Admin/AI-Providers`
+ * by M7-10): a Whisper-compatible `POST …/audio/transcriptions` URL, the
+ * model it is asked for and its key. An empty endpoint is "off".
+ */
+export const transcriptionSettingsViewSchema = z.object({
+  endpoint: z.string(),
+  model: z.string(),
+  hasApiKey: z.boolean(),
+  /** Settings keys pinned by the environment, such as `transcription.endpoint`. */
+  lockedKeys: z.array(z.string()),
+});
+export type TranscriptionSettingsView = z.infer<typeof transcriptionSettingsViewSchema>;
+
+export const transcriptionSettingsUpdateSchema = z.strictObject({
+  /** An empty string turns transcription off. */
+  endpoint: z.union([z.literal(''), z.url({ protocol: /^https?$/ })]),
+  model: z.string().trim().max(200),
+  /** Left out to keep the stored key; an empty string clears it. */
+  apiKey: z.string().max(4_096).optional(),
+});
+export type TranscriptionSettingsUpdate = z.infer<typeof transcriptionSettingsUpdateSchema>;
+
 // ---------------------------------------------------------------- per brand
 
 const usd = z.number().positive().max(1_000_000);
@@ -204,14 +229,72 @@ export const aiBudgetWindowSchema = z.object({
 /** The longest system prompt a brand may set. */
 export const AI_SYSTEM_PROMPT_MAX_LENGTH = 8_000;
 
+/** The longest handoff message, per language. */
+export const AI_HANDOFF_MAX_LENGTH = 1_000;
+
+/** The channels auto-reply can answer on (REQUIREMENTS §4.7). */
+export const AI_AUTO_REPLY_CHANNELS = ['widget', 'email', 'telegram'] as const;
+export const aiAutoReplyChannelSchema = z.enum(AI_AUTO_REPLY_CHANNELS);
+export type AiAutoReplyChannel = z.infer<typeof aiAutoReplyChannelSchema>;
+
+/** Below this confidence auto-reply hands off to a person instead of answering. */
+export const AI_DEFAULT_THRESHOLD = 0.7;
+
+const autoReplyChannelSchema = z.object({
+  enabled: z.boolean(),
+  /** 0 to 1 in steps of 0.05, as the SliderField sets it. */
+  threshold: z.number().min(0).max(1),
+});
+export type AiAutoReplyChannelSettings = z.infer<typeof autoReplyChannelSchema>;
+
+const offChannel = { enabled: false, threshold: AI_DEFAULT_THRESHOLD };
+
+/**
+ * Which AI modes a brand runs (M7-10, read by M7-05 agent assist and M7-06
+ * auto-reply). Every mode starts off; a key a stored row lacks takes its
+ * default, so a later mode does not need a migration of old rows.
+ */
+export const aiAssistantModesSchema = z.object({
+  agentAssist: z.boolean().default(false),
+  /** At the 100 % hard stop auto-reply always stops; this keeps agent assist on. */
+  keepAssistAfterHardStop: z.boolean().default(true),
+  autoReply: z
+    .object({
+      widget: autoReplyChannelSchema.default(offChannel),
+      email: autoReplyChannelSchema.default(offChannel),
+      telegram: autoReplyChannelSchema.default(offChannel),
+    })
+    .default({ widget: offChannel, email: offChannel, telegram: offChannel }),
+  /** What the assistant says when it hands off; empty for the built-in wording. */
+  handoffMessage: z
+    .object({
+      en: z.string().max(AI_HANDOFF_MAX_LENGTH).default(''),
+      ar: z.string().max(AI_HANDOFF_MAX_LENGTH).default(''),
+    })
+    .default({ en: '', ar: '' }),
+});
+export type AiAssistantModes = z.infer<typeof aiAssistantModesSchema>;
+
+/** A stored `ai_settings.modes` value, or null, as the modes it means. */
+export const parseAiAssistantModes = (stored: unknown): AiAssistantModes =>
+  aiAssistantModesSchema.parse(stored ?? {});
+
 export const brandAiSettingsSchema = z.object({
   /** The brand's own model; both null when it uses the install default. */
   providerId: aiProviderIdSchema.nullable(),
   modelId: z.string().nullable(),
   systemPrompt: z.string(),
+  /** The prompt for Arabic conversations; empty when `systemPrompt` serves both. */
+  systemPromptAr: z.string(),
   piiRedaction: z.boolean(),
   injectionFilter: z.boolean(),
   budget: aiBudgetSchema,
+  modes: aiAssistantModesSchema,
+  /**
+   * DOMAIN-RULES §3.1's `ai_counts_as_first_response`: the brand setting
+   * Ticketing › SLAs edits too, shown here beside auto-reply.
+   */
+  aiCountsAsFirstResponse: z.boolean(),
   usage: z.object({
     todayUsd: z.number().nonnegative(),
     monthUsd: z.number().nonnegative(),
@@ -235,9 +318,30 @@ export const brandAiSettingsUpdateSchema = z
   });
 export type BrandAiSettingsUpdate = z.infer<typeof brandAiSettingsUpdateSchema>;
 
+const autoReplyChannelUpdateSchema = z.strictObject(autoReplyChannelSchema.shape);
+
+/** The Admin's modes: agent assist, auto-reply per channel, handoff wording. */
+export const brandAiModesUpdateSchema = z.strictObject({
+  agentAssist: z.boolean(),
+  keepAssistAfterHardStop: z.boolean(),
+  autoReply: z.strictObject({
+    widget: autoReplyChannelUpdateSchema,
+    email: autoReplyChannelUpdateSchema,
+    telegram: autoReplyChannelUpdateSchema,
+  }),
+  handoffMessage: z.strictObject({
+    en: z.string().trim().max(AI_HANDOFF_MAX_LENGTH),
+    ar: z.string().trim().max(AI_HANDOFF_MAX_LENGTH),
+  }),
+  aiCountsAsFirstResponse: z.boolean(),
+});
+export type BrandAiModesUpdate = z.infer<typeof brandAiModesUpdateSchema>;
+
 /** The Team Leader's half: tone, language policy, forbidden topics (REQUIREMENTS §4.7). */
 export const brandAiPromptUpdateSchema = z.strictObject({
   systemPrompt: z.string().max(AI_SYSTEM_PROMPT_MAX_LENGTH),
+  /** Left out to keep the stored Arabic prompt. */
+  systemPromptAr: z.string().max(AI_SYSTEM_PROMPT_MAX_LENGTH).optional(),
 });
 export type BrandAiPromptUpdate = z.infer<typeof brandAiPromptUpdateSchema>;
 
@@ -280,3 +384,36 @@ export const ticketAiCallsSchema = z.object({ items: z.array(aiCallViewSchema) }
 export type TicketAiCalls = z.infer<typeof ticketAiCallsSchema>;
 
 export const ticketAiCallsParamSchema = z.object({ brandId: z.uuid(), ticketId: z.uuid() });
+
+// ------------------------------------------------------------- the brand's log
+
+/** One AI call in the brand's activity list (M7-10): counts and cost, no bodies. */
+export const aiCallSummarySchema = z.object({
+  id: z.uuid(),
+  feature: z.string(),
+  model: z.string(),
+  status: z.enum(['ok', 'error', 'refused']),
+  tokensIn: z.int().nonnegative(),
+  tokensOut: z.int().nonnegative(),
+  costUsd: z.number().nonnegative(),
+  createdAt: z.iso.datetime(),
+  /** The ticket the call was made for, when there is one the reader may open. */
+  ticket: z.object({ id: z.uuid(), reference: z.string() }).nullable(),
+});
+export type AiCallSummary = z.infer<typeof aiCallSummarySchema>;
+
+export const AI_CALLS_PAGE_SIZE = 20;
+
+export const brandAiCallsQuerySchema = z.object({
+  /** The `nextCursor` of the previous page. */
+  cursor: z.string().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(AI_CALLS_PAGE_SIZE),
+});
+export type BrandAiCallsQuery = z.infer<typeof brandAiCallsQuerySchema>;
+
+export const brandAiCallsPageSchema = z.object({
+  items: z.array(aiCallSummarySchema),
+  /** Pass back as `cursor` for the next, older page. Null on the last one. */
+  nextCursor: z.string().nullable(),
+});
+export type BrandAiCallsPage = z.infer<typeof brandAiCallsPageSchema>;

@@ -11,3 +11,5 @@ export const OBSERVABILITY_LOGGER = Symbol('helpdock.observability-logger');
 export const QUEUE_REGISTRY = Symbol('helpdock.queue-registry');
 /** What boot learned and the request path cannot ask for again. */
 export const BOOT_FACTS = Symbol('helpdock.boot-facts');
+/** M2 and M6: what the Channels card lists, read across every brand. */
+export const CHANNEL_STATUS = Symbol('helpdock.channel-status');

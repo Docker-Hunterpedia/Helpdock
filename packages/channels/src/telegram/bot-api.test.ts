@@ -157,6 +157,7 @@ describe('TelegramBotApi', () => {
     await expect(api().sendMessage('0', 'Hello')).rejects.toMatchObject({
       kind: 'refused',
       detail: '400: Bad Request: chat not found',
+      permanent: true,
     });
   });
 
@@ -178,7 +179,7 @@ describe('toTelegramFailure', () => {
     expect(toTelegramFailure(error)).toMatchObject({ kind: 'token', detail: '401: Unauthorized' });
   });
 
-  it('keeps Telegram’s retry hint', () => {
+  it('reads a rate limit as worth retrying', () => {
     const error = new GrammyError(
       "Call to 'sendMessage' failed!",
       {
@@ -190,7 +191,7 @@ describe('toTelegramFailure', () => {
       'sendMessage',
       {},
     );
-    expect(toTelegramFailure(error)).toMatchObject({ kind: 'refused', retryAfterSeconds: 3 });
+    expect(toTelegramFailure(error)).toMatchObject({ kind: 'refused', permanent: false });
   });
 
   it('never repeats the token from a transport error', () => {

@@ -11,6 +11,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import { readChannelStatuses } from '../channels/channel-status.js';
 import type { Logger } from '../logging/logger.js';
 import { ReadinessService } from '../runtime/readiness.service.js';
 import { DB, ENV, REDIS } from '../runtime/tokens.js';
@@ -26,10 +27,16 @@ import {
 } from './metrics-sampler.js';
 import { QueueRegistry } from './queues.js';
 import { SystemController } from './system.controller.js';
-import { SystemService } from './system.service.js';
+import { type ChannelStatusReader, SystemService } from './system.service.js';
 import { readPostgresFacts } from './system-facts.js';
 import { checkReached } from './system-view.js';
-import { BOOT_FACTS, METRICS, OBSERVABILITY_LOGGER, QUEUE_REGISTRY } from './tokens.js';
+import {
+  BOOT_FACTS,
+  CHANNEL_STATUS,
+  METRICS,
+  OBSERVABILITY_LOGGER,
+  QUEUE_REGISTRY,
+} from './tokens.js';
 
 /**
  * M0-10: `/health`, `/ready`, `/metrics`, the gauges behind them and the System
@@ -129,6 +136,14 @@ export class ObservabilityModule {
           provide: QUEUE_REGISTRY,
           inject: [ENV],
           useFactory: (env: Env) => new QueueRegistry(env.REDIS_URL),
+        },
+        {
+          provide: CHANNEL_STATUS,
+          inject: [DB],
+          useFactory:
+            (db: Db): ChannelStatusReader =>
+            () =>
+              readChannelStatuses(db, new Date()),
         },
         ReadinessService,
         SystemService,

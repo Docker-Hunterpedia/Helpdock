@@ -2,6 +2,7 @@ import { auditLog, type Db } from '@helpdock/db';
 import { readRelayStatus } from '@helpdock/jobs';
 import type {
   AuditEntry,
+  ChannelStatus,
   SystemQueuePage,
   SystemQueuesQuery,
   SystemStatus,
@@ -24,7 +25,10 @@ import {
   queuesView,
   relayView,
 } from './system-view.js';
-import { BOOT_FACTS, QUEUE_REGISTRY } from './tokens.js';
+import { BOOT_FACTS, CHANNEL_STATUS, QUEUE_REGISTRY } from './tokens.js';
+
+/** Every brand's mailboxes and bots with their health (`channels/channel-status.ts`). */
+export type ChannelStatusReader = () => Promise<readonly ChannelStatus[]>;
 
 /**
  * Everything the System page shows, in one read (REQUIREMENTS §4.10).
@@ -57,6 +61,7 @@ export class SystemService {
   readonly #readiness: ReadinessService;
   readonly #queues: QueueRegistry;
   readonly #boot: BootFacts;
+  readonly #channels: ChannelStatusReader;
 
   constructor(
     @Inject(DB) db: Db,
@@ -64,12 +69,14 @@ export class SystemService {
     @Inject(ReadinessService) readiness: ReadinessService,
     @Inject(QUEUE_REGISTRY) queues: QueueRegistry,
     @Inject(BOOT_FACTS) boot: BootFacts,
+    @Inject(CHANNEL_STATUS) channels: ChannelStatusReader,
   ) {
     this.#db = db;
     this.#redis = redis;
     this.#readiness = readiness;
     this.#queues = queues;
     this.#boot = boot;
+    this.#channels = channels;
   }
 
   async status(): Promise<SystemStatus> {
@@ -78,12 +85,13 @@ export class SystemService {
     // scope decides what they can see.
     const audit = await this.#auditPreview();
 
-    const [checks, postgres, redis, relayStatus, queueCounts] = await Promise.all([
+    const [checks, postgres, redis, relayStatus, queueCounts, channels] = await Promise.all([
       this.#readiness.detail(),
       readPostgresFacts(this.#db),
       readRedisFacts(this.#redis),
       readRelayStatus(this.#redis).catch(() => null),
       this.#queues.counts().catch(() => []),
+      this.#channels().catch(() => []),
     ]);
 
     const databaseCheck = checkNamed(checks, 'database');
@@ -119,10 +127,8 @@ export class SystemService {
       },
       relay: relayView(relayStatus),
       queues: queuesView(queueCounts, SUMMARY_QUEUE_LIMIT),
-      // M2 (email) and M6 (Telegram) fill this from `channels.status` and the
-      // adapter's `health()`. Until a channel can exist, the honest answer is
-      // that there are none.
-      channels: [],
+      // M2's mailboxes and M6's bots, each with the health its own list shows.
+      channels: [...channels],
       storage: { configured: false },
       aiSpend: { configured: false },
       audit: [...audit],

@@ -42,19 +42,19 @@ export class TelegramApiFailure extends Error {
   readonly kind: 'token' | 'refused' | 'connect';
   /** Telegram's `description`, or the transport's message. Never the token. */
   readonly detail: string;
-  /** Telegram asked to be left alone for this many seconds (429). */
-  readonly retryAfterSeconds: number | null;
+  /**
+   * Telegram said no to this request for good — the chat is gone, the bot was
+   * blocked, the text was refused — so asking again will not help. A 429 or a
+   * 5xx is not permanent.
+   */
+  readonly permanent: boolean;
 
-  constructor(
-    kind: TelegramApiFailure['kind'],
-    detail: string,
-    retryAfterSeconds: number | null = null,
-  ) {
+  constructor(kind: TelegramApiFailure['kind'], detail: string, permanent = false) {
     super(detail);
     this.name = 'TelegramApiFailure';
     this.kind = kind;
     this.detail = detail;
-    this.retryAfterSeconds = retryAfterSeconds;
+    this.permanent = permanent;
   }
 }
 
@@ -68,7 +68,7 @@ export const toTelegramFailure = (error: unknown, token?: string): TelegramApiFa
     return new TelegramApiFailure(
       kind,
       `${String(error.error_code)}: ${error.description}`,
-      error.parameters.retry_after ?? null,
+      error.error_code === 400 || error.error_code === 403,
     );
   }
   const message =

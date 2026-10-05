@@ -4,6 +4,8 @@ import {
   type RuleAction,
   type RuleActionType,
   type RuleBuilderOptions,
+  aiTriageFieldSchema,
+  aiTriageModeSchema,
   ticketPrioritySchema,
 } from '@helpdock/schemas';
 import { Box, Checkbox, IconButton, TextField, Typography } from '@mui/material';
@@ -39,6 +41,7 @@ const UI_TYPES = [
   'notify',
   'escalate',
   'close',
+  'ai_triage',
 ] as const;
 type UiType = (typeof UI_TYPES)[number];
 
@@ -291,6 +294,59 @@ export function ActionRow({
             />
           </>
         );
+      case 'ai_triage':
+        return (
+          <>
+            <Choice
+              label={t('rules:builder.triageMode')}
+              value={action.mode}
+              onChange={(value) => {
+                const mode = aiTriageModeSchema.safeParse(value);
+                if (mode.success) {
+                  onChange({ ...action, mode: mode.data });
+                }
+              }}
+            >
+              {aiTriageModeSchema.options.map((mode) => (
+                <option key={mode} value={mode}>
+                  {t(`rules:triageModes.${mode}`)}
+                </option>
+              ))}
+            </Choice>
+            <Box
+              role="group"
+              aria-label={t('rules:builder.triageFields')}
+              sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}
+            >
+              {aiTriageFieldSchema.options.map((field) => (
+                <Box
+                  key={field}
+                  component="label"
+                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+                >
+                  <Checkbox
+                    size="small"
+                    checked={action.fields.includes(field)}
+                    // The last field stays: a triage that may change nothing is no action.
+                    disabled={action.fields.length === 1 && action.fields.includes(field)}
+                    onChange={(event) => {
+                      onChange({
+                        ...action,
+                        fields: event.target.checked
+                          ? aiTriageFieldSchema.options.filter(
+                              (candidate) => candidate === field || action.fields.includes(candidate),
+                            )
+                          : action.fields.filter((candidate) => candidate !== field),
+                      });
+                    }}
+                    sx={{ padding: 0 }}
+                  />
+                  <Typography variant="body2">{t(`rules:triageFields.${field}`)}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </>
+        );
       default:
         return null;
     }
@@ -350,6 +406,14 @@ export function ActionRow({
           <X size={16} aria-hidden="true" />
         </IconButton>
       </Box>
+      {action.type === 'ai_triage' ? (
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', fontWeight: 400, paddingInlineStart: 12 }}
+        >
+          {t('rules:builder.triageHint')}
+        </Typography>
+      ) : null}
       {action.type === 'send_canned' ? (
         <Box
           component="label"

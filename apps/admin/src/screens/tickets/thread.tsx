@@ -26,6 +26,16 @@ import {
 } from './message-bubble.tsx';
 import { LocationLine, splitLocation } from './telegram/location-line.tsx';
 import type { ThreadTelegram } from './telegram/use-ticket-telegram.tsx';
+import { VoiceNote } from './telegram/voice-note.tsx';
+
+/** M7-05, M7-08: what agent assist adds to a customer's message in the thread. */
+export interface ThreadAssist {
+  readonly brandId: string;
+  /** A translation or the redacted text, drawn instead of the body; undefined for the body. */
+  bodyFor(message: TicketMessage): ReactNode | undefined;
+  /** The AI facts line under the body; undefined for none. */
+  factsFor(message: TicketMessage): ReactNode | undefined;
+}
 
 /**
  * The thread: bubbles and system events in one column, 720 px wide at most.
@@ -81,6 +91,7 @@ export function Thread({
   merges,
   deliveryFooter,
   telegram,
+  assist,
   onRetry,
   onDiscard,
 }: {
@@ -92,6 +103,8 @@ export function Thread({
   readonly deliveryFooter?: ((message: TicketMessage) => ReactNode) | undefined;
   /** M6: the "via @bot" and "Sent" lines, voice notes and locations of a Telegram thread. */
   readonly telegram?: ThreadTelegram | undefined;
+  /** M7-05, M7-08: translations and "Show redacted" under a customer's messages. */
+  readonly assist?: ThreadAssist | undefined;
   onRetry(pending: PendingMessage): void;
   onDiscard(pending: PendingMessage): void;
 }): ReactNode {
@@ -167,6 +180,8 @@ export function Thread({
                     item.message.email.from.address
                   }
                   time={messageTime(item.message.createdAt, locale, now)}
+                  body={assist?.bodyFor(item.message)}
+                  facts={assist?.factsFor(item.message)}
                 />
               ) : (
                 <SentMessage
@@ -174,6 +189,7 @@ export function Thread({
                   names={names}
                   now={now}
                   telegram={telegram}
+                  assist={assist}
                   footer={deliveryFooter?.(item.message) ?? null}
                 />
               )
@@ -305,12 +321,14 @@ function SentMessage({
   names,
   now,
   telegram,
+  assist,
   footer,
 }: {
   readonly message: TicketMessage;
   readonly names: ThreadNames;
   readonly now: number;
   readonly telegram: ThreadTelegram | undefined;
+  readonly assist: ThreadAssist | undefined;
   readonly footer: ReactNode;
 }): ReactNode {
   const t = useT();
@@ -327,6 +345,8 @@ function SentMessage({
       }
       meta={metaOf(message, names, locale, now, telegram)}
       bodyHtml={located?.html ?? message.bodyHtml}
+      body={assist?.bodyFor(message)}
+      facts={assist?.factsFor(message)}
       footer={footer}
       {...(located === undefined ? {} : { extra: <LocationLine location={located.location} /> })}
       {...(message.attachments.length === 0
@@ -334,14 +354,23 @@ function SentMessage({
         : {
             attachments: message.attachments.map(
               (attachment) =>
-                telegram?.attachmentFor(attachment, time) ?? (
+                telegram?.attachmentFor(attachment, time) ??
+                (attachment.kind === 'audio' && attachment.status === 'ready' && assist !== undefined ? (
+                  // M7-09: a voice note from any channel plays, with its transcript under it.
+                  <VoiceNote
+                    key={attachment.id}
+                    brandId={assist.brandId}
+                    attachment={attachment}
+                    time={time}
+                  />
+                ) : (
                   <AttachmentChip
                     key={attachment.id}
                     name={attachment.originalName}
                     size={attachment.size}
                     state={chipState(attachment)}
                   />
-                ),
+                )),
             ),
           })}
     />

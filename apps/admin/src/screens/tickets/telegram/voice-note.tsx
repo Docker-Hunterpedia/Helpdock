@@ -6,13 +6,14 @@ import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { useAttachmentUploader } from '../../../auth/session.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
+import { VoiceTranscript } from '../assist/voice-transcript.tsx';
 
 /**
  * DESIGN §6.3 VoiceNote (M6-03, `Admin/Ticket-Telegram`): a contact's voice
  * message as a round outlined play button, an `aria-hidden` waveform, its
  * length and the time. The five-minute URL is asked for on the first press,
- * never for a thread that is only being read. The transcript under it is
- * M7-09's; an attachment carries none yet, so nothing is drawn for it.
+ * never for a thread that is only being read. Under it, M7-09's transcript
+ * (`assist/voice-transcript.tsx`), staff only, when the install transcribes.
  */
 
 const BARS = 18;
@@ -82,6 +83,7 @@ export function VoiceNote({
   };
 
   return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
     <Box
       sx={{
         display: 'flex',
@@ -156,6 +158,8 @@ export function VoiceNote({
           setPlaying(false);
         }}
       />
+    </Box>
+    <VoiceTranscript attachmentId={attachment.id} />
     </Box>
   );
 }

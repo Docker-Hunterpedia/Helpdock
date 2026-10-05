@@ -1,4 +1,5 @@
 import type {
+  AssistRefusal,
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
@@ -11,6 +12,7 @@ import type {
   TicketLifecycleRefusal,
 } from '@helpdock/schemas';
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
+import { AssistError } from '../assist/api.js';
 import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
 import { DomainsError } from '../domains/api.js';
@@ -200,6 +202,7 @@ export class HttpTransport {
 const toError = async (
   response: Response,
 ): Promise<
+  | AssistError
   | AuthError
   | ChannelsError
   | ContactError
@@ -219,6 +222,7 @@ const toError = async (
   let domains: DomainsRefusal | undefined;
   let helpCenter: HcRefusal | undefined;
   let telegram: TelegramRefusal | undefined;
+  let assist: AssistRefusal | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -231,6 +235,7 @@ const toError = async (
     domains = body.domains?.reason;
     helpCenter = body.helpCenter?.reason;
     telegram = body.telegram?.reason;
+    assist = body.assist?.reason;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -266,6 +271,10 @@ const toError = async (
 
   if (telegram !== undefined) {
     return new TelegramError(telegram);
+  }
+
+  if (assist !== undefined) {
+    return new AssistError(assist);
   }
 
   if (auth === undefined) {

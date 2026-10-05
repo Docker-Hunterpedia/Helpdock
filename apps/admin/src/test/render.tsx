@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
+import type { AssistApi } from '../assist/api.js';
+import { MockAssistApi } from '../assist/mock-api.js';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import type { AutomationApi } from '../automation/api.js';
@@ -49,6 +51,7 @@ export interface RenderAppOptions {
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
   readonly telegramApi?: TelegramApi;
+  readonly assistApi?: AssistApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -68,6 +71,7 @@ export interface RenderedApp extends RenderResult {
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
   readonly telegramApi: TelegramApi;
+  readonly assistApi: AssistApi;
 }
 
 /**
@@ -91,6 +95,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
   const telegramApi = options.telegramApi ?? new MockTelegramApi();
+  const assistApi =
+    options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -110,6 +116,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       browserPush={browserPush}
       domainsApi={domainsApi}
       telegramApi={telegramApi}
+      assistApi={assistApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -136,5 +143,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     browserPush,
     domainsApi,
     telegramApi,
+    assistApi,
   };
 }

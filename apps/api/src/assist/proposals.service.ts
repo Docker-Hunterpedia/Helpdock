@@ -13,6 +13,7 @@ import type {
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import type { HelpCenterArticlesService } from '../help-center/articles.service.js';
+import { writeTicketActivity } from '../tickets/ticket-activity.js';
 import type { AssistRepository } from './assist.repository.js';
 import { AssistFailure } from './assist-failure.js';
 import type { ProposalRow, ProposalsRepository } from './proposals.repository.js';
@@ -118,6 +119,15 @@ export class ProposalsService {
       proposedBy: actorId,
     });
     await this.#audit(context, 'help_center.proposal.created', id, { ticketId });
+    // The thread's "Lina proposed an article · waiting for approval" line.
+    await writeTicketActivity(tx, {
+      brandId,
+      ticketId,
+      departmentId: ticket.departmentId,
+      actor: { actorType: 'staff', actorId, via: 'ui' },
+      action: 'ticket.article_proposed',
+      to: { proposalId: id, title: request.title },
+    });
     return this.get(tx, id);
   }
 

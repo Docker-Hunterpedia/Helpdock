@@ -1,5 +1,6 @@
 import type { Locale } from '@helpdock/i18n';
 import {
+  type ActionOutcome,
   type ConditionTrace,
   RULE_FIELD_VALUE_KIND,
   type RuleAction,
@@ -26,6 +27,8 @@ export interface RuleText {
   value(field: RuleCondition['field'], value: string): string;
   condition(condition: RuleCondition): string;
   action(action: RuleAction): string;
+  /** An action of a run, with what an AI triage job made of it (M7-07). */
+  outcome(outcome: ActionOutcome): string;
   summary(rule: Pick<WorkflowRule, 'conditions' | 'actions'>): string;
   /** What a condition found on the ticket, for the test run and the log. */
   actual(trace: ConditionTrace): string;
@@ -162,8 +165,23 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
         return t('rules:text.action.escalate');
       case 'close':
         return t('rules:text.action.close');
+      case 'ai_triage':
+        return t(`rules:text.action.ai_triage.${entry.mode}`, {
+          fields: entry.fields
+            .map((name) => t(`rules:triageFields.${name}`))
+            .join(t('rules:text.listSeparator')),
+        });
     }
   };
+
+  /** An action as the run log reports it: M7-07's triage says what its job did. */
+  const outcome = (entry: ActionOutcome): string =>
+    entry.triage === undefined
+      ? action(entry.action)
+      : t('rules:text.triageOutcome', {
+          action: action(entry.action),
+          status: t(`rules:triageStatus.${entry.triage.status}`),
+        });
 
   const summary = (rule: Pick<WorkflowRule, 'conditions' | 'actions'>): string => {
     const conditions = rule.conditions.groups.flatMap((group) => group.conditions);
@@ -200,6 +218,7 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
     value,
     condition,
     action,
+    outcome,
     summary,
     actual,
   };

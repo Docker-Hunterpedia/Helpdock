@@ -1,5 +1,6 @@
 export * from './accounts.js';
 export * from './ai.js';
+export * from './api-keys.js';
 export * from './assignment.js';
 export * from './attachments.js';
 export * from './audit-log.js';
@@ -48,6 +49,7 @@ export * from './user-brand-roles.js';
 export * from './users.js';
 export * from './views.js';
 export * from './web-form-settings.js';
+export * from './webhooks.js';
 export * from './widget-settings.js';
 export * from './widget-visitors.js';
 export * from './workflow-rules.js';

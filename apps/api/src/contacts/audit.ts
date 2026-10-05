@@ -28,6 +28,8 @@ export type ContactAuditAction =
 export interface ContactAuditEntry {
   readonly brandId: string;
   readonly actorId: string;
+  /** Default `staff`; the public API writes as its key (M8-02). */
+  readonly actorType?: 'staff' | 'apikey' | undefined;
   readonly action: ContactAuditAction;
   readonly targetType: 'contact' | 'account';
   readonly targetId: string;
@@ -36,11 +38,19 @@ export interface ContactAuditEntry {
 
 export const writeContactAudit = async (
   tx: DbTransaction,
-  { brandId, actorId, action, targetType, targetId, meta = {} }: ContactAuditEntry,
+  {
+    brandId,
+    actorId,
+    actorType = 'staff',
+    action,
+    targetType,
+    targetId,
+    meta = {},
+  }: ContactAuditEntry,
 ): Promise<void> => {
   await tx.insert(auditLog).values({
     brandId,
-    actorType: 'staff',
+    actorType,
     actorId,
     action,
     targetType,

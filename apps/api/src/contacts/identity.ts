@@ -15,6 +15,7 @@ import {
   VERIFIABLE_IDENTITY_KINDS,
 } from '@helpdock/schemas';
 import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { enqueueContactCreated } from './contact-events.js';
 import { ContactFailure } from './contact-failure.js';
 
 /**
@@ -422,6 +423,9 @@ export const insertContact = async (
   if (contact === undefined) {
     throw new Error('The contact could not be created');
   }
+  // Every contact is made here, whichever path made it, so this is where the
+  // event is written (M8-03).
+  await enqueueContactCreated(tx, contact.brandId, contact.id);
 
   return contact;
 };

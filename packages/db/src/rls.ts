@@ -173,6 +173,14 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'knowledge_sources', departmentScoped: false },
   { name: 'knowledge_documents', departmentScoped: false },
   { name: 'knowledge_chunks', departmentScoped: false },
+  // M8-01, M8-02, M8-03. An API key acts for the whole brand, so its keys,
+  // their idempotency records, the webhook endpoints and their delivery log
+  // are the brand's. A delivery names a ticket in its payload, but it is a
+  // copy sent to the brand's own endpoint, not a ticket row an agent reads.
+  { name: 'api_keys', departmentScoped: false },
+  { name: 'api_idempotency_keys', departmentScoped: false },
+  { name: 'webhooks', departmentScoped: false },
+  { name: 'webhook_deliveries', departmentScoped: false },
   // M6-01, M6-02. A bot is configuration, like `mailboxes`; a chat names the
   // ticket it continues but holds none of it, like `notifications`. A reply's
   // delivery is a child of its ticket and follows the ticket's department, as

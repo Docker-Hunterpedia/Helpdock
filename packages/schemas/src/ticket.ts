@@ -567,6 +567,35 @@ export type TicketList = z.infer<typeof ticketListSchema>;
 // --------------------------------------------------------------------------
 
 /**
+ * The three fields a ticket cannot be written without — subject, body and
+ * department — unless a template fills them. Shared by the admin's create and
+ * the public API's (M8-02), which differ in what else they accept.
+ */
+export const requireUnlessTemplate = (
+  value: {
+    readonly templateId?: string | undefined;
+    readonly subject?: string | undefined;
+    readonly bodyHtml?: string | undefined;
+    readonly departmentId?: string | undefined;
+  },
+  ctx: z.RefinementCtx,
+): void => {
+  if (value.templateId !== undefined) {
+    return;
+  }
+
+  for (const field of ['subject', 'bodyHtml', 'departmentId'] as const) {
+    if (value[field] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'Required unless the request names a template',
+      });
+    }
+  }
+};
+
+/**
  * Manual creation. The body is the first message of the thread, so a ticket is
  * never created empty — a ticket with no message is a row nobody can answer.
  */
@@ -618,21 +647,7 @@ export const ticketCreateRequestSchema = z
      */
     clientId: z.uuid().optional(),
   })
-  .superRefine((value, ctx) => {
-    if (value.templateId !== undefined) {
-      return;
-    }
-
-    for (const field of ['subject', 'bodyHtml', 'departmentId'] as const) {
-      if (value[field] === undefined) {
-        ctx.addIssue({
-          code: 'custom',
-          path: [field],
-          message: 'Required unless the request names a template',
-        });
-      }
-    }
-  });
+  .superRefine(requireUnlessTemplate);
 export type TicketCreateRequest = z.infer<typeof ticketCreateRequestSchema>;
 
 /**

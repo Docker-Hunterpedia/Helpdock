@@ -24,7 +24,14 @@ export interface ApiKeyActor {
   readonly userId: string;
 }
 
-export const toApiKey = (row: ApiKeyRow): ApiKey => ({
+/** Names are only read for the list; a create or a revoke answers without them. */
+export const toApiKey = (
+  row: ApiKeyRow,
+  names: { readonly createdByName: string | null; readonly revokedByName: string | null } = {
+    createdByName: null,
+    revokedByName: null,
+  },
+): ApiKey => ({
   id: row.id,
   name: row.name,
   prefix: row.prefix,
@@ -38,6 +45,8 @@ export const toApiKey = (row: ApiKeyRow): ApiKey => ({
   createdAt: row.createdAt.toISOString(),
   lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
   revokedAt: row.revokedAt?.toISOString() ?? null,
+  createdByName: names.createdByName,
+  revokedByName: names.revokedByName,
 });
 
 export class ApiKeysService {
@@ -48,7 +57,9 @@ export class ApiKeysService {
   }
 
   async list({ tx }: ApiKeyActor): Promise<ApiKeyList> {
-    return { keys: (await this.#repository.list(tx)).map(toApiKey) };
+    return {
+      keys: (await this.#repository.list(tx)).map(({ key, ...names }) => toApiKey(key, names)),
+    };
   }
 
   async create(actor: ApiKeyActor, request: ApiKeyCreateRequest): Promise<ApiKeyCreated> {

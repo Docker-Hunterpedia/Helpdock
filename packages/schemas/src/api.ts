@@ -59,6 +59,9 @@ export const apiKeySchema = z.object({
   createdAt: z.iso.datetime(),
   lastUsedAt: z.iso.datetime().nullable(),
   revokedAt: z.iso.datetime().nullable(),
+  /** Who issued and who revoked the key, for the Developers page; null once they are gone. */
+  createdByName: z.string().nullable(),
+  revokedByName: z.string().nullable(),
 });
 export type ApiKey = z.infer<typeof apiKeySchema>;
 
@@ -102,11 +105,26 @@ export const WEBHOOK_EVENTS = [
 export const webhookEventSchema = z.enum(WEBHOOK_EVENTS);
 export type WebhookEvent = z.infer<typeof webhookEventSchema>;
 
+/**
+ * What "Send test event" delivers. Not an event an endpoint subscribes to: it
+ * is sent to the one endpoint it was asked for, whatever its events.
+ */
+export const WEBHOOK_TEST_EVENT = 'ping';
+
+/** Every event a delivery can carry: the subscribable ones and the test ping. */
+export const webhookDeliveryEventSchema = z.enum([...WEBHOOK_EVENTS, WEBHOOK_TEST_EVENT]);
+export type WebhookDeliveryEvent = z.infer<typeof webhookDeliveryEventSchema>;
+
 /** The header every delivery is signed in: `t=<unix seconds>,v1=<hex HMAC-SHA256>`. */
 export const WEBHOOK_SIGNATURE_HEADER = 'x-helpdock-signature';
 /** Every signing secret starts with this, so a leaked one is recognisable. */
 export const WEBHOOK_SECRET_PREFIX = 'whsec_';
 
+/**
+ * `http` is accepted by the schema and refused by the service unless the
+ * address is in `OUTBOUND_ALLOW_CIDRS`: an operator's own service may not
+ * speak TLS, a stranger's endpoint must (see `webhook-destination.ts`).
+ */
 const webhookUrlSchema = z
   .url({ protocol: /^https?$/ })
   .max(2_000)
@@ -172,7 +190,7 @@ export const webhookDeliverySchema = z.object({
   id: z.uuid(),
   webhookId: z.uuid(),
   eventId: z.uuid(),
-  event: webhookEventSchema,
+  event: webhookDeliveryEventSchema,
   status: webhookDeliveryStatusSchema,
   attempts: z.int().nonnegative(),
   responseStatus: z.int().nullable(),
@@ -195,6 +213,47 @@ export const webhookDeliveryListSchema = z.object({
 });
 export type WebhookDeliveryList = z.infer<typeof webhookDeliveryListSchema>;
 
+/**
+ * One delivery with the request as it was sent: the frozen body and the
+ * headers of its last attempt, signature included. The signature is a MAC of a
+ * body the Admin can already read, so it gives nothing away; the secret is not
+ * here.
+ */
+export const webhookDeliveryDetailSchema = webhookDeliverySchema.extend({
+  request: z.object({
+    method: z.literal('POST'),
+    url: z.string(),
+    headers: z.array(z.object({ name: z.string(), value: z.string() })),
+    body: z.string(),
+  }),
+});
+export type WebhookDeliveryDetail = z.infer<typeof webhookDeliveryDetailSchema>;
+
+/** An endpoint as the Developers page lists it: with its last day and its last delivery. */
+export const webhookOverviewSchema = webhookSchema.extend({
+  createdByName: z.string().nullable(),
+  last24h: z.object({
+    total: z.int().nonnegative(),
+    succeeded: z.int().nonnegative(),
+  }),
+  lastDelivery: webhookDeliverySchema.nullable(),
+});
+export type WebhookOverview = z.infer<typeof webhookOverviewSchema>;
+
+export const webhookOverviewListSchema = z.object({ webhooks: z.array(webhookOverviewSchema) });
+export type WebhookOverviewList = z.infer<typeof webhookOverviewListSchema>;
+
+/**
+ * Why an endpoint was refused when it was added or changed: plain `http` to an
+ * address the operator has not allowed, or a name that resolves to a private,
+ * loopback or metadata address (DOMAIN-RULES §13).
+ */
+export const webhooksRefusalSchema = z.enum([
+  'webhook-https-required',
+  'webhook-destination-blocked',
+]);
+export type WebhooksRefusal = z.infer<typeof webhooksRefusalSchema>;
+
 export const webhookDeliveryQuerySchema = z.object({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(WEBHOOK_DELIVERY_PAGE_SIZE).optional(),
@@ -212,7 +271,7 @@ export type WebhookDeliveryParam = z.infer<typeof webhookDeliveryParamSchema>;
  */
 export const webhookEnvelopeSchema = z.object({
   id: z.uuid(),
-  event: webhookEventSchema,
+  event: webhookDeliveryEventSchema,
   createdAt: z.iso.datetime(),
   brandId: z.uuid(),
   data: z.record(z.string(), z.unknown()),

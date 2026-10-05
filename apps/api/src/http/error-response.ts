@@ -15,6 +15,7 @@ import type {
   TelegramRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
+  WebhooksRefusal,
   WidgetErrorCode,
 } from '@helpdock/schemas';
 import { HttpException, HttpStatus } from '@nestjs/common';
@@ -32,6 +33,7 @@ import { StaffFailure } from '../staff/staff-failure.js';
 import { TelegramFailure } from '../telegram/telegram-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
+import { WebhooksFailure } from '../webhooks/webhooks-failure.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
 
 /**
@@ -73,6 +75,8 @@ export interface MappedError {
   readonly helpCenter?: HcRefusal;
   /** Only on a refused AI settings change; see `ai/ai-failure.ts`. */
   readonly ai?: AiRefusal;
+  /** Only on a refused webhook endpoint; see `webhooks/webhooks-failure.ts`. */
+  readonly webhooks?: { readonly reason: WebhooksRefusal; readonly address?: string };
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -222,6 +226,19 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  if (error instanceof WebhooksFailure) {
+    return {
+      status: error.getStatus(),
+      code: 'validation_failed',
+      message: error.message,
+      webhooks: {
+        reason: error.reason,
+        ...(error.address === undefined ? {} : { address: error.address }),
+      },
+      unexpected: false,
+    };
+  }
+
   // M4. Before the generic branch, for the reason the ones above give.
   if (error instanceof WidgetFailure) {
     return {
@@ -308,5 +325,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
     ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
     ...(mapped.ai === undefined ? {} : { ai: { reason: mapped.ai } }),
+    ...(mapped.webhooks === undefined ? {} : { webhooks: mapped.webhooks }),
   },
 });

@@ -31,7 +31,12 @@ export const inlineScriptHashes = (html: string): readonly string[] =>
     (script) => `'sha256-${createHash('sha256').update(script, 'utf8').digest('base64')}'`,
   );
 
-export const adminContentSecurityPolicy = (html: string): string =>
+/**
+ * `mediaOrigin` is the bucket's ({@link storageOrigin}): an `<audio>` element
+ * plays a voice note from its presigned URL, and nothing else may be a media
+ * source.
+ */
+export const adminContentSecurityPolicy = (html: string, mediaOrigin?: string): string =>
   [
     "default-src 'none'",
     `script-src 'self' ${inlineScriptHashes(html).join(' ')}`.trimEnd(),
@@ -39,6 +44,7 @@ export const adminContentSecurityPolicy = (html: string): string =>
     // this means giving that cache a nonce, which is a change in `apps/admin`.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
+    `media-src 'self'${mediaOrigin === undefined ? '' : ` ${mediaOrigin}`}`,
     "font-src 'self'",
     // The admin talks to its own origin: Caddy sends the admin host to the api.
     "connect-src 'self'",

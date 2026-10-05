@@ -533,6 +533,7 @@ export const workerDependencies: WorkerDependencies = {
         repository: telegramRepository,
         keyring,
         api: telegramApiFactory(env.TELEGRAM_API_ROOT),
+        storage: storageFor(env),
       }),
     });
     const worker = new Worker(

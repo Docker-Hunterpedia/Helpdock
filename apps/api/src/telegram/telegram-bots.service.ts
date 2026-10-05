@@ -1,5 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { type TelegramBotIdentity, toTelegramFailure } from '@helpdock/channels';
+import {
+  type TelegramApiFailure,
+  type TelegramBotIdentity,
+  toTelegramFailure,
+} from '@helpdock/channels';
 import { decryptSecret, encryptSecret, type Keyring } from '@helpdock/config';
 import { auditLog, type DbTransaction, type NewTelegramBot } from '@helpdock/db';
 import type {
@@ -15,7 +19,7 @@ import { telegramBotHealth } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
 import { apiForBot, type TelegramApiFactory } from './bot-api-factory.js';
-import type { TelegramRepository } from './telegram.repository.js';
+import type { BotWithNames, TelegramRepository } from './telegram.repository.js';
 import { enqueueTelegramBotChanged } from './telegram-events.js';
 import { TelegramFailure } from './telegram-failure.js';
 import { type TelegramViewContext, toTelegramBot, webhookUrlFor } from './telegram-view.js';
@@ -70,13 +74,11 @@ export class TelegramBotsService {
   }
 
   async list(tx: DbTransaction): Promise<TelegramBotList> {
-    return {
-      bots: (await this.#repository.list(tx)).map((row) => toTelegramBot(row, this.#view)),
-    };
+    return { bots: (await this.#repository.list(tx)).map((row) => this.#toView(row)) };
   }
 
   async get(tx: DbTransaction, id: string): Promise<TelegramBot> {
-    return toTelegramBot(await this.#require(tx, id), this.#view);
+    return this.#toView(await this.#require(tx, id));
   }
 
   async create(context: TicketingContext, request: TelegramBotCreateRequest): Promise<TelegramBot> {
@@ -155,14 +157,22 @@ export class TelegramBotsService {
     const { bot } = await this.#require(tx, id);
     try {
       const me = await apiForBot(bot, this.#keyring, this.#api).getMe();
-      return { ok: true, username: me.username, telegramId: me.id };
+      return { ok: true, username: me.username, name: me.name, telegramId: me.id };
     } catch (error) {
-      const failure = toTelegramFailure(error);
-      return {
-        ok: false,
-        kind: failure.kind === 'connect' ? 'connect' : 'token',
-        detail: failure.detail,
-      };
+      return testFailure(toTelegramFailure(error));
+    }
+  }
+
+  /**
+   * "Test" in the Add bot dialog: `getMe` with a typed token, before anything
+   * is stored. Writes nothing and never repeats the token in its answer.
+   */
+  async testToken(token: string): Promise<TelegramTestResult> {
+    try {
+      const me = await this.#api(token).getMe();
+      return { ok: true, username: me.username, name: me.name, telegramId: me.id };
+    } catch (error) {
+      return testFailure(toTelegramFailure(error, token));
     }
   }
 
@@ -192,6 +202,16 @@ export class TelegramBotsService {
   /** The health panel: the row's facts, and `getWebhookInfo` when Telegram answers. */
   async status(tx: DbTransaction, id: string): Promise<TelegramBotStatus> {
     const { bot } = await this.#require(tx, id);
+    const facts = await this.#repository.activity(
+      tx,
+      id,
+      new Date(this.#now().getTime() - FAILED_SENDS_WINDOW_MS),
+    );
+    const activity = {
+      lastReplyAt: facts.lastReplyAt?.toISOString() ?? null,
+      failedSends24h: facts.failedSends,
+      openTickets: facts.openTickets,
+    };
     const health = {
       state: telegramBotHealth(bot),
       lastUpdateAt: bot.lastUpdateAt?.toISOString() ?? null,
@@ -211,9 +231,16 @@ export class TelegramBotsService {
           lastErrorMessage: info.lastErrorMessage,
         },
         webhookError: null,
+        activity,
       };
     } catch (error) {
-      return { health, mode, webhook: null, webhookError: toTelegramFailure(error).detail };
+      return {
+        health,
+        mode,
+        webhook: null,
+        webhookError: toTelegramFailure(error).detail,
+        activity,
+      };
     }
   }
 
@@ -229,6 +256,10 @@ export class TelegramBotsService {
         failure.kind === 'connect' ? 'telegram-unreachable' : 'token-invalid',
       );
     }
+  }
+
+  #toView(row: BotWithNames): TelegramBot {
+    return toTelegramBot(row, this.#view, decryptSecret(row.bot.token, this.#keyring));
   }
 
   #common(request: TelegramBotCreateRequest | TelegramBotUpdateRequest) {
@@ -282,6 +313,15 @@ export class TelegramBotsService {
     });
   }
 }
+
+/** "Failed sends, 24 h" on the Activity card. */
+const FAILED_SENDS_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+const testFailure = (failure: TelegramApiFailure): TelegramTestResult => ({
+  ok: false,
+  kind: failure.kind === 'connect' ? 'connect' : 'token',
+  detail: failure.detail,
+});
 
 const blankToNull = (value: string | null): string | null =>
   value === null || value === '' ? null : value;

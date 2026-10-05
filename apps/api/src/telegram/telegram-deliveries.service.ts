@@ -1,5 +1,5 @@
 import { type DbTransaction, tickets } from '@helpdock/db';
-import type { TelegramDeliveryList } from '@helpdock/schemas';
+import type { TelegramDeliveryList, TelegramTicketContextResponse } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { OutboundTelegramService } from './outbound-telegram.service.js';
@@ -26,6 +26,31 @@ export class TelegramDeliveriesService {
     return { items: rows.map(toTelegramDelivery) };
   }
 
+  /**
+   * The chat the thread is with and whether each reply reached it, in one
+   * read for the ticket view. A ticket no chat belongs to answers a null
+   * context, so the view draws nothing Telegram for it.
+   */
+  async ticketContext(tx: DbTransaction, ticketId: string): Promise<TelegramTicketContextResponse> {
+    const ticket = await requireTicket(tx, ticketId);
+    const found = await this.#repository.ticketContext(tx, ticket);
+    const { items } = await this.list(tx, ticketId);
+    return {
+      context:
+        found === undefined
+          ? null
+          : {
+              bot: { id: found.chat.botId, username: found.botUsername },
+              chatId: found.chat.chatId,
+              username: found.chat.username,
+              name: found.name,
+              locale: found.locale,
+              languageChosenAt: found.chat.languageChosenAt?.toISOString() ?? null,
+            },
+      deliveries: items,
+    };
+  }
+
   /** Puts a failed reply back in the queue; one that is queued or sent is left alone. */
   async retry(
     tx: DbTransaction,
@@ -42,13 +67,18 @@ export class TelegramDeliveriesService {
   }
 }
 
-const requireTicket = async (tx: DbTransaction, ticketId: string): Promise<void> => {
+const requireTicket = async (
+  tx: DbTransaction,
+  ticketId: string,
+): Promise<{ id: string; contactId: string | null }> => {
   const rows = await tx
-    .select({ id: tickets.id })
+    .select({ id: tickets.id, contactId: tickets.contactId })
     .from(tickets)
     .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
     .limit(1);
-  if (rows.length === 0) {
+  const ticket = rows[0];
+  if (ticket === undefined) {
     throw new NotFoundException('No such ticket');
   }
+  return ticket;
 };

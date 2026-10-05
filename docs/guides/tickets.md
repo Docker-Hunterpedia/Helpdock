@@ -1371,7 +1371,9 @@ pnpm --filter @helpdock/api build
 pnpm --filter @helpdock/api perf:tickets
 ```
 
-`apps/api/src/testing/perf/`, run by `apps/api/vitest.perf.config.ts`:
+`apps/api/src/testing/perf/`, run by `apps/api/vitest.perf.config.ts`. The
+help center and realtime gates of M9-03 run on the same harness
+([performance](performance.md)).
 
 1. **Dataset** (`dataset.ts`): five brands. The measured one has 50 000
    tickets, about 200 000 messages and 20 000 contacts, the other four 10 000

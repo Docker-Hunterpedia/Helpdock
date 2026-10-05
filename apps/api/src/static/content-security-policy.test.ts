@@ -59,4 +59,10 @@ describe('adminContentSecurityPolicy', () => {
       "media-src 'self' https://helpdock.s3.example.com;",
     );
   });
+
+  it('lets the browser PUT uploads to the bucket and show its images (M1-10)', () => {
+    const withBucket = adminContentSecurityPolicy('', 'https://helpdock.s3.example.com');
+    expect(withBucket).toContain("connect-src 'self' https://helpdock.s3.example.com;");
+    expect(withBucket).toContain("img-src 'self' data: https://helpdock.s3.example.com;");
+  });
 });

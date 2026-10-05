@@ -62,6 +62,7 @@ describe('the settings registry', () => {
       'push.vapidPrivateKey',
       'embedding.apiKey',
       'ai.providers',
+      'transcription.apiKey',
     ]);
   });
 });

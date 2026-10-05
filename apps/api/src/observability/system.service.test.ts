@@ -6,7 +6,6 @@ import { RequestContext, runInRequestContext } from '../context/request-context.
 import { NoAiUsage } from '../reports/ai-usage.js';
 import type { ReadinessService } from '../runtime/readiness.service.js';
 import type { BootFacts } from './boot-facts.js';
-import type { ChannelStatusSource } from './channel-status.js';
 import type { QueueRegistry } from './queues.js';
 import type { StorageUsageRecord, StorageUsageStore } from './storage-usage.js';
 import { SystemService } from './system.service.js';
@@ -53,16 +52,6 @@ const fakeDb = (rows: Record<string, unknown>[]): Db =>
 const fakeStorage = (readings: readonly StorageUsageRecord[]): StorageUsageStore =>
   ({ all: async () => readings }) as unknown as StorageUsageStore;
 
-const MAILBOX: ChannelStatus = {
-  id: '0192c3f0-1a2b-7c3d-8e4f-0000000000c1',
-  name: 'support@acme.example',
-  brandName: 'Acme',
-  kind: 'email',
-  status: 'error',
-  detail: 'failing',
-  checkedAt: '2026-10-05T08:00:00.000Z',
-};
-
 const fakeRedis = (relay: string | null) =>
   ({
     info: async (section: string) =>
@@ -95,15 +84,24 @@ const fakeQueues = (names: readonly string[]): QueueRegistry =>
 
 const QUEUE_NAMES = ['inbound', 'outbound', 'sla', 'rules', 'ai', 'knowledge', 'media'];
 
+const CHANNEL: ChannelStatus = {
+  id: '01924f00-0000-7000-8000-0000000000c1',
+  name: '@acme_support_bot',
+  kind: 'telegram',
+  status: 'ok',
+  detail: 'healthy',
+  checkedAt: '2026-09-19T10:00:00.000Z',
+};
+
 const serviceWith = ({
   relay = null,
+  channels = async () => [CHANNEL],
   rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2 }],
-  channels = [],
   readings = [],
 }: {
   relay?: string | null;
+  channels?: () => Promise<readonly ChannelStatus[]>;
   rows?: Record<string, unknown>[];
-  channels?: readonly ChannelStatusSource[];
   readings?: readonly StorageUsageRecord[];
 } = {}) =>
   new SystemService(
@@ -184,22 +182,12 @@ describe('SystemService.status', () => {
 
     expect(status.storage).toEqual({ configured: false });
     expect(status.aiSpend).toEqual({ configured: false });
-    expect(status.channels).toEqual([]);
   });
 
-  it("lists every source's channels and leaves out a source that failed", async () => {
-    const channels: ChannelStatusSource[] = [
-      { statuses: async () => [MAILBOX] },
-      {
-        statuses: async () => {
-          throw new Error('the bot API is down');
-        },
-      },
-    ];
+  it('lists every channel the reader found (M2, M6)', async () => {
+    const status = await inRequest(() => serviceWith().status());
 
-    const status = await inRequest(() => serviceWith({ channels }).status());
-
-    expect(status.channels).toEqual([MAILBOX]);
+    expect(status.channels).toEqual([CHANNEL]);
   });
 
   it("reports storage from the worker's readings, per brand, once there are any", async () => {
@@ -247,7 +235,9 @@ describe('SystemService.status', () => {
         },
       } as unknown as QueueRegistry,
       BOOT_FACTS,
-      [],
+      async () => {
+        throw new Error('no connection');
+      },
       {
         all: async () => {
           throw new Error('redis went away');

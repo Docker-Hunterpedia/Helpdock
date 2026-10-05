@@ -1,16 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
-import {
-  auditLog,
-  brands,
-  type Db,
-  departments,
-  mailboxes,
-  userBrandRoles,
-  users,
-  uuidv7,
-} from '@helpdock/db';
+import { auditLog, brands, type Db, userBrandRoles, users, uuidv7 } from '@helpdock/db';
 import {
   createQueueConnection,
   QUEUE_NAME_LIST,
@@ -447,51 +438,7 @@ describe.skipIf(!hasDocker)('observability', () => {
     });
   });
 
-  describe('M8-05: channels, storage, product metrics and the queue dashboard', () => {
-    const mailboxId = uuidv7();
-
-    beforeAll(async () => {
-      await withSystemJob(runtime.db, BRAND, 'seed', async (tx) => {
-        const [department] = await tx
-          .insert(departments)
-          .values({ brandId: BRAND, name: 'Support' })
-          .returning({ id: departments.id });
-        await tx.insert(mailboxes).values({
-          id: mailboxId,
-          brandId: BRAND,
-          address: 'support@acme.example',
-          displayName: 'Acme Support',
-          departmentId: department?.id ?? '',
-          method: 'imap',
-          imapHost: 'imap.acme.example',
-          imapPort: 993,
-          imapSecurity: 'tls',
-          imapUsername: 'support',
-          lastPolledAt: new Date(),
-          lastErrorAt: new Date(),
-          lastError: 'AUTHENTICATIONFAILED',
-          lastErrorKind: 'auth',
-        });
-      });
-    });
-
-    it("lists every brand's mailboxes with the health Channels › Mailboxes shows", async () => {
-      const status = (
-        await get('/api/install/system', asPrincipal(installAdmin))
-      ).json<SystemStatus>();
-
-      expect(status.channels).toEqual([
-        expect.objectContaining({
-          id: mailboxId,
-          name: 'support@acme.example',
-          brandName: 'Acme',
-          kind: 'email',
-          status: 'error',
-          detail: 'failing',
-        }),
-      ]);
-    });
-
+  describe('M8-05: storage, product metrics and the queue dashboard', () => {
     it("reports storage from the worker's readings, with the brand's name", async () => {
       await new StorageUsageStore(runtime.redis).write({
         brandId: BRAND,

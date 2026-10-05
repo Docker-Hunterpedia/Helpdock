@@ -182,6 +182,8 @@ export interface CreateApiAppOptions {
   readonly objectStorage?: AppModuleOptions['objectStorage'];
   /** M2's IMAP connection and image fetcher, for suites. */
   readonly channels?: AppModuleOptions['channels'];
+  /** M6's Bot API, for suites. */
+  readonly telegram?: AppModuleOptions['telegram'];
   /** M4's siteverify call and SSE timings, for suites. */
   readonly widget?: AppModuleOptions['widget'];
   /** M4-09's siteverify call, for suites. */
@@ -194,6 +196,7 @@ export const createApiApp = async ({
   brandResolver,
   objectStorage,
   channels,
+  telegram,
   widget,
   webForm,
 }: CreateApiAppOptions): Promise<ApiApp> => {
@@ -223,6 +226,7 @@ export const createApiApp = async ({
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(channels === undefined ? {} : { channels }),
+      ...(telegram === undefined ? {} : { telegram }),
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
@@ -277,7 +281,7 @@ export const createApiApp = async ({
   registerFormBodies(app.getHttpAdapter().getInstance(), [INBOUND_PARSE_ROUTE, WEB_FORM_ROUTE]);
 
   // M8-05: Bull Board brings its own router, so it is a Fastify plugin behind
-  // its own install-admin session check (`queue-board.ts`, ADR 0016).
+  // its own install-admin session check (`queue-board.ts`, ADR 0017).
   await registerQueueBoard(app.getHttpAdapter().getInstance(), {
     access: app.get(QueueBoardAccess),
     queues: app.get<QueueRegistry>(QUEUE_REGISTRY).queues(),

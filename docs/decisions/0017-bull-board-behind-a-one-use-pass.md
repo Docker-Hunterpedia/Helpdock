@@ -1,4 +1,4 @@
-# 0016 Mount Bull Board as a Fastify plugin, opened with a one-use pass
+# 0017 Mount Bull Board as a Fastify plugin, opened with a one-use pass
 
 Status: accepted
 Date: 2026-10-05

@@ -228,7 +228,7 @@ anything a stranger could not learn by trying the port.
 | Postgres | Server version, migrations applied at boot, and the runtime role — which must be `helpdock_app` with RLS forced (DOMAIN-RULES §1.5) |
 | Redis | Version, latency, and whether an AOF rewrite is running (not a failure, but it costs latency) |
 | Queues | The first few, with waiting, active, failed, delayed and the age of the oldest waiting job; "All queues" fetches the rest. A failed count is a dead-letter count. |
-| Channels | Every active brand's mailboxes, with the brand's name and the health Channels › Mailboxes shows: healthy (ok), behind or waiting (warning), failing (error). Telegram bots join the list with M6. |
+| Channels | Every brand's mailboxes and Telegram bots, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red ([email](email.md), [Telegram](telegram.md)) |
 | Storage | The bucket's size in total and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. "Not configured" until the worker has measured once. |
 | AI spend | "Not configured" until M7 records LLM calls. A subsystem that is not measured says so rather than showing a zero. |
 | Audit log | The most recent install-scope entries |
@@ -242,7 +242,7 @@ draws "Not allowed"; the nav item is not offered to them in the first place.
 
 ### Where the numbers come from
 
-Four are worth knowing:
+Three are worth knowing:
 
 - **The outbox backlog is reported by the relay, not queried by the api.** An
   install-scope request holds only the install sentinel in `app.brand_ids`, so
@@ -261,9 +261,6 @@ Four are worth knowing:
   is more than six hours old and keeps it in the Redis hash
   `hd:storage:usage`; the page shows the last readings. Losing Redis loses the
   readings until the next run.
-- **Channels are read across brands in one system transaction** over every
-  active brand's id, the way an all-brands path must name them (ARCHITECTURE
-  §6). A brand being deleted is not listed.
 
 ### The queue dashboard
 
@@ -271,7 +268,7 @@ Four are worth knowing:
 `/api/install/queues/board/`: every queue's jobs, their
 payloads and errors, with retry, promote and clean ([ADR
 0004](../decisions/0004-bull-board-for-queues.md), [ADR
-0016](../decisions/0016-bull-board-behind-a-one-use-pass.md)). It shows **every
+0017](../decisions/0017-bull-board-behind-a-one-use-pass.md)). It shows **every
 brand's jobs**, because queues are install-wide; that is why only an install
 admin may open it.
 

@@ -36,7 +36,7 @@ Copied from the PRD, ticked as they are met.
 
 ### M8-04 Reports
 
-- **Rollups** (migration `0036_report_rollups`): `report_daily` and
+- **Rollups** (migration `0037_report_rollups`): `report_daily` and
   `report_agent_daily` are department-scoped tenant tables, so a Team Leader's
   report is narrowed by the same policy as their ticket list;
   `report_search_daily` and `report_help_center_daily` are brand-scoped. All
@@ -77,7 +77,7 @@ Copied from the PRD, ticked as they are met.
 - **Bull Board** at `/api/install/queues/board/`, reached through
   `POST /api/install/system/queue-board` (a one-use pass) and an `hd_queue_board`
   session that re-checks the admin's refresh family and install-admin status on
-  every request ([ADR 0016](../decisions/0016-bull-board-behind-a-one-use-pass.md),
+  every request ([ADR 0017](../decisions/0017-bull-board-behind-a-one-use-pass.md),
   amending ADR 0004). New dependencies `@bull-board/api` and
   `@bull-board/fastify` 9.10.1.
 - The admin screen's new cards (per-brand storage, product metrics, the board

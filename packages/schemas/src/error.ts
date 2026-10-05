@@ -6,6 +6,7 @@ import { channelsRefusalSchema } from './email-inbound.js';
 import { hcRefusalSchema } from './help-center.js';
 import { setupRefusalSchema } from './install.js';
 import { staffRefusalSchema } from './staff.js';
+import { telegramRefusalSchema } from './telegram.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
 import { ticketingRefusalSchema } from './ticketing.js';
 import { widgetErrorCodeSchema } from './widget-protocol.js';
@@ -89,6 +90,8 @@ export const errorResponseSchema = z.object({
     widget: z.object({ reason: widgetErrorCodeSchema }).optional(),
     /** Only on a refused help center change (M5-01). */
     helpCenter: z.object({ reason: hcRefusalSchema }).optional(),
+    /** Only on a refused Telegram bot action (M6-05). */
+    telegram: z.object({ reason: telegramRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

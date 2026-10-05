@@ -2,6 +2,7 @@ import { auditLog, brands, type Db } from '@helpdock/db';
 import { readRelayStatus } from '@helpdock/jobs';
 import type {
   AuditEntry,
+  ChannelStatus,
   ProductMetrics,
   SystemQueuePage,
   SystemQueuesQuery,
@@ -16,11 +17,6 @@ import { ReadinessService } from '../runtime/readiness.service.js';
 import { DB, REDIS } from '../runtime/tokens.js';
 import type { BootFacts } from './boot-facts.js';
 import { buildInfo } from './build-info.js';
-import {
-  CHANNEL_STATUS_SOURCES,
-  type ChannelStatusSource,
-  readChannelStatuses,
-} from './channel-status.js';
 import { ProductMetricsService } from './product-metrics.js';
 import type { QueueRegistry } from './queues.js';
 import type { StorageUsageStore } from './storage-usage.js';
@@ -34,7 +30,10 @@ import {
   relayView,
   storageView,
 } from './system-view.js';
-import { BOOT_FACTS, QUEUE_REGISTRY, STORAGE_USAGE } from './tokens.js';
+import { BOOT_FACTS, CHANNEL_STATUS, QUEUE_REGISTRY, STORAGE_USAGE } from './tokens.js';
+
+/** Every brand's mailboxes and bots with their health (`channels/channel-status.ts`). */
+export type ChannelStatusReader = () => Promise<readonly ChannelStatus[]>;
 
 /**
  * Everything the System page shows, in one read (REQUIREMENTS §4.10).
@@ -54,9 +53,9 @@ import { BOOT_FACTS, QUEUE_REGISTRY, STORAGE_USAGE } from './tokens.js';
  * `{ configured: false }` rather than zeroes, because a zero on a status page
  * is a measurement and this would be a guess.
  *
- * **Channels and storage are read across brands** (M8-05): mailboxes in a
- * system transaction over every active brand (`channel-status.ts`), and
- * storage from the readings the worker keeps in Redis (`storage-usage.ts`).
+ * **Storage is read from the readings the worker keeps in Redis** (M8-05,
+ * `storage-usage.ts`): measuring the bucket is not something a page load
+ * should wait on.
  */
 
 /** The queues the summary card lists before "All queues" (DESIGN artboard `Admin/System`). */
@@ -72,7 +71,7 @@ export class SystemService {
   readonly #readiness: ReadinessService;
   readonly #queues: QueueRegistry;
   readonly #boot: BootFacts;
-  readonly #channels: readonly ChannelStatusSource[];
+  readonly #channels: ChannelStatusReader;
   readonly #storage: StorageUsageStore;
   readonly #ai: AiUsageSource;
 
@@ -82,7 +81,7 @@ export class SystemService {
     @Inject(ReadinessService) readiness: ReadinessService,
     @Inject(QUEUE_REGISTRY) queues: QueueRegistry,
     @Inject(BOOT_FACTS) boot: BootFacts,
-    @Inject(CHANNEL_STATUS_SOURCES) channels: readonly ChannelStatusSource[],
+    @Inject(CHANNEL_STATUS) channels: ChannelStatusReader,
     @Inject(STORAGE_USAGE) storage: StorageUsageStore,
     @Inject(AI_USAGE_SOURCE) ai: AiUsageSource,
   ) {
@@ -110,7 +109,7 @@ export class SystemService {
         readRedisFacts(this.#redis),
         readRelayStatus(this.#redis).catch(() => null),
         this.#queues.counts().catch(() => []),
-        readChannelStatuses(this.#channels, this.#db, now),
+        this.#channels().catch(() => []),
         this.#storageReading(),
         this.#ai.installSpend(this.#db).catch(() => ({ configured: false as const })),
       ]);
@@ -148,7 +147,8 @@ export class SystemService {
       },
       relay: relayView(relayStatus),
       queues: queuesView(queueCounts, SUMMARY_QUEUE_LIMIT),
-      channels,
+      // M2's mailboxes and M6's bots, each with the health its own list shows.
+      channels: [...channels],
       storage,
       aiSpend,
       audit: [...audit],

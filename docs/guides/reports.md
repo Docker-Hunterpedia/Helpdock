@@ -92,7 +92,7 @@ rebuilds hourly, at seven minutes past, for every active brand:
 
 The rollup tables are `report_daily` and `report_agent_daily`
 (department-scoped), and `report_search_daily` and `report_help_center_daily`
-(brand-scoped), from migration `0036_report_rollups`.
+(brand-scoped), from migration `0037_report_rollups`.
 
 ## API
 

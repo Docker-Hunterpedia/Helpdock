@@ -377,3 +377,13 @@ export const hcMediaStatusEnum = pgEnum('hc_media_status', [
   'ready',
   'rejected',
 ]);
+
+/**
+ * Where an agent's reply to a Telegram chat is (M6-02). `failed` is a reply
+ * the last attempt could not deliver; an agent puts it back with Retry.
+ */
+export const telegramDeliveryStatusEnum = pgEnum('telegram_delivery_status', [
+  'queued',
+  'sent',
+  'failed',
+]);

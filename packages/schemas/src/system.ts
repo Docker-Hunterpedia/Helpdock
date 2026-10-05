@@ -120,15 +120,12 @@ export const systemRelaySchema = z.discriminatedUnion('reporting', [
 export type SystemRelay = z.infer<typeof systemRelaySchema>;
 
 /**
- * A channel's connection health, for every active brand. M8-05 fills it from
- * the mailboxes (M2); M6 adds Telegram bots through the same source list
- * (`apps/api/src/observability/channel-status.ts`).
+ * A channel's connection health, for every brand: its mailboxes (M2) and
+ * Telegram bots (M6), read by `apps/api/src/channels/channel-status.ts`.
  */
 export const channelStatusSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1),
-  /** The brand the channel belongs to, since the page lists every brand's. */
-  brandName: z.string().optional(),
   kind: z.enum(['email', 'telegram', 'widget', 'form', 'api']),
   status: componentStatusSchema,
   /** One short line, already resolved to a catalog key by the page. Never a credential. */
@@ -263,7 +260,7 @@ export const productMetricsSchema = z.object({
 export type ProductMetrics = z.infer<typeof productMetricsSchema>;
 
 /**
- * The one-time address that opens Bull Board in a new tab (M8-05, ADR 0016).
+ * The one-time address that opens Bull Board in a new tab (M8-05, ADR 0017).
  * Spent on first use and good for a minute.
  */
 export const queueBoardPassSchema = z.object({ url: z.string().startsWith('/') });

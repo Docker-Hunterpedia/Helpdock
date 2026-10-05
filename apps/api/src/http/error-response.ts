@@ -11,6 +11,7 @@ import type {
   IdentityProblem,
   SetupRefusal,
   StaffRefusal,
+  TelegramRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
   WidgetErrorCode,
@@ -26,6 +27,7 @@ import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
+import { TelegramFailure } from '../telegram/telegram-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
@@ -61,6 +63,8 @@ export interface MappedError {
   readonly channels?: ChannelsRefusal;
   /** Only on a refused custom-domain action; see `domains/domains-failure.ts`. */
   readonly domains?: DomainsRefusal;
+  /** Only on a refused Telegram bot action; see `telegram/telegram-failure.ts`. */
+  readonly telegram?: TelegramRefusal;
   /** Only on a refused widget request; see `widget/widget-failure.ts`. */
   readonly widget?: WidgetErrorCode;
   /** Only on a refused help center change; see `help-center/help-center-failure.ts`. */
@@ -190,6 +194,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M6-05. Before the generic branch, for the reason the ones above give.
+  if (error instanceof TelegramFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      telegram: error.reason,
+      unexpected: false,
+    };
+  }
+
   // M5-07. Before the generic branch, for the reason the ones above give.
   if (error instanceof DomainsFailure) {
     return {
@@ -272,6 +287,7 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
     ...(mapped.domains === undefined ? {} : { domains: { reason: mapped.domains } }),
+    ...(mapped.telegram === undefined ? {} : { telegram: { reason: mapped.telegram } }),
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
     ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
   },

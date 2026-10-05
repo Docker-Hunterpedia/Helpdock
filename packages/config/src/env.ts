@@ -248,6 +248,19 @@ export const envSchema = z.object({
     .describe(
       'optional; the hostname a brand points its help center domain at with a CNAME record, for example edge.example.com. Defaults to the host of APP_URL (M5-07)',
     ),
+  // Optional rather than defaulted, as CLAMAV_HOST is: unset means off, and the
+  // type does not oblige every caller that builds an `Env` by hand to name it.
+  TELEGRAM_POLLING: z
+    .stringbool()
+    .optional()
+    .describe(
+      'optional; must be "true" or "false", default false. "true" makes the worker long-poll every Telegram bot instead of waiting for webhooks, for development on a machine Telegram cannot reach (M6-01)',
+    ),
+  TELEGRAM_API_ROOT: urlSchema('http:', 'https:')
+    .optional()
+    .describe(
+      'optional; the Bot API server, default https://api.telegram.org. Set it only for a self-hosted Bot API server',
+    ),
 });
 
 export type Env = Readonly<z.infer<typeof envSchema>>;

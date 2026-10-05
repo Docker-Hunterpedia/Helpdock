@@ -14,6 +14,7 @@ import arRules from '../locales/ar/rules.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
 import arSystem from '../locales/ar/system.json' with { type: 'json' };
+import arTelegram from '../locales/ar/telegram.json' with { type: 'json' };
 import arTicket from '../locales/ar/ticket.json' with { type: 'json' };
 import arTicketing from '../locales/ar/ticketing.json' with { type: 'json' };
 import arTickets from '../locales/ar/tickets.json' with { type: 'json' };
@@ -36,6 +37,7 @@ import enRules from '../locales/en/rules.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
 import enSystem from '../locales/en/system.json' with { type: 'json' };
+import enTelegram from '../locales/en/telegram.json' with { type: 'json' };
 import enTicket from '../locales/en/ticket.json' with { type: 'json' };
 import enTicketing from '../locales/en/ticketing.json' with { type: 'json' };
 import enTickets from '../locales/en/tickets.json' with { type: 'json' };
@@ -84,6 +86,9 @@ export const NAMESPACES = [
   'helpCenter',
   // The published help center (M5-03 to M5-06): read by visitors and staff on the brand's host.
   'hcSite',
+  // M6-04: what a Telegram bot says to a customer, and the word a shared
+  // location is filed under. Read by the customer, in their language.
+  'telegram',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -113,6 +118,7 @@ export const resources = {
     webform: enWebform,
     helpCenter: enHelpCenter,
     hcSite: enHcSite,
+    telegram: enTelegram,
   },
   ar: {
     common: arCommon,
@@ -137,6 +143,7 @@ export const resources = {
     webform: arWebform,
     helpCenter: arHelpCenter,
     hcSite: arHcSite,
+    telegram: arTelegram,
   },
 };
 

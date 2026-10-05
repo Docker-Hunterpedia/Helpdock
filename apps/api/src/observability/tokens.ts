@@ -15,3 +15,5 @@ export const BOOT_FACTS = Symbol('helpdock.boot-facts');
 export const STORAGE_USAGE = Symbol('helpdock.storage-usage');
 /** The session keys, for reading which browser session asked for the queue dashboard. */
 export const OBSERVABILITY_SIGNING_KEYS = Symbol('helpdock.observability-signing-keys');
+/** M2 and M6: what the Channels card lists, read across every brand. */
+export const CHANNEL_STATUS = Symbol('helpdock.channel-status');

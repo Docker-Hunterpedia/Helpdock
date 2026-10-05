@@ -161,6 +161,13 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'hc_search_log', departmentScoped: false },
   { name: 'hc_article_views', departmentScoped: false },
   { name: 'hc_article_feedback', departmentScoped: false },
+  // M6-01, M6-02. A bot is configuration, like `mailboxes`; a chat names the
+  // ticket it continues but holds none of it, like `notifications`. A reply's
+  // delivery is a child of its ticket and follows the ticket's department, as
+  // `email_deliveries` does.
+  { name: 'telegram_bots', departmentScoped: false },
+  { name: 'telegram_chats', departmentScoped: false },
+  { name: 'telegram_deliveries', departmentScoped: true },
   // M8-04. The ticket rollups carry the department they describe, so a Team
   // Leader's report is narrowed by the same policy as their ticket list. The
   // help center rollups are the brand's, like the search log they summarise.

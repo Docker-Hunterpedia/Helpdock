@@ -13,15 +13,11 @@ import {
 import type { Redis } from 'ioredis';
 import { RefreshStore } from '../auth/session/refresh-store.js';
 import type { SigningKeys } from '../auth/session/signing-keys.js';
+import { readChannelStatuses } from '../channels/channel-status.js';
 import type { Logger } from '../logging/logger.js';
 import { ReadinessService } from '../runtime/readiness.service.js';
 import { DB, ENV, REDIS } from '../runtime/tokens.js';
 import type { BootFacts } from './boot-facts.js';
-import {
-  CHANNEL_STATUS_SOURCES,
-  type ChannelStatusSource,
-  MailboxChannelStatus,
-} from './channel-status.js';
 import { MetricsController } from './metrics.controller.js';
 import { createMetrics, type Metrics } from './metrics.js';
 import {
@@ -35,11 +31,12 @@ import { QueueBoardAccess } from './queue-board.js';
 import { QueueRegistry } from './queues.js';
 import { StorageUsageStore } from './storage-usage.js';
 import { SystemController } from './system.controller.js';
-import { SystemService } from './system.service.js';
+import { type ChannelStatusReader, SystemService } from './system.service.js';
 import { readPostgresFacts } from './system-facts.js';
 import { checkReached } from './system-view.js';
 import {
   BOOT_FACTS,
+  CHANNEL_STATUS,
   METRICS,
   OBSERVABILITY_LOGGER,
   OBSERVABILITY_SIGNING_KEYS,
@@ -155,12 +152,15 @@ export class ObservabilityModule {
           inject: [ENV],
           useFactory: (env: Env) => new QueueRegistry(env.REDIS_URL),
         },
-        ReadinessService,
-        // M8-05: the channel list's sources. M6 adds its Telegram bots here.
         {
-          provide: CHANNEL_STATUS_SOURCES,
-          useFactory: (): readonly ChannelStatusSource[] => [new MailboxChannelStatus()],
+          provide: CHANNEL_STATUS,
+          inject: [DB],
+          useFactory:
+            (db: Db): ChannelStatusReader =>
+            () =>
+              readChannelStatuses(db, new Date()),
         },
+        ReadinessService,
         {
           provide: STORAGE_USAGE,
           inject: [REDIS],

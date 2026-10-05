@@ -10,7 +10,7 @@ import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
 /**
- * Bull Board, embedded (M8-05, ADR 0004 and its amendment in ADR 0016).
+ * Bull Board, embedded (M8-05, ADR 0004 and its amendment in ADR 0017).
  *
  * Bull Board is a page of its own, opened in a new tab, so it cannot carry the
  * admin's bearer token — that lives in the admin's memory. It is reached the

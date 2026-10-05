@@ -20,7 +20,12 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createWorker, type JobHandler } from './consumer.js';
-import { createOutboxEventHandler, SETTINGS_CHANGED_EVENT } from './dispatcher.js';
+import {
+  createOutboxDispatcher,
+  createOutboxEventHandler,
+  outboxJobOrderingKeys,
+  SETTINGS_CHANGED_EVENT,
+} from './dispatcher.js';
 import { type OutboxEventPayload, outboxEventJob } from './jobs.js';
 import type { JobLogger } from './logger.js';
 import { enqueueOutbox } from './outbox.js';
@@ -261,5 +266,117 @@ describe.skipIf(!hasDocker)('idempotent consumers', () => {
 
     expect(job.failedReason).toContain('No outbox handler is registered for ticket.replied');
     expect(job.attemptsMade).toBe(outboxEventJob.options.attempts);
+  });
+
+  describe('per-ticket order under concurrency', () => {
+    const TICKETS = [uuidv7(), uuidv7(), uuidv7()];
+    const EVENTS_PER_TICKET = 8;
+
+    interface Run {
+      readonly ticketId: string;
+      readonly n: number;
+      readonly startedAt: number;
+      readonly endedAt: number;
+    }
+
+    /** A subscriber that sleeps a little, as a real one waits on the database, and records when. */
+    const recordingDispatcher = (runs: Run[]) => {
+      const dispatcher = createOutboxDispatcher();
+      dispatcher.register('ticket.updated', async ({ payload }) => {
+        const startedAt = performance.now();
+        await new Promise((resolve) => setTimeout(resolve, 5 + Math.random() * 25));
+        runs.push({
+          ticketId: String(payload.ticketId),
+          n: Number(payload.n),
+          startedAt,
+          endedAt: performance.now(),
+        });
+      });
+      return dispatcher;
+    };
+
+    /** Round-robin across the tickets, so each ticket's events are interleaved with the others'. */
+    const publishInterleaved = async (): Promise<void> => {
+      await withSystem(db, brandId, async (tx) => {
+        for (let n = 0; n < EVENTS_PER_TICKET; n += 1) {
+          for (const ticketId of TICKETS) {
+            await enqueueOutbox(tx, { brandId, event: 'ticket.updated', payload: { ticketId, n } });
+          }
+        }
+      });
+      await runRelayCycle({ db, queue, brandIds: [brandId] });
+    };
+
+    const waitForAll = (runs: Run[]) =>
+      vi.waitFor(
+        () => {
+          expect(runs).toHaveLength(TICKETS.length * EVENTS_PER_TICKET);
+        },
+        { timeout: 30_000, interval: 50 },
+      );
+
+    const overlapsWithinATicket = (runs: readonly Run[]): boolean =>
+      TICKETS.some((ticketId) => {
+        const mine = runs
+          .filter((run) => run.ticketId === ticketId)
+          .sort((a, b) => a.startedAt - b.startedAt);
+        return mine.some(
+          (run, index) => index > 0 && run.startedAt < (mine[index - 1]?.endedAt ?? 0),
+        );
+      });
+
+    const mostAtOnce = (runs: readonly Run[]): number =>
+      Math.max(
+        ...runs.map(
+          (run) =>
+            runs.filter((other) => other.startedAt < run.endedAt && other.endedAt > run.startedAt)
+              .length,
+        ),
+      );
+
+    it('runs one ticket’s events one at a time, in the order they were written', async () => {
+      const runs: Run[] = [];
+      workers.push(
+        createWorker(outboxEventJob, createOutboxEventHandler(recordingDispatcher(runs)), {
+          redis: connection,
+          db,
+          log: recordingLogger(),
+          concurrency: 8,
+          serialize: outboxJobOrderingKeys,
+        }),
+      );
+
+      await publishInterleaved();
+      await waitForAll(runs);
+
+      for (const ticketId of TICKETS) {
+        expect(runs.filter((run) => run.ticketId === ticketId).map((run) => run.n)).toEqual(
+          Array.from({ length: EVENTS_PER_TICKET }, (_unused, n) => n),
+        );
+      }
+      expect(overlapsWithinATicket(runs)).toBe(false);
+      // …and different tickets did run side by side, which is the point.
+      expect(mostAtOnce(runs)).toBeGreaterThan(1);
+    });
+
+    it('never runs two events of one ticket at once across two worker processes', async () => {
+      const runs: Run[] = [];
+      for (let replica = 0; replica < 2; replica += 1) {
+        workers.push(
+          createWorker(outboxEventJob, createOutboxEventHandler(recordingDispatcher(runs)), {
+            redis: connection,
+            db,
+            log: recordingLogger(),
+            concurrency: 4,
+            serialize: outboxJobOrderingKeys,
+          }),
+        );
+      }
+
+      await publishInterleaved();
+      await waitForAll(runs);
+
+      expect(overlapsWithinATicket(runs)).toBe(false);
+    });
   });
 });

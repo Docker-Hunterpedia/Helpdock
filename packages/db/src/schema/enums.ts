@@ -1,5 +1,17 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
 
+/**
+ * Where an outbound webhook delivery stands (M8-03). `pending` until an
+ * attempt succeeds or the retries run out; `skipped` when the endpoint was
+ * removed or switched off before it could be sent.
+ */
+export const webhookDeliveryStatusEnum = pgEnum('webhook_delivery_status', [
+  'pending',
+  'succeeded',
+  'failed',
+  'skipped',
+]);
+
 /** Interface and content languages Helpdock ships with (REQUIREMENTS §3). */
 export const localeEnum = pgEnum('locale', ['en', 'ar']);
 
@@ -284,7 +296,16 @@ export const emailDeliveryKindEnum = pgEnum('email_delivery_kind', [
   'out_of_hours',
   // M4-08: a widget conversation sent to the address the visitor typed.
   'transcript',
+  // M8-06: the satisfaction survey sent on close, one per survey.
+  'csat',
 ]);
+
+/**
+ * M8-06. Where a satisfaction answer came from: the rating page a link opens,
+ * the widget's inline card, or a Telegram button. A Telegram tap records the
+ * score alone and leaves the link open for a comment (`Telegram/Chat-EN`).
+ */
+export const csatAnswerChannelEnum = pgEnum('csat_answer_channel', ['link', 'widget', 'telegram']);
 
 /**
  * Where an outbound email is. `failed` is the dead-letter state an Admin sees
@@ -403,6 +424,26 @@ export const knowledgeSyncStatusEnum = pgEnum('knowledge_sync_status', [
   'syncing',
   'ok',
   'failed',
+]);
+
+/**
+ * M7-03. When a source syncs on its own: `automatic` for articles (on
+ * publish) and files (on upload), a daily or weekly run in the brand's zone
+ * for crawls, Notion and Drive, or only when someone presses "Sync now".
+ */
+export const knowledgeSyncScheduleEnum = pgEnum('knowledge_sync_schedule', [
+  'automatic',
+  'daily',
+  'weekly',
+  'manual',
+]);
+
+/** M7-03. A line of a source's sync log: `done` closes a run. */
+export const knowledgeLogLevelEnum = pgEnum('knowledge_log_level', [
+  'info',
+  'warn',
+  'error',
+  'done',
 ]);
 
 /**

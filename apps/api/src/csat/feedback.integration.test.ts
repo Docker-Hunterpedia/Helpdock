@@ -45,6 +45,7 @@ import { registerNotificationHandlers } from '../notifications/notification-even
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { noCsatDelivery } from '../testing/csat-doubles.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { CsatRepository } from './csat.repository.js';
@@ -280,6 +281,8 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
     registerCsatEventHandlers({
       repository: new CsatRepository(),
       tokens: new CsatTokens(createKeyring(envFor())),
+      // Sending the survey is `delivery.integration.test.ts`'s (M8-06).
+      delivery: noCsatDelivery,
     });
     // M3-07: an assignment writes `ticket.assigned`, a note or reply is also
     // the notifications module's, and the worker handles both.

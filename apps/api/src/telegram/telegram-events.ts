@@ -4,6 +4,8 @@ import {
   type OutboxEventHandler,
   registerEventHandler,
   type TelegramSendPayload,
+  telegramCsatNoticeSchema,
+  telegramNoticeKindSchema,
 } from '@helpdock/jobs';
 import { z } from 'zod';
 
@@ -34,9 +36,10 @@ export const telegramReplyEventSchema = z.object({ deliveryId: z.uuid() });
 export const telegramNoticeEventSchema = z.object({
   botId: z.uuid(),
   chatId: z.string().min(1).max(32),
-  notice: z.enum(['welcome', 'language_set']),
+  notice: telegramNoticeKindSchema,
   locale: z.enum(['en', 'ar']),
   callbackQueryId: z.string().min(1).max(128).optional(),
+  csat: telegramCsatNoticeSchema.optional(),
 });
 export type TelegramNoticeEvent = z.infer<typeof telegramNoticeEventSchema>;
 

@@ -13,6 +13,8 @@ import {
   aiBudgetAlerts,
   aiCalls,
   aiSettings,
+  apiIdempotencyKeys,
+  apiKeys,
   assignmentAgents,
   assignmentSkills,
   attachments,
@@ -47,6 +49,7 @@ import {
   knowledgeChunks,
   knowledgeDocuments,
   knowledgeSources,
+  knowledgeSyncLog,
   mailboxes,
   notifications,
   outbox,
@@ -77,6 +80,8 @@ import {
   users,
   views,
   webFormSettings,
+  webhookDeliveries,
+  webhooks,
   widgetSettings,
   widgetVisitors,
   workflowRules,
@@ -142,6 +147,8 @@ const hcArticleId = perBrand();
 const hcVersionId = perBrand();
 const knowledgeSourceId = perBrand();
 const knowledgeDocumentId = perBrand();
+const apiKeyId = perBrand();
+const webhookId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -828,6 +835,64 @@ const fixtures = [
         visibility: 'internal',
         content: 'Refunds are issued within five working days.',
         contentHash: 'sha256-fixture-chunk',
+      }),
+  },
+  // M7-03. A source's sync log, under the brand's source.
+  {
+    name: 'knowledge_sync_log',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(knowledgeSyncLog).values({
+        brandId,
+        sourceId: knowledgeSourceId[brandId] ?? '',
+        runId: knowledgeSourceId[brandId] ?? '',
+        level: 'info',
+        code: 'sync.started',
+      }),
+  },
+  // M8-01, M8-02, M8-03. The key hash is unique across the install, so each
+  // brand's needs its own; the children point at their brand's parent rows.
+  {
+    name: 'api_keys',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(apiKeys).values({
+        id: apiKeyId[brandId] ?? '',
+        brandId,
+        name: 'CRM sync',
+        prefix: 'hd_live_abcd',
+        keyHash: `fixture-${brandId}-${nextNumber()}`,
+        scopes: ['tickets:read'],
+      }),
+  },
+  {
+    name: 'api_idempotency_keys',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(apiIdempotencyKeys).values({
+        brandId,
+        apiKeyId: apiKeyId[brandId] ?? '',
+        key: `request-${nextNumber()}`,
+        requestHash: 'hash',
+      }),
+  },
+  {
+    name: 'webhooks',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(webhooks).values({
+        id: webhookId[brandId] ?? '',
+        brandId,
+        url: 'https://hooks.example.com/helpdock',
+        events: ['ticket.created'],
+        secret: 'v1.fixture.not-a-real-envelope',
+      }),
+  },
+  {
+    name: 'webhook_deliveries',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(webhookDeliveries).values({
+        brandId,
+        webhookId: webhookId[brandId] ?? '',
+        eventId: uuidv7(),
+        event: 'ticket.created',
+        payload: {},
       }),
   },
   // M6-01, M6-02.

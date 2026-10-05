@@ -853,6 +853,125 @@ export const knowledgeReembedJob = defineJob({
 });
 
 export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
+
+export const knowledgeSyncPayloadSchema = z.object({
+  brandId: z.uuid(),
+  sourceId: z.uuid(),
+  /** What started it, for the first line of the sync log. */
+  trigger: z.enum(['upload', 'manual', 'schedule', 'created', 'changed']),
+  /** The staff member who pressed "Sync now" or saved the source. */
+  actorId: z.string().max(100).optional(),
+});
+export type KnowledgeSyncPayload = z.infer<typeof knowledgeSyncPayloadSchema>;
+
+/**
+ * M7-03: reads one source — an uploaded file, a website crawl, Notion pages,
+ * Drive folders — into documents and chunks, removes what the source no
+ * longer has, and embeds the new chunks. Added by the `knowledge.sync_requested`
+ * outbox handler (upload confirmed, "Sync now", source created or changed)
+ * with the outbox row's id, and by the source's own job scheduler for daily
+ * and weekly sources. Not one transaction: a crawl takes minutes, so each
+ * document is written in a short transaction of its own, and a second run
+ * that finds the source already syncing leaves it alone. Idempotent by
+ * content: a document whose hash is unchanged is skipped.
+ */
+export const knowledgeSyncJob = defineJob({
+  name: 'knowledge.sync',
+  queue: QUEUE_NAMES.knowledge,
+  schema: knowledgeSyncPayloadSchema,
+  options: {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The job scheduler that repeats a daily or weekly source's sync. */
+export const knowledgeSyncSchedulerId = (sourceId: string): string =>
+  `knowledge.sync.schedule.${sourceId}`;
+
+export const knowledgeEmbedPayloadSchema = z.object({ brandId: z.uuid() });
+export type KnowledgeEmbedPayload = z.infer<typeof knowledgeEmbedPayloadSchema>;
+
+/**
+ * M7-03: embeds every chunk of one brand that has no vector in the target
+ * model yet — the chunks an article publish just wrote, most often. Added by
+ * the article subscriber after it rewrites an article's chunks, with an id
+ * derived from the outbox row; a second run finds nothing left to embed. A
+ * failure (no embedding model, a provider down) leaves the chunks for the
+ * next run or for `knowledge.reembed`; full-text retrieval finds them meanwhile.
+ */
+export const knowledgeEmbedJob = defineJob({
+  name: 'knowledge.embed',
+  queue: QUEUE_NAMES.knowledge,
+  schema: knowledgeEmbedPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 3_600, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+export const webhookDeliverPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `webhook_deliveries` row: its frozen body, its endpoint, and its log. */
+  deliveryId: z.uuid(),
+});
+
+export type WebhookDeliverPayload = z.infer<typeof webhookDeliverPayloadSchema>;
+
+/** Attempts before a delivery is marked `failed` (M8-03). */
+export const WEBHOOK_DELIVER_ATTEMPTS = 8;
+
+/**
+ * M8-03: one event to one endpoint (ARCHITECTURE §13, `webhooks` queue). The
+ * delivery row is written by the `webhooks` subscriber of the domain event,
+ * beside a `webhook.delivery_requested` outbox row whose handler adds this job
+ * once the row has committed, as `email.send` does.
+ *
+ * Eight attempts, doubling from 30 seconds: the last one is 32 minutes after
+ * the one before it and about an hour after the first, so a receiver that is
+ * down for a deploy or a short outage still gets the event. Idempotent by
+ * delivery: a delivery that already succeeded is not sent again.
+ */
+export const webhookDeliverJob = defineJob({
+  name: 'webhook.deliver',
+  queue: QUEUE_NAMES.webhooks,
+  schema: webhookDeliverPayloadSchema,
+  options: {
+    attempts: WEBHOOK_DELIVER_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
+});
+
+/**
+ * What a bot sends that is not an agent's reply: M6-04's welcome and language
+ * confirmation, and M8-06's survey on close, the thanks after a tap and "This
+ * survey has closed." for a tap that came too late.
+ */
+export const telegramNoticeKindSchema = z.enum([
+  'welcome',
+  'language_set',
+  'csat_survey',
+  'csat_rated',
+  'csat_closed',
+]);
+export type TelegramNoticeKind = z.infer<typeof telegramNoticeKindSchema>;
+
+/** M8-06: the survey a `csat_*` notice is about, and the tap it answers. */
+export const telegramCsatNoticeSchema = z.object({
+  surveyId: z.uuid(),
+  /** The score a `csat_rated` thanks the contact for. */
+  rating: z.int().min(1).max(5).optional(),
+  /** The survey message whose buttons a tap's answer replaces. */
+  messageId: z.string().min(1).max(32).optional(),
+});
+export type TelegramCsatNotice = z.infer<typeof telegramCsatNoticeSchema>;
+
 export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('reply'),
@@ -867,10 +986,11 @@ export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
     sourceOutboxId: z.uuid(),
     botId: z.uuid(),
     chatId: z.string().min(1).max(32),
-    notice: z.enum(['welcome', 'language_set']),
+    notice: telegramNoticeKindSchema,
     locale: z.enum(['en', 'ar']),
-    /** The button press a `language_set` answers, so the spinner on it stops. */
+    /** The button press a `language_set` or `csat_*` notice answers, so the spinner on it stops. */
     callbackQueryId: z.string().min(1).max(128).optional(),
+    csat: telegramCsatNoticeSchema.optional(),
   }),
 ]);
 
@@ -1047,6 +1167,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
   [knowledgeConfigureJob.name]: knowledgeConfigureJob,
   [knowledgeReembedJob.name]: knowledgeReembedJob,
+  [webhookDeliverJob.name]: webhookDeliverJob,
   [telegramSendJob.name]: telegramSendJob,
   [telegramPollJob.name]: telegramPollJob,
   [statsRollupJob.name]: statsRollupJob,

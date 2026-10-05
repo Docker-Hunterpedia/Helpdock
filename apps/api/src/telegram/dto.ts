@@ -8,7 +8,9 @@ import {
   telegramBotUpdateRequestSchema,
   telegramDeliveryListSchema,
   telegramDeliveryParamSchema,
+  telegramTicketContextResponseSchema,
   telegramTicketParamSchema,
+  telegramTokenTestRequestSchema,
   telegramWebhookParamSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
@@ -30,3 +32,5 @@ export class TelegramWebhookParamDto extends createZodDto(telegramWebhookParamSc
 export class TelegramTicketParamDto extends createZodDto(telegramTicketParamSchema) {}
 export class TelegramDeliveryParamDto extends createZodDto(telegramDeliveryParamSchema) {}
 export class TelegramDeliveryListDto extends createZodDto(telegramDeliveryListSchema) {}
+export class TelegramTokenTestDto extends createZodDto(telegramTokenTestRequestSchema) {}
+export class TelegramTicketContextDto extends createZodDto(telegramTicketContextResponseSchema) {}

@@ -1,6 +1,7 @@
 import type { TelegramDelivery as TelegramDeliveryRow } from '@helpdock/db';
 import {
   TELEGRAM_SEND_ATTEMPTS,
+  TELEGRAM_TOKEN_HINT_LENGTH,
   type TelegramBot,
   type TelegramDelivery,
   telegramBotHealth,
@@ -25,9 +26,14 @@ export interface TelegramViewContext {
 export const webhookUrlFor = (appUrl: string, botId: string): string =>
   new URL(telegramWebhookPath(botId), appUrl).toString();
 
+/** The last characters of a token, which is all of it the screen shows. */
+export const tokenHint = (token: string): string => token.slice(-TELEGRAM_TOKEN_HINT_LENGTH);
+
+/** `plainToken` is the decrypted token, of which only {@link tokenHint} is kept. */
 export const toTelegramBot = (
   { bot, departmentName, tokenUpdatedByName }: BotWithNames,
   context: TelegramViewContext,
+  plainToken: string,
 ): TelegramBot => ({
   id: bot.id,
   username: bot.username,
@@ -35,6 +41,7 @@ export const toTelegramBot = (
   departmentId: bot.departmentId,
   departmentName,
   tokenSet: bot.token !== '',
+  tokenHint: tokenHint(plainToken),
   tokenUpdatedAt: bot.tokenUpdatedAt.toISOString(),
   tokenUpdatedByName,
   welcome: { en: bot.welcomeEn, ar: bot.welcomeAr },

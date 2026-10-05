@@ -49,6 +49,7 @@ export const deliveryRow = (overrides: Partial<EmailDelivery> = {}): EmailDelive
   departmentId: BILLING,
   ticketId: TICKET,
   ticketMessageId: MESSAGE,
+  csatResponseId: null,
   kind: 'reply',
   fromName: 'Helpdock Billing',
   fromAddress: 'billing@helpdock.io',

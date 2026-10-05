@@ -1,5 +1,5 @@
 import { createKeyring, type Env, type Settings } from '@helpdock/config';
-import type { Db } from '@helpdock/db';
+import { brands, type Db } from '@helpdock/db';
 import {
   assignmentOfflineUnassignJob,
   authEmailJob,
@@ -23,7 +23,10 @@ import {
   helpCenterSearchReindexSweepJob,
   type JobLogger,
   knowledgeConfigureJob,
+  knowledgeEmbedJob,
   knowledgeReembedJob,
+  knowledgeSyncJob,
+  knowledgeSyncSchedulerId,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -48,8 +51,11 @@ import {
   statsRollupScheduleJob,
   telegramPollJob,
   telegramSendJob,
+  webhookDeliverJob,
 } from '@helpdock/jobs';
+import type { BlockedEvent } from '@helpdock/net';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
+import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { safeAiTransport } from '../ai/ai-http.js';
 import { registerAiEventHandlers } from '../ai/budget-alert.handler.js';
@@ -74,8 +80,12 @@ import {
 import { imapConnectOptions } from '../channels/imap-connector.js';
 import { createInboundEmailService } from '../channels/inbound/factory.js';
 import { MailboxesRepository } from '../channels/mailboxes.repository.js';
+import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { CsatRepository } from '../csat/csat.repository.js';
+import { CsatDelivery } from '../csat/csat-delivery.js';
+import { CsatEmailSource } from '../csat/csat-email.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
+import { CsatTelegramNotices } from '../csat/telegram-csat.js';
 import { CsatTokens } from '../csat/tokens.js';
 import { cnameTargetOf, createDomainProbes } from '../domains/domain-config.js';
 import {
@@ -100,7 +110,21 @@ import {
 } from '../help-center/search/search-events.js';
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
+import { createPlaywrightRenderer } from '../knowledge/crawl-renderer.js';
+import { readOAuthApps } from '../knowledge/credentials.js';
 import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
+import {
+  type KnowledgeQueues,
+  registerKnowledgeEventHandlers,
+  scheduleBrandSources,
+} from '../knowledge/knowledge-events.js';
+import type { SourceLoaderDeps } from '../knowledge/load-source.js';
+import {
+  safeCrawlFetch,
+  safeFetchFunction,
+  safeRenderFetch,
+} from '../knowledge/safe-transports.js';
+import { createKnowledgeSyncProcessor } from '../knowledge/sync.job.js';
 import { registerAttachmentEventHandlers } from '../media/attachment-events.js';
 import { S3BrandObjects } from '../media/brand-objects.js';
 import { createMediaTools } from '../media/ffmpeg.js';
@@ -144,7 +168,13 @@ import {
   createTelegramSendHandler,
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
+import { withSystemJob } from '../tenant/system-job.js';
+
+import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
+import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
+import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
 import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
 
@@ -253,6 +283,8 @@ export interface WorkerDependencies {
    * the retention schedule is.
    */
   createDomainsWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
+  /** M8-03's `webhooks` consumer: one signed POST per delivery, through `@helpdock/net`. */
+  createWebhooksWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -291,6 +323,8 @@ export type WorkerEnv = Pick<
   // M6: whether bots are polled, and where the Bot API is.
   | 'TELEGRAM_POLLING'
   | 'TELEGRAM_API_ROOT'
+  // M7-03: whether a website crawl may render pages in a headless browser.
+  | 'KNOWLEDGE_CRAWL_RENDER'
   // M9: how many outbox events run at once.
   | 'OUTBOX_CONCURRENCY'
 >;
@@ -379,6 +413,65 @@ const slaDeps = (queue: Queue): SlaWorkerDeps => {
   };
 };
 
+/** M7-03's handlers and boot reach the `knowledge` queue through this. */
+const knowledgeQueuesOf = (queue: Queue): KnowledgeQueues => ({
+  addSync: async (payload, jobId) => {
+    await queue.add(knowledgeSyncJob.name, payload, { ...knowledgeSyncJob.options, jobId });
+  },
+  addEmbed: async (payload, jobId) => {
+    await queue.add(knowledgeEmbedJob.name, payload, { ...knowledgeEmbedJob.options, jobId });
+  },
+  schedule: async (sourceId, cron, payload) => {
+    const id = knowledgeSyncSchedulerId(sourceId);
+    if (cron === null) {
+      await queue.removeJobScheduler(id);
+      return;
+    }
+    await queue.upsertJobScheduler(
+      id,
+      { pattern: cron.pattern, tz: cron.tz },
+      { name: knowledgeSyncJob.name, data: payload, opts: knowledgeSyncJob.options },
+    );
+  },
+});
+
+/** Every brand's daily and weekly sources, re-registered on boot (DOMAIN-RULES §10). */
+const scheduleAllKnowledgeSources = async (db: Db, queues: KnowledgeQueues): Promise<void> => {
+  const active = await db.select({ id: brands.id }).from(brands).where(eq(brands.status, 'active'));
+  for (const { id: brandId } of active) {
+    await withSystemJob(db, brandId, 'knowledge.schedule.boot', (tx) =>
+      scheduleBrandSources(tx, brandId, queues),
+    );
+  }
+};
+
+/** What a source sync reads through: the bucket, and the SSRF-safe client for everything else. */
+const knowledgeLoaders = (
+  env: WorkerEnv,
+  settings: WorkerSettings,
+  log: JobLogger,
+): SourceLoaderDeps => {
+  const transport = {
+    allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+    onBlocked: (event: BlockedEvent) =>
+      log.warn(
+        { host: event.host, address: event.address, url: event.url },
+        'knowledge fetch blocked (DOMAIN-RULES §13)',
+      ),
+  };
+  return {
+    storage: storageFor(env),
+    crawlFetch: safeCrawlFetch(transport),
+    renderer:
+      env.KNOWLEDGE_CRAWL_RENDER === true
+        ? () => createPlaywrightRenderer(safeRenderFetch(transport))
+        : null,
+    fetch: safeFetchFunction(transport),
+    keyring: createKeyring(env),
+    oauthApps: () => readOAuthApps(settings),
+  };
+};
+
 export const workerDependencies: WorkerDependencies = {
   createConnection: (url) => createQueueConnection(url),
   // The broadcast publishes on the same connection: a ticket event ends in a
@@ -393,9 +486,18 @@ export const workerDependencies: WorkerDependencies = {
     registerObjectPurgeHandler(storageFor(env));
     // M7-08: a brand reached 80 % or 100 % of an AI budget window.
     registerAiEventHandlers();
+    // M8-06: the survey goes out on the ticket's channel in the survey job.
+    const csatRepository = new CsatRepository();
     registerCsatEventHandlers({
-      repository: new CsatRepository(),
+      repository: csatRepository,
       tokens: new CsatTokens(createKeyring(env)),
+      delivery: new CsatDelivery({
+        repository: csatRepository,
+        email: new OutboundEmailService(new EmailRepository(), installSmtp),
+        telegram: new TelegramRepository(),
+        locales: new TicketLifecycleRepository(),
+        widget: new RedisWidgetBroadcast(redis),
+      }),
     });
 
     // `attachment.uploaded` ends in a job on the `media` queue, so its handler
@@ -537,10 +639,31 @@ export const workerDependencies: WorkerDependencies = {
     // M5-05. The search index follows the same three events under its own
     // subscriber name, in the event's transaction.
     registerSearchEventHandlers();
+    // M7-03. So do the knowledge base's article chunks; and a source added,
+    // re-scheduled, synced or removed adds its job or moves its scheduler.
+    registerKnowledgeEventHandlers(knowledgeQueuesOf(knowledge), storageFor(env));
 
     // M5-03. After the content module's own handlers: every help center
     // event drops the brand's cached pages, under its own subscriber name.
     registerPageCacheHandlers(new RedisPageCache(redis));
+
+    // M8-03. `contact.created` is the contacts module's; the webhooks module
+    // subscribes to it below. Last, so every other subscriber of a ticket event has run before
+    // its deliveries are written. `webhook.delivery_requested` adds the
+    // `webhook.deliver` job under the delivery's id, once that row committed.
+    registerContactEventHandlers();
+    const webhooks = new Queue(QUEUE_NAMES.webhooks, { connection: redis });
+    registerWebhookEventHandlers({
+      repository: new WebhooksRepository(),
+      queue: {
+        add: async (payload, jobId) => {
+          await webhooks.add(webhookDeliverJob.name, payload, {
+            ...webhookDeliverJob.options,
+            jobId,
+          });
+        },
+      },
+    });
 
     return {
       close: async () => {
@@ -553,6 +676,7 @@ export const workerDependencies: WorkerDependencies = {
         await rules.close();
         await notify.close();
         await domains.close();
+        await webhooks.close();
       },
     };
   },
@@ -569,6 +693,8 @@ export const workerDependencies: WorkerDependencies = {
   createOutboundWorker: ({ redis, db, log, env, installSmtp }) => {
     const keyring = createKeyring(env);
     const emailRepository = new EmailRepository();
+    const csatRepository = new CsatRepository();
+    const csatTokens = new CsatTokens(keyring);
     const email = createEmailSendProcessor({
       db,
       log,
@@ -578,6 +704,7 @@ export const workerDependencies: WorkerDependencies = {
         keyring,
         installSmtp,
         transports: smtpTransportFactory,
+        surveys: new CsatEmailSource(csatRepository, csatTokens, env.APP_URL),
       }),
     });
     const telegramRepository = new TelegramRepository();
@@ -590,6 +717,13 @@ export const workerDependencies: WorkerDependencies = {
         repository: telegramRepository,
         keyring,
         api: telegramApiFactory(env.TELEGRAM_API_ROOT),
+        storage: storageFor(env),
+
+        csat: new CsatTelegramNotices({
+          repository: csatRepository,
+          tokens: csatTokens,
+          appUrl: env.APP_URL,
+        }),
       }),
     });
     const worker = new Worker(
@@ -971,21 +1105,22 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+    const ai = createAiRuntime({
+      db,
+      settings,
+      http: safeAiTransport(env.OUTBOUND_ALLOW_CIDRS, (event) =>
+        log.warn(
+          { host: event.host, address: event.address },
+          'embeddings endpoint resolves to a blocked address (DOMAIN-RULES §13)',
+        ),
+      ),
+    });
     // M7-02's configure tick and re-embed share the queue too.
     const embedding = createEmbeddingSpaceProcessor({
       db,
       settings,
       log,
-      ai: createAiRuntime({
-        db,
-        settings,
-        http: safeAiTransport(env.OUTBOUND_ALLOW_CIDRS, (event) =>
-          log.warn(
-            { host: event.host, address: event.address },
-            'embeddings endpoint resolves to a blocked address (DOMAIN-RULES §13)',
-          ),
-        ),
-      }),
+      ai,
       queue: {
         add: async (jobId) => {
           await knowledge.add(
@@ -996,12 +1131,25 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+    // M7-03's source syncs and embeds, and every source's schedule re-registered on boot.
+    const queues = knowledgeQueuesOf(knowledge);
+    scheduleAllKnowledgeSources(db, queues).catch((error: unknown) =>
+      log.error({ err: error }, 'could not register the knowledge sync schedules'),
+    );
+    const sync = createKnowledgeSyncProcessor({
+      db,
+      ai,
+      log,
+      loaders: knowledgeLoaders(env, settings, log),
+    });
     const worker = new Worker(
       QUEUE_NAMES.knowledge,
       async (job) => {
-        await (embedding(job) ?? search(job) ?? publishing(job));
+        await (sync(job) ?? embedding(job) ?? search(job) ?? publishing(job));
       },
-      { connection: redis },
+      // A crawl takes minutes; a few at once keeps one from holding up a
+      // scheduled publish behind it.
+      { connection: redis, concurrency: 4 },
     );
     worker.on('failed', (job, error) =>
       log.error({ job: job?.name, jobId: job?.id, err: error }, 'knowledge job failed'),
@@ -1083,6 +1231,34 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
+  createWebhooksWorker: ({ redis, db, log, env }) => {
+    const worker = new Worker(
+      QUEUE_NAMES.webhooks,
+      createWebhookDeliverProcessor({
+        db,
+        log,
+        repository: new WebhooksRepository(),
+        keyring: createKeyring(env),
+        policy: {
+          allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+          onBlocked: (event) =>
+            log.warn(
+              { host: event.host, address: event.address, reason: event.reason },
+              'webhook destination blocked (DOMAIN-RULES §13)',
+            ),
+        },
+      }),
+      // A few at once: each delivery is mostly waiting on somebody's server.
+      { connection: redis, concurrency: 5 },
+    );
+    worker.on('failed', (job, error) =>
+      log.warn(
+        { job: job?.name, jobId: job?.id, attemptsMade: job?.attemptsMade, err: error },
+        'webhook.deliver attempt failed',
+      ),
+    );
+    return worker;
+  },
   startRelay: ({ db, redis, log, listenUrl, status }) =>
     startOutboxRelay({ db, redis, log, listenUrl, status }),
 };
@@ -1127,6 +1303,7 @@ export const startWorker = ({
   const helpCenter = deps.createHelpCenterWorker({ redis: connection, db, log, env, settings });
   const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   const domains = deps.createDomainsWorker({ redis: connection, db, log, env });
+  const webhooks = deps.createWebhooksWorker({ redis: connection, db, log, env });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -1158,6 +1335,7 @@ export const startWorker = ({
     await helpCenter.close();
     await notify.close();
     await domains.close();
+    await webhooks.close();
     await producers.close();
     await connection.quit();
   };

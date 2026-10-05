@@ -8,6 +8,7 @@ import {
   attachments,
   auditLog,
   blockedSenders,
+  brands,
   contactIdentities,
   contacts,
   createDb,
@@ -16,6 +17,7 @@ import {
   departments,
   outbox,
   telegramBots,
+  telegramChats,
   telegramDeliveries,
   ticketMessages,
   ticketStatuses,
@@ -32,6 +34,7 @@ import type {
   TelegramBotStatus,
   TelegramDeliveryList,
   TelegramTestResult,
+  TelegramTicketContextResponse,
   TelegramWebhookResult,
   Ticket,
 } from '@helpdock/schemas';
@@ -45,7 +48,9 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { readChannelStatuses } from '../channels/channel-status.js';
 import { createLogger } from '../logging/logger.js';
+import { objectKeyBeside } from '../media/keys.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { noCsatNotices } from '../testing/csat-doubles.js';
 import { FakeTelegram, textUpdate } from '../testing/fake-telegram.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
@@ -123,6 +128,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
   let owner: DbHandle;
   let seeded: SeededInstall;
   const telegram = new FakeTelegram();
+  let storage: FakeStorage;
 
   let support: string;
   let ada: Person;
@@ -233,6 +239,9 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
         repository,
         keyring: createKeyring(envFor()),
         api: telegramApiFactory(telegram.url),
+        storage,
+
+        csat: noCsatNotices,
       }),
     });
     for (const row of rows.filter((candidate) => !handled.has(candidate.id))) {
@@ -313,9 +322,10 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       env: envFor(),
       logger: createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' } }),
     });
+    storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-telegram-')));
     app = await createApiApp({
       runtime,
-      objectStorage: new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-telegram-'))),
+      objectStorage: storage,
       telegram: { api: telegramApiFactory(telegram.url) },
     });
 
@@ -363,6 +373,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
         username: 'acme_support_bot',
         departmentName: 'Support',
         tokenSet: true,
+        tokenHint: TOKEN.slice(-4),
         welcome: { en: 'Welcome to Acme support.', ar: null },
         languagePick: true,
         mode: 'webhook',
@@ -436,7 +447,32 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       expect(saved.body).toMatchObject({ displayName: 'Acme Help', welcome: { ar: null } });
 
       const test = await call<TelegramTestResult>('POST', `${botsPath()}/${bot.id}/test`, ada);
-      expect(test.body).toEqual({ ok: true, username: 'acme_support_bot', telegramId: 7_000_001 });
+      expect(test.body).toEqual({
+        ok: true,
+        username: 'acme_support_bot',
+        name: 'acme_support_bot',
+        telegramId: 7_000_001,
+      });
+    });
+
+    it('tests a typed token before the bot exists, and refuses one Telegram does not know', async () => {
+      const known = await call<TelegramTestResult>('POST', `${botsPath()}/test`, ada, {
+        token: OTHER_TOKEN,
+      });
+      expect(known.status).toBe(200);
+      expect(known.body).toMatchObject({ ok: true, username: 'acme_other_bot' });
+
+      const unknown = await call<TelegramTestResult>('POST', `${botsPath()}/test`, ada, {
+        token: '7000009:AAEunknownTokenAbcdefghijklmnopqrstu',
+      });
+      expect(unknown.body).toEqual({ ok: false, kind: 'token', detail: '401: Unauthorized' });
+      expect(JSON.stringify(unknown.body)).not.toContain('AAEunknown');
+
+      expect((await call('POST', `${botsPath()}/test`, sam, { token: OTHER_TOKEN })).status).toBe(
+        403,
+      );
+      const list = await call<TelegramBotList>('GET', botsPath(), ada);
+      expect(list.body.bots).toHaveLength(1);
     });
 
     it('sets the webhook with the bot’s secret and reads it back in the health panel', async () => {
@@ -456,6 +492,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
         mode: 'webhook',
         webhook: { url: bot.webhook.expectedUrl, pendingUpdateCount: 0 },
         webhookError: null,
+        activity: { lastReplyAt: null, failedSends24h: 0, openTickets: 0 },
       });
     });
   });
@@ -473,6 +510,24 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
 
     it('refuses a body that is not an update', async () => {
       expect((await deliver({ hello: 'world' })).status).toBe(400);
+    });
+
+    it('answers 410 for a brand being deleted, but only after the secret (M8-07)', async () => {
+      const setStatus = (status: 'active' | 'deleting') =>
+        owner.db
+          .update(brands)
+          .set({ status, deletedAt: status === 'active' ? null : new Date() })
+          .where(eq(brands.id, seeded.brandId));
+      const update = textUpdate(nextUpdate(), CHAT, 'still there?');
+
+      await setStatus('deleting');
+      try {
+        expect((await deliver(update, 'wrong-secret')).status).toBe(401);
+        expect((await deliver(update)).status).toBe(410);
+      } finally {
+        await setStatus('active');
+      }
+      expect(await ticketForChat(CHAT)).toEqual([]);
     });
   });
 
@@ -527,6 +582,142 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       handled.clear();
       await runOutbox();
       expect(sentTo(CHAT)).toHaveLength(1);
+    });
+
+    it('tells the ticket view who the chat is with, through which bot', async () => {
+      const chat = 4_242_010;
+      await deliver(
+        textUpdate(nextUpdate(), chat, 'Where is my refund?', {
+          from: { id: chat, is_bot: false, first_name: 'Mona', username: 'mona_k' },
+        }),
+      );
+      const [ticket] = await ticketForChat(chat);
+
+      const read = await call<TelegramTicketContextResponse>(
+        'GET',
+        `/api/brands/${seeded.brandId}/tickets/${ticket?.id}/telegram`,
+        sam,
+      );
+      expect(read.status).toBe(200);
+      expect(read.body).toEqual({
+        context: {
+          bot: { id: bot.id, username: 'acme_support_bot' },
+          chatId: String(chat),
+          username: 'mona_k',
+          name: 'Mona',
+          locale: null,
+          languageChosenAt: null,
+        },
+        deliveries: [],
+      });
+
+      const status = await call<TelegramBotStatus>('GET', `${botsPath()}/${bot.id}/status`, ada);
+      expect(status.body.activity.openTickets).toBeGreaterThanOrEqual(2);
+      expect(status.body.activity.lastReplyAt).not.toBeNull();
+    });
+
+    it('sends a reply’s attachments after its text, each once, and waits for one still processing', async () => {
+      const chat = 4_242_011;
+      await deliver(textUpdate(nextUpdate(), chat, 'Can you send the invoice?'));
+      const [ticket] = await ticketForChat(chat);
+      const attach = async (input: {
+        name: string;
+        kind: 'image' | 'file';
+        mime: string;
+        variant: 'webp' | 'original';
+        bytes: Buffer;
+        status: 'ready' | 'processing';
+      }): Promise<string> => {
+        const id = uuidv7();
+        const s3Key = `brands/${seeded.brandId}/tickets/${ticket?.id}/${id}/original`;
+        await storage.put(objectKeyBeside(s3Key, input.variant), input.bytes);
+        await owner.db.insert(attachments).values({
+          id,
+          brandId: seeded.brandId,
+          departmentId: ticket?.departmentId ?? '',
+          ticketId: ticket?.id ?? '',
+          uploaderType: 'staff',
+          uploaderId: ada.id,
+          s3Key,
+          originalName: input.name,
+          mime: input.mime,
+          size: input.bytes.length,
+          kind: input.kind,
+          status: input.status,
+          variants:
+            input.status === 'ready'
+              ? { [input.variant]: { mime: input.mime, size: input.bytes.length } }
+              : {},
+        });
+        return id;
+      };
+      const photo = await attach({
+        name: 'label.jpg',
+        kind: 'image',
+        mime: 'image/webp',
+        variant: 'webp',
+        bytes: Buffer.from('RIFF webp bytes'),
+        status: 'ready',
+      });
+      const invoice = await attach({
+        name: 'invoice.pdf',
+        kind: 'file',
+        mime: 'application/pdf',
+        variant: 'original',
+        bytes: Buffer.from('%PDF-1.7 invoice'),
+        status: 'processing',
+      });
+
+      const reply = await call(
+        'POST',
+        `/api/brands/${seeded.brandId}/tickets/${ticket?.id}/messages`,
+        ada,
+        { kind: 'public', bodyHtml: '<p>Here you are.</p>', attachmentIds: [photo, invoice] },
+      );
+      expect(reply.status).toBe(201);
+      await runOutbox();
+
+      const toChat = (method: string) =>
+        telegram.callsOf(method).filter((entry) => entry.body.chat_id === String(chat));
+      expect(toChat('sendMessage').map((entry) => entry.body.text)).toEqual(['Here you are.']);
+      expect(toChat('sendPhoto').map((entry) => entry.body.photo)).toEqual([
+        { name: 'label-webp.webp', bytes: Buffer.from('RIFF webp bytes') },
+      ]);
+      expect(toChat('sendDocument')).toEqual([]);
+      const [waiting] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select()
+          .from(telegramDeliveries)
+          .where(eq(telegramDeliveries.ticketId, ticket?.id ?? '')),
+      );
+      expect(waiting).toMatchObject({ status: 'queued', partsSent: 2, attempts: 1 });
+
+      // The pipeline finishes, and BullMQ's next attempt sends only what is left.
+      await owner.db
+        .update(attachments)
+        .set({
+          status: 'ready',
+          variants: { original: { mime: 'application/pdf', size: 16 } },
+        })
+        .where(eq(attachments.id, invoice));
+      handled.clear();
+      await runOutbox(1);
+      handled.clear();
+      await runOutbox(2);
+
+      expect(toChat('sendMessage')).toHaveLength(1);
+      expect(toChat('sendPhoto')).toHaveLength(1);
+      expect(toChat('sendDocument').map((entry) => entry.body.document)).toEqual([
+        { name: 'invoice.pdf', bytes: Buffer.from('%PDF-1.7 invoice') },
+      ]);
+      const [sent] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select()
+          .from(telegramDeliveries)
+          .where(eq(telegramDeliveries.ticketId, ticket?.id ?? '')),
+      );
+      expect(sent).toMatchObject({ status: 'sent', partsSent: 3 });
+      expect(sent?.sentMessageIds).toHaveLength(3);
     });
 
     it('keeps one open ticket per chat, and ignores an update it has already filed', async () => {
@@ -729,6 +920,13 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
           ),
       );
       expect(identity?.locale).toBe('ar');
+      const [chatRow] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select()
+          .from(telegramChats)
+          .where(eq(telegramChats.chatId, String(chat))),
+      );
+      expect(chatRow?.languageChosenAt).toBeInstanceOf(Date);
       expect(telegram.callsOf('answerCallbackQuery').at(-1)?.body).toEqual({
         callback_query_id: 'cq-ar',
       });
@@ -782,9 +980,10 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     );
   });
 
-  it('removes a bot and its chats, and keeps the tickets', async () => {
+  it('removes a bot, its webhook and its chats, and keeps the tickets', async () => {
     const removed = await call('DELETE', `${botsPath()}/${bot.id}`, ada);
     expect(removed.status).toBe(204);
+    expect(telegram.callsOf('deleteWebhook').at(-1)).toMatchObject({ token: TOKEN });
     expect(await ticketForChat(CHAT)).toHaveLength(1);
     const deliveries = await owner.db.select().from(telegramDeliveries);
     expect(deliveries).toEqual([]);

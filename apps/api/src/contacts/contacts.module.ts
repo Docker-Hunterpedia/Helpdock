@@ -123,6 +123,8 @@ export class ContactsModule {
             new AccountsService({ repository }),
         },
       ],
+      // M8-02: the public API's contact routes write through the same service.
+      exports: [ContactsService, ContactsRepository],
     };
   }
 }

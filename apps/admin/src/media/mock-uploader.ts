@@ -1,4 +1,4 @@
-import type { Attachment } from '@helpdock/schemas';
+import type { Attachment, DownloadVariant } from '@helpdock/schemas';
 import type { AttachmentUploader, UploadAttachmentInput } from './upload.js';
 import { kindOf } from './upload.js';
 
@@ -72,4 +72,18 @@ export class MockAttachmentUploader implements AttachmentUploader {
 
     return Promise.resolve(ready);
   }
+
+  /** A second of silence, so a voice note's player has something to load. */
+  downloadUrl(
+    _brandId: string,
+    _ticketId: string,
+    _attachmentId: string,
+    _variant: DownloadVariant,
+  ): Promise<string> {
+    return Promise.resolve(MOCK_SILENCE);
+  }
 }
+
+/** A valid, empty WAV: 44 bytes of header and no samples. */
+export const MOCK_SILENCE =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';

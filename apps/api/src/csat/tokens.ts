@@ -18,8 +18,8 @@ import type { Keyring } from '@helpdock/config';
  *   `expires_at`), not of the token: those have to be decided under a lock.
  *
  * It is deterministic, which is deliberate: the details panel shows the agent
- * the link to share until channels deliver it (M8-06), and only a hash is
- * stored, so the link has to be recomputable. A token can therefore be verified
+ * the link to share, the email and Telegram surveys carry it when they are sent
+ * (M8-06), and only a hash is stored, so the link has to be recomputable. A token can therefore be verified
  * under the previous master key too, so a rotation does not strand the surveys
  * already out; one signed under a key older than that no longer verifies.
  */
@@ -55,6 +55,45 @@ const macOf = (key: Buffer, ids: Buffer): Buffer => createHmac('sha256', key).up
 /** What is stored in `csat_responses.token_hash`. */
 export const hashCsatToken = (token: string): string =>
   createHash('sha256').update(token, 'utf8').digest('hex');
+
+export const sameTokenHash = (stored: string, presented: string): boolean => {
+  const a = Buffer.from(stored, 'utf8');
+  const b = Buffer.from(presented, 'utf8');
+
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
+/**
+ * The rating page's address for a survey: the token whose hash is the stored
+ * one, under the current key or the previous. Null once the key that signed it
+ * has been rotated out. `query` carries a channel's `rating` and `lang`
+ * (M8-06): the page opens with that score pressed, in that language.
+ */
+export const csatSurveyUrl = (
+  tokens: CsatTokens,
+  appUrl: string,
+  {
+    brandId,
+    survey,
+  }: {
+    readonly brandId: string;
+    readonly survey: { readonly id: string; readonly tokenHash: string };
+  },
+  query: Readonly<Record<string, string>> = {},
+): string | null => {
+  const token = tokens
+    .candidates({ brandId, surveyId: survey.id })
+    .find((candidate) => sameTokenHash(survey.tokenHash, hashCsatToken(candidate)));
+  if (token === undefined) {
+    return null;
+  }
+  const url = new URL(`/csat/${token}`, appUrl);
+  for (const [key, value] of Object.entries(query)) {
+    url.searchParams.set(key, value);
+  }
+
+  return url.toString();
+};
 
 export class CsatTokens {
   /** Current key first: it is the one that signs. */

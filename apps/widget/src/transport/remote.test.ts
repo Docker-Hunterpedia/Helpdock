@@ -350,6 +350,9 @@ describe('the remote transport', () => {
       state: 'closed',
       continuedById: null,
     });
+    const card = { state: 'open', rating: null, comment: null, skippedAt: null };
+    live.envelope('csat', { conversationId: CONVERSATION, ...card });
+    live.envelope('csat', { conversationId: BRAND, ...card });
 
     expect(live.socket.emitWithAck).toHaveBeenCalledWith('conversation:join', {
       conversationId: CONVERSATION,
@@ -370,6 +373,10 @@ describe('the remote transport', () => {
         }),
       },
       { type: 'conversation', conversation: expect.objectContaining({ status: 'ended' }) },
+      {
+        type: 'csat',
+        csat: { state: 'open', rating: null, comment: null, skipped_at: null },
+      },
     ]);
 
     transport.sendTyping(CONVERSATION, true);
@@ -478,6 +485,51 @@ describe('the remote transport', () => {
     await vi.waitFor(() =>
       expect(api.calls.map((call) => call.path)).toContain(`/conversations/${CONVERSATION}/typing`),
     );
+  });
+
+  it('reads, rates and skips the satisfaction card over REST (M8-06)', async () => {
+    const card = (fields: Record<string, unknown> = {}) => ({
+      csat: {
+        conversationId: CONVERSATION,
+        state: 'open',
+        rating: null,
+        comment: null,
+        skippedAt: null,
+        ...fields,
+      },
+    });
+    const path = `/conversations/${CONVERSATION}/csat`;
+    const api = fakeApi({
+      [`GET ${path}`]: () => ({ csat: null }),
+      [`POST ${path}`]: (body) => card({ state: 'rated', ...(body as object) }),
+      [`POST ${path}/skip`]: () =>
+        card({ state: 'skipped', skippedAt: '2026-10-05T10:06:00.000Z' }),
+    });
+    const transport = createRemoteTransport({
+      apiOrigin: API,
+      brand: BRAND,
+      storage: memoryStore({ [secretKeyFor(BRAND)]: SECRET }),
+      fetch: api.fetch,
+      network: null,
+    });
+
+    expect(await transport.getCsat(CONVERSATION)).toBeNull();
+    expect(await transport.rateConversation(CONVERSATION, 4, '  ')).toMatchObject({
+      state: 'rated',
+      rating: 4,
+    });
+    expect(await transport.rateConversation(CONVERSATION, 5, 'Quick')).toMatchObject({
+      comment: 'Quick',
+    });
+    expect(await transport.skipCsat(CONVERSATION)).toMatchObject({
+      state: 'skipped',
+      skipped_at: '2026-10-05T10:06:00.000Z',
+    });
+    expect(api.calls.filter((call) => call.method === 'POST').map((call) => call.body)).toEqual([
+      { rating: 4 },
+      { rating: 5, comment: 'Quick' },
+      {},
+    ]);
   });
 
   it('files a contact form as one conversation with its files, even when the send is retried', async () => {

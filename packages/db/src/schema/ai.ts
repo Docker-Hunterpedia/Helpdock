@@ -41,6 +41,14 @@ export const aiSettings = pgTable(
     providerId: text('provider_id'),
     modelId: text('model_id'),
     systemPrompt: text('system_prompt').notNull().default(''),
+    /** The prompt for Arabic conversations (M7-10); empty means the one above serves both. */
+    systemPromptAr: text('system_prompt_ar').notNull().default(''),
+    /**
+     * Agent assist, auto-reply per channel and the handoff wording (M7-10), as
+     * `aiAssistantModesSchema` in `@helpdock/schemas` parses it. Null is the
+     * defaults: every mode off, so a brand turns AI on deliberately.
+     */
+    modes: jsonb('modes').$type<Record<string, unknown>>(),
     piiRedaction: boolean('pii_redaction').notNull().default(true),
     injectionFilter: boolean('injection_filter').notNull().default(true),
     dailyBudgetUsd: numeric('daily_budget_usd', { precision: 12, scale: 4, mode: 'number' }),

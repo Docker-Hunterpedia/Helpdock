@@ -309,6 +309,66 @@ export const SETTING_DEFINITIONS = [
     scope: 'install',
     description: 'Model id, of the default provider, every brand uses unless it overrides it.',
   }),
+  defineSetting({
+    key: 'knowledge.notion.clientId',
+    schema: TEXT,
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'OAuth client id of the install’s public Notion integration, for brands connecting Notion (M7-03).',
+  }),
+  defineSetting({
+    key: 'knowledge.notion.clientSecret',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description: 'OAuth client secret of the Notion integration.',
+  }),
+  defineSetting({
+    key: 'knowledge.google.clientId',
+    schema: TEXT,
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'OAuth client id of the install’s Google Cloud app, for brands connecting Google Drive (M7-03).',
+  }),
+  defineSetting({
+    key: 'knowledge.google.clientSecret',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description: 'OAuth client secret of the Google Cloud app.',
+  }),
+  defineSetting({
+    key: 'transcription.endpoint',
+    schema: z.union([z.literal(''), z.url({ protocol: /^https?$/ })]),
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'Whisper-compatible transcription endpoint for voice notes, for example https://api.openai.com/v1/audio/transcriptions. Empty turns transcription off.',
+  }),
+  defineSetting({
+    key: 'transcription.model',
+    schema: TEXT,
+    default: 'whisper-1',
+    secret: false,
+    scope: 'install',
+    description: 'Model the transcription endpoint is asked for.',
+  }),
+  defineSetting({
+    key: 'transcription.apiKey',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description:
+      'API key for the transcription endpoint. Empty for a local server that asks for none.',
+  }),
 ] as const;
 
 type Definition = (typeof SETTING_DEFINITIONS)[number];

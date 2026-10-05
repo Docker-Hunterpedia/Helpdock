@@ -40,7 +40,7 @@ day).
 | Assigned | The assignee or the team changed |
 | Tag added | A tag was put on the ticket |
 | SLA warning, SLA breach | M3-02's `sla.warning` and `sla.breached` events |
-| CSAT received | `csat.received`, once a survey answer emits it |
+| CSAT received | `csat.received`: a customer answered a survey on the rating page, in the widget or with a Telegram button (M8-06) |
 
 **If.** The ticket matches *all* or *any* of the rule's groups, and each group
 *all* or *any* of its conditions. A rule with no groups runs on every ticket its

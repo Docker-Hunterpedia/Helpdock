@@ -1,5 +1,5 @@
-import type { BrandAiSettings, TicketAiCalls } from '@helpdock/schemas';
-import { Body, Controller, Get, Inject, Param, Put } from '@nestjs/common';
+import type { BrandAiCallsPage, BrandAiSettings, TicketAiCalls } from '@helpdock/schemas';
+import { Body, Controller, Get, Inject, Param, Put, Query } from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { requireStaffPrincipalId } from '../auth/principal.js';
 import { Requires } from '../auth/route-declaration.js';
@@ -7,6 +7,9 @@ import { getTx, requireRequestContext } from '../context/request-context.js';
 import { BrandAiService } from './brand-ai.service.js';
 import {
   AiBrandParamDto,
+  BrandAiCallsPageDto,
+  BrandAiCallsQueryDto,
+  BrandAiModesUpdateDto,
   BrandAiPromptUpdateDto,
   BrandAiSettingsDto,
   BrandAiSettingsUpdateDto,
@@ -18,9 +21,10 @@ import {
  * A brand's AI assistant (M7-01, M7-08; screen in M7-10 from the
  * `Admin/AI-Assistant` artboard), and the AI log on a ticket.
  *
- * Reading the settings and editing the system prompt are `ai:manage` — the
- * Admin's and the Team Leader's (REQUIREMENTS §4.7). The model, guardrails
- * and budget are `brand:manage`, the Admin's alone.
+ * Reading the settings and the brand's AI activity, and editing the system
+ * prompt, are `ai:manage` — the Admin's and the Team Leader's (REQUIREMENTS
+ * §4.7). The model, guardrails, budget and modes are `brand:manage`, the
+ * Admin's alone.
  */
 @Controller('api/brands/:brandId')
 export class BrandAiController {
@@ -47,6 +51,26 @@ export class BrandAiController {
     @Body(new ZodValidationPipe(BrandAiSettingsUpdateDto)) body: BrandAiSettingsUpdateDto,
   ): Promise<BrandAiSettings> {
     return this.#ai.update(this.#context(brandId), body);
+  }
+
+  @Put('ai/modes')
+  @Requires('brand:manage')
+  @ZodSerializerDto(BrandAiSettingsDto)
+  updateModes(
+    @Param(new ZodValidationPipe(AiBrandParamDto)) { brandId }: AiBrandParamDto,
+    @Body(new ZodValidationPipe(BrandAiModesUpdateDto)) body: BrandAiModesUpdateDto,
+  ): Promise<BrandAiSettings> {
+    return this.#ai.updateModes(this.#context(brandId), body);
+  }
+
+  @Get('ai/calls')
+  @Requires('ai:manage')
+  @ZodSerializerDto(BrandAiCallsPageDto)
+  calls(
+    @Param(new ZodValidationPipe(AiBrandParamDto)) { brandId }: AiBrandParamDto,
+    @Query(new ZodValidationPipe(BrandAiCallsQueryDto)) query: BrandAiCallsQueryDto,
+  ): Promise<BrandAiCallsPage> {
+    return this.#ai.calls(getTx(), brandId, query);
   }
 
   @Put('ai/prompt')

@@ -1,4 +1,4 @@
-import type { RetentionUpdateRequest } from '@helpdock/schemas';
+import type { RetentionUpdateRequest, SessionBrand } from '@helpdock/schemas';
 import { Box, Tab, Tabs, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -11,6 +11,7 @@ import { currentBrand, useSession, useTicketingApi } from '../../../auth/session
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
+import { DeleteBrandCard, PendingDeletionBanner, useBrandDeletion } from './brand-deletion.tsx';
 import { DomainsTab } from './domains-tab.tsx';
 import { GeneralTab } from './general-tab.tsx';
 import { RetentionCard } from './retention-card.tsx';
@@ -18,11 +19,13 @@ import { RetentionCard } from './retention-card.tsx';
 /**
  * `Admin/Brand`: **General** (artboard `AdminBrand`, the Identity card),
  * **Domains** (`AdminBrandDomains`, M5-07) and **Danger zone**
- * (`AdminBrandDanger`, M1-14's Data retention card).
+ * (`AdminBrandDanger`: M1-14's Data retention card and M8-07's "Delete this
+ * brand").
  *
  * There is no Theme tab: theming lives on Channels › Widget and on the help
- * center's own settings. "Delete this brand" is its own path in DOMAIN-RULES
- * §11 and is not drawn until it has a deliverable.
+ * center's own settings. While the brand is in its deletion grace every tab
+ * shows the banner with Restore and is read-only: the brand is on its way out,
+ * and a change made now would be purged or restored with it unseen.
  */
 
 const BRAND_TABS = [
@@ -38,6 +41,8 @@ export function BrandPage(): ReactNode {
   const session = useSession();
   const brand = currentBrand(session);
   const { tab: segment } = useParams();
+  const deletion = useBrandDeletion(brand.id, session.user.installAdmin);
+  const pending = deletion.data?.status === 'deleting';
 
   const tab = BRAND_TABS.find((candidate) => candidate.segment === segment);
   if (tab === undefined) {
@@ -75,15 +80,39 @@ export function BrandPage(): ReactNode {
         </Tabs>
       </Box>
 
-      {tab.key === 'general' ? <GeneralTab /> : null}
-      {tab.key === 'domains' ? <DomainsTab /> : null}
-      {tab.key === 'danger' ? <DangerZone brandId={brand.id} /> : null}
+      {deletion.data === undefined ? null : (
+        <PendingDeletionBanner brand={brand} deletion={deletion.data} />
+      )}
+
+      {/* A disabled fieldset turns every control under it off at once, which
+          is what read-only during the grace means. */}
+      <Box
+        component="fieldset"
+        disabled={pending}
+        sx={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}
+      >
+        {tab.key === 'general' ? <GeneralTab /> : null}
+        {tab.key === 'domains' ? <DomainsTab /> : null}
+        {tab.key === 'danger' ? (
+          <DangerZone brand={brand} installAdmin={session.user.installAdmin} pending={pending} />
+        ) : null}
+      </Box>
     </>
   );
 }
 
-function DangerZone({ brandId }: { readonly brandId: string }): ReactNode {
+function DangerZone({
+  brand,
+  installAdmin,
+  pending,
+}: {
+  readonly brand: SessionBrand;
+  readonly installAdmin: boolean;
+  /** In its deletion grace: there is nothing to delete, and the banner offers Restore. */
+  readonly pending: boolean;
+}): ReactNode {
   const t = useT();
+  const brandId = brand.id;
   const api = useTicketingApi();
   const tokens = useSemanticTokens();
   const toast = useToast();
@@ -117,7 +146,7 @@ function DangerZone({ brandId }: { readonly brandId: string }): ReactNode {
         alignContent: 'start',
       }}
     >
-      <Box>
+      <Box sx={{ display: 'grid', gap: 6, alignContent: 'start' }}>
         {retention.isError ? (
           <AlertBanner tone="danger">{t('brand:retention.loadFailed')}</AlertBanner>
         ) : null}
@@ -130,6 +159,7 @@ function DangerZone({ brandId }: { readonly brandId: string }): ReactNode {
             }}
           />
         )}
+        {pending ? null : <DeleteBrandCard brand={brand} installAdmin={installAdmin} />}
       </Box>
 
       <Box

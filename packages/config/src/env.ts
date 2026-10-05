@@ -267,6 +267,12 @@ export const envSchema = z.object({
     .describe(
       'optional; the Bot API server, default https://api.telegram.org. Set it only for a self-hosted Bot API server',
     ),
+  KNOWLEDGE_CRAWL_RENDER: z
+    .stringbool()
+    .optional()
+    .describe(
+      'optional; must be "true" or "false", default false. "true" lets a website crawl render pages in a headless Chromium, which the worker image must have installed (M7-03)',
+    ),
   // Optional rather than defaulted, for the reason TELEGRAM_POLLING gives; the
   // defaults live beside the code that reads them (`auth/session/lifetime.ts`).
   AUTH_SESSION_IDLE_MINUTES: z.coerce

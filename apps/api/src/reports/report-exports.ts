@@ -135,7 +135,3 @@ export const exportLines = async (
 
   return [csvLine(header), ...rows.map(csvLine)];
 };
-
-/** `helpdock-volume-2026-09-01-2026-09-30.csv`. */
-export const exportFileName = (report: ReportExport, from: string, to: string): string =>
-  `helpdock-${report.replaceAll('_', '-')}-${from}-${to}.csv`;

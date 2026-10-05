@@ -5,6 +5,9 @@ import {
   aiProvidersOverviewSchema,
   aiProviderUpsertSchema,
   aiProviderViewSchema,
+  brandAiCallsPageSchema,
+  brandAiCallsQuerySchema,
+  brandAiModesUpdateSchema,
   brandAiPromptUpdateSchema,
   brandAiSettingsSchema,
   brandAiSettingsUpdateSchema,
@@ -13,6 +16,8 @@ import {
   embeddingSettingsViewSchema,
   ticketAiCallsParamSchema,
   ticketAiCallsSchema,
+  transcriptionSettingsUpdateSchema,
+  transcriptionSettingsViewSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 
@@ -31,3 +36,10 @@ export class BrandAiSettingsUpdateDto extends createZodDto(brandAiSettingsUpdate
 export class BrandAiPromptUpdateDto extends createZodDto(brandAiPromptUpdateSchema) {}
 export class TicketAiCallsParamDto extends createZodDto(ticketAiCallsParamSchema) {}
 export class TicketAiCallsDto extends createZodDto(ticketAiCallsSchema) {}
+export class BrandAiModesUpdateDto extends createZodDto(brandAiModesUpdateSchema) {}
+export class BrandAiCallsQueryDto extends createZodDto(brandAiCallsQuerySchema) {}
+export class BrandAiCallsPageDto extends createZodDto(brandAiCallsPageSchema) {}
+export class TranscriptionSettingsViewDto extends createZodDto(transcriptionSettingsViewSchema) {}
+export class TranscriptionSettingsUpdateDto extends createZodDto(
+  transcriptionSettingsUpdateSchema,
+) {}

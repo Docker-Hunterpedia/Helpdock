@@ -1,8 +1,10 @@
 import {
   brands,
   type CsatResponse,
+  contactIdentities,
   csatResponses,
   type DbTransaction,
+  type Ticket,
   ticketActivity,
   ticketMessages,
   ticketStatuses,
@@ -10,7 +12,8 @@ import {
   userBrandRoles,
   users,
 } from '@helpdock/db';
-import { and, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
+import type { CsatAnswerChannel } from '@helpdock/schemas';
+import { and, desc, eq, gt, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
 
 /**
  * Every query M1-12's survey makes, each one in the caller's transaction so the
@@ -18,14 +21,24 @@ import { and, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
  * brand or department here.
  */
 
-/** What the survey job needs to decide that a close still deserves one. */
+/** What the survey job needs to decide that a close still deserves one, and where to send it. */
 export interface ClosedTicketFacts {
   readonly departmentId: string;
+  readonly channel: Ticket['channel'];
+  readonly contactId: string | null;
   readonly closedAt: Date | null;
   readonly mergedIntoId: string | null;
   readonly deletedAt: Date | null;
   /** The status is the brand's Spam (M1-11's `is_spam`); a merge is `mergedIntoId`. */
   readonly isSpam: boolean;
+}
+
+/** One answer, from whichever channel took it. A blank comment is null. */
+export interface CsatAnswer {
+  readonly rating: number;
+  readonly comment: string | null;
+  readonly via: CsatAnswerChannel;
+  readonly at: Date;
 }
 
 /** What the public page may print about the ticket, and nothing more. */
@@ -43,6 +56,8 @@ export class CsatRepository {
     const [row] = await tx
       .select({
         departmentId: tickets.departmentId,
+        channel: tickets.channel,
+        contactId: tickets.contactId,
         closedAt: tickets.closedAt,
         mergedIntoId: tickets.mergedIntoId,
         deletedAt: tickets.deletedAt,
@@ -56,7 +71,7 @@ export class CsatRepository {
     return row;
   }
 
-  /** Inserts the survey unless this close already has one; a redelivered job is a no-op. */
+  /** Inserts the survey unless this close already has one; a redelivered job gets undefined. */
   async insertSurvey(
     tx: DbTransaction,
     values: {
@@ -68,14 +83,14 @@ export class CsatRepository {
       readonly tokenHash: string;
       readonly expiresAt: Date;
     },
-  ): Promise<boolean> {
-    const inserted = await tx
+  ): Promise<CsatResponse | undefined> {
+    const [row] = await tx
       .insert(csatResponses)
       .values(values)
       .onConflictDoNothing({ target: [csatResponses.ticketId, csatResponses.closedAt] })
-      .returning({ id: csatResponses.id });
+      .returning();
 
-    return inserted.length > 0;
+    return row;
   }
 
   /** The survey for the ticket's most recent close. */
@@ -157,29 +172,104 @@ export class CsatRepository {
     return row?.name;
   }
 
+  async find(tx: DbTransaction, surveyId: string): Promise<CsatResponse | undefined> {
+    const [row] = await tx
+      .select()
+      .from(csatResponses)
+      .where(eq(csatResponses.id, surveyId))
+      .limit(1);
+
+    return row;
+  }
+
   /**
-   * Records the answer if, and only if, the survey is still open. The two
+   * The survey a Telegram button names, if the chat that pressed it is the
+   * ticket's contact's (M8-06). The callback data is the chat's to send, so a
+   * survey id alone proves nothing.
+   */
+  async findForTelegramChat(
+    tx: DbTransaction,
+    surveyId: string,
+    chatId: string,
+  ): Promise<CsatResponse | undefined> {
+    const [row] = await tx
+      .select({ survey: csatResponses })
+      .from(csatResponses)
+      .innerJoin(tickets, eq(tickets.id, csatResponses.ticketId))
+      .innerJoin(
+        contactIdentities,
+        and(
+          eq(contactIdentities.contactId, tickets.contactId),
+          eq(contactIdentities.kind, 'telegram'),
+          eq(contactIdentities.value, chatId),
+        ),
+      )
+      .where(and(eq(csatResponses.id, surveyId), isNull(tickets.deletedAt)))
+      .limit(1);
+
+    return row?.survey;
+  }
+
+  /**
+   * Records the answer if, and only if, the survey is still open to it. The
    * conditions are in the `WHERE`, so two submissions racing cannot both win:
-   * the second finds `rated_at` set and updates nothing.
+   * the second finds the survey answered and updates nothing.
+   *
+   * Open means unanswered and unexpired — and, for the rating page, also a
+   * Telegram tap with no comment yet: the tap records the score and the link
+   * stays usable once, to add the comment (`Telegram/Chat-EN`, panel 6).
    */
   async rate(
     tx: DbTransaction,
     surveyId: string,
-    answer: { readonly rating: number; readonly comment: string | null; readonly at: Date },
-  ): Promise<boolean> {
+    answer: CsatAnswer,
+  ): Promise<CsatResponse | undefined> {
+    const unanswered: SQL | undefined =
+      answer.via === 'link'
+        ? or(
+            isNull(csatResponses.ratedAt),
+            and(eq(csatResponses.ratedVia, 'telegram'), isNull(csatResponses.comment)),
+          )
+        : isNull(csatResponses.ratedAt);
+    const [row] = await tx
+      .update(csatResponses)
+      .set({
+        rating: answer.rating,
+        comment: answer.comment,
+        ratedAt: answer.at,
+        ratedVia: answer.via,
+      })
+      .where(
+        and(eq(csatResponses.id, surveyId), unanswered, gt(csatResponses.expiresAt, answer.at)),
+      )
+      .returning();
+
+    return row;
+  }
+
+  /** The widget's Skip: nothing recorded, the card not offered again. False once answered. */
+  async skip(tx: DbTransaction, surveyId: string, at: Date): Promise<boolean> {
     const updated = await tx
       .update(csatResponses)
-      .set({ rating: answer.rating, comment: answer.comment, ratedAt: answer.at })
+      .set({ skippedAt: at })
       .where(
         and(
           eq(csatResponses.id, surveyId),
           isNull(csatResponses.ratedAt),
-          gt(csatResponses.expiresAt, answer.at),
+          isNull(csatResponses.skippedAt),
         ),
       )
       .returning({ id: csatResponses.id });
 
     return updated.length > 0;
+  }
+
+  /** A channel delivered the survey (M8-06). The first delivery is the one kept. */
+  async markSent(tx: DbTransaction, surveyId: string, at: Date): Promise<void> {
+    await tx
+      .update(csatResponses)
+      .set({ sentAt: at })
+      .where(and(eq(csatResponses.id, surveyId), isNull(csatResponses.sentAt)));
   }
 
   /** `brands` is global, so this read needs no more than the brand id the token named. */

@@ -1,0 +1,197 @@
+{
+  "title": "Reports",
+  "caption": "{{brand}} brand · tickets, help center and AI",
+  "loading": "Reading the reports",
+  "error": {
+    "heading": "Could not read the reports",
+    "body": "The api did not answer. Check that it is running, then try again."
+  },
+  "exportFailed": "The CSV could not be downloaded. Try again.",
+  "comparedWith": "Compared with {{range}}",
+  "rolledUp": "Rolled up at {{time}} by stats.rollup · today so far is live",
+  "notRolledUp": "Not rolled up yet: stats.rollup runs hourly",
+  "tableNote": "Every chart has a table. \"Table\" on a card swaps the chart for the same numbers as an accessible table, and \"Export CSV\" downloads those rows with the filters above. Charts carry a text summary for screen readers; colour is never the only label.",
+  "empty": "Nothing in this period.",
+  "of_one": "of {{count}}",
+  "of_other": "of {{count}}",
+  "filters": {
+    "range": "Date range",
+    "rangeLabel_one": "{{from}} – {{to}} · {{count}} day",
+    "rangeLabel_other": "{{from}} – {{to}} · {{count}} days",
+    "lastDays_one": "Last {{count}} day",
+    "lastDays_other": "Last {{count}} days",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "invalidRange": "Pick a start before the end, at most 366 days apart.",
+    "department": "Department",
+    "allDepartments": "All departments",
+    "channel": "Channel",
+    "allChannels": "All channels"
+  },
+  "card": {
+    "tableShort": "Table",
+    "table": "Table · {{chart}}",
+    "exportShort": "Export CSV",
+    "export": "Export CSV · {{chart}}"
+  },
+  "kpi": {
+    "created": {
+      "label": "Tickets created",
+      "inDays_one": "in {{count}} day",
+      "inDays_other": "in {{count}} days",
+      "up_one": "{{percent}} % more than the previous day",
+      "up_other": "{{percent}} % more than the previous {{count}} days",
+      "down_one": "{{percent}} % fewer than the previous day",
+      "down_other": "{{percent}} % fewer than the previous {{count}} days",
+      "same_one": "the same as the previous day",
+      "same_other": "the same as the previous {{count}} days"
+    },
+    "firstResponse": {
+      "label": "Median first response",
+      "over_one": "over {{count}} response",
+      "over_other": "over {{count}} responses",
+      "faster_one": "{{amount}} faster than the previous day",
+      "faster_other": "{{amount}} faster than the previous {{count}} days",
+      "slower_one": "{{amount}} slower than the previous day",
+      "slower_other": "{{amount}} slower than the previous {{count}} days",
+      "same_one": "unchanged from the previous day",
+      "same_other": "unchanged from the previous {{count}} days"
+    },
+    "sla": {
+      "label": "SLA met",
+      "none": "No SLA clock finished in the previous period",
+      "up_one": "{{points}} points higher than the previous day",
+      "up_other": "{{points}} points higher than the previous {{count}} days",
+      "down_one": "{{points}} points lower than the previous day",
+      "down_other": "{{points}} points lower than the previous {{count}} days",
+      "same_one": "unchanged from the previous day",
+      "same_other": "unchanged from the previous {{count}} days"
+    },
+    "csat": {
+      "label": "CSAT",
+      "answers_one": "{{count}} answer",
+      "answers_other": "{{count}} answers",
+      "up_one": "{{answers}} answers · {{amount}} higher than the previous day",
+      "up_other": "{{answers}} answers · {{amount}} higher than the previous {{count}} days",
+      "down_one": "{{answers}} answers · {{amount}} lower than the previous day",
+      "down_other": "{{answers}} answers · {{amount}} lower than the previous {{count}} days",
+      "same": "{{answers}} answers · unchanged"
+    }
+  },
+  "columns": {
+    "day": "Day",
+    "created": "Created",
+    "resolved": "Resolved",
+    "metric": "Measure",
+    "count": "Count",
+    "clock": "Clock",
+    "compliance": "Met",
+    "open": "Open",
+    "rating": "Rating",
+    "responses": "Answers",
+    "share": "Share",
+    "agent": "Agent",
+    "openAssigned": "Open assigned",
+    "solved": "Solved",
+    "replies": "Replies",
+    "weekday": "Day",
+    "query": "Query",
+    "searches": "Searches",
+    "clicked": "Clicked",
+    "action": "Action"
+  },
+  "volume": {
+    "title": "Ticket volume",
+    "caption_one": "Tickets created per day · {{count}} in {{days}} days",
+    "caption_other": "Tickets created per day · {{count}} in {{days}} days",
+    "breakdown": "Break down by",
+    "by": {
+      "channel": "Channel",
+      "status": "Status",
+      "priority": "Priority"
+    },
+    "chartLabel": "Tickets created per day: {{created}} created and {{resolved}} resolved over {{days}} days.",
+    "breakdownLabel": "Tickets created by {{breakdown}}: {{figures}}.",
+    "tooltip_one": "{{day}} · {{count}} ticket created",
+    "tooltip_other": "{{day}} · {{count}} tickets created"
+  },
+  "times": {
+    "title": "First response and resolution time",
+    "caption": "Business hours · median and 90th percentile over the period",
+    "firstResponse": "First response",
+    "resolution": "Resolution",
+    "median": "Median",
+    "p90": "90th percentile (p90)",
+    "over_one": "{{metric}} · {{count}} measured",
+    "over_other": "{{metric}} · {{count}} measured",
+    "chartLabel": "{{metric}}: median {{median}}, 90th percentile {{p90}}."
+  },
+  "sla": {
+    "title": "SLA compliance",
+    "caption": "Clocks that finished within their target in the period",
+    "sentence": "{{met}} of {{total}} clocks met · {{breached}} breached",
+    "byClock": "By clock",
+    "response": "First reply",
+    "resolution": "Resolution",
+    "met": "Met",
+    "breached": "Breached",
+    "chartLabel": "SLA met by clock: {{figures}}.",
+    "countsReopens": "A reopened ticket's clocks count again, as this brand's SLA settings say.",
+    "ignoresReopens": "A reopened ticket's clocks are not counted again, as this brand's SLA settings say."
+  },
+  "backlog": {
+    "title": "Backlog trend",
+    "caption": "Tickets not closed at the end of each day",
+    "sentenceMore": "open at the end of the range · {{change}} more than on {{day}}",
+    "sentenceFewer": "open at the end of the range · {{change}} fewer than on {{day}}",
+    "chartLabel": "Open tickets at the end of each day: {{first}} on the first day, {{last}} on the last, over {{days}} days.",
+    "endLabel_one": "{{count}} open",
+    "endLabel_other": "{{count}} open",
+    "tooltip_one": "{{day}} · {{count}} open",
+    "tooltip_other": "{{day}} · {{count}} open"
+  },
+  "csat": {
+    "title": "Customer satisfaction",
+    "caption": "Survey answers after close · email, widget and Telegram",
+    "sentence_one": "out of 5 · {{count}} answer · {{satisfied}} rated 4 or 5",
+    "sentence_other": "out of 5 · {{count}} answers · {{satisfied}} rated 4 or 5",
+    "noAnswers": "No survey was answered in this period",
+    "stars_one": "{{count}} star",
+    "stars_other": "{{count}} stars",
+    "chartLabel": "Answers by rating: {{figures}}."
+  },
+  "agents": {
+    "title": "Agent workload",
+    "caption": "Per agent in the period · open count is at the end of the range",
+    "empty": "No agent replied or resolved in this period.",
+    "removed": "Removed account"
+  },
+  "hours": {
+    "title": "Busiest hours",
+    "caption": "Tickets created by weekday and hour · brand time ({{timezone}})",
+    "legend": "Tickets per hour",
+    "chartLabel": "Busiest hour {{busiest}} with {{busiestCount}} tickets; quietest {{quietest}} with {{quietestCount}}.",
+    "tooltip_one": "{{day}} {{hours}} · {{count}} ticket",
+    "tooltip_other": "{{day}} {{hours}} · {{count}} tickets"
+  },
+  "searches": {
+    "topTitle": "Help center top searches",
+    "topCaption": "What visitors searched for · click-through to an article",
+    "empty": "Nobody searched the help center in this period.",
+    "zeroTitle": "Searches with no results",
+    "zeroCaption": "Gaps in the help center · each is a candidate article",
+    "zeroEmpty": "Every search found something in this period.",
+    "writeArticle": "Write article"
+  },
+  "ai": {
+    "deflectionTitle": "AI deflection rate",
+    "deflectionCaption": "Conversations an AI auto-reply resolved without staff",
+    "deflectionSentence": "{{deflected}} of {{eligible}} eligible conversations",
+    "deflectionRule": "Counted when an auto-reply was sent, the visitor did not ask for a person, no staff replied, and the conversation closed or went quiet for 24 hours; divided by conversations where auto-reply was allowed.",
+    "costTitle": "AI cost",
+    "costCaption": "Provider spend logged in ai_calls · tokens in and out",
+    "costSentence": "{{calls}} calls · {{tokensIn}} tokens in · {{tokensOut}} out",
+    "unavailable": "Not available until the AI assistant records its calls (M7)."
+  }
+}

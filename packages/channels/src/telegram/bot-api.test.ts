@@ -18,7 +18,21 @@ const readBody = async (request: IncomingMessage): Promise<Record<string, unknow
   for await (const chunk of request) {
     chunks.push(chunk as Buffer);
   }
-  const text = Buffer.concat(chunks).toString('utf8');
+  const raw = Buffer.concat(chunks);
+  const type = request.headers['content-type'] ?? '';
+  if (type.startsWith('multipart/form-data')) {
+    const form = await new Response(raw, { headers: { 'content-type': type } }).formData();
+    const fields: Record<string, unknown> = {};
+    for (const [key, value] of form) {
+      if (typeof value === 'string') {
+        // grammY names an uploaded part `attach://<part>`; the part is the file.
+        const part = value.startsWith('attach://') ? form.get(value.slice(9)) : null;
+        fields[key] = part instanceof File ? { name: part.name, text: await part.text() } : value;
+      }
+    }
+    return fields;
+  }
+  const text = raw.toString('utf8');
   return text === '' ? {} : (JSON.parse(text) as Record<string, unknown>);
 };
 
@@ -73,6 +87,10 @@ describe('TelegramBotApi', () => {
             }
             reply({ message_id: 77, date: 0, chat: { id: 1, type: 'private' } });
             return;
+          case 'sendPhoto':
+          case 'sendDocument':
+            reply({ message_id: method === 'sendPhoto' ? 78 : 79, date: 0, chat: { id: 1 } });
+            return;
           case 'getFile':
             reply(
               body.file_id === 'missing'
@@ -97,7 +115,7 @@ describe('TelegramBotApi', () => {
   });
 
   it('reads who the bot is', async () => {
-    expect(await api().getMe()).toEqual({ id: 123456, username: 'acme_bot' });
+    expect(await api().getMe()).toEqual({ id: 123456, username: 'acme_bot', name: 'Acme' });
   });
 
   it('registers the webhook with its secret and only the updates Helpdock reads', async () => {
@@ -109,6 +127,14 @@ describe('TelegramBotApi', () => {
         secret_token: 'shh',
         allowed_updates: ['message', 'callback_query'],
       },
+    });
+  });
+
+  it('removes the webhook and what was pending for it', async () => {
+    await api().deleteWebhook();
+    expect(calls.at(-1)).toEqual({
+      method: 'deleteWebhook',
+      body: { drop_pending_updates: true },
     });
   });
 
@@ -132,6 +158,36 @@ describe('TelegramBotApi', () => {
     expect(calls.at(-1)).toEqual({
       method: 'answerCallbackQuery',
       body: { callback_query_id: 'cq-1' },
+    });
+  });
+
+  it('uploads a photo and a document as files, named', async () => {
+    const photo = { bytes: Buffer.from('webp bytes'), fileName: 'receipt.webp' };
+    expect(await api().sendPhoto('42', photo)).toBe('78');
+    expect(calls.at(-1)).toEqual({
+      method: 'sendPhoto',
+      body: { chat_id: '42', photo: { name: 'receipt.webp', text: 'webp bytes' } },
+    });
+
+    const document = { bytes: Buffer.from('%PDF-1.7'), fileName: 'invoice.pdf' };
+    expect(await api().sendDocument('42', document)).toBe('79');
+    expect(calls.at(-1)).toEqual({
+      method: 'sendDocument',
+      body: { chat_id: '42', document: { name: 'invoice.pdf', text: '%PDF-1.7' } },
+    });
+  });
+
+  it('replaces a message’s buttons, or removes them', async () => {
+    const keyboard = { inline_keyboard: [[{ text: 'Add a comment', url: 'https://x.test/c' }]] };
+    await api().editMessageReplyMarkup('42', '77', keyboard);
+    expect(calls.at(-1)).toEqual({
+      method: 'editMessageReplyMarkup',
+      body: { chat_id: '42', message_id: 77, reply_markup: keyboard },
+    });
+    await api().editMessageReplyMarkup('42', '77');
+    expect(calls.at(-1)).toEqual({
+      method: 'editMessageReplyMarkup',
+      body: { chat_id: '42', message_id: 77 },
     });
   });
 

@@ -6,6 +6,7 @@ import type {
   WidgetConfig as WireConfig,
   ContentPolicy as WireContentPolicy,
   WidgetConversation as WireConversation,
+  WidgetCsat as WireCsat,
   WidgetPrechatFieldView as WireField,
   WidgetMessage as WireMessage,
 } from '@helpdock/schemas';
@@ -18,6 +19,7 @@ import type {
   ContentPolicy,
   ConversationStatus,
   ConversationSummary,
+  CsatCard,
   FieldDefinition,
   KindPolicy,
   WidgetConfig,
@@ -192,4 +194,12 @@ export const toConversation = (
   department: null,
   visitor_email: visitorEmail,
   read_seq: 0,
+});
+
+/** M8-06: the satisfaction card, as the UI draws it. */
+export const toCsat = (wire: WireCsat): CsatCard => ({
+  state: wire.state,
+  rating: wire.rating,
+  comment: wire.comment,
+  skipped_at: wire.skippedAt,
 });

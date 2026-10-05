@@ -11,7 +11,7 @@ const event = (fields: Partial<TelegramMessageEvent> = {}): TelegramMessageEvent
   kind: 'message',
   updateId: 1,
   messageId: 11,
-  sender: { chatId: '4242', name: 'Mona', languageCode: null },
+  sender: { chatId: '4242', name: 'Mona', username: 'mona_k', languageCode: null },
   text: 'Hello <b>there</b>',
   files: [],
   location: null,
@@ -35,7 +35,7 @@ describe('toTelegramInboundMessage', () => {
       cc: [],
       hints: { messageIds: [], ticketNumbers: [] },
       receivedAt,
-      telegram: { chatId: '4242', messageId: 11, location: null },
+      telegram: { chatId: '4242', messageId: 11, location: null, username: 'mona_k' },
     });
   });
 

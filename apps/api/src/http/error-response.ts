@@ -10,6 +10,7 @@ import type {
   FieldError,
   HcRefusal,
   IdentityProblem,
+  KnowledgeRefusal,
   SetupRefusal,
   StaffRefusal,
   TelegramRefusal,
@@ -28,6 +29,7 @@ import { ContactFailure } from '../contacts/contact-failure.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
+import { KnowledgeFailure } from '../knowledge/knowledge-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TelegramFailure } from '../telegram/telegram-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
@@ -73,6 +75,8 @@ export interface MappedError {
   readonly helpCenter?: HcRefusal;
   /** Only on a refused AI settings change; see `ai/ai-failure.ts`. */
   readonly ai?: AiRefusal;
+  /** Only on a refused knowledge source action; see `knowledge/knowledge-failure.ts`. */
+  readonly knowledge?: KnowledgeRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -83,6 +87,8 @@ const CODE_BY_STATUS: Readonly<Record<number, ErrorCode>> = {
   [HttpStatus.FORBIDDEN]: 'forbidden',
   [HttpStatus.NOT_FOUND]: 'not_found',
   [HttpStatus.CONFLICT]: 'conflict',
+  // M8-02: an Idempotency-Key reused with a different request.
+  [HttpStatus.UNPROCESSABLE_ENTITY]: 'conflict',
   [HttpStatus.TOO_MANY_REQUESTS]: 'rate_limited',
 };
 
@@ -253,6 +259,16 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  if (error instanceof KnowledgeFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      knowledge: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof HttpException) {
     const status = error.getStatus();
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
@@ -306,5 +322,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
     ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
     ...(mapped.ai === undefined ? {} : { ai: { reason: mapped.ai } }),
+    ...(mapped.knowledge === undefined ? {} : { knowledge: { reason: mapped.knowledge } }),
   },
 });

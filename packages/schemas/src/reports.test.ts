@@ -3,6 +3,7 @@ import {
   csvCell,
   csvLine,
   REPORT_MAX_DAYS,
+  reportExportFileName,
   reportQuerySchema,
   reportRangeDays,
   reportSummarySchema,
@@ -78,5 +79,13 @@ describe('reportSummarySchema', () => {
     const ai = reportSummarySchema.shape.ai.parse({ available: false });
 
     expect(ai).toEqual({ available: false });
+  });
+});
+
+describe('reportExportFileName', () => {
+  it('names the file after the report and the range, with dashes for underscores', () => {
+    expect(reportExportFileName('busiest_hours', '2026-09-01', '2026-09-30')).toBe(
+      'helpdock-busiest-hours-2026-09-01-2026-09-30.csv',
+    );
   });
 });

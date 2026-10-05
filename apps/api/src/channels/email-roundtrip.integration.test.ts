@@ -46,6 +46,7 @@ import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { businessHoursProbe } from '../sla/business-hours-probe.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
+import { noSurveyEmails } from '../testing/csat-doubles.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 
@@ -233,6 +234,7 @@ describe.skipIf(!hasDocker)('inbound and outbound email together', () => {
         keyring: createKeyring(envFor()),
         installSmtp: NO_INSTALL_SMTP,
         transports: smtpTransportFactory,
+        surveys: noSurveyEmails,
       }),
     });
     const queued = await owner.db

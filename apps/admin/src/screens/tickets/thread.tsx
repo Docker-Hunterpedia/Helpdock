@@ -24,6 +24,8 @@ import {
   PendingFooter,
   SystemEvent,
 } from './message-bubble.tsx';
+import { LocationLine, splitLocation } from './telegram/location-line.tsx';
+import type { ThreadTelegram } from './telegram/use-ticket-telegram.tsx';
 
 /**
  * The thread: bubbles and system events in one column, 720 px wide at most.
@@ -78,6 +80,7 @@ export function Thread({
   now,
   merges,
   deliveryFooter,
+  telegram,
   onRetry,
   onDiscard,
 }: {
@@ -87,6 +90,8 @@ export function Thread({
   readonly merges?: ThreadMerges;
   /** M2-05: under a reply that was emailed, "Not delivered · Retry" when it was not. */
   readonly deliveryFooter?: ((message: TicketMessage) => ReactNode) | undefined;
+  /** M6: the "via @bot" and "Sent" lines, voice notes and locations of a Telegram thread. */
+  readonly telegram?: ThreadTelegram | undefined;
   onRetry(pending: PendingMessage): void;
   onDiscard(pending: PendingMessage): void;
 }): ReactNode {
@@ -164,27 +169,12 @@ export function Thread({
                   time={messageTime(item.message.createdAt, locale, now)}
                 />
               ) : (
-                <MessageBubble
-                  kind={bubbleKindOf(item.message)}
-                  author={
-                    names.nameFor(item.message.authorType, item.message.authorId) ??
-                    t(`tickets:thread.${item.message.authorType === 'ai' ? 'system' : 'contact'}`)
-                  }
-                  meta={metaOf(item.message, names, locale, now)}
-                  bodyHtml={item.message.bodyHtml}
+                <SentMessage
+                  message={item.message}
+                  names={names}
+                  now={now}
+                  telegram={telegram}
                   footer={deliveryFooter?.(item.message) ?? null}
-                  {...(item.message.attachments.length === 0
-                    ? {}
-                    : {
-                        attachments: item.message.attachments.map((attachment) => (
-                          <AttachmentChip
-                            key={attachment.id}
-                            name={attachment.originalName}
-                            size={attachment.size}
-                            state={chipState(attachment)}
-                          />
-                        )),
-                      })}
                 />
               )
             ) : (
@@ -287,8 +277,9 @@ const metaOf = (
   names: ThreadNames,
   locale: 'en' | 'ar',
   now: number,
+  telegram?: ThreadTelegram,
 ): ReactNode => {
-  const address = names.addressFor(message.authorId);
+  const address = telegram?.leadFor(message) ?? names.addressFor(message.authorId);
 
   return (
     <>
@@ -299,9 +290,63 @@ const metaOf = (
         </>
       )}
       <bdi>{messageTime(message.createdAt, locale, now)}</bdi>
+      {telegram?.trailFor(message)}
     </>
   );
 };
+
+/**
+ * A message the api has, as a bubble. On a Telegram thread a shared location
+ * is lifted out of the body into its LocationLine and a voice note is a
+ * player rather than a chip (M6-03).
+ */
+function SentMessage({
+  message,
+  names,
+  now,
+  telegram,
+  footer,
+}: {
+  readonly message: TicketMessage;
+  readonly names: ThreadNames;
+  readonly now: number;
+  readonly telegram: ThreadTelegram | undefined;
+  readonly footer: ReactNode;
+}): ReactNode {
+  const t = useT();
+  const { locale } = usePreferences();
+  const located = telegram === undefined ? undefined : splitLocation(message.bodyHtml);
+  const time = messageTime(message.createdAt, locale, now);
+
+  return (
+    <MessageBubble
+      kind={bubbleKindOf(message)}
+      author={
+        names.nameFor(message.authorType, message.authorId) ??
+        t(`tickets:thread.${message.authorType === 'ai' ? 'system' : 'contact'}`)
+      }
+      meta={metaOf(message, names, locale, now, telegram)}
+      bodyHtml={located?.html ?? message.bodyHtml}
+      footer={footer}
+      {...(located === undefined ? {} : { extra: <LocationLine location={located.location} /> })}
+      {...(message.attachments.length === 0
+        ? {}
+        : {
+            attachments: message.attachments.map(
+              (attachment) =>
+                telegram?.attachmentFor(attachment, time) ?? (
+                  <AttachmentChip
+                    key={attachment.id}
+                    name={attachment.originalName}
+                    size={attachment.size}
+                    state={chipState(attachment)}
+                  />
+                ),
+            ),
+          })}
+    />
+  );
+}
 
 /**
  * What an activity row says in the thread. Only the fields that actually moved

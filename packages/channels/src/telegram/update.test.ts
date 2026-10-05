@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
-import { classifyUpdate } from './update.js';
+import { classifyUpdate, csatCallbackData } from './update.js';
 
 const chat = { id: 4242, type: 'private', first_name: 'Mona' };
 const from = {
@@ -22,7 +22,7 @@ describe('classifyUpdate', () => {
       kind: 'message',
       updateId: 7,
       messageId: 11,
-      sender: { chatId: '4242', name: 'Mona Khalil', languageCode: 'ar' },
+      sender: { chatId: '4242', name: 'Mona Khalil', username: null, languageCode: 'ar' },
       text: 'My order is late',
       files: [],
       location: null,
@@ -96,7 +96,12 @@ describe('classifyUpdate', () => {
   it('reads a language button press', () => {
     const event = classifyUpdate({
       update_id: 8,
-      callback_query: { id: 'cq-1', from, message: { message_id: 3, chat }, data: 'lang:ar' },
+      callback_query: {
+        id: 'cq-1',
+        from: { ...from, username: 'mona_k' },
+        message: { message_id: 3, chat },
+        data: 'lang:ar',
+      },
     });
 
     expect(event).toEqual({
@@ -104,8 +109,46 @@ describe('classifyUpdate', () => {
       updateId: 8,
       callbackQueryId: 'cq-1',
       locale: 'ar',
-      sender: { chatId: '4242', name: 'Mona Khalil', languageCode: 'ar' },
+      sender: { chatId: '4242', name: 'Mona Khalil', username: 'mona_k', languageCode: 'ar' },
     });
+  });
+
+  it('reads a survey button press with the survey, the score and the message it sits under', () => {
+    const surveyId = '0192c3f0-1a2b-7c3d-8e4f-000000000042';
+    const event = classifyUpdate({
+      update_id: 9,
+      callback_query: {
+        id: 'cq-2',
+        from,
+        message: { message_id: 77, chat },
+        data: csatCallbackData(surveyId, 4),
+      },
+    });
+
+    expect(event).toEqual({
+      kind: 'csat',
+      updateId: 9,
+      callbackQueryId: 'cq-2',
+      surveyId,
+      rating: 4,
+      messageId: '77',
+      sender: { chatId: '4242', name: 'Mona Khalil', username: null, languageCode: 'ar' },
+    });
+  });
+
+  it('ignores survey data out of range or malformed', () => {
+    for (const data of [
+      'csat:0192c3f0-1a2b-7c3d-8e4f-000000000042:6',
+      'csat:not-a-uuid:4',
+      'csat:0192c3f0-1a2b-7c3d-8e4f-000000000042',
+    ]) {
+      expect(
+        classifyUpdate({
+          update_id: 10,
+          callback_query: { id: 'cq', from, message: { message_id: 1, chat }, data },
+        }),
+      ).toMatchObject({ reason: 'unknown-callback' });
+    }
   });
 
   it('ignores what a ticket is not made of', () => {

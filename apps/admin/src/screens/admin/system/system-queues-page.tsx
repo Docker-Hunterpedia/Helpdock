@@ -1,7 +1,7 @@
 import { Box, Button } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ServerCog, ShieldAlert } from 'lucide-react';
-import { type ReactNode, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { ROUTES } from '../../../app/route-paths.js';
@@ -9,12 +9,12 @@ import { EmptyState } from '../../../shell/empty-state.js';
 import { PageHeader } from '../../../shell/page-header.js';
 import { QueuesCard } from './queues-card.js';
 import {
-  HttpSystemApi,
   NotAllowedError,
   SYSTEM_QUERY_KEY,
   SYSTEM_REFETCH_MS,
   type SystemApi,
 } from './system-api.js';
+import { useSystemApi } from './system-api-context.tsx';
 
 /**
  * Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR
@@ -22,7 +22,7 @@ import {
  */
 export function SystemQueuesPage({ api }: { readonly api?: SystemApi } = {}): ReactNode {
   const t = useT();
-  const client = useMemo(() => api ?? new HttpSystemApi(), [api]);
+  const client = useSystemApi(api);
 
   const { data, error } = useQuery({
     queryKey: SYSTEM_QUERY_KEY,
@@ -62,7 +62,7 @@ export function SystemQueuesPage({ api }: { readonly api?: SystemApi } = {}): Re
     <>
       <PageHeader
         title={t('system:queues.title')}
-        caption={t('system:openQueuesHint')}
+        caption={t('system:queues.pageCaption')}
         action={back}
       />
       <Box sx={{ display: 'grid', gap: 4 }}>

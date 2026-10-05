@@ -13,6 +13,7 @@ import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { CaptchaVerifier, DbCaptchaKeys, safeCaptchaTransport } from '../captcha/captcha-keys.js';
+import { CsatRepository } from '../csat/csat.repository.js';
 import { EmailRepository } from '../email/email.repository.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { SettingsInstallSmtp } from '../email/transport.js';
@@ -47,6 +48,8 @@ import { WIDGET_DIST, WidgetBundleController } from './widget-bundle.controller.
 import { resolveWidgetDist } from './widget-bundle.js';
 import { WidgetConfigService } from './widget-config.service.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
+import { WidgetCsatController } from './widget-csat.controller.js';
+import { WidgetCsatService } from './widget-csat.service.js';
 import { WidgetGate } from './widget-gate.js';
 import { WidgetHub } from './widget-hub.js';
 import { brandVisitorsRoom, RedisWidgetBroadcast } from './widget-relay.js';
@@ -164,6 +167,7 @@ export class WidgetModule {
       controllers: [
         WidgetSettingsController,
         WidgetController,
+        WidgetCsatController,
         WidgetArticlesController,
         WidgetStreamController,
         WidgetBundleController,
@@ -262,6 +266,17 @@ export class WidgetModule {
               ),
               lifecycleReads,
               limiter: new RateLimiter(redis),
+            }),
+        },
+        {
+          provide: WidgetCsatService,
+          inject: [WidgetGate, WidgetConversationsService, REDIS],
+          useFactory: (gate: WidgetGate, conversations: WidgetConversationsService, redis: Redis) =>
+            new WidgetCsatService({
+              gate,
+              conversations,
+              repository: new CsatRepository(),
+              broadcast: new RedisWidgetBroadcast(redis),
             }),
         },
         {

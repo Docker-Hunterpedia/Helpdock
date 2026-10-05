@@ -13,7 +13,8 @@ import { HEALTH_TEXT, HEALTH_TOKEN, healthLabelKey } from './format.js';
 
 const DOT = 8;
 
-function Dot({ state }: { readonly state: MailboxHealthState }): ReactNode {
+/** The dot alone, for a channel whose label is its own (Telegram, M6-05). */
+export function HealthStateDot({ state }: { readonly state: MailboxHealthState }): ReactNode {
   const tokens = useSemanticTokens();
 
   return (
@@ -39,7 +40,7 @@ export function HealthDot({ mailbox }: { readonly mailbox: Pick<Mailbox, 'health
 
   return (
     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-      <Dot state={state} />
+      <HealthStateDot state={state} />
       <Typography
         component="span"
         sx={{
@@ -72,7 +73,7 @@ export function HealthLegend(): ReactNode {
     >
       {LEGEND.map((state) => (
         <Box component="li" key={state} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Dot state={state} />
+          <HealthStateDot state={state} />
           {t(`channels:legend.${state}`)}
         </Box>
       ))}

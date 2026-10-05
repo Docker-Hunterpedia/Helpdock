@@ -49,12 +49,19 @@ export function CsatPage({
   brandName,
   state,
   preview = false,
+  initialRating = null,
   onRate,
 }: {
   readonly tokens: SemanticTokens;
   readonly brandName: string | null;
   readonly state: LoadState;
   readonly preview?: boolean;
+  /**
+   * M8-06: the score an email link carried (`?rating=`), pressed when the
+   * page opens. Nothing is recorded until Send, so a mail scanner that follows
+   * the link casts no rating. A score a Telegram tap already recorded wins.
+   */
+  readonly initialRating?: number | null;
   onRate(request: CsatSubmitRequest): Promise<CsatSurveyView>;
 }): ReactNode {
   const t = useT();
@@ -136,6 +143,7 @@ export function CsatPage({
             reference={view.ticket.reference}
             subject={view.ticket.subject}
             closedBy={view.ticket.closedBy}
+            initialRating={view.rating ?? initialRating}
             tokens={tokens}
             onRate={async (request) => {
               setAnswer(await onRate(request));
@@ -182,19 +190,21 @@ function RatingForm({
   reference,
   subject,
   closedBy,
+  initialRating,
   tokens,
   onRate,
 }: {
   readonly reference: string;
   readonly subject: string;
   readonly closedBy: string | null;
+  readonly initialRating: number | null;
   readonly tokens: SemanticTokens;
   onRate(request: CsatSubmitRequest): Promise<void>;
 }): ReactNode {
   const t = useT();
   const legendId = useId();
   const errorId = useId();
-  const [rating, setRating] = useState<number | null>(null);
+  const [rating, setRating] = useState<number | null>(initialRating);
   const [comment, setComment] = useState('');
   const [missing, setMissing] = useState(false);
   const [failed, setFailed] = useState(false);

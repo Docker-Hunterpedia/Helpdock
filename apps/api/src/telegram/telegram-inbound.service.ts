@@ -5,6 +5,7 @@ import {
   TelegramApiFailure,
   type TelegramEvent,
   type TelegramMessageEvent,
+  type TelegramSender,
   telegramExternalId,
   toTelegramInboundMessage,
 } from '@helpdock/channels';
@@ -24,6 +25,7 @@ import { and, eq } from 'drizzle-orm';
 import type { StorageAttachmentSink } from '../channels/inbound/attachment-sink.js';
 import type { InboundLog } from '../channels/inbound/inbound-email.service.js';
 import { isUniqueViolation } from '../channels/pg-errors.js';
+import type { CsatTelegramTaps } from '../csat/telegram-csat.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { isSenderBlocked } from '../ticketing/sender-gate.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
@@ -41,6 +43,7 @@ import type { TelegramConversationRouter, TelegramRouteOutcome } from './telegra
  * | a message | its files are fetched with `getFile` (outside any transaction), then in one system transaction: dedupe, the sender gate, the router |
  * | `/start` | the contact and chat are recorded and a welcome is asked for through the outbox (M6-04) |
  * | a language button | the contact's locale is set and a confirmation is asked for |
+ * | a survey button | the score is recorded and the thanks, or "closed", is asked for (M8-06) |
  * | anything else | counted as received and dropped |
  *
  * Every reply to the customer — the welcome, the confirmation, an agent's
@@ -51,7 +54,7 @@ import type { TelegramConversationRouter, TelegramRouteOutcome } from './telegra
 
 export type TelegramInboundResult =
   | { readonly outcome: 'accepted'; readonly route: TelegramRouteOutcome }
-  | { readonly outcome: 'welcomed' | 'language-set' }
+  | { readonly outcome: 'welcomed' | 'language-set' | 'csat-rated' | 'csat-closed' }
   | { readonly outcome: 'duplicate' | 'ignored'; readonly reason: string };
 
 export interface TelegramInboundServiceOptions {
@@ -59,6 +62,7 @@ export interface TelegramInboundServiceOptions {
   readonly repository: TelegramRepository;
   readonly router: TelegramConversationRouter;
   readonly lifecycleReads: TicketLifecycleRepository;
+  readonly csatTaps: Pick<CsatTelegramTaps, 'tap'>;
   readonly keyring: Keyring;
   readonly api: TelegramApiFactory;
   /** A fresh sink per message, so a rolled-back message's uploads are its own to remove. */
@@ -108,6 +112,8 @@ export class TelegramInboundService {
         return this.#greet(bot, event, now);
       case 'language':
         return this.#setLanguage(bot, event, now);
+      case 'csat':
+        return this.#rate(bot, event, now);
       case 'message':
         return this.#file(bot, event, now);
     }
@@ -224,7 +230,7 @@ export class TelegramInboundService {
       if (await this.#blocked(tx, bot, event.sender.chatId, now)) {
         return { outcome: 'ignored', reason: 'blocked-sender' };
       }
-      const contact = await this.#chatContact(tx, bot, event.sender, now);
+      const { contact } = await this.#chatContact(tx, bot, event.sender, now);
       await enqueueTelegramNotice(tx, bot.brandId, {
         botId: bot.id,
         chatId: event.sender.chatId,
@@ -247,7 +253,8 @@ export class TelegramInboundService {
       if (await this.#blocked(tx, bot, event.sender.chatId, now)) {
         return { outcome: 'ignored', reason: 'blocked-sender' };
       }
-      const contact = await this.#chatContact(tx, bot, event.sender, now);
+      const { contact, chat } = await this.#chatContact(tx, bot, event.sender, now);
+      await this.#options.repository.markLanguageChosen(tx, chat.id, now);
       await tx
         .update(contacts)
         .set({ locale: event.locale, updatedAt: now })
@@ -263,21 +270,47 @@ export class TelegramInboundService {
     });
   }
 
-  async #chatContact(
-    tx: DbTransaction,
+  /** M8-06: a score under the survey, recorded in one tap; a late or second tap is told so. */
+  async #rate(
     bot: TelegramBotRow,
-    sender: { readonly chatId: string; readonly name: string | null },
+    event: Extract<TelegramEvent, { kind: 'csat' }>,
     now: Date,
-  ) {
+  ): Promise<TelegramInboundResult> {
+    return this.#system(bot, async (tx): Promise<TelegramInboundResult> => {
+      const outcome = await this.#options.csatTaps.tap(tx, {
+        brandId: bot.brandId,
+        chatId: event.sender.chatId,
+        surveyId: event.surveyId,
+        rating: event.rating,
+        at: now,
+      });
+      await enqueueTelegramNotice(tx, bot.brandId, {
+        botId: bot.id,
+        chatId: event.sender.chatId,
+        notice: outcome === 'rated' ? 'csat_rated' : 'csat_closed',
+        locale: await this.#localeOf(tx, bot.brandId, event.sender.chatId),
+        callbackQueryId: event.callbackQueryId,
+        csat: {
+          surveyId: event.surveyId,
+          messageId: event.messageId,
+          ...(outcome === 'rated' ? { rating: event.rating } : {}),
+        },
+      });
+      return { outcome: outcome === 'rated' ? 'csat-rated' : 'csat-closed' };
+    });
+  }
+
+  async #chatContact(tx: DbTransaction, bot: TelegramBotRow, sender: TelegramSender, now: Date) {
     const contact = await this.#options.router.contactFor(tx, bot.brandId, sender);
-    await this.#options.repository.upsertChat(tx, {
+    const chat = await this.#options.repository.upsertChat(tx, {
       brandId: bot.brandId,
       botId: bot.id,
       chatId: sender.chatId,
       contactId: contact.id,
       at: now,
+      username: sender.username,
     });
-    return contact;
+    return { contact, chat };
   }
 
   // --------------------------------------------------------------------

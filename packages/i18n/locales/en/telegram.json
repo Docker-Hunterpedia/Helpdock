@@ -6,5 +6,11 @@
   },
   "thread": {
     "location": "Location"
+  },
+  "csat": {
+    "survey": "Your request {{reference}} is closed. How was our help? Tap a number: 1 is very bad, 5 is excellent.",
+    "addComment": "Add a comment",
+    "thanks": "Thanks! You rated this request {{rating}} · {{label}}. You can still add a comment on the survey page until {{date}}.",
+    "closed": "This survey has closed."
   }
 }

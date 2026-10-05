@@ -24,7 +24,8 @@ export const minimalPdf = (pages: readonly (readonly string[])[]): Uint8Array =>
     ].join('\n');
     objects[pageId] =
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageId + 1} 0 R >>`;
-    objects[pageId + 1] = `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`;
+    objects[pageId + 1] =
+      `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`;
   });
 
   let body = '%PDF-1.4\n';

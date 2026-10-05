@@ -1,6 +1,6 @@
 /**
  * Reciprocal rank fusion with a locale boost (M7-04, ARCHITECTURE §10;
- * [ADR 0019](../../../../docs/decisions/0019-knowledge-chunking-and-fusion.md)).
+ * [ADR 0020](../../../../docs/decisions/0020-knowledge-chunking-and-fusion.md)).
  *
  * Retrieval asks two rankers — pgvector cosine and Postgres full text — for
  * their best chunks, each already filtered by audience in SQL, and merges the

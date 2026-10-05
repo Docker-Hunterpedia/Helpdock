@@ -185,7 +185,12 @@ export async function* crawlSite(
       readSitemaps += 1;
       const response = await paced(() => deps.fetch(sitemapUrl));
       if (response.status < 200 || response.status >= 300) {
-        yield { type: 'skipped', url: sitemapUrl, reason: 'status', detail: String(response.status) };
+        yield {
+          type: 'skipped',
+          url: sitemapUrl,
+          reason: 'status',
+          detail: String(response.status),
+        };
         continue;
       }
       const sitemap = parseSitemap(response.body);
@@ -214,7 +219,13 @@ export async function* crawlSite(
         continue;
       }
       indexed += 1;
-      yield { type: 'page', url, document: documentOf(page.html, page.url), index: indexed, total: planned.length };
+      yield {
+        type: 'page',
+        url,
+        document: documentOf(page.html, page.url),
+        index: indexed,
+        total: planned.length,
+      };
     }
     return;
   }
@@ -248,7 +259,13 @@ export async function* crawlSite(
     }
     if (reason === null) {
       indexed += 1;
-      yield { type: 'page', url, document: documentOf(page.html, page.url), index: indexed, total: undefined };
+      yield {
+        type: 'page',
+        url,
+        document: documentOf(page.html, page.url),
+        index: indexed,
+        total: undefined,
+      };
     }
   }
 }

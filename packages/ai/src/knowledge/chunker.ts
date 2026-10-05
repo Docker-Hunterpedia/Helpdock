@@ -3,7 +3,7 @@ import { detectLocale, type KnowledgeLocale } from './locale.js';
 
 /**
  * The chunker (M7-03, ARCHITECTURE §10: "by headings, ~500 tokens, overlap
- * 60"; [ADR 0019](../../../../docs/decisions/0019-knowledge-chunking-and-fusion.md)).
+ * 60"; [ADR 0020](../../../../docs/decisions/0020-knowledge-chunking-and-fusion.md)).
  *
  * Every loader — article, file, page, Notion, Drive — hands over an
  * {@link ExtractedDocument}: a title and one or more parts (a PDF page, or the

@@ -216,7 +216,8 @@ export const browseDrive = async (
   parentId: string | undefined,
 ): Promise<ConnectorItem[]> => {
   const client = driveFor(connection);
-  const parent = parentId === undefined ? '' : `'${parentId.replace(/['\\]/g, '')}' in parents and `;
+  const parent =
+    parentId === undefined ? '' : `'${parentId.replace(/['\\]/g, '')}' in parents and `;
   const { data } = await authAware(() =>
     client.files.list({
       q: `${parent}mimeType = '${FOLDER}' and trashed = false`,

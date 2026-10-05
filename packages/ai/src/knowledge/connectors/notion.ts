@@ -43,7 +43,11 @@ export interface NotionSelection {
   readonly databaseIds: readonly string[];
 }
 
-const clientFor = ({ token, fetch, baseUrl }: Omit<NotionConnection, 'token'> & { token?: string }) =>
+const clientFor = ({
+  token,
+  fetch,
+  baseUrl,
+}: Omit<NotionConnection, 'token'> & { token?: string }) =>
   new Client({
     ...(token === undefined ? {} : { auth: token }),
     fetch,
@@ -89,9 +93,7 @@ async function* readPage(client: Client, pageId: string): AsyncGenerator<Connect
   try {
     const page = await authAware(() => client.pages.retrieve({ page_id: pageId }));
     const title = isFullPage(page) ? pageTitle(page.properties) : '';
-    const { markdown } = await authAware(() =>
-      client.pages.retrieveMarkdown({ page_id: pageId }),
-    );
+    const { markdown } = await authAware(() => client.pages.retrieveMarkdown({ page_id: pageId }));
     yield {
       type: 'document',
       externalId: pageId,

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { localeSchema } from './brand.js';
+import { HC_FEEDBACK_COMMENT_MAX } from './help-center-insights.js';
 
 /**
  * The published help center as a site (M5-03, M5-04, M5-06): its theme, its
@@ -261,6 +262,17 @@ export const hcFeedbackFormSchema = z.object({
   locale: localeSchema,
   slug: z.string().max(200),
   helpful: z.enum(['yes', 'no']),
+  /**
+   * The "What was missing?" step after a "No" (`HelpCenter/Article-AR` panel
+   * 2). Present, if empty, whenever that step's form is sent; absent from the
+   * first answer. A browser sends each line break of the field as two
+   * characters, so twice the field's limit is let through and the service
+   * trims and caps what it stores.
+   */
+  comment: z
+    .string()
+    .max(HC_FEEDBACK_COMMENT_MAX * 2)
+    .optional(),
 });
 export type HcFeedbackForm = z.infer<typeof hcFeedbackFormSchema>;
 

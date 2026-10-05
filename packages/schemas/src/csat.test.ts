@@ -7,7 +7,7 @@ import {
 } from './csat.js';
 
 const TOKEN = `${'A'.repeat(43)}.${'b'.repeat(43)}`;
-const BRAND = { name: 'Helpdock', locale: 'en', accent: null } as const;
+const BRAND = { name: 'Helpdock', locale: 'en', accent: null, helpCenterUrl: null } as const;
 
 describe('csatTokenParamSchema', () => {
   it('takes the two base64url halves a link carries', () => {

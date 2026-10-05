@@ -5,6 +5,7 @@ import { Composer } from './Composer.js';
 import { ContactForm } from './ContactForm.js';
 import { useLazy, useWidget, useWidgetState } from './context.js';
 import { Ended } from './Ended.js';
+import { usePhone, wrapFocus } from './focus-trap.js';
 import { Header } from './Header.js';
 import { Icon } from './icons.js';
 import { loadArticle, loadHelpCenter } from './lazy.js';
@@ -16,7 +17,9 @@ const FOCUSABLE = 'input:not([type=hidden]):not([tabindex="-1"]), textarea, butt
 /**
  * The launcher and the window (DESIGN §6.6). Every mode keeps the same window,
  * header and footer; only the body changes (`WidgetModesEN`). The window is a
- * labelled region, not a modal: the host page stays usable behind it.
+ * labelled region, not a modal: the host page stays usable behind it. On a
+ * phone it fills the screen and covers the page, so there it is a modal
+ * dialog that keeps Tab inside it, and the launcher steps aside (M9-04).
  */
 export function App() {
   const { controller, t } = useWidget();
@@ -26,6 +29,7 @@ export function App() {
   const launcher = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(open);
+  const phone = usePhone();
 
   const HelpCenter = useLazy(loadHelpCenter, open && config?.mode === 'helpcenter');
   const ArticleView = useLazy(loadArticle, article !== null);
@@ -53,13 +57,16 @@ export function App() {
 
   const minimise = () => {
     controller.setOpen(false);
-    launcher.current?.focus();
+    // After the render: on a phone the launcher is hidden until the window closes.
+    requestAnimationFrame(() => launcher.current?.focus());
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       event.stopPropagation();
       minimise();
+    } else if (phone) {
+      wrapFocus(event.currentTarget as HTMLElement, event);
     }
   };
 
@@ -89,9 +96,14 @@ export function App() {
   }
 
   return (
-    <div class={`hd-root hd-position-${launcherTheme.position}`}>
+    <div class={`hd-root hd-position-${launcherTheme.position}${open ? ' hd-root-open' : ''}`}>
       {open ? (
-        <section class="hd-window" aria-label={t('window.label')} onKeyDown={onKeyDown}>
+        <section
+          class="hd-window"
+          aria-label={t('window.label')}
+          {...(phone ? { role: 'dialog', 'aria-modal': 'true' } : {})}
+          onKeyDown={onKeyDown}
+        >
           <Header article={article} onBack={closeArticle} onMinimise={minimise} />
           <div class="hd-content" ref={body}>
             {content}

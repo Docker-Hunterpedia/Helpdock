@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mountWidget } from './mount.js';
+import { changesOnly, mountWidget } from './mount.js';
 import { sampleMockOptions } from './transport/fixtures.js';
 import { MockTransport } from './transport/mock.js';
 
@@ -44,5 +44,18 @@ describe('mountWidget', () => {
     widget.unmount();
 
     expect(host.shadowRoot?.querySelector('.hd-launcher')).toBeNull();
+  });
+});
+
+describe('changesOnly', () => {
+  it('passes a stylesheet on once until its text changes', () => {
+    const apply = vi.fn();
+    const setTheme = changesOnly(apply);
+
+    setTheme(':host{--a:1}');
+    setTheme(':host{--a:1}');
+    setTheme(':host{--a:2}');
+
+    expect(apply.mock.calls).toEqual([[':host{--a:1}'], [':host{--a:2}']]);
   });
 });

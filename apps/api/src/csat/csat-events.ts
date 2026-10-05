@@ -104,7 +104,31 @@ export const createCsatRequestedHandler =
     log.info({ brandId, ticketId, surveyId: inserted ? id : null }, 'csat survey created');
   };
 
+/**
+ * A customer rated a survey. Written in the transaction that stores the
+ * rating; the rules engine (M3-03, `csat_received`) and the `csat.received`
+ * webhook (M8-03) subscribe to it under their own names. Ids only: the comment
+ * is read from the row by whoever needs it.
+ */
+export const CSAT_RECEIVED_EVENT = 'csat.received';
+
+export const enqueueCsatReceived = (
+  tx: DbTransaction,
+  brandId: string,
+  payload: { readonly ticketId: string; readonly surveyId: string },
+): Promise<string> =>
+  enqueueOutbox(tx, { brandId, event: CSAT_RECEIVED_EVENT, payload: { ...payload } });
+
+/** The owner's slot of `csat.received`, which only logs: the rules and the webhooks subscribe. */
+const logReceived: OutboxEventHandler = async ({ brandId, outboxId, payload, log }) => {
+  log.info(
+    { event: CSAT_RECEIVED_EVENT, brandId, outboxId, surveyId: payload.surveyId },
+    'csat received',
+  );
+};
+
 /** Called by the worker's start-up, before the consumer exists (`worker/start-worker.ts`). */
 export const registerCsatEventHandlers = (dependencies: CsatSurveyJobDependencies): void => {
   registerEventHandler(CSAT_EVENTS.requested, createCsatRequestedHandler(dependencies));
+  registerEventHandler(CSAT_RECEIVED_EVENT, logReceived);
 };

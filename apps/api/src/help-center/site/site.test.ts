@@ -139,6 +139,16 @@ describe('HelpCenterSite pages', () => {
     );
   });
 
+  it('opens every page with a skip link to a main that can take focus (M9-04)', async () => {
+    const { site } = setup();
+    const response = await site.handle(request(`${BASE}/ar/articles/refund-timelines`));
+
+    expect(response.body).toMatch(
+      /<body>\n<a class="hd-skip" href="#hd-main">تخطَّ إلى المحتوى<\/a>/,
+    );
+    expect(response.body).toContain('id="hd-main" tabindex="-1"');
+  });
+
   it('puts one fresh nonce in the CSP and the page, and never serves the placeholder', async () => {
     const { site } = setup();
     const first = await site.handle(request(`${BASE}/en`));
@@ -421,7 +431,7 @@ describe('HelpCenterSite forms and staff', () => {
 
     expect(response.status).toBe(303);
     expect(response.headers.location).toBe(
-      `${BASE}/en/articles/refund-timelines?feedback=1#feedback`,
+      `${BASE}/en/articles/refund-timelines?feedback=no#hd-feedback-comment`,
     );
     const cookie = response.cookies.find((candidate) => candidate.name === VISITOR_COOKIE);
     expect(cookie?.value).toMatch(/^[\w-]{22}$/);
@@ -439,6 +449,59 @@ describe('HelpCenterSite forms and staff', () => {
     );
     expect(thanked.body).toContain('Thank you.');
     expect(thanked.headers['cache-control']).toBe(PRIVATE_CACHE_CONTROL);
+  });
+
+  it('asks what was missing after a "No", then records the note with the vote and thanks', async () => {
+    const { site, feedback } = setup();
+    const asking = await site.handle(
+      request(`${BASE}/en/articles/refund-timelines`, { query: { feedback: 'no' } }),
+    );
+
+    expect(asking.headers['cache-control']).toBe(PRIVATE_CACHE_CONTROL);
+    expect(asking.body).toContain('What was missing from this article?');
+    expect(asking.body).toContain('name="comment"');
+    expect(asking.body).toContain('value="no" aria-pressed="true"');
+    expect(asking.body).toContain(
+      `href="${BASE}/en/articles/refund-timelines?feedback=1#feedback">Skip</a>`,
+    );
+
+    const sent = await site.handle(
+      request(`${BASE}/_hd/feedback`, {
+        method: 'POST',
+        body: {
+          article: articleId(1),
+          locale: 'en',
+          slug: 'refund-timelines',
+          helpful: 'no',
+          comment: 'Nothing about Apple Pay.',
+        },
+      }),
+    );
+
+    expect(sent.headers.location).toBe(`${BASE}/en/articles/refund-timelines?feedback=1#feedback`);
+    expect(feedback.recordVote).toHaveBeenCalledWith(
+      expect.objectContaining({ helpful: false, comment: 'Nothing about Apple Pay.' }),
+    );
+  });
+
+  it('drops a comment sent with a "Yes" from the comment step', async () => {
+    const { site, feedback } = setup();
+    await site.handle(
+      request(`${BASE}/_hd/feedback`, {
+        method: 'POST',
+        body: {
+          article: articleId(1),
+          locale: 'en',
+          slug: 'refund-timelines',
+          helpful: 'yes',
+          comment: 'Changed my mind.',
+        },
+      }),
+    );
+
+    expect(feedback.recordVote).toHaveBeenCalledWith(
+      expect.not.objectContaining({ comment: expect.anything() }),
+    );
   });
 
   it('refuses a vote from another origin, and one for an article the visitor may not read', async () => {

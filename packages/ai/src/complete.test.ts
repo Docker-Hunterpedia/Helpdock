@@ -165,6 +165,21 @@ describe('complete()', () => {
     expect(ports.calls[0]).toMatchObject({ status: 'refused', costUsd: 0 });
   });
 
+  it('lets agent assist past the hard stop when the brand keeps it on, and still logs the call', async () => {
+    ports.exceedBudget(brandId);
+    fake.reply('Here is a draft.');
+
+    const result = await ai.complete({
+      brandId,
+      feature: 'assist.rewrite',
+      allowOverBudget: true,
+      messages: [{ role: 'user', text: 'Hi' }],
+    });
+
+    expect(result.text).toBe('Here is a draft.');
+    expect(ports.calls[0]).toMatchObject({ status: 'ok', feature: 'assist.rewrite' });
+  });
+
   it('logs a provider failure and throws AiProviderError naming the logged call', async () => {
     fake.reply(fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'rate limited' }));
 

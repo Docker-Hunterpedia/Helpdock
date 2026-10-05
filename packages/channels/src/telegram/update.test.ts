@@ -22,7 +22,7 @@ describe('classifyUpdate', () => {
       kind: 'message',
       updateId: 7,
       messageId: 11,
-      sender: { chatId: '4242', name: 'Mona Khalil', languageCode: 'ar' },
+      sender: { chatId: '4242', name: 'Mona Khalil', username: null, languageCode: 'ar' },
       text: 'My order is late',
       files: [],
       location: null,
@@ -96,7 +96,12 @@ describe('classifyUpdate', () => {
   it('reads a language button press', () => {
     const event = classifyUpdate({
       update_id: 8,
-      callback_query: { id: 'cq-1', from, message: { message_id: 3, chat }, data: 'lang:ar' },
+      callback_query: {
+        id: 'cq-1',
+        from: { ...from, username: 'mona_k' },
+        message: { message_id: 3, chat },
+        data: 'lang:ar',
+      },
     });
 
     expect(event).toEqual({
@@ -104,7 +109,7 @@ describe('classifyUpdate', () => {
       updateId: 8,
       callbackQueryId: 'cq-1',
       locale: 'ar',
-      sender: { chatId: '4242', name: 'Mona Khalil', languageCode: 'ar' },
+      sender: { chatId: '4242', name: 'Mona Khalil', username: 'mona_k', languageCode: 'ar' },
     });
   });
 

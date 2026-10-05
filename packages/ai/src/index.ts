@@ -16,6 +16,7 @@ export * from './guardrails/injection.js';
 export * from './guardrails/no-tools.js';
 export * from './guardrails/pii.js';
 export * from './http.js';
+export * from './knowledge/index.js';
 export * from './ports.js';
 export * from './providers/credentials.js';
 export * from './providers/models.js';

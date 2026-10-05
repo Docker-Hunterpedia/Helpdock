@@ -26,8 +26,10 @@ import { TELEGRAM_ERROR_MAX_LENGTH } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import type { CsatTelegramNotices } from '../csat/telegram-csat.js';
+import type { ObjectStorage } from '../media/storage.js';
 import { apiForBot, type TelegramApiFactory } from './bot-api-factory.js';
 import type { TelegramRepository } from './telegram.repository.js';
+import { planOutgoingFile, readOutgoingFile, replyAttachments } from './telegram-attachments.js';
 
 /**
  * The `telegram.send` consumer (M6-02, M6-04): an agent's reply to its chat,
@@ -36,10 +38,12 @@ import type { TelegramRepository } from './telegram.repository.js';
  * **Idempotent** (DOMAIN-RULES §6). The receipt — `telegram.send:<delivery>`
  * or `telegram.notice:<outbox row>` — is claimed in the job's transaction, so
  * a second delivery of the job sends nothing; a reply already `sent` is
- * skipped, which holds after receipts are purged. A long reply is several
- * messages, and each one Telegram accepts is recorded at once, in a
+ * skipped, which holds after receipts are purged. A reply is several parts —
+ * the text, cut at 4096 characters, then each attachment as a photo or a
+ * document — and each one Telegram accepts is recorded at once, in a
  * transaction of its own, so a retry starts after the last part that landed
- * and the customer never reads a part twice.
+ * and the customer never reads a part twice. An attachment the media
+ * pipeline is still working on fails the attempt, which BullMQ retries.
  *
  * **Failure** is recorded outside the job's transaction, which rolls back on a
  * throw, as `email.send` records it: every attempt counts, and the last one —
@@ -52,9 +56,20 @@ export interface TelegramSendDependencies {
   readonly repository: TelegramRepository;
   readonly keyring: Keyring;
   readonly api: TelegramApiFactory;
+  /** Where an agent's attachments are read from. */
+  readonly storage: ObjectStorage;
+
   /** M8-06: the survey, the thanks after a tap, and "This survey has closed." */
   readonly csat: Pick<CsatTelegramNotices, 'send'>;
   readonly now?: () => Date;
+}
+
+/** An attachment of the reply is not ready yet; retrying later is the answer. */
+export class AttachmentNotReadyError extends Error {
+  constructor() {
+    super('An attachment of the reply is still being processed');
+    this.name = 'AttachmentNotReadyError';
+  }
 }
 
 const t = (locale: Locale) => createI18n({ lng: locale }).getFixedT(locale, 'telegram');
@@ -143,10 +158,33 @@ const sendReply = async (
   }
 
   const api = apiForBot(bot, deps.keyring, deps.api);
-  const parts = splitTelegramText(message.bodyText);
+  const texts = splitTelegramText(message.bodyText);
+  const files = await replyAttachments(tx, delivery.ticketMessageId);
+  // Every attachment is a part, sent or skipped, so a part's index never moves
+  // between attempts.
+  const parts: (() => Promise<string | null>)[] = [
+    ...texts.map((text) => () => api.sendMessage(delivery.chatId, text)),
+    ...files.map((file) => async () => {
+      const plan = planOutgoingFile(file);
+      if (plan.kind === 'wait') {
+        throw new AttachmentNotReadyError();
+      }
+      if (plan.kind === 'skip') {
+        log.info(
+          { brandId: payload.brandId, deliveryId: delivery.id, attachmentId: file.id },
+          'telegram reply: an attachment cannot be sent and is left out',
+        );
+        return null;
+      }
+      const outgoing = await readOutgoingFile(deps.storage, file, plan.variant);
+      return plan.method === 'photo'
+        ? api.sendPhoto(delivery.chatId, outgoing)
+        : api.sendDocument(delivery.chatId, outgoing);
+    }),
+  ];
   await withPermanentAsFinal(async () => {
-    for (const part of parts.slice(delivery.partsSent)) {
-      const sentId = await api.sendMessage(delivery.chatId, part);
+    for (const send of parts.slice(delivery.partsSent)) {
+      const sentId = await send();
       await withSystem(deps.db, payload.brandId, (partTx) =>
         deps.repository.recordPart(partTx, delivery.id, sentId),
       );
@@ -164,6 +202,9 @@ const withPermanentAsFinal = async (send: () => Promise<void>): Promise<void> =>
   try {
     await send();
   } catch (error) {
+    if (error instanceof AttachmentNotReadyError) {
+      throw error;
+    }
     const failure = toTelegramFailure(error);
     if (failure.permanent) {
       throw new UnrecoverableError(failure.detail);
@@ -178,7 +219,9 @@ const isLastAttempt = (job: Job, error: unknown): boolean =>
   job.attemptsMade + 1 >= (job.opts.attempts ?? telegramSendJob.options.attempts ?? 1);
 
 const errorText = (error: unknown): string =>
-  (error instanceof TelegramApiFailure || error instanceof UnrecoverableError
+  (error instanceof TelegramApiFailure ||
+  error instanceof UnrecoverableError ||
+  error instanceof AttachmentNotReadyError
     ? error.message
     : 'The reply could not be sent'
   ).slice(0, TELEGRAM_ERROR_MAX_LENGTH);

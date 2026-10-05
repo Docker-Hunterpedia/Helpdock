@@ -309,6 +309,40 @@ export const SETTING_DEFINITIONS = [
     scope: 'install',
     description: 'Model id, of the default provider, every brand uses unless it overrides it.',
   }),
+  defineSetting({
+    key: 'knowledge.notion.clientId',
+    schema: TEXT,
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'OAuth client id of the install’s public Notion integration, for brands connecting Notion (M7-03).',
+  }),
+  defineSetting({
+    key: 'knowledge.notion.clientSecret',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description: 'OAuth client secret of the Notion integration.',
+  }),
+  defineSetting({
+    key: 'knowledge.google.clientId',
+    schema: TEXT,
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'OAuth client id of the install’s Google Cloud app, for brands connecting Google Drive (M7-03).',
+  }),
+  defineSetting({
+    key: 'knowledge.google.clientSecret',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description: 'OAuth client secret of the Google Cloud app.',
+  }),
 ] as const;
 
 type Definition = (typeof SETTING_DEFINITIONS)[number];

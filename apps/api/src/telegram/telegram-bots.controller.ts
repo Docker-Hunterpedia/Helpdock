@@ -4,6 +4,7 @@ import {
   type TelegramBotStatus,
   type TelegramDeliveryList,
   type TelegramTestResult,
+  type TelegramTicketContextResponse,
   type TelegramWebhookResult,
   telegramTestResultSchema,
   telegramWebhookResultSchema,
@@ -34,7 +35,9 @@ import {
   TelegramBrandParamDto,
   TelegramDeliveryListDto,
   TelegramDeliveryParamDto,
+  TelegramTicketContextDto,
   TelegramTicketParamDto,
+  TelegramTokenTestDto,
 } from './dto.js';
 import { TelegramBotsService } from './telegram-bots.service.js';
 import { TelegramDeliveriesService } from './telegram-deliveries.service.js';
@@ -72,6 +75,17 @@ export class TelegramBotsController {
     @Body(new ZodValidationPipe(TelegramBotCreateDto)) body: TelegramBotCreateDto,
   ): Promise<TelegramBot> {
     return this.#bots.create(requireTicketingContext(), body);
+  }
+
+  /** "Test" in the Add bot dialog, before the bot exists. Declared before `:botId`. */
+  @Post('test')
+  @Requires('brand:manage')
+  @HttpCode(HttpStatus.OK)
+  async testToken(
+    @Param(new ZodValidationPipe(TelegramBrandParamDto)) _params: TelegramBrandParamDto,
+    @Body(new ZodValidationPipe(TelegramTokenTestDto)) { token }: TelegramTokenTestDto,
+  ): Promise<TelegramTestResult> {
+    return telegramTestResultSchema.parse(await this.#bots.testToken(token));
   }
 
   @Get(':botId')
@@ -163,5 +177,27 @@ export class TicketTelegramController {
     { brandId, ticketId, deliveryId }: TelegramDeliveryParamDto,
   ): Promise<void> {
     await this.#deliveries.retry(getTx(), brandId, ticketId, deliveryId);
+  }
+}
+
+/**
+ * The ticket view's Telegram half (M6-02): the channel chip, the "via @bot"
+ * line, the ChannelIdentityCard and each reply's delivery, in one read.
+ */
+@Controller('api/brands/:brandId/tickets/:ticketId/telegram')
+export class TicketTelegramContextController {
+  readonly #deliveries: TelegramDeliveriesService;
+
+  constructor(@Inject(TelegramDeliveriesService) deliveries: TelegramDeliveriesService) {
+    this.#deliveries = deliveries;
+  }
+
+  @Get()
+  @Requires('ticket:read')
+  @ZodSerializerDto(TelegramTicketContextDto)
+  context(
+    @Param(new ZodValidationPipe(TelegramTicketParamDto)) { ticketId }: TelegramTicketParamDto,
+  ): Promise<TelegramTicketContextResponse> {
+    return this.#deliveries.ticketContext(getTx(), ticketId);
   }
 }

@@ -52,4 +52,17 @@ describe('adminContentSecurityPolicy', () => {
   it('leaves no trailing space when the document has no inline script', () => {
     expect(adminContentSecurityPolicy('<html></html>')).toContain("script-src 'self';");
   });
+
+  it('lets media play from the bucket and nowhere else (M6-03)', () => {
+    expect(directive('media-src')).toBe("media-src 'self'");
+    expect(adminContentSecurityPolicy('', 'https://helpdock.s3.example.com')).toContain(
+      "media-src 'self' https://helpdock.s3.example.com;",
+    );
+  });
+
+  it('lets the browser PUT uploads to the bucket and show its images (M1-10)', () => {
+    const withBucket = adminContentSecurityPolicy('', 'https://helpdock.s3.example.com');
+    expect(withBucket).toContain("connect-src 'self' https://helpdock.s3.example.com;");
+    expect(withBucket).toContain("img-src 'self' data: https://helpdock.s3.example.com;");
+  });
 });

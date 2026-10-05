@@ -62,6 +62,8 @@ describe('the settings registry', () => {
       'push.vapidPrivateKey',
       'embedding.apiKey',
       'ai.providers',
+      'knowledge.notion.clientSecret',
+      'knowledge.google.clientSecret',
     ]);
   });
 });

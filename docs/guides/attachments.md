@@ -45,6 +45,13 @@ tenant table, so an attachment on a ticket the caller cannot read is invisible
 to the query that would have built the URL. There is no separate check to
 forget.
 
+**The browser talks to the bucket.** The upload `PUT` and the presigned `GET`s
+go from the admin straight to the bucket's origin (`S3_ENDPOINT`, or
+`bucket.<endpoint>` without `S3_FORCE_PATH_STYLE`), so the admin's
+Content-Security-Policy names that origin in `connect-src`, `img-src` and
+`media-src`, and no other. The bucket needs a CORS rule allowing `PUT` and `GET`
+from the admin's origin.
+
 ## The content policy
 
 Per brand, stored in `brands.content_policy` as jsonb and edited by a Team

@@ -7,7 +7,11 @@ import { type TelegramApiFactory, telegramApiFactory } from './bot-api-factory.j
 import { createTelegramInboundService } from './factory.js';
 import { OutboundTelegramService } from './outbound-telegram.service.js';
 import { TelegramRepository } from './telegram.repository.js';
-import { TelegramBotsController, TicketTelegramController } from './telegram-bots.controller.js';
+import {
+  TelegramBotsController,
+  TicketTelegramContextController,
+  TicketTelegramController,
+} from './telegram-bots.controller.js';
 import { TelegramBotsService } from './telegram-bots.service.js';
 import { TelegramDeliveriesService } from './telegram-deliveries.service.js';
 import { TelegramWebhookController } from './telegram-webhook.controller.js';
@@ -44,7 +48,12 @@ export class TelegramModule {
 
     return {
       module: TelegramModule,
-      controllers: [TelegramBotsController, TicketTelegramController, TelegramWebhookController],
+      controllers: [
+        TelegramBotsController,
+        TicketTelegramController,
+        TicketTelegramContextController,
+        TelegramWebhookController,
+      ],
       providers: [
         {
           provide: TelegramBotsService,

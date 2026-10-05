@@ -36,6 +36,7 @@ import type { SmtpTransportFactory } from './email/transport.js';
 import { HelpCenterModule } from './help-center/help-center.module.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { InstallModule } from './install/install.module.js';
+import { KnowledgeModule, type KnowledgeOverrides } from './knowledge/knowledge.module.js';
 import type { Logger } from './logging/logger.js';
 import { MacrosModule } from './macros/macros.module.js';
 import { MediaModule } from './media/media.module.js';
@@ -127,6 +128,8 @@ export interface AppModuleOptions {
   readonly webForm?: Pick<WebFormModuleOptions, 'captchaTransport'>;
   /** M7: model discovery's HTTP, which suites replace so nothing reaches a provider. */
   readonly ai?: Pick<AiModuleOptions, 'http'>;
+  /** M7-03: the Notion and Google Drive APIs, which suites replace with fakes. */
+  readonly knowledge?: KnowledgeOverrides;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
   readonly extraControllers?: readonly Type<unknown>[];
 }
@@ -172,6 +175,7 @@ export class AppModule implements NestModule {
       signingKeys: options.auth.signingKeys,
       hosts: options.brandResolver ?? hostResolver,
       ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+      ...(options.ai?.http === undefined ? {} : { aiHttp: options.ai.http }),
     });
     // M1-04, built once and imported twice, by `AppModule` and by M8-02's
     // public API, which writes contacts through the same service.
@@ -293,6 +297,13 @@ export class AppModule implements NestModule {
         // M7-01, M7-02, M7-08: providers, models, embeddings, a brand's AI
         // settings and a ticket's AI log. Re-embedding runs in the worker.
         AiModule.forRoot({ env: options.env, ...options.ai }),
+        // M7-03: knowledge sources, uploads, the sync log and connector
+        // sign-in. Syncing and embedding run in the worker.
+        KnowledgeModule.forRoot({
+          env: options.env,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+          ...(options.knowledge === undefined ? {} : { overrides: options.knowledge }),
+        }),
         // M5-01, M5-02, M5-09: help center content, the editor and its images;
         // M5-03, M5-04, M5-06: the pages, SEO and the site settings;
         // M5-05, M5-08: search, feedback, views and Insights.

@@ -27,6 +27,7 @@ export interface TelegramFacts {
   readonly chatId: string;
   readonly messageId: number;
   readonly location: TelegramPoint | null;
+  readonly username: string | null;
 }
 
 export interface TelegramInboundMessage extends InboundMessage {
@@ -82,6 +83,7 @@ export const toTelegramInboundMessage = (
       chatId: event.sender.chatId,
       messageId: event.messageId,
       location: event.location,
+      username: event.sender.username,
     },
   };
 };

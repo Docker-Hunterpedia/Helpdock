@@ -5,6 +5,7 @@ import {
   TelegramApiFailure,
   type TelegramEvent,
   type TelegramMessageEvent,
+  type TelegramSender,
   telegramExternalId,
   toTelegramInboundMessage,
 } from '@helpdock/channels';
@@ -229,7 +230,7 @@ export class TelegramInboundService {
       if (await this.#blocked(tx, bot, event.sender.chatId, now)) {
         return { outcome: 'ignored', reason: 'blocked-sender' };
       }
-      const contact = await this.#chatContact(tx, bot, event.sender, now);
+      const { contact } = await this.#chatContact(tx, bot, event.sender, now);
       await enqueueTelegramNotice(tx, bot.brandId, {
         botId: bot.id,
         chatId: event.sender.chatId,
@@ -252,7 +253,8 @@ export class TelegramInboundService {
       if (await this.#blocked(tx, bot, event.sender.chatId, now)) {
         return { outcome: 'ignored', reason: 'blocked-sender' };
       }
-      const contact = await this.#chatContact(tx, bot, event.sender, now);
+      const { contact, chat } = await this.#chatContact(tx, bot, event.sender, now);
+      await this.#options.repository.markLanguageChosen(tx, chat.id, now);
       await tx
         .update(contacts)
         .set({ locale: event.locale, updatedAt: now })
@@ -298,21 +300,17 @@ export class TelegramInboundService {
     });
   }
 
-  async #chatContact(
-    tx: DbTransaction,
-    bot: TelegramBotRow,
-    sender: { readonly chatId: string; readonly name: string | null },
-    now: Date,
-  ) {
+  async #chatContact(tx: DbTransaction, bot: TelegramBotRow, sender: TelegramSender, now: Date) {
     const contact = await this.#options.router.contactFor(tx, bot.brandId, sender);
-    await this.#options.repository.upsertChat(tx, {
+    const chat = await this.#options.repository.upsertChat(tx, {
       brandId: bot.brandId,
       botId: bot.id,
       chatId: sender.chatId,
       contactId: contact.id,
       at: now,
+      username: sender.username,
     });
-    return contact;
+    return { contact, chat };
   }
 
   // --------------------------------------------------------------------

@@ -1,5 +1,5 @@
 {
-  "id": "92ff6f3d-b3c6-4363-8dfe-e7dd3819b929",
+  "id": "bf1a74ca-ecc4-4253-bacf-bef437f330a8",
   "prevId": "dfa177c2-8e0e-4737-aefd-968375830ecd",
   "version": "7",
   "dialect": "postgresql",
@@ -2711,19 +2711,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "rated_via": {
-          "name": "rated_via",
-          "type": "csat_answer_channel",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "skipped_at": {
-          "name": "skipped_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3128,12 +3115,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "csat_response_id": {
-          "name": "csat_response_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "from_name": {
           "name": "from_name",
           "type": "text",
@@ -3271,22 +3252,6 @@
           "method": "btree",
           "with": {}
         },
-        "email_deliveries_csat_key": {
-          "name": "email_deliveries_csat_key",
-          "columns": [
-            {
-              "expression": "csat_response_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"email_deliveries\".\"csat_response_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "email_deliveries_brand_message_id_key": {
           "name": "email_deliveries_brand_message_id_key",
           "columns": [
@@ -3411,15 +3376,6 @@
           "tableFrom": "email_deliveries",
           "tableTo": "ticket_messages",
           "columnsFrom": ["ticket_message_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "email_deliveries_csat_response_id_csat_responses_id_fk": {
-          "name": "email_deliveries_csat_response_id_csat_responses_id_fk",
-          "tableFrom": "email_deliveries",
-          "tableTo": "csat_responses",
-          "columnsFrom": ["csat_response_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -7652,6 +7608,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "language_chosen_at": {
+          "name": "language_chosen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_message_at": {
           "name": "last_message_at",
           "type": "timestamp with time zone",
@@ -11542,11 +11510,6 @@
       "schema": "public",
       "values": ["email", "phone", "telegram", "visitor", "external"]
     },
-    "public.csat_answer_channel": {
-      "name": "csat_answer_channel",
-      "schema": "public",
-      "values": ["link", "widget", "telegram"]
-    },
     "public.custom_field_target": {
       "name": "custom_field_target",
       "schema": "public",
@@ -11560,7 +11523,7 @@
     "public.email_delivery_kind": {
       "name": "email_delivery_kind",
       "schema": "public",
-      "values": ["reply", "acknowledgment", "out_of_hours", "transcript", "csat"]
+      "values": ["reply", "acknowledgment", "out_of_hours", "transcript"]
     },
     "public.email_delivery_status": {
       "name": "email_delivery_status",

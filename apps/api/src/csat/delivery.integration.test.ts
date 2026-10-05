@@ -148,6 +148,7 @@ describe.skipIf(!hasDocker)('CSAT delivery on close (M8-06)', () => {
   let openStatus: string;
   let webhookSecret = '';
   let botId = '';
+  let storage: FakeStorage;
   let updateId = 5_000;
   const telegram = new FakeTelegram();
   const sockets: Socket[] = [];
@@ -271,6 +272,7 @@ describe.skipIf(!hasDocker)('CSAT delivery on close (M8-06)', () => {
         repository: telegramRepository,
         keyring: keyring(),
         api: telegramApiFactory(telegram.url),
+        storage,
         csat: new CsatTelegramNotices({
           repository: csatRepository,
           tokens: csatTokens(),
@@ -340,13 +342,14 @@ describe.skipIf(!hasDocker)('CSAT delivery on close (M8-06)', () => {
       max: 2,
     });
 
+    storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-csat-')));
     runtime = await createRuntime({
       env: envFor(),
       logger: createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' } }),
     });
     app = await createApiApp({
       runtime,
-      objectStorage: new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-csat-'))),
+      objectStorage: storage,
       telegram: { api: telegramApiFactory(telegram.url) },
     });
     await app.listen({ port: 0, host: '127.0.0.1' });

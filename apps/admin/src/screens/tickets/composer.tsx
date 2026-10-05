@@ -11,7 +11,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { Languages, Paperclip, Zap } from 'lucide-react';
+import { Languages, Paperclip, Send, Zap } from 'lucide-react';
 import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
@@ -89,6 +89,11 @@ export interface ComposerProps {
    * To and Cc, and the signature it will carry; a note is unchanged.
    */
   readonly email?: ComposerEmail | undefined;
+  /**
+   * M6-02: a ticket that answers in a Telegram chat. A reply then says which
+   * chat it goes to and that the bot sends it as plain text, unsigned.
+   */
+  readonly telegram?: { readonly bot: string; readonly username: string | null } | undefined;
   /** M3-06: opens the macro picker. Absent for a reader who cannot reply. */
   onOpenMacros?: (() => void) | undefined;
   /** Whether the picker is open, for the button's `aria-expanded`. */
@@ -114,6 +119,7 @@ export function Composer({
   onSend,
   onBodyFocus,
   email,
+  telegram,
   onOpenMacros,
   macrosOpen = false,
 }: ComposerProps): ReactNode {
@@ -126,6 +132,7 @@ export function Composer({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const note = mode === 'note';
   const emailReply = email !== undefined && !note;
+  const telegramReply = telegram !== undefined && !note;
 
   // A layout effect: refs are attached and the caret moves before the browser
   // paints, so `r` never shows a frame of the composer without a caret in it.
@@ -174,6 +181,21 @@ export function Composer({
 
         {emailReply ? (
           <FromSelect email={email} />
+        ) : telegramReply ? (
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
+              marginInlineStart: 'auto',
+            }}
+          >
+            <Send size={14} aria-hidden="true" />
+            {t('tickets:telegram.composerTo')}
+            {telegram.username === null ? null : <bdi>@{telegram.username}</bdi>}
+          </Typography>
         ) : (
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {note
@@ -209,6 +231,11 @@ export function Composer({
       />
 
       {emailReply ? <SignaturePreview signature={email.signature} /> : null}
+      {telegramReply ? (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <bdi>{t('tickets:telegram.composerFoot', { bot: telegram.bot })}</bdi>
+        </Typography>
+      ) : null}
 
       {attachments.length === 0 ? null : (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>

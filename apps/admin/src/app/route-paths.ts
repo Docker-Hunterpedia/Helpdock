@@ -69,6 +69,8 @@ export const ROUTES = {
   mailboxNew: '/admin/channels/mailboxes/new',
   /** One mailbox's form. */
   mailbox: '/admin/channels/mailboxes/:mailboxId',
+  /** One Telegram bot's page (M6-05, `Admin/Channels-Telegram` panel 2). */
+  telegramBot: '/admin/channels/telegram/:botId',
   staff: '/admin/staff',
   system: '/admin/system',
   /** The install-wide audit log (M3-08), reached from System. */
@@ -150,6 +152,10 @@ export const channelsRoute = (tab: string): string => `${ROUTES.channels}/${tab}
 /** One mailbox's form. */
 export const mailboxRoute = (mailboxId: string): string =>
   `${ROUTES.channels}/mailboxes/${encodeURIComponent(mailboxId)}`;
+
+/** One Telegram bot's page. */
+export const telegramBotRoute = (botId: string): string =>
+  `${ROUTES.channels}/telegram/${encodeURIComponent(botId)}`;
 
 /** One tab of `Admin/Automation`, by its url segment. */
 export const automationRoute = (tab: string): string => `${ROUTES.automation}/${tab}`;

@@ -52,7 +52,9 @@ const MIGRATION_TAGS = [
   '0037_report_rollups',
   '0038_ai_and_knowledge',
   '0039_api_keys_and_webhooks',
-  '0040_csat_delivery',
+  '0040_telegram_chat_identity',
+  '0041_knowledge_ingest',
+  '0042_csat_delivery',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

@@ -1,8 +1,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { decryptSecret, type Keyring } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, GoneException, UnauthorizedException } from '@nestjs/common';
 import { ZodError } from 'zod';
+import { isBrandGone } from '../brands/brand-availability.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import type { TelegramRepository } from './telegram.repository.js';
 import type { TelegramInboundResult, TelegramInboundService } from './telegram-inbound.service.js';
@@ -17,7 +18,9 @@ import type { TelegramInboundResult, TelegramInboundService } from './telegram-i
  * 2. Compare the header with that bot's secret in constant time. An unknown
  *    bot and a wrong secret are the same 401, so the route does not confirm
  *    which bot ids exist.
- * 3. Hand the update to {@link TelegramInboundService}. A body that is not an
+ * 3. Answer 410 for a brand being deleted (M8-07, DOMAIN-RULES §11), after
+ *    the secret so a stranger cannot learn which bots belong to one.
+ * 4. Hand the update to {@link TelegramInboundService}. A body that is not an
  *    update at all is a 400; anything filed, dropped or seen before is a 200,
  *    because Telegram's retry would only meet the same answer.
  */
@@ -56,6 +59,9 @@ export class TelegramWebhookService {
       !sameSecret(decryptSecret(bot.webhookSecret, this.#keyring), presented)
     ) {
       throw refused();
+    }
+    if (await isBrandGone(this.#db, locator.brandId)) {
+      throw new GoneException('This brand is no longer available');
     }
 
     try {

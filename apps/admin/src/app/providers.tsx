@@ -28,6 +28,10 @@ import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import type { BrowserPush } from '../notifications/browser-push.js';
 import { NotificationsProvider } from '../notifications/context.tsx';
+import type { ReportsApi } from '../reports/api.js';
+import { ReportsApiProvider } from '../reports/context.tsx';
+import type { SystemApi } from '../screens/admin/system/system-api.js';
+import { SystemApiProvider } from '../screens/admin/system/system-api-context.tsx';
 import type { StaffApi } from '../staff/api.js';
 import type { TelegramApi } from '../telegram/api.js';
 import { TelegramApiProvider } from '../telegram/context.tsx';
@@ -128,6 +132,10 @@ export interface AppProvidersProps {
   readonly aiApi?: AiApi;
   /** Defaults to the matching adapter. Only AI › Knowledge reads it (M7-10). */
   readonly knowledgeApi?: KnowledgeApi;
+  /** Defaults to the matching adapter. Only `Admin/Reports` reads it (M8-04). */
+  readonly reportsApi?: ReportsApi;
+  /** Defaults to the matching adapter. System and Brand › Danger zone read it. */
+  readonly systemApi?: SystemApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
   readonly queryClient?: QueryClient;
@@ -165,6 +173,8 @@ export function AppProviders({
   domainsApi,
   aiApi,
   knowledgeApi,
+  reportsApi,
+  systemApi,
   telegramApi,
   queryClient,
   router: Router = BrowserRouter,
@@ -195,6 +205,8 @@ export function AppProviders({
   const domains = domainsApi ?? fallback.domains;
   const ai = aiApi ?? fallback.ai;
   const knowledge = knowledgeApi ?? fallback.knowledge;
+  const reports = reportsApi ?? fallback.reports;
+  const system = systemApi ?? fallback.system;
   const telegram = telegramApi ?? fallback.telegram;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
@@ -266,11 +278,15 @@ export function AppProviders({
                       <KnowledgeApiProvider api={knowledge}>
                         <TelegramApiProvider api={telegram}>
                           <HelpCenterApiProvider api={helpCenter}>
-                            <NotificationsProvider api={notifications} push={push}>
-                              <ToastProvider>
-                                <Router>{children}</Router>
-                              </ToastProvider>
-                            </NotificationsProvider>
+                            <ReportsApiProvider api={reports}>
+                              <SystemApiProvider api={system}>
+                                <NotificationsProvider api={notifications} push={push}>
+                                  <ToastProvider>
+                                    <Router>{children}</Router>
+                                  </ToastProvider>
+                                </NotificationsProvider>
+                              </SystemApiProvider>
+                            </ReportsApiProvider>
                           </HelpCenterApiProvider>
                         </TelegramApiProvider>
                       </KnowledgeApiProvider>

@@ -10,7 +10,7 @@ import { useSemanticTokens } from '../../../../app/tokens.js';
 import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { Switch } from '../../../../ui/switch.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
-import { UsageMeter, usageLevelOf } from '../../../../ui/usage-meter.tsx';
+import { meterTone, UsageMeter } from '../../../../ui/usage-meter.tsx';
 import { SectionCard } from '../../channels/section-card.tsx';
 import { failureMessage, percentOf, usd } from '../format.js';
 import { settingsUpdateOf } from '../settings-update.js';
@@ -29,6 +29,9 @@ export const limitOf = (typed: string): number | null | 'invalid' => {
   const amount = Number(typed);
   return Number.isFinite(amount) && amount > 0 && amount <= 1_000_000 ? amount : 'invalid';
 };
+
+/** The meter's tone as the caption's level: the alert at 80 %, the hard stop at 100 %. */
+const LEVEL_BY_TONE = { normal: 'ok', warning: 'warning', danger: 'exceeded' } as const;
 
 const typedOf = (amount: number | null): string => (amount === null ? '' : amount.toFixed(2));
 
@@ -99,32 +102,24 @@ export function BudgetCard({
     new Date(),
   );
   const meter = (period: 'day' | 'month', spent: number, limit: number | null) => {
-    const share = limit === null ? null : spent / limit;
     const percent = limit === null ? 0 : percentOf(spent, limit);
-    const level = share === null ? 'ok' : usageLevelOf(share);
+    const level = LEVEL_BY_TONE[meterTone(percent)];
     const label = period === 'day' ? t('aiSettings:budget.today') : monthName;
     return (
       <UsageMeter
         label={label}
         figure={
-          limit === null ? (
-            t('aiSettings:budget.noLimitFigure', { spent: usd(spent) })
-          ) : (
-            <>
-              {usd(spent)}{' '}
-              <Box component="span" sx={{ color: 'text.secondary' }}>
-                {t('aiSettings:budget.of', { limit: usd(limit) })}
-              </Box>
-            </>
-          )
+          limit === null
+            ? t('aiSettings:budget.noLimitFigure', { spent: usd(spent) })
+            : `${usd(spent)} ${t('aiSettings:budget.of', { limit: usd(limit) })}`
         }
-        share={share}
+        percent={percent}
         caption={
           limit === null
             ? t('aiSettings:budget.noLimit')
             : t(`aiSettings:budget.meterCaption.${level}`, { percent })
         }
-        progressLabel={t(`aiSettings:budget.progress.${period}`, { percent })}
+        accessibleLabel={t(`aiSettings:budget.progress.${period}`, { percent })}
       />
     );
   };

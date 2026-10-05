@@ -33,6 +33,8 @@ import {
 } from '../notifications/browser-push.js';
 import { HttpNotificationsApi } from '../notifications/http-api.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { HttpReportsApi, type ReportsApi } from '../reports/api.js';
+import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
@@ -81,6 +83,10 @@ export interface AdminApis {
   readonly ai: AiApi;
   /** M7-10: AI › Knowledge, on M7-03's api. */
   readonly knowledge: KnowledgeApi;
+  /** M8-04: `Admin/Reports`. */
+  readonly reports: ReportsApi;
+  /** The install-admin routes: System (M0-10, M8-05) and brand deletion (M8-07). */
+  readonly system: SystemApi;
   /** M6: Channels › Telegram and a Telegram ticket's chat. */
   readonly telegram: TelegramApi;
 }
@@ -131,6 +137,8 @@ export function createApis(
       domains: new HttpDomainsApi(transport),
       ai: new HttpAiApi(transport),
       knowledge: new HttpKnowledgeApi(transport),
+      reports: new HttpReportsApi(transport),
+      system: new HttpSystemApi(() => transport.currentAccessToken()),
       telegram: new HttpTelegramApi(transport),
     };
   }
@@ -170,6 +178,10 @@ export function createApis(
     domains: new MockDomainsApi(),
     ai: new MockAiApi(),
     knowledge: new MockKnowledgeApi(),
+    // No fixtures for these two: the browser tests answer their routes with
+    // Playwright, which a fixture would sit in front of.
+    reports: new HttpReportsApi(),
+    system: new HttpSystemApi(),
     telegram: new MockTelegramApi(),
   };
 }

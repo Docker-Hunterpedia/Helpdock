@@ -24,6 +24,7 @@ import { OpenHelpCenter } from '../screens/help-center/site/open-help-center.tsx
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
+import { ReportsPage } from '../screens/reports/reports-page.tsx';
 import { SetupPage } from '../screens/setup/setup-page.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
 import { StaffScreen } from '../screens/staff.tsx';
@@ -91,6 +92,8 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
           {/* M3-08. Install-wide like the rest of System; the api refuses anybody else. */}
           <Route path={ROUTES.systemAuditLog} element={<AuditLogPage />} />
+          {/* M8-04. Offered to the roles holding `report:read`; the api refuses anyone else. */}
+          <Route path={ROUTES.reports} element={<ReportsPage />} />
           <Route path={ROUTES.staff} element={<StaffScreen />} />
           {/* M1-04. `new` and `accounts/:id` are static-first, which React
               Router ranks above `:contactId`, so a contact can never be

@@ -26,6 +26,10 @@ import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import type { ReportsApi } from '../reports/api.js';
+import { fakeSystemApi } from '../screens/admin/system/fixtures.js';
+import type { SystemApi } from '../screens/admin/system/system-api.js';
+import { fakeReportsApi } from '../screens/reports/fixtures.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TelegramApi } from '../telegram/api.js';
@@ -54,6 +58,10 @@ export interface RenderAppOptions {
   readonly domainsApi?: DomainsApi;
   readonly aiApi?: AiApi;
   readonly knowledgeApi?: KnowledgeApi;
+  /** Defaults to the reports fixture, so no test reaches for a real api. */
+  readonly reportsApi?: ReportsApi;
+  /** Defaults to the System fixture: a brand that is not being deleted. */
+  readonly systemApi?: SystemApi;
   readonly telegramApi?: TelegramApi;
   readonly initialEntries?: readonly string[];
 }
@@ -121,6 +129,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       domainsApi={domainsApi}
       aiApi={aiApi}
       knowledgeApi={knowledgeApi}
+      reportsApi={options.reportsApi ?? fakeReportsApi()}
+      systemApi={options.systemApi ?? fakeSystemApi()}
       telegramApi={telegramApi}
       queryClient={queryClient}
       router={({ children }) => (

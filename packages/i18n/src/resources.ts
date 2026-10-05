@@ -11,6 +11,7 @@ import arHcSite from '../locales/ar/hcSite.json' with { type: 'json' };
 import arHelpCenter from '../locales/ar/helpCenter.json' with { type: 'json' };
 import arMacros from '../locales/ar/macros.json' with { type: 'json' };
 import arMe from '../locales/ar/me.json' with { type: 'json' };
+import arReports from '../locales/ar/reports.json' with { type: 'json' };
 import arRules from '../locales/ar/rules.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
@@ -35,6 +36,7 @@ import enHcSite from '../locales/en/hcSite.json' with { type: 'json' };
 import enHelpCenter from '../locales/en/helpCenter.json' with { type: 'json' };
 import enMacros from '../locales/en/macros.json' with { type: 'json' };
 import enMe from '../locales/en/me.json' with { type: 'json' };
+import enReports from '../locales/en/reports.json' with { type: 'json' };
 import enRules from '../locales/en/rules.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
@@ -93,6 +95,8 @@ export const NAMESPACES = [
   'telegram',
   // `Admin/AI` (M7-10): Providers, Knowledge and Assistant.
   'aiSettings',
+  // `Admin/Reports` (M8-04).
+  'reports',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -124,6 +128,7 @@ export const resources = {
     hcSite: enHcSite,
     telegram: enTelegram,
     aiSettings: enAiSettings,
+    reports: enReports,
   },
   ar: {
     common: arCommon,
@@ -150,6 +155,7 @@ export const resources = {
     hcSite: arHcSite,
     telegram: arTelegram,
     aiSettings: arAiSettings,
+    reports: arReports,
   },
 };
 

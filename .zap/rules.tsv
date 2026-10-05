@@ -1,0 +1,12 @@
+# ZAP baseline rules for .github/workflows/zap.yml (M9-05).
+#
+# One line per rule: <plugin id> TAB <IGNORE|INFO|WARN|FAIL> TAB <why>.
+# A rule not listed here fails the scan when it raises an alert. Lower a rule
+# only for a finding that has been read and accepted, and say why on its line;
+# docs/guides/security-scanning.md has the procedure.
+#
+# 10049 Storable and cacheable content: the admin's hashed assets are meant to
+# be cached; every api response sets its own Cache-Control.
+10049	IGNORE	(Non-Storable / Storable and Cacheable Content: hashed static assets)
+# 10104 User agent fuzzer: informational by design.
+10104	IGNORE	(User Agent Fuzzer: informational)

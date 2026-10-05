@@ -96,6 +96,13 @@ full. What it removes from tickets:
 An install admin deletes a brand; a brand's own Admin cannot, because a brand
 is the tenant boundary and deleting one removes everybody's work in it.
 
+In the admin it is **Brand › Danger zone › Delete this brand**: type the
+brand's ticket prefix (`HD` for `HD-1042`) and "Delete brand". The page then
+shows "Scheduled for deletion on …" with **Restore** on every tab, and every
+tab is read-only until the brand is restored. The brands in their grace are
+also listed on **System › Brands pending deletion**, with the days left and
+Restore ([operations](operations.md#the-system-page)).
+
 1. **Asking.** `POST /api/install/brands/:id/deletion` with the brand's prefix
    typed out (`{ "confirmPrefix": "ACME" }`) sets the brand to `deleting` and
    starts a **30-day grace**. From that moment:

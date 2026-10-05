@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import {
   brandIdParamSchema,
   type ReportSummary,
+  reportExportFileName,
   reportExportParamSchema,
   reportQuerySchema,
   reportSummarySchema,
@@ -10,7 +11,6 @@ import { Controller, Get, Inject, Param, Query, StreamableFile } from '@nestjs/c
 import { createZodDto, ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Requires } from '../auth/route-declaration.js';
 import { getTx } from '../context/request-context.js';
-import { exportFileName } from './report-exports.js';
 import { ReportsService } from './reports.service.js';
 
 class ReportParamDto extends createZodDto(brandIdParamSchema) {}
@@ -53,7 +53,7 @@ export class ReportsController {
 
     return new StreamableFile(Readable.from(lines), {
       type: 'text/csv; charset=utf-8',
-      disposition: `attachment; filename="${exportFileName(report, query.from, query.to)}"`,
+      disposition: `attachment; filename="${reportExportFileName(report, query.from, query.to)}"`,
     });
   }
 }

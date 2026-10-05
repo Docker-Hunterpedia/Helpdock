@@ -222,16 +222,19 @@ anything a stranger could not learn by trying the port.
 
 | Card | What it tells you |
 |---|---|
-| Header | The release, the commit the image was built from and the Node version — `helpdock 0.1.0 · a2cf2b3 · node v24.18.0`. The commit comes from the `HELPDOCK_GIT_SHA` build argument; a tree built without one says `unknown`. |
+| Header | The release, the commit the image was built from and the Node version — `helpdock 0.1.0 · a2cf2b3 · node v24.18.0` — and **Open queue dashboard** ([below](#the-queue-dashboard)). The commit comes from the `HELPDOCK_GIT_SHA` build argument; a tree built without one says `unknown`. |
 | API | The three readiness probes and the slowest of them |
 | Worker | The outbox relay's last cycle and the backlog it reported. "no relay has reported" means no worker is running, or none has finished a cycle. |
 | Postgres | Server version, migrations applied at boot, and the runtime role — which must be `helpdock_app` with RLS forced (DOMAIN-RULES §1.5) |
 | Redis | Version, latency, and whether an AOF rewrite is running (not a failure, but it costs latency) |
+| Product metrics | Activation, AI deflection and help center self-service ([below](#product-metrics)) |
 | Queues | The first few, with waiting, active, failed, delayed and the age of the oldest waiting job; "All queues" fetches the rest. A failed count is a dead-letter count. |
-| Channels | Every brand's mailboxes and Telegram bots, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red ([email](email.md), [Telegram](telegram.md)) |
-| Storage | The bucket's size in total and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. "Not configured" until the worker has measured once. |
-| AI spend | "Not configured" until M7 records LLM calls. A subsystem that is not measured says so rather than showing a zero. |
+| Channels | Every brand's mailboxes and Telegram bots, grouped by kind, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red ([email](email.md), [Telegram](telegram.md)). The header counts the connections that need attention. |
+| Version and migrations | The version and commit, the runtime (Node, Postgres, Redis) and the migrations this replica applied at boot |
+| Storage | The bucket's size against its soft limit, and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. A brand in its deletion grace is marked "pending deletion". "Not measured yet" until the worker has measured once. |
 | Audit log | The most recent install-scope entries |
+| LLM spend | Install-wide tokens and cost against the monthly budget; "not available" until M7 records LLM calls. A subsystem that is not measured says so rather than showing a zero. |
+| Brands pending deletion | Every brand in its 30-day grace, with the date it was asked for, the days left (amber in the last three) and **Restore** ([deleting a brand](data-retention.md#deleting-a-brand)) |
 
 The endpoint is `@Requires('install:admin')`: everything on it is install-wide,
 so it runs in install scope and writes an `install.scope.access` audit row on
@@ -272,7 +275,8 @@ payloads and errors, with retry, promote and clean ([ADR
 brand's jobs**, because queues are install-wide; that is why only an install
 admin may open it.
 
-A new tab cannot carry the admin's sign-in, so the page asks
+**Open queue dashboard** in the page header opens it in a new tab. A new tab
+cannot carry the admin's sign-in, so the page asks
 `POST /api/install/system/queue-board` for a one-minute, one-use address, and
 opening it sets the `hd_queue_board` cookie (an hour, `HttpOnly`,
 `SameSite=Strict`, scoped to the board's path). Every board request checks
@@ -294,6 +298,11 @@ that the install can measure about itself:
 | Activation | The first ticket from any channel that is not manual (email, widget, Telegram, form, API), in any brand, and whether it came within 7 days of the wizard. The wizard's end is when the first brand was created. |
 | Help center self-service | Per brand, over the last 30 days: widget article views not followed by a ticket from the same visitor within an hour, over widget views. Only a view in the widget names a visitor a ticket can also name, so the rate is over those; every view is counted beside it. Read from `report_help_center_daily`, which `stats.rollup` writes. |
 | AI deflection | Per brand, null until M7 records auto-replies. |
+
+The System page's **Product metrics** row draws them for the whole install:
+the day of activation, help center self-service summed over every brand (so a
+busy brand weighs what it should), and AI deflection averaged over the brands
+that record it, "not available" until one does.
 
 Agent efficiency and handoff quality are measured by people in the M9
 usability pass, not by the install.
@@ -346,9 +355,8 @@ the two keys can coexist when it does.
 
 ## Still to come
 
-- The admin's System page draws the per-brand storage list and the product
-  metrics, and its "Open queue dashboard" button asks for the board's pass,
-  once their artboards exist. The api serves all three today; until then the
-  button opens the full queue table.
+- The artboard's per-brand LLM spend and budgets, its Postgres size per brand
+  and its migration list need the api to report them; the System page draws
+  the install-wide spend, the bucket per brand and the migration count.
 - **M9-06** adds backup, restore, upgrade and key rotation to this guide, and
   **M9-10** rehearses them (DOMAIN-RULES §10).

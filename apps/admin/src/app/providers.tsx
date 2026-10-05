@@ -24,6 +24,10 @@ import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import type { BrowserPush } from '../notifications/browser-push.js';
 import { NotificationsProvider } from '../notifications/context.tsx';
+import type { ReportsApi } from '../reports/api.js';
+import { ReportsApiProvider } from '../reports/context.tsx';
+import type { SystemApi } from '../screens/admin/system/system-api.js';
+import { SystemApiProvider } from '../screens/admin/system/system-api-context.tsx';
 import type { StaffApi } from '../staff/api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import type { TicketsApi } from '../tickets/api.js';
@@ -118,6 +122,10 @@ export interface AppProvidersProps {
   readonly browserPush?: BrowserPush;
   /** Defaults to the matching adapter. Only Brand › Domains reads it (M5-07). */
   readonly domainsApi?: DomainsApi;
+  /** Defaults to the matching adapter. Only `Admin/Reports` reads it (M8-04). */
+  readonly reportsApi?: ReportsApi;
+  /** Defaults to the matching adapter. System and Brand › Danger zone read it. */
+  readonly systemApi?: SystemApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -151,6 +159,8 @@ export function AppProviders({
   notificationsApi,
   browserPush,
   domainsApi,
+  reportsApi,
+  systemApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -178,6 +188,8 @@ export function AppProviders({
   const notifications = notificationsApi ?? fallback.notifications;
   const push = browserPush ?? fallback.browserPush;
   const domains = domainsApi ?? fallback.domains;
+  const reports = reportsApi ?? fallback.reports;
+  const system = systemApi ?? fallback.system;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -245,11 +257,15 @@ export function AppProviders({
                 <AutomationApiProvider api={automation}>
                   <DomainsApiProvider api={domains}>
                     <HelpCenterApiProvider api={helpCenter}>
-                      <NotificationsProvider api={notifications} push={push}>
-                        <ToastProvider>
-                          <Router>{children}</Router>
-                        </ToastProvider>
-                      </NotificationsProvider>
+                      <ReportsApiProvider api={reports}>
+                        <SystemApiProvider api={system}>
+                          <NotificationsProvider api={notifications} push={push}>
+                            <ToastProvider>
+                              <Router>{children}</Router>
+                            </ToastProvider>
+                          </NotificationsProvider>
+                        </SystemApiProvider>
+                      </ReportsApiProvider>
                     </HelpCenterApiProvider>
                   </DomainsApiProvider>
                 </AutomationApiProvider>

@@ -88,13 +88,13 @@ describe('AppShell', () => {
   });
 
   it('says what a page will hold and which milestone brings it', async () => {
-    await renderShell('/reports');
+    await renderShell('/admin/settings');
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
+    expect(screen.getByText('Install-wide · applies to every brand.')).toBeInTheDocument();
     expect(
-      screen.getByText('Volume, response times, SLA and CSAT for this brand.'),
+      screen.getByText('Install settings arrive with the rest of milestone M0.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('Reports arrive with milestone M8.')).toBeInTheDocument();
   });
 
   it('switches brand from the menu and marks the one in force', async () => {

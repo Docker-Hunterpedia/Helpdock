@@ -1,9 +1,8 @@
 # Reports
 
 What a brand's reports count, where the numbers come from, and how to export
-them (M8-04, [REQUIREMENTS §4.8](../planning/REQUIREMENTS.md#48-reports--dashboards)).
-The admin screen that draws them is a later task; this guide describes the api
-it will read.
+them (M8-04, [REQUIREMENTS §4.8](../planning/REQUIREMENTS.md#48-reports--dashboards)):
+the **Reports** screen in the admin, and the api it reads.
 
 ## Who may read them
 
@@ -14,6 +13,33 @@ A Team Leader or a Viewer restricted to some departments gets those
 departments' numbers and no others. The rollup tables are department-scoped
 under row-level security like the tickets they summarise, so asking for a
 department they cannot see answers zeroes, not another team's figures.
+
+## The Reports screen
+
+`Reports` in the sidebar (artboard `Admin/Reports`), offered to the three roles
+that hold `report:read`.
+
+- **Filters:** a date range (the last 7, 30 or 90 days, or any range of up to
+  366 days), a department and a channel. Each change asks the api again. The
+  range opens on the last 30 days, ending today.
+- **KPI tiles:** tickets created, median first response, SLA met (response and
+  resolution clocks together) and CSAT. Each compares itself in words with the
+  same number of days just before the range ("8 % more than the previous 30
+  days"), from a second read of the same route.
+- **Cards:** Ticket volume (created per day, with a Channel, Status or Priority
+  breakdown beside it), First response and resolution time, SLA compliance,
+  Backlog trend, Customer satisfaction, Agent workload, Busiest hours (weekday
+  by hour, in the brand's time zone), Help center top searches and Searches with
+  no results. AI deflection rate and AI cost say "not available" until M7
+  records AI calls.
+- **Table and Export CSV** on every card: "Table" swaps the chart for the same
+  numbers as a table, and "Export CSV" downloads that report's rows with the
+  filters in force, named as below. The two search cards export the same
+  `searches` file.
+- Charts are drawn as plain SVG (no charting library is in the stack). Each is
+  one image with its figures in its accessible name, and follows the charting
+  rules of [DESIGN §9](../../DESIGN.md#9-charts). In Arabic the page mirrors and
+  the plots keep time running left to right, as numerals do.
 
 ## What is counted
 
@@ -129,7 +155,11 @@ would run outside that transaction.
 - **AI deflection and cost** read "not available" until M7 adds `ai_calls`. The
   seam is `AiUsageSource` in `apps/api/src/reports/ai-usage.ts`, bound in
   `ReportsModule.forRoot({ aiUsage })`.
-- **No admin screen yet.** The Reports screen needs its artboard first.
+- **The screen draws what the summary carries.** The artboard's per-channel
+  stacks per day, SLA by priority, per-agent first response, resolution, SLA
+  and CSAT columns, the "Unassigned" row and the Agent filter need the api to
+  report them; the screen shows volume per day with the breakdown as totals
+  beside it, SLA by clock, and agents' replies, resolutions and open tickets.
 - **Agent workload** counts open tickets by today's assignee, as departments
   count by today's department.
 - **Scheduled email reports** are v1.1 (REQUIREMENTS §4.8).

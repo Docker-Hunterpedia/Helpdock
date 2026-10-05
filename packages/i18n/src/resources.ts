@@ -10,6 +10,7 @@ import arHcSite from '../locales/ar/hcSite.json' with { type: 'json' };
 import arHelpCenter from '../locales/ar/helpCenter.json' with { type: 'json' };
 import arMacros from '../locales/ar/macros.json' with { type: 'json' };
 import arMe from '../locales/ar/me.json' with { type: 'json' };
+import arReports from '../locales/ar/reports.json' with { type: 'json' };
 import arRules from '../locales/ar/rules.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
@@ -33,6 +34,7 @@ import enHcSite from '../locales/en/hcSite.json' with { type: 'json' };
 import enHelpCenter from '../locales/en/helpCenter.json' with { type: 'json' };
 import enMacros from '../locales/en/macros.json' with { type: 'json' };
 import enMe from '../locales/en/me.json' with { type: 'json' };
+import enReports from '../locales/en/reports.json' with { type: 'json' };
 import enRules from '../locales/en/rules.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
@@ -89,6 +91,8 @@ export const NAMESPACES = [
   // M6-04: what a Telegram bot says to a customer, and the word a shared
   // location is filed under. Read by the customer, in their language.
   'telegram',
+  // `Admin/Reports` (M8-04).
+  'reports',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -119,6 +123,7 @@ export const resources = {
     helpCenter: enHelpCenter,
     hcSite: enHcSite,
     telegram: enTelegram,
+    reports: enReports,
   },
   ar: {
     common: arCommon,
@@ -144,6 +149,7 @@ export const resources = {
     helpCenter: arHelpCenter,
     hcSite: arHcSite,
     telegram: arTelegram,
+    reports: arReports,
   },
 };
 

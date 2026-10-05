@@ -3,8 +3,6 @@
   "caption": "Install-wide · refreshed {{seconds}} s ago",
   "captionJustNow": "Install-wide · refreshed just now",
   "version": "helpdock {{version}} · {{sha}} · node {{node}}",
-  "openQueues": "Open queue dashboard",
-  "openQueuesHint": "Opens the full queue table. The embedded Bull Board arrives with milestone M8.",
   "notAllowed": {
     "heading": "Not allowed",
     "body": "The System page is install-wide, so only an install admin can open it."
@@ -58,21 +56,24 @@
     "footer": "Showing {{shown}} of {{total}}",
     "showAll": "All queues",
     "showFewer": "Show fewer",
-    "empty": "No queues could be read."
+    "empty": "No queues could be read.",
+    "pageCaption": "Every queue BullMQ holds. Retry or remove a job in the queue dashboard, where it is done as you and recorded in the audit log."
   },
   "channels": {
     "title": "Channels",
     "empty": "No channels yet · added in M2",
-    "fix": "fix"
-  },
-  "usage": {
-    "title": "Storage and AI spend",
-    "storage": "Attachments in S3",
-    "storageLimit": "of {{limit}} soft limit",
-    "storagePending": "Attachment storage is measured from milestone M1.",
-    "ai": "LLM tokens · cost",
-    "aiBudget": "{{percent}} % of the {{budget}} budget · alert at {{alert}} %",
-    "aiPending": "LLM usage is measured from milestone M7."
+    "fix": "fix",
+    "caption_one": "All brands · {{count}} connection",
+    "caption_other": "All brands · {{count}} connections",
+    "attention_one": "{{count}} needs attention",
+    "attention_other": "{{count}} need attention",
+    "kinds": {
+      "email": "Mailboxes",
+      "telegram": "Telegram bots",
+      "widget": "Widget",
+      "form": "Web forms",
+      "api": "API"
+    }
   },
   "audit": {
     "title": "Audit log",
@@ -155,5 +156,77 @@
       "body": "Nothing was recorded for these filters."
     },
     "readOnly": "Read only: no row can be edited or deleted here; retention removes them. Secrets are never shown, so a secret field shows that it changed and nothing else. Opening this page writes its own install.scope.access row."
+  },
+  "queueBoard": {
+    "open": "Open queue dashboard",
+    "failed": "Could not open the queue dashboard. Try again."
+  },
+  "metrics": {
+    "title": "Product metrics",
+    "caption": "This install · last {{days}} days · how the release checklist reads them",
+    "failed": "The product metrics could not be read.",
+    "activation": {
+      "label": "Activation",
+      "activated": "Activated",
+      "day": "Day {{day}}",
+      "caption": "The first ticket from a channel arrived on day {{day}} after the wizard finished. The target is within 7 days.",
+      "waiting": "No ticket from a channel yet. The target is within 7 days of the wizard."
+    },
+    "deflection": {
+      "label": "AI deflection rate",
+      "caption_one": "Auto-replied conversations resolved without staff, averaged over {{count}} brand.",
+      "caption_other": "Auto-replied conversations resolved without staff, averaged over {{count}} brands.",
+      "unavailable": "Not available until the AI assistant records auto-replies (M7)."
+    },
+    "selfService": {
+      "label": "Help center self-service",
+      "views": "{{views}} views",
+      "caption": "Widget article views not followed by a ticket within 1 hour, over all widget article views."
+    }
+  },
+  "versionCard": {
+    "title": "Version and migrations",
+    "version": "Version",
+    "runtime": "Runtime",
+    "migrations": "Migrations",
+    "migrationsApplied_one": "{{count}} applied",
+    "migrationsApplied_other": "{{count}} applied",
+    "migrationsUnknown": "Not known: this replica did not migrate at boot"
+  },
+  "storage": {
+    "title": "Storage",
+    "measured": "Measured {{time}}",
+    "files": "Files in S3",
+    "brand": "Brand",
+    "byBrand": "Storage by brand",
+    "ofLimit": "{{percent}} % of the {{limit}} soft limit",
+    "meterLabel": "Storage {{percent}} %",
+    "noLimit": "No soft limit set",
+    "pending": "Not measured yet. The worker measures the bucket hourly, each brand at most every six hours.",
+    "pendingDeletion": "pending deletion"
+  },
+  "llm": {
+    "title": "LLM spend",
+    "install": "Install",
+    "figure": "{{tokens}} tokens · {{cost}}",
+    "ofBudget": "{{percent}} % of the {{budget}} monthly budget",
+    "meterLabel": "Monthly LLM spend {{percent}} %",
+    "unavailable": "Not available until the AI assistant is set up (M7).",
+    "footer": "A brand that reaches its budget stops AI calls until the month turns."
+  },
+  "pending": {
+    "title": "Brands pending deletion",
+    "caption_one": "{{count}} brand · 30-day grace",
+    "caption_other": "{{count}} brands · 30-day grace",
+    "empty": "No brand is pending deletion.",
+    "requested": "Deletion requested on {{date}}",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "purgeOn": "purge on {{date}}",
+    "restore": "Restore",
+    "restoreBrand": "Restore {{name}}",
+    "restored": "{{name}} is restored.",
+    "restoreFailed": "Could not restore {{name}}. Try again.",
+    "footer": "While pending, the brand is disabled: its widget, help center and channels answer 410. Restore brings it back as it was. On the purge date every row, S3 prefix, Redis key and custom domain of the brand is removed for good; its ticket prefix stays reserved."
   }
 }

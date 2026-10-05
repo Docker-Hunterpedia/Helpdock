@@ -28,10 +28,11 @@ import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { hashSubject, rateLimitKey, revokedSessionKey } from '../auth/redis-keys.js';
-import { REFRESH_COOKIE } from '../auth/session/cookies.js';
+import { refreshCookieOf } from '../auth/session/cookies.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { signInResponseForTest } from '../testing/staff-sign-in.js';
 import { PresenceService } from './presence.service.js';
 import { presenceSocketKey } from './presence.store.js';
 import { SOCKET_EVENT_RULES } from './socket-rate-limit.js';
@@ -50,6 +51,8 @@ const REDIS_IMAGE = 'redis:7-alpine';
 const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 13).toString('base64');
 const APP_URL = 'https://support.example.com';
+/** Over https the cookies carry the `__Secure-` prefix (ASVS 3.4.4). */
+const REFRESH_COOKIE = refreshCookieOf({ APP_URL }).name;
 const COLLEAGUE_PASSWORD = 'a second staff password';
 /** The one department the colleague is in; M1 creates the table, M0 only scopes by id. */
 const COLLEAGUE_DEPARTMENT = uuidv7();
@@ -173,18 +176,8 @@ describe.skipIf(!hasDocker)('the realtime gateway', () => {
     email = seeded.email,
     password = seeded.password,
   } = {}): Promise<{ token: string; refreshCookie: string }> => {
-    const response = await replica(at).app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
+    const response = await signInResponseForTest(replica(at).app, { email, password });
+    const body = response.json() as { accessToken: string };
     const cookie = response.cookies.find((entry) => entry.name === REFRESH_COOKIE);
     return { token: body.accessToken, refreshCookie: `${REFRESH_COOKIE}=${cookie?.value ?? ''}` };
   };

@@ -5,6 +5,7 @@ import {
   index,
   integer,
   pgTable,
+  smallint,
   timestamp,
   uuid,
   varchar,
@@ -35,7 +36,7 @@ const counter = (name: string) => integer(name).notNull().default(0);
 
 /**
  * Ticket volume, times, SLA outcomes, CSAT and backlog per brand, day,
- * department, channel and priority. Department-scoped like the tickets it
+ * department, channel, priority and assignee. Department-scoped like the tickets it
  * describes (DOMAIN-RULES §1.3), so a Team Leader's report is their
  * departments' by row-level security, not by a `WHERE` somebody remembered.
  */
@@ -49,6 +50,18 @@ export const reportDaily = pgTable(
     departmentId: uuid('department_id').notNull(),
     channel: ticketChannelEnum('channel').notNull(),
     priority: ticketPriorityEnum('priority').notNull(),
+    /**
+     * The ticket's assignee now, null when it has none: the Agent filter and
+     * Agent workload's per-agent times, SLA and CSAT (M8-04). No foreign key,
+     * for the reason `report_agent_daily.agent_id` has none.
+     */
+    assigneeId: uuid('assignee_id'),
+    /**
+     * The grain the row was built at, against `REPORT_ROLLUP_VERSION` in the
+     * rollup job: rows from before the assignee joined the grain are 1, and a
+     * brand with such rows in its backfill window is rebuilt in full once.
+     */
+    rollupVersion: smallint('rollup_version').notNull().default(1),
     created: counter('created'),
     resolved: counter('resolved'),
     /** Tickets open at the end of the day: the backlog trend's point. */

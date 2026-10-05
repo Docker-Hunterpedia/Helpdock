@@ -181,6 +181,21 @@ export class TelegramBotApi {
     await this.#call(() => this.#api.answerCallbackQuery(callbackQueryId));
   }
 
+  /** Replaces a sent message's buttons (M8-06); without `replyMarkup` it removes them. */
+  async editMessageReplyMarkup(
+    chatId: string,
+    messageId: string,
+    replyMarkup?: InlineKeyboardMarkup,
+  ): Promise<void> {
+    await this.#call(() =>
+      this.#api.editMessageReplyMarkup(
+        chatId,
+        Number(messageId),
+        replyMarkup === undefined ? {} : { reply_markup: replyMarkup },
+      ),
+    );
+  }
+
   /** `getFile`, then the file's bytes, refusing anything past `maxBytes`. */
   async downloadFile(fileId: string, maxBytes = TELEGRAM_DOWNLOAD_MAX_BYTES): Promise<Buffer> {
     const file = await this.#call(() => this.#api.getFile(fileId));

@@ -1078,6 +1078,77 @@ button:disabled {
   background: var(--hd-action-primary-tint);
 }
 
+/* Satisfaction card (M8-06, Widget/CSAT-EN) */
+.hd-csat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--hd-border-default);
+  border-radius: var(--hd-radius-lg);
+  background: var(--hd-bg-surface);
+}
+
+.hd-csat-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.hd-csat-scores {
+  display: flex;
+  gap: 8px;
+}
+
+.hd-csat-score {
+  flex: 1 1 0;
+  min-inline-size: 44px;
+  block-size: 44px;
+  border: 1px solid var(--hd-border-strong);
+  border-radius: var(--hd-radius-md);
+  background: var(--hd-bg-surface);
+  color: var(--hd-text-primary);
+  font-family: var(--hd-font-mono);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.hd-csat-score[aria-pressed="true"] {
+  border: 2px solid var(--hd-action-primary);
+  background: var(--hd-action-primary-tint);
+}
+
+.hd-csat-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--hd-text-secondary);
+}
+
+.hd-csat-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.hd-csat-box {
+  border-radius: var(--hd-radius-lg);
+}
+
+.hd-button-ghost {
+  border: 0;
+  background: transparent;
+  color: var(--hd-text-primary);
+}
+
+.hd-button-ghost:hover:not(:disabled) {
+  background: var(--hd-bg-muted);
+}
+
 /* Ended */
 .hd-ended {
   display: flex;

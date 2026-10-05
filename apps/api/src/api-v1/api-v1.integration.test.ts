@@ -21,8 +21,11 @@ import type {
   TicketList,
   V1ContactUpsert,
   V1TicketDetail,
+  WebhookDelivery,
+  WebhookDeliveryDetail,
   WebhookDeliveryList,
   WebhookEnvelope,
+  WebhookOverviewList,
   WebhookWithSecret,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -33,6 +36,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
 import {
   registerWebhookEventHandlers,
@@ -115,7 +119,9 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       FFPROBE_PATH: 'ffprobe',
       CLAMAV_PORT: 3310,
       ADMIN_DIST_DIR: 'apps/admin/dist',
-      OUTBOUND_ALLOW_CIDRS: [],
+      // Loopback, for the receiver below: the registration check refuses
+      // plain http anywhere else, and a private address everywhere.
+      OUTBOUND_ALLOW_CIDRS: ['127.0.0.1/32'],
     }) as Env;
 
   const call = async <T>(
@@ -242,13 +248,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     await app.getHttpAdapter().getInstance().ready();
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
 
-    const signIn = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email: seeded.email, password: seeded.password }),
-    });
-    staffToken = (signIn.json() as { accessToken: string }).accessToken;
+    staffToken = await signInForTest(app, { email: seeded.email, password: seeded.password });
 
     const [department] = await withSystem(runtime.db, seeded.brandId, (tx) =>
       tx.select({ id: departments.id }).from(departments).limit(1),
@@ -289,6 +289,10 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect(listed.body.keys.find((key) => key.id === created.id)?.prefix).toBe(
         created.key.slice(0, 12),
       );
+      expect(listed.body.keys.find((key) => key.id === created.id)).toMatchObject({
+        createdByName: expect.any(String),
+        revokedByName: null,
+      });
 
       const [stored] = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx.select().from(apiKeys).where(eq(apiKeys.id, created.id)),
@@ -543,13 +547,40 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect(await runWorker()).toEqual([]);
     });
 
-    it('never reaches an endpoint the outbound policy blocks, and logs why', async () => {
+    it('refuses a private address or plain http when the endpoint is added', async () => {
+      const { key } = await issueKey(['webhooks:manage']);
+
+      const blocked = await call<{ error: { webhooks?: unknown } }>(
+        'POST',
+        '/api/v1/webhooks',
+        key,
+        { url: 'https://10.0.4.12/hooks', events: ['ticket.created'] },
+      );
+      const http = await call<{ error: { webhooks?: unknown } }>(
+        'POST',
+        `/api/brands/${seeded.brandId}/webhooks`,
+        staffToken,
+        { url: 'http://93.184.216.34/hooks', events: ['ticket.created'] },
+      );
+
+      expect(blocked.status).toBe(400);
+      expect(blocked.body.error.webhooks).toEqual({
+        reason: 'webhook-destination-blocked',
+        address: '10.0.4.12',
+      });
+      expect(http.status).toBe(400);
+      expect(http.body.error.webhooks).toEqual({ reason: 'webhook-https-required' });
+    });
+
+    it('never reaches an endpoint the outbound policy blocks at delivery time, and logs why', async () => {
       const { key } = await issueKey(['tickets:write', 'webhooks:manage']);
       await runWorker();
       received.length = 0;
 
+      // Allowed when added, refused when sent: the delivery policy allows the
+      // receiver's port alone.
       const webhook = await call<WebhookWithSecret>('POST', '/api/v1/webhooks', key, {
-        url: 'http://10.0.0.1/hooks',
+        url: 'http://127.0.0.1:1/hooks',
         events: ['ticket.created'],
       });
       await call('POST', '/api/v1/tickets', key, newTicket('Blocked'));
@@ -613,6 +644,50 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
         bodyText: expect.stringContaining('On its way.'),
       });
       expect(JSON.stringify(envelopes)).not.toContain('Internal only');
+    });
+
+    it('serves the Developers page: the overview, a test ping, and one delivery as it was sent', async () => {
+      await runWorker();
+      received.length = 0;
+      const base = `/api/brands/${seeded.brandId}/webhooks`;
+      const webhook = await call<WebhookWithSecret>('POST', base, staffToken, {
+        url: receiverUrl,
+        events: ['article.published'],
+      });
+
+      const ping = await call<WebhookDelivery>(
+        'POST',
+        `${base}/${webhook.body.id}/test`,
+        staffToken,
+      );
+      expect(ping.status).toBe(202);
+      expect(ping.body).toMatchObject({ event: 'ping', status: 'pending' });
+      for (const job of await runWorker()) {
+        await deliver(job);
+      }
+      expect(received).toHaveLength(1);
+      expect(received[0]?.headers['x-helpdock-event']).toBe('ping');
+
+      const detail = await call<WebhookDeliveryDetail>(
+        'GET',
+        `${base}/${webhook.body.id}/deliveries/${ping.body.id}`,
+        staffToken,
+      );
+      expect(detail.body).toMatchObject({ status: 'succeeded', responseStatus: 200 });
+      const sent = detail.body.request.headers.find(
+        (header) => header.name === 'x-helpdock-signature',
+      );
+      expect(sent?.value).toBe(received[0]?.headers['x-helpdock-signature']);
+      expect(detail.body.request.body).toBe(received[0]?.body);
+
+      const overview = await call<WebhookOverviewList>('GET', base, staffToken);
+      const listed = overview.body.webhooks.find((candidate) => candidate.id === webhook.body.id);
+      expect(listed).toMatchObject({
+        createdByName: expect.any(String),
+        last24h: { total: 1, succeeded: 1 },
+        lastDelivery: { id: ping.body.id, status: 'succeeded' },
+      });
+      expect(JSON.stringify(overview.body)).not.toContain(webhook.body.secret);
     });
   });
 });

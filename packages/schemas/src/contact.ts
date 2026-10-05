@@ -383,6 +383,64 @@ export const contactTimelineSchema = z.object({
 });
 export type ContactTimeline = z.infer<typeof contactTimelineSchema>;
 
+/** One file a contact's message carried, and where an authorised caller downloads it. */
+export const contactExportAttachmentSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  mime: z.string(),
+  size: z.int().nonnegative(),
+  /**
+   * The api route that answers with a short-lived download URL, relative to
+   * the install. Not the presigned URL itself: that lives five minutes, and
+   * an export is read later than that.
+   */
+  downloadPath: z.string().min(1),
+});
+
+export const contactExportMessageSchema = z.object({
+  id: z.uuid(),
+  seq: z.int().nonnegative(),
+  /** Who wrote it, as the conversation shows it: the contact, an agent, or the AI. */
+  author: z.enum(['contact', 'staff', 'ai', 'system']),
+  bodyText: z.string(),
+  createdAt: z.iso.datetime(),
+  attachments: z.array(contactExportAttachmentSchema),
+});
+
+export const contactExportTicketSchema = z.object({
+  id: z.uuid(),
+  reference: z.string().min(1).max(64),
+  subject: z.string(),
+  channel: z.string().min(1).max(32),
+  status: z.string().min(1).max(64),
+  createdAt: z.iso.datetime(),
+  closedAt: z.iso.datetime().nullable(),
+  messages: z.array(contactExportMessageSchema),
+});
+
+/**
+ * Everything a brand holds about one contact, as one JSON document (ASVS 8.3.2,
+ * the access half of DOMAIN-RULES §11's erasure). Internal notes are staff
+ * working papers, not the contact's conversation, and are left out.
+ */
+export const contactExportSchema = z.object({
+  exportedAt: z.iso.datetime(),
+  brandId: z.uuid(),
+  contact: z.object({
+    id: z.uuid(),
+    name: z.string(),
+    timezone: z.string().nullable(),
+    externalId: z.string().nullable(),
+    custom: z.record(z.string(), z.unknown()),
+    createdAt: z.iso.datetime(),
+    anonymisedAt: z.iso.datetime().nullable(),
+    identities: z.array(contactIdentitySchema),
+  }),
+  tickets: z.array(contactExportTicketSchema),
+});
+export type ContactExport = z.infer<typeof contactExportSchema>;
+export type ContactExportTicket = z.infer<typeof contactExportTicketSchema>;
+
 export const contactListSchema = z.object({
   contacts: z.array(contactSummarySchema),
   /** Total matching the filters, for "1–50 of 412". */
@@ -542,6 +600,8 @@ export const contactRefusalSchema = z.enum([
   'last-identity',
   /** Only an Admin may erase a contact (DOMAIN-RULES §11). */
   'anonymise-forbidden',
+  /** Only an Admin may export everything held about a contact (ASVS 8.3.2). */
+  'export-forbidden',
   /** The contact has already been erased; nothing left to change. */
   'anonymised',
   /** Another account of this brand already claims that domain. */

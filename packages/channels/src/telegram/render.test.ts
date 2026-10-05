@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { languageKeyboard, locationText, mapLinkFor, splitTelegramText } from './render.js';
+import {
+  csatCommentKeyboard,
+  csatKeyboard,
+  languageKeyboard,
+  locationText,
+  mapLinkFor,
+  splitTelegramText,
+} from './render.js';
 
 describe('splitTelegramText', () => {
   it('sends a short reply as one part', () => {
@@ -62,4 +69,19 @@ it('offers both languages, each in its own words', () => {
       { text: 'العربية', callback_data: 'lang:ar' },
     ],
   ]);
+});
+
+it('draws the survey as five score buttons in a row, then the comment link', () => {
+  const surveyId = '0192c3f0-1a2b-7c3d-8e4f-000000000042';
+  const comment = { label: 'Add a comment', url: 'https://desk.test/csat/tok?lang=en' };
+  const { inline_keyboard: rows } = csatKeyboard(surveyId, comment);
+
+  expect(rows[0]).toEqual(
+    [1, 2, 3, 4, 5].map((rating) => ({
+      text: String(rating),
+      callback_data: `csat:${surveyId}:${String(rating)}`,
+    })),
+  );
+  expect(rows[1]).toEqual([{ text: 'Add a comment', url: comment.url }]);
+  expect(csatCommentKeyboard(comment).inline_keyboard).toEqual([rows[1]]);
 });

@@ -56,6 +56,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { configureEmbeddingSpace, reembedChunks } from '../knowledge/embedding-space.job.js';
 import { createLogger } from '../logging/logger.js';
 import { seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { handleBudgetAlert } from './budget-alert.handler.js';
 import { AI_BUDGET_ALERT_EVENT } from './budget-meter.js';
 import { createAiRuntime } from './db-ai-ports.js';
@@ -167,19 +168,8 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
         body: (response.body === '' ? undefined : response.json()) as T,
       }));
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { accessToken?: string };
-    if (body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addStaff = async (role: 'agent' | 'team_leader'): Promise<string> => {
     const masterKey = decodeMasterKey(MASTER_KEY);
@@ -787,8 +777,30 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
     it("sums this month's calls of every brand, with no ceiling while a brand has no monthly budget", async () => {
       const spend = await new DbAiUsage(runtime.settings).installSpend(db());
 
-      expect(spend).toMatchObject({ configured: true, budgetUsd: null, alertAtPercent: null });
+      expect(spend).toMatchObject({ configured: true, budgetUsd: null, alertAtPercent: 80 });
       expect(spend.configured && spend.costUsd).toBeGreaterThan(1);
+    });
+
+    it('gives each brand its own spend against its own monthly budget, and they add up', async () => {
+      await withSystem(db(), brandId, (tx) =>
+        tx.update(aiSettings).set({ monthlyBudgetUsd: 100 }).where(eq(aiSettings.brandId, brandId)),
+      );
+      const spend = await new DbAiUsage(runtime.settings).installSpend(db());
+      if (!spend.configured) {
+        throw new Error('AI spend should be configured');
+      }
+      const brand = spend.brands.find((row) => row.brandId === brandId);
+
+      expect(brand).toMatchObject({ budgetUsd: 100 });
+      expect(brand?.costUsd).toBeGreaterThan(1);
+      expect(spend.brands.reduce((sum, row) => sum + row.costUsd, 0)).toBeCloseTo(spend.costUsd);
+      expect(spend.brands.reduce((sum, row) => sum + row.tokens, 0)).toBe(spend.tokens);
+      await withSystem(db(), brandId, (tx) =>
+        tx
+          .update(aiSettings)
+          .set({ monthlyBudgetUsd: null })
+          .where(eq(aiSettings.brandId, brandId)),
+      );
     });
   });
 

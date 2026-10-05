@@ -1,11 +1,13 @@
-import { createKeyring, decryptSecret } from '@helpdock/config';
+import { createKeyring, decryptSecret, encryptSecret } from '@helpdock/config';
 import type { DbTransaction, WebhookDeliveryRow, WebhookRow } from '@helpdock/db';
 import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrandActor } from '../context/brand-actor.js';
 import { WEBHOOK_DELIVERY_REQUESTED_EVENT } from './webhook-events.js';
+import { verifyWebhookSignature } from './webhook-signature.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
 import { toWebhook, WebhooksService } from './webhooks.service.js';
+import { WebhooksFailure } from './webhooks-failure.js';
 
 const enqueueOutbox = vi.hoisted(() => vi.fn(async () => 'outbox-id'));
 vi.mock('@helpdock/jobs', async (importOriginal) => ({
@@ -49,8 +51,33 @@ const tx = {
 /** The public API acting: its audit rows name the key. */
 const keyActor: BrandActor = { tx, brandId: BRAND, principalType: 'apikey', principalId: KEY };
 
+const checkDestination = vi.fn(async (_url: string) => {});
+
 const service = (repository: Partial<Record<keyof WebhooksRepository, unknown>>) =>
-  new WebhooksService(repository as unknown as WebhooksRepository, keyring);
+  new WebhooksService(repository as unknown as WebhooksRepository, keyring, {
+    checkDestination,
+    now: () => NOW,
+  });
+
+const deliveryRow = (overrides: Partial<WebhookDeliveryRow> = {}): WebhookDeliveryRow => ({
+  id: DELIVERY,
+  brandId: BRAND,
+  webhookId: WEBHOOK,
+  eventId: '0192a000-0000-7000-8000-0000000000f1',
+  event: 'ticket.created',
+  payload: { id: 'evt', event: 'ticket.created' },
+  status: 'failed',
+  attempts: 8,
+  responseStatus: 500,
+  responseExcerpt: 'nope',
+  durationMs: 120,
+  error: 'The endpoint answered 500',
+  replayOf: null,
+  createdAt: NOW,
+  lastAttemptAt: NOW,
+  deliveredAt: null,
+  ...overrides,
+});
 
 beforeEach(() => {
   audits.length = 0;
@@ -86,6 +113,107 @@ describe('WebhooksService', () => {
       expect.objectContaining({ action: 'webhook.created', actorType: 'apikey', actorId: KEY }),
     ]);
     expect(JSON.stringify(audits)).not.toContain(created.secret);
+  });
+
+  it('checks where a new or changed URL resolves before storing it', async () => {
+    checkDestination.mockRejectedValueOnce(
+      new WebhooksFailure('webhook-destination-blocked', '10.0.4.12'),
+    );
+    const insert = vi.fn();
+
+    await expect(
+      service({ insert }).create(keyActor, {
+        url: 'https://billing.internal.example/hooks',
+        events: ['ticket.created'],
+      }),
+    ).rejects.toMatchObject({ reason: 'webhook-destination-blocked', address: '10.0.4.12' });
+    expect(insert).not.toHaveBeenCalled();
+
+    const update = vi.fn(async () => webhookRow());
+    await service({ find: vi.fn(async () => webhookRow()), update }).update(keyActor, WEBHOOK, {
+      url: 'https://hooks.example.com/v2',
+    });
+    expect(checkDestination).toHaveBeenLastCalledWith('https://hooks.example.com/v2');
+  });
+
+  it('lists endpoints with their last day of finished deliveries and the newest one', async () => {
+    const overview = vi.fn(async () => [
+      {
+        webhook: webhookRow(),
+        createdByName: 'Omar',
+        finished: 8,
+        succeeded: 7,
+        lastDelivery: deliveryRow(),
+      },
+    ]);
+
+    const listed = await service({ overview }).overview(keyActor);
+
+    expect(overview).toHaveBeenCalledWith(tx, new Date('2026-10-04T10:00:00Z'));
+    expect(listed.webhooks[0]).toMatchObject({
+      createdByName: 'Omar',
+      last24h: { total: 8, succeeded: 7 },
+      lastDelivery: { id: DELIVERY, responseStatus: 500 },
+    });
+    expect(listed.webhooks[0]).not.toHaveProperty('secret');
+  });
+
+  it('shows a delivery with the headers its last attempt carried, signature included', async () => {
+    const secret = 'whsec_test';
+    const webhook = webhookRow({ secret: encryptSecret(secret, keyring) });
+
+    const detail = await service({
+      find: vi.fn(async () => webhook),
+      delivery: vi.fn(async () => deliveryRow()),
+    }).delivery(keyActor, WEBHOOK, DELIVERY);
+
+    const header = (name: string) =>
+      detail.request.headers.find((candidate) => candidate.name === name)?.value ?? '';
+    expect(detail.request).toMatchObject({ method: 'POST', url: webhook.url });
+    expect(header('x-helpdock-delivery')).toBe(DELIVERY);
+    expect(
+      verifyWebhookSignature({
+        secret,
+        header: header('x-helpdock-signature'),
+        body: detail.request.body,
+        nowSeconds: NOW.getTime() / 1000,
+      }),
+    ).toBe(true);
+    expect(JSON.stringify(detail)).not.toContain(secret);
+  });
+
+  it('shows no headers for a delivery that was never attempted', async () => {
+    const detail = await service({
+      find: vi.fn(async () => webhookRow()),
+      delivery: vi.fn(async () => deliveryRow({ lastAttemptAt: null, status: 'pending' })),
+    }).delivery(keyActor, WEBHOOK, DELIVERY);
+
+    expect(detail.request.headers).toEqual([]);
+    expect(JSON.parse(detail.request.body)).toEqual({ id: 'evt', event: 'ticket.created' });
+  });
+
+  it('sends a test ping through the outbox like any delivery, and audits it', async () => {
+    const insertDelivery = vi.fn(async (_tx: unknown, values: Partial<WebhookDeliveryRow>) =>
+      deliveryRow({ ...values, status: 'pending', attempts: 0, lastAttemptAt: null }),
+    );
+
+    const ping = await service({ find: vi.fn(async () => webhookRow()), insertDelivery }).sendTest(
+      keyActor,
+      WEBHOOK,
+    );
+
+    const inserted = insertDelivery.mock.calls[0]?.[1];
+    expect(inserted).toMatchObject({
+      event: 'ping',
+      payload: { event: 'ping', id: inserted?.eventId, brandId: BRAND },
+    });
+    expect(ping.event).toBe('ping');
+    expect(enqueueOutbox).toHaveBeenCalledWith(tx, {
+      brandId: BRAND,
+      event: WEBHOOK_DELIVERY_REQUESTED_EVENT,
+      payload: { deliveryId: ping.id },
+    });
+    expect(audits.map((audit) => audit.action)).toEqual(['webhook.tested']);
   });
 
   it('switching an endpoint back on starts its run of failures over', async () => {
@@ -158,10 +286,18 @@ describe('WebhooksService', () => {
       delete: vi.fn(async () => false),
       delivery: vi.fn(async () => undefined),
     });
+    const noDelivery = service({
+      find: vi.fn(async () => webhookRow()),
+      delivery: vi.fn(async () => undefined),
+    });
 
     await expect(missing.find(keyActor, WEBHOOK)).rejects.toBeInstanceOf(NotFoundException);
     await expect(missing.remove(keyActor, WEBHOOK)).rejects.toBeInstanceOf(NotFoundException);
     await expect(missing.replay(keyActor, WEBHOOK, DELIVERY)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(missing.sendTest(keyActor, WEBHOOK)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(noDelivery.delivery(keyActor, WEBHOOK, DELIVERY)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });

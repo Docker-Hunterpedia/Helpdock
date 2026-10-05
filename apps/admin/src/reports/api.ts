@@ -26,6 +26,9 @@ export const reportSearch = (query: ReportQuery): string => {
   if (query.channel !== undefined) {
     params.set('channel', query.channel);
   }
+  if (query.agentId !== undefined) {
+    params.set('agentId', query.agentId);
+  }
 
   return params.toString();
 };

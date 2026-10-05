@@ -1,6 +1,6 @@
 import { CacheProvider } from '@emotion/react';
 import { createI18n, dir, type Locale, SUPPORTED_LNGS } from '@helpdock/i18n';
-import type { CsatSurveyView } from '@helpdock/schemas';
+import { CSAT_RATING_MAX, CSAT_RATING_MIN, type CsatSurveyView } from '@helpdock/schemas';
 import {
   createHelpdockTheme,
   createLtrCache,
@@ -28,6 +28,8 @@ import { CsatPage } from './csat-page.tsx';
  *
  * - **the language**: `?lang=` when it names one the app ships (a channel can
  *   send the contact's own), otherwise the brand's default;
+ * - **the score already pressed**: `?rating=` from a survey email's link
+ *   (M8-06), which records nothing until the customer presses Send;
  * - **the direction**, from that language, with the matching Emotion cache;
  * - **the theme**, from DESIGN §8's brand accent when the brand has one, and
  *   the stock accent otherwise. Only the accent is brand-configurable here, as
@@ -46,6 +48,15 @@ const requestedLocale = (search: string): Locale | undefined => {
   const lang = new URLSearchParams(search).get('lang');
 
   return SUPPORTED_LNGS.find((candidate) => candidate === lang);
+};
+
+/** `?rating=` from a survey email's link, when it is a score from 1 to 5. */
+export const requestedRating = (search: string): number | null => {
+  const rating = Number(new URLSearchParams(search).get('rating'));
+
+  return Number.isInteger(rating) && rating >= CSAT_RATING_MIN && rating <= CSAT_RATING_MAX
+    ? rating
+    : null;
 };
 
 /** The preview's sample, in whichever language the page settled on. */
@@ -163,6 +174,7 @@ export function CsatApp({
             brandName={brand?.name ?? null}
             state={state}
             preview={preview}
+            initialRating={requestedRating(search)}
             onRate={(request) => api.rate(token, request)}
           />
         </I18nextProvider>

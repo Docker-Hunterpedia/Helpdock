@@ -8,6 +8,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { sql } from 'drizzle-orm';
 import { PasswordHasher } from '../../auth/password.js';
+import { overHttp, signInForTest } from '../staff-sign-in.js';
 
 /**
  * What every performance suite (M1-15, M9-03) runs against: a fresh Postgres
@@ -174,16 +175,9 @@ const waitForHealth = async (baseUrl: string): Promise<void> => {
   throw new Error(`${baseUrl} did not become healthy`);
 };
 
-/** A password sign-in; the access token is good on every replica. */
-export const signIn = async (baseUrl: string, email: string): Promise<string> => {
-  const response = await fetch(`${baseUrl}/api/auth/sign-in`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password: PERF_PASSWORD }),
-  });
-  const body = (await response.json()) as { kind?: string; accessToken?: string };
-  if (body.kind !== 'session' || body.accessToken === undefined) {
-    throw new Error(`sign-in as ${email} did not produce a session`);
-  }
-  return body.accessToken;
-};
+/**
+ * A sign-in over real HTTP; the access token is good on every replica. An
+ * Admin enrols a second factor the first time, as `staff-sign-in.ts` says.
+ */
+export const signIn = (baseUrl: string, email: string): Promise<string> =>
+  signInForTest(overHttp(baseUrl), { email, password: PERF_PASSWORD });

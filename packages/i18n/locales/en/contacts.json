@@ -218,7 +218,8 @@
     "merged": "This contact was merged into another. Open that one instead.",
     "mergeSelf": "A contact cannot be merged into itself.",
     "mergeExpired": "This merge can no longer be undone.",
-    "mergeBlocked": "These contacts have changed since the merge, so it cannot be undone."
+    "mergeBlocked": "These contacts have changed since the merge, so it cannot be undone.",
+    "exportForbidden": "Only an administrator of this brand may export a contact."
   },
   "problem": {
     "empty": "Enter a value.",

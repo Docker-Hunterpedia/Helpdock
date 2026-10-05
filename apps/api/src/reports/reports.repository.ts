@@ -20,8 +20,24 @@ type Numeric = number | string | null;
 const num = (value: Numeric): number => (value === null ? 0 : Number(value));
 const nullableNum = (value: Numeric): number | null => (value === null ? null : Number(value));
 
-/** The rows of `report_daily` the query asks for. */
-const dailyWhere = ({ brandId, query }: ReportScope, alias = 'r'): SQL => {
+interface RollupTable {
+  readonly alias: string;
+  /** The column the Agent filter narrows: `assignee_id` or `agent_id`. */
+  readonly agentColumn: string;
+}
+
+const DAILY: RollupTable = { alias: 'r', agentColumn: 'assignee_id' };
+const AGENT_DAILY: RollupTable = { alias: 'a', agentColumn: 'agent_id' };
+
+/**
+ * The rows of a rollup the query asks for. `withAgent: false` leaves the
+ * Agent filter out, for the list the filter itself offers.
+ */
+const dailyWhere = (
+  { brandId, query }: ReportScope,
+  { alias, agentColumn }: RollupTable = DAILY,
+  { withAgent = true }: { readonly withAgent?: boolean } = {},
+): SQL => {
   const table = sql.raw(alias);
   return sql.join(
     [
@@ -31,10 +47,28 @@ const dailyWhere = ({ brandId, query }: ReportScope, alias = 'r'): SQL => {
         ? []
         : [sql`${table}.department_id = ${query.departmentId}`]),
       ...(query.channel === undefined ? [] : [sql`${table}.channel = ${query.channel}`]),
+      ...(query.agentId === undefined || !withAgent
+        ? []
+        : [sql`${table}.${sql.raw(agentColumn)} = ${query.agentId}`]),
     ],
     sql` AND `,
   );
 };
+
+/**
+ * Tickets created in the range that count in reports, under the query's
+ * filters: the same tickets the rollups count (`rollup.repository.ts`), for
+ * the reads that describe a current state rather than something that
+ * happened on a day.
+ */
+const createdTicketsWhere = ({ brandId, query, timezone }: ReportScope): SQL => sql`
+  t.brand_id = ${brandId}
+  AND t.created_at >= (${query.from}::date)::timestamp AT TIME ZONE ${timezone}
+  AND t.created_at < ((${query.to}::date) + 1)::timestamp AT TIME ZONE ${timezone}
+  AND t.deleted_at IS NULL AND t.merged_into_id IS NULL AND NOT s.excluded_from_reports
+  ${query.departmentId === undefined ? sql`` : sql`AND t.department_id = ${query.departmentId}`}
+  ${query.channel === undefined ? sql`` : sql`AND t.channel = ${query.channel}`}
+  ${query.agentId === undefined ? sql`` : sql`AND t.assignee_id = ${query.agentId}`}`;
 
 export interface DayRow {
   readonly day: string;
@@ -72,12 +106,41 @@ export interface StatusRow {
   readonly tickets: number;
 }
 
+export interface DaySliceRow<K extends string> {
+  readonly day: string;
+  readonly key: K;
+  readonly created: number;
+}
+
+export interface PriorityOutcomeRow {
+  readonly priority: TicketPriority;
+  readonly met: number;
+  readonly breached: number;
+}
+
+export interface Median {
+  readonly count: number;
+  readonly medianMs: number | null;
+}
+
 export interface AgentRow {
   readonly agentId: string;
   readonly name: string | null;
   readonly replies: number;
   readonly resolved: number;
   readonly assignedOpen: number;
+  readonly firstResponse: Median;
+  readonly resolution: Median;
+  readonly slaMet: number;
+  readonly slaBreached: number;
+  readonly csatResponses: number;
+  /** The sum of their ratings, for the average. */
+  readonly csatPoints: number;
+}
+
+export interface AgentChoice {
+  readonly agentId: string;
+  readonly name: string | null;
 }
 
 export interface HourRow {
@@ -98,6 +161,10 @@ export interface SearchRow {
 export interface DailyDetailRow {
   readonly day: string;
   readonly department: string | null;
+  /** The ticket's assignee; null for none. */
+  readonly agentId: string | null;
+  /** Null for no assignee, or an account that no longer exists. */
+  readonly agent: string | null;
   readonly channel: TicketChannel;
   readonly priority: TicketPriority;
   readonly created: number;
@@ -156,6 +223,85 @@ export class ReportsRepository {
       created: num(row.created),
       resolved: num(row.resolved),
     }));
+  }
+
+  async byDayAndChannel(
+    tx: DbTransaction,
+    scope: ReportScope,
+  ): Promise<DaySliceRow<TicketChannel>[]> {
+    return this.#daySlice(tx, scope, sql.raw('channel'));
+  }
+
+  async byDayAndPriority(
+    tx: DbTransaction,
+    scope: ReportScope,
+  ): Promise<DaySliceRow<TicketPriority>[]> {
+    return this.#daySlice(tx, scope, sql.raw('priority'));
+  }
+
+  async #daySlice<K extends string>(
+    tx: DbTransaction,
+    scope: ReportScope,
+    column: SQL,
+  ): Promise<DaySliceRow<K>[]> {
+    const rows = await tx.execute<{ day: string; key: K; created: Numeric }>(sql`
+      SELECT r.day::text AS day, r.${column}::text AS key, sum(r.created) AS created
+      FROM report_daily r WHERE ${dailyWhere(scope)}
+      GROUP BY r.day, r.${column} HAVING sum(r.created) > 0
+      ORDER BY r.day, r.${column}`);
+
+    return rows.map((row) => ({ day: row.day, key: row.key, created: num(row.created) }));
+  }
+
+  /** Both clocks' outcomes per priority, most urgent first. */
+  async slaByPriority(tx: DbTransaction, scope: ReportScope): Promise<PriorityOutcomeRow[]> {
+    const rows = await tx.execute<{ priority: TicketPriority; met: Numeric; breached: Numeric }>(
+      sql`
+      SELECT r.priority::text AS priority,
+        sum(r.sla_response_met + r.sla_resolution_met) AS met,
+        sum(r.sla_response_breached + r.sla_resolution_breached) AS breached
+      FROM report_daily r WHERE ${dailyWhere(scope)}
+      GROUP BY r.priority
+      HAVING sum(r.sla_response_met + r.sla_resolution_met
+        + r.sla_response_breached + r.sla_resolution_breached) > 0
+      ORDER BY r.priority DESC`,
+    );
+
+    return rows.map((row) => ({
+      priority: row.priority,
+      met: num(row.met),
+      breached: num(row.breached),
+    }));
+  }
+
+  /** Open tickets with no assignee at the end of the range. */
+  async unassignedOpen(tx: DbTransaction, scope: ReportScope): Promise<number> {
+    const [row] = await tx.execute<{ open: Numeric }>(sql`
+      SELECT sum(r.backlog) AS open
+      FROM report_daily r
+      WHERE ${dailyWhere(scope)} AND r.day = ${scope.query.to}::date AND r.assignee_id IS NULL`);
+
+    return num(row?.open ?? null);
+  }
+
+  /**
+   * Everyone with work or assigned tickets in the range, by name, under every
+   * filter but the agent's own.
+   */
+  async agentChoices(tx: DbTransaction, scope: ReportScope): Promise<AgentChoice[]> {
+    const rows = await tx.execute<{ agent_id: string; name: string | null }>(sql`
+      SELECT ids.agent_id, u.name
+      FROM (
+        SELECT a.agent_id FROM report_agent_daily a
+        WHERE ${dailyWhere(scope, AGENT_DAILY, { withAgent: false })}
+        UNION
+        SELECT r.assignee_id FROM report_daily r
+        WHERE ${dailyWhere(scope, DAILY, { withAgent: false })} AND r.assignee_id IS NOT NULL
+      ) ids
+      LEFT JOIN users u ON u.id = ids.agent_id
+      ORDER BY u.name NULLS LAST, ids.agent_id`);
+
+    return rows.map((row) => ({ agentId: row.agent_id, name: row.name }));
   }
 
   async totals(tx: DbTransaction, scope: ReportScope): Promise<Totals> {
@@ -222,7 +368,6 @@ export class ReportsRepository {
    * count as in the rollups (`rollup.repository.ts`).
    */
   async byStatus(tx: DbTransaction, scope: ReportScope): Promise<StatusRow[]> {
-    const { brandId, query, timezone } = scope;
     const rows = await tx.execute<{
       status_id: string;
       name: string;
@@ -232,12 +377,7 @@ export class ReportsRepository {
       SELECT s.id AS status_id, s.name, s.system_state::text AS system_state, count(*) AS tickets
       FROM tickets t
       JOIN ticket_statuses s ON s.id = t.status_id
-      WHERE t.brand_id = ${brandId}
-        AND t.created_at >= (${query.from}::date)::timestamp AT TIME ZONE ${timezone}
-        AND t.created_at < ((${query.to}::date) + 1)::timestamp AT TIME ZONE ${timezone}
-        AND t.deleted_at IS NULL AND t.merged_into_id IS NULL AND NOT s.excluded_from_reports
-        ${query.departmentId === undefined ? sql`` : sql`AND t.department_id = ${query.departmentId}`}
-        ${query.channel === undefined ? sql`` : sql`AND t.channel = ${query.channel}`}
+      WHERE ${createdTicketsWhere(scope)}
       GROUP BY s.id, s.name, s.system_state, s.sort_order
       ORDER BY s.sort_order, s.name`);
 
@@ -249,27 +389,78 @@ export class ReportsRepository {
     }));
   }
 
+  /** {@link byStatus} per local day of creation, for the stacked columns. */
+  async byDayAndStatus(tx: DbTransaction, scope: ReportScope): Promise<DaySliceRow<string>[]> {
+    const rows = await tx.execute<{ day: string; status_id: string; tickets: Numeric }>(sql`
+      SELECT ((t.created_at AT TIME ZONE ${scope.timezone})::date)::text AS day,
+        s.id AS status_id, count(*) AS tickets
+      FROM tickets t
+      JOIN ticket_statuses s ON s.id = t.status_id
+      WHERE ${createdTicketsWhere(scope)}
+      GROUP BY 1, s.id, s.sort_order, s.name
+      ORDER BY 1, s.sort_order, s.name`);
+
+    return rows.map((row) => ({ day: row.day, key: row.status_id, created: num(row.tickets) }));
+  }
+
   /**
-   * Each agent's replies and resolutions over the range, and the open tickets
-   * assigned to them at its end. A name is read from `users` (a global table);
-   * an account that no longer exists has none.
+   * Each agent's replies and resolutions over the range and the open tickets
+   * assigned to them at its end (`report_agent_daily`), with the times, SLA
+   * outcomes and ratings of the tickets assigned to them (`report_daily` by
+   * `assignee_id`). A name is read from `users` (a global table); an account
+   * that no longer exists has none.
    */
   async agents(tx: DbTransaction, scope: ReportScope, limit: number | null): Promise<AgentRow[]> {
+    const median = (column: string): SQL => sql`
+      SELECT r.assignee_id AS agent_id, count(ms) AS n,
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY ms) AS median
+      FROM report_daily r, unnest(r.${sql.raw(column)}) AS ms
+      WHERE ${dailyWhere(scope)} AND r.assignee_id IS NOT NULL
+      GROUP BY r.assignee_id`;
     const rows = await tx.execute<{
       agent_id: string;
       name: string | null;
       replies: Numeric;
       resolved: Numeric;
       assigned_open: Numeric;
+      frt_n: Numeric;
+      frt_median: Numeric;
+      res_n: Numeric;
+      res_median: Numeric;
+      sla_met: Numeric;
+      sla_breached: Numeric;
+      csat_n: Numeric;
+      csat_points: Numeric;
     }>(sql`
-      SELECT a.agent_id, u.name, sum(a.replies) AS replies, sum(a.resolved) AS resolved,
-        coalesce(sum(a.assigned_open) FILTER (WHERE a.day = ${scope.query.to}::date), 0)
-          AS assigned_open
-      FROM report_agent_daily a
-      LEFT JOIN users u ON u.id = a.agent_id
-      WHERE ${dailyWhere(scope, 'a')}
-      GROUP BY a.agent_id, u.name
-      ORDER BY sum(a.replies) DESC, sum(a.resolved) DESC, a.agent_id
+      WITH work AS (
+        SELECT a.agent_id, sum(a.replies) AS replies, sum(a.resolved) AS resolved,
+          coalesce(sum(a.assigned_open) FILTER (WHERE a.day = ${scope.query.to}::date), 0)
+            AS assigned_open
+        FROM report_agent_daily a
+        WHERE ${dailyWhere(scope, AGENT_DAILY)}
+        GROUP BY a.agent_id
+      ),
+      frt AS (${median('first_response_ms')}),
+      res AS (${median('resolution_ms')}),
+      outcomes AS (
+        SELECT r.assignee_id AS agent_id,
+          sum(r.sla_response_met + r.sla_resolution_met) AS sla_met,
+          sum(r.sla_response_breached + r.sla_resolution_breached) AS sla_breached,
+          sum(r.csat_1 + r.csat_2 + r.csat_3 + r.csat_4 + r.csat_5) AS csat_n,
+          sum(r.csat_1 + 2 * r.csat_2 + 3 * r.csat_3 + 4 * r.csat_4 + 5 * r.csat_5) AS csat_points
+        FROM report_daily r
+        WHERE ${dailyWhere(scope)} AND r.assignee_id IS NOT NULL
+        GROUP BY r.assignee_id
+      )
+      SELECT w.agent_id, u.name, w.replies, w.resolved, w.assigned_open,
+        frt.n AS frt_n, frt.median AS frt_median, res.n AS res_n, res.median AS res_median,
+        o.sla_met, o.sla_breached, o.csat_n, o.csat_points
+      FROM work w
+      LEFT JOIN users u ON u.id = w.agent_id
+      LEFT JOIN frt USING (agent_id)
+      LEFT JOIN res USING (agent_id)
+      LEFT JOIN outcomes o USING (agent_id)
+      ORDER BY w.replies DESC, w.resolved DESC, w.agent_id
       ${limit === null ? sql`` : sql`LIMIT ${limit}`}`);
 
     return rows.map((row) => ({
@@ -278,6 +469,12 @@ export class ReportsRepository {
       replies: num(row.replies),
       resolved: num(row.resolved),
       assignedOpen: num(row.assigned_open),
+      firstResponse: { count: num(row.frt_n), medianMs: nullableNum(row.frt_median) },
+      resolution: { count: num(row.res_n), medianMs: nullableNum(row.res_median) },
+      slaMet: num(row.sla_met),
+      slaBreached: num(row.sla_breached),
+      csatResponses: num(row.csat_n),
+      csatPoints: num(row.csat_points),
     }));
   }
 
@@ -327,6 +524,8 @@ export class ReportsRepository {
     const rows = await tx.execute<{
       day: string;
       department: string | null;
+      agent_id: string | null;
+      agent: string | null;
       channel: TicketChannel;
       priority: TicketPriority;
       created: number;
@@ -340,7 +539,8 @@ export class ReportsRepository {
       res_breached: number;
       csat: number[];
     }>(sql`
-      SELECT r.day::text AS day, d.name AS department, r.channel::text AS channel,
+      SELECT r.day::text AS day, d.name AS department, r.assignee_id AS agent_id, u.name AS agent,
+        r.channel::text AS channel,
         r.priority::text AS priority, r.created, r.resolved, r.backlog,
         ${percentiles('first_response_ms')} AS frt, ${percentiles('resolution_ms')} AS res,
         r.sla_response_met AS rsp_met, r.sla_response_breached AS rsp_breached,
@@ -348,8 +548,9 @@ export class ReportsRepository {
         ARRAY[r.csat_1, r.csat_2, r.csat_3, r.csat_4, r.csat_5] AS csat
       FROM report_daily r
       LEFT JOIN departments d ON d.id = r.department_id
+      LEFT JOIN users u ON u.id = r.assignee_id
       WHERE ${dailyWhere(scope)}
-      ORDER BY r.day, d.name, r.channel, r.priority`);
+      ORDER BY r.day, d.name, r.channel, r.priority, u.name NULLS FIRST, r.assignee_id`);
     const durations = ([count, median, p90]: [Numeric, Numeric, Numeric]): Durations => ({
       count: num(count),
       medianMs: nullableNum(median),
@@ -359,6 +560,8 @@ export class ReportsRepository {
     return rows.map((row) => ({
       day: row.day,
       department: row.department,
+      agentId: row.agent_id,
+      agent: row.agent,
       channel: row.channel,
       priority: row.priority,
       created: row.created,

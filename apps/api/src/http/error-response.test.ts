@@ -14,6 +14,7 @@ import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
+import { WebhooksFailure } from '../webhooks/webhooks-failure.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
 import { errorBody, mapError } from './error-response.js';
 
@@ -134,6 +135,20 @@ describe('errorBody', () => {
       requestId: 'req-11',
       domains: { reason: 'domain-taken' },
     });
+  });
+
+  it('carries the webhook refusal and the address the name resolved to', () => {
+    const blocked = errorBody(
+      mapError(new WebhooksFailure('webhook-destination-blocked', '10.0.4.12')),
+      'req-12',
+    );
+    const http = errorBody(mapError(new WebhooksFailure('webhook-https-required')), 'req-13');
+
+    expect(blocked.error).toMatchObject({
+      code: 'validation_failed',
+      webhooks: { reason: 'webhook-destination-blocked', address: '10.0.4.12' },
+    });
+    expect(http.error.webhooks).toEqual({ reason: 'webhook-https-required' });
   });
 
   it('carries the help center refusal, with the status its rule answers', () => {

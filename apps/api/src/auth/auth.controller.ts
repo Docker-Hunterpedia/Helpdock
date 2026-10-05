@@ -2,6 +2,7 @@ import type { Env } from '@helpdock/config';
 import type {
   AuthMethods,
   AuthSessionResponse,
+  EnrolmentCompleteResponse,
   OauthProvider,
   RecoveryCodes,
   Session,
@@ -31,6 +32,9 @@ import { AuthFailure, isAuthFailure } from './auth-failure.js';
 import {
   AuthMethodsDto,
   AuthSessionResponseDto,
+  EnrolmentCompleteResponseDto,
+  EnrolmentConfirmRequestDto,
+  EnrolmentStartRequestDto,
   ExchangeRequestDto,
   MagicLinkRequestDto,
   MagicLinkTokenParamDto,
@@ -48,12 +52,11 @@ import {
 } from './dto.js';
 import { Authenticated, Public } from './route-declaration.js';
 import {
+  type CookieSpec,
   decodeRefreshCookie,
   encodeRefreshCookie,
-  REFRESH_COOKIE,
-  refreshCookieAttributes,
-  TRUSTED_DEVICE_COOKIE,
-  trustedDeviceCookieAttributes,
+  refreshCookieOf,
+  trustedDeviceCookie,
 } from './session/cookies.js';
 import type { IssuedSession } from './session/session.service.js';
 import { SessionService } from './session/session.service.js';
@@ -88,6 +91,8 @@ export class AuthController {
   readonly #auth: AuthService;
   readonly #sessions: SessionService;
   readonly #env: Env;
+  readonly #refreshCookie: CookieSpec;
+  readonly #trustCookie: CookieSpec;
 
   constructor(
     @Inject(AuthService) auth: AuthService,
@@ -97,6 +102,8 @@ export class AuthController {
     this.#auth = auth;
     this.#sessions = sessions;
     this.#env = env;
+    this.#refreshCookie = refreshCookieOf(env);
+    this.#trustCookie = trustedDeviceCookie(env.APP_URL);
   }
 
   // ------------------------------------------------------------------
@@ -123,7 +130,7 @@ export class AuthController {
       password: body.password,
       ip: request.ip,
       userAgent: request.headers['user-agent'],
-      trustedDeviceCookie: request.cookies[TRUSTED_DEVICE_COOKIE],
+      trustedDeviceCookie: request.cookies[this.#trustCookie.name],
     });
 
     return this.#answer(outcome, reply);
@@ -144,11 +151,7 @@ export class AuthController {
     });
 
     if (trustedDeviceCookie !== null) {
-      reply.setCookie(
-        TRUSTED_DEVICE_COOKIE,
-        trustedDeviceCookie,
-        trustedDeviceCookieAttributes(this.#env.APP_URL),
-      );
+      reply.setCookie(this.#trustCookie.name, trustedDeviceCookie, this.#trustCookie.attributes);
     }
 
     return this.#answer({ kind: 'session', issued }, reply);
@@ -168,6 +171,44 @@ export class AuthController {
     });
 
     return this.#answer({ kind: 'session', issued }, reply);
+  }
+
+  /**
+   * Enrolment for an account that must have a second factor and was handed a
+   * challenge instead of a session (`totp-enrolment-required`). The challenge
+   * is the credential, as it is for `/totp`.
+   */
+  @Post('enrolment/start')
+  @Public()
+  @ZodSerializerDto(TotpEnrolmentDto)
+  startEnrolment(
+    @Body(new ZodValidationPipe(EnrolmentStartRequestDto)) body: EnrolmentStartRequestDto,
+  ): Promise<TotpEnrolment> {
+    return this.#auth.startEnrolment(body.challengeId);
+  }
+
+  /** A live code turns the factor on and opens the session the challenge stood in for. */
+  @Post('enrolment/confirm')
+  @Public()
+  @ZodSerializerDto(EnrolmentCompleteResponseDto)
+  async confirmEnrolment(
+    @Body(new ZodValidationPipe(EnrolmentConfirmRequestDto)) body: EnrolmentConfirmRequestDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<EnrolmentCompleteResponse> {
+    const { recoveryCodes, issued } = await this.#auth.completeEnrolment({
+      challengeId: body.challengeId,
+      code: body.code,
+      userAgent: request.headers['user-agent'],
+    });
+    this.#setRefreshCookie(reply, issued);
+
+    return {
+      recoveryCodes,
+      accessToken: issued.accessToken,
+      expiresInSeconds: issued.expiresInSeconds,
+      session: issued.session,
+    };
   }
 
   /** 204 whatever happened, so the form cannot be used to find out who works here. */
@@ -295,7 +336,7 @@ export class AuthController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthSessionResponse> {
-    const cookie = decodeRefreshCookie(request.cookies[REFRESH_COOKIE]);
+    const cookie = decodeRefreshCookie(request.cookies[this.#refreshCookie.name]);
     if (cookie === null) {
       throw new AuthFailure('challenge-expired');
     }
@@ -339,7 +380,7 @@ export class AuthController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    const cookie = decodeRefreshCookie(request.cookies[REFRESH_COOKIE]);
+    const cookie = decodeRefreshCookie(request.cookies[this.#refreshCookie.name]);
     if (cookie !== null) {
       await this.#sessions.revokeFamily(cookie.fam, 'sign-out');
     }
@@ -354,7 +395,7 @@ export class AuthController {
   async signOutEverywhere(@Res({ passthrough: true }) reply: FastifyReply): Promise<void> {
     await this.#auth.signOutEverywhere(this.#staffId());
     this.#clearSessionCookies(reply);
-    reply.clearCookie(TRUSTED_DEVICE_COOKIE, trustedDeviceCookieAttributes(this.#env.APP_URL));
+    reply.clearCookie(this.#trustCookie.name, this.#trustCookie.attributes);
   }
 
   /** M0-06 builds the screen; the endpoints are here so the flow is complete. */
@@ -448,14 +489,14 @@ export class AuthController {
 
   #setRefreshCookie(reply: FastifyReply, issued: IssuedSession): void {
     reply.setCookie(
-      REFRESH_COOKIE,
+      this.#refreshCookie.name,
       encodeRefreshCookie(issued.refreshCookieValue),
-      refreshCookieAttributes(this.#env.APP_URL),
+      this.#refreshCookie.attributes,
     );
   }
 
   #clearSessionCookies(reply: FastifyReply): void {
-    reply.clearCookie(REFRESH_COOKIE, refreshCookieAttributes(this.#env.APP_URL));
+    reply.clearCookie(this.#refreshCookie.name, this.#refreshCookie.attributes);
   }
 
   /**

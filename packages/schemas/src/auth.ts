@@ -124,6 +124,21 @@ export type PasswordResetRequest = z.infer<typeof passwordResetRequestSchema>;
 export const totpConfirmRequestSchema = z.object({ code: z.string().regex(/^\d{6}$/) });
 export type TotpConfirmRequest = z.infer<typeof totpConfirmRequestSchema>;
 
+/**
+ * Enrolment before there is a session: an account that must have a second
+ * factor and has none gets an `enrolment` challenge instead of a session
+ * (`totp-enrolment-required`), and spends it here. The challenge stands in for
+ * the session the authenticated `/totp/enrol` and `/totp/confirm` would need.
+ */
+export const enrolmentStartRequestSchema = z.object({ challengeId: z.string().min(1) });
+export type EnrolmentStartRequest = z.infer<typeof enrolmentStartRequestSchema>;
+
+export const enrolmentConfirmRequestSchema = z.object({
+  challengeId: z.string().min(1),
+  code: z.string().regex(/^\d{6}$/),
+});
+export type EnrolmentConfirmRequest = z.infer<typeof enrolmentConfirmRequestSchema>;
+
 // --------------------------------------------------------------------------
 // Paths and query strings
 // --------------------------------------------------------------------------
@@ -235,6 +250,12 @@ export type TotpEnrolment = z.infer<typeof totpEnrolmentSchema>;
 export const recoveryCodesSchema = z.object({ recoveryCodes: z.array(z.string().min(1)) });
 export type RecoveryCodes = z.infer<typeof recoveryCodesSchema>;
 
+/** A completed enrolment challenge: the codes, once, and the session it was standing in for. */
+export const enrolmentCompleteResponseSchema = authSessionResponseSchema.extend(
+  recoveryCodesSchema.shape,
+);
+export type EnrolmentCompleteResponse = z.infer<typeof enrolmentCompleteResponseSchema>;
+
 /**
  * Every failure the screens have to tell apart. The api returns the code; the
  * screen picks the catalog key, so no user-facing English crosses this boundary
@@ -248,6 +269,8 @@ const authErrorCodes = [
   'recovery-invalid',
   'no-account',
   'unavailable',
+  /** A new password that is on the bundled list of breached passwords (ASVS 2.1.7). */
+  'password-breached',
 ] as const;
 export const authErrorCodeSchema = z.enum(authErrorCodes);
 export type AuthErrorCode = z.infer<typeof authErrorCodeSchema>;

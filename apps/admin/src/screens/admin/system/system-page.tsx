@@ -153,7 +153,11 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
 
           <Box sx={{ display: 'grid', gap: 4 }}>
             <VersionCard status={data} />
-            <StorageCard storage={data.storage} pendingBrandIds={pendingIds} />
+            <StorageCard
+              storage={data.storage}
+              databaseBytes={data.database.sizeBytes}
+              pendingBrandIds={pendingIds}
+            />
             <AuditCard audit={data.audit} />
           </Box>
         </Box>

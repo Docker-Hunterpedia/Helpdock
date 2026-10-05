@@ -127,6 +127,8 @@ export class SystemService {
         }),
         version: postgres.version,
         migrationsApplied: this.#boot.migrationsApplied,
+        migrations: this.#boot.migrations === null ? null : [...this.#boot.migrations],
+        sizeBytes: postgres.sizeBytes,
         runtimeRole: {
           name: this.#boot.runtimeRole.roleName,
           superuser: this.#boot.runtimeRole.superuser,

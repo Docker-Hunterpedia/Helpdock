@@ -55,6 +55,14 @@ export const systemDatabaseSchema = z.object({
    * runtime role is deliberately not granted (DOMAIN-RULES §1.5).
    */
   migrationsApplied: z.number().int().nonnegative().nullable(),
+  /** Their names, newest first, read at boot for the same reason; null where the count is. */
+  migrations: z.array(z.string().min(1)).nullable(),
+  /**
+   * The whole database on disk (`pg_database_size`), or null when the server
+   * did not answer. Install-wide: a brand's share is spread over every table
+   * and index, and measuring it would mean reading every row.
+   */
+  sizeBytes: z.number().nonnegative().nullable(),
   /** Read once at boot from `assertRuntimeRoleIsSafe` (DOMAIN-RULES §1.5). */
   runtimeRole: z.object({
     name: z.string().min(1),
@@ -164,7 +172,21 @@ export const systemStorageSchema = z.discriminatedUnion('configured', [
 ]);
 export type SystemStorage = z.infer<typeof systemStorageSchema>;
 
-/** LLM spend for the current budget window, install-wide. Filled in by M7 through `AiUsageSource`. */
+/** One brand's LLM spend in the current month, against its own monthly budget. */
+export const brandAiSpendSchema = z.object({
+  brandId: z.uuid(),
+  name: z.string(),
+  tokens: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative(),
+  /** Null when the brand has no monthly limit. */
+  budgetUsd: z.number().positive().nullable(),
+});
+export type BrandAiSpend = z.infer<typeof brandAiSpendSchema>;
+
+/**
+ * LLM spend for the current budget window, install-wide and per brand, from
+ * `ai_calls` through `AiUsageSource` (M7).
+ */
 export const systemAiSpendSchema = z.discriminatedUnion('configured', [
   z.object({ configured: z.literal(false) }),
   z.object({
@@ -174,6 +196,8 @@ export const systemAiSpendSchema = z.discriminatedUnion('configured', [
     budgetUsd: z.number().positive().nullable(),
     /** DESIGN and ARCHITECTURE §10: a soft alert at 80 % of the budget. */
     alertAtPercent: z.number().min(0).max(100).nullable(),
+    /** Every brand not yet purged, largest spend first. */
+    brands: z.array(brandAiSpendSchema),
   }),
 ]);
 export type SystemAiSpend = z.infer<typeof systemAiSpendSchema>;

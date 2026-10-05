@@ -1,4 +1,3 @@
-import type { Settings } from '@helpdock/config';
 import type { DbTransaction } from '@helpdock/db';
 import type {
   Profile,
@@ -18,21 +17,16 @@ import type { StaffRepository } from './staff.repository.js';
  * language, their password, their second factor, and which browsers are signed
  * in.
  *
- * **These write no `audit_log` row.** `audit_log` is a tenant table keyed on
- * `brand_id`, and a password change belongs to a person rather than to a brand
- * — writing it under whichever brand happened to be first would put a fact in a
- * place it is not true of, and writing it under the install sentinel would mean
- * an ordinary staff principal opening an install-scope transaction, which is
- * exactly what `target-brand.ts` exists to refuse. They are logged instead, by
- * `AuthService`, with the user id and the reason, which is what an operator
- * greps for. The guide says so.
+ * **The audit rows are `AuthService`'s.** A password change belongs to a person
+ * rather than to a brand, so it is recorded in install scope by the `auth`
+ * system principal (`auth/auth-audit.ts`, ADR 0022) — never by this request's
+ * staff principal, which `target-brand.ts` keeps out of install scope.
  */
 
 export interface AccountServiceOptions {
   readonly staff: StaffRepository;
   readonly auth: AuthService;
   readonly sessions: SessionService;
-  readonly settings: Settings;
   readonly logger: Logger;
 }
 
@@ -57,7 +51,7 @@ export class AccountService {
       locale: user.locale,
       twoFactorEnabled: user.totpEnabled,
       recoveryCodesLeft: user.recoveryCodesHashed.length,
-      twoFactorRequired: await this.#parts.settings.get('auth.require2fa'),
+      twoFactorRequired: await this.#parts.auth.secondFactorRequiredFor(userId, tx),
     };
   }
 

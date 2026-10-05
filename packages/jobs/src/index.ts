@@ -2,6 +2,7 @@ export * from './consumer.js';
 export * from './dispatcher.js';
 export * from './jobs.js';
 export * from './logger.js';
+export * from './ordering.js';
 export * from './outbox.js';
 export * from './queues.js';
 export * from './redis.js';

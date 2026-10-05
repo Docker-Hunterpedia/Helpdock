@@ -1,7 +1,7 @@
 import type { DbTransaction } from '@helpdock/db';
 import { csvLine, type ReportExport } from '@helpdock/schemas';
-import { fillDays } from './report-math.js';
-import type { ReportScope, ReportsRepository } from './reports.repository.js';
+import { csatAverage, fillDays } from './report-math.js';
+import type { DailyDetailRow, ReportScope, ReportsRepository } from './reports.repository.js';
 
 /**
  * The CSV exports of Reports (M8-04): one file per report, with every row
@@ -22,7 +22,16 @@ interface ExportContext {
 
 type Cell = string | number | null;
 
-const SLICE = ['day', 'department', 'channel', 'priority'] as const;
+const SLICE = ['day', 'department', 'channel', 'priority', 'agent_id', 'agent'] as const;
+
+const sliceOf = (r: DailyDetailRow): Cell[] => [
+  r.day,
+  r.department,
+  r.channel,
+  r.priority,
+  r.agentId,
+  r.agent,
+];
 
 const rowsOf = async (
   report: ReportExport,
@@ -33,15 +42,17 @@ const rowsOf = async (
       const detail = await repository.dailyDetail(tx, scope);
       return {
         header: [...SLICE, 'created', 'resolved', 'backlog'],
-        rows: detail.map((r) => [
-          r.day,
-          r.department,
-          r.channel,
-          r.priority,
-          r.created,
-          r.resolved,
-          r.backlog,
-        ]),
+        rows: detail.map((r) => [...sliceOf(r), r.created, r.resolved, r.backlog]),
+      };
+    }
+    case 'volume_by_status': {
+      const statuses = new Map(
+        (await repository.byStatus(tx, scope)).map((status) => [status.statusId, status.name]),
+      );
+      const days = await repository.byDayAndStatus(tx, scope);
+      return {
+        header: ['day', 'status_id', 'status', 'created'],
+        rows: days.map((d) => [d.day, d.key, statuses.get(d.key) ?? null, d.created]),
       };
     }
     case 'response_times': {
@@ -57,10 +68,7 @@ const rowsOf = async (
           'resolution_p90_ms',
         ],
         rows: detail.map((r) => [
-          r.day,
-          r.department,
-          r.channel,
-          r.priority,
+          ...sliceOf(r),
           r.firstResponse.count,
           r.firstResponse.medianMs,
           r.firstResponse.p90Ms,
@@ -81,10 +89,7 @@ const rowsOf = async (
           'resolution_breached',
         ],
         rows: detail.map((r) => [
-          r.day,
-          r.department,
-          r.channel,
-          r.priority,
+          ...sliceOf(r),
           r.slaResponseMet,
           r.slaResponseBreached,
           r.slaResolutionMet,
@@ -96,7 +101,7 @@ const rowsOf = async (
       const detail = await repository.dailyDetail(tx, scope);
       return {
         header: [...SLICE, 'rating_1', 'rating_2', 'rating_3', 'rating_4', 'rating_5'],
-        rows: detail.map((r) => [r.day, r.department, r.channel, r.priority, ...r.csat]),
+        rows: detail.map((r) => [...sliceOf(r), ...r.csat]),
       };
     }
     case 'backlog': {
@@ -106,8 +111,47 @@ const rowsOf = async (
     case 'agents': {
       const agents = await repository.agents(tx, scope, null);
       return {
-        header: ['agent_id', 'agent', 'replies', 'resolved', 'assigned_open'],
-        rows: agents.map((a) => [a.agentId, a.name, a.replies, a.resolved, a.assignedOpen]),
+        header: [
+          'agent_id',
+          'agent',
+          'replies',
+          'resolved',
+          'assigned_open',
+          'first_responses',
+          'first_response_median_ms',
+          'resolutions',
+          'resolution_median_ms',
+          'sla_met',
+          'sla_breached',
+          'csat_responses',
+          'csat_average',
+        ],
+        rows: [
+          ...agents.map((a) => [
+            a.agentId,
+            a.name,
+            a.replies,
+            a.resolved,
+            a.assignedOpen,
+            a.firstResponse.count,
+            a.firstResponse.medianMs,
+            a.resolution.count,
+            a.resolution.medianMs,
+            a.slaMet,
+            a.slaBreached,
+            a.csatResponses,
+            csatAverage(a.csatPoints, a.csatResponses),
+          ]),
+          // Open tickets nobody is assigned: the row without an agent.
+          [
+            null,
+            null,
+            null,
+            null,
+            await repository.unassignedOpen(tx, scope),
+            ...Array(8).fill(null),
+          ],
+        ],
       };
     }
     case 'busiest_hours': {

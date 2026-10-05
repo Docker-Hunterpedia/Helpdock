@@ -3,6 +3,8 @@ import type {
   WidgetArticleSearch,
   WidgetConversationEvent,
   WidgetConversationList,
+  WidgetCsat,
+  WidgetCsatResponse,
   WidgetEnvelope,
   WidgetMessagePage,
   WidgetPresence,
@@ -29,6 +31,7 @@ import {
   toAvailability,
   toConfig,
   toConversation,
+  toCsat,
   toMessage,
   toWireKind,
 } from './map.js';
@@ -268,6 +271,13 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
         if (mine(moved.conversationId)) {
           handOver(moved.aiHandedOff === true);
           moveTo(statusOf(moved, null));
+        }
+        return;
+      }
+      case EVENTS.csat: {
+        const csat = envelope.data as WidgetCsat;
+        if (mine(csat.conversationId)) {
+          emit({ type: 'csat', csat: toCsat(csat) });
         }
         return;
       }
@@ -642,6 +652,29 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       await http.post(conversationPath(conversationId, `/messages/${messageId}/feedback`), {
         feedback,
       });
+    },
+
+    async getCsat(conversationId) {
+      const { csat } = await http.get<WidgetCsatResponse>(
+        conversationPath(conversationId, '/csat'),
+      );
+      return csat === null ? null : toCsat(csat);
+    },
+
+    async rateConversation(conversationId, rating, comment) {
+      const { csat } = await http.post<WidgetCsatResponse>(
+        conversationPath(conversationId, '/csat'),
+        { rating, ...(comment.trim() === '' ? {} : { comment }) },
+      );
+      return csat === null ? null : toCsat(csat);
+    },
+
+    async skipCsat(conversationId) {
+      const { csat } = await http.post<WidgetCsatResponse>(
+        conversationPath(conversationId, '/csat/skip'),
+        {},
+      );
+      return csat === null ? null : toCsat(csat);
     },
 
     async submitContactForm(input) {

@@ -5,6 +5,7 @@ import { deliveryOf, type PendingMessage } from '../state/thread.js';
 import type { AgentSummary, WidgetMessage } from '../transport/types.js';
 import { AssistantMessage, HandoffLine, type OpenArticle } from './Assistant.js';
 import { AttachmentView } from './Attachments.js';
+import { CsatCard } from './CsatCard.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
 
@@ -18,8 +19,16 @@ import { Icon } from './icons.js';
 export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
   const { t, locale } = useWidget();
   const state = useWidgetState();
-  const { config, thread, conversation, reconnected, firstMessageNotice, visitorEmail, typing } =
-    state;
+  const {
+    config,
+    thread,
+    conversation,
+    reconnected,
+    firstMessageNotice,
+    visitorEmail,
+    typing,
+    csat,
+  } = state;
   const scroller = useRef<HTMLDivElement>(null);
   const count = thread.confirmed.length + thread.pending.length;
 
@@ -28,7 +37,7 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
     if (element) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [count, typing]);
+  }, [count, typing, csat]);
 
   if (!config) {
     return null;
@@ -116,6 +125,10 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
     addDay(pending.created_at);
     items.push(<PendingItem key={pending.client_id} pending={pending} />);
     addNotice();
+  }
+
+  if (conversation?.status === 'ended' && csat) {
+    items.push(<CsatCard key="csat" card={csat} />);
   }
 
   return (

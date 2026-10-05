@@ -215,7 +215,7 @@ test.describe('the setup key on step 1', () => {
     await key.fill('not-the-key');
     await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
     await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
-    await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+    await page.getByLabel(t('wizard:account.passwordLabel'), { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: t('wizard:account.submit') }).click();
 
     await expect(page.getByRole('alert')).toHaveText(t('wizard:account.setupKeyInvalid'));
@@ -321,7 +321,7 @@ test.describe('accessibility', () => {
     await page.getByLabel(t('wizard:account.setupKeyLabel')).fill('not-the-key');
     await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
     await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
-    await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+    await page.getByLabel(t('wizard:account.passwordLabel'), { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: t('wizard:account.submit') }).click();
     await page.getByRole('alert').waitFor();
     expect(await violations(page), 'setup key refused').toEqual([]);

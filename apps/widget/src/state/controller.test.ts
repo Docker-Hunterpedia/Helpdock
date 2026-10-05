@@ -384,3 +384,56 @@ describe('typing, transcript and a new conversation', () => {
     expect(controller.state.firstMessageNotice).toBeNull();
   });
 });
+
+describe('the satisfaction card (M8-06)', () => {
+  const open = { state: 'open', rating: null, comment: null, skipped_at: null } as const;
+
+  it('asks for the card when the conversation ends, and takes the survey job’s frame', async () => {
+    const { controller, mock } = await setup({}, []);
+
+    mock.end();
+    await flush();
+    expect(mock.calls.some((call) => call.method === 'getCsat')).toBe(true);
+    expect(controller.state.csat).toBeNull();
+
+    mock.offerCsat();
+    expect(controller.state.csat).toEqual(open);
+  });
+
+  it('records a rating and draws the answer the api gave back', async () => {
+    const { controller, mock } = await setup({}, []);
+    mock.end();
+    mock.offerCsat();
+
+    await controller.rateConversation(4, 'Quick');
+
+    expect(controller.state.csat).toMatchObject({ state: 'rated', rating: 4, comment: 'Quick' });
+    expect(mock.calls.at(-1)).toEqual({
+      method: 'rateConversation',
+      args: ['conversation-1', 4, 'Quick'],
+    });
+  });
+
+  it('skips without rating, and lets a failed rating throw for the card to show', async () => {
+    const { controller, mock } = await setup({}, []);
+    mock.end();
+    mock.offerCsat();
+
+    mock.failNextRating();
+    await expect(controller.rateConversation(2, '')).rejects.toThrow();
+    expect(controller.state.csat).toEqual(open);
+
+    await controller.skipCsat();
+    expect(controller.state.csat?.state).toBe('skipped');
+  });
+
+  it('drops the card when the conversation opens again', async () => {
+    const { controller, mock } = await setup({}, []);
+    mock.end();
+    mock.offerCsat();
+
+    mock.assign(LINA, 'Billing');
+
+    expect(controller.state.csat).toBeNull();
+  });
+});

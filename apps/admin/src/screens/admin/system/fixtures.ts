@@ -35,6 +35,13 @@ export const healthySystemStatus = (overrides: Partial<SystemStatus> = {}): Syst
     status: 'ok',
     version: '17.6',
     migrationsApplied: 4,
+    migrations: [
+      '0003_outbox_notify_relay',
+      '0002_tenant_rls_policies',
+      '0001_app_role_and_ticket_sequences',
+      '0000_core_tables',
+    ],
+    sizeBytes: 3.2 * 1024 ** 3,
     runtimeRole: {
       name: 'helpdock_app',
       superuser: false,
@@ -281,7 +288,18 @@ const brandStorage = (brandId: string, name: string, gibibytes: number): BrandSt
   measuredAt: '2026-10-05T04:00:00.000Z',
 });
 
-/** A System status with storage measured per brand and two channels, one failing. */
+const brandSpend = (
+  brandId: string,
+  name: string,
+  tokens: number,
+  costUsd: number,
+  budgetUsd: number | null,
+) => ({ brandId, name, tokens, costUsd, budgetUsd });
+
+/**
+ * A System status with storage and LLM spend measured per brand, and two
+ * channels, one failing.
+ */
 export const measuredSystemStatus = (): SystemStatus =>
   healthySystemStatus({
     channels: [
@@ -310,6 +328,18 @@ export const measuredSystemStatus = (): SystemStatus =>
         brandStorage(SESSION_BRAND, 'Helpdock', 11.2),
         brandStorage(ACME_BRAND, 'Acme Store', 6.4),
         brandStorage(OLD_STORE_BRAND, 'Old Store', 0.8),
+      ],
+    },
+    aiSpend: {
+      configured: true,
+      tokens: 11_900_000,
+      costUsd: 134.6,
+      budgetUsd: null,
+      alertAtPercent: 80,
+      brands: [
+        brandSpend(ACME_BRAND, 'Acme Store', 7_100_000, 86.4, 100),
+        brandSpend(SESSION_BRAND, 'Helpdock', 4_800_000, 48.2, 100),
+        brandSpend(OLD_STORE_BRAND, 'Old Store', 0, 0, null),
       ],
     },
   });
@@ -362,23 +392,35 @@ export const activeDeletion = (brandId: string): BrandDeletion => ({
   status: 'active',
   requestedAt: null,
   purgeAfter: null,
+  requestedBy: null,
 });
 
 /** A deletion requested at `requestedAt` (epoch ms), with its 30-day grace. */
-export const pendingDeletion = (brandId: string, requestedAt: number): BrandDeletion => ({
+export const pendingDeletion = (
+  brandId: string,
+  requestedAt: number,
+  requestedBy: BrandDeletion['requestedBy'] = null,
+): BrandDeletion => ({
   brandId,
   status: 'deleting',
   requestedAt: new Date(requestedAt).toISOString(),
   purgeAfter: new Date(requestedAt + GRACE_MS).toISOString(),
+  requestedBy,
 });
 
 /** Old Store has 26 days left and Pilot brand 3: the artboard's two rows. */
 export const brandDeletionOf = (brandId: string, now = Date.now()): BrandDeletion => {
   if (brandId === OLD_STORE_BRAND) {
-    return pendingDeletion(brandId, now - 4 * DAY_MS);
+    return pendingDeletion(brandId, now - 4 * DAY_MS, {
+      userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000a',
+      name: 'Lina Haddad',
+    });
   }
   if (brandId === PILOT_BRAND) {
-    return pendingDeletion(brandId, now - 27 * DAY_MS);
+    return pendingDeletion(brandId, now - 27 * DAY_MS, {
+      userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000b',
+      name: null,
+    });
   }
 
   return activeDeletion(brandId);

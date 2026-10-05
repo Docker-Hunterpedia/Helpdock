@@ -8,7 +8,7 @@ import {
 import { HC_ARTICLE_CHANGED_EVENT, type WebhookEvent } from '@helpdock/schemas';
 import { z } from 'zod';
 import { CONTACT_CREATED_EVENT } from '../contacts/contact-events.js';
-import { CSAT_RECEIVED_EVENT } from '../csat/csat-events.js';
+import { CSAT_EVENTS } from '../csat/csat-events.js';
 import { TICKET_EVENTS } from '../tickets/ticket-events.js';
 import { webhookDataFor } from './webhook-payload.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
@@ -58,7 +58,7 @@ export const webhookEventFor = (
       return 'ticket.closed';
     case CONTACT_CREATED_EVENT:
       return 'contact.created';
-    case CSAT_RECEIVED_EVENT:
+    case CSAT_EVENTS.received:
       return 'csat.received';
     case HC_ARTICLE_CHANGED_EVENT:
       return payload.change === 'published' ? 'article.published' : undefined;
@@ -75,7 +75,7 @@ export const WEBHOOK_SOURCE_EVENTS = [
   TICKET_EVENTS.replied,
   TICKET_EVENTS.closed,
   CONTACT_CREATED_EVENT,
-  CSAT_RECEIVED_EVENT,
+  CSAT_EVENTS.received,
   HC_ARTICLE_CHANGED_EVENT,
 ] as const;
 

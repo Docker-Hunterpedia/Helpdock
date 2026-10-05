@@ -1,5 +1,6 @@
 import { createKeyring, type Env } from '@helpdock/config';
 import { type DynamicModule, Module } from '@nestjs/common';
+import { createWebhookDestinationCheck } from './webhook-destination.js';
 import { WebhooksController } from './webhooks.controller.js';
 import { WebhooksRepository } from './webhooks.repository.js';
 import { WebhooksService } from './webhooks.service.js';
@@ -14,6 +15,9 @@ import { WebhooksService } from './webhooks.service.js';
 export class WebhooksModule {
   static forRoot({ env }: { readonly env: Env }): DynamicModule {
     const keyring = createKeyring(env);
+    const checkDestination = createWebhookDestinationCheck({
+      allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+    });
 
     return {
       module: WebhooksModule,
@@ -23,7 +27,8 @@ export class WebhooksModule {
         {
           provide: WebhooksService,
           inject: [WebhooksRepository],
-          useFactory: (repository: WebhooksRepository) => new WebhooksService(repository, keyring),
+          useFactory: (repository: WebhooksRepository) =>
+            new WebhooksService(repository, keyring, { checkDestination }),
         },
       ],
       exports: [WebhooksService],

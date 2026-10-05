@@ -69,6 +69,10 @@ export function createTransport(
     handOff: (id) => remote().then((t) => t.handOff(id)),
     sendFeedback: (id, messageId, feedback) =>
       remote().then((t) => t.sendFeedback(id, messageId, feedback)),
+    getCsat: (id) => remote().then((t) => t.getCsat(id)),
+    rateConversation: (id, rating, comment) =>
+      remote().then((t) => t.rateConversation(id, rating, comment)),
+    skipCsat: (id) => remote().then((t) => t.skipCsat(id)),
     submitContactForm: (input) => remote().then((t) => t.submitContactForm(input)),
     searchArticles: (query, locale) => remote().then((t) => t.searchArticles(query, locale)),
     suggestArticles: (query, locale) => remote().then((t) => t.suggestArticles(query, locale)),

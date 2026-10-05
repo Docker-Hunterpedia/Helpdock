@@ -17,6 +17,11 @@ import { totpChallengeKey, totpLockKey } from '../redis-keys.js';
  */
 
 export const TOTP_CHALLENGE_TTL_SECONDS = 300;
+/**
+ * An enrolment challenge has a QR code to scan and a code to type before it is
+ * spent, so it gets longer than the five minutes a code alone needs.
+ */
+export const ENROLMENT_CHALLENGE_TTL_SECONDS = 900;
 /** DOMAIN-RULES §1.4, and the "2 attempts left … 15-minute lock" the screen renders. */
 export const TOTP_MAX_ATTEMPTS = 3;
 export const TOTP_LOCK_SECONDS = 15 * 60;
@@ -26,11 +31,13 @@ const challengeSchema = z.object({
   attempts: z.number().int().nonnegative(),
   createdAt: z.number().int(),
   /**
-   * `second-factor` is the ordinary case. `enrolment` is what an install with
-   * `auth.require2fa` on hands an account that has no authenticator yet; M0-06
-   * spends it from the enrolment screen.
+   * `second-factor` is the ordinary case. `enrolment` is what an account that
+   * must have a second factor and has none is handed instead of a session; the
+   * enrolment screen spends it (`POST /api/auth/enrolment/*`).
    */
   kind: z.enum(['second-factor', 'enrolment']),
+  /** How the password step was proved, for the audit row of the sign-in it completes. */
+  firstFactor: z.string().min(1).max(32).optional(),
 });
 
 export type TotpChallenge = z.infer<typeof challengeSchema>;
@@ -54,9 +61,11 @@ export class TotpChallengeStore {
   async create({
     userId,
     kind,
+    firstFactor,
   }: {
     readonly userId: string;
     readonly kind: TotpChallenge['kind'];
+    readonly firstFactor?: string;
   }): Promise<string> {
     const challengeId = uuidv7();
     const challenge: TotpChallenge = {
@@ -64,13 +73,14 @@ export class TotpChallengeStore {
       attempts: 0,
       createdAt: Math.floor(Date.now() / 1000),
       kind,
+      ...(firstFactor === undefined ? {} : { firstFactor }),
     };
 
     await this.#redis.set(
       totpChallengeKey(challengeId),
       JSON.stringify(challenge),
       'EX',
-      TOTP_CHALLENGE_TTL_SECONDS,
+      kind === 'enrolment' ? ENROLMENT_CHALLENGE_TTL_SECONDS : TOTP_CHALLENGE_TTL_SECONDS,
     );
 
     return challengeId;

@@ -225,6 +225,12 @@ export const brandDeletionSchema = z.object({
   requestedAt: z.iso.datetime().nullable(),
   /** The end of the grace: restorable until then, purged by the next nightly run after. */
   purgeAfter: z.iso.datetime().nullable(),
+  /**
+   * Who asked, from the install-scope audit row (`brand.deletion_requested`).
+   * Null for an active brand; `name` is null for an account that no longer
+   * exists.
+   */
+  requestedBy: z.object({ userId: z.string().min(1), name: z.string().nullable() }).nullable(),
 });
 export type BrandDeletion = z.infer<typeof brandDeletionSchema>;
 

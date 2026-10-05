@@ -579,7 +579,7 @@ export const notifyPushJob = defineJob({
     `notify.push:${payload.subscriptionId}:${payload.notificationId ?? payload.testId}`,
 });
 
-export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite'] as const;
+export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite', 'securityChange'] as const;
 
 export const authEmailPayloadSchema = z.object({
   brandId: z.uuid(),
@@ -594,15 +594,19 @@ export const authEmailPayloadSchema = z.object({
    * holds it in the clear.
    */
   urlEncrypted: z.string().min(1),
-  /** How long the link lasts, in the unit the kind's catalog key counts in. */
-  expiresIn: z.int().positive(),
+  /**
+   * How long the link lasts, in the unit the kind's catalog key counts in.
+   * Absent for a `securityChange`, whose link is to a page and does not expire.
+   */
+  expiresIn: z.int().positive().optional(),
   /** Extra interpolation the invite's sentences need: inviter, brand and role. */
   values: z.record(z.string(), z.string()).optional(),
 });
 export type AuthEmailPayload = z.infer<typeof authEmailPayloadSchema>;
 
 /**
- * A sign-in link, a password reset or a staff invitation, sent from the
+ * A sign-in link, a password reset, a staff invitation or a notice that a
+ * credential changed, sent from the
  * install's system sender in the recipient's language. Added by the
  * `auth.email_requested` outbox handler with a job id derived from the outbox
  * row, so a redelivered event adds nothing, and keyed by that row, so one
@@ -944,6 +948,30 @@ export const webhookDeliverJob = defineJob({
   idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
 });
 
+/**
+ * What a bot sends that is not an agent's reply: M6-04's welcome and language
+ * confirmation, and M8-06's survey on close, the thanks after a tap and "This
+ * survey has closed." for a tap that came too late.
+ */
+export const telegramNoticeKindSchema = z.enum([
+  'welcome',
+  'language_set',
+  'csat_survey',
+  'csat_rated',
+  'csat_closed',
+]);
+export type TelegramNoticeKind = z.infer<typeof telegramNoticeKindSchema>;
+
+/** M8-06: the survey a `csat_*` notice is about, and the tap it answers. */
+export const telegramCsatNoticeSchema = z.object({
+  surveyId: z.uuid(),
+  /** The score a `csat_rated` thanks the contact for. */
+  rating: z.int().min(1).max(5).optional(),
+  /** The survey message whose buttons a tap's answer replaces. */
+  messageId: z.string().min(1).max(32).optional(),
+});
+export type TelegramCsatNotice = z.infer<typeof telegramCsatNoticeSchema>;
+
 export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('reply'),
@@ -958,10 +986,11 @@ export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
     sourceOutboxId: z.uuid(),
     botId: z.uuid(),
     chatId: z.string().min(1).max(32),
-    notice: z.enum(['welcome', 'language_set']),
+    notice: telegramNoticeKindSchema,
     locale: z.enum(['en', 'ar']),
-    /** The button press a `language_set` answers, so the spinner on it stops. */
+    /** The button press a `language_set` or `csat_*` notice answers, so the spinner on it stops. */
     callbackQueryId: z.string().min(1).max(128).optional(),
+    csat: telegramCsatNoticeSchema.optional(),
   }),
 ]);
 

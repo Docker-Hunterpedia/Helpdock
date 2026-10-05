@@ -57,6 +57,8 @@ import { registerNotificationHandlers } from '../notifications/notification-even
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { noCsatDelivery } from '../testing/csat-doubles.js';
+import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from './ticket-events.js';
 import type { SearchMode } from './ticket-query.js';
 import { TicketRepository } from './tickets.repository.js';
@@ -183,21 +185,8 @@ describe.skipIf(!hasDocker)('tickets', () => {
 
   const brandPath = (brandId: string) => `/api/brands/${brandId}`;
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const createTicket = async (
     who: Person,
@@ -301,10 +290,12 @@ describe.skipIf(!hasDocker)('tickets', () => {
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
     // M8-03: every contact the suite makes writes `contact.created`.
     registerContactEventHandlers();
+    ignoreAuthEmailInThisSuite();
     // M1-12: a close writes `csat.requested` too, and the worker handles it.
     registerCsatEventHandlers({
       repository: new CsatRepository(),
       tokens: new CsatTokens(createKeyring(envFor())),
+      delivery: noCsatDelivery,
     });
     // M3-07: an assignment writes `ticket.assigned`, a note or reply is also
     // the notifications module's, and the worker handles both.

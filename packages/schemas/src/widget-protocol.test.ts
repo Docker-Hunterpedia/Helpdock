@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   canonicalIdentityJson,
   signedIdentitySchema,
+  WIDGET_CSAT_COMMENT_MAX,
   WIDGET_EVENT_PAYLOADS,
   WIDGET_EVENTS,
   widgetConfigQuerySchema,
+  widgetCsatRequestSchema,
   widgetMessagesQuerySchema,
   widgetPrechatAnswersSchema,
   widgetSendRequestSchema,
@@ -76,7 +78,28 @@ describe('WIDGET_EVENT_PAYLOADS', () => {
         WIDGET_EVENTS.presence,
         WIDGET_EVENTS.queue,
         WIDGET_EVENTS.conversation,
+        WIDGET_EVENTS.csat,
       ].sort(),
     );
+  });
+});
+
+describe('widgetCsatRequestSchema', () => {
+  it('trims the comment and caps it at the card’s 1000 characters', () => {
+    expect(widgetCsatRequestSchema.parse({ rating: 4, comment: '  quick  ' })).toEqual({
+      rating: 4,
+      comment: 'quick',
+    });
+    expect(
+      widgetCsatRequestSchema.safeParse({
+        rating: 4,
+        comment: 'x'.repeat(WIDGET_CSAT_COMMENT_MAX + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  it('refuses a rating outside 1 to 5', () => {
+    expect(widgetCsatRequestSchema.safeParse({ rating: 0 }).success).toBe(false);
+    expect(widgetCsatRequestSchema.safeParse({ rating: 6 }).success).toBe(false);
   });
 });

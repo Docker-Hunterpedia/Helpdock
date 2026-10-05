@@ -71,6 +71,26 @@ test.describe('the rating page', () => {
     ).toBeVisible();
   });
 
+  test('opens a survey email’s link with its score pressed, recording nothing until Send (M8-06)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    let rated = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().includes('/csat/')) {
+        rated += 1;
+      }
+    });
+    await page.goto(`/csat/${MOCK_CSAT_TOKENS.open}?rating=5&lang=${locale}`);
+
+    await expect(
+      page.getByRole('button', { name: new RegExp(t('csat:ratings.5')) }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(rated).toBe(0);
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('asks for a rating before sending', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await openLink(page, MOCK_CSAT_TOKENS.open, locale);

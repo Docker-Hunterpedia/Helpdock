@@ -3,6 +3,7 @@ import {
   BookOpen,
   Building2,
   ChartColumn,
+  Code,
   type LucideIcon,
   Mail,
   Server,
@@ -28,6 +29,7 @@ export type NavKey =
   | 'automation'
   | 'channels'
   | 'ai'
+  | 'developers'
   | 'staff'
   | 'system';
 
@@ -113,6 +115,9 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   // M7-10: Providers (install admins), Knowledge and Assistant. The two roles
   // that hold `ai:manage` (DOMAIN-RULES §1.2); `ai/tabs.ts` narrows the tabs.
   ai: item('ai', ROUTES.ai, Sparkles, { roles: ['admin', 'teamLeader'] }),
+  // M8-01, M8-03: API keys and webhooks act for the whole brand, every
+  // department included, so they are the Admin's alone (`brand:manage`).
+  developers: item('developers', ROUTES.developers, Code, { roles: ['admin'] }),
   // "Staff and roles" is the Admin and Team Leader screen: they are the two
   // roles that hold `staff:manage` (DOMAIN-RULES §1.2).
   staff: item('staff', ROUTES.staff, ShieldUser, { roles: ['admin', 'teamLeader'] }),
@@ -136,6 +141,7 @@ export const ADMIN_NAV: readonly NavItem[] = [
   NAV_BY_KEY.automation,
   NAV_BY_KEY.channels,
   NAV_BY_KEY.ai,
+  NAV_BY_KEY.developers,
   NAV_BY_KEY.staff,
   NAV_BY_KEY.system,
 ];

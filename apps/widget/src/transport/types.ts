@@ -260,6 +260,19 @@ export interface ContactFormInput {
   readonly article_id?: string;
 }
 
+/**
+ * M8-06: the satisfaction card of a closed conversation (`Widget/CSAT-EN`).
+ * `skipped` records nothing; `expired` is thirty days on, or an answer that
+ * arrived another way first.
+ */
+export interface CsatCard {
+  readonly state: 'open' | 'rated' | 'skipped' | 'expired';
+  readonly rating: number | null;
+  readonly comment: string | null;
+  /** When Skip was pressed, for "You skipped the rating · 10:06". */
+  readonly skipped_at: string | null;
+}
+
 export type ConnectionState = 'connecting' | 'online' | 'reconnecting';
 
 /**
@@ -277,7 +290,8 @@ export type WidgetEvent =
       readonly position: number;
       readonly eta_seconds: number | null;
     }
-  | { readonly type: 'conversation'; readonly conversation: ConversationSummary };
+  | { readonly type: 'conversation'; readonly conversation: ConversationSummary }
+  | { readonly type: 'csat'; readonly csat: CsatCard };
 
 export interface Subscription {
   readonly onEvent: (event: WidgetEvent) => void;
@@ -328,6 +342,16 @@ export interface WidgetTransport {
   handOff(conversationId: string): Promise<ConversationSummary>;
   /** M7-06: "Was this helpful?" on one of the assistant's answers. */
   sendFeedback(conversationId: string, messageId: string, feedback: AiFeedback): Promise<void>;
+  /** M8-06: the card of an ended conversation; null while there is none to offer. */
+  getCsat(conversationId: string): Promise<CsatCard | null>;
+  /** Records the rating once; answers the card as it then stands. */
+  rateConversation(
+    conversationId: string,
+    rating: number,
+    comment: string,
+  ): Promise<CsatCard | null>;
+  /** Records nothing; the card is not offered again on any device. */
+  skipCsat(conversationId: string): Promise<CsatCard | null>;
   submitContactForm(input: ContactFormInput): Promise<{ readonly ticket_ref: string }>;
   /** M5-10: help center search, public articles only; the api logs it for Insights. */
   searchArticles(query: string, locale: WidgetLocale): Promise<readonly ArticleSummary[]>;

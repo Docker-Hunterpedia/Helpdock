@@ -15,15 +15,24 @@ import type { BrandObjects } from '../media/brand-objects.js';
 import type { StorageUsageStore } from '../observability/storage-usage.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { RollupRepository } from './rollup.repository.js';
-import { chunkDays, type DayRange, localDay, rollupWindow } from './rollup-window.js';
+import {
+  addDays,
+  BACKFILL_MAX_DAYS,
+  chunkDays,
+  type DayRange,
+  localDay,
+  rollupWindow,
+} from './rollup-window.js';
 
 /**
  * The `stats.rollup` cron of ARCHITECTURE §13 (M8-04), as the worker runs it.
  *
  * ```
  * :07 every hour  stats.rollup.schedule   lists active brands, adds one job each
- *                 stats.rollup (brand A)  rebuilds the trailing week, or backfills
- *                                         and measures the brand's storage when stale
+ *                 stats.rollup (brand A)  rebuilds the trailing week, or backfills a
+ *                                         brand with no rollups or rollups of an older
+ *                                         REPORT_ROLLUP_VERSION, and measures the
+ *                                         brand's storage when stale
  * ```
  *
  * Each brand's run is a system principal of that brand alone (DOMAIN-RULES
@@ -73,10 +82,13 @@ export const runBrandRollup = async ({
   const inBrand = <T>(fn: (tx: DbTransaction) => Promise<T>): Promise<T> =>
     withSystemJob(db, brandId, jobId, fn);
 
+  const today = localDay(now, timezone);
   const range = await inBrand(async (tx) =>
     rollupWindow({
-      today: localDay(now, timezone),
-      rolledUpBefore: await repository.hasRollups(tx, brandId),
+      today,
+      rolledUpBefore:
+        (await repository.rollupState(tx, brandId, addDays(today, -(BACKFILL_MAX_DAYS - 1)))) ===
+        'current',
       firstActivityDay: await repository.firstActivityDay(tx, brandId, timezone),
     }),
   );

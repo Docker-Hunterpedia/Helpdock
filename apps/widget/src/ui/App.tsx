@@ -92,15 +92,16 @@ export function App() {
       <>
         <Banners />
         <Thread onOpenArticle={setArticle} />
-        {conversation?.status === 'ended' ? (
-          <Ended />
-        ) : (
+        {conversation?.status !== 'ended' ? (
           <>
             {assistantAnswering(state.thread, conversation?.ai_handed_off === true) ? (
               <TalkToHuman />
             ) : null}
             <Composer onOpenArticle={setArticle} />
           </>
+        ) : state.csat?.state === 'open' ? null : (
+          // The card replaces the composer area until it is answered or skipped (M8-06).
+          <Ended />
         )}
       </>
     );

@@ -1,0 +1,298 @@
+{
+  "title": "Developers",
+  "subtitle": "{{brand}} brand · keys and webhooks for your own integrations",
+  "apiDocs": "API docs",
+  "apiDocsLabel": "API docs (opens /api/docs)",
+  "tabList": "Developers sections",
+  "tabs": {
+    "apiKeys": "API keys",
+    "webhooks": "Webhooks"
+  },
+  "copy": "Copy",
+  "copied": "Copied to the clipboard",
+  "copyFailed": "The clipboard is not available. Select the text and copy it instead.",
+  "done": "Done",
+  "failed": "That did not work. Try again.",
+  "loadFailed": "This could not be loaded. Reload the page to try again.",
+  "keys": {
+    "create": "Create API key",
+    "heading": "API keys",
+    "summary": "{{active}} active · {{revoked}} revoked · bound to the {{brand}} brand",
+    "showRevoked": "Show revoked",
+    "tableLabel": "API keys",
+    "columns": {
+      "name": "Name",
+      "key": "Key",
+      "scopes": "Scopes",
+      "rateLimit": "Rate limit",
+      "createdBy": "Created by",
+      "lastUsed": "Last used",
+      "actions": "Actions"
+    },
+    "perMinute": "{{limit}}/min",
+    "neverUsed": "Never used",
+    "revokedTag": "revoked",
+    "revokedOn": "Revoked {{date}} by {{name}}",
+    "revokedOnNobody": "Revoked {{date}}",
+    "someone": "A former member",
+    "revoke": "Revoke",
+    "revokeLabel": "Revoke {{name}}",
+    "empty": {
+      "heading": "No API keys yet",
+      "body": "Create a key to reach this brand's tickets, contacts and articles from your own code."
+    },
+    "curl": {
+      "heading": "Calling the API",
+      "copyLabel": "Copy the example request",
+      "notePrefix": "Send an",
+      "noteMiddle": "on every create: a retry with the same key returns the first result instead of a second ticket. The full reference is the",
+      "noteLink": "OpenAPI 3.1 document at /api/docs"
+    },
+    "how": {
+      "heading": "How keys work",
+      "shown": "A key is shown once, when it is created. Helpdock stores only its SHA-256 hash, so a lost key is revoked and replaced, never recovered.",
+      "reach": "Each key reaches this brand only, and only what its scopes allow. A request over the key's rate limit gets 429 with Retry-After.",
+      "auditBefore": "Creating and revoking keys is recorded in the",
+      "auditLink": "audit log"
+    },
+    "dialog": {
+      "title": "Create API key",
+      "close": "Close",
+      "name": "Name · required",
+      "nameHint": "Say where the key lives, so whoever revokes it knows what breaks.",
+      "nameRequired": "Give the key a name.",
+      "scopes": "Scopes",
+      "scopesRequired": "Choose at least one scope.",
+      "rateLimit": "Rate limit",
+      "rateLimitUnit": "requests per minute",
+      "rateLimitHint": "{{default}} by default. Requests over it get 429.",
+      "rateLimitInvalid": "Enter a whole number from 1 to {{max}}.",
+      "submit": "Create key"
+    },
+    "scopeHints": {
+      "tickets:read": "List and read tickets and their messages",
+      "tickets:write": "Create and update tickets, add messages",
+      "contacts:read": "Search and read contacts",
+      "contacts:write": "Create and upsert contacts",
+      "articles:read": "Search and read published help center articles",
+      "webhooks:manage": "Create, change and delete webhook endpoints"
+    },
+    "reveal": {
+      "title": "Copy your new key",
+      "warningStrong": "Shown only this once.",
+      "warning": "Helpdock keeps a hash of the key, not the key, so it cannot show it again. Store it in your secret manager now.",
+      "summaryLabel": "What this key can do",
+      "scopes": "Scopes",
+      "rateLimit": "Rate limit",
+      "sendAs": "Send as"
+    },
+    "revokeConfirm": {
+      "title": "Revoke “{{name}}”?",
+      "body": "Requests signed with {{prefix}}… stop working at once and get 401. This cannot be undone; create a new key to restore access.",
+      "lastUsed": "Last used {{when}} · {{scopes}}",
+      "neverUsed": "Never used · {{scopes}}",
+      "action": "Revoke key"
+    },
+    "toast": {
+      "created": "{{name}} created",
+      "revoked": "{{name}} revoked"
+    }
+  },
+  "webhooks": {
+    "add": "Add endpoint",
+    "heading": "Endpoints",
+    "summary": "{{endpoints}} · signed with HMAC-SHA256 · retried up to {{attempts}} times with backoff",
+    "tableLabel": "Webhook endpoints",
+    "columns": {
+      "url": "URL",
+      "events": "Events",
+      "status": "Status",
+      "successRate": "Success rate",
+      "lastDelivery": "Last delivery",
+      "actions": "Actions"
+    },
+    "allEvents": "All {{n}} events",
+    "moreEvents": "+{{n}}",
+    "active": "Active",
+    "turnedOff": "Turned off",
+    "rateOf": "{{succeeded}} of {{total}} · 24 h",
+    "noDeliveries": "None in 24 h",
+    "lastNever": "Nothing sent yet",
+    "retrying": "retrying",
+    "attemptAt": "attempt {{attempt}}/{{max}} · {{time}}",
+    "gaveUp": "{{when}} · gave up after {{max}}",
+    "open": "Show {{url}}",
+    "actionsFor": "Actions for {{url}}",
+    "menu": {
+      "test": "Send test event",
+      "edit": "Edit",
+      "turnOff": "Turn off",
+      "turnOn": "Turn back on",
+      "delete": "Delete"
+    },
+    "empty": {
+      "heading": "No endpoints yet",
+      "body": "Add an HTTPS endpoint to be told when tickets, contacts, ratings and articles change."
+    },
+    "banner": {
+      "title": "Turned off: {{url}}",
+      "body": "{{n}} deliveries in a row used up all their retries; the last answer was {{answer}} on {{date}}. Nothing is sent to it until it is turned back on; events in between are not queued.",
+      "noAnswer": "no answer",
+      "openLog": "Open log",
+      "turnOn": "Turn back on"
+    },
+    "panel": {
+      "meta": "Added by {{name}} on {{date}} · {{events}} · {{state}}",
+      "metaNobody": "Added on {{date}} · {{events}} · {{state}}",
+      "eventCount": "{{n}} events",
+      "eventCountOne": "1 event",
+      "events": "Events",
+      "secret": "Signing secret",
+      "rotate": "Rotate",
+      "secretSet": "Set on {{date}}. Shown once when rotated, never again.",
+      "secretSetBy": "Set by {{name}} on {{date}}. Shown once when rotated, never again."
+    },
+    "form": {
+      "addTitle": "Add endpoint",
+      "editTitle": "Edit endpoint",
+      "close": "Close",
+      "url": "Endpoint URL · required",
+      "urlHint": "HTTPS only. Helpdock checks where the name resolves before every delivery.",
+      "urlInvalid": "Enter a full URL, starting with https://.",
+      "events": "Events",
+      "eventsRequired": "Choose at least one event.",
+      "secretNote": "A signing secret is created with the endpoint and shown once.",
+      "save": "Save changes"
+    },
+    "refusals": {
+      "webhook-https-required": "Use https://. Webhooks are never sent over plain HTTP.",
+      "webhook-destination-blocked": "Address resolves to a private network ({{address}}) — refused. Helpdock only delivers to public addresses.",
+      "webhook-destination-blocked-unknown": "That address is private — refused. Helpdock only delivers to public addresses."
+    },
+    "eventHints": {
+      "ticket.created": "A ticket is opened on any channel or the API",
+      "ticket.updated": "Status, priority, assignee, department, tags or fields change",
+      "ticket.replied": "A public reply is added by staff or the customer",
+      "ticket.closed": "A ticket is closed",
+      "contact.created": "A new contact is created",
+      "csat.received": "A customer answers a satisfaction survey",
+      "article.published": "A help center article is published"
+    },
+    "created": {
+      "title": "Endpoint added",
+      "warningStrong": "Copy the signing secret now.",
+      "warning": "It is shown only this once; rotate it if it is lost.",
+      "secretLabel": "Signing secret"
+    },
+    "rotated": {
+      "title": "Copy your new signing secret",
+      "warningStrong": "Shown only this once.",
+      "warning": "Helpdock stores the secret encrypted and never shows it again; rotate it if it is lost."
+    },
+    "test": {
+      "heading": "Test event",
+      "send": "Send test event",
+      "sendFor": "Send test event to {{url}}",
+      "sending": "Sending ping…",
+      "delivered": "ping delivered · {{status}} in {{duration}}",
+      "failed": "ping failed · {{outcome}}",
+      "queued": "Test event queued for {{url}}"
+    },
+    "rotateConfirm": {
+      "title": "Rotate the signing secret?",
+      "body": "Deliveries are signed with the new secret at once, and the old one stops verifying. The new secret is shown once.",
+      "action": "Rotate"
+    },
+    "deleteConfirm": {
+      "title": "Delete {{url}}?",
+      "body": "Nothing more is sent to it, and its delivery log is deleted with it. This cannot be undone.",
+      "action": "Delete endpoint"
+    },
+    "toast": {
+      "added": "Endpoint added",
+      "saved": "Endpoint saved",
+      "turnedOff": "{{url}} turned off",
+      "turnedOn": "{{url}} turned back on",
+      "deleted": "{{url}} deleted",
+      "rotated": "Signing secret rotated",
+      "replayed": "Replay queued"
+    },
+    "log": {
+      "heading": "Delivery log",
+      "caption": "newest first",
+      "filter": "Filter deliveries",
+      "filters": {
+        "all": "All results",
+        "failed": "Failed",
+        "delivered": "Delivered"
+      },
+      "tableLabel": "Deliveries to {{url}}",
+      "columns": {
+        "event": "Event",
+        "status": "Status",
+        "attempt": "Attempt",
+        "duration": "Duration",
+        "next": "Next retry"
+      },
+      "openDelivery": "Open {{event}} delivery at {{time}}",
+      "attempt": "{{attempt}}/{{max}}",
+      "replayCaption": "replay · {{time}}",
+      "showing": "Showing {{shown}}",
+      "loadMore": "Load more",
+      "empty": "No deliveries yet. Send a test event to see one here.",
+      "emptyFiltered": "No deliveries match this filter."
+    },
+    "outcome": {
+      "delivered": "Delivered",
+      "http": "Error answer",
+      "timeout": "Timeout",
+      "refused": "Refused",
+      "redirect": "Redirect",
+      "noAnswer": "No answer",
+      "queued": "Queued",
+      "skipped": "Skipped"
+    },
+    "progress": {
+      "delivered": "Delivered",
+      "deliveredOnRetry": "Delivered on retry",
+      "next": "Next retry {{time}} · {{when}}",
+      "redirectNext": "Redirect not followed · retry {{time}}",
+      "gaveUp": "Gave up after {{max}}",
+      "skipped": "Not sent: the endpoint was off",
+      "queued": "Waiting to be sent",
+      "due": "Retrying now"
+    },
+    "schedule": {
+      "heading": "When a delivery fails",
+      "body": "Any answer other than 2xx, no answer within {{timeout}} s, a redirect or a refused address counts as a failure. Helpdock tries again, up to {{max}} attempts in all:",
+      "label": "Retry schedule",
+      "now": "now",
+      "seconds": "+{{value}} s",
+      "minutes": "+{{value}} min",
+      "after": "After the last one, the delivery is marked failed and can be replayed by hand. Replay sends the same event id, so a receiver that stores ids sees it once."
+    },
+    "detail": {
+      "firstSent": "{{id}} · created {{time}}",
+      "replay": "Replay",
+      "replayLabel": "Replay this delivery",
+      "attempts": "Attempts",
+      "chipFailed": "{{attempt}} · failed",
+      "chipLast": "{{attempt}} · {{time}} · {{outcome}}",
+      "chipNext": "{{attempt}} · next {{time}}",
+      "left": "{{from}}–{{to}} left",
+      "leftOne": "{{from}} left",
+      "headers": "Request headers",
+      "noHeaders": "Not sent yet: the headers, and the signature, are made when it is.",
+      "signatureNote": "The signature is an HMAC-SHA256 of timestamp.body under this endpoint's signing secret.",
+      "verifyLink": "How to verify it",
+      "body": "Body",
+      "response": "Response",
+      "noResponse": "No response: {{error}}",
+      "responseNote": "Helpdock keeps the status code and the first 1 KB of the body. Redirects are never followed and a response is never rendered.",
+      "refusedNote": "An operator can allow an internal range with OUTBOUND_ALLOW_CIDRS. Every refusal is logged with its destination.",
+      "pick": "Choose a delivery to see what was sent and what came back."
+    },
+    "endpointCount_one": "{{count}} endpoint",
+    "endpointCount_other": "{{count}} endpoints"
+  }
+}

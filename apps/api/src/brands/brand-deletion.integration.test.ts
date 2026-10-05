@@ -17,6 +17,7 @@ import {
   ticketMessages,
   ticketStatuses,
   tickets,
+  users,
   uuidv7,
   withSystem,
   withTenant,
@@ -240,6 +241,9 @@ describe.skipIf(!hasDocker)('brand deletion', () => {
 
     await seedBrand(BRAND_A, 'ACME');
     await seedBrand(BRAND_B, 'GLOBEX');
+    await db()
+      .insert(users)
+      .values({ id: INSTALL_ADMIN, email: 'lina@example.com', name: 'Lina Haddad' });
   }, 400_000);
 
   afterAll(async () => {
@@ -274,7 +278,9 @@ describe.skipIf(!hasDocker)('brand deletion', () => {
       expect(Date.parse(deletion.purgeAfter ?? '') - Date.parse(deletion.requestedAt ?? '')).toBe(
         30 * DAY_MS,
       );
+      expect(deletion.requestedBy).toEqual({ userId: INSTALL_ADMIN, name: 'Lina Haddad' });
       expect(await installAudit(BRAND_DELETION_REQUESTED)).toHaveLength(1);
+      // The read finds the requester in the audit row the request wrote.
       expect(
         (await call('GET', deletionPath(BRAND_A), installAdmin)).json<BrandDeletion>(),
       ).toEqual(deletion);
@@ -302,7 +308,11 @@ describe.skipIf(!hasDocker)('brand deletion', () => {
       const response = await call('DELETE', deletionPath(BRAND_A), installAdmin);
 
       expect(response.statusCode).toBe(200);
-      expect(response.json<BrandDeletion>()).toMatchObject({ status: 'active', purgeAfter: null });
+      expect(response.json<BrandDeletion>()).toMatchObject({
+        status: 'active',
+        purgeAfter: null,
+        requestedBy: null,
+      });
       // Past the few seconds a replica keeps its answer.
       vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10_000 });
       expect((await call('GET', `/api/widget/${BRAND_A}/config`)).statusCode).not.toBe(410);

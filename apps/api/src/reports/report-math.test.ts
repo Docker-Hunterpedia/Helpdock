@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { csatSummary, fillDays, openedRate, slaOutcome } from './report-math.js';
+import {
+  agentSummary,
+  csatAverage,
+  csatSummary,
+  fillDays,
+  openedRate,
+  slaOutcome,
+} from './report-math.js';
 
 describe('slaOutcome', () => {
   it('is met over every outcome', () => {
@@ -54,5 +61,34 @@ describe('openedRate', () => {
     expect(openedRate(1, 4)).toBe(0.25);
     expect(openedRate(5, 4)).toBe(1);
     expect(openedRate(0, 0)).toBeNull();
+  });
+});
+
+describe('agentSummary', () => {
+  const row = {
+    agentId: '0192c3f0-1a2b-7c3d-8e4f-0000000000a1',
+    name: 'Omar',
+    replies: 4,
+    resolved: 2,
+    assignedOpen: 1,
+    firstResponse: { count: 2, medianMs: 60_000 },
+    resolution: { count: 0, medianMs: null },
+    slaMet: 3,
+    slaBreached: 1,
+    csatResponses: 2,
+    csatPoints: 9,
+  };
+
+  it('turns the sums into an SLA share and a CSAT average', () => {
+    expect(agentSummary(row)).toMatchObject({
+      sla: { met: 3, breached: 1, compliance: 0.75 },
+      csat: { responses: 2, average: 4.5 },
+      resolution: { count: 0, medianMs: null },
+    });
+  });
+
+  it('has no average, rather than zero, for an agent nobody rated', () => {
+    expect(csatAverage(0, 0)).toBeNull();
+    expect(agentSummary({ ...row, csatResponses: 0, csatPoints: 0 }).csat.average).toBeNull();
   });
 });

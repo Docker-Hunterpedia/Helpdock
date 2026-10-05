@@ -1,3 +1,5 @@
+import { rateLimitRefusals } from '../observability/rate-limit-refusals.js';
+
 /**
  * A fixed-window counter per source address, in process.
  *
@@ -13,6 +15,8 @@
  */
 
 export interface IpRateLimiterOptions {
+  /** The `bucket` label a refusal is counted under in `rate_limit_refusals_total`. */
+  readonly bucket: string;
   /** Requests one address may make per window. */
   readonly limit: number;
   readonly windowMs: number;
@@ -37,6 +41,7 @@ interface Window {
 }
 
 export const createIpRateLimiter = ({
+  bucket,
   limit,
   windowMs,
   maxTrackedIps,
@@ -58,7 +63,11 @@ export const createIpRateLimiter = ({
       }
 
       current.count += 1;
-      return current.count <= limit;
+      if (current.count > limit) {
+        rateLimitRefusals().record(bucket);
+        return false;
+      }
+      return true;
     },
   };
 };

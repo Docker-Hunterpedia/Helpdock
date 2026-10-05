@@ -8,8 +8,9 @@
  *   it was counted in, so the last {@link TRAILING_DAYS} days are rebuilt each
  *   run rather than today alone.
  * - **Everything, once.** A brand with no rollups yet (an install upgraded to
- *   M8, or a brand whose history predates its first run) is backfilled from its
- *   first ticket, at most {@link BACKFILL_MAX_DAYS} days back.
+ *   M8, or a brand whose history predates its first run), or with rollups built
+ *   at an older grain (`REPORT_ROLLUP_VERSION`), is backfilled from its first
+ *   ticket, at most {@link BACKFILL_MAX_DAYS} days back.
  * - **In chunks.** Each chunk is one transaction, so a backfill of a year is
  *   twelve short transactions rather than one long one.
  */
@@ -37,7 +38,7 @@ export const addDays = (day: string, days: number): string =>
 export interface RollupWindowInput {
   /** The brand's today. */
   readonly today: string;
-  /** Whether the brand has any rollup rows yet. */
+  /** Whether the brand has rollup rows, at the current grain. */
   readonly rolledUpBefore: boolean;
   /** The local day of the brand's first ticket, or null when it has none. */
   readonly firstActivityDay: string | null;

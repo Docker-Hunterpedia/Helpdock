@@ -405,6 +405,28 @@ A visitor is never told why the assistant is quiet: with auto-reply off, a
 spent AI budget or no model configured, the chat is the ordinary chat, with
 no `ai` messages and nothing marked as AI.
 
+### Satisfaction card
+
+M8-06. When an agent ends a `chat` conversation and the brand asks for ratings,
+the conversation gets one card per close (`Widget/CSAT-EN`). Show it in place of
+the composer until it is answered or skipped.
+
+| Method and path | Body | Answer |
+|---|---|---|
+| `GET /conversations/:id/csat` | | `{ csat: widgetCsatSchema \| null }` |
+| `POST /conversations/:id/csat` | `{ rating: 1–5, comment?: string ≤ 1000 }` | `{ csat }` |
+| `POST /conversations/:id/csat/skip` | | `{ csat }` |
+
+`csat` is `{ conversationId, state, rating, comment, skippedAt }`, `state` one of
+`open`, `rated`, `skipped` (nothing recorded; do not offer the card again) and
+`expired` (30 days passed). It is `null` while the conversation is open, has no
+survey yet, or is not a `chat` conversation. A rating is recorded once: a second
+`POST` answers the card as it stands. Each change is also pushed to the
+conversation's room as a `csat` event, so a card answered on one device is not
+offered on another. Read the card over REST when you load an ended
+conversation: the survey is created by the worker just after the close, so the
+`csat` event may arrive after the `conversation` event that ended it.
+
 ## Help center
 
 The widget's help center modes read the brand's help center (M5-10). Every
@@ -522,6 +544,7 @@ on `message` events and `null` on all others.
 | `presence` | `{ agentsOnline, agents }`, as in [`GET /availability`](#configuration) |
 | `queue` | `{ conversationId, position }` |
 | `conversation` | `{ conversationId, state: "open" \| "closed", continuedById }` |
+| `csat` | `widgetCsatSchema`: the [satisfaction card](#satisfaction-card) appeared or changed |
 
 On a `message` event:
 

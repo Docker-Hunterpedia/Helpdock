@@ -23,6 +23,7 @@ export const EVENTS = {
   presence: 'presence',
   queue: 'queue',
   conversation: 'conversation',
+  csat: 'csat',
 } as const;
 
 /** The largest catch-up page the api serves (`WIDGET_MESSAGE_PAGE_MAX`). */

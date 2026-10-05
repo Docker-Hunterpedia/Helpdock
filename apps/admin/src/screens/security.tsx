@@ -12,8 +12,8 @@ import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession, useStaffApi } from '../auth/session.tsx';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
+import { PasswordField, type PasswordRefusal } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
-import { PasswordStrengthBar } from '../ui/password-strength-bar.tsx';
 import { useToast } from '../ui/toasts.tsx';
 
 /**
@@ -92,6 +92,7 @@ export function SecurityScreen(): ReactNode {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [newPasswordRefusal, setNewPasswordRefusal] = useState<PasswordRefusal | null>(null);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -138,12 +139,17 @@ export function SecurityScreen(): ReactNode {
       setCurrentPassword('');
       setNewPassword('');
       setPasswordError(null);
+      setNewPasswordRefusal(null);
       await queryClient.invalidateQueries({ queryKey: ['me', 'sessions'] });
       toast({ tone: 'success', message: t('me:password.done') });
     },
     onError: (error) => {
       if (isAuthError(error) && error.code === 'invalid-credentials') {
         setPasswordError(t('me:password.wrong'));
+        return;
+      }
+      if (isAuthError(error) && error.code === 'password-breached') {
+        setNewPasswordRefusal({ kind: 'breached' });
         return;
       }
       fail(error);
@@ -201,12 +207,16 @@ export function SecurityScreen(): ReactNode {
       setPasswordError(t('me:password.currentRequired'));
       return;
     }
+    setPasswordError(null);
     if (newPassword.length < PASSWORD_MIN_LENGTH) {
-      setPasswordError(t('me:password.tooShort', { count: PASSWORD_MIN_LENGTH }));
+      setNewPasswordRefusal({
+        kind: 'short',
+        message: t('me:password.tooShort', { count: PASSWORD_MIN_LENGTH }),
+      });
       return;
     }
 
-    setPasswordError(null);
+    setNewPasswordRefusal(null);
     changePassword.mutate();
   };
 
@@ -285,24 +295,20 @@ export function SecurityScreen(): ReactNode {
               helperText={passwordError ?? ' '}
               slotProps={{ htmlInput: { autoComplete: 'current-password' } }}
             />
-            <Box>
-              <TextField
-                id={newPasswordId}
-                type="password"
-                label={t('me:password.newLabel')}
-                value={newPassword}
-                onChange={(event) => {
-                  setNewPassword(event.target.value);
-                }}
-                helperText={t('me:password.newHint', {
-                  count: PASSWORD_MIN_LENGTH,
-                  strength: t(`auth:invite.strength.${strength.level}`),
-                })}
-                fullWidth
-                slotProps={{ htmlInput: { autoComplete: 'new-password', maxLength: 200 } }}
-              />
-              <PasswordStrengthBar strength={strength} />
-            </Box>
+            <PasswordField
+              id={newPasswordId}
+              label={t('me:password.newLabel')}
+              value={newPassword}
+              onChange={(value) => {
+                setNewPassword(value);
+                setNewPasswordRefusal(null);
+              }}
+              hint={t('me:password.newHint', {
+                count: PASSWORD_MIN_LENGTH,
+                strength: t(`auth:invite.strength.${strength.level}`),
+              })}
+              refusal={newPasswordRefusal}
+            />
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button type="submit" variant="contained" disabled={changePassword.isPending}>
                 {t('me:password.submit')}

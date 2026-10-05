@@ -8,6 +8,7 @@ import {
   type Availability,
   type ConnectionState,
   type ConversationSummary,
+  type CsatCard,
   type SignedIdentity,
   type Subscription,
   TransportError,
@@ -31,6 +32,8 @@ export interface MockOptions {
   readonly resume?: {
     readonly conversation: ConversationSummary;
     readonly messages: WidgetMessage[];
+    /** M8-06: the ended conversation's satisfaction card. */
+    readonly csat?: CsatCard;
   };
 }
 
@@ -43,6 +46,8 @@ export class MockTransport implements WidgetTransport {
   #failures = 0;
   #uploads = 0;
   #tickets = 1042;
+  #csat: CsatCard | null;
+  #failRating = false;
   /** Every call a test may want to assert on, in order. */
   readonly calls: { readonly method: string; readonly args: readonly unknown[] }[] = [];
 
@@ -50,6 +55,7 @@ export class MockTransport implements WidgetTransport {
     this.#options = options;
     this.#conversation = options.resume?.conversation ?? null;
     this.#messages = [...(options.resume?.messages ?? [])];
+    this.#csat = options.resume?.csat ?? null;
   }
 
   #record(method: string, ...args: unknown[]): void {
@@ -186,6 +192,38 @@ export class MockTransport implements WidgetTransport {
         ? { ...message, ai: { ...message.ai, feedback } }
         : message,
     );
+  }
+
+  async getCsat(conversationId: string): Promise<CsatCard | null> {
+    this.#record('getCsat', conversationId);
+    this.#assertOnline();
+    return this.#csat;
+  }
+
+  async rateConversation(
+    conversationId: string,
+    rating: number,
+    comment: string,
+  ): Promise<CsatCard | null> {
+    this.#record('rateConversation', conversationId, rating, comment);
+    this.#assertOnline();
+    if (this.#failRating) {
+      this.#failRating = false;
+      throw new TransportError('unavailable');
+    }
+    if (this.#csat?.state === 'open' || this.#csat?.state === 'skipped') {
+      this.#csat = { ...this.#csat, state: 'rated', rating, comment: comment.trim() || null };
+    }
+    return this.#csat;
+  }
+
+  async skipCsat(conversationId: string): Promise<CsatCard | null> {
+    this.#record('skipCsat', conversationId);
+    this.#assertOnline();
+    if (this.#csat?.state === 'open') {
+      this.#csat = { ...this.#csat, state: 'skipped', skipped_at: new Date().toISOString() };
+    }
+    return this.#csat;
   }
 
   async submitContactForm(input: Parameters<WidgetTransport['submitContactForm']>[0]) {
@@ -335,6 +373,17 @@ export class MockTransport implements WidgetTransport {
 
   emit(event: WidgetEvent): void {
     this.#emit(event);
+  }
+
+  /** M8-06: the survey job offers the ended conversation's card. */
+  offerCsat(card: CsatCard = { state: 'open', rating: null, comment: null, skipped_at: null }) {
+    this.#csat = card;
+    this.#emit({ type: 'csat', csat: card });
+  }
+
+  /** The next rating fails, as an api that cannot be reached would. */
+  failNextRating(): void {
+    this.#failRating = true;
   }
 
   setAvailability(availability: Availability): void {

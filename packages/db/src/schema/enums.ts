@@ -296,7 +296,16 @@ export const emailDeliveryKindEnum = pgEnum('email_delivery_kind', [
   'out_of_hours',
   // M4-08: a widget conversation sent to the address the visitor typed.
   'transcript',
+  // M8-06: the satisfaction survey sent on close, one per survey.
+  'csat',
 ]);
+
+/**
+ * M8-06. Where a satisfaction answer came from: the rating page a link opens,
+ * the widget's inline card, or a Telegram button. A Telegram tap records the
+ * score alone and leaves the link open for a comment (`Telegram/Chat-EN`).
+ */
+export const csatAnswerChannelEnum = pgEnum('csat_answer_channel', ['link', 'widget', 'telegram']);
 
 /**
  * Where an outbound email is. `failed` is the dead-letter state an Admin sees

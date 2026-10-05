@@ -4,6 +4,7 @@ import type { AdminApis } from '../auth/select-api.js';
 import { MockAutomationApi } from '../automation/mock-api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import { MockDevelopersApi } from '../developers/mock-api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
@@ -63,5 +64,6 @@ export async function signedInMockApis(): Promise<AdminApis> {
     reports: new HttpReportsApi(),
     system: new HttpSystemApi(),
     telegram: new MockTelegramApi(),
+    developers: new MockDevelopersApi(),
   };
 }

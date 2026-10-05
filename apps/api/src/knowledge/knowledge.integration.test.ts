@@ -44,6 +44,7 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { FakeStorage, silentJobLogger } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { readOAuthApps } from './credentials.js';
 import { embedPending } from './embed-pending.js';
 import { configureEmbeddingSpace, reembedChunks } from './embedding-space.job.js';
@@ -255,19 +256,8 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
     return response.body;
   };
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { accessToken?: string };
-    if (body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const loaders = (): SourceLoaderDeps => ({
     storage,

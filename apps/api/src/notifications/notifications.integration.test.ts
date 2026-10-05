@@ -41,6 +41,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { createLogger } from '../logging/logger.js';
 import type { RealtimeBroadcastInput } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import { createNotifyProcessor } from './delivery.js';
 import {
   CONSUMED_EVENTS,
@@ -160,20 +161,8 @@ describe.skipIf(!hasDocker)('notifications', () => {
 
   const brandPath = () => `/api/brands/${seeded.brandId}`;
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addPerson = async (db: Db, name: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);

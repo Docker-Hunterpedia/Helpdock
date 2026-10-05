@@ -280,6 +280,10 @@ describe.skipIf(!hasDocker)('observability', () => {
       const status = response.json<SystemStatus>();
 
       expect(status.database.migrationsApplied).toBeGreaterThan(0);
+      expect(status.database.migrations).toHaveLength(status.database.migrationsApplied ?? -1);
+      expect(status.database.migrations?.at(-1)).toBe('0000_core_tables');
+      // The runtime role may size the database it connects to.
+      expect(status.database.sizeBytes).toBeGreaterThan(0);
       expect(status.database.version).toMatch(/^17\./);
       expect(status.database.runtimeRole).toEqual({
         name: 'helpdock_app',

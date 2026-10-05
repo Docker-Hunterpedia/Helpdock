@@ -6,6 +6,7 @@ import type {
   Availability,
   ConnectionState,
   ConversationSummary,
+  CsatCard,
   SignedIdentity,
   StartConversationInput,
   WidgetConfig,
@@ -50,6 +51,8 @@ export interface WidgetState {
   /** The system line drawn after the visitor's first message (`WidgetStatesEN`, columns 2 and 4). */
   readonly firstMessageNotice: 'talking' | 'closed' | null;
   readonly attachmentProblem: PolicyProblem | null;
+  /** M8-06: the ended conversation's satisfaction card, once the survey job offered one. */
+  readonly csat: CsatCard | null;
 }
 
 type Listener = (state: WidgetState) => void;
@@ -97,6 +100,7 @@ export class WidgetController {
       visitorEmail: null,
       firstMessageNotice: null,
       attachmentProblem: null,
+      csat: null,
     };
   }
 
@@ -161,6 +165,7 @@ export class WidgetController {
       typing: null,
       queue: null,
       reconnected: null,
+      csat: null,
     });
     this.#unsubscribe = this.#transport.subscribe(conversation?.id ?? null, {
       onEvent: (event) => this.#onEvent(event),
@@ -169,6 +174,44 @@ export class WidgetController {
     if (conversation) {
       await this.#catchUp(false);
     }
+    if (conversation?.status === 'ended') {
+      await this.#loadCsat();
+    }
+  }
+
+  /** The card is read over REST too: a visitor who comes back later never saw its frame. */
+  async #loadCsat(): Promise<void> {
+    const { conversation } = this.#state;
+    if (!conversation) {
+      return;
+    }
+    try {
+      const csat = await this.#transport.getCsat(conversation.id);
+      // A frame may have landed while this was in flight; it is as fresh.
+      this.#set({ csat: csat ?? this.#state.csat });
+    } catch {
+      // Without the card the conversation still ends; the next load asks again.
+    }
+  }
+
+  /** M8-06: records the rating. Throws so the card can say it was not sent. */
+  async rateConversation(rating: number, comment: string): Promise<void> {
+    const { conversation } = this.#state;
+    if (!conversation) {
+      return;
+    }
+    const csat = await this.#transport.rateConversation(conversation.id, rating, comment);
+    this.#set({ csat });
+  }
+
+  /** Records nothing; the card becomes a line in the log and is not offered again. */
+  async skipCsat(): Promise<void> {
+    const { conversation } = this.#state;
+    if (!conversation) {
+      return;
+    }
+    const csat = await this.#transport.skipCsat(conversation.id);
+    this.#set({ csat });
   }
 
   setOpen(open: boolean): void {
@@ -421,7 +464,9 @@ export class WidgetController {
       case 'queue':
         this.#set({ queue: { position: event.position, eta_seconds: event.eta_seconds } });
         break;
-      case 'conversation':
+      case 'conversation': {
+        const ended =
+          event.conversation.status === 'ended' && this.#state.conversation?.status !== 'ended';
         this.#set({
           conversation: {
             ...event.conversation,
@@ -431,8 +476,15 @@ export class WidgetController {
               this.#state.conversation?.ai_handed_off === true,
           },
           ...(event.conversation.status === 'queued' ? {} : { queue: null }),
-          ...(event.conversation.status === 'ended' ? { typing: null } : {}),
+          ...(event.conversation.status === 'ended' ? { typing: null } : { csat: null }),
         });
+        if (ended) {
+          void this.#loadCsat();
+        }
+        break;
+      }
+      case 'csat':
+        this.#set({ csat: event.csat });
         break;
     }
   }

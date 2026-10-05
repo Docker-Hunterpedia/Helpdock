@@ -33,6 +33,7 @@ import { DEV_PRINCIPAL_ENV_KEY, DEV_PRINCIPAL_HEADER } from '../auth/principal-r
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { runBrandRollup } from './rollup.job.js';
+import { REPORT_ROLLUP_VERSION } from './rollup.repository.js';
 
 /**
  * M8-04's exit criterion: "Reports match seeded data in an integration test."
@@ -504,6 +505,32 @@ describe.skipIf(!hasDocker)('reports', () => {
       ]);
     });
 
+    it('stacks each day by channel, priority and status, leaving empty cells out', async () => {
+      const { volume } = await report();
+      const statusName = new Map(volume.byStatus.map((row) => [row.statusId, row.name]));
+
+      expect(volume.byDayAndChannel).toEqual([
+        { day: DAY[0], channel: 'email', created: 1 },
+        { day: DAY[0], channel: 'chat', created: 1 },
+        { day: DAY[1], channel: 'email', created: 1 },
+        { day: DAY[2], channel: 'form', created: 1 },
+      ]);
+      expect(volume.byDayAndPriority).toEqual([
+        { day: DAY[0], priority: 'medium', created: 1 },
+        { day: DAY[0], priority: 'high', created: 1 },
+        { day: DAY[1], priority: 'low', created: 1 },
+        { day: DAY[2], priority: 'urgent', created: 1 },
+      ]);
+      expect(
+        volume.byDayAndStatus.map((row) => [row.day, statusName.get(row.statusId), row.tickets]),
+      ).toEqual([
+        [DAY[0], 'Open', 1],
+        [DAY[0], 'Closed', 1],
+        [DAY[1], 'Open', 1],
+        [DAY[2], 'Closed', 1],
+      ]);
+    });
+
     it('takes first-response and resolution percentiles over every sample, less paused time', async () => {
       const summary = await report();
 
@@ -519,6 +546,8 @@ describe.skipIf(!hasDocker)('reports', () => {
       expect(sla).toEqual({
         response: { met: 1, breached: 0, compliance: 1 },
         resolution: { met: 0, breached: 1, compliance: 0 },
+        // Both of T2's clocks; no other ticket has any.
+        byPriority: [{ priority: 'medium', met: 1, breached: 1, compliance: 0.5 }],
         countsReopens: false,
       });
     });
@@ -538,10 +567,39 @@ describe.skipIf(!hasDocker)('reports', () => {
       expect(csat.distribution.map((row) => row.responses)).toEqual([0, 1, 0, 0, 1]);
     });
 
-    it("counts each agent's replies, resolutions and open tickets at the end of the range", async () => {
-      expect((await report()).agents).toEqual([
-        { agentId: AGENT_ONE, name: 'Omar One', replies: 2, resolved: 1, assignedOpen: 1 },
-        { agentId: ADMIN, name: 'Ada Admin', replies: 1, resolved: 1, assignedOpen: 0 },
+    it("counts each agent's work, with the times, SLA and ratings of their tickets", async () => {
+      const summary = await report();
+
+      expect(summary.agents).toEqual([
+        {
+          agentId: AGENT_ONE,
+          name: 'Omar One',
+          replies: 2,
+          resolved: 1,
+          assignedOpen: 1,
+          // T1's 30 minutes and T2's 50; T1's day to close (T2's resolution breached).
+          firstResponse: { count: 2, medianMs: 2_400_000 },
+          resolution: { count: 1, medianMs: 86_400_000 },
+          sla: { met: 1, breached: 1, compliance: 0.5 },
+          csat: { responses: 1, average: 5 },
+        },
+        {
+          agentId: ADMIN,
+          name: 'Ada Admin',
+          replies: 1,
+          resolved: 1,
+          assignedOpen: 0,
+          firstResponse: { count: 1, medianMs: 7_200_000 },
+          resolution: { count: 1, medianMs: 28_800_000 },
+          sla: { met: 0, breached: 0, compliance: null },
+          csat: { responses: 1, average: 2 },
+        },
+      ]);
+      // T3, open in Billing with nobody on it.
+      expect(summary.unassignedOpen).toBe(1);
+      expect(summary.agentChoices).toEqual([
+        { agentId: ADMIN, name: 'Ada Admin' },
+        { agentId: AGENT_ONE, name: 'Omar One' },
       ]);
     });
 
@@ -614,6 +672,21 @@ describe.skipIf(!hasDocker)('reports', () => {
       expect((await report(`&departmentId=${BILLING}&channel=form`)).volume.created).toBe(1);
     });
 
+    it("narrows to an agent's tickets and work, and still offers every agent", async () => {
+      const summary = await report(`&agentId=${AGENT_ONE}`);
+
+      expect(summary.filters.agentId).toBe(AGENT_ONE);
+      expect(summary.volume.created).toBe(2);
+      expect(summary.volume.byStatus.map(({ name, tickets: n }) => [name, n])).toEqual([
+        ['Open', 1],
+        ['Closed', 1],
+      ]);
+      expect(summary.backlog.map((day) => day.open)).toEqual([2, 1, 1]);
+      expect(summary.agents.map((agent) => agent.agentId)).toEqual([AGENT_ONE]);
+      expect(summary.unassignedOpen).toBe(0);
+      expect(summary.agentChoices).toHaveLength(2);
+    });
+
     it("gives a Team Leader their departments' numbers, and zeroes for another's", async () => {
       const lead = principal('team_leader', [SUPPORT]);
 
@@ -675,6 +748,48 @@ describe.skipIf(!hasDocker)('reports', () => {
         .where(eq(brands.id, BRAND_A));
       await rollUp(BRAND_A);
     });
+
+    describe('rows built before the assignee joined the grain', () => {
+      // Three weeks on, the seeded days are out of the trailing week, so only
+      // a full rebuild reaches them.
+      const later = () => new Date(Date.now() + 21 * DAY_MS);
+      const rollUpLater = () =>
+        runBrandRollup({ db: db(), brandId: BRAND_A, jobId: 'stats.rollup.test', now: later() });
+      /** What a row written before migration 0044 looks like. */
+      const makePre0044 = (version: number) =>
+        withSystem(db(), BRAND_A, (tx) =>
+          tx.update(reportDaily).set({ assigneeId: null, rollupVersion: version }),
+        );
+      const versions = () =>
+        withSystem(db(), BRAND_A, async (tx) =>
+          (await tx.selectDistinct({ v: reportDaily.rollupVersion }).from(reportDaily)).map(
+            (row) => row.v,
+          ),
+        );
+
+      it('leaves the history alone while it is at the current grain', async () => {
+        await makePre0044(REPORT_ROLLUP_VERSION);
+
+        const { range } = await rollUpLater();
+
+        expect(range?.from).not.toBe(FROM);
+        expect((await report()).agents[0]?.firstResponse.count).toBe(0);
+      });
+
+      it("rebuilds a brand's whole history once its rows are of an older grain", async () => {
+        await makePre0044(1);
+
+        const { range } = await rollUpLater();
+
+        expect(range?.from).toBe(FROM);
+        expect(await versions()).toEqual([REPORT_ROLLUP_VERSION]);
+        expect((await report()).agents[0]).toMatchObject({
+          agentId: AGENT_ONE,
+          firstResponse: { count: 2, medianMs: 2_400_000 },
+        });
+        expect((await rollUpLater()).range?.from).not.toBe(FROM);
+      });
+    });
   });
 
   describe('CSV export', () => {
@@ -690,8 +805,27 @@ describe.skipIf(!hasDocker)('reports', () => {
         `attachment; filename="helpdock-volume-${FROM}-${TO}.csv"`,
       );
       const lines = response.body.trimEnd().split('\r\n');
-      expect(lines[0]).toBe('day,department,channel,priority,created,resolved,backlog');
-      expect(lines).toContain(`${DAY[0]},Support,email,high,1,0,1`);
+      expect(lines[0]).toBe(
+        'day,department,channel,priority,agent_id,agent,created,resolved,backlog',
+      );
+      expect(lines).toContain(`${DAY[0]},Support,email,high,${AGENT_ONE},Omar One,1,0,1`);
+      expect(lines).toContain(`${DAY[1]},'=SUM(1+1),email,low,,,1,0,1`);
+    });
+
+    it('exports volume by status per day, and agents with their times and the unassigned row', async () => {
+      const statuses = new Map(
+        (await report()).volume.byStatus.map((row) => [row.name, row.statusId]),
+      );
+      const byStatus = (await exportOf('volume_by_status')).body.trimEnd().split('\r\n');
+      const agents = (await exportOf('agents')).body.trimEnd().split('\r\n');
+
+      expect(byStatus[0]).toBe('day,status_id,status,created');
+      expect(byStatus).toContain(`${DAY[2]},${statuses.get('Closed')},Closed,1`);
+      expect(agents[0]).toBe(
+        'agent_id,agent,replies,resolved,assigned_open,first_responses,first_response_median_ms,resolutions,resolution_median_ms,sla_met,sla_breached,csat_responses,csat_average',
+      );
+      expect(agents).toContain(`${AGENT_ONE},Omar One,2,1,1,2,2400000,1,86400000,1,1,1,5`);
+      expect(agents.at(-1)).toBe(',,,,1,,,,,,,,');
     });
 
     it('writes a cell that would be a formula as text', async () => {

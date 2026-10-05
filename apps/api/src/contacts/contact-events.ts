@@ -1,5 +1,10 @@
 import type { DbTransaction } from '@helpdock/db';
-import { enqueueOutbox } from '@helpdock/jobs';
+import {
+  enqueueOutbox,
+  type OutboxDispatcher,
+  type OutboxEventHandler,
+  outboxEvents,
+} from '@helpdock/jobs';
 
 /**
  * M8-03: `contact.created`, written in the transaction that creates the
@@ -15,3 +20,21 @@ export const enqueueContactCreated = (
   contactId: string,
 ): Promise<string> =>
   enqueueOutbox(tx, { brandId, event: CONTACT_CREATED_EVENT, payload: { contactId } });
+
+const logCreated: OutboxEventHandler = async ({ brandId, outboxId, payload, log }) => {
+  log.info(
+    { event: CONTACT_CREATED_EVENT, brandId, outboxId, contactId: payload.contactId },
+    'contact created',
+  );
+};
+
+/**
+ * The owner's slot of `contact.created`, which only logs: the work is the
+ * subscribers' (the webhooks module's, M8-03), and an event with no handler at
+ * all would fail as unknown and burn its attempts.
+ */
+export const registerContactEventHandlers = (
+  dispatcher: Pick<OutboxDispatcher, 'register'> = outboxEvents,
+): void => {
+  dispatcher.register(CONTACT_CREATED_EVENT, logCreated);
+};

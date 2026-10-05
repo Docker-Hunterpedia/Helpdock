@@ -119,7 +119,16 @@ export const enqueueCsatReceived = (
 ): Promise<string> =>
   enqueueOutbox(tx, { brandId, event: CSAT_RECEIVED_EVENT, payload: { ...payload } });
 
+/** The owner's slot of `csat.received`, which only logs: the rules and the webhooks subscribe. */
+const logReceived: OutboxEventHandler = async ({ brandId, outboxId, payload, log }) => {
+  log.info(
+    { event: CSAT_RECEIVED_EVENT, brandId, outboxId, surveyId: payload.surveyId },
+    'csat received',
+  );
+};
+
 /** Called by the worker's start-up, before the consumer exists (`worker/start-worker.ts`). */
 export const registerCsatEventHandlers = (dependencies: CsatSurveyJobDependencies): void => {
   registerEventHandler(CSAT_EVENTS.requested, createCsatRequestedHandler(dependencies));
+  registerEventHandler(CSAT_RECEIVED_EVENT, logReceived);
 };

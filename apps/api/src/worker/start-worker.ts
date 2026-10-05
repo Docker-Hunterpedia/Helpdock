@@ -58,6 +58,7 @@ import {
 import { imapConnectOptions } from '../channels/imap-connector.js';
 import { createInboundEmailService } from '../channels/inbound/factory.js';
 import { MailboxesRepository } from '../channels/mailboxes.repository.js';
+import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { CsatRepository } from '../csat/csat.repository.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
 import { CsatTokens } from '../csat/tokens.js';
@@ -464,9 +465,11 @@ export const workerDependencies: WorkerDependencies = {
     // event drops the brand's cached pages, under its own subscriber name.
     registerPageCacheHandlers(new RedisPageCache(redis));
 
-    // M8-03. Last, so every other subscriber of a ticket event has run before
+    // M8-03. `contact.created` is the contacts module's; the webhooks module
+    // subscribes to it below. Last, so every other subscriber of a ticket event has run before
     // its deliveries are written. `webhook.delivery_requested` adds the
     // `webhook.deliver` job under the delivery's id, once that row committed.
+    registerContactEventHandlers();
     const webhooks = new Queue(QUEUE_NAMES.webhooks, { connection: redis });
     registerWebhookEventHandlers({
       repository: new WebhooksRepository(),

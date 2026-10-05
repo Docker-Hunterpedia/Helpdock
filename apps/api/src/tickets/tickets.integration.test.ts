@@ -48,6 +48,7 @@ import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { registerContactEventHandlers } from '../contacts/contact-events.js';
 import { CsatRepository } from '../csat/csat.repository.js';
 import { registerCsatEventHandlers } from '../csat/csat-events.js';
 import { CsatTokens } from '../csat/tokens.js';
@@ -298,6 +299,8 @@ describe.skipIf(!hasDocker)('tickets', () => {
     // start-up, publishing on a connection of its own exactly as it would.
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    // M8-03: every contact the suite makes writes `contact.created`.
+    registerContactEventHandlers();
     // M1-12: a close writes `csat.requested` too, and the worker handles it.
     registerCsatEventHandlers({
       repository: new CsatRepository(),

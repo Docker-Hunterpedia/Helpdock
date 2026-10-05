@@ -32,6 +32,11 @@ export const reportQuerySchema = z
     to: z.iso.date(),
     departmentId: z.uuid().optional(),
     channel: ticketChannelSchema.optional(),
+    /**
+     * The ticket's assignee for ticket figures, the agent for Agent workload.
+     * Help center searches and AI cost have no agent and ignore it.
+     */
+    agentId: z.uuid().optional(),
   })
   .refine((query) => query.from <= query.to, {
     message: '`from` must not be after `to`',
@@ -45,6 +50,7 @@ export type ReportQuery = z.infer<typeof reportQuerySchema>;
 
 export const REPORT_EXPORTS = [
   'volume',
+  'volume_by_status',
   'response_times',
   'sla',
   'backlog',
@@ -88,6 +94,9 @@ export const slaOutcomeSchema = z.object({
 });
 export type SlaOutcome = z.infer<typeof slaOutcomeSchema>;
 
+/** A median over the range, with how many samples it is over. */
+const medianSchema = z.object({ count, medianMs: z.number().nonnegative().nullable() });
+
 /**
  * AI deflection and cost. `available: false` until the AI subsystem (M7)
  * records calls, rather than zeroes that would read as "the AI did nothing".
@@ -112,6 +121,7 @@ export const reportSummarySchema = z.object({
   filters: z.object({
     departmentId: z.uuid().nullable(),
     channel: ticketChannelSchema.nullable(),
+    agentId: z.uuid().nullable(),
   }),
   /** When the oldest rollup in the range was written; null when the range has none yet. */
   computedAt: z.iso.datetime().nullable(),
@@ -119,6 +129,15 @@ export const reportSummarySchema = z.object({
     created: count,
     resolved: count,
     byDay: z.array(z.object({ day: z.iso.date(), created: count, resolved: count })),
+    /** Tickets created per day and channel, for the stacked columns; zero cells left out. */
+    byDayAndChannel: z.array(
+      z.object({ day: z.iso.date(), channel: ticketChannelSchema, created: count }),
+    ),
+    byDayAndPriority: z.array(
+      z.object({ day: z.iso.date(), priority: ticketPrioritySchema, created: count }),
+    ),
+    /** Tickets created per day by the status they are in now; zero cells left out. */
+    byDayAndStatus: z.array(z.object({ day: z.iso.date(), statusId: z.uuid(), tickets: count })),
     byChannel: z.array(z.object({ channel: ticketChannelSchema, created: count, resolved: count })),
     byPriority: z.array(
       z.object({ priority: ticketPrioritySchema, created: count, resolved: count }),
@@ -138,6 +157,8 @@ export const reportSummarySchema = z.object({
   sla: z.object({
     response: slaOutcomeSchema,
     resolution: slaOutcomeSchema,
+    /** Both clocks together, per priority, most urgent first; priorities with no outcome left out. */
+    byPriority: z.array(slaOutcomeSchema.extend({ priority: ticketPrioritySchema })),
     /** The brand's `slaCountReopens` (DOMAIN-RULES §3.5) at the time of the rollup. */
     countsReopens: z.boolean(),
   }),
@@ -160,8 +181,23 @@ export const reportSummarySchema = z.object({
       resolved: count,
       /** Open tickets assigned to them at the end of the range. */
       assignedOpen: count,
+      /** The times, SLA outcomes and ratings of the tickets assigned to them. */
+      firstResponse: medianSchema,
+      resolution: medianSchema,
+      sla: slaOutcomeSchema,
+      csat: z.object({
+        responses: count,
+        average: z.number().min(CSAT_RATING_MIN).max(CSAT_RATING_MAX).nullable(),
+      }),
     }),
   ),
+  /** Open tickets with no assignee at the end of the range: Agent workload's last row. */
+  unassignedOpen: count,
+  /**
+   * Everyone with work or assigned tickets in the range under the other
+   * filters, for the Agent filter: the list does not shrink to the one picked.
+   */
+  agentChoices: z.array(z.object({ agentId: z.uuid(), name: z.string().nullable() })),
   /** Tickets created per local weekday (ISO, 1 = Monday) and hour; empty cells left out. */
   busiestHours: z.array(
     z.object({ weekday: z.int().min(1).max(7), hour: z.int().min(0).max(23), created: count }),

@@ -281,6 +281,13 @@
       "when": 1791202932776,
       "tag": "0041_knowledge_ingest",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791204629299,
+      "tag": "0042_report_daily_assignee",
+      "breakpoints": true
     }
   ]
 }

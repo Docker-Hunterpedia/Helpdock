@@ -54,6 +54,7 @@ const MIGRATION_TAGS = [
   '0039_api_keys_and_webhooks',
   '0040_telegram_chat_identity',
   '0041_knowledge_ingest',
+  '0042_report_daily_assignee',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -134,6 +135,7 @@ describe.skipIf(!hasDocker)('migrations', () => {
     // page reads it from boot, because the runtime role may not read the log.
     expect(first.total).toBe(MIGRATION_TAGS.length);
     expect(second.total).toBe(MIGRATION_TAGS.length);
+    expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
   });
 
   it('applies each migration once when two replicas start at the same time', async () => {

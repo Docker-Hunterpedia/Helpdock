@@ -191,7 +191,8 @@
     "migrations": "Migrations",
     "migrationsApplied_one": "{{count}} applied",
     "migrationsApplied_other": "{{count}} applied",
-    "migrationsUnknown": "Not known: this replica did not migrate at boot"
+    "migrationsUnknown": "Not known: this replica did not migrate at boot",
+    "recent": "Newest migrations"
   },
   "storage": {
     "title": "Storage",
@@ -203,14 +204,21 @@
     "meterLabel": "Storage {{percent}} %",
     "noLimit": "No soft limit set",
     "pending": "Not measured yet. The worker measures the bucket hourly, each brand at most every six hours.",
-    "pendingDeletion": "pending deletion"
+    "pendingDeletion": "pending deletion",
+    "postgres": "Postgres",
+    "postgresCaption": "The whole database · not measured per brand"
   },
   "llm": {
-    "title": "LLM spend",
+    "title": "LLM spend by brand",
+    "caption": "This month so far · from ai_calls",
+    "brand": "Brand",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "budget": "Monthly budget",
     "install": "Install",
-    "figure": "{{tokens}} tokens · {{cost}}",
-    "ofBudget": "{{percent}} % of the {{budget}} monthly budget",
-    "meterLabel": "Monthly LLM spend {{percent}} %",
+    "ofBudget": "{{percent}} % of {{budget}}",
+    "pastAlert": "{{percent}} % of {{budget}} · past the {{alert}} % alert",
+    "noBudget": "No monthly budget",
     "unavailable": "Not available until the AI assistant is set up (M7).",
     "footer": "A brand that reaches its budget stops AI calls until the month turns."
   },
@@ -220,6 +228,8 @@
     "caption_other": "{{count}} brands · 30-day grace",
     "empty": "No brand is pending deletion.",
     "requested": "Deletion requested on {{date}}",
+    "requestedBy": "Deleted by {{name}} on {{date}}",
+    "removedAccount": "a removed account",
     "daysLeft_one": "{{count}} day left",
     "daysLeft_other": "{{count}} days left",
     "purgeOn": "purge on {{date}}",

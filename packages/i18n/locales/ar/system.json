@@ -219,7 +219,8 @@
     "migrationsApplied_few": "{{count}} ترحيلات مطبّقة",
     "migrationsApplied_many": "{{count}} ترحيلًا مطبّقًا",
     "migrationsApplied_other": "{{count}} ترحيل مطبّق",
-    "migrationsUnknown": "غير معروف: هذه النسخة لم تُجرِ الترحيل عند الإقلاع"
+    "migrationsUnknown": "غير معروف: هذه النسخة لم تُجرِ الترحيل عند الإقلاع",
+    "recent": "أحدث الترحيلات"
   },
   "storage": {
     "title": "التخزين",
@@ -231,14 +232,21 @@
     "meterLabel": "التخزين {{percent}} %",
     "noLimit": "لم يُضبط حد مرن",
     "pending": "لم يُقس بعد. يقيس العامل الحاوية كل ساعة، وكل علامة مرة كل ست ساعات على الأكثر.",
-    "pendingDeletion": "بانتظار الحذف"
+    "pendingDeletion": "بانتظار الحذف",
+    "postgres": "Postgres",
+    "postgresCaption": "قاعدة البيانات كاملة · لا تُقاس لكل علامة"
   },
   "llm": {
-    "title": "إنفاق نماذج اللغة",
+    "title": "إنفاق نماذج اللغة حسب العلامة",
+    "caption": "هذا الشهر حتى الآن · من ai_calls",
+    "brand": "العلامة",
+    "tokens": "الرموز",
+    "cost": "التكلفة",
+    "budget": "الميزانية الشهرية",
     "install": "التثبيت",
-    "figure": "{{tokens}} رمز · {{cost}}",
-    "ofBudget": "{{percent}} % من الميزانية الشهرية {{budget}}",
-    "meterLabel": "إنفاق نماذج اللغة الشهري {{percent}} %",
+    "ofBudget": "{{percent}} % من {{budget}}",
+    "pastAlert": "{{percent}} % من {{budget}} · تجاوزت تنبيه {{alert}} %",
+    "noBudget": "لا ميزانية شهرية",
     "unavailable": "غير متاح حتى يُعدّ مساعد الذكاء الاصطناعي (M7).",
     "footer": "العلامة التي تبلغ ميزانيتها تتوقف عن استدعاءات الذكاء الاصطناعي حتى بداية الشهر التالي."
   },
@@ -252,6 +260,8 @@
     "caption_other": "{{count}} علامة · مهلة 30 يومًا",
     "empty": "لا توجد علامة بانتظار الحذف.",
     "requested": "طُلب الحذف في {{date}}",
+    "requestedBy": "حذفها {{name}} في {{date}}",
+    "removedAccount": "حساب محذوف",
     "daysLeft_zero": "لم يبقَ أي يوم",
     "daysLeft_one": "يوم واحد متبقٍ",
     "daysLeft_two": "يومان متبقيان",

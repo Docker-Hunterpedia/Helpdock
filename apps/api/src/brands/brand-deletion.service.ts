@@ -1,7 +1,7 @@
-import { auditLog, brands, type DbTransaction, INSTALL_SCOPE_BRAND_ID } from '@helpdock/db';
+import { auditLog, brands, type DbTransaction, INSTALL_SCOPE_BRAND_ID, users } from '@helpdock/db';
 import { type BrandDeletion, brandPurgeAfter } from '@helpdock/schemas';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -34,7 +34,10 @@ interface DeletionInput {
 
 type BrandRow = Pick<typeof brands.$inferSelect, 'id' | 'name' | 'prefix' | 'status' | 'deletedAt'>;
 
-export const deletionOf = (row: BrandRow): BrandDeletion => ({
+export const deletionOf = (
+  row: BrandRow,
+  requestedBy: BrandDeletion['requestedBy'] = null,
+): BrandDeletion => ({
   brandId: row.id,
   status: row.status,
   requestedAt: row.status === 'active' ? null : (row.deletedAt?.toISOString() ?? null),
@@ -42,6 +45,7 @@ export const deletionOf = (row: BrandRow): BrandDeletion => ({
     row.status === 'active' || row.deletedAt === null
       ? null
       : brandPurgeAfter(row.deletedAt).toISOString(),
+  requestedBy: row.status === 'active' ? null : requestedBy,
 });
 
 export class BrandDeletionService {
@@ -52,7 +56,12 @@ export class BrandDeletionService {
   }
 
   async status(tx: DbTransaction, brandId: string): Promise<BrandDeletion> {
-    return deletionOf(await this.#find(tx, brandId));
+    const brand = await this.#find(tx, brandId);
+
+    return deletionOf(
+      brand,
+      brand.status === 'active' ? null : await this.#requestedBy(tx, brandId),
+    );
   }
 
   async request({
@@ -79,7 +88,7 @@ export class BrandDeletionService {
     if (updated === undefined) {
       throw new ConflictException('This brand is already being deleted');
     }
-    const deletion = deletionOf(updated);
+    const deletion = deletionOf(updated, await this.#requestedBy(tx, brandId, actorId));
     await this.#audit(tx, actorId, BRAND_DELETION_REQUESTED, brand, {
       purgeAfter: deletion.purgeAfter,
     });
@@ -114,6 +123,45 @@ export class BrandDeletionService {
     this.#logger.info({ brandId, actorId }, 'Brand deletion cancelled');
 
     return deletionOf(updated);
+  }
+
+  /**
+   * The staff member behind the latest `brand.deletion_requested` row of the
+   * brand, or `actorId` when the row is being written now. Install-scope
+   * rows, which this install-scope transaction reads.
+   */
+  async #requestedBy(
+    tx: DbTransaction,
+    brandId: string,
+    actorId?: string,
+  ): Promise<BrandDeletion['requestedBy']> {
+    const userId =
+      actorId ??
+      (
+        await tx
+          .select({ actorId: auditLog.actorId })
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.brandId, INSTALL_SCOPE_BRAND_ID),
+              eq(auditLog.action, BRAND_DELETION_REQUESTED),
+              eq(auditLog.targetType, 'brand'),
+              eq(auditLog.targetId, brandId),
+            ),
+          )
+          .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+          .limit(1)
+      )[0]?.actorId;
+    if (userId === undefined) {
+      return null;
+    }
+    const [user] = await tx
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return { userId, name: user?.name ?? null };
   }
 
   async #find(tx: DbTransaction, brandId: string): Promise<BrandRow> {

@@ -1,0 +1,1 @@
+ALTER TABLE "report_daily" ADD COLUMN "assignee_id" uuid;

@@ -28,6 +28,8 @@ export interface PostgresFacts {
   readonly version: string | null;
   /** Sessions this role holds on the server, by the state Postgres reports. */
   readonly connections: ReadonlyMap<string, number>;
+  /** The database on disk, or null when the server did not answer. */
+  readonly sizeBytes: number | null;
 }
 
 /** `PostgreSQL 17.6 (Debian …) on aarch64…` → `17.6`. */
@@ -37,9 +39,31 @@ export const postgresVersionNumber = (full: string | undefined): string | null =
 };
 
 export const readPostgresFacts = async (db: Db): Promise<PostgresFacts> => {
-  const [version, connections] = await Promise.all([serverVersion(db), poolConnections(db)]);
+  const [version, connections, sizeBytes] = await Promise.all([
+    serverVersion(db),
+    poolConnections(db),
+    databaseSize(db),
+  ]);
 
-  return { version, connections };
+  return { version, connections, sizeBytes };
+};
+
+/**
+ * `pg_database_size` of the current database: one catalog read, which any
+ * role allowed to connect may make. Per brand is not measured: a brand's rows
+ * share every table and index with the others, and adding them up would read
+ * every row.
+ */
+const databaseSize = async (db: Db): Promise<number | null> => {
+  try {
+    const rows = await db.execute<{ bytes: string }>(
+      sql`SELECT pg_database_size(current_database())::text AS bytes`,
+    );
+    const bytes = [...rows][0]?.bytes;
+    return bytes === undefined ? null : Number(bytes);
+  } catch {
+    return null;
+  }
 };
 
 const serverVersion = async (db: Db): Promise<string | null> => {

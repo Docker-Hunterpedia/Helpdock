@@ -611,8 +611,30 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
     it("sums this month's calls of every brand, with no ceiling while a brand has no monthly budget", async () => {
       const spend = await new DbAiUsage(runtime.settings).installSpend(db());
 
-      expect(spend).toMatchObject({ configured: true, budgetUsd: null, alertAtPercent: null });
+      expect(spend).toMatchObject({ configured: true, budgetUsd: null, alertAtPercent: 80 });
       expect(spend.configured && spend.costUsd).toBeGreaterThan(1);
+    });
+
+    it('gives each brand its own spend against its own monthly budget, and they add up', async () => {
+      await withSystem(db(), brandId, (tx) =>
+        tx.update(aiSettings).set({ monthlyBudgetUsd: 100 }).where(eq(aiSettings.brandId, brandId)),
+      );
+      const spend = await new DbAiUsage(runtime.settings).installSpend(db());
+      if (!spend.configured) {
+        throw new Error('AI spend should be configured');
+      }
+      const brand = spend.brands.find((row) => row.brandId === brandId);
+
+      expect(brand).toMatchObject({ budgetUsd: 100 });
+      expect(brand?.costUsd).toBeGreaterThan(1);
+      expect(spend.brands.reduce((sum, row) => sum + row.costUsd, 0)).toBeCloseTo(spend.costUsd);
+      expect(spend.brands.reduce((sum, row) => sum + row.tokens, 0)).toBe(spend.tokens);
+      await withSystem(db(), brandId, (tx) =>
+        tx
+          .update(aiSettings)
+          .set({ monthlyBudgetUsd: null })
+          .where(eq(aiSettings.brandId, brandId)),
+      );
     });
   });
 

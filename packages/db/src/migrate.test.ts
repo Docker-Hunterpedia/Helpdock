@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appRolePasswordFromUrl, newlyAppliedTags } from './migrate.js';
+import { appRolePasswordFromUrl, newlyAppliedTags, recordedTags } from './migrate.js';
 
 const journal = {
   entries: [
@@ -32,6 +32,17 @@ describe('newlyAppliedTags', () => {
 
     expect(newlyAppliedTags(journal, before, after)).toEqual([
       '0001_app_role_and_ticket_sequences',
+    ]);
+  });
+});
+
+describe('recordedTags', () => {
+  it('lists the recorded migrations newest first, leaving out the ones not applied', () => {
+    const after = new Set([1_789_765_607_157, 1_789_765_623_084]);
+
+    expect(recordedTags(journal, after)).toEqual([
+      '0001_app_role_and_ticket_sequences',
+      '0000_core_tables',
     ]);
   });
 });

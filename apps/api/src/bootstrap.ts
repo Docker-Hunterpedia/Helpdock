@@ -89,14 +89,16 @@ export const createRuntime = async ({
   // read (DOMAIN-RULES §1.5). The System page is served by an api replica,
   // which does.
   let migrationsApplied: number | null = null;
+  let migrations: readonly string[] | null = null;
 
   if (env.APP_ROLE === 'api') {
-    const migrations = await runMigrations({
+    const result = await runMigrations({
       migrationUrl: env.DATABASE_MIGRATION_URL,
       appRolePassword: appRolePasswordFromUrl(env.DATABASE_URL),
       log: (message) => logger.info(message),
     });
-    migrationsApplied = migrations.total;
+    migrationsApplied = result.total;
+    migrations = result.recorded;
   }
 
   const { db, close: closeDb } = createDb({ url: env.DATABASE_URL });
@@ -150,7 +152,7 @@ export const createRuntime = async ({
       settings,
       logger,
       signingKeys,
-      bootFacts: { runtimeRole: facts, migrationsApplied },
+      bootFacts: { runtimeRole: facts, migrationsApplied, migrations },
       close: async () => {
         for (const close of closers) {
           await close();

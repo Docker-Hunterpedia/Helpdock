@@ -14,6 +14,7 @@ const run = (actions: readonly SetupAction[], start = initialSetupState('en')): 
 const admin: SetupAction = { type: 'adminCreated', name: 'Lina', email: 'lina@example.com' };
 const brand: SetupAction = { type: 'brandCreated', name: 'Acme', prefix: 'ACME' };
 const smtp: SetupAction = { type: 'smtpDecided', host: 'smtp.example.com' };
+const ai: SetupAction = { type: 'aiDecided', model: 'OpenAI · gpt-4.1-mini' };
 
 describe('setupReducer', () => {
   it('starts on the account step with nothing decided', () => {
@@ -27,21 +28,31 @@ describe('setupReducer', () => {
       brandName: '',
       brandPrefix: '',
       smtpHost: null,
+      aiModel: null,
     });
   });
 
   it('advances one step per decision and remembers what each one produced', () => {
     expect(run([admin]).step).toBe('brand');
     expect(run([admin, brand]).step).toBe('email');
-    expect(run([admin, brand, smtp]).step).toBe('done');
+    expect(run([admin, brand, smtp]).step).toBe('ai');
+    expect(run([admin, brand, smtp, ai]).step).toBe('done');
 
-    expect(run([admin, brand, smtp]).summary).toEqual({
+    expect(run([admin, brand, smtp, ai]).summary).toEqual({
       adminEmail: 'lina@example.com',
       adminName: 'Lina',
       brandName: 'Acme',
       brandPrefix: 'ACME',
       smtpHost: 'smtp.example.com',
+      aiModel: 'OpenAI · gpt-4.1-mini',
     });
+  });
+
+  it('records a skipped AI step as having no model, and goes back from it to email', () => {
+    expect(
+      run([admin, brand, smtp, { type: 'aiDecided', model: null }]).summary.aiModel,
+    ).toBeNull();
+    expect(run([admin, brand, smtp, { type: 'back' }]).step).toBe('email');
   });
 
   it('records a skipped email step as having no host', () => {
@@ -62,7 +73,7 @@ describe('setupReducer', () => {
   });
 
   it('refuses to go back from done, because the account and the brand exist', () => {
-    const done = run([admin, brand, smtp]);
+    const done = run([admin, brand, smtp, ai]);
 
     expect(setupReducer(done, { type: 'back' })).toBe(done);
   });
@@ -83,6 +94,6 @@ describe('setupReducer', () => {
 
 describe('stepsRemaining', () => {
   it('counts down to nothing', () => {
-    expect(SETUP_STEPS.map(stepsRemaining)).toEqual([3, 2, 1, 0]);
+    expect(SETUP_STEPS.map(stepsRemaining)).toEqual([4, 3, 2, 1, 0]);
   });
 });

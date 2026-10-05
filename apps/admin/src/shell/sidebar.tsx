@@ -87,6 +87,7 @@ export function Sidebar({
   // Chrome only: the api refuses the request whatever the sidebar draws.
   // "Staff and roles" is for the two roles that hold `staff:manage`; "System"
   // is install-wide and is offered to an install admin alone.
+  const primaryNav = navFor(PRIMARY_NAV, session.user);
   const adminNav = navFor(ADMIN_NAV, session.user);
 
   return (
@@ -119,7 +120,7 @@ export function Sidebar({
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
       >
         <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {PRIMARY_NAV.map((item) => (
+          {primaryNav.map((item) => (
             <Box component="li" key={item.key}>
               <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
             </Box>

@@ -24,7 +24,7 @@ import {
   ServerCog,
   ShieldAlert,
 } from 'lucide-react';
-import { type ReactNode, useId, useMemo, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { Link as RouterLink } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { ROUTES } from '../../../app/route-paths.js';
@@ -45,12 +45,8 @@ import {
   userAgentSummary,
   utcOffsetLabel,
 } from './audit-format.js';
-import {
-  AUDIT_LOG_QUERY_KEY,
-  HttpSystemApi,
-  NotAllowedError,
-  type SystemApi,
-} from './system-api.js';
+import { AUDIT_LOG_QUERY_KEY, NotAllowedError, type SystemApi } from './system-api.js';
+import { useSystemApi } from './system-api-context.tsx';
 
 /**
  * The admin audit log viewer (M3-08, artboard `AdminAuditLog`): install-wide,
@@ -67,7 +63,7 @@ const ACTOR_DEBOUNCE_MS = 300;
 
 export function AuditLogPage({ api }: { readonly api?: SystemApi } = {}): ReactNode {
   const t = useT();
-  const client = useMemo(() => api ?? new HttpSystemApi(), [api]);
+  const client = useSystemApi(api);
   const [filters, setFilters] = useState<AuditFilters>(NO_FILTERS);
   // Every cursor that led to the page shown, so Newer is a step back.
   const [cursors, setCursors] = useState<readonly (string | null)[]>([null]);

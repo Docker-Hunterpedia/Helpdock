@@ -248,6 +248,7 @@ const generate = async (
       brandId: payload.brandId,
       feature: AUTO_REPLY_FEATURE,
       ticketId: payload.ticketId,
+      locale: prepared.locale,
       instructions: autoReplyInstructions(chunks, prepared.locale),
       messages: autoReplyMessages(prepared.turns),
       sources: chunks.map((chunk) => chunk.chunkId),

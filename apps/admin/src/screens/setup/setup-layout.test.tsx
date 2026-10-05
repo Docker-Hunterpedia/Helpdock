@@ -11,7 +11,7 @@ const render = (step: 'account' | 'brand' | 'email' | 'done') =>
   );
 
 describe('SetupLayout', () => {
-  it('names the four steps in order', () => {
+  it('names the five steps in order', () => {
     render('account');
 
     const items = within(screen.getByRole('navigation', { name: 'Setup progress' })).getAllByRole(
@@ -22,7 +22,8 @@ describe('SetupLayout', () => {
       '1 · Admin account',
       '2 · First brand',
       '3 · Outgoing email',
-      '4 · Done',
+      '4 · AI provider',
+      '5 · Done',
     ]);
   });
 
@@ -51,7 +52,7 @@ describe('SetupLayout', () => {
   it('counts the steps that are left', () => {
     render('brand');
 
-    expect(screen.getByText('2 steps left')).toBeInTheDocument();
+    expect(screen.getByText('3 steps left')).toBeInTheDocument();
   });
 
   it('carries the version and health caption the wizard was given', () => {

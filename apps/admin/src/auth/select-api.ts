@@ -1,3 +1,6 @@
+import type { AiApi } from '../ai/api.js';
+import { HttpAiApi } from '../ai/http-api.js';
+import { MockAiApi } from '../ai/mock-api.js';
 import type { AutomationApi } from '../automation/api.js';
 import { HttpAutomationApi } from '../automation/http-api.js';
 import { MockAutomationApi } from '../automation/mock-api.js';
@@ -16,6 +19,9 @@ import { MockEmailApi } from '../email/mock-api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { HttpHelpCenterApi } from '../help-center/http-api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import type { KnowledgeApi } from '../knowledge/api.js';
+import { HttpKnowledgeApi } from '../knowledge/http-api.js';
+import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import { HttpAttachmentUploader } from '../media/upload.js';
@@ -27,6 +33,8 @@ import {
 } from '../notifications/browser-push.js';
 import { HttpNotificationsApi } from '../notifications/http-api.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { HttpReportsApi, type ReportsApi } from '../reports/api.js';
+import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
@@ -71,6 +79,14 @@ export interface AdminApis {
   readonly browserPush: BrowserPush;
   /** M5-07: Brand › Domains. */
   readonly domains: DomainsApi;
+  /** M7-10: `Admin/AI`. */
+  readonly ai: AiApi;
+  /** M7-10: AI › Knowledge, on M7-03's api. */
+  readonly knowledge: KnowledgeApi;
+  /** M8-04: `Admin/Reports`. */
+  readonly reports: ReportsApi;
+  /** The install-admin routes: System (M0-10, M8-05) and brand deletion (M8-07). */
+  readonly system: SystemApi;
   /** M6: Channels › Telegram and a Telegram ticket's chat. */
   readonly telegram: TelegramApi;
 }
@@ -119,6 +135,10 @@ export function createApis(
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
       domains: new HttpDomainsApi(transport),
+      ai: new HttpAiApi(transport),
+      knowledge: new HttpKnowledgeApi(transport),
+      reports: new HttpReportsApi(transport),
+      system: new HttpSystemApi(() => transport.currentAccessToken()),
       telegram: new HttpTelegramApi(transport),
     };
   }
@@ -156,6 +176,12 @@ export function createApis(
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    ai: new MockAiApi(),
+    knowledge: new MockKnowledgeApi(),
+    // No fixtures for these two: the browser tests answer their routes with
+    // Playwright, which a fixture would sit in front of.
+    reports: new HttpReportsApi(),
+    system: new HttpSystemApi(),
     telegram: new MockTelegramApi(),
   };
 }

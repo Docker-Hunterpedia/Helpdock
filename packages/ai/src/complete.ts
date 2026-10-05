@@ -49,6 +49,8 @@ export interface CompleteRequest {
   /** Dotted feature name for the log, for example `assist.summarize`. */
   readonly feature: string;
   readonly ticketId?: string | null;
+  /** The conversation's language: `ar` uses the brand's Arabic prompt when it has one. */
+  readonly locale?: 'en' | 'ar';
   /** The feature's own instructions, placed before the brand's system prompt. */
   readonly instructions?: string;
   readonly messages: readonly ChatMessage[];
@@ -139,7 +141,11 @@ const preparePrompt = (
   target: AiTarget,
   redact: boolean,
 ): PreparedPrompt => {
-  const system = [request.instructions ?? '', target.systemPrompt]
+  const brandPrompt =
+    request.locale === 'ar' && (target.systemPromptAr ?? '').trim() !== ''
+      ? (target.systemPromptAr ?? '')
+      : target.systemPrompt;
+  const system = [request.instructions ?? '', brandPrompt]
     .map((part) => part.trim())
     .filter((part) => part !== '')
     .join('\n\n');

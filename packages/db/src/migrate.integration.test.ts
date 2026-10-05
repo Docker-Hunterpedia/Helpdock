@@ -54,6 +54,7 @@ const MIGRATION_TAGS = [
   '0039_api_keys_and_webhooks',
   '0040_telegram_chat_identity',
   '0041_knowledge_ingest',
+  '0042_ai_assistant_modes',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

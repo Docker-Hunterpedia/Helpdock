@@ -15,6 +15,8 @@ export interface AiTarget {
   readonly modelId: string;
   /** The brand's own system prompt (M7-08), empty when it has none. */
   readonly systemPrompt: string;
+  /** M7-10: the prompt for Arabic conversations; empty when `systemPrompt` serves both. */
+  readonly systemPromptAr?: string;
 }
 
 export interface BrandGuardrails {

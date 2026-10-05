@@ -16,9 +16,11 @@ import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from '../../app/route-paths.js';
 import { readPublicInstallInfo } from '../../install/public-info.js';
 import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { AccountStep } from './account-step.tsx';
+import { AiStep } from './ai-step.tsx';
 import { BrandStep } from './brand-step.tsx';
 import { DoneStep } from './done-step.tsx';
 import { EmailStep } from './email-step.tsx';
+import { httpSetupAi, type SetupAi } from './setup-ai.js';
 import {
   HttpSetupApi,
   type SetupApi,
@@ -58,6 +60,8 @@ const readReadiness = async (): Promise<boolean> => {
 export interface SetupPageProps {
   /** Tests pass their own; the browser gets the real one. */
   readonly api?: SetupApi;
+  /** The AI step's half (M7-10). Tests pass a fixture; the browser gets the real api. */
+  readonly ai?: SetupAi;
   /** Where "Open Helpdock" sends the browser. Replaced in tests. */
   readonly onFinished?: (path: string) => void;
 }
@@ -66,11 +70,12 @@ const leaveTo = (path: string): void => {
   globalThis.location.assign(path);
 };
 
-export function SetupPage({ api, onFinished = leaveTo }: SetupPageProps): ReactNode {
+export function SetupPage({ api, ai, onFinished = leaveTo }: SetupPageProps): ReactNode {
   const t = useT();
   const { locale, setLocale } = usePreferences();
   const install = useMemo(() => readPublicInstallInfo(), []);
   const client = useMemo(() => api ?? new HttpSetupApi(), [api]);
+  const aiClient = useMemo(() => ai ?? httpSetupAi(), [ai]);
 
   const [state, dispatch] = useReducer(setupReducer, locale, initialSetupState);
   const [failure, setFailure] = useState<'closed' | 'throttled' | 'failed' | null>(null);
@@ -168,13 +173,18 @@ export function SetupPage({ api, onFinished = leaveTo }: SetupPageProps): ReactN
     },
     onSuccess: (_response, request) => {
       dispatch({ type: 'smtpDecided', host: request.skip ? null : request.host });
-      // The wizard is over the moment the last decision is taken, so the token
-      // is spent here rather than on the button below: the summary has to know
-      // whether this install requires a second factor before it is drawn.
-      complete.mutate();
     },
     onError: fail,
   });
+
+  const decideAi = (model: string | null): void => {
+    setFailure(null);
+    dispatch({ type: 'aiDecided', model });
+    // The wizard is over the moment the last decision is taken, so the token
+    // is spent here rather than on the button below: the summary has to know
+    // whether this install requires a second factor before it is drawn.
+    complete.mutate();
+  };
 
   const chooseLocale = (next: Locale): void => {
     setLocale(next);
@@ -241,6 +251,8 @@ export function SetupPage({ api, onFinished = leaveTo }: SetupPageProps): ReactN
             adminEmail={state.summary.adminEmail}
           />
         ) : null}
+
+        {state.step === 'ai' ? <AiStep ai={aiClient} onDecided={decideAi} onBack={back} /> : null}
 
         {state.step === 'done' ? (
           <DoneStep

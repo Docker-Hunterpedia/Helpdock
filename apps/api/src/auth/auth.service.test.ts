@@ -179,6 +179,7 @@ let mail: CollectingAuthMail;
 let settings: Settings;
 let service: AuthService;
 let hasher: PasswordHasher;
+let sessions: SessionService;
 
 const newUser = async (overrides: Partial<StaffUser> = {}): Promise<StaffUser> => ({
   id: uuidv7(),
@@ -248,17 +249,18 @@ beforeEach(async () => {
   const repository = staff as unknown as StaffRepository;
   const refresh = new RefreshStore(created.redis);
 
+  sessions = new SessionService({
+    staff: repository,
+    refresh,
+    redis: created.redis,
+    keys: { kid: 'k1', privateKey, publicKey },
+    logger: silentLogger(),
+    appUrl: APP_URL,
+    settings,
+  });
   service = new AuthService({
     staff: repository,
-    sessions: new SessionService({
-      staff: repository,
-      refresh,
-      redis: created.redis,
-      keys: { kid: 'k1', privateKey, publicKey },
-      logger: silentLogger(),
-      appUrl: APP_URL,
-      settings,
-    }),
+    sessions,
     hasher,
     challenges: new TotpChallengeStore(created.redis),
     trustedDevices: new TrustedDeviceStore({ redis: created.redis, masterKey: MASTER_KEY }),
@@ -870,6 +872,45 @@ describe('me and signing out', () => {
 
   it('answers null for an account that cannot use the admin', async () => {
     await expect(service.me(uuidv7())).resolves.toBeNull();
+  });
+
+  const twoBrowsers = async (): Promise<[string, string]> => {
+    const families: string[] = [];
+    for (const userAgent of ['Firefox', 'Safari']) {
+      const opened = await signIn({ userAgent });
+      if (opened.kind !== 'session') {
+        throw new Error('expected a session');
+      }
+      families.push(opened.issued.refreshCookieValue.fam);
+    }
+    return families as [string, string];
+  };
+
+  const revocations = () =>
+    stub.published
+      .filter((entry) => entry.channel === 'principal.revoked')
+      .map((entry) => JSON.parse(entry.message) as Record<string, unknown>);
+
+  it('names the one browser that signed out, so only its sockets close', async () => {
+    const user = staff.add(await newUser());
+    const [firefox] = await twoBrowsers();
+
+    await sessions.revokeFamily(firefox, 'sign-out');
+
+    expect(revocations()).toEqual([
+      { principalType: 'staff', principalId: user.id, reason: 'sign-out', familyIds: [firefox] },
+    ]);
+  });
+
+  it('names every browser but the kept one after a password change', async () => {
+    const user = staff.add(await newUser());
+    const [firefox, safari] = await twoBrowsers();
+
+    await sessions.revokeEverythingExcept(user.id, safari, 'password-changed');
+
+    expect(revocations()).toEqual([
+      expect.objectContaining({ principalId: user.id, familyIds: [firefox] }),
+    ]);
   });
 
   it('forgets every family and every trusted browser', async () => {

@@ -84,8 +84,31 @@ describe('RevocationSubscriber', () => {
     ]);
   });
 
+  it('closes only the sockets of the refresh families it names', () => {
+    const registry = new SocketRegistry();
+    const signedOut = socketOf('s1', LINA);
+    const otherBrowser = socketOf('s2', LINA);
+    registry.add(signedOut);
+    registry.add(otherBrowser);
+
+    subscriberWith(registry).disconnectRevoked(
+      JSON.stringify({
+        principalType: 'staff',
+        principalId: LINA,
+        reason: 'sign-out',
+        familyIds: [signedOut.data.familyId],
+      }),
+    );
+
+    expect([signedOut.disconnected, otherBrowser.disconnected]).toEqual([true, false]);
+  });
+
   it.each([
     ['text that is not JSON', 'not json'],
+    [
+      'family ids that are not a list',
+      JSON.stringify({ principalType: 'staff', principalId: LINA, reason: 'r', familyIds: 'x' }),
+    ],
     [
       'a principal id that is not a uuid',
       JSON.stringify({ principalType: 'staff', principalId: 'x', reason: 'r' }),

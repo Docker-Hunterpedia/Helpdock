@@ -136,8 +136,23 @@ Client to server, all acknowledged:
 | `ticket:viewing` | `{ brandId, ticketId, activity? }` — `activity` is `viewing` (the default) or `replying` | `@Requires('ticket:read')` | `{ ok: true, data: { ticketId } }` |
 
 A refusal is `{ ok: false, error: { code, message } }` on the same
-acknowledgement, with the codes above plus `invalid_payload` and
-`session_revoked`.
+acknowledgement, with the codes above plus `invalid_payload`,
+`session_revoked` and `rate_limited`.
+
+### Event budgets
+
+`room:join`, `presence:set` and `presence:heartbeat` each cost Redis work, so
+each is limited per person, across every socket and every replica, with the
+same sliding-window counter in Redis that the sign-in form uses
+(`apps/api/src/realtime/socket-rate-limit.ts`). An event over its budget is
+answered `rate_limited` and the socket stays open; the budget is counted before
+the message is parsed, so malformed messages spend it too.
+
+| Event | Per person, per minute |
+|---|---|
+| `room:join` | 120 |
+| `presence:set` | 30 |
+| `presence:heartbeat` | 60 (twenty-five open tabs at one every 25 s) |
 
 Server to client:
 
@@ -266,11 +281,22 @@ change.
 > `principal.revoked` over Redis and every replica disconnects that principal's
 > sockets within 5 seconds. — DOMAIN-RULES §1.4
 
-M0-05 publishes. `RevocationSubscriber` subscribes on a dedicated connection —
-a subscribed ioredis client may run no other command, and the Socket.IO adapter
-has subscriptions of its own — parses the message, and closes every socket of
-that person that this replica is holding. It emits `revoked` first, so the
-client shows "signed out" instead of reconnecting in a loop.
+M0-05 publishes `{ principalType, principalId, reason, familyIds? }`.
+`RevocationSubscriber` subscribes on a dedicated connection — a subscribed
+ioredis client may run no other command, and the Socket.IO adapter has
+subscriptions of its own — parses the message, and closes the sockets of that
+person that this replica is holding. It emits `revoked` first, so the client
+shows "signed out" instead of reconnecting in a loop.
+
+Revocation is per browser. Each socket remembers the refresh family (`fam`) of
+the token it was opened with, and a message that carries `familyIds` closes only
+the sockets of those families:
+
+| Revocation | `familyIds` | Sockets closed |
+|---|---|---|
+| Sign out, refresh-token reuse, an account left with no brand role | the one family | that browser's |
+| Password change from the security page | every family but the current one | every other browser's |
+| Sign out everywhere, password reset, role or department change, deactivation | absent | every socket of that person |
 
 That is the push half. The pull half is the revocation check on every room join,
 for the window before the message arrives and for a replica that missed it.
@@ -348,15 +374,8 @@ way; the screen re-reads over REST anyway.
 
 ## Known gaps
 
-- **Revocation is per person, not per browser.** `principal.revoked` carries
-  only the user id (M0-05), so signing out of one browser closes that person's
-  sockets in all of them. It fails closed, which is the right direction, but
-  the other browser's realtime stops until the page is reloaded. Narrowing it
-  means adding the family id to the published payload, which is M0-05's
-  contract to change.
-- **Socket events are not rate-limited.** HTTP is; `room:join`, `presence:set`
-  and `presence:heartbeat` are not. Only an authenticated staff principal can
-  send them, and each costs a small number of Redis commands.
+- None open. Per-browser revocation and the event budgets closed M0's two
+  gaps in M9.
 
 ## Operating it
 

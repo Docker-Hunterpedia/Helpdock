@@ -161,13 +161,29 @@ export const toMessage = (wire: WireMessage, brandName: string): WidgetMessage =
       ? { kind: 'visitor' }
       : wire.author === 'system'
         ? { kind: 'system' }
-        : {
-            kind: 'agent',
-            agent: agentOf(wire.agent?.name ?? null, wire.agent?.avatarUrl ?? null, brandName),
-          },
+        : wire.author === 'ai'
+          ? { kind: 'ai' }
+          : {
+              kind: 'agent',
+              agent: agentOf(wire.agent?.name ?? null, wire.agent?.avatarUrl ?? null, brandName),
+            },
   body: wire.text,
   attachments: wire.attachments.map(toAttachment),
   system: null,
+  ...(wire.ai === undefined
+    ? {}
+    : {
+        ai: {
+          kind: wire.ai.kind,
+          citations: wire.ai.citations.map((citation) => ({
+            marker: citation.marker,
+            title: citation.title,
+            url: citation.url,
+            article_id: citation.articleId,
+          })),
+          feedback: wire.ai.feedback,
+        },
+      }),
   created_at: wire.createdAt,
 });
 
@@ -192,4 +208,5 @@ export const toConversation = (
   department: null,
   visitor_email: visitorEmail,
   read_seq: 0,
+  ai_handed_off: wire.aiHandedOff ?? false,
 });

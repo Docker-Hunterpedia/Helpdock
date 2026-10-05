@@ -66,6 +66,9 @@ export function createTransport(
       remote().then((t) => t.uploadAttachment(file, name, kind)),
     attachmentUrl: (id, attachmentId) => remote().then((t) => t.attachmentUrl(id, attachmentId)),
     requestTranscript: (id, email) => remote().then((t) => t.requestTranscript(id, email)),
+    handOff: (id) => remote().then((t) => t.handOff(id)),
+    sendFeedback: (id, messageId, feedback) =>
+      remote().then((t) => t.sendFeedback(id, messageId, feedback)),
     submitContactForm: (input) => remote().then((t) => t.submitContactForm(input)),
     searchArticles: (query, locale) => remote().then((t) => t.searchArticles(query, locale)),
     suggestArticles: (query, locale) => remote().then((t) => t.suggestArticles(query, locale)),

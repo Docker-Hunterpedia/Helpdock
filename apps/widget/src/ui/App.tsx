@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { assistantAnswering } from '../state/thread.js';
 import type { ArticleSummary } from '../transport/types.js';
+import { TalkToHuman } from './Assistant.js';
 import { Banners } from './Banners.js';
 import { Composer } from './Composer.js';
 import { ContactForm } from './ContactForm.js';
@@ -89,8 +91,17 @@ export function App() {
     content = (
       <>
         <Banners />
-        <Thread />
-        {conversation?.status === 'ended' ? <Ended /> : <Composer onOpenArticle={setArticle} />}
+        <Thread onOpenArticle={setArticle} />
+        {conversation?.status === 'ended' ? (
+          <Ended />
+        ) : (
+          <>
+            {assistantAnswering(state.thread, conversation?.ai_handed_off === true) ? (
+              <TalkToHuman />
+            ) : null}
+            <Composer onOpenArticle={setArticle} />
+          </>
+        )}
       </>
     );
   }

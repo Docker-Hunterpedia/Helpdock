@@ -49,6 +49,9 @@ import {
   tags,
   teamMembers,
   teams,
+  telegramBots,
+  telegramChats,
+  telegramDeliveries,
   ticketActivity,
   ticketMessages,
   ticketParticipants,
@@ -118,6 +121,8 @@ const departmentId = perBrand();
 const teamId = perBrand();
 const statusId = perBrand();
 const ticketId = perBrand();
+const messageId = perBrand();
+const telegramBotId = perBrand();
 const tagId = perBrand();
 const ruleId = perBrand();
 const hcCategoryId = perBrand();
@@ -344,6 +349,7 @@ const fixtures = [
     refusal: /not visible in this transaction/i,
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(ticketMessages).values({
+        id: messageId[brandId] ?? '',
         brandId,
         ticketId: ticketId[brandId] ?? '',
         // Whatever is passed is overwritten by the trigger with the parent
@@ -741,6 +747,48 @@ const fixtures = [
         locale: 'en',
         visitorHash: `visitor-${nextNumber()}`,
         helpful: true,
+      }),
+  },
+  // M6-01, M6-02.
+  {
+    name: 'telegram_bots',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(telegramBots).values({
+        id: telegramBotId[brandId] ?? '',
+        brandId,
+        // Unique across the install, so each brand's fixture needs its own.
+        telegramId: nextNumber(),
+        username: 'acme_support_bot',
+        displayName: 'Acme Support',
+        departmentId: departmentId[brandId] ?? '',
+        token: 'v1.sealed.token',
+        tokenUpdatedAt: new Date(),
+        webhookSecret: 'v1.sealed.secret',
+      }),
+  },
+  {
+    name: 'telegram_chats',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(telegramChats).values({
+        brandId,
+        botId: telegramBotId[brandId] ?? '',
+        chatId: String(nextNumber()),
+        contactId: contactId(brandId),
+        ticketId: ticketId[brandId] ?? '',
+      }),
+  },
+  {
+    name: 'telegram_deliveries',
+    // A child of a ticket, refused by the same trigger as `email_deliveries`.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(telegramDeliveries).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        ticketMessageId: messageId[brandId] ?? '',
+        botId: telegramBotId[brandId] ?? '',
+        chatId: '42',
       }),
   },
 ] as const;

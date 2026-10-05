@@ -13,8 +13,8 @@ import { SocketRegistry } from './socket-registry.js';
  *
  * M0-05 publishes; this subscribes. A message that names refresh families
  * closes only the sockets opened with tokens of those families — one browser
- * signing out leaves the person's others connected. The budget is five seconds and the actual
- * latency is one Redis round trip, because the work is local: the registry
+ * signing out leaves the person's others connected. The budget is five seconds
+ * and the actual latency is one Redis round trip, because the work is local: the registry
  * already knows which of this replica's sockets belong to that person.
  *
  * The connection is a dedicated one. A subscribed ioredis client may run no

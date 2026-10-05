@@ -108,6 +108,7 @@ describe('asksForHuman', () => {
     'أريد التحدث مع موظف',
     'ممكن اكلم شخص؟',
     'خدمة العملاء',
+    'أريد موظفاً',
   ])('hears a request for a person in %j', (text) => {
     expect(asksForHuman(text)).toBe(true);
   });

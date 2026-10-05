@@ -49,7 +49,7 @@ import { DbAiUsage } from '../db-ai-usage.js';
 import { type AutoReplyDeps, runAutoReply } from './auto-reply.job.js';
 import { createAutoReplyDeps } from './auto-reply-deps.js';
 import { registerAutoReplyEventHandlers } from './auto-reply-events.js';
-import { type AutoReplySettingsReader, DEFAULT_HANDOFF_MESSAGES } from './auto-reply-settings.js';
+import { DEFAULT_HANDOFF_MESSAGES, readAutoReplySettings } from './auto-reply-settings.js';
 
 /**
  * M7-06 end to end against a real Postgres with pgvector and a real Redis,
@@ -131,24 +131,13 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
   let adminToken: string;
   let fake: FakeModel;
   let deps: AutoReplyDeps;
-  let threshold = 0.7;
-  let enabled = true;
   const queued: AiAutoReplyPayload[] = [];
   const dispatched = new Set<string>();
   const dispatcher = createOutboxDispatcher();
 
-  const settings: AutoReplySettingsReader = (_tx, _brandId, channel) =>
-    Promise.resolve(
-      enabled && channel === 'chat'
-        ? {
-            threshold,
-            handoffMessage: (locale: 'en' | 'ar') => DEFAULT_HANDOFF_MESSAGES[locale],
-          }
-        : null,
-    );
   registerAutoReplyEventHandlers(
     { add: async (payload) => void queued.push(payload) },
-    settings,
+    readAutoReplySettings,
     dispatcher,
   );
 
@@ -409,13 +398,24 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
         installSmtp: new SettingsInstallSmtp(runtime.settings),
         log: silentJobLogger,
       }),
-      settings,
     };
   }, 400_000);
 
+  /** The Admin's AI › Assistant modes (M7-10): auto-reply on the widget only. */
+  const setModes = async (threshold: number): Promise<void> => {
+    const off = { enabled: false, threshold: 0.7 };
+    const saved = await staff('PUT', `/api/brands/${brandId()}/ai/modes`, {
+      agentAssist: false,
+      keepAssistAfterHardStop: true,
+      autoReply: { widget: { enabled: true, threshold }, email: off, telegram: off },
+      handoffMessage: { en: '', ar: '' },
+      aiCountsAsFirstResponse: true,
+    });
+    expect(saved.status).toBe(200);
+  };
+
   beforeEach(async () => {
-    threshold = 0.7;
-    enabled = true;
+    await setModes(0.7);
     await dispatchTicketEvents();
     queued.splice(0);
   });
@@ -496,7 +496,7 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
   });
 
   it('hands off below the threshold with the handoff wording, and answers nothing after', async () => {
-    threshold = 0.8;
+    await setModes(0.8);
     const visitor = await newVisitor();
     const conversationId = await start(visitor);
     const [job] = await takeJobs();

@@ -7,7 +7,7 @@ import list from './breached-passwords.json' with { type: 'json' };
  * from) rather than being asked of an online service, because a self-hosted
  * install may have no route out, and because sending even a hash prefix of a
  * staff password to a third party is a disclosure the operator never agreed to
- * (ADR 0019).
+ * (ADR 0021).
  *
  * Case is ignored: `Qwertyuiop123` is the same guess as `qwertyuiop123` to
  * anybody running a cracking dictionary with its usual rules.

@@ -335,7 +335,7 @@ notification, an email — is an `outbox.event` job. A worker runs
 of one ticket run one at a time, in the order they were written**, and events
 of different tickets run side by side. An event that names no ticket is
 ordered with the other ticket-less events of its brand
-([ADR 0021](../decisions/0021-outbox-events-ordered-per-ticket.md)).
+([ADR 0023](../decisions/0023-outbox-events-ordered-per-ticket.md)).
 
 Each running event holds one of the worker's ten database connections, so
 raise `OUTBOX_CONCURRENCY` with care; a second `worker` replica is the other

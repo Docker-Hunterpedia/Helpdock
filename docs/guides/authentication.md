@@ -134,7 +134,7 @@ is checked against a list of passwords already known to attackers (ASVS
 2.1.7): the 46 146 entries of 12 characters or more among the million most
 common in SecLists' `xato-net` list, compared without regard to case. The list
 ships in the image (`apps/api/src/auth/breached/`); the password is never sent
-anywhere to be checked ([ADR 0019](../decisions/0019-bundled-breached-password-list.md)).
+anywhere to be checked ([ADR 0021](../decisions/0021-bundled-breached-password-list.md)).
 A match answers `400` with `error.auth.code` `password-breached`, and the
 screen says so on the field. A reset refuses it before the link is spent, so
 the same link takes a better password.
@@ -309,7 +309,7 @@ link went. The link is to a page, not a credential, and does not expire.
 
 Every authentication decision is a row of `audit_log` in install scope, which
 install admins read in the [audit log](audit-log.md) with **Brand: install**
-and an `auth.*` action ([ADR 0020](../decisions/0020-auth-audit-trail-in-install-scope.md),
+and an `auth.*` action ([ADR 0022](../decisions/0022-auth-audit-trail-in-install-scope.md),
 ASVS 7.1.3, 7.2.1):
 
 | Action | When |

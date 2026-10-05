@@ -1,4 +1,4 @@
-# 0019 Check new passwords against a bundled breached-password list
+# 0021 Check new passwords against a bundled breached-password list
 
 Status: accepted
 Date: 2026-10-05

@@ -62,7 +62,7 @@ Copied from the PRD, ticked as they are met.
 
 - ~~**Outbox event concurrency.**~~ Settled: events run eight at a time,
   ordered per ticket ([M9-03 outbox concurrency](#m9-03-outbox-concurrency),
-  ADR 0021).
+  ADR 0023).
 - **ZAP's first release run** will tell which passive alerts need a line in
   `.zap/rules.tsv`. The image could not be built in the development sandbox
   (Docker Hub rate limit), so the stack script has not run end to end yet.
@@ -93,7 +93,7 @@ its row in [asvs-l2](../completed/asvs-l2.md) updated (198 Met, 33 Partial,
   transaction from inside a session, `en` and `ar`.
 - **Breached passwords (2.1.7).** A bundled list (46 146 entries, SecLists,
   MIT) checked in process wherever a password is set; `password-breached`
-  drawn on the field ([ADR 0019](../decisions/0019-bundled-breached-password-list.md)).
+  drawn on the field ([ADR 0021](../decisions/0021-bundled-breached-password-list.md)).
 - **Show-password toggle and strength meter (2.1.8, 2.1.12).**
   `Admin/PasswordField` (`apps/admin/src/ui/password-field.tsx`) on accept
   invitation, reset, Account › Security and the wizard's admin step; errors
@@ -116,7 +116,7 @@ its row in [asvs-l2](../completed/asvs-l2.md) updated (198 Met, 33 Partial,
 - **Auth audit trail (7.1.3, 7.2.1).** `auth.*` rows in install scope, written
   by the `auth` system principal in transactions of their own, with address
   and user agent from the request context
-  ([ADR 0020](../decisions/0020-auth-audit-trail-in-install-scope.md)). Closes
+  ([ADR 0022](../decisions/0022-auth-audit-trail-in-install-scope.md)). Closes
   M0's "own-account actions write no audit_log row".
 - **Rate-limit alerting (8.1.4, 11.1.8).** `rate_limit_refusals_total{bucket}`
   on every limit, and an alert in the operations guide.
@@ -140,7 +140,7 @@ one ticket's events run one at a time and in order, and nothing across
 tickets. So the worker now runs `OUTBOX_CONCURRENCY` (8) at once with
 per-ticket ordering keys: chained in process in relay order, and an advisory
 lock per key across replicas
-([ADR 0021](../decisions/0021-outbox-events-ordered-per-ticket.md)).
+([ADR 0023](../decisions/0023-outbox-events-ordered-per-ticket.md)).
 `consumer.integration.test.ts` proves one ticket's events run in written order
 without overlapping while tickets overlap each other, and fails with the
 serializer off.

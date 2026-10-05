@@ -142,7 +142,7 @@ length of the backlog. At one reply a second it stayed under the gate.
 
 The handlers' ordering assumptions were then reviewed and the worker now runs
 `OUTBOX_CONCURRENCY` events at once (8 by default), one ticket's events still
-one at a time and in order ([ADR 0021](../decisions/0021-outbox-events-ordered-per-ticket.md),
+one at a time and in order ([ADR 0023](../decisions/0023-outbox-events-ordered-per-ticket.md),
 [operations › Scaling the worker](operations.md#scaling-the-worker)).
 
 ### Outbox concurrency on the sandbox

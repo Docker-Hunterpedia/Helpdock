@@ -10,4 +10,4 @@ Burnett published in 2015.
 Shorter entries are left out because Helpdock refuses a password under 12
 characters before it ever reaches this list. Why the list is bundled rather than
 queried, and how to regenerate it, is in
-[ADR 0019](../../../../../docs/decisions/0019-bundled-breached-password-list.md).
+[ADR 0021](../../../../../docs/decisions/0021-bundled-breached-password-list.md).

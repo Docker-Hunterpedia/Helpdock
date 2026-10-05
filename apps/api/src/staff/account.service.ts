@@ -19,7 +19,7 @@ import type { StaffRepository } from './staff.repository.js';
  *
  * **The audit rows are `AuthService`'s.** A password change belongs to a person
  * rather than to a brand, so it is recorded in install scope by the `auth`
- * system principal (`auth/auth-audit.ts`, ADR 0020) — never by this request's
+ * system principal (`auth/auth-audit.ts`, ADR 0022) — never by this request's
  * staff principal, which `target-brand.ts` keeps out of install scope.
  */
 

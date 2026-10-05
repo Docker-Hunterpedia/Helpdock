@@ -6,7 +6,7 @@ import { AUTH_SYSTEM_PRINCIPAL } from './staff.repository.js';
 /**
  * The authentication trail of ASVS 7.1.3 and 7.2.1: every sign-in that
  * succeeded or failed, every lock and refused step-up, and every change to a
- * credential, in `audit_log` where an install admin reads them (ADR 0020).
+ * credential, in `audit_log` where an install admin reads them (ADR 0022).
  *
  * **Install scope.** A sign-in belongs to a person, and a person is not a
  * brand's: the same account works in several, and a failed attempt may name

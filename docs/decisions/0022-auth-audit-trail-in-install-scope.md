@@ -1,4 +1,4 @@
-# 0020 Record authentication events in install scope, as the `auth` system principal
+# 0022 Record authentication events in install scope, as the `auth` system principal
 
 Status: accepted
 Date: 2026-10-05

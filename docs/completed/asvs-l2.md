@@ -48,13 +48,13 @@ the evidence in its row below. One closes with a recorded deviation (3.4.4).
 | Requirement | What was missing | What closed it |
 |---|---|---|
 | 2.2.3, 2.5.5 | No email when a password, second factor or recovery codes change | A `securityChange` auth email through the outbox, `en` and `ar` (`api/auth/auth.service.ts` `#notifySecurityChange`) |
-| 2.1.7 | No breached-password check | A bundled list, checked at every place a password is set ([ADR 0019](../decisions/0019-bundled-breached-password-list.md)) |
+| 2.1.7 | No breached-password check | A bundled list, checked at every place a password is set ([ADR 0021](../decisions/0021-bundled-breached-password-list.md)) |
 | 2.8.4, 2.8.5 | A TOTP code could open a second challenge within its 30 s | The last accepted step is kept per account and only later ones pass (`api/auth/totp/used-steps.ts`) |
 | 2.1.8, 2.1.12 | No strength meter and no show-password toggle on every password field | `Admin/PasswordField` on the four screens that choose a password (`apps/admin/src/ui/password-field.tsx`) |
 | 3.3.2 | A refresh family lived 30 days, renewed by use | Idle and absolute limits, `AUTH_SESSION_IDLE_MINUTES` (240) and `AUTH_SESSION_MAX_HOURS` (12) |
 | 3.4.4 | No cookie prefix | `__Secure-` over https; `__Host-` declined to keep `Path=/api/auth` (deviation, see the row) |
 | 4.3.1 | A second factor for administrators was a setting | Required for Admins and install admins whatever the setting; enrolment by challenge at the next sign-in |
-| 7.1.3, 7.2.1 | Sign-in failures only in the process log | An `auth.*` trail in install scope ([ADR 0020](../decisions/0020-auth-audit-trail-in-install-scope.md)) |
+| 7.1.3, 7.2.1 | Sign-in failures only in the process log | An `auth.*` trail in install scope ([ADR 0022](../decisions/0022-auth-audit-trail-in-install-scope.md)) |
 | 8.1.4 | Nothing alerted on rate-limit refusals | `rate_limit_refusals_total{bucket}` and an alert in the operations guide |
 | 8.3.2 | No contact export | `GET /api/brands/:brandId/contacts/:contactId/export`, Admin only, audited |
 | 14.4.2 | No `Content-Disposition` on JSON | `attachment; filename="api.json"` on every JSON answer (`api/http/json-disposition.ts`) |
@@ -112,7 +112,7 @@ the evidence in its row below. One closes with a recorded deviation (3.4.4).
 | 2.1.4 | Any printable Unicode allowed | Met | No character class rules in the schema |
 | 2.1.5 | Users can change their password | Met | `POST /api/me/password` |
 | 2.1.6 | Change requires current and new password | Met | Same route, step-up budget (`STEP_UP_RULE`) |
-| 2.1.7 | Checked against breached passwords | Met | The 46 146 entries of 12+ characters among SecLists' million most common, case-insensitive, checked by the wizard, invitation acceptance, reset and change (`api/auth/breached/breached-passwords.ts`, ADR 0019); `password-breached` drawn on the field; `breached-passwords.test.ts`, `auth.service.test.ts` › breached passwords |
+| 2.1.7 | Checked against breached passwords | Met | The 46 146 entries of 12+ characters among SecLists' million most common, case-insensitive, checked by the wizard, invitation acceptance, reset and change (`api/auth/breached/breached-passwords.ts`, ADR 0021); `password-breached` drawn on the field; `breached-passwords.test.ts`, `auth.service.test.ts` › breached passwords |
 | 2.1.8 | Password strength meter | Met | `PasswordStrengthBar` with its reading in the hint, on every field that chooses a password (`apps/admin/src/ui/password-field.tsx`, artboard `Admin/PasswordField`) |
 | 2.1.9 | No composition rules | Met | `docs/guides/authentication.md` "Passwords" |
 | 2.1.10 | No periodic rotation | Met | None exists |
@@ -257,7 +257,7 @@ already knows.
 |---|---|---|---|
 | 7.1.1 | No credentials or session tokens logged | Met | pino `redact` with `remove: true` (`api/logging/logger.ts`), token paths scrubbed, Semgrep `helpdock-secret-in-log` |
 | 7.1.2 | No other sensitive data logged | Met | `operations.md` "What a line never carries" |
-| 7.1.3 | Security-relevant events logged | Met | Every sign-in success and failure, lock, refused step-up, replayed code, reused refresh token and credential change is an `auth.*` row in install scope with address and user agent (`api/auth/auth-audit.ts`, ADR 0020); rate-limit refusals are counted in `rate_limit_refusals_total` |
+| 7.1.3 | Security-relevant events logged | Met | Every sign-in success and failure, lock, refused step-up, replayed code, reused refresh token and credential change is an `auth.*` row in install scope with address and user agent (`api/auth/auth-audit.ts`, ADR 0022); rate-limit refusals are counted in `rate_limit_refusals_total` |
 | 7.1.4 | Enough detail for an investigation | Met | Request id, role, user id, brand id on every line |
 | 7.2.1 | Authentication decisions logged | Met | As 7.1.3 |
 | 7.2.2 | Access control decisions logged | Partial | Refusals logged at `debug` by the exception filter; not audited |

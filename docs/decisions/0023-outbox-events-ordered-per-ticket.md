@@ -1,4 +1,4 @@
-# 0021 Run outbox events concurrently, ordered per ticket
+# 0023 Run outbox events concurrently, ordered per ticket
 
 Status: accepted
 Date: 2026-10-05

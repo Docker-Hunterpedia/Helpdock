@@ -4,14 +4,15 @@ How Helpdock talks to language models: the providers an install is configured
 with and their credentials, the model each brand uses, the one embedding model
 of the install and what changing it does, the guardrails every call passes
 through, the per-brand budget, and the knowledge the assistant reads and how
-it is retrieved (M7-01, M7-02, M7-03, M7-04, M7-08;
+it is retrieved, and how auto-reply answers customers (M7-01, M7-02, M7-03, M7-04,
+M7-06, M7-08;
 [REQUIREMENTS §4.7](../planning/REQUIREMENTS.md#47-ai),
 [ARCHITECTURE §10](../planning/ARCHITECTURE.md#10-ai-subsystem),
 [ADR 0005](../decisions/0005-single-embedding-model-per-install.md),
 [ADR 0018](../decisions/0018-pi-ai-provider-layer.md),
 [ADR 0020](../decisions/0020-knowledge-chunking-and-fusion.md)).
 
-This is the foundation the AI features build on. Agent assist, auto-reply,
+This is the foundation the AI features build on, and auto-reply. Agent assist,
 triage and knowledge ingest arrive with their own deliverables. Everything
 below is configured in admin under **AI** (M7-10, see [The screens](#the-screens)),
 through the API, or pinned in the environment.
@@ -411,6 +412,118 @@ Help center search and the widget's suggestions gain the same semantic search
 for articles beside their full-text search, filtered by the reader's audience
 the same way; without an embedding model they stay full text only.
 
+## Auto-reply
+
+With auto-reply on for a channel (AI › Assistant, `PUT …/ai/modes`), the
+assistant answers a customer's message on the widget, by email or on Telegram
+from the brand's **public** knowledge, or hands the conversation to the team
+(M7-06, REQUIREMENTS §4.7, DOMAIN-RULES §9). Every channel starts off.
+
+### What happens to a message
+
+```
+inbound message ──▶ ticket.created / ticket.replied ──▶ outbox
+worker: `ai` subscriber   channel on? not paused? a customer's public message?
+                          ──▶ ai.auto_reply job (`ai` queue, job id per message)
+job:   brand tx     still open, not paused, still the newest message
+       no tx        "talk to a human"?  ──▶ handoff
+                    retrieve (audience visitor) ──▶ nothing found ──▶ handoff
+                    complete() (redaction, budget, no tools, logged)
+                    validate citations ──▶ confidence ──▶ answer or handoff
+       brand tx     lock the ticket · paused or superseded now? ──▶ send nothing
+                    answer:  AI message, first response, channel delivery
+                    handoff: handoff message, pause, channel delivery
+```
+
+- **Retrieval** asks with `audience: 'visitor'` in the language of the
+  customer's message, so internal sources and unpublished articles never reach
+  the model (DOMAIN-RULES §5). The model sees the numbered sources, the
+  conversation's last eight customer and assistant messages, the auto-reply
+  rules and then the brand's system prompt — the Arabic one for an Arabic
+  message, when the brand wrote one.
+- **The answer** is an AI-authored public message (`kind: ai`, `author_type:
+  ai`). The widget draws it with the AI badge, its sources and "Was this
+  helpful?"; email and Telegram send it through their usual outbound path,
+  with the public sources listed by number under the text. Staff see it in
+  the thread with the AIBadge, every source marked Public or Internal, and the
+  AI log.
+- **First response**: the answer meets the first-response clock when the
+  brand's "AI reply satisfies the first-response SLA" is on (the default; it is
+  `aiCountsAsFirstResponse`, the same setting Ticketing › SLAs shows). A
+  handoff message never does. See [SLAs](slas.md#what-counts-as-a-response).
+- **Assignment** is untouched: the ticket was routed when it arrived, as any
+  other, and sits in the queue while the assistant answers.
+
+### Confidence
+
+The answer goes out only when its confidence reaches the channel's threshold
+(0.70 by default, 0 to 1 per channel). Confidence is two signals multiplied:
+
+```
+confidence = self × (0.6 + 0.4 × support)          0 when the answer cites nothing valid
+```
+
+- **self** is the model's own estimate: the auto-reply rules make it end its
+  answer with `CONFIDENCE: 0.82`, which is removed before anyone sees the
+  answer. A missing or unreadable line counts as 0.
+- **support** is how strongly retrieval backed the best source the answer
+  cites: its fused score divided by the most a chunk can score — first in every
+  ranker that ran, with the language boost when it applied. About 1 when both
+  the vector and the full-text ranker put it at the top, about 0.5 when only
+  one of two found it.
+
+Support can lower the model's figure by up to 40 % and never raise it. An
+answer the model is sure of (0.95), citing a source only one ranker found,
+scores 0.76. The thresholds of DOMAIN-RULES §9 (unanswerable questions handed
+off ≥ 95 %) are what the evaluation harness (M7-11) measures the default
+against; raise a channel's threshold if the assistant answers questions it
+should hand off. `decideAutoReply` in `@helpdock/ai` is the whole rule.
+
+### Handoff
+
+The assistant hands off — sends the brand's handoff message (or the built-in
+one, in the customer's language) and stops — when:
+
+- its confidence is under the threshold, or retrieval found nothing;
+- the answer cited a source it was not given (the citation is invalid, so the
+  answer cannot be trusted; DOMAIN-RULES §5).
+
+It stops without a message of its own when the customer asks for a person
+(the widget's **Talk to a human**, or typing it — "talk to a human", "speak
+to someone", "أريد موظفاً", "أريد التحدث مع موظف"), and when a staff member
+replies in public or assigns the ticket.
+
+Every one of these sets `tickets.ai_paused_at` (with the reason) for the rest
+of the conversation. Every job reads it twice: before it asks the model, and
+again under the ticket's row lock immediately before it sends — the lock a
+staff reply and **Talk to a human** take — so a job that was queued, or
+already waiting on the model, when the conversation was handed off sends
+nothing. The thread shows a System event saying why ("Handed off to a person
+· confidence 0.42 below 0.70"), and the ticket view the **Assistant paused**
+strip.
+
+**Return to assistant** on that strip (`POST …/tickets/:ticketId/ai/resume`,
+anyone who may reply on the ticket) clears the pause; it is audited
+(`ai.auto_reply.resumed`) and is a System event too. A closed conversation
+that continues does so on a new ticket, which starts unpaused.
+
+### When it says nothing
+
+With the budget's hard stop reached, or no model configured, the job ends
+without a word: the customer gets the ordinary chat, a person answers, and
+nothing marks the conversation as AI. The refused call is in the AI log, and
+AI › Assistant shows the exceeded window.
+
+### Deflection
+
+Reports' **AI deflection** (DOMAIN-RULES §15) counts the conversations
+auto-reply took part in — those it answered or handed off, or whose visitor
+pressed **Talk to a human** — by the day it first did (`tickets.ai_eligible_at`).
+A conversation is deflected when the assistant answered it
+(`ai_answered_at`), it was never handed off for any reason
+(`ai_handed_off_at`, which **Return to assistant** does not clear), and it
+closed or has been quiet for 24 hours.
+
 ## API
 
 | Route | Permission | |
@@ -430,6 +543,7 @@ the same way; without an embedding model they stay full text only.
 | `PUT /api/brands/:brandId/ai/prompt` | `ai:manage` | The system prompts (`systemPrompt`, optional `systemPromptAr`), up to 8000 characters each |
 | `GET /api/brands/:brandId/ai/calls` | `ai:manage` | The brand's AI activity, keyset-paged |
 | `GET /api/brands/:brandId/tickets/:ticketId/ai-calls` | `ticket:read` | The ticket's AI log, with the redaction map |
+| `POST /api/brands/:brandId/tickets/:ticketId/ai/resume` | `ticket:write` | "Return to assistant": ends the auto-reply pause, audited. Answers the ticket's `ai` state |
 | `GET /api/brands/:brandId/knowledge/sources` | `ai:manage` | Sources with visibility, schedule, next sync, status and progress, counts; the embedding model; whether rendering and each OAuth app are available |
 | `POST /api/brands/:brandId/knowledge/sources` | `ai:manage` | Add a crawl, Notion or Drive source. 400 `rendering-disabled` |
 | `GET`, `PATCH`, `DELETE /api/brands/:brandId/knowledge/sources/:sourceId` | `ai:manage` | Read, edit (name, visibility, schedule, config, Notion token), remove. 409 `article-source-fixed` |
@@ -476,6 +590,14 @@ declares, or for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`). 
   At 80 % of a limit a warning banner says so; at 100 % a danger banner says
   auto-reply is off until the window resets, with **Raise limit**. A Team
   Leader reads the modes, guardrails and budget and edits the prompt.
+
+On a **ticket** the assistant has taken part in (`Admin/Ticket-AI`), its
+answers and handoff messages carry the AI badge, their sources with
+Public/Internal, and an **AI log** disclosure (model, tokens, cost, redactions,
+confidence against the threshold, sources retrieved and cited); a pause or a
+resume is a System event; while paused, the **Assistant paused** strip above
+the composer offers **Return to assistant**; and the details panel's **AI on
+this ticket** totals its calls, tokens and cost.
 
 The first-run wizard has an optional **AI provider** step after Outgoing
 email: choose a provider, paste an API key (or subscription credentials),

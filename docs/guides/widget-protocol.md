@@ -258,6 +258,8 @@ no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
 | `POST /conversations/:id/typing` | `{ "typing": true }` | `204` |
 | `POST /conversations/:id/read` | `{ "seq": 12 }` | `204` |
 | `POST /conversations/:id/transcript` | `{ "email": "…" }` | `202` |
+| `POST /conversations/:id/handoff` | | `widgetConversationSchema` |
+| `POST /conversations/:id/messages/:messageId/feedback` | `widgetFeedbackRequestSchema` | `widgetMessageSchema` |
 
 The conversation list holds what this visitor may see: the conversations they
 started, plus any their verified contact may see.
@@ -355,6 +357,53 @@ shows agents. It has no field that could carry an internal note.
   access, and goes through the outbox. It works only when the brand turned
   transcripts on (`unavailable` otherwise) and only for `chat` conversations
   (`read_only` otherwise). Each conversation allows three transcripts an hour.
+
+### The assistant
+
+When the brand turns auto-reply on for the widget (AI › Assistant, M7-06),
+the assistant may answer a visitor's message before a person does. Its
+messages arrive like any other, as `message` frames and in the catch-up, with
+`author: "ai"` and an `ai` part:
+
+```json
+{
+  "author": "ai",
+  "text": "Card refunds show up 3 to 5 business days after we issue them [1].",
+  "html": null,
+  "ai": {
+    "kind": "answer",
+    "citations": [
+      { "marker": 1, "title": "Refund timelines", "url": "https://help.example.com/en/articles/refund-timelines", "articleId": "0192c3f0-…" }
+    ],
+    "feedback": null
+  }
+}
+```
+
+- `text` is the answer alone; each `[n]` in it is a citation, and
+  `citations` lists the sources by that number. They are public, published
+  sources only (DOMAIN-RULES §5). Open an article with `articleId` in the
+  client, or `url` in a browser when there is one.
+- `kind: "handoff"` is the brand's handoff text: the assistant was not sure
+  enough, and a person will answer. Draw it like an answer, without sources or
+  feedback, then the handoff line.
+- `POST …/messages/:messageId/feedback` with `{ "feedback": "helpful" }` or
+  `"not_helpful"` records "Was this helpful?" on an `answer`; the response is
+  the message with `ai.feedback` set. Anything else is `not_found`.
+- `POST …/handoff` is "Talk to a human": the assistant stops answering this
+  conversation for good, and nothing it was still preparing is sent. The
+  response is the conversation with `aiHandedOff: true`. Pressing it again
+  changes nothing. Typing "talk to a human" (or the Arabic) does the same on
+  the server.
+- `aiHandedOff` on the conversation, and on `conversation` frames, says the
+  assistant has stepped back: by its own handoff, the visitor's request, or a
+  person replying or taking the conversation. Offer "Talk to a human" only
+  while the assistant's last message is an `answer` and `aiHandedOff` is not
+  true.
+
+A visitor is never told why the assistant is quiet: with auto-reply off, a
+spent AI budget or no model configured, the chat is the ordinary chat, with
+no `ai` messages and nothing marked as AI.
 
 ## Help center
 

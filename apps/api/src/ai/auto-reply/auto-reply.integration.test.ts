@@ -44,6 +44,7 @@ import { createLogger } from '../../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../../seed/dev-seed.js';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { FakeStorage, silentJobLogger } from '../../testing/media.js';
+import { signInForTest } from '../../testing/staff-sign-in.js';
 import { createAiRuntime } from '../db-ai-ports.js';
 import { DbAiUsage } from '../db-ai-usage.js';
 import { type AutoReplyDeps, runAutoReply } from './auto-reply.job.js';
@@ -300,13 +301,7 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
     });
     app = await createApiApp({ runtime, objectStorage: storage, ai: { http: embeddingsHttp } });
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
-    const signIn = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email: seeded.email, password: seeded.password }),
-    });
-    adminToken = (signIn.json() as { accessToken: string }).accessToken;
+    adminToken = await signInForTest(app, { email: seeded.email, password: seeded.password });
     fake = createFakeModel();
 
     // The model: an OpenAI-compatible server, answered by the faux provider.

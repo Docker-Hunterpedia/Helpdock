@@ -77,6 +77,13 @@ export const csatBrandSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .nullable(),
+  /**
+   * "Browse the help center" (`CsatEN`): the brand's help center on its
+   * primary domain, or under `/hc/<brandId>` until it has one. Null while
+   * there is nothing public to read: internal-only, or no public article
+   * published.
+   */
+  helpCenterUrl: z.url().nullable(),
 });
 export type CsatBrand = z.infer<typeof csatBrandSchema>;
 

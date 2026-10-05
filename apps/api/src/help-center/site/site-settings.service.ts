@@ -16,8 +16,8 @@ import { enqueueSiteChanged } from '../events.js';
 import { HelpCenterFailure } from '../help-center-failure.js';
 import type { HelpCenterContext } from '../structure.service.js';
 import { sanitizeCustomCss } from './custom-css.js';
-import { HC_FALLBACK_PREFIX } from './paths.js';
 import { readSiteConfig, readyImage, type SiteConfig, toSiteImage } from './site-config.js';
+import { helpCenterSiteUrl } from './site-url.js';
 import { themeContrastError } from './theme.js';
 
 /**
@@ -47,11 +47,7 @@ export class HelpCenterSiteSettingsService {
 
   /** Where the help center answers: its primary verified domain, or the install's fallback path. */
   siteUrl(config: Pick<SiteConfig, 'brandId' | 'primaryDomain'>): string {
-    if (config.primaryDomain !== null) {
-      const scheme = this.#appUrl.startsWith('https:') ? 'https' : 'http';
-      return `${scheme}://${config.primaryDomain}/`;
-    }
-    return `${this.#appUrl}${HC_FALLBACK_PREFIX}/${config.brandId}/`;
+    return helpCenterSiteUrl(this.#appUrl, config);
   }
 
   async updateAppearance(

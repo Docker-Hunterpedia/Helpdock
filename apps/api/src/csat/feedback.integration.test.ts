@@ -9,6 +9,11 @@ import {
   type Db,
   type DbHandle,
   departments,
+  hcArticles,
+  hcArticleVersions,
+  hcCategories,
+  hcSections,
+  hcSettings,
   outbox,
   ticketTimeEntries,
   userBrandRoles,
@@ -601,12 +606,63 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
       expect(status).toBe(200);
       expect(body).toEqual({
         state: 'open',
-        brand: { name: expect.any(String), locale: 'en', accent: null },
+        brand: { name: expect.any(String), locale: 'en', accent: null, helpCenterUrl: null },
         ticket: {
           reference: `${ticket.prefix}-${String(ticket.number)}`,
           subject: 'Invoice shows the wrong VAT number',
           closedBy: null,
         },
+      });
+    });
+
+    it('links the brand’s help center once it has a public article, and not while internal-only (M9-04)', async () => {
+      const { ticket } = await createTicket({ subject: 'Where do I find my invoices?' });
+      const token = await closeAndSurvey(ticket.id);
+      const helpCenterUrl = async () =>
+        (await call<CsatSurveyView>('GET', publicPath(token), null)).body.brand.helpCenterUrl;
+
+      expect(await helpCenterUrl()).toBeNull();
+
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        const [category] = await tx
+          .insert(hcCategories)
+          .values({ brandId: seeded.brandId, slug: 'billing', names: { en: 'Billing' } })
+          .returning();
+        const [section] = await tx
+          .insert(hcSections)
+          .values({
+            brandId: seeded.brandId,
+            categoryId: String(category?.id),
+            slug: 'invoices',
+            names: { en: 'Invoices' },
+          })
+          .returning();
+        const [article] = await tx
+          .insert(hcArticles)
+          .values({ brandId: seeded.brandId, sectionId: String(section?.id), slug: 'invoices' })
+          .returning();
+        await tx.insert(hcArticleVersions).values({
+          brandId: seeded.brandId,
+          articleId: String(article?.id),
+          locale: 'en',
+          status: 'published',
+          title: 'Finding your invoices',
+          publishedTitle: 'Finding your invoices',
+          publishedAt: new Date(),
+        });
+      });
+      expect(await helpCenterUrl()).toBe(`${APP_URL}/hc/${seeded.brandId}/`);
+
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.insert(hcSettings).values({ brandId: seeded.brandId, access: 'internal_only' }),
+      );
+      expect(await helpCenterUrl()).toBeNull();
+
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await tx.delete(hcSettings);
+        await tx.delete(hcArticles);
+        await tx.delete(hcSections);
+        await tx.delete(hcCategories);
       });
     });
 

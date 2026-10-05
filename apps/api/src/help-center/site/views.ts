@@ -8,6 +8,7 @@ import type {
 } from '@helpdock/schemas';
 import { HC_POPULAR_COUNT } from '@helpdock/schemas';
 import type { PopularArticle, SearchHit } from '../ports.js';
+import { type FeedbackStep, feedbackHref } from './feedback-step.js';
 import type { SiteLinks } from './paths.js';
 import { articleBodyHtml } from './render/article-body.js';
 import { type ChromeView, type HeadView, type NavLink, renderDocument } from './render/layout.js';
@@ -444,7 +445,7 @@ const listingHead = (
 // ---------------------------------------------------------------- article
 
 export interface ArticleOptions {
-  readonly feedbackAnswered: boolean;
+  readonly feedback: FeedbackStep;
 }
 
 const sectionNavOf = (context: PageContext, sectionId: string, currentId: string): NavLink[] => {
@@ -585,7 +586,8 @@ export const renderArticle = (
         articleId: article.id,
         locale: article.locale,
         slug: article.slug,
-        answered: options.feedbackAnswered,
+        step: options.feedback,
+        skipHref: feedbackHref(links.article(locale, article.slug), 'thanks'),
       },
       help: help(context, article.id),
     }),

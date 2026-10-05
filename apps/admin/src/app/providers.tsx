@@ -8,6 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { BrowserRouter } from 'react-router';
+import type { AiApi } from '../ai/api.js';
+import { AiApiProvider } from '../ai/context.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
@@ -118,6 +120,8 @@ export interface AppProvidersProps {
   readonly browserPush?: BrowserPush;
   /** Defaults to the matching adapter. Only Brand › Domains reads it (M5-07). */
   readonly domainsApi?: DomainsApi;
+  /** Defaults to the matching adapter. Only `Admin/AI` reads it (M7-10). */
+  readonly aiApi?: AiApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -151,6 +155,7 @@ export function AppProviders({
   notificationsApi,
   browserPush,
   domainsApi,
+  aiApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -178,6 +183,7 @@ export function AppProviders({
   const notifications = notificationsApi ?? fallback.notifications;
   const push = browserPush ?? fallback.browserPush;
   const domains = domainsApi ?? fallback.domains;
+  const ai = aiApi ?? fallback.ai;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -244,13 +250,15 @@ export function AppProviders({
               >
                 <AutomationApiProvider api={automation}>
                   <DomainsApiProvider api={domains}>
-                    <HelpCenterApiProvider api={helpCenter}>
-                      <NotificationsProvider api={notifications} push={push}>
-                        <ToastProvider>
-                          <Router>{children}</Router>
-                        </ToastProvider>
-                      </NotificationsProvider>
-                    </HelpCenterApiProvider>
+                    <AiApiProvider api={ai}>
+                      <HelpCenterApiProvider api={helpCenter}>
+                        <NotificationsProvider api={notifications} push={push}>
+                          <ToastProvider>
+                            <Router>{children}</Router>
+                          </ToastProvider>
+                        </NotificationsProvider>
+                      </HelpCenterApiProvider>
+                    </AiApiProvider>
                   </DomainsApiProvider>
                 </AutomationApiProvider>
               </AuthApiProvider>

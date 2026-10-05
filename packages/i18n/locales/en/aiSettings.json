@@ -1,0 +1,359 @@
+{
+  "title": "AI",
+  "subtitle": {
+    "install": "Install-wide · providers, models, embeddings and transcription",
+    "brand": "{{brand}} brand · modes, guardrails, budget and prompt"
+  },
+  "tabList": "AI sections",
+  "tabs": {
+    "providers": "Providers",
+    "knowledge": "Knowledge",
+    "assistant": "Assistant"
+  },
+  "knowledge": {
+    "placeholder": "Knowledge sources arrive with milestone M7-03."
+  },
+  "loadFailed": "This could not be loaded. Check your connection and try again.",
+  "actionFailed": "That did not work. Check your connection and try again.",
+  "adminOnly": "Only an Admin can change this.",
+  "save": "Save",
+  "discard": "Discard",
+  "period": {
+    "day": "daily",
+    "month": "monthly"
+  },
+  "languages": {
+    "en": "English",
+    "ar": "Arabic",
+    "arNative": "العربية"
+  },
+  "channels": {
+    "widget": "Widget",
+    "email": "Email",
+    "telegram": "Telegram"
+  },
+  "kinds": {
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "google": "Google",
+    "openrouter": "OpenRouter",
+    "openai-compatible": "OpenAI-compatible server"
+  },
+  "refusals": {
+    "locked-by-environment": "This is set in the server's .env, so it cannot be changed here.",
+    "unknown-provider": "That provider no longer exists. Reload the page.",
+    "unknown-kind": "Helpdock does not know that kind of provider.",
+    "unknown-model": "That provider does not offer the model.",
+    "credential-required": "This provider needs a credential. Enter the API key or the sign-in credentials.",
+    "oauth-unsupported": "This provider does not offer subscription sign-in. Use an API key.",
+    "provider-in-use": "The install default or a brand still uses this provider. Choose another model first.",
+    "discovery-failed": "The provider could not be asked for its models. Check the key and the address.",
+    "reembed-not-confirmed": "Changing the embedding model re-embeds every chunk. Confirm it to go ahead."
+  },
+  "env": {
+    "chip": "Set by environment",
+    "banner_one": "{{count}} setting is set by environment. {{keys}} comes from .env and overrides anything saved here. It is shown locked.",
+    "banner_other": "{{count}} settings are set by environment. {{keys}} come from .env and override anything saved here. They are shown locked.",
+    "hintBefore": "Set by",
+    "hintAfter": "in .env. Change it there and restart; it cannot be edited here."
+  },
+  "secret": {
+    "replace": "Replace"
+  },
+  "credential": {
+    "apiKey": "API key",
+    "oauth": "OAuth sign-in",
+    "none": "No key",
+    "oauthExpires": "token expires {{date}}"
+  },
+  "providers": {
+    "heading": "Providers",
+    "caption": "Install-wide · every brand uses these credentials · Install admins only",
+    "add": "Add provider",
+    "tableLabel": "Providers",
+    "columns": {
+      "provider": "Provider",
+      "credential": "Credential",
+      "actions": "Actions"
+    },
+    "default": "Default",
+    "edit": "Edit {{name}}",
+    "editShort": "Edit",
+    "footer": "Credentials are encrypted with APP_MASTER_KEY and never sent back to the browser. Keys set in .env override what is saved here and are locked."
+  },
+  "provider": {
+    "addHeading": "Add provider",
+    "addCaption": "Credentials are encrypted when you save",
+    "editCaption": "Edit provider",
+    "locked": "HD_AI_PROVIDERS in .env sets every provider, so none can be changed here.",
+    "kind": "Provider",
+    "baseUrl": "Base URL",
+    "baseUrlOptional": "Base URL (optional)",
+    "baseUrlHint": "Only for OpenAI-compatible servers or a gateway. Fetched through the outbound safety client.",
+    "id": "Id",
+    "idHint": "A lower-case name brands refer to it by, such as openai. It cannot be changed later.",
+    "label": "Name",
+    "credentialType": "Credential type",
+    "auth": {
+      "apiKey": {
+        "title": "API key",
+        "body": "The supported path. Billed to your provider account."
+      },
+      "oauth": {
+        "title": "OAuth or subscription sign-in",
+        "body": "At your own risk: check the provider's terms before using a personal subscription.",
+        "unavailable": "This provider offers no subscription sign-in."
+      },
+      "none": {
+        "title": "No key",
+        "body": "A local server that asks for none, such as Ollama."
+      }
+    },
+    "apiKey": "API key",
+    "apiKeyHint": "Encrypted on save; the value is never shown again.",
+    "replaceKey": "Replace the API key of {{name}}",
+    "oauthLabel": "Credentials from auth.json",
+    "oauthHint": "Run npx @mariozechner/pi-ai login {{kind}} on your own machine and paste the auth.json it writes.",
+    "oauthStored": "Sign-in credentials are stored. Helpdock refreshes them when they expire.",
+    "discover": "Discover models",
+    "discoverSaveFirst": "Save the provider to discover its models.",
+    "modelsFound_one": "{{count}} model found",
+    "modelsFound_other": "{{count}} models found",
+    "modelsLabel": "Models of {{name}}",
+    "modelColumns": {
+      "model": "Model",
+      "context": "Context",
+      "price": "In / out per 1M"
+    },
+    "modelsShowing": "Showing {{shown}} of {{total}} · prices from pi-ai's model registry, used for cost in ai_calls",
+    "showAll": "Show all",
+    "remove": "Remove provider",
+    "removeTitle": "Remove {{name}}?",
+    "removeBody": "Its credentials are deleted and no brand can use it any more.",
+    "save": "Save provider",
+    "saved": "Provider saved.",
+    "removed": "Provider removed.",
+    "problems": {
+      "idInvalid": "Use 1 to 40 lower-case letters, digits and hyphens.",
+      "labelRequired": "Give the provider a name.",
+      "baseUrlRequired": "Enter the server's address.",
+      "baseUrlInvalid": "Enter an address starting with http:// or https://.",
+      "apiKeyRequired": "Enter the API key.",
+      "oauthInvalid": "Paste the JSON with access, refresh and expires."
+    }
+  },
+  "chatModel": {
+    "heading": "Chat model",
+    "caption": "Used by agent assist, auto-reply and triage",
+    "installDefault": "Install default",
+    "installDefaultHint": "Only models discovered from a provider are listed.",
+    "lockedHint": "Set by HD_AI_DEFAULT_PROVIDER and HD_AI_DEFAULT_MODEL in .env.",
+    "notSet": "Not set",
+    "perBrand": "Per-brand override",
+    "perBrandCaption": "A brand's Admin may pick another model. Tokens and cost are tracked per brand either way.",
+    "useDefault": "Install default",
+    "brandModel": "Model for {{brand}}",
+    "saved": "Chat model saved."
+  },
+  "transcription": {
+    "heading": "Voice transcription",
+    "caption": "Voice notes from the widget and Telegram get a transcript agents can read",
+    "endpoint": "Whisper-compatible endpoint",
+    "endpointHint": "For example https://api.openai.com/v1/audio/transcriptions. Empty turns transcription off.",
+    "endpointInvalid": "Enter an address starting with http:// or https://, or leave it empty.",
+    "model": "Model",
+    "apiKey": "API key",
+    "replaceKey": "Replace the transcription API key",
+    "on": "On · voice notes are transcribed",
+    "off": "Off · voice notes are not transcribed",
+    "turnOff": "Turn off",
+    "saved": "Transcription saved."
+  },
+  "embeddings": {
+    "heading": "Embeddings",
+    "caption": "One model for the whole install · used to search knowledge for every brand",
+    "status": {
+      "ready": "Ready",
+      "reindexing": "Reindexing {{percent}} %",
+      "unconfigured": "Not configured"
+    },
+    "reindexing": "Reindexing to {{model}} ({{dims}} dims). Until it finishes, auto-reply and suggestions use full-text search only. Helpdock never serves results from two embedding models at once.",
+    "failed": "The re-embed stopped: {{error}}. It is retried every minute, and nothing mixed is served meanwhile.",
+    "endpoint": "Endpoint",
+    "endpointHint": "OpenAI-compatible: OpenAI, Voyage or a local Ollama.",
+    "model": "Model",
+    "dims": "Dimensions",
+    "dimsHint": "Max 2000 (pgvector index).",
+    "provider": "Provider name",
+    "price": "Price per 1M tokens (USD)",
+    "apiKey": "API key",
+    "replaceKey": "Replace the embeddings API key",
+    "progressHeading": "Progress",
+    "progressLabel": "Re-embed progress",
+    "allBrands": "Every brand",
+    "done": "done",
+    "readyLine": "{{model}} · {{dims}} dims · {{chunks}} chunks. Every chunk carries the model's name; search only ranks chunks of the current model.",
+    "frozen": "These settings can be changed again when reindexing finishes.",
+    "saved": "Embedding settings saved.",
+    "problems": {
+      "providerRequired": "Name the provider, for the cost log.",
+      "baseUrlInvalid": "Enter an address starting with http:// or https://.",
+      "modelRequired": "Enter the model.",
+      "dimsInvalid": "Enter a whole number from 1 to 2000.",
+      "dimsTooMany": "{{dims}} is above the 2000 the vector index supports. Pick a smaller model, or one that can shorten its output (for example 1536).",
+      "priceInvalid": "Enter a price from 0 to 1000."
+    },
+    "dialog": {
+      "title": "Change the embedding model?",
+      "body": "Every knowledge source of every brand is embedded again: {{chunks}} chunks, at the new model's price.",
+      "to": "changes to",
+      "fallback": "While it runs, auto-reply and suggestions fall back to full-text search, and admins see a reindexing banner.",
+      "dropped": "The old index is dropped first. Vectors from the two models are never ranked together.",
+      "failure": "If it fails, the status stays “Reindexing” until it is retried. Nothing mixed is served.",
+      "confirm": "Change and re-embed"
+    }
+  },
+  "assistant": {
+    "noProvider": "No AI provider is set up. Modes stay off until an install admin adds one in",
+    "reindexing": "Knowledge is being reindexed. Until it finishes, auto-reply and suggestions use full-text search only.",
+    "seeProgress": "See progress"
+  },
+  "budgetBanner": {
+    "exceededTitle": "Budget reached — auto-reply is off until {{date}}.",
+    "exceededAssistOn": "The {{period}} limit of {{limit}} was reached. Visitors are answered by people; agent assist stays on. Raise the limit to turn auto-reply back on now.",
+    "exceededAssistOff": "The {{period}} limit of {{limit}} was reached. Visitors are answered by people, and agent assist is off too. Raise the limit to turn AI back on now.",
+    "raise": "Raise limit",
+    "warningTitle": "{{percent}} % of the {{period}} AI budget used.",
+    "warningBody": "{{spent}} of {{limit}}. Auto-reply stops at {{limit}}."
+  },
+  "modes": {
+    "heading": "Modes",
+    "caption": "Each mode is on or off for this brand",
+    "agentAssist": "Agent assist",
+    "agentAssistBody": "Helps agents in the ticket. Nothing is sent to a customer without an agent pressing Send. May use internal sources; their citations are marked internal.",
+    "features": {
+      "suggest": "Suggest reply with citations",
+      "summarize": "Summarise ticket",
+      "triage": "Suggest tags, priority, department",
+      "translate": "Translate AR ↔ EN",
+      "rewrite": "Rewrite tone",
+      "draft": "Draft article (Team Leader approves)"
+    },
+    "autoReply": "Auto-reply",
+    "autoReplyBody": "Answers visitors from public knowledge with citations and an AI badge. Below the confidence threshold it hands off to a person instead of answering.",
+    "columns": {
+      "channel": "Channel",
+      "on": "On",
+      "threshold": "Confidence threshold",
+      "state": "State"
+    },
+    "autoReplyOn": "Auto-reply on {{channel}}",
+    "threshold": "{{channel}} confidence threshold",
+    "offCaption": "Off · replies come from people only",
+    "state": {
+      "active": "Active",
+      "paused": "Paused · budget"
+    },
+    "firstResponse": "AI reply satisfies first-response SLA",
+    "firstResponseBody": "The same setting as in Ticketing › SLAs. A handoff message never counts.",
+    "slaLink": "Open SLA settings",
+    "handoff": "Handoff message",
+    "handoffBody": "Sent when the assistant hands off or a visitor asks for a person (“talk to a human” always works). After a handoff the assistant stays quiet for the rest of the conversation unless an agent returns it.",
+    "handoffHint": "Empty uses the built-in wording.",
+    "triageNote": "Auto-triage is not a mode here: it runs as an AI triage action in",
+    "save": "Save modes",
+    "saved": "Modes saved."
+  },
+  "guardrails": {
+    "heading": "Guardrails",
+    "caption": "On for every brand; only the injection filter can be turned off",
+    "alwaysOn": "Always on",
+    "fixedInV1": "Fixed in v1",
+    "saved": "Guardrails saved.",
+    "pii": {
+      "title": "PII redaction",
+      "body": "Emails, phone numbers, card numbers (Luhn-checked) and IBANs are replaced with placeholders before any text reaches the model, and restored for agents in the reply. The model never sees the originals."
+    },
+    "injection": {
+      "title": "Injection filter on ingested content",
+      "body": "Crawled and imported text is scanned for instructions aimed at the assistant; they are stripped and the chunk is marked suspicious."
+    },
+    "noTools": {
+      "title": "No tools or actions",
+      "body": "The assistant can only read knowledge and write text. It cannot change tickets, call services or send anything an agent or a rule did not allow."
+    },
+    "logged": {
+      "title": "Every output is logged",
+      "body": "Model, prompt hash, sources, tokens and cost are stored for each call and shown on the ticket. Bodies are kept for the brand's AI log retention."
+    }
+  },
+  "budget": {
+    "heading": "Budget",
+    "caption": "USD, from the cost of each call",
+    "today": "Today",
+    "of": "of {{limit}}",
+    "noLimitFigure": "{{spent}}",
+    "noLimit": "No limit",
+    "meterCaption": {
+      "ok": "{{percent}} % · resets at midnight UTC",
+      "warning": "{{percent}} % · alert recorded",
+      "exceeded": "{{percent}} % · hard stop"
+    },
+    "progress": {
+      "day": "Daily spend {{percent}} %",
+      "month": "Monthly spend {{percent}} %"
+    },
+    "limit": {
+      "day": "Daily limit (USD)",
+      "month": "Monthly limit (USD)"
+    },
+    "limitHint": "Empty for no limit.",
+    "invalid": "Enter an amount above 0, or leave it empty.",
+    "alertNote": "At 80 % of either limit an alert is written to the brand's audit log.",
+    "hardStop": "At 100 %: hard stop",
+    "hardStopBody": "Auto-reply turns off on every channel until the period resets or the limit is raised.",
+    "keepAssist": "Keep agent assist on after the hard stop",
+    "save": "Save budget",
+    "saved": "Budget saved."
+  },
+  "prompt": {
+    "heading": "System prompt",
+    "caption": "Tone, language policy and forbidden topics · Admins and Team Leaders can edit",
+    "languageLabel": "Prompt language",
+    "label": {
+      "en": "Prompt for English conversations",
+      "ar": "Prompt for Arabic conversations"
+    },
+    "arHint": "Empty: the English prompt is used for Arabic conversations too.",
+    "hint": "Helpdock adds its own rules after yours (cite sources, hand off when unsure, no tools). They cannot be removed here. PII is redacted before the prompt is sent.",
+    "count_one": "{{count}} character",
+    "count_other": "{{count}} characters",
+    "save": "Save prompt",
+    "saved": "Prompt saved."
+  },
+  "activity": {
+    "heading": "AI activity",
+    "caption": "Recent calls for this brand · tokens in / out",
+    "listLabel": "AI calls",
+    "empty": "No AI calls yet.",
+    "loadMore": "Load more",
+    "footer": "Each row is one ai_calls entry. Open the ticket to see the sources it used.",
+    "noModelCall": "no model call",
+    "tokens": "{{in}} / {{out}} tok",
+    "status": {
+      "refused": "skipped · budget",
+      "error": "failed"
+    },
+    "features": {
+      "suggestReply": "Suggest reply",
+      "summarize": "Summarise",
+      "translate": "Translate",
+      "rewrite": "Rewrite tone",
+      "triage": "Triage",
+      "draftArticle": "Draft article",
+      "autoReply": "Auto-reply",
+      "transcribe": "Transcribe",
+      "embed": "Knowledge index"
+    }
+  }
+}

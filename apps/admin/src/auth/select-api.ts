@@ -1,3 +1,6 @@
+import type { AiApi } from '../ai/api.js';
+import { HttpAiApi } from '../ai/http-api.js';
+import { MockAiApi } from '../ai/mock-api.js';
 import type { AutomationApi } from '../automation/api.js';
 import { HttpAutomationApi } from '../automation/http-api.js';
 import { MockAutomationApi } from '../automation/mock-api.js';
@@ -68,6 +71,8 @@ export interface AdminApis {
   readonly browserPush: BrowserPush;
   /** M5-07: Brand › Domains. */
   readonly domains: DomainsApi;
+  /** M7-10: `Admin/AI`. */
+  readonly ai: AiApi;
 }
 
 /**
@@ -114,6 +119,7 @@ export function createApis(
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
       domains: new HttpDomainsApi(transport),
+      ai: new HttpAiApi(transport),
     };
   }
 
@@ -150,5 +156,6 @@ export function createApis(
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    ai: new MockAiApi(),
   };
 }

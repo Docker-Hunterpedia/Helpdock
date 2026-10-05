@@ -76,6 +76,7 @@ describe('AppShell', () => {
       'Ticketing',
       'Automation',
       'Channels',
+      'AI',
       'Staff and roles',
       'System',
     ]);

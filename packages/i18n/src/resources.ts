@@ -1,4 +1,5 @@
 import arAdmin from '../locales/ar/admin.json' with { type: 'json' };
+import arAiSettings from '../locales/ar/aiSettings.json' with { type: 'json' };
 import arAuth from '../locales/ar/auth.json' with { type: 'json' };
 import arBrand from '../locales/ar/brand.json' with { type: 'json' };
 import arChannels from '../locales/ar/channels.json' with { type: 'json' };
@@ -22,6 +23,7 @@ import arWebform from '../locales/ar/webform.json' with { type: 'json' };
 import arWidget from '../locales/ar/widget.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
+import enAiSettings from '../locales/en/aiSettings.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
 import enBrand from '../locales/en/brand.json' with { type: 'json' };
 import enChannels from '../locales/en/channels.json' with { type: 'json' };
@@ -89,6 +91,8 @@ export const NAMESPACES = [
   // M6-04: what a Telegram bot says to a customer, and the word a shared
   // location is filed under. Read by the customer, in their language.
   'telegram',
+  // `Admin/AI` (M7-10): Providers, Knowledge and Assistant.
+  'aiSettings',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -119,6 +123,7 @@ export const resources = {
     helpCenter: enHelpCenter,
     hcSite: enHcSite,
     telegram: enTelegram,
+    aiSettings: enAiSettings,
   },
   ar: {
     common: arCommon,
@@ -144,6 +149,7 @@ export const resources = {
     helpCenter: arHelpCenter,
     hcSite: arHcSite,
     telegram: arTelegram,
+    aiSettings: arAiSettings,
   },
 };
 

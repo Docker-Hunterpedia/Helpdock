@@ -10,9 +10,9 @@ through, and the per-brand budget (M7-01, M7-02, M7-08;
 [ADR 0018](../decisions/0018-pi-ai-provider-layer.md)).
 
 This is the foundation the AI features build on. Agent assist, auto-reply,
-triage and knowledge ingest arrive with their own deliverables; the admin
-screens (`Admin/AI-Providers`, `Admin/AI-Assistant`) arrive with M7-10. Until
-then everything below is configured through the API or the environment.
+triage and knowledge ingest arrive with their own deliverables. Everything
+below is configured in admin under **AI** (M7-10, see [The screens](#the-screens)),
+through the API, or pinned in the environment.
 
 ## Providers
 
@@ -90,6 +90,17 @@ A pinned list cannot store refreshed OAuth tokens. Such an install refreshes
 from the pinned tokens on every call until the refresh token itself expires;
 pin API keys instead.
 
+## Voice transcription
+
+Voice notes from the widget and Telegram can be transcribed for agents
+(M7-09) by any Whisper-compatible `POST …/audio/transcriptions` endpoint:
+
+| Setting | Environment | Example |
+|---|---|---|
+| `transcription.endpoint` | `HD_TRANSCRIPTION_ENDPOINT` | `https://api.openai.com/v1/audio/transcriptions`. Empty turns transcription off |
+| `transcription.model` | `HD_TRANSCRIPTION_MODEL` | `whisper-1` (the default) |
+| `transcription.apiKey` | `HD_TRANSCRIPTION_API_KEY` | Write-only, like provider keys |
+
 ## Per brand
 
 `GET /api/brands/:brandId/ai/settings` answers the brand's AI settings and how
@@ -101,11 +112,15 @@ much it has spent today and this month.
 | PII redaction | Admin | On |
 | Injection filter on ingested content | Admin | On |
 | Daily and monthly budget, US dollars | Admin | No limit |
-| System prompt — tone, language policy, forbidden topics | Admin and Team Leader (`ai:manage`) | Empty |
+| System prompt — tone, language policy, forbidden topics — for English and for Arabic conversations | Admin and Team Leader (`ai:manage`) | Empty; an empty Arabic prompt means the English one serves both |
+| Modes: agent assist, auto-reply per channel (widget, email, Telegram) with a confidence threshold 0–1, the handoff message in English and Arabic, keep agent assist on after the hard stop | Admin | Every mode off; threshold 0.70; built-in handoff wording; keep assist on |
+| AI reply satisfies the first-response SLA | Admin | On. The same `aiCountsAsFirstResponse` Ticketing › SLAs edits |
 
-Admins change the first four with `PUT …/ai/settings` (the whole form); Team
-Leaders and Admins change the prompt with `PUT …/ai/prompt`. Both are audited
-with the values before and after.
+Admins change the model, guardrails and budget with `PUT …/ai/settings` (the
+whole form) and the modes with `PUT …/ai/modes`; Team Leaders and Admins
+change the prompts with `PUT …/ai/prompt`. Each is audited with the values
+before and after (`ai.settings.updated`, `ai.modes.updated`,
+`ai.prompt.updated`).
 
 ## Every call
 
@@ -133,7 +148,10 @@ an `openai-compatible` server costs 0. Embeddings are priced by
 
 The calls on a ticket are listed by
 `GET /api/brands/:brandId/tickets/:ticketId/ai-calls` (`ticket:read`), which
-reads the ticket under the reader's own department scope first.
+reads the ticket under the reader's own department scope first. The brand's
+calls, newest first and without bodies, are listed by
+`GET /api/brands/:brandId/ai/calls?cursor=…&limit=…` (`ai:manage`, 20 a page,
+at most 100); a call's ticket is named only when the reader may open it.
 
 ### PII redaction
 
@@ -255,13 +273,43 @@ minute's tick resumes from the chunks still left.
 | `PUT /api/install/ai/default-model` | install admin | 400 `unknown-model` |
 | `GET /api/install/ai/embedding` | install admin | Settings (without the key), status and progress |
 | `PUT /api/install/ai/embedding` | install admin | 400 above 2000 dimensions; 409 `reembed-not-confirmed` |
+| `GET /api/install/ai/transcription` | install admin | Endpoint, model, whether a key is stored, what the environment locks |
+| `PUT /api/install/ai/transcription` | install admin | 409 `locked-by-environment` |
 | `GET /api/brands/:brandId/ai/settings` | `ai:manage` | Model, guardrails, budget, prompt, spend |
 | `PUT /api/brands/:brandId/ai/settings` | `brand:manage` | Model, guardrails and budget |
-| `PUT /api/brands/:brandId/ai/prompt` | `ai:manage` | The system prompt, up to 8000 characters |
+| `PUT /api/brands/:brandId/ai/modes` | `brand:manage` | Agent assist, auto-reply per channel, handoff message, keep assist after the hard stop, AI reply counts as first response |
+| `PUT /api/brands/:brandId/ai/prompt` | `ai:manage` | The system prompts (`systemPrompt`, optional `systemPromptAr`), up to 8000 characters each |
+| `GET /api/brands/:brandId/ai/calls` | `ai:manage` | The brand's AI activity, keyset-paged |
 | `GET /api/brands/:brandId/tickets/:ticketId/ai-calls` | `ticket:read` | The ticket's AI log, with the redaction map |
 
 A refusal carries `error.ai.reason`, as `aiRefusalSchema` in `@helpdock/schemas`
 declares. Request and response shapes are the `ai*` schemas there.
+
+## The screens
+
+**AI** sits in the Admin group of the sidebar for Admins and Team Leaders.
+
+- **Providers** (install admins only, `Admin/AI-Providers`): the providers
+  table, the open provider's form — kind, base URL, credential type, the key
+  (shown masked; "Replace" to change it), **Discover models** with each
+  model's context and price — the install's default chat model and each
+  brand's override, voice transcription, and the embedding model with its
+  status and re-embed progress. Saving a different embedding model or
+  dimension asks first and says what happens; more than 2000 dimensions is
+  refused under the field. Anything an `HD_*` variable pins is drawn locked,
+  with the variable named, and listed in a banner at the top.
+- **Knowledge**: the brand's knowledge sources arrive with M7-03.
+- **Assistant** (`Admin/AI-Assistant`): the modes, guardrails, budget (today
+  and this month against the limits, and what happens at the hard stop),
+  the system prompt in English and Arabic, and the brand's recent AI calls.
+  At 80 % of a limit a warning banner says so; at 100 % a danger banner says
+  auto-reply is off until the window resets, with **Raise limit**. A Team
+  Leader reads the modes, guardrails and budget and edits the prompt.
+
+The first-run wizard has an optional **AI provider** step after Outgoing
+email: choose a provider, paste an API key (or subscription credentials),
+**Test and find models**, and pick the default chat model — or skip it and do
+the same in AI › Providers later.
 
 ## For developers
 
@@ -290,4 +338,4 @@ use `createFakeModel()`, `fakeEmbeddingsServer()` and `InMemoryAiPorts` from
   a bell entry for it waits for a design of its own (notifications are about a
   ticket today).
 - OAuth login runs on your machine, not in admin.
-- The admin screens are M7-10.
+- The Knowledge tab of the admin is M7-10 part 2, after M7-03's ingest.

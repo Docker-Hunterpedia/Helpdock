@@ -10,7 +10,8 @@ import type { Locale } from '@helpdock/i18n';
  * half-finished one is finished by starting it again.
  */
 
-export const SETUP_STEPS = ['account', 'brand', 'email', 'done'] as const;
+/** M7-10 put the optional AI provider step between Outgoing email and Done (`Admin/Wizard-AI`). */
+export const SETUP_STEPS = ['account', 'brand', 'email', 'ai', 'done'] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 export interface SetupSummary {
@@ -20,6 +21,8 @@ export interface SetupSummary {
   readonly brandPrefix: string;
   /** The relay's hostname, or null when the step was skipped. */
   readonly smtpHost: string | null;
+  /** "OpenAI · gpt-4.1-mini", or null when the AI step was skipped. */
+  readonly aiModel: string | null;
 }
 
 export interface SetupState {
@@ -33,12 +36,20 @@ export type SetupAction =
   | { readonly type: 'back' }
   | { readonly type: 'adminCreated'; readonly name: string; readonly email: string }
   | { readonly type: 'brandCreated'; readonly name: string; readonly prefix: string }
-  | { readonly type: 'smtpDecided'; readonly host: string | null };
+  | { readonly type: 'smtpDecided'; readonly host: string | null }
+  | { readonly type: 'aiDecided'; readonly model: string | null };
 
 export const initialSetupState = (locale: Locale): SetupState => ({
   step: 'account',
   locale,
-  summary: { adminEmail: '', adminName: '', brandName: '', brandPrefix: '', smtpHost: null },
+  summary: {
+    adminEmail: '',
+    adminName: '',
+    brandName: '',
+    brandPrefix: '',
+    smtpHost: null,
+    aiModel: null,
+  },
 });
 
 const indexOf = (step: SetupStep): number => SETUP_STEPS.indexOf(step);
@@ -77,7 +88,10 @@ export const setupReducer = (state: SetupState, action: SetupAction): SetupState
       );
 
     case 'smtpDecided':
-      return advance({ ...state, summary: { ...state.summary, smtpHost: action.host } }, 'done');
+      return advance({ ...state, summary: { ...state.summary, smtpHost: action.host } }, 'ai');
+
+    case 'aiDecided':
+      return advance({ ...state, summary: { ...state.summary, aiModel: action.model } }, 'done');
   }
 };
 

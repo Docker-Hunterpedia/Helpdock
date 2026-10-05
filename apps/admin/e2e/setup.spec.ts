@@ -5,6 +5,7 @@ import {
   ADMIN_EMAIL,
   ADMIN_NAME,
   ADMIN_PASSWORD,
+  AI_MODELS,
   BRAND_NAME,
   BRAND_PREFIX,
   completeAccountStep,
@@ -14,6 +15,7 @@ import {
   SETUP_KEY,
   SMTP_HOST,
   SMTP_RESPONSE,
+  skipAiStep,
 } from './setup-install.js';
 import { strings } from './strings.js';
 
@@ -38,7 +40,7 @@ test.describe('the first-run wizard', () => {
     await expect(page.getByText(t('wizard:systemStatus', { version: '0.1.0' }))).toBeVisible();
 
     await completeAccountStep(page, locale);
-    await expect(page.getByText(t('wizard:stepsRemaining', { count: 2 }))).toBeVisible();
+    await expect(page.getByText(t('wizard:stepsRemaining', { count: 3 }))).toBeVisible();
 
     // The prefix is the one thing on this screen that cannot be changed, so it
     // is previewed as it is typed.
@@ -63,7 +65,17 @@ test.describe('the first-run wizard', () => {
 
     await page.getByRole('button', { name: t('wizard:email.submit') }).click();
 
+    // Step 4, optional: connect a provider and choose the default model.
+    await expect(page.getByRole('heading', { name: t('wizard:ai.title') })).toBeVisible();
+    await page.locator('#setup-ai-credential').fill('sk-live');
+    await page.getByRole('button', { name: t('wizard:ai.test') }).click();
+    await expect(
+      page.getByText(t('wizard:ai.connected', { count: AI_MODELS.length })),
+    ).toBeVisible();
+    await page.getByRole('button', { name: t('wizard:ai.submit') }).click();
+
     await expect(page.getByRole('heading', { name: t('wizard:done.title') })).toBeVisible();
+    await expect(page.getByText(`OpenAI · ${AI_MODELS[0]}`)).toBeVisible();
     await expect(page.getByText(ADMIN_EMAIL)).toBeVisible();
     await expect(
       page.getByText(t('wizard:done.brandValue', { name: BRAND_NAME, prefix: BRAND_PREFIX })),
@@ -83,9 +95,32 @@ test.describe('the first-run wizard', () => {
     await completeAccountStep(page, locale);
     await completeBrandStep(page, locale);
     await page.getByRole('button', { name: t('wizard:email.skip') }).click();
+    await skipAiStep(page, locale);
 
     await expect(page.getByRole('heading', { name: t('wizard:done.title') })).toBeVisible();
-    await expect(page.getByText(t('wizard:done.emailSkipped'))).toBeVisible();
+    await expect(page.getByText(t('wizard:done.emailSkipped'))).toHaveCount(2);
+  });
+
+  test('says why the AI provider refused the key, and stays on the step', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await freshInstall(page, { aiRefused: true });
+
+    await page.goto('/setup');
+    await completeAccountStep(page, locale);
+    await completeBrandStep(page, locale);
+    await page.getByRole('button', { name: t('wizard:email.skip') }).click();
+    await page.getByRole('heading', { name: t('wizard:ai.title') }).waitFor();
+    await page.locator('#setup-ai-credential').fill('sk-revoked');
+    await page.getByRole('button', { name: t('wizard:ai.test') }).click();
+
+    await expect(page.getByRole('alert')).toHaveText(t('aiSettings:refusals.discovery-failed'));
+    await expect(page.getByRole('heading', { name: t('wizard:ai.title') })).toBeVisible();
+    expect(await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()).toMatchObject({
+      violations: [],
+    });
   });
 
   test('shows one sentence when the relay refuses the credentials', async ({
@@ -117,6 +152,7 @@ test.describe('the first-run wizard', () => {
     await completeAccountStep(page, locale);
     await completeBrandStep(page, locale);
     await page.getByRole('button', { name: t('wizard:email.skip') }).click();
+    await skipAiStep(page, locale);
 
     await expect(page.getByText(t('wizard:done.twoFactor'))).toBeVisible();
   });
@@ -263,6 +299,10 @@ test.describe('accessibility', () => {
     expect(await violations(page), 'email step').toEqual([]);
 
     await page.getByRole('button', { name: t('wizard:email.skip') }).click();
+    await page.getByRole('heading', { name: t('wizard:ai.title') }).waitFor();
+    expect(await violations(page), 'AI step').toEqual([]);
+
+    await page.getByRole('button', { name: t('wizard:ai.skip') }).click();
     await page.getByRole('heading', { name: t('wizard:done.title') }).waitFor();
     expect(await violations(page), 'done step').toEqual([]);
   });

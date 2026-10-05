@@ -2,6 +2,8 @@ import { type RenderResult, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
+import type { AiApi } from '../ai/api.js';
+import { MockAiApi } from '../ai/mock-api.js';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
@@ -46,6 +48,7 @@ export interface RenderAppOptions {
   readonly helpCenterApi?: HelpCenterApi;
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
+  readonly aiApi?: AiApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -64,6 +67,7 @@ export interface RenderedApp extends RenderResult {
   readonly helpCenterApi: HelpCenterApi;
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
+  readonly aiApi: AiApi;
 }
 
 /**
@@ -86,6 +90,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const helpCenterApi = options.helpCenterApi ?? new MockHelpCenterApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
+  const aiApi = options.aiApi ?? new MockAiApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -104,6 +109,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       helpCenterApi={helpCenterApi}
       browserPush={browserPush}
       domainsApi={domainsApi}
+      aiApi={aiApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -129,5 +135,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     helpCenterApi,
     browserPush,
     domainsApi,
+    aiApi,
   };
 }

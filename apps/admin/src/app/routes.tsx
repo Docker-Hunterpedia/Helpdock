@@ -4,6 +4,7 @@ import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { YourAccountPage } from '../screens/account/account-page.tsx';
+import { AiPage } from '../screens/admin/ai/ai-page.tsx';
 import { AutomationPage } from '../screens/admin/automation/automation-page.tsx';
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
@@ -114,6 +115,9 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
           <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
           <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
+          {/* M7-10. `/admin/ai` alone opens the first tab the reader has. */}
+          <Route path={ROUTES.ai} element={<AiPage />} />
+          <Route path={ROUTES.aiTab} element={<AiPage />} />
           {/* M5-01, M5-02, M5-09. `/help-center` alone opens Articles. */}
           <Route path={ROUTES.helpCenter} element={<HelpCenterPage />} />
           <Route path={ROUTES.helpCenterTab} element={<HelpCenterPage />} />

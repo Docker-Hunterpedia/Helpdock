@@ -90,6 +90,11 @@ export function DoneStep({ summary, require2fa, onOpen, pending }: DoneStepProps
           value={summary.smtpHost ?? t('wizard:done.emailSkipped')}
           mono={summary.smtpHost !== null}
         />
+        <SummaryRow
+          label={t('wizard:done.aiLabel')}
+          value={summary.aiModel ?? t('wizard:done.aiSkipped')}
+          mono={summary.aiModel !== null}
+        />
       </Box>
     </StepFrame>
   );

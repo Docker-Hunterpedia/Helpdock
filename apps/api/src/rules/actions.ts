@@ -33,6 +33,7 @@ import {
   type TicketEvent,
 } from '../tickets/ticket-events.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
+import { enqueueTriageRequested } from '../triage/triage-events.js';
 import type { CannedResponseRenderer } from './ports.js';
 import type { RulesRepository } from './rules.repository.js';
 
@@ -83,6 +84,8 @@ export interface RuleActionContext {
   readonly tx: DbTransaction;
   readonly brandId: string;
   readonly ruleId: string;
+  /** The run's log row (M7-07: a triage job writes its result back to it). */
+  readonly runId: string;
   /** The chain the changes carry: the rules before this one, then this one. */
   readonly chain: readonly string[];
   readonly now: Date;
@@ -527,13 +530,80 @@ const notify = async (
   return { effect: 'changed', recipientIds: recipients };
 };
 
+/**
+ * M7-07. The model is not called here: the rule's transaction must not wait
+ * seconds on a provider, and an AI call is a side effect, so it goes through
+ * the outbox and the `ai.classify` job does the rest after commit.
+ */
+const requestTriage = async (
+  context: RuleActionContext,
+  state: RunState,
+  action: Extract<RuleAction, { type: 'ai_triage' }>,
+  actionIndex: number,
+): Promise<Effect> => {
+  await enqueueTriageRequested(context.tx, context.brandId, {
+    ticketId: state.ticket.id,
+    ruleId: context.ruleId,
+    runId: context.runId,
+    actionIndex,
+    mode: action.mode,
+    fields: [...action.fields],
+    chain: [...context.chain],
+  });
+  return { effect: 'changed', triage: { status: 'queued' } };
+};
+
+/** A department move, which only a triage `apply` makes; no rule action names one. */
+export interface MoveDepartment {
+  readonly type: 'move_department';
+  readonly departmentId: string;
+}
+
+const moveDepartment = async (
+  deps: RuleActionDeps,
+  context: RuleActionContext,
+  state: RunState,
+  departmentId: string,
+): Promise<Effect> => {
+  const { ticket } = state;
+  if (ticket.departmentId === departmentId) {
+    return UNCHANGED;
+  }
+  const values: Partial<TicketRow> = { departmentId, teamId: null };
+  const from: Record<string, unknown> = {
+    departmentId: ticket.departmentId,
+    teamId: ticket.teamId,
+  };
+  state.changes.add('department');
+  if (ticket.teamId !== null) {
+    state.changes.add('team');
+  }
+  // An assignee who cannot follow is taken off, as for a person's move (M1-07).
+  if (ticket.assigneeId !== null) {
+    const member = await deps.assignment.member(context.tx, context.brandId, ticket.assigneeId);
+    if (member === undefined || !canWorkDepartment(member, departmentId)) {
+      values.assigneeId = null;
+      from.assigneeId = ticket.assigneeId;
+      state.changes.add('assignee');
+    }
+  }
+  await writeUpdate(deps, context, state, values, from);
+  state.wantsRotation = state.ticket.assigneeId === null;
+  return CHANGED;
+};
+
 const runOne = async (
   deps: RuleActionDeps,
   context: RuleActionContext,
   state: RunState,
-  action: RuleAction,
+  action: RuleAction | MoveDepartment,
+  index: number,
 ): Promise<Effect> => {
   switch (action.type) {
+    case 'move_department':
+      return moveDepartment(deps, context, state, action.departmentId);
+    case 'ai_triage':
+      return requestTriage(context, state, action, index);
     case 'set_status':
       return moveStatus(deps, context, state, await deps.rules.status(context.tx, action.statusId));
     case 'escalate':
@@ -590,12 +660,33 @@ const CLOCK_CHANGES: readonly TicketChange[] = ['status', 'priority', 'departmen
  * Runs a rule's actions on one ticket, in order, and writes the one ticket
  * event their changes add up to. Returns what each action did, for the log.
  */
-export const applyRuleActions = async (
+export const applyRuleActions = (
   deps: RuleActionDeps,
   context: RuleActionContext,
   target: { readonly ticket: TicketRow; readonly status: TicketStatusRow },
   actions: readonly RuleAction[],
-): Promise<ActionOutcome[]> => {
+): Promise<ActionOutcome[]> => applyActions(deps, context, target, actions);
+
+/**
+ * What a triage `apply` changes (M7-07), carried out exactly as a rule's own
+ * actions are — the same activity rows with actor `rule:<id>`, the same one
+ * ticket event with the chain, the same clocks — because it is the rule's
+ * change, made a few seconds later.
+ */
+export const applyTriageActions = (
+  deps: RuleActionDeps,
+  context: RuleActionContext,
+  target: { readonly ticket: TicketRow; readonly status: TicketStatusRow },
+  actions: readonly (RuleAction | MoveDepartment)[],
+): Promise<{ action: RuleAction | MoveDepartment; effect: Effect['effect'] }[]> =>
+  applyActions(deps, context, target, actions);
+
+const applyActions = async <A extends RuleAction | MoveDepartment>(
+  deps: RuleActionDeps,
+  context: RuleActionContext,
+  target: { readonly ticket: TicketRow; readonly status: TicketStatusRow },
+  actions: readonly A[],
+): Promise<(Effect & { action: A })[]> => {
   const state: RunState = {
     ticket: target.ticket,
     status: target.status,
@@ -604,9 +695,9 @@ export const applyRuleActions = async (
     wantsRotation: false,
   };
 
-  const outcomes: ActionOutcome[] = [];
-  for (const action of actions) {
-    outcomes.push({ action, ...(await runOne(deps, context, state, action)) });
+  const outcomes: (Effect & { action: A })[] = [];
+  for (const [index, action] of actions.entries()) {
+    outcomes.push({ action, ...(await runOne(deps, context, state, action, index)) });
   }
 
   const previousDepartmentId = target.ticket.departmentId;

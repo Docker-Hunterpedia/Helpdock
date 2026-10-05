@@ -1,6 +1,8 @@
 import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import { brands, type Db } from '@helpdock/db';
 import {
+  aiClassifyJob,
+  aiTranscribeJob,
   assignmentOfflineUnassignJob,
   authEmailJob,
   BRAND_PURGE_CRON,
@@ -166,6 +168,11 @@ import {
 } from '../telegram/telegram-send.job.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { createTranscribeProcessor } from '../transcription/transcribe.job.js';
+import { transcriptionConfigFrom } from '../transcription/transcription-config.js';
+import { registerTranscriptionHandlers } from '../transcription/transcription-events.js';
+import { createTriageProcessor } from '../triage/triage.job.js';
+import { registerTriageEventHandlers } from '../triage/triage-events.js';
 import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
 import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
 import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
@@ -279,6 +286,14 @@ export interface WorkerDependencies {
   createDomainsWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** M8-03's `webhooks` consumer: one signed POST per delivery, through `@helpdock/net`. */
   createWebhooksWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
+  /** M7-07's `ai.classify` and M7-09's `ai.transcribe`, on the `ai` queue. */
+  createAiWorker(options: {
+    redis: Redis;
+    db: Db;
+    log: JobLogger;
+    env: WorkerEnv;
+    settings: WorkerSettings;
+  }): Closable;
   startRelay(options: {
     db: Db;
     redis: Redis;
@@ -641,8 +656,26 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
 
+    // M7-07, M7-09. A rule's AI triage and a ready voice note each add a job
+    // on the `ai` queue, under ids derived from the rows, by the rule above.
+    const ai = new Queue(QUEUE_NAMES.ai, { connection: redis });
+    registerTriageEventHandlers({
+      add: async ({ jobId, name, payload }) => {
+        await ai.add(name, payload, { ...aiClassifyJob.options, jobId });
+      },
+    });
+    registerTranscriptionHandlers(
+      {
+        add: async ({ jobId, payload }) => {
+          await ai.add(aiTranscribeJob.name, payload, { ...aiTranscribeJob.options, jobId });
+        },
+      },
+      transcriptionConfigFrom(settings),
+    );
+
     return {
       close: async () => {
+        await ai.close();
         await media.close();
         await knowledge.close();
         await assignment.close();
@@ -658,6 +691,47 @@ export const workerDependencies: WorkerDependencies = {
   },
   createEventWorker: ({ redis, db, log }) =>
     createWorker(outboxEventJob, createOutboxEventHandler(), { redis, db, log }),
+  createAiWorker: ({ redis, db, log, env, settings }) => {
+    const ai = createAiRuntime({
+      db,
+      settings,
+      http: safeAiTransport(env.OUTBOUND_ALLOW_CIDRS, (event) =>
+        log.warn(
+          { host: event.host, address: event.address },
+          'AI endpoint resolves to a blocked address (DOMAIN-RULES §13)',
+        ),
+      ),
+    });
+    const triage = createTriageProcessor({
+      db,
+      ai,
+      rules: createRulesEngineDeps({ log }),
+      log,
+    });
+    const transcribe = createTranscribeProcessor({
+      db,
+      ai,
+      storage: storageFor(env),
+      config: transcriptionConfigFrom(settings),
+      log,
+    });
+    const worker = new Worker(
+      QUEUE_NAMES.ai,
+      async (job) => {
+        const run = triage(job) ?? transcribe(job);
+        if (run === null) {
+          throw new UnrecoverableError(`The ai queue has no processor for ${job.name}`);
+        }
+        await run;
+      },
+      // Model calls wait on a provider, not on this process: a few at once.
+      { connection: redis, concurrency: 4 },
+    );
+    worker.on('failed', (job, error) =>
+      log.error({ job: job?.name, jobId: job?.id, err: error }, 'ai job failed'),
+    );
+    return { close: () => worker.close() };
+  },
   createOutboundWorker: ({ redis, db, log, env, installSmtp }) => {
     const keyring = createKeyring(env);
     const emailRepository = new EmailRepository();
@@ -1263,6 +1337,7 @@ export const startWorker = ({
   const notify = deps.createNotifyWorker({ redis: connection, db, log, env, settings });
   const domains = deps.createDomainsWorker({ redis: connection, db, log, env });
   const webhooks = deps.createWebhooksWorker({ redis: connection, db, log, env });
+  const ai = deps.createAiWorker({ redis: connection, db, log, env, settings });
   // `status` is the same connection. The relay reports each cycle under
   // `hd:relay:last`, which is where `/metrics` and the System page learn that a
   // worker is alive and how big the outbox backlog is (ARCHITECTURE §14);
@@ -1295,6 +1370,7 @@ export const startWorker = ({
     await notify.close();
     await domains.close();
     await webhooks.close();
+    await ai.close();
     await producers.close();
     await connection.quit();
   };

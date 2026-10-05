@@ -456,3 +456,13 @@ export const telegramDeliveryStatusEnum = pgEnum('telegram_delivery_status', [
   'sent',
   'failed',
 ]);
+
+/** M7-05: where an article drafted from a ticket stands with its reviewer. */
+export const articleProposalStatusEnum = pgEnum('article_proposal_status', [
+  'waiting',
+  'approved',
+  'rejected',
+]);
+
+/** M7-09: a voice note's transcription job. */
+export const transcriptStatusEnum = pgEnum('transcript_status', ['pending', 'done', 'failed']);

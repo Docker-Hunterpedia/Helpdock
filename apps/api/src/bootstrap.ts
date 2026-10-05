@@ -193,6 +193,8 @@ export interface CreateApiAppOptions {
   readonly webForm?: AppModuleOptions['webForm'];
   /** M7's model discovery HTTP, for suites. */
   readonly ai?: AppModuleOptions['ai'];
+  /** M7-05's retrieval HTTP and model, for suites. */
+  readonly assist?: AppModuleOptions['assist'];
   /** M7-03's Notion and Google Drive APIs, for suites. */
   readonly knowledge?: AppModuleOptions['knowledge'];
 }
@@ -207,6 +209,7 @@ export const createApiApp = async ({
   widget,
   webForm,
   ai,
+  assist,
   knowledge,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
@@ -245,6 +248,7 @@ export const createApiApp = async ({
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
       ...(ai === undefined ? {} : { ai }),
+      ...(assist === undefined ? {} : { assist }),
       ...(knowledge === undefined ? {} : { knowledge }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),

@@ -155,6 +155,10 @@ const previewOne = async (
     case 'send_canned':
     case 'add_note':
       return CHANGED;
+    // A test run calls no model: it says the triage would be queued, which is
+    // all the rule itself does (M7-07).
+    case 'ai_triage':
+      return { effect: 'changed', triage: { status: 'queued' } };
     case 'notify': {
       const recipients = await recipientsFor(tx, brandId, deps, facts, action.recipient);
       return recipients.length === 0

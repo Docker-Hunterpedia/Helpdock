@@ -57,6 +57,12 @@ export interface CompleteRequest {
   readonly maxTokens?: number;
   readonly temperature?: number;
   readonly signal?: AbortSignal;
+  /**
+   * Skips the hard stop: agent assist for a brand that keeps it on past its
+   * budget (ARCHITECTURE §10, "assist still allowed if configured"). The call
+   * is logged and counted like any other. Auto-reply never sets it.
+   */
+  readonly allowOverBudget?: boolean;
 }
 
 export interface CompleteResult {
@@ -194,7 +200,9 @@ export const createComplete =
       });
 
     try {
-      await ports.assertWithinBudget(request.brandId);
+      if (request.allowOverBudget !== true) {
+        await ports.assertWithinBudget(request.brandId);
+      }
     } catch (error) {
       if (error instanceof BudgetExceededError) {
         await record({

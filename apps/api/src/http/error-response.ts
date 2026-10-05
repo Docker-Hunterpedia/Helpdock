@@ -1,6 +1,7 @@
 import { TenantContextError } from '@helpdock/db';
 import type {
   AiRefusal,
+  AssistRefusal,
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
@@ -22,6 +23,7 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
 import { AiFailure } from '../ai/ai-failure.js';
+import { AssistFailure } from '../assist/assist-failure.js';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ChannelsFailure } from '../channels/channels-failure.js';
@@ -75,6 +77,8 @@ export interface MappedError {
   readonly helpCenter?: HcRefusal;
   /** Only on a refused AI settings change; see `ai/ai-failure.ts`. */
   readonly ai?: AiRefusal;
+  /** Only on a refused assist request; see `assist/assist-failure.ts`. */
+  readonly assist?: AssistRefusal;
   /** Only on a refused knowledge source action; see `knowledge/knowledge-failure.ts`. */
   readonly knowledge?: KnowledgeRefusal;
   /** True when the log line should carry the whole error, not just its message. */
@@ -259,6 +263,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M7-05. A provider failure is a 502 the agent can retry, not an internal error.
+  if (error instanceof AssistFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'internal_error',
+      message: error.message,
+      assist: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof KnowledgeFailure) {
     return {
       status: error.getStatus(),
@@ -323,5 +338,6 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
     ...(mapped.ai === undefined ? {} : { ai: { reason: mapped.ai } }),
     ...(mapped.knowledge === undefined ? {} : { knowledge: { reason: mapped.knowledge } }),
+    ...(mapped.assist === undefined ? {} : { assist: { reason: mapped.assist } }),
   },
 });

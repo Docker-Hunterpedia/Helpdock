@@ -15,6 +15,7 @@ import {
   aiSettings,
   apiIdempotencyKeys,
   apiKeys,
+  articleProposals,
   assignmentAgents,
   assignmentSkills,
   attachments,
@@ -67,6 +68,7 @@ import {
   telegramChats,
   telegramDeliveries,
   ticketActivity,
+  ticketFieldSuggestions,
   ticketMessages,
   ticketParticipants,
   ticketSearchTokens,
@@ -847,6 +849,33 @@ const fixtures = [
         runId: knowledgeSourceId[brandId] ?? '',
         level: 'info',
         code: 'sync.started',
+      }),
+  },
+  // M7-05, M7-07. Children of a ticket, refused by the shared trigger when the
+  // ticket is not visible, like the thread they quote.
+  {
+    name: 'article_proposals',
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(articleProposals).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        locale: 'en',
+        title: 'Customs on parcels to Germany',
+        bodyMarkdown: 'Parcels under 150 euros pay no duty.',
+      }),
+  },
+  {
+    name: 'ticket_field_suggestions',
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketFieldSuggestions).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        priority: 'high',
+        source: 'assist',
       }),
   },
   // M8-01, M8-02, M8-03. The key hash is unique across the install, so each

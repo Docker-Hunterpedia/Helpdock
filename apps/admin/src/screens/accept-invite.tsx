@@ -8,10 +8,11 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from '../app/route-paths.js';
+import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
+import { PasswordField } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
-import { PasswordStrengthBar } from '../ui/password-strength-bar.tsx';
 import { AuthLayout } from './auth-layout.tsx';
 
 /**
@@ -47,6 +48,7 @@ export function AcceptInvite(): ReactNode {
   const [password, setPassword] = useState('');
   const [locale, setChosenLocale] = useState<Locale>(appLocale);
   const [errors, setErrors] = useState<{ name?: string; password?: string }>({});
+  const [breached, setBreached] = useState(false);
 
   const invite = useQuery({
     queryKey: ['invite', token],
@@ -57,6 +59,9 @@ export function AcceptInvite(): ReactNode {
 
   const accept = useMutation({
     mutationFn: () => api.acceptInvite(token, { name: name.trim(), password, locale }),
+    onError: (error) => {
+      setBreached(isAuthError(error) && error.code === 'password-breached');
+    },
     onSuccess: (result) => {
       // The language they just chose is the language the app should already be
       // in by the time the next screen paints.
@@ -70,7 +75,10 @@ export function AcceptInvite(): ReactNode {
 
       // An install that requires two-factor sends them straight to enrolment;
       // the caption under the form already said this was coming.
-      void navigate(ROUTES.totpEnrolment, { replace: true });
+      void navigate(ROUTES.totpEnrolment, {
+        replace: true,
+        state: { challengeId: result.challengeId },
+      });
     },
   });
 
@@ -148,7 +156,9 @@ export function AcceptInvite(): ReactNode {
         onSubmit={submit}
         sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
       >
-        {accept.isError ? <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner> : null}
+        {accept.isError && !breached ? (
+          <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner>
+        ) : null}
 
         <TextField
           id={nameId}
@@ -162,28 +172,26 @@ export function AcceptInvite(): ReactNode {
           slotProps={{ htmlInput: { autoComplete: 'name', maxLength: 120 } }}
         />
 
-        <Box>
-          <TextField
-            id={passwordId}
-            type="password"
-            label={t('auth:invite.passwordLabel')}
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-            }}
-            error={errors.password !== undefined}
-            helperText={
-              errors.password ??
-              t('auth:invite.passwordHint', {
-                count: PASSWORD_MIN_LENGTH,
-                strength: t(`auth:invite.strength.${strength.level}`),
-              })
-            }
-            fullWidth
-            slotProps={{ htmlInput: { autoComplete: 'new-password', maxLength: 200 } }}
-          />
-          <PasswordStrengthBar strength={strength} />
-        </Box>
+        <PasswordField
+          id={passwordId}
+          label={t('auth:invite.passwordLabel')}
+          value={password}
+          onChange={(value) => {
+            setPassword(value);
+            setBreached(false);
+          }}
+          hint={t('auth:invite.passwordHint', {
+            count: PASSWORD_MIN_LENGTH,
+            strength: t(`auth:invite.strength.${strength.level}`),
+          })}
+          refusal={
+            errors.password !== undefined
+              ? { kind: 'short', message: errors.password }
+              : breached
+                ? { kind: 'breached' }
+                : null
+          }
+        />
 
         <TextField
           id={localeId}

@@ -1,4 +1,4 @@
-import { totpCodeRequestSchema } from '@helpdock/schemas';
+import { type RecoveryCodes, type Session, totpCodeRequestSchema } from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -12,12 +12,12 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import { Check, Copy, Download } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
-import { useAuthApi } from '../auth/session.tsx';
+import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { QrCode } from '../ui/qr-code.tsx';
 import { AuthLayout } from './auth-layout.tsx';
@@ -35,6 +35,17 @@ import { AuthLayout } from './auth-layout.tsx';
  */
 
 type Step = 'scan' | 'codes';
+
+/**
+ * The enrolment challenge sign-in handed over instead of a session, when the
+ * account must have a second factor and has none (an Admin, or any account on
+ * an install that requires one). Without it the screen enrols the signed-in
+ * account, from the security page.
+ */
+const challengeOf = (state: unknown): string | null => {
+  const value = (state as { challengeId?: unknown } | null)?.challengeId;
+  return typeof value === 'string' && value !== '' ? value : null;
+};
 
 const copyToClipboard = async (text: string): Promise<boolean> => {
   try {
@@ -67,6 +78,8 @@ export function TotpEnrolment(): ReactNode {
   const t = useT();
   const api = useAuthApi();
   const navigate = useNavigate();
+  const setSession = useSetSession();
+  const challengeId = challengeOf(useLocation().state);
   const tokens = useSemanticTokens();
   const codeFieldId = useId();
 
@@ -76,7 +89,9 @@ export function TotpEnrolment(): ReactNode {
   const [copied, setCopied] = useState<'key' | 'codes' | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const enrolment = useMutation({ mutationFn: () => api.enrolTotp() });
+  const enrolment = useMutation({
+    mutationFn: () => (challengeId === null ? api.enrolTotp() : api.startEnrolment(challengeId)),
+  });
   const { mutate: startEnrolment } = enrolment;
   const staged = useRef(false);
 
@@ -100,7 +115,8 @@ export function TotpEnrolment(): ReactNode {
   }, [startEnrolment]);
 
   const confirm = useMutation({
-    mutationFn: (value: string) => api.confirmTotp(value),
+    mutationFn: (value: string): Promise<RecoveryCodes & { readonly session?: Session }> =>
+      challengeId === null ? api.confirmTotp(value) : api.completeEnrolment(challengeId, value),
     onSuccess: () => {
       setStep('codes');
     },
@@ -227,6 +243,10 @@ export function TotpEnrolment(): ReactNode {
             variant="contained"
             disabled={!saved}
             onClick={() => {
+              const session = confirm.data?.session;
+              if (session !== undefined) {
+                setSession(session);
+              }
               void navigate(DEFAULT_SIGNED_IN_ROUTE, { replace: true });
             }}
           >

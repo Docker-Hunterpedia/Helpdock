@@ -23,6 +23,7 @@ const TOAST_KEY: Readonly<Record<ContactRefusal, string>> = {
   'identity-invalid': 'contacts:toast.failed',
   'last-identity': 'contacts:toast.lastIdentity',
   'anonymise-forbidden': 'contacts:toast.anonymiseForbidden',
+  'export-forbidden': 'contacts:toast.exportForbidden',
   anonymised: 'contacts:toast.alreadyAnonymised',
   'domain-taken': 'contacts:toast.domainTaken',
   merged: 'contacts:toast.merged',

@@ -410,7 +410,7 @@ export const workerDependencies: WorkerDependencies = {
       botChanged: createTelegramBotChangedHandler(
         new TelegramRepository(),
         queueTelegramPollScheduler(inbound),
-        env.TELEGRAM_POLLING,
+        env.TELEGRAM_POLLING === true,
       ),
     });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
@@ -661,7 +661,7 @@ export const workerDependencies: WorkerDependencies = {
     // M6-01, development only: every bot polled instead of waiting for webhooks.
     const telegramRepository = new TelegramRepository();
     const telegramApi = telegramApiFactory(env.TELEGRAM_API_ROOT);
-    if (env.TELEGRAM_POLLING) {
+    if (env.TELEGRAM_POLLING === true) {
       scheduleAllTelegramPollers(db, telegramRepository, queueTelegramPollScheduler(inbound)).catch(
         (error: unknown) => log.error({ err: error }, 'could not register the Telegram pollers'),
       );

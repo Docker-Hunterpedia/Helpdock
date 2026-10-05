@@ -20,9 +20,6 @@ export const DEFAULT_WIDGET_DIST_DIR = '/app/widget';
 const DEFAULT_FFMPEG_PATH = 'ffmpeg';
 const DEFAULT_FFPROBE_PATH = 'ffprobe';
 
-/** Telegram's own Bot API server (M6-01). */
-const DEFAULT_TELEGRAM_API_ROOT = 'https://api.telegram.org';
-
 /** clamd's registered port. The Compose `clamav` profile listens on it. */
 const DEFAULT_CLAMAV_PORT = 3310;
 const IPV4_BITS = 32;
@@ -251,16 +248,18 @@ export const envSchema = z.object({
     .describe(
       'optional; the hostname a brand points its help center domain at with a CNAME record, for example edge.example.com. Defaults to the host of APP_URL (M5-07)',
     ),
+  // Optional rather than defaulted, as CLAMAV_HOST is: unset means off, and the
+  // type does not oblige every caller that builds an `Env` by hand to name it.
   TELEGRAM_POLLING: z
     .stringbool()
-    .default(false)
+    .optional()
     .describe(
       'optional; must be "true" or "false", default false. "true" makes the worker long-poll every Telegram bot instead of waiting for webhooks, for development on a machine Telegram cannot reach (M6-01)',
     ),
   TELEGRAM_API_ROOT: urlSchema('http:', 'https:')
-    .default(DEFAULT_TELEGRAM_API_ROOT)
+    .optional()
     .describe(
-      `optional; the Bot API server, default ${DEFAULT_TELEGRAM_API_ROOT}. Set it only for a self-hosted Bot API server`,
+      'optional; the Bot API server, default https://api.telegram.org. Set it only for a self-hosted Bot API server',
     ),
 });
 

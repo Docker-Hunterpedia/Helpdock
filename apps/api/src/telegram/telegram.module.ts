@@ -53,7 +53,7 @@ export class TelegramModule {
               repository,
               keyring,
               api,
-              view: { appUrl: env.APP_URL, polling: env.TELEGRAM_POLLING },
+              view: { appUrl: env.APP_URL, polling: env.TELEGRAM_POLLING === true },
             }),
         },
         {

@@ -121,9 +121,19 @@ export class TelegramInboundService {
     now: Date,
   ): Promise<TelegramInboundResult> {
     const externalId = telegramExternalId(bot.telegramId, event.sender.chatId, event.messageId);
-    // Before any download: a redelivered photo is not fetched again.
-    if (await this.#system(bot, (tx) => this.#seen(tx, bot.brandId, externalId))) {
-      return { outcome: 'duplicate', reason: 'message-id' };
+    // Before any download: a redelivered photo is not fetched again, and a
+    // blocked sender's never is.
+    const early = await this.#system(bot, async (tx): Promise<TelegramInboundResult | null> => {
+      if (await this.#seen(tx, bot.brandId, externalId)) {
+        return { outcome: 'duplicate', reason: 'message-id' };
+      }
+      if (await this.#blocked(tx, bot, event.sender.chatId, now)) {
+        return { outcome: 'ignored', reason: 'blocked-sender' };
+      }
+      return null;
+    });
+    if (early !== null) {
+      return early;
     }
 
     const files = await this.#download(bot, event);
@@ -132,9 +142,6 @@ export class TelegramInboundService {
       return await this.#system(bot, async (tx): Promise<TelegramInboundResult> => {
         if (await this.#seen(tx, bot.brandId, externalId)) {
           return { outcome: 'duplicate', reason: 'message-id' };
-        }
-        if (await this.#blocked(tx, bot, event.sender.chatId, now)) {
-          return { outcome: 'ignored', reason: 'blocked-sender' };
         }
 
         const locale = await this.#localeOf(tx, bot.brandId, event.sender.chatId);

@@ -26,8 +26,6 @@ const env: WorkerEnv = {
   APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
   APP_URL: 'https://support.example.com',
   OUTBOUND_ALLOW_CIDRS: [],
-  TELEGRAM_POLLING: false,
-  TELEGRAM_API_ROOT: 'https://api.telegram.org',
 };
 
 const settings = { get: async () => '' } as unknown as WorkerSettings;

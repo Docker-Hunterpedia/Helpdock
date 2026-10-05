@@ -7,6 +7,7 @@ import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   attachments,
   auditLog,
+  blockedSenders,
   contactIdentities,
   contacts,
   createDb,
@@ -570,6 +571,35 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       const after = await ticketForChat(CHAT);
       expect(after).toHaveLength(1);
       expect(after[0]?.closedAt).toBeNull();
+    });
+
+    it('drops a blocked sender before anything is written, and counts it', async () => {
+      const chat = 4_242_009;
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .insert(blockedSenders)
+          .values({ brandId: seeded.brandId, kind: 'telegram', value: String(chat) }),
+      );
+      telegram.files.set('blocked-photo', JPEG);
+      const downloadsBefore = telegram.callsOf('getFile').length;
+
+      const received = await deliver(
+        textUpdate(nextUpdate(), chat, '', {
+          text: undefined,
+          photo: [{ file_id: 'blocked-photo', file_unique_id: 'b', width: 8, height: 8 }],
+        }),
+      );
+
+      expect(received.status).toBe(200);
+      expect(await ticketForChat(chat)).toEqual([]);
+      expect(telegram.callsOf('getFile')).toHaveLength(downloadsBefore);
+      const [row] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ droppedCount: blockedSenders.droppedCount })
+          .from(blockedSenders)
+          .where(eq(blockedSenders.value, String(chat))),
+      );
+      expect(row?.droppedCount).toBe(1);
     });
 
     it('records a reply the chat refuses as failed, and Retry puts it back', async () => {

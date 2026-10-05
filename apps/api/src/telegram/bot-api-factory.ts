@@ -8,10 +8,11 @@ import type { TelegramBot as TelegramBotRow } from '@helpdock/db';
  */
 export type TelegramApiFactory = (token: string) => TelegramBotApi;
 
+/** `apiRoot` unset is Telegram's own server. */
 export const telegramApiFactory =
-  (apiRoot: string): TelegramApiFactory =>
+  (apiRoot: string | undefined): TelegramApiFactory =>
   (token) =>
-    new TelegramBotApi({ token, apiRoot });
+    new TelegramBotApi(apiRoot === undefined ? { token } : { token, apiRoot });
 
 /** The client for a stored bot: its token is decrypted here and nowhere it could be logged. */
 export const apiForBot = (

@@ -7,6 +7,7 @@ import { domainsRefusalSchema } from './domains.js';
 import { channelsRefusalSchema } from './email-inbound.js';
 import { hcRefusalSchema } from './help-center.js';
 import { setupRefusalSchema } from './install.js';
+import { knowledgeRefusalSchema } from './knowledge.js';
 import { staffRefusalSchema } from './staff.js';
 import { telegramRefusalSchema } from './telegram.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
@@ -94,6 +95,8 @@ export const errorResponseSchema = z.object({
     helpCenter: z.object({ reason: hcRefusalSchema }).optional(),
     /** Only on a refused AI settings change (M7-01, M7-02). */
     ai: z.object({ reason: aiRefusalSchema }).optional(),
+    /** Only on a refused knowledge source action (M7-03). */
+    knowledge: z.object({ reason: knowledgeRefusalSchema }).optional(),
     /** Only on a refused Telegram bot action (M6-05). */
     telegram: z.object({ reason: telegramRefusalSchema }).optional(),
     /**

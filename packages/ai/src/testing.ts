@@ -8,6 +8,10 @@ import {
   registerFauxProvider,
 } from '@mariozechner/pi-ai';
 import type { ModelTransport } from './complete.js';
+
+export * from './knowledge/connectors/fake-service.js';
+export * from './knowledge/fixtures.js';
+
 import { BudgetExceededError } from './guardrails/budget.js';
 import type { HttpRequest, HttpResponse, HttpTransport } from './http.js';
 import {

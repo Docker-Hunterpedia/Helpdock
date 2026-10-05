@@ -1,9 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { Env } from '@helpdock/config';
 import { Controller, Get, Inject, NotFoundException, Optional, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public } from '../auth/route-declaration.js';
-import { ADMIN_DIST, HOST_PAGES } from '../runtime/tokens.js';
+import { storageOrigin } from '../media/storage.js';
+import { ADMIN_DIST, ENV, HOST_PAGES } from '../runtime/tokens.js';
 import { cacheControlFor, INDEX_FILE, isApiPath, resolveAssetPath } from './admin-assets.js';
 import { adminContentSecurityPolicy } from './content-security-policy.js';
 import { InstallInfoService } from './install-info.service.js';
@@ -33,6 +35,7 @@ export class AdminSpaController {
   readonly #root: string | undefined;
   readonly #installInfo: InstallInfoService;
   readonly #hostPages: HostPages | undefined;
+  readonly #mediaOrigin: string;
   /** The build never changes while the process runs, so the file is read once. */
   #index: string | undefined;
   /** Derived from that file, because it carries the hash of its inline script. */
@@ -41,8 +44,10 @@ export class AdminSpaController {
   constructor(
     @Inject(ADMIN_DIST) root: string | undefined,
     @Inject(InstallInfoService) installInfo: InstallInfoService,
+    @Inject(ENV) env: Env,
     @Optional() @Inject(HOST_PAGES) hostPages?: HostPages,
   ) {
+    this.#mediaOrigin = storageOrigin(env);
     this.#root = root;
     this.#installInfo = installInfo;
     this.#hostPages = hostPages;
@@ -84,7 +89,7 @@ export class AdminSpaController {
     // and never a wrong answer. Caching the promise instead would cache a
     // rejection for the life of the process.
     this.#index ??= await readFile(path.join(root, INDEX_FILE), 'utf8');
-    this.#policy ??= adminContentSecurityPolicy(this.#index);
+    this.#policy ??= adminContentSecurityPolicy(this.#index, this.#mediaOrigin);
 
     const html = rewriteInstallMeta(this.#index, await this.#installInfo.read());
     await reply

@@ -193,6 +193,8 @@ export interface CreateApiAppOptions {
   readonly webForm?: AppModuleOptions['webForm'];
   /** M7's model discovery HTTP, for suites. */
   readonly ai?: AppModuleOptions['ai'];
+  /** M7-03's Notion and Google Drive APIs, for suites. */
+  readonly knowledge?: AppModuleOptions['knowledge'];
 }
 
 export const createApiApp = async ({
@@ -205,6 +207,7 @@ export const createApiApp = async ({
   widget,
   webForm,
   ai,
+  knowledge,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -242,6 +245,7 @@ export const createApiApp = async ({
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
       ...(ai === undefined ? {} : { ai }),
+      ...(knowledge === undefined ? {} : { knowledge }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the

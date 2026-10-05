@@ -75,6 +75,22 @@ describe('the admin nav', () => {
     expect(navLinks()).toContain('Settings');
   });
 
+  /** M8-04: `report:read` is an Admin's, a Team Leader's and a Viewer's, not an Agent's. */
+  it.each([
+    ['admin', true],
+    ['teamLeader', true],
+    ['viewer', true],
+    ['agent', false],
+  ] as const)('offers Reports to %s: %s', async (role, offered) => {
+    renderApp(<AppRoutes />, {
+      ...asProps(await withUser({ role, installAdmin: false })),
+      initialEntries: ['/tickets'],
+    });
+    await screen.findByRole('navigation', { name: 'Main' });
+
+    expect(navLinks().some((link) => link.startsWith('Reports'))).toBe(offered);
+  });
+
   it('offers Staff and roles to a Team Leader', async () => {
     renderApp(<AppRoutes />, {
       ...asProps(await withUser({ role: 'teamLeader', installAdmin: false })),

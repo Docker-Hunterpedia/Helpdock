@@ -30,9 +30,14 @@ import {
 } from '../notifications/browser-push.js';
 import { HttpNotificationsApi } from '../notifications/http-api.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { HttpReportsApi, type ReportsApi } from '../reports/api.js';
+import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { HttpTelegramApi } from '../telegram/http-api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { HttpTicketingApi } from '../ticketing/http-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -71,6 +76,12 @@ export interface AdminApis {
   readonly browserPush: BrowserPush;
   /** M5-07: Brand › Domains. */
   readonly domains: DomainsApi;
+  /** M8-04: `Admin/Reports`. */
+  readonly reports: ReportsApi;
+  /** The install-admin routes: System (M0-10, M8-05) and brand deletion (M8-07). */
+  readonly system: SystemApi;
+  /** M6: Channels › Telegram and a Telegram ticket's chat. */
+  readonly telegram: TelegramApi;
   /** M8-01, M8-03: the Developers page. */
   readonly developers: DevelopersApi;
 }
@@ -119,6 +130,9 @@ export function createApis(
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
       domains: new HttpDomainsApi(transport),
+      reports: new HttpReportsApi(transport),
+      system: new HttpSystemApi(() => transport.currentAccessToken()),
+      telegram: new HttpTelegramApi(transport),
       developers: new HttpDevelopersApi(transport),
     };
   }
@@ -156,6 +170,11 @@ export function createApis(
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    // No fixtures for these two: the browser tests answer their routes with
+    // Playwright, which a fixture would sit in front of.
+    reports: new HttpReportsApi(),
+    system: new HttpSystemApi(),
+    telegram: new MockTelegramApi(),
     developers: new MockDevelopersApi(),
   };
 }

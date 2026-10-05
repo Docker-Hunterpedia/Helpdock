@@ -15,7 +15,7 @@ const apiThrowing = (error: Error): SystemApi =>
   });
 
 describe('SystemQueuesPage', () => {
-  it('shows every queue, not just the summary, and says why it is not Bull Board yet', async () => {
+  it('shows every queue, not just the summary, and where jobs are retried', async () => {
     renderApp(<SystemQueuesPage api={apiReturning()} />);
 
     const table = await screen.findByRole('table', { name: 'Queues' });
@@ -26,7 +26,7 @@ describe('SystemQueuesPage', () => {
     expect(screen.queryByRole('button', { name: 'All queues' })).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        'Opens the full queue table. The embedded Bull Board arrives with milestone M8.',
+        'Every queue BullMQ holds. Retry or remove a job in the queue dashboard, where it is done as you and recorded in the audit log.',
       ),
     ).toBeVisible();
   });

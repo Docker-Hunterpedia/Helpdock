@@ -6,7 +6,8 @@
     "mailboxes": "Mailboxes",
     "outgoing": "Outgoing email",
     "widget": "Widget",
-    "webForm": "Web form"
+    "webForm": "Web form",
+    "telegram": "Telegram"
   },
   "mailboxes": {
     "heading": "Mailboxes",
@@ -616,5 +617,172 @@
     "save": "Save changes",
     "saved": "Web form saved",
     "loadFailed": "The web form could not be loaded. Reload the page to try again."
+  },
+  "addBot": "Add bot",
+  "telegram": {
+    "heading": "Telegram bots",
+    "caption_one": "{{count}} bot · each chat with a bot is one contact; new messages open tickets in the bot’s department",
+    "caption_other": "{{count}} bots · each chat with a bot is one contact; new messages open tickets in the bot’s department",
+    "columns": {
+      "bot": "Bot",
+      "routesTo": "Routes to",
+      "webhook": "Webhook",
+      "lastUpdate": "Last update",
+      "health": "Health",
+      "actions": "Actions"
+    },
+    "webhook": {
+      "set": "Set",
+      "withSecret": "with secret token",
+      "notSet": "Not set",
+      "polling": "Polling",
+      "error": "Error",
+      "telegramSaid": "Telegram: “{{error}}” · {{time}}"
+    },
+    "lastUpdate": "{{time}} · {{ago}}",
+    "noUpdate": "No update yet",
+    "health": {
+      "healthy": "Healthy",
+      "failing": "Failing",
+      "waiting": "Waiting",
+      "fix": "Fix",
+      "fixFor": "Fix @{{username}}"
+    },
+    "actionsFor": "Actions for @{{username}}",
+    "open": "Open",
+    "delete": "Delete",
+    "empty": {
+      "heading": "No Telegram bots yet",
+      "body": "Connect a bot and every chat with it becomes a contact, with its messages as tickets."
+    },
+    "updates": {
+      "heading": "How updates arrive",
+      "body": "In production Telegram posts each update to Helpdock’s webhook and signs it with a secret token; requests without it are refused. Development installs poll with long polling instead, so no webhook is set and the Webhook column reads “Polling”."
+    },
+    "legend": {
+      "heading": "Health",
+      "healthy": "Healthy: the last update arrived and was filed.",
+      "failing": "Failing: Telegram’s last delivery failed, or the token was revoked.",
+      "waiting": "Waiting: saved, no update received yet."
+    },
+    "add": {
+      "title": "Add a Telegram bot",
+      "intro": "Create a bot with @BotFather in Telegram, then paste the token it gives you.",
+      "token": "Bot token",
+      "required": "required",
+      "tokenHint": "Looks like 123456789:AA… · Encrypted on save and never shown again.",
+      "department": "Department",
+      "test": "Test",
+      "works": "Token works · @{{username}}",
+      "refused": "Telegram refused this token ({{detail}}). Copy it again from @BotFather.",
+      "unreachable": "Telegram could not be reached. Try again in a moment.",
+      "malformed": "That is not a BotFather token. It looks like 123456789:AA…",
+      "submit": "Add bot",
+      "testFirst": "Add bot stays off until Test succeeds.",
+      "footnote": "Adding sets the webhook straight away in production. The welcome and language buttons start from the defaults; change them on the bot’s page."
+    },
+    "refusal": {
+      "token-invalid": "Telegram refused this token. Copy it again from @BotFather.",
+      "telegram-unreachable": "Telegram could not be reached. Try again in a moment.",
+      "bot-taken": "That bot is already connected to a brand on this install.",
+      "token-other-bot": "That token belongs to a different bot. Add it as a new bot instead.",
+      "department-not-found": "That department no longer exists. Pick another."
+    },
+    "deleteConfirm": {
+      "title": "Delete @{{username}}?",
+      "body": "Helpdock removes the webhook and erases the token. Tickets from this bot stay in {{department}}, but replies to them can no longer reach Telegram. The bot itself stays in Telegram; delete it there with @BotFather.",
+      "typeLabel": "Type @{{username}} to confirm",
+      "action": "Delete bot"
+    },
+    "detail": {
+      "back": "Back to Telegram bots",
+      "caption": "{{name}} · added {{date}}",
+      "update": "update {{ago}}",
+      "notFound": {
+        "heading": "This bot is gone",
+        "body": "It was deleted, or it belongs to another brand."
+      },
+      "connection": {
+        "heading": "Connection",
+        "caption": "The token from @BotFather. Helpdock encrypts it and never shows it again.",
+        "token": "Bot token",
+        "masked": "Saved token ending in {{hint}}",
+        "replace": "Replace",
+        "saved": "Saved {{date}} by {{name}}. Stored encrypted; only the last four characters are shown, so you can tell tokens apart. Replace opens an empty field.",
+        "savedBySomeone": "Saved {{date}}. Stored encrypted; only the last four characters are shown, so you can tell tokens apart. Replace opens an empty field.",
+        "test": "Test connection",
+        "testHint": "Calls getMe with the saved token. Nothing is sent to any chat.",
+        "connected": "Connected · {{time}}",
+        "connectedBody": "getMe returned @{{username}} · “{{name}}” · id {{id}}",
+        "refused": "Telegram refused the saved token · {{time}}",
+        "unreachable": "Telegram could not be reached · {{time}}"
+      },
+      "webhook": {
+        "heading": "Webhook",
+        "caption": "Where Telegram sends updates for this bot.",
+        "state": "State",
+        "address": "Address",
+        "secret": "Secret token",
+        "secretBody": "Generated by Helpdock when the bot was added; Telegram sends it with every update. Never shown.",
+        "pending": "Pending updates",
+        "lastError": "Last error",
+        "none": "None reported by Telegram",
+        "set": "Set",
+        "notSet": "Not set",
+        "polling": "Polling",
+        "checked": "checked {{time}}",
+        "elsewhere": "Telegram posts to another address",
+        "unknown": "Telegram could not be asked: {{detail}}",
+        "copy": "Copy the webhook address",
+        "button": "Set webhook",
+        "hint": "Calls setWebhook with this address and the bot’s secret token. Run it again after changing the public address of this install.",
+        "pollingNote": "Development installs use long polling: the worker calls getUpdates and Set webhook is off. Telegram allows only one of the two per bot at a time.",
+        "refused": "Telegram refused the webhook: {{detail}}"
+      },
+      "routing": {
+        "heading": "Routing",
+        "caption": "Messages to this bot open tickets here.",
+        "department": "Department",
+        "hint": "Agents reply from the ticket; replies go back to the same chat."
+      },
+      "welcome": {
+        "heading": "Welcome and language",
+        "caption": "What the bot says when someone sends /start.",
+        "languagePick": "Offer English and العربية buttons with the welcome",
+        "prompt": "Language prompt",
+        "promptHint": "Sent under the welcome in the contact’s language, with two buttons: English and العربية. The choice becomes the contact’s language.",
+        "en": "Welcome · English",
+        "ar": "Welcome · Arabic",
+        "hint": "Leave one empty to send the default welcome in that language. Plain text, up to {{max}} characters.",
+        "tooLong": "Keep it to {{max}} characters."
+      },
+      "footer": {
+        "note": "Changes apply to the next /start; chats already going keep their language.",
+        "unsaved": "Unsaved changes",
+        "discard": "Discard",
+        "save": "Save"
+      },
+      "activity": {
+        "heading": "Activity",
+        "lastUpdate": "Last update received",
+        "lastReply": "Last reply delivered",
+        "failed": "Failed sends, 24 h",
+        "open": "Open tickets from this bot",
+        "none": "—",
+        "failedJobs": "View failed jobs in System"
+      },
+      "danger": {
+        "heading": "Delete bot",
+        "body": "Removes the webhook and erases the token. Tickets from this bot stay, but agents can no longer reply into their chats.",
+        "action": "Delete bot…"
+      }
+    },
+    "toast": {
+      "created": "@{{username}} added",
+      "saved": "@{{username}} saved",
+      "deleted": "@{{username}} deleted",
+      "webhookSet": "Webhook set for @{{username}}",
+      "copied": "Copied"
+    }
   }
 }

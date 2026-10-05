@@ -24,8 +24,14 @@ import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import type { ReportsApi } from '../reports/api.js';
+import { fakeSystemApi } from '../screens/admin/system/fixtures.js';
+import type { SystemApi } from '../screens/admin/system/system-api.js';
+import { fakeReportsApi } from '../screens/reports/fixtures.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import type { TicketsApi } from '../tickets/api.js';
@@ -48,6 +54,11 @@ export interface RenderAppOptions {
   readonly helpCenterApi?: HelpCenterApi;
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
+  /** Defaults to the reports fixture, so no test reaches for a real api. */
+  readonly reportsApi?: ReportsApi;
+  /** Defaults to the System fixture: a brand that is not being deleted. */
+  readonly systemApi?: SystemApi;
+  readonly telegramApi?: TelegramApi;
   readonly developersApi?: DevelopersApi;
   readonly initialEntries?: readonly string[];
 }
@@ -67,6 +78,7 @@ export interface RenderedApp extends RenderResult {
   readonly helpCenterApi: HelpCenterApi;
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
+  readonly telegramApi: TelegramApi;
   readonly developersApi: DevelopersApi;
 }
 
@@ -90,6 +102,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const helpCenterApi = options.helpCenterApi ?? new MockHelpCenterApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
+  const telegramApi = options.telegramApi ?? new MockTelegramApi();
   const developersApi = options.developersApi ?? new MockDevelopersApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
@@ -109,6 +122,9 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       helpCenterApi={helpCenterApi}
       browserPush={browserPush}
       domainsApi={domainsApi}
+      reportsApi={options.reportsApi ?? fakeReportsApi()}
+      systemApi={options.systemApi ?? fakeSystemApi()}
+      telegramApi={telegramApi}
       developersApi={developersApi}
       queryClient={queryClient}
       router={({ children }) => (
@@ -135,6 +151,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     helpCenterApi,
     browserPush,
     domainsApi,
+    telegramApi,
     developersApi,
   };
 }

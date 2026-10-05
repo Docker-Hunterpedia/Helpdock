@@ -16,10 +16,10 @@ Depends on M1 and M3, both shipped. Runs in parallel with M7.
 | M8-01 | Tenant API keys | | built, in review; screen built: [Developers page](#m8-01-m8-03-developers-page) |
 | M8-02 | REST v1 | | built, in review |
 | M8-03 | Outbound webhooks | | built, in review; screen built: [Developers page](#m8-01-m8-03-developers-page) |
-| M8-04 | Reports | | built, PR pending: [Reports](#m8-04-reports) |
-| M8-05 | System page | | built (api), PR pending: [System page](#m8-05-system-page) |
+| M8-04 | Reports | | built (api and screen), PR pending: [Reports](#m8-04-reports) |
+| M8-05 | System page | | built (api and screen), PR pending: [System page](#m8-05-system-page) |
 | M8-06 | CSAT delivery wired on close for email, widget, Telegram | | planned |
-| M8-07 | Brand deletion with 30-day grace and full purge (rows, S3 prefix, Redis keys, Caddy domain); product metrics on the System page | | built (api), PR pending: [Brand deletion](#m8-07-brand-deletion-and-product-metrics) |
+| M8-07 | Brand deletion with 30-day grace and full purge (rows, S3 prefix, Redis keys, Caddy domain); product metrics on the System page | | built (api and screens), PR pending: [Brand deletion](#m8-07-brand-deletion-and-product-metrics) |
 
 ## Exit criteria
 
@@ -90,6 +90,28 @@ Copied from the PRD, ticked as they are met.
   `AI_USAGE_SOURCE`, bound by `ReportsModule.forRoot({ aiUsage })`). Until M7
   binds a reader of `ai_calls`, `NoAiUsage` answers `{ available: false }` in
   reports, `{ configured: false }` for LLM spend and `null` for deflection.
+- **Screen** (artboard `Admin/Reports`, `apps/admin/src/screens/reports/`):
+  date range, department and channel filters; four MetricTiles compared with
+  the previous period from a second read; a ChartCard per report with "Table"
+  and "Export CSV" (through `HttpTransport.requestBlob`, saved as
+  `reportExportFileName`, now in `@helpdock/schemas`); the AI cards "not
+  available" until M7. The sidebar offers Reports to Admin, Team Leader and
+  Viewer. No charting dependency is in the ARCHITECTURE §1 stack, so the
+  charts are plain SVG components (`charts.tsx`): column, line with an end
+  label, share rows and Heatmap, per DESIGN §9 (legend, direct labels, Table
+  view, Tooltip naming the series). The adapter is `ReportsApi`
+  (`apps/admin/src/reports/`), on the shared transport.
+- **Where the screen differs from the artboard**, because the summary does not
+  carry it: volume per day is one series (created) with the Channel, Status or
+  Priority breakdown as totals beside it rather than stacked per day; response
+  and resolution times are the period's median and p90, not a line per day;
+  SLA is by clock, not by priority; Agent workload has open, solved and replies
+  (no per-agent times, SLA or CSAT, no Unassigned row); there is no Agent
+  filter; CSAT has no "% of surveys answered" or comment count. The heatmap
+  runs Monday to Sunday (brands have no week-start setting).
+- Tests: `reports-page.test.tsx`, `report-math.test.ts`,
+  `reports/api.test.ts`, `ui/usage-meter.test.tsx`; Playwright
+  `e2e/reports.spec.ts` (en and ar, axe, the api failing).
 - Guide: [reports](../guides/reports.md).
 
 ### M8-01, M8-03 Developers page
@@ -157,8 +179,22 @@ Copied from the PRD, ticked as they are met.
   every request ([ADR 0017](../decisions/0017-bull-board-behind-a-one-use-pass.md),
   amending ADR 0004). New dependencies `@bull-board/api` and
   `@bull-board/fastify` 9.10.1.
-- The admin screen's new cards (per-brand storage, product metrics, the board
-  button) wait for their artboards; the api is done.
+- **Screen** (artboard `Admin/System-1.0`): the health cards, a Product
+  metrics row, Queues, Channels grouped by kind with an attention count,
+  Version and migrations, Storage (UsageMeter against the soft limit, per brand
+  with "pending deletion" marked), Audit log, LLM spend (install-wide, "not
+  available" until M7) and Brands pending deletion. "Open queue dashboard" asks
+  for the one-use pass and opens the board in a new tab opened before the
+  request, so popup blockers let it through. The page's api adapter now sends
+  the access token (it did not before, which a real install would have
+  refused); `SystemApi` is provided by `SystemApiProvider` from `createApis`.
+- **Where the screen differs from the artboard:** LLM spend is install-wide
+  (the seam has no per-brand spend or budgets); Storage has no Postgres
+  column; Version has no image name or migration list; Channels show no brand
+  name or Widget rows; the queue button is in the header only. Each needs the
+  api to report it.
+- Tests: `system-page.test.tsx`, `side-cards.test.tsx`, `system-api.test.ts`,
+  `product-metrics.test.ts`; Playwright `e2e/system.spec.ts`.
 - Guide: [operations](../guides/operations.md#the-system-page).
 
 ### M8-07 Brand deletion and product metrics
@@ -184,6 +220,18 @@ Copied from the PRD, ticked as they are met.
 - **Product metrics:** `GET /api/install/system/metrics` — activation,
   help center self-service per brand (widget views, from
   `report_help_center_daily`), AI deflection (seam).
+- **Telegram:** the webhook names a bot, not a brand, so `BrandGoneGuard`
+  does not see it; `TelegramWebhookService` answers 410 through `isBrandGone`
+  after the secret check (`telegram.integration.test.ts`).
+- **Screens:** Brand › Danger zone (artboard `Admin/Brand-Danger`) gains
+  "Delete this brand" for install admins. The artboard asks for the brand's
+  name; the api checks its ticket prefix (`confirmPrefix`), so the screen asks
+  for the prefix ("Type HD to confirm"). During the grace every Brand tab shows
+  a warning Banner "Scheduled for deletion on …" with Restore and is
+  read-only (a disabled fieldset). System lists the pending brands with
+  PendingDeletionRow; "Deleted by" is not drawn, since the deletion read does
+  not name who asked. Tests: `brand-page.test.tsx`; Playwright
+  `e2e/brand-deletion.spec.ts`.
 - Guides: [data retention](../guides/data-retention.md#deleting-a-brand),
   [operations](../guides/operations.md#product-metrics).
 

@@ -267,6 +267,20 @@
       "when": 1791197554568,
       "tag": "0039_api_keys_and_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791198174966,
+      "tag": "0040_telegram_chat_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791202932776,
+      "tag": "0041_knowledge_ingest",
+      "breakpoints": true
     }
   ]
 }

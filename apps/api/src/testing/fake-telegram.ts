@@ -19,12 +19,39 @@ export interface FakeBot {
   readonly username: string;
 }
 
-const readJson = async (request: IncomingMessage): Promise<Record<string, unknown>> => {
+/** An uploaded file as the stand-in records it. */
+export interface FakeUpload {
+  readonly name: string;
+  readonly bytes: Buffer;
+}
+
+/**
+ * A JSON body, or grammY's multipart upload with each `attach://<part>`
+ * reference replaced by the file it names.
+ */
+const readBody = async (request: IncomingMessage): Promise<Record<string, unknown>> => {
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
     chunks.push(chunk as Buffer);
   }
-  const text = Buffer.concat(chunks).toString('utf8');
+  const raw = Buffer.concat(chunks);
+  const type = request.headers['content-type'] ?? '';
+  if (type.startsWith('multipart/form-data')) {
+    const form = await new Response(raw, { headers: { 'content-type': type } }).formData();
+    const fields: Record<string, unknown> = {};
+    for (const [key, value] of form) {
+      if (typeof value !== 'string') {
+        continue;
+      }
+      const part = value.startsWith('attach://') ? form.get(value.slice('attach://'.length)) : null;
+      fields[key] =
+        part instanceof File
+          ? ({ name: part.name, bytes: Buffer.from(await part.arrayBuffer()) } satisfies FakeUpload)
+          : value;
+    }
+    return fields;
+  }
+  const text = raw.toString('utf8');
   return text === '' ? {} : (JSON.parse(text) as Record<string, unknown>);
 };
 
@@ -88,7 +115,7 @@ export class FakeTelegram {
     const match = /^\/bot([^/]+)\/(\w+)$/.exec(url);
     const token = match?.[1] ?? '';
     const method = match?.[2] ?? '';
-    const body = await readJson(request);
+    const body = await readBody(request);
     this.calls.push({ token, method, body });
 
     const bot = this.bots.get(token);
@@ -120,6 +147,8 @@ export class FakeTelegram {
           file_path: `files/${String(body.file_id)}`,
         });
       case 'sendMessage':
+      case 'sendPhoto':
+      case 'sendDocument':
         if (this.blockedChats.has(String(body.chat_id))) {
           return refusal(403, 'Forbidden: bot was blocked by the user');
         }
@@ -128,7 +157,7 @@ export class FakeTelegram {
           message_id: this.#messageId,
           date: Math.floor(Date.now() / 1_000),
           chat: { id: Number(body.chat_id), type: 'private' },
-          text: body.text,
+          ...(method === 'sendMessage' ? { text: body.text } : {}),
         });
       default:
         return ok(true);

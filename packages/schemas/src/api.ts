@@ -115,6 +115,18 @@ export const WEBHOOK_TEST_EVENT = 'ping';
 export const webhookDeliveryEventSchema = z.enum([...WEBHOOK_EVENTS, WEBHOOK_TEST_EVENT]);
 export type WebhookDeliveryEvent = z.infer<typeof webhookDeliveryEventSchema>;
 
+/**
+ * The retry schedule of `webhook.deliver`, as the Developers page explains it:
+ * eight attempts, the second 30 s after the first, each wait twice the last.
+ * The job's own options in `@helpdock/jobs` are held to these by a test in the
+ * api, because that package does not depend on this one.
+ */
+export const WEBHOOK_DELIVERY_ATTEMPTS = 8;
+export const WEBHOOK_RETRY_BASE_MS = 30_000;
+
+/** How long a receiver has to answer before the attempt counts as failed. */
+export const WEBHOOK_TIMEOUT_MS = 15_000;
+
 /** The header every delivery is signed in: `t=<unix seconds>,v1=<hex HMAC-SHA256>`. */
 export const WEBHOOK_SIGNATURE_HEADER = 'x-helpdock-signature';
 /** Every signing secret starts with this, so a leaked one is recognisable. */

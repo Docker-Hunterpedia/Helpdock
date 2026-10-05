@@ -60,6 +60,7 @@ describe('the admin nav', () => {
     // rather than a group that disappeared.
     expect(navLinks()).toContain('Settings');
     expect(navLinks()).toContain('Staff and roles');
+    expect(navLinks()).toContain('Developers');
   });
 
   /** DOMAIN-RULES §1.2: only an Admin and a Team Leader hold `staff:manage`. */
@@ -82,5 +83,7 @@ describe('the admin nav', () => {
     await screen.findByRole('navigation', { name: 'Main' });
 
     expect(navLinks()).toContain('Staff and roles');
+    // API keys and webhooks act for the whole brand: `brand:manage` (M8-01, M8-03).
+    expect(navLinks()).not.toContain('Developers');
   });
 });

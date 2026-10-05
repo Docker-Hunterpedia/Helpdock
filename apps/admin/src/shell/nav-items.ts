@@ -3,6 +3,7 @@ import {
   BookOpen,
   Building2,
   ChartColumn,
+  Code,
   type LucideIcon,
   Mail,
   Server,
@@ -26,6 +27,7 @@ export type NavKey =
   | 'ticketing'
   | 'automation'
   | 'channels'
+  | 'developers'
   | 'staff'
   | 'system';
 
@@ -104,6 +106,9 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   // Admin, and a Team Leader owns the widget's theme and content policy, so
   // the page is theirs too with the Widget tab alone (`channels/tabs.ts`).
   channels: item('channels', ROUTES.channels, Mail, { roles: ['admin', 'teamLeader'] }),
+  // M8-01, M8-03: API keys and webhooks act for the whole brand, every
+  // department included, so they are the Admin's alone (`brand:manage`).
+  developers: item('developers', ROUTES.developers, Code, { roles: ['admin'] }),
   // "Staff and roles" is the Admin and Team Leader screen: they are the two
   // roles that hold `staff:manage` (DOMAIN-RULES §1.2).
   staff: item('staff', ROUTES.staff, ShieldUser, { roles: ['admin', 'teamLeader'] }),
@@ -126,6 +131,7 @@ export const ADMIN_NAV: readonly NavItem[] = [
   NAV_BY_KEY.ticketing,
   NAV_BY_KEY.automation,
   NAV_BY_KEY.channels,
+  NAV_BY_KEY.developers,
   NAV_BY_KEY.staff,
   NAV_BY_KEY.system,
 ];

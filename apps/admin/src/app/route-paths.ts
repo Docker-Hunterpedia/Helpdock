@@ -69,6 +69,9 @@ export const ROUTES = {
   mailboxNew: '/admin/channels/mailboxes/new',
   /** One mailbox's form. */
   mailbox: '/admin/channels/mailboxes/:mailboxId',
+  /** API keys and webhooks (M8-01, M8-03). `/admin/developers` alone opens API keys. */
+  developers: '/admin/developers',
+  developersTab: '/admin/developers/:tab',
   staff: '/admin/staff',
   system: '/admin/system',
   /** The install-wide audit log (M3-08), reached from System. */
@@ -164,6 +167,9 @@ export const helpCenterRoute = (tab: string): string => `${ROUTES.helpCenter}/${
 /** One article in the editor. */
 export const articleRoute = (articleId: string): string =>
   `${ROUTES.helpCenter}/articles/${encodeURIComponent(articleId)}`;
+
+/** One tab of the Developers page, by its url segment. */
+export const developersRoute = (tab: string): string => `${ROUTES.developers}/${tab}`;
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;

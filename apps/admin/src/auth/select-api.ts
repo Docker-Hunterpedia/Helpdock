@@ -7,6 +7,9 @@ import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { HttpDevelopersApi } from '../developers/http-api.js';
+import { MockDevelopersApi } from '../developers/mock-api.js';
 import type { DomainsApi } from '../domains/api.js';
 import { HttpDomainsApi } from '../domains/http-api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
@@ -68,6 +71,8 @@ export interface AdminApis {
   readonly browserPush: BrowserPush;
   /** M5-07: Brand › Domains. */
   readonly domains: DomainsApi;
+  /** M8-01, M8-03: the Developers page. */
+  readonly developers: DevelopersApi;
 }
 
 /**
@@ -114,6 +119,7 @@ export function createApis(
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
       domains: new HttpDomainsApi(transport),
+      developers: new HttpDevelopersApi(transport),
     };
   }
 
@@ -150,5 +156,6 @@ export function createApis(
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    developers: new MockDevelopersApi(),
   };
 }

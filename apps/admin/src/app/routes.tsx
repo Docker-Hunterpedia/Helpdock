@@ -8,6 +8,7 @@ import { AutomationPage } from '../screens/admin/automation/automation-page.tsx'
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
 import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
+import { DevelopersPage } from '../screens/admin/developers/developers-page.tsx';
 import { AuditLogPage } from '../screens/admin/system/audit-log-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
@@ -124,6 +125,9 @@ export function AppRoutes(): ReactNode {
               its first. */}
           <Route path={ROUTES.brand} element={<BrandPage />} />
           <Route path={ROUTES.brandTab} element={<BrandPage />} />
+          {/* M8-01, M8-03: API keys and Webhooks; `/admin/developers` alone opens API keys. */}
+          <Route path={ROUTES.developers} element={<DevelopersPage />} />
+          <Route path={ROUTES.developersTab} element={<DevelopersPage />} />
           {/* Your account: Security (M0-06), Notifications (M3-07) and Email
               signature (M2-05) are tabs of one page, and `/me` alone opens
               the first. */}

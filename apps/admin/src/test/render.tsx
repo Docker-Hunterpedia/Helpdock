@@ -11,6 +11,8 @@ import type { ChannelsApi } from '../channels/api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { MockDevelopersApi } from '../developers/mock-api.js';
 import type { DomainsApi } from '../domains/api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
 import type { EmailApi } from '../email/api.js';
@@ -46,6 +48,7 @@ export interface RenderAppOptions {
   readonly helpCenterApi?: HelpCenterApi;
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
+  readonly developersApi?: DevelopersApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -64,6 +67,7 @@ export interface RenderedApp extends RenderResult {
   readonly helpCenterApi: HelpCenterApi;
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
+  readonly developersApi: DevelopersApi;
 }
 
 /**
@@ -86,6 +90,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const helpCenterApi = options.helpCenterApi ?? new MockHelpCenterApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
+  const developersApi = options.developersApi ?? new MockDevelopersApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -104,6 +109,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       helpCenterApi={helpCenterApi}
       browserPush={browserPush}
       domainsApi={domainsApi}
+      developersApi={developersApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -129,5 +135,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     helpCenterApi,
     browserPush,
     domainsApi,
+    developersApi,
   };
 }

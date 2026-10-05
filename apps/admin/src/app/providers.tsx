@@ -15,6 +15,8 @@ import type { AutomationApi } from '../automation/api.js';
 import { AutomationApiProvider } from '../automation/context.tsx';
 import type { ChannelsApi } from '../channels/api.js';
 import type { ContactsApi } from '../contacts/api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { DevelopersApiProvider } from '../developers/context.tsx';
 import type { DomainsApi } from '../domains/api.js';
 import { DomainsApiProvider } from '../domains/context.tsx';
 import type { EmailApi } from '../email/api.js';
@@ -118,6 +120,8 @@ export interface AppProvidersProps {
   readonly browserPush?: BrowserPush;
   /** Defaults to the matching adapter. Only Brand › Domains reads it (M5-07). */
   readonly domainsApi?: DomainsApi;
+  /** Defaults to the matching adapter. Only the Developers page reads it (M8-01, M8-03). */
+  readonly developersApi?: DevelopersApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -151,6 +155,7 @@ export function AppProviders({
   notificationsApi,
   browserPush,
   domainsApi,
+  developersApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -178,6 +183,7 @@ export function AppProviders({
   const notifications = notificationsApi ?? fallback.notifications;
   const push = browserPush ?? fallback.browserPush;
   const domains = domainsApi ?? fallback.domains;
+  const developers = developersApi ?? fallback.developers;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -244,13 +250,15 @@ export function AppProviders({
               >
                 <AutomationApiProvider api={automation}>
                   <DomainsApiProvider api={domains}>
-                    <HelpCenterApiProvider api={helpCenter}>
-                      <NotificationsProvider api={notifications} push={push}>
-                        <ToastProvider>
-                          <Router>{children}</Router>
-                        </ToastProvider>
-                      </NotificationsProvider>
-                    </HelpCenterApiProvider>
+                    <DevelopersApiProvider api={developers}>
+                      <HelpCenterApiProvider api={helpCenter}>
+                        <NotificationsProvider api={notifications} push={push}>
+                          <ToastProvider>
+                            <Router>{children}</Router>
+                          </ToastProvider>
+                        </NotificationsProvider>
+                      </HelpCenterApiProvider>
+                    </DevelopersApiProvider>
                   </DomainsApiProvider>
                 </AutomationApiProvider>
               </AuthApiProvider>

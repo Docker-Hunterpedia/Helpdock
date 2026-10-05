@@ -4,15 +4,29 @@ Helpdock POSTs an event to your endpoint when something happens in a brand: a ti
 
 ## Managing endpoints
 
-The Admin manages a brand's endpoints (`brand:manage`) at `/api/brands/{brandId}/webhooks`; an API key with `webhooks:manage` manages them at `/api/v1/webhooks` (see [the API guide](api.md)). The screen is a later task. Both take the same requests:
+The Admin manages a brand's endpoints (`brand:manage`) on **Developers › Webhooks** in the admin (artboard `Admin/Developers-Webhooks`), which calls `/api/brands/{brandId}/webhooks`; an API key with `webhooks:manage` manages them at `/api/v1/webhooks` (see [the API guide](api.md)).
+
+### The Developers › Webhooks page
+
+- **A red banner** names each endpoint Helpdock switched off after failed deliveries, with the last answer and when, and offers **Open log** and **Turn back on**.
+- **The Endpoints table** shows each URL, its events, Active or Turned off, the share of the last 24 hours' finished deliveries that succeeded, and the newest delivery's answer (or which attempt is next). Its row menu sends a test event, edits, turns the endpoint off or on, and deletes it.
+- **Add endpoint** takes an `https://` URL and the events. Helpdock resolves the name before saving it: a private, loopback or link-local address is refused with the address it found, and plain `http://` is refused (see [Network safety](#network-safety)). The signing secret is then shown **once**, with **Send test event** beside it.
+- **The open endpoint** shows its events and its signing secret as a masked field with **Rotate**, which asks first and then shows the new secret once.
+- **The delivery log** lists the endpoint's deliveries, newest first, filterable to failed or delivered ones, with the status code (or Timeout, Refused, Redirect, No answer), the attempt, the duration and when the next retry runs. A row opens **the delivery detail**: the attempts so far, the request headers exactly as the last attempt sent them (the `X-Helpdock-Signature` line marked), the body, and the first 1 KB of the answer. **Replay** sends it again.
+
+### The routes
+
+Both take the same requests, except the two the page alone uses:
 
 | Request | What it does |
 |---|---|
-| `POST …/webhooks` | `{ "url", "events": [...], "description"? }`. The answer carries `secret` — **the only time it is shown** |
+| `POST …/webhooks` | `{ "url", "events": [...], "description"? }`. The answer carries `secret` — **the only time it is shown**. A refused URL answers `400` with `error.webhooks.reason` (`webhook-destination-blocked`, with `address`, or `webhook-https-required`) |
 | `PATCH …/webhooks/{webhookId}` | Change the URL, events or description; `{ "enabled": true }` switches an endpoint back on |
 | `DELETE …/webhooks/{webhookId}` | Removes the endpoint and its delivery log |
 | `POST …/webhooks/{webhookId}/rotate-secret` | A new secret, shown once; deliveries from now on are signed with it |
 | `GET …/webhooks/{webhookId}/deliveries` | The delivery log, newest first |
+| `GET /api/brands/{brandId}/webhooks/{webhookId}/deliveries/{deliveryId}` | Admin only. One delivery with `request`: the URL, the body, and the headers its last attempt sent, signature included (none before the first attempt) |
+| `POST /api/brands/{brandId}/webhooks/{webhookId}/test` | Admin only. Sends a `ping` event to this endpoint alone, through the same queue and job as any delivery; answers `202` with the delivery to watch |
 | `POST …/webhooks/{webhookId}/deliveries/{deliveryId}/replay` | Sends that delivery's body again |
 
 The secret is stored encrypted under `APP_MASTER_KEY`. Every change is in the audit log, naming the staff member or the API key that made it.
@@ -30,6 +44,8 @@ The secret is stored encrypted under `APP_MASTER_KEY`. Every change is in the au
 | `article.published` | A help center article is published, in one language | `article`: `id`, `slug`, `locale`, `title`, `visibility`, `publishedAt` |
 
 `ticket`, `message` and `contact` have the shapes the API answers with (`/api/docs`).
+
+**`ping`** is not an event an endpoint subscribes to: it is what "Send test event" sends, to that endpoint alone, whatever its events. Its `data` is `webhook`: the endpoint's `id` and `url`. A receiver should answer it `2xx` and otherwise ignore it.
 
 ## The request
 
@@ -89,4 +105,9 @@ Each delivery records its status (`pending`, `succeeded`, `failed`, or `skipped`
 
 ## Network safety
 
-Every delivery goes through Helpdock's outbound client ([DOMAIN-RULES §13](../planning/DOMAIN-RULES.md#13-outbound-network-safety)): `http` and `https` only, ports 80, 443, 8080 and 8443, no credentials in the URL, and never a private, loopback, link-local or cloud-metadata address — checked on the address the name resolves to, at delivery time. Blocked attempts are logged with the destination. To deliver to an internal service on purpose, an operator adds its range to `OUTBOUND_ALLOW_CIDRS`.
+Every delivery goes through Helpdock's outbound client ([DOMAIN-RULES §13](../planning/DOMAIN-RULES.md#13-outbound-network-safety)): ports 80, 443, 8080 and 8443, no credentials in the URL, and never a private, loopback, link-local or cloud-metadata address — checked on the address the name resolves to, at delivery time. Blocked attempts are logged with the destination, and show as **Refused** in the delivery log. To deliver to an internal service on purpose, an operator adds its range to `OUTBOUND_ALLOW_CIDRS`.
+
+The same check runs when an endpoint is added or its URL is changed, so a private address is refused in the form rather than an hour later in the log. Two rules apply there:
+
+- **HTTPS only.** Plain `http://` is refused (`webhook-https-required`) unless the name resolves inside `OUTBOUND_ALLOW_CIDRS`: an operator's own service may not speak TLS, somebody else's endpoint must.
+- A name that does not resolve yet is accepted over `https`; its deliveries fail, and say so, until it does.

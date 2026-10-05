@@ -373,7 +373,7 @@ function TurnedOffBanner({
   const { locale } = usePreferences();
   const last = webhook.lastDelivery;
   const answer =
-    last?.responseStatus === null || last === null
+    last === null || last.responseStatus === null
       ? t('developers:webhooks.banner.noAnswer')
       : String(last.responseStatus);
   const date = dayAndTime(last?.lastAttemptAt ?? webhook.updatedAt, locale);

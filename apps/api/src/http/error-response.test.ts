@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { describe, expect, it } from 'vitest';
@@ -59,6 +60,12 @@ describe('mapError', () => {
     expect(mapped.status).toBe(status);
     expect(mapped.code).toBe(code);
     expect(mapped.unexpected).toBe(false);
+  });
+
+  it('calls a reused Idempotency-Key a conflict, at 422', () => {
+    expect(
+      mapError(new UnprocessableEntityException('used with a different request')),
+    ).toMatchObject({ status: 422, code: 'conflict', unexpected: false });
   });
 
   it('maps a tenant context the caller built wrongly to 400', () => {

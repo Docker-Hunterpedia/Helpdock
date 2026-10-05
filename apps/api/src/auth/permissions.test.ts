@@ -1,4 +1,4 @@
-import type { BrandMembership, BrandRole } from '@helpdock/schemas';
+import { API_SCOPES, type ApiScope, type BrandMembership, type BrandRole } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import {
   INSTALL_ADMIN,
@@ -20,6 +20,12 @@ const USER = '01937f5e-7e53-7000-8000-000000000001';
  * `rolePermissions` fails here until someone has read DOMAIN-RULES §1.2 again.
  * `install:admin` is in no row: no role grants it.
  */
+/** M8-02: the API scopes are permissions too, and no role holds one. */
+const NO_API_SCOPES = Object.fromEntries(API_SCOPES.map((scope) => [scope, false])) as Record<
+  ApiScope,
+  false
+>;
+
 const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>> = {
   admin: {
     'ticket:read': true,
@@ -37,6 +43,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     'install:admin': false,
     'help_center:read': true,
     'help_center:manage': true,
+    ...NO_API_SCOPES,
   },
   team_leader: {
     'ticket:read': true,
@@ -58,6 +65,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     // DOMAIN-RULES §1.2: a Team Leader manages "help center" content.
     'help_center:read': true,
     'help_center:manage': true,
+    ...NO_API_SCOPES,
   },
   agent: {
     'ticket:read': true,
@@ -76,6 +84,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     // Reads articles to answer with them; changes none.
     'help_center:read': true,
     'help_center:manage': false,
+    ...NO_API_SCOPES,
   },
   viewer: {
     'ticket:read': true,
@@ -94,6 +103,7 @@ const MATRIX: Readonly<Record<BrandRole, Readonly<Record<Permission, boolean>>>>
     // §1.2: a Viewer "may read … help center content".
     'help_center:read': true,
     'help_center:manage': false,
+    ...NO_API_SCOPES,
   },
 };
 
@@ -168,12 +178,14 @@ describe('principalHasPermission', () => {
       type: 'apikey',
       id: USER,
       brandId: BRAND_A,
-      scopes: ['ticket:read'],
+      scopes: ['tickets:read'],
     };
 
-    expect(principalHasPermission(key, BRAND_A, 'ticket:read')).toBe(true);
-    expect(principalHasPermission(key, BRAND_A, 'ticket:write')).toBe(false);
-    expect(principalHasPermission(key, BRAND_B, 'ticket:read')).toBe(false);
+    expect(principalHasPermission(key, BRAND_A, 'tickets:read')).toBe(true);
+    expect(principalHasPermission(key, BRAND_A, 'tickets:write')).toBe(false);
+    expect(principalHasPermission(key, BRAND_B, 'tickets:read')).toBe(false);
+    // A key's scopes are the public API's; a staff route's permission is not one.
+    expect(principalHasPermission(key, BRAND_A, 'ticket:read')).toBe(false);
   });
 
   it('gives a visitor and a worker no staff permission over HTTP', () => {

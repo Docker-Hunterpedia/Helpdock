@@ -123,6 +123,11 @@ const harness = (): Harness => {
         expect(redis).toBe(connection);
         return { close: async () => void calls.push('domains.close') };
       },
+      createWebhooksWorker: ({ redis }) => {
+        calls.push('webhooks.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('webhooks.close') };
+      },
       startRelay: ({ redis, listenUrl, status }) => {
         calls.push('relay.start');
         started.listenUrl = listenUrl;
@@ -156,6 +161,7 @@ describe('startWorker', () => {
       'help-center.create',
       'notify.create',
       'domains.create',
+      'webhooks.create',
       'relay.start',
     ]);
   });
@@ -243,6 +249,7 @@ describe('startWorker', () => {
       'help-center.close',
       'notify.close',
       'domains.close',
+      'webhooks.close',
       'producers.close',
       'connection.quit',
     ]);
@@ -269,6 +276,7 @@ describe('startWorker', () => {
       'help-center.close',
       'notify.close',
       'domains.close',
+      'webhooks.close',
       'producers.close',
       'connection.quit',
     ]);

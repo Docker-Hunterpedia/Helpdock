@@ -19,8 +19,11 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Redis } from 'ioredis';
+import { ApiKeyPrincipalResolver } from './api-keys/api-key-principal-resolver.js';
+import { ApiKeysRepository } from './api-keys/api-keys.repository.js';
 import { AppModule, type AppModuleOptions } from './app.module.js';
 import { createPrincipalResolver } from './auth/principal-resolver.js';
+import { RateLimiter } from './auth/rate-limit.js';
 import { RefreshStore } from './auth/session/refresh-store.js';
 import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
@@ -217,7 +220,13 @@ export const createApiApp = async ({
       bootFacts: runtime.bootFacts,
       auth: { signingKeys: runtime.signingKeys, logger },
       realtime: { sessionResolver, revocations: refreshStore },
-      principalResolver: createPrincipalResolver({ env, logger, session: sessionResolver }),
+      // M8-01: `hd_live_…` bearers are API keys; anything else is the session's.
+      principalResolver: new ApiKeyPrincipalResolver({
+        db: runtime.db,
+        keys: new ApiKeysRepository(),
+        limiter: new RateLimiter(runtime.redis),
+        fallback: createPrincipalResolver({ env, logger, session: sessionResolver }),
+      }),
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(channels === undefined ? {} : { channels }),

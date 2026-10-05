@@ -11,6 +11,7 @@ import type { CsatBrand, CsatSubmitRequest, CsatSurveyView, TicketCsat } from '@
 import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import type { CsatRepository, SurveyWithTicket } from './csat.repository.js';
+import { enqueueCsatReceived } from './csat-events.js';
 import { type CsatTokenSubject, type CsatTokens, hashCsatToken } from './tokens.js';
 
 /**
@@ -135,6 +136,10 @@ export class CsatService {
       }
 
       await this.#audit(tx, subject, found, 'csat.rated', { rating: request.rating });
+      await enqueueCsatReceived(tx, subject.brandId, {
+        ticketId: found.survey.ticketId,
+        surveyId: subject.surveyId,
+      });
 
       return { state: 'rated', brand, rating: request.rating };
     });

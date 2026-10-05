@@ -10,6 +10,8 @@ import {
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { Redis } from 'ioredis';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
+import { ApiKeysModule } from './api-keys/api-keys.module.js';
+import { ApiV1Module } from './api-v1/api-v1.module.js';
 import { AssignmentModule } from './assignment/assignment.module.js';
 import { AuditLogModule } from './audit/audit-log.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
@@ -59,6 +61,7 @@ import { DbContactTimelineProvider, DbTicketStatsProvider } from './tickets/cont
 import { TicketsModule } from './tickets/tickets.module.js';
 import { ViewsModule } from './views/views.module.js';
 import { WebFormModule, type WebFormModuleOptions } from './web-form/web-form.module.js';
+import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { agentTypingRelay } from './widget/agent-typing.js';
 import { WidgetModule, type WidgetModuleOptions } from './widget/widget.module.js';
 import { RedisWidgetBroadcast } from './widget/widget-relay.js';
@@ -160,6 +163,20 @@ export class AppModule implements NestModule {
       hosts: options.brandResolver ?? hostResolver,
       ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
     });
+    // M1-04, built once and imported twice, by `AppModule` and by M8-02's
+    // public API, which writes contacts through the same service.
+    // M1-02 fills in two null providers left for the contact screens; they
+    // live in `tickets/` so that contacts never learn the ticket schema
+    // (`contacts/providers.ts` says why).
+    const contacts = ContactsModule.forRoot({
+      ticketStats: new DbTicketStatsProvider(),
+      timeline: new DbContactTimelineProvider(),
+      // M1-14: an erasure also removes the files the person sent.
+      erasure: new DbContactErasureProvider(),
+    });
+    // M8-03, the same pattern: the Admin's webhook settings here, and the
+    // public API's `webhooks:manage` routes in `ApiV1Module`.
+    const webhooks = WebhooksModule.forRoot({ env: options.env });
     // M0-13's gateway, imported by `AppModule` and by `WidgetModule` as one
     // module, so `/widget` shares the presence and publisher `/staff` runs.
     const realtime = RealtimeModule.forRoot({
@@ -184,15 +201,7 @@ export class AppModule implements NestModule {
         ObservabilityModule.forRoot({ logger: options.logger, bootFacts: options.bootFacts }),
         realtime,
         StaffModule.forRoot({ logger: options.logger }),
-        // M1-04 left two null providers behind for the contact screens; M1-02
-        // fills them in. They live in `tickets/` so that contacts never learn
-        // the ticket schema (`contacts/providers.ts` says why).
-        ContactsModule.forRoot({
-          ticketStats: new DbTicketStatsProvider(),
-          timeline: new DbContactTimelineProvider(),
-          // M1-14: an erasure also removes the files the person sent.
-          erasure: new DbContactErasureProvider(),
-        }),
+        contacts,
         ticketing,
         csat,
         sla,
@@ -259,6 +268,11 @@ export class AppModule implements NestModule {
         // M5-03, M5-04, M5-06: the pages, SEO and the site settings;
         // M5-05, M5-08: search, feedback, views and Insights.
         helpCenter,
+        // M8-01: Settings › API keys. M8-02: `/api/v1` and `/api/docs`.
+        // M8-03: Settings › Webhooks; delivering runs in the worker.
+        ApiKeysModule.forRoot(),
+        webhooks,
+        ApiV1Module.forRoot({ tickets, contacts, helpCenter, webhooks }),
         // Last, so its catch-all route is registered after every declared one.
         StaticModule.forRoot({ env: options.env, logger: options.logger, hostPages: helpCenter }),
       ],

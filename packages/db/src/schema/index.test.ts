@@ -25,6 +25,8 @@ describe('the schema', () => {
   it('declares the tables shipped so far (ARCHITECTURE §5)', () => {
     expect([...byName.keys()].sort()).toEqual([
       'accounts',
+      'api_idempotency_keys',
+      'api_keys',
       'assignment_agents',
       'assignment_skills',
       'attachments',
@@ -82,6 +84,8 @@ describe('the schema', () => {
       'users',
       'views',
       'web_form_settings',
+      'webhook_deliveries',
+      'webhooks',
       'widget_settings',
       'widget_visitors',
       'workflow_rules',

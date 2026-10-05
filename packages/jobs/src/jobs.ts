@@ -805,6 +805,41 @@ export const helpCenterMediaProcessJob = defineJob({
   idempotencyKey: (payload) => `help_center.media_process:${payload.mediaId}`,
 });
 
+export const webhookDeliverPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `webhook_deliveries` row: its frozen body, its endpoint, and its log. */
+  deliveryId: z.uuid(),
+});
+
+export type WebhookDeliverPayload = z.infer<typeof webhookDeliverPayloadSchema>;
+
+/** Attempts before a delivery is marked `failed` (M8-03). */
+export const WEBHOOK_DELIVER_ATTEMPTS = 8;
+
+/**
+ * M8-03: one event to one endpoint (ARCHITECTURE §13, `webhooks` queue). The
+ * delivery row is written by the `webhooks` subscriber of the domain event,
+ * beside a `webhook.delivery_requested` outbox row whose handler adds this job
+ * once the row has committed, as `email.send` does.
+ *
+ * Eight attempts, doubling from 30 seconds: the last one is 32 minutes after
+ * the one before it and about an hour after the first, so a receiver that is
+ * down for a deploy or a short outage still gets the event. Idempotent by delivery: a delivery that already
+ * succeeded is not sent again.
+ */
+export const webhookDeliverJob = defineJob({
+  name: 'webhook.deliver',
+  queue: QUEUE_NAMES.webhooks,
+  schema: webhookDeliverPayloadSchema,
+  options: {
+    attempts: WEBHOOK_DELIVER_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -830,6 +865,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterMediaProcessJob.name]: helpCenterMediaProcessJob,
   [helpCenterSearchReindexJob.name]: helpCenterSearchReindexJob,
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
+  [webhookDeliverJob.name]: webhookDeliverJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

@@ -1,5 +1,17 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
 
+/**
+ * Where an outbound webhook delivery stands (M8-03). `pending` until an
+ * attempt succeeds or the retries run out; `skipped` when the endpoint was
+ * removed or switched off before it could be sent.
+ */
+export const webhookDeliveryStatusEnum = pgEnum('webhook_delivery_status', [
+  'pending',
+  'succeeded',
+  'failed',
+  'skipped',
+]);
+
 /** Interface and content languages Helpdock ships with (REQUIREMENTS §3). */
 export const localeEnum = pgEnum('locale', ['en', 'ar']);
 

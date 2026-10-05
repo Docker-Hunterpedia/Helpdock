@@ -1,3 +1,4 @@
+import { API_SCOPES } from '@helpdock/schemas';
 import type { BrandRole, Principal } from './principal.js';
 
 /**
@@ -65,6 +66,10 @@ export const PERMISSIONS = [
   // Team Leader's ("Manages config … help center").
   'help_center:read',
   'help_center:manage',
+  // M8-02: the API scopes of REQUIREMENTS §4.11, which are the permissions the
+  // `/api/v1` routes require. No role grants one, so a staff session never
+  // reaches the public API and an API key never reaches a staff route.
+  ...API_SCOPES,
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

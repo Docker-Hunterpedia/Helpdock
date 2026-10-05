@@ -74,6 +74,9 @@ export const ROUTES = {
   aiTab: '/admin/ai/:tab',
   /** One Telegram bot's page (M6-05, `Admin/Channels-Telegram` panel 2). */
   telegramBot: '/admin/channels/telegram/:botId',
+  /** API keys and webhooks (M8-01, M8-03). `/admin/developers` alone opens API keys. */
+  developers: '/admin/developers',
+  developersTab: '/admin/developers/:tab',
   staff: '/admin/staff',
   system: '/admin/system',
   /** The install-wide audit log (M3-08), reached from System. */
@@ -176,6 +179,8 @@ export const articleRoute = (articleId: string): string =>
 
 /** One tab of `Admin/AI`, by its url segment. */
 export const aiRoute = (tab: string): string => `${ROUTES.ai}/${tab}`;
+/** One tab of the Developers page, by its url segment. */
+export const developersRoute = (tab: string): string => `${ROUTES.developers}/${tab}`;
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;

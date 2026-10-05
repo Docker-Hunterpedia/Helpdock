@@ -17,6 +17,8 @@ import type { AutomationApi } from '../automation/api.js';
 import { AutomationApiProvider } from '../automation/context.tsx';
 import type { ChannelsApi } from '../channels/api.js';
 import type { ContactsApi } from '../contacts/api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { DevelopersApiProvider } from '../developers/context.tsx';
 import type { DomainsApi } from '../domains/api.js';
 import { DomainsApiProvider } from '../domains/context.tsx';
 import type { EmailApi } from '../email/api.js';
@@ -138,6 +140,8 @@ export interface AppProvidersProps {
   readonly systemApi?: SystemApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
+  /** Defaults to the matching adapter. Only the Developers page reads it (M8-01, M8-03). */
+  readonly developersApi?: DevelopersApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -176,6 +180,7 @@ export function AppProviders({
   reportsApi,
   systemApi,
   telegramApi,
+  developersApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -208,6 +213,7 @@ export function AppProviders({
   const reports = reportsApi ?? fallback.reports;
   const system = systemApi ?? fallback.system;
   const telegram = telegramApi ?? fallback.telegram;
+  const developers = developersApi ?? fallback.developers;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -277,17 +283,19 @@ export function AppProviders({
                     <AiApiProvider api={ai}>
                       <KnowledgeApiProvider api={knowledge}>
                         <TelegramApiProvider api={telegram}>
-                          <HelpCenterApiProvider api={helpCenter}>
-                            <ReportsApiProvider api={reports}>
-                              <SystemApiProvider api={system}>
-                                <NotificationsProvider api={notifications} push={push}>
-                                  <ToastProvider>
-                                    <Router>{children}</Router>
-                                  </ToastProvider>
-                                </NotificationsProvider>
-                              </SystemApiProvider>
-                            </ReportsApiProvider>
-                          </HelpCenterApiProvider>
+                          <DevelopersApiProvider api={developers}>
+                            <HelpCenterApiProvider api={helpCenter}>
+                              <ReportsApiProvider api={reports}>
+                                <SystemApiProvider api={system}>
+                                  <NotificationsProvider api={notifications} push={push}>
+                                    <ToastProvider>
+                                      <Router>{children}</Router>
+                                    </ToastProvider>
+                                  </NotificationsProvider>
+                                </SystemApiProvider>
+                              </ReportsApiProvider>
+                            </HelpCenterApiProvider>
+                          </DevelopersApiProvider>
                         </TelegramApiProvider>
                       </KnowledgeApiProvider>
                     </AiApiProvider>

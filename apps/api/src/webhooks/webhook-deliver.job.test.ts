@@ -1,7 +1,12 @@
 import { createKeyring, encryptSecret } from '@helpdock/config';
 import type { Db, WebhookDeliveryRow, WebhookRow } from '@helpdock/db';
-import { silentLogger } from '@helpdock/jobs';
-import { SafeFetchError, type SafeFetchResponse } from '@helpdock/net';
+import { silentLogger, webhookDeliverJob } from '@helpdock/jobs';
+import { policies, SafeFetchError, type SafeFetchResponse } from '@helpdock/net';
+import {
+  WEBHOOK_DELIVERY_ATTEMPTS,
+  WEBHOOK_RETRY_BASE_MS,
+  WEBHOOK_TIMEOUT_MS,
+} from '@helpdock/schemas';
 import type { Job } from 'bullmq';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import {
@@ -228,6 +233,16 @@ describe('webhook.deliver', () => {
     await expect(process({ ...job(), data: { brandId: BRAND } } as unknown as Job)).rejects.toThrow(
       /deliveryId/,
     );
+  });
+});
+
+describe('the retry schedule the Developers page explains', () => {
+  it('is the one the job and the outbound policy run', () => {
+    expect(webhookDeliverJob.options).toMatchObject({
+      attempts: WEBHOOK_DELIVERY_ATTEMPTS,
+      backoff: { type: 'exponential', delay: WEBHOOK_RETRY_BASE_MS },
+    });
+    expect(policies.webhook.totalTimeoutMs).toBe(WEBHOOK_TIMEOUT_MS);
   });
 });
 

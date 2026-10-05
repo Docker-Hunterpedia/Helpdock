@@ -14,10 +14,9 @@ import {
   type SafeFetchResponse,
   safeFetch,
 } from '@helpdock/net';
-import { WEBHOOK_SIGNATURE_HEADER } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { withSystemJob } from '../tenant/system-job.js';
-import { signWebhook } from './webhook-signature.js';
+import { type WebhookRequest, webhookRequest } from './webhook-request.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
 
 /**
@@ -105,19 +104,13 @@ export const createWebhookDeliverProcessor = ({
   fetch = safeFetch,
   now = () => new Date(),
 }: WebhookDeliverDependencies) => {
-  const post = async (
-    url: string,
-    secret: string,
-    headers: Record<string, string>,
-    body: string,
-  ): Promise<Outcome> => {
+  const post = async (url: string, { headers, body }: WebhookRequest): Promise<Outcome> => {
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);
-    const signature = signWebhook(secret, Math.floor(now().getTime() / 1000), body);
     try {
       const response = await fetch(
         url,
-        { method: 'POST', headers: { ...headers, [WEBHOOK_SIGNATURE_HEADER]: signature }, body },
+        { method: 'POST', headers: { ...headers }, body },
         { ...policies.webhook, ...policy, maxRedirects: 0 },
       );
       const ok = response.status >= 200 && response.status < 300;
@@ -169,17 +162,12 @@ export const createWebhookDeliverProcessor = ({
       return;
     }
 
+    // One clock reading for the signature and for `last_attempt_at`, so the
+    // delivery log can show the signature this attempt carried.
+    const sentAt = now();
     const outcome = await post(
       webhook.url,
-      decryptSecret(webhook.secret, keyring),
-      {
-        'content-type': 'application/json',
-        'user-agent': 'Helpdock-Webhooks/1',
-        'x-helpdock-event': delivery.event,
-        'x-helpdock-event-id': delivery.eventId,
-        'x-helpdock-delivery': delivery.id,
-      },
-      JSON.stringify(delivery.payload),
+      webhookRequest(delivery, decryptSecret(webhook.secret, keyring), sentAt),
     );
 
     // The row's count survives a replay's fresh job; BullMQ's survives an
@@ -189,7 +177,7 @@ export const createWebhookDeliverProcessor = ({
     const status = outcome.ok ? 'succeeded' : last ? 'failed' : 'pending';
 
     await withSystemJob(db, brandId, principal, async (tx) => {
-      await repository.recordAttempt(tx, deliveryId, { ...outcome, status, attempts, at: now() });
+      await repository.recordAttempt(tx, deliveryId, { ...outcome, status, attempts, at: sentAt });
       if (outcome.ok) {
         if (webhook.consecutiveFailures > 0) {
           await repository.update(tx, webhook.id, { consecutiveFailures: 0 });

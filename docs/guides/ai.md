@@ -809,7 +809,6 @@ real calls.
 - The Arabic system prompt (`systemPromptAr`) is not yet chosen for assist: every
   assist call sends the brand's main prompt.
 - A transcription costs 0 in the log: there is no per-minute price setting.
-
 - A budget alert reaches the audit log and the settings response; an email or
   a bell entry for it waits for a design of its own (notifications are about a
   ticket today).

@@ -1,3 +1,4 @@
+import { aiProviderIdSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 
 /**
@@ -16,13 +17,8 @@ import { z } from 'zod';
 /** A provider kind that is not one of pi-ai's built-ins: any OpenAI-compatible server. */
 export const OPENAI_COMPATIBLE_KIND = 'openai-compatible';
 
-/** Lower-case slug, chosen by the admin, that a brand's override names. */
-export const aiProviderIdSchema = z
-  .string()
-  .regex(
-    /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/,
-    'must be a lower-case slug of 1 to 40 characters',
-  );
+/** The slug a provider is known by, as `@helpdock/schemas` defines it for the API too. */
+export { aiProviderIdSchema };
 
 /**
  * What pi-ai's OAuth helpers return and refresh (`OAuthCredentials`): an

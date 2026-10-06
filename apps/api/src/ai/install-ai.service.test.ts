@@ -1,6 +1,5 @@
 import { fakeEmbeddingsServer } from '@helpdock/ai';
 import {
-  aiProviderIdSchema as configProviderId,
   createKeyring,
   createSettings,
   InMemorySettingsStore,
@@ -8,7 +7,6 @@ import {
   type Settings,
 } from '@helpdock/config';
 import type { DbTransaction } from '@helpdock/db';
-import { aiProviderIdSchema as apiProviderId } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { InstallAiService, toProviderView } from './install-ai.service.js';
 
@@ -116,13 +114,5 @@ describe('toProviderView', () => {
       authType: 'oauth',
       oauthExpiresAt: '1970-01-01T00:00:00.000Z',
     });
-  });
-});
-
-describe('the provider id rule', () => {
-  it('is the same in the settings registry and in the api schema', () => {
-    for (const id of ['openai', 'a', 'my-ollama-2', 'Open AI', '-x', 'x-', 'a'.repeat(41)]) {
-      expect(apiProviderId.safeParse(id).success).toBe(configProviderId.safeParse(id).success);
-    }
   });
 });

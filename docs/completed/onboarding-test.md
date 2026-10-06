@@ -15,20 +15,27 @@ and [DOMAIN-RULES §15](../planning/DOMAIN-RULES.md#15-product-metrics):
 ## Machine runs
 
 `scripts/onboarding-run.sh` times the steps an operator takes through the same
-HTTP calls the admin and the web form make, on a throwaway local stack: the
-stack coming up, the first-run wizard, the admin's first sign-in with a second
-factor, Channels › Web form switched on, a customer sending the form, and the
-agent replying. It is the floor under the human run: what the software itself
-costs.
+HTTP calls the admin, the widget and the web form make, on a throwaway local
+stack: the stack coming up, the first-run wizard, the admin's first sign-in
+with a second factor, a second brand, each brand's widget allowed on its own
+site with a visitor starting a conversation from each, Channels › Web form
+switched on, a customer sending the form, and the agent replying. It is the
+floor under the human run: what the software itself costs. The Telegram
+ticket of REQUIREMENTS §7 is left to the clean-VM run (it needs a bot and a
+host Telegram can reach).
 
-| Date | Image | Pull | Up to healthy | Wizard | First sign-in | Web form on | Customer writes | Agent replies | Total |
+| Date | Image | Up to healthy | Wizard | First sign-in | Second brand | Two widgets | Web form | Agent replies | Total |
 |---|---|---|---|---|---|---|---|---|---|
-| 2026-10-05 | `local` (this branch) | already present | 26.2 s | 0.5 s | 0.9 s | 0.1 s | 0.4 s | 0.2 s | 28.6 s |
-| 2026-10-05 | `0.3.1` (published, GHCR) | 16.6 s | 18.0 s | 0.3 s | 0.1 s | 0.2 s | 0.2 s | 0.1 s | 35.6 s |
+| 2026-10-06 | `local` (this branch, merged) | 25.6 s | 0.2 s | 0.5 s | 0.1 s | 0.3 s | 0.2 s | 0.1 s | 27.0 s |
+| 2026-10-06 | `0.3.1` (published, GHCR, already pulled) | 30.4 s | 0.3 s | 0.1 s | 0.1 s | 0.4 s | 0.4 s | 0.1 s | 32.1 s |
+| 2026-10-05 | `0.3.1` (published, GHCR), earlier script without the second brand and the widgets | 18.0 s | 0.3 s | 0.1 s | — | — | 0.2 s | 0.1 s | 35.6 s, with a 16.6 s pull |
 
-Both on the shared development sandbox (4 vCPU, 15 GB), with the dev Compose
+All on the shared development sandbox (4 vCPU, 15 GB), with the dev Compose
 override and its MinIO. `0.3.1` predates the mandatory second factor for
-Admins, so its first sign-in opened a session at once.
+Admins, so its first sign-in opened a session at once. The `local` image was
+built from this branch's `docker/Dockerfile` on a base image that carries the
+sandbox's proxy certificate (`NODE_IMAGE` build argument), which the sandbox
+needs to reach the npm registry and a real build does not.
 
 ### The README against the published image
 

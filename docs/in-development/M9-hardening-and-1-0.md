@@ -18,11 +18,11 @@ Depends on everything above. Code-side deliverables (security scanning, load tes
 | M9-03 | Load tests | | in progress: suites built and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); the §14 host run is outstanding |
 | M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | | built in branch (M9-04): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); screen-reader pass outstanding |
 | M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | | in review |
-| M9-06 | User docs under `docs/guides/` | | planned |
-| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outs | | planned |
+| M9-06 | User docs under `docs/guides/` | | built in branch: every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
+| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outs | | tooling built and run locally ([notes](#m9-07-onboarding-test)); **the clean-VM run and the three outside testers need people** and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
 | M9-08 | Release pipeline | | verified; external dependency (GHCR visibility, signing key) open |
 | M9-09 | Tag `1.0.0` | | planned |
-| M9-10 | Restore drill | | planned |
+| M9-10 | Restore drill | | tooling built and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
 
 ## M9-04 Accessibility audit
 
@@ -209,6 +209,74 @@ pre-releases) to GHCR with the run's own token, generates the CycloneDX SBOM
 from the pushed image and creates the Release from the `CHANGELOG.md` section
 plus GitHub's generated notes. What remains is the external dependency in the
 PRD: making the GHCR package public and the image signing key.
+
+## M9-06 User docs
+
+The PRD's list, each page checked against the code it names (every command,
+env key, route and file):
+
+- **Install** ([install](../guides/install.md)): the README's install section
+  and the guide pull `ghcr.io/docker-hunterpedia/helpdock:<version>` with the
+  release's own Compose file; upgrades and backups now point at operations.
+- **Configuration** ([configuration](../guides/configuration.md)) is
+  generated: `renderConfigurationReference` (`packages/config/src/reference.ts`)
+  renders the bootstrap keys from `envSchema` and the comments in
+  `.env.example`, the Compose-only keys from `docker/docker-compose.yml`
+  (`${KEY:?}` required, `${KEY:-x}` defaulted), and every `HD_*` setting from
+  the registry. `reference.test.ts` snapshots the page, so a key added to the
+  schema, the registry or `.env.example` without regenerating the page fails
+  the unit tests, as does a key in `.env.example` that nothing reads.
+- **Channels** ([channels](../guides/channels.md)): one page over email,
+  Telegram, the widget, the web form and the API, and what they share.
+- **Security** ([security](../guides/security.md)): the threat model in brief,
+  tenancy, secrets, outbound requests, uploads, sessions, headers and the
+  operator's list, each pointing at the ASVS evidence.
+- **Operations** ([operations](../guides/operations.md)): backups, restoring,
+  upgrading, rotating the master key, and losing Redis.
+- Help center, AI, API and widget protocol already existed and were checked
+  for drift; only links changed.
+
+Master key rotation, which the operations page needed to describe, is
+`rotateMasterKey` (`packages/db/src/master-key-rotation.ts`): one transaction
+over every envelope column (`ENVELOPE_COLUMNS`), the secret rows of
+`settings`, and sign-in links still unpublished in the outbox, under the
+runtime role with every brand in scope, audited as
+`install.master_key_rotated`. A value neither key opens rolls the run back and
+names the place. `master-key-rotation.test.ts` fails when the schema gains a
+secret-looking column that is on neither list; the integration test proves
+every brand's secrets open under the new key alone, published outbox rows and
+plain settings are untouched, a second run changes nothing, and the rollback.
+`node dist/cli.js keys rotate` (`apps/api/src/cli.ts`) runs it from the image.
+Found on the way: a rotation would have locked every staff member out, because
+password hashes are peppered from the master key; `PasswordHasher` now
+verifies under `APP_MASTER_KEY_PREVIOUS` too and re-hashes at that sign-in.
+
+## M9-07 Onboarding test
+
+`scripts/onboarding-run.sh` is the machine half of REQUIREMENTS §7: a
+throwaway stack from the image, the first-run wizard, the admin's first
+sign-in with the second factor enrolled, a second brand, each brand's widget
+allowed on its own site with a visitor starting a conversation from each, the
+web form switched on and sent, and the agent finding and answering a ticket,
+each step timed through the same HTTP calls the admin, the widget and the form
+make. Local runs are in [onboarding-test.md](../completed/onboarding-test.md).
+**Still to do by people:** the clean-VM run with a stopwatch (Telegram
+included, which needs a bot and a reachable host) and the usability pass with
+three outside testers on the three-click reply task; the document has the
+tables to fill in.
+
+## M9-10 Restore drill
+
+`scripts/restore-drill.sh` (`backup`, `restore`, `verify`, and `rehearse` for
+a local run on two throwaway stacks) with [restore drill](../guides/restore-drill.md)
+as the runbook. Backup is `pg_dump -Fc`, the bucket through `mc` from the
+image the Compose file pins, and `.env`, with row counts, an object hash list
+and the hash of an attachment as the api serves it; verify compares all of
+them and signs in with the second factor; rehearse then rotates the master
+key on the restored stack and signs in under both keys and the new one alone.
+Local rehearsals are in [restore-drill.md](../completed/restore-drill.md).
+**Still to do by a person:** the drill for the record on a clean VM against
+the one-hour target.
 
 ## Gaps carried from earlier milestones
 

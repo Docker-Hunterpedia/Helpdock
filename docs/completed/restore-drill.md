@@ -17,7 +17,21 @@ rehearsed on the result. The procedure is the
 | Date | Kind | Release | Backup | Restore | Verify | Key rotation | Result |
 |---|---|---|---|---|---|---|---|
 | 2026-10-05 | Local rehearsal (`restore-drill.sh rehearse`) | image built from the M9-06 branch | 8.5 s, 556 KB | 35.0 s | 5.5 s | 68.3 s | Passed |
+| 2026-10-06 | Local rehearsal (`restore-drill.sh rehearse`) | image built from the branch after merging M6–M8 work | 3.6 s, 580 KB | 19.9 s | 9.2 s | 58.9 s | Passed |
 | | **Clean VM, for the record** | `1.0.0` release candidate | | | | | To do |
+
+## 2026-10-06, local rehearsal
+
+Same machine and procedure as the day before, after merging the integration
+branch (migrations up to 0046), with the image built from the merged branch;
+the sandbox needed a base image carrying its proxy certificate (`NODE_IMAGE`
+build argument), which a real build does not. Restore 19.9 s (database 7.9 s
+in, bucket 8.5 s in), verify 9.2 s: row counts 1 1 1 0 1 1 1 0 3 5, three
+objects, the drill admin signed in with the second factor, the attachment's
+bytes matched. `keys rotate` re-encrypted 3 values (the authenticator secret
+and two secret settings), listing every envelope place with 0 for the rest,
+then 0 under the new key alone; the rotation phase took 58.9 s, most of it
+waiting for fresh TOTP steps.
 
 ## 2026-10-05, local rehearsal
 

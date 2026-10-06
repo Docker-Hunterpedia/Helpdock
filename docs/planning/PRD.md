@@ -107,10 +107,10 @@ Effort assumes one full-time maintainer working with AI coding agents, including
 | M2 | SMTP provider account and one IMAP mailbox for E2E against a real provider (CI uses Mailpit for SMTP and GreenMail for IMAP) | @Docker-Hunterpedia | needed |
 | M5-07 | A registered domain with DNS control for the TLS onboarding test | @Docker-Hunterpedia | needed |
 | M6 | A Telegram bot token for the staging bot | @Docker-Hunterpedia | needed |
-| M7 | LLM and embeddings API keys for the nightly evaluation run (stored as CI secrets) | @Docker-Hunterpedia | needed |
+| M7 | LLM and embeddings API keys for the nightly evaluation run (stored as CI secrets: `AI_EVAL_API_KEY` and the keys named in `.github/workflows/ai-eval.yml`) | @Docker-Hunterpedia | needed |
 | M7-03 | Notion integration and Google Cloud OAuth app for the connectors | @Docker-Hunterpedia | needed |
 | M9-01 | External pentest vendor, budget and a 2-week slot booked at least 6 weeks ahead | @Docker-Hunterpedia | not started |
-| M9-04 | Three outside testers for the usability pass | @Docker-Hunterpedia | not started |
+| M9-07 | Three outside testers for the usability pass, and a clean VM for the onboarding run and the restore drill for the record (`docs/completed/onboarding-test.md`, `docs/completed/restore-drill.md`) | @Docker-Hunterpedia | not started |
 | M9-08 | GHCR publish permissions on the org and a signing key for images | @Docker-Hunterpedia | needed |
 
 ---
@@ -306,7 +306,7 @@ Depends on: M2 (adapter interface), M1 (media pipeline).
 
 Exit criteria:
 
-- [ ] A Telegram message creates a ticket and the agent reply arrives in the chat, tested against a mocked Bot API.
+- [x] A Telegram message creates a ticket and the agent reply arrives in the chat, tested against a mocked Bot API. See [the milestone doc](../in-development/M6-telegram.md#exit-criteria).
 
 ---
 
@@ -334,12 +334,12 @@ Depends on: M5 (articles as knowledge), M4 and M6 (auto-reply surfaces), M3 (rul
 
 Exit criteria:
 
-- [ ] Auto-reply answers a question from an uploaded PDF with a citation, and hands off when confidence is below threshold, in an E2E test with a mocked provider.
-- [ ] The evaluation run meets every threshold in DOMAIN-RULES §9 for both English and Arabic.
-- [ ] After a handoff, no auto-reply is sent for the rest of the conversation even if a queued job fires late.
-- [ ] A visitor-audience query never retrieves an internal chunk (SQL-level test), and a fabricated citation is dropped.
-- [ ] Budget hard stop disables auto-reply and is visible in admin.
-- [ ] PII redaction is covered by unit tests for emails, phones, cards (Luhn), IBANs.
+- [x] Auto-reply answers a question from an uploaded PDF with a citation, and hands off when confidence is below threshold, in an E2E test with a mocked provider. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
+- [ ] The evaluation run meets every threshold in DOMAIN-RULES §9 for both English and Arabic. The harness and nightly workflow are in (M7-11); the run needs the real-provider `AI_EVAL_API_KEY` secret listed under external dependencies.
+- [x] After a handoff, no auto-reply is sent for the rest of the conversation even if a queued job fires late. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
+- [x] A visitor-audience query never retrieves an internal chunk (SQL-level test), and a fabricated citation is dropped. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
+- [x] Budget hard stop disables auto-reply and is visible in admin. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
+- [x] PII redaction is covered by unit tests for emails, phones, cards (Luhn), IBANs. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
 
 ---
 
@@ -363,8 +363,8 @@ Depends on: M1, M3. May run in parallel with M7.
 
 Exit criteria:
 
-- [ ] A ticket created via the API triggers a signed `ticket.created` webhook received by a test endpoint.
-- [ ] Reports match seeded data in an integration test.
+- [x] A ticket created via the API triggers a signed `ticket.created` webhook received by a test endpoint. See [the milestone doc](../in-development/M8-api-webhooks-reports.md#exit-criteria).
+- [x] Reports match seeded data in an integration test. See [the milestone doc](../in-development/M8-api-webhooks-reports.md#exit-criteria).
 
 #### M9 Hardening and 1.0
 

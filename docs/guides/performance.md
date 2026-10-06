@@ -129,6 +129,7 @@ are smoke runs and say so.
 | 2026-10-05 | the same | `perf:realtime`, 20 visitors, 2 agents, one reply a second, 40 s | p50 84 ms, p95 257 ms, nothing lost. Passes. |
 | 2026-10-05 | the same | `perf:realtime`, 20 visitors, 2 agents, five replies a second, 30 s | p50 196 ms, **p95 4.9 s**, nothing lost. See below. |
 | 2026-10-05 | the same, load average 13–47 | `perf:realtime`, 20 visitors, 2 agents, five replies a second, 30 s, `PERF_SCALE=0.02`, `OUTBOX_CONCURRENCY` 1 and 8 interleaved | see [the concurrency runs](#outbox-concurrency-on-the-sandbox) |
+| 2026-10-06 | development sandbox, 4 vCPU, 15 GB, load average ~1.5, `PERF_SCALE=0.02` (1 000 tickets in the measured brand), 10 sessions, 5 s warm-up, 30 s | `perf:tickets` | 293 requests, no errors, 9.8 req/s; overall p95 42 ms; worst scenario p95 76 ms (Admin, "escalated" view); opening a ticket p95 65 ms. Passes the 150 ms gate at a fiftieth of §14's dataset, so it says the harness and the plans are healthy, not that the gate holds at 50 000. |
 
 ### What the realtime runs showed
 

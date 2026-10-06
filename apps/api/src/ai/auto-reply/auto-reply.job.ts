@@ -1,14 +1,6 @@
 import {
   type Ai,
-  AiNotConfiguredError,
   AUTO_REPLY_HISTORY_TURNS,
-  AUTO_REPLY_MAX_TOKENS,
-  type AutoReplyDecision,
-  asksForHuman,
-  autoReplyInstructions,
-  autoReplyMessages,
-  BudgetExceededError,
-  decideAutoReply,
   detectLocale,
   type KnowledgeLocale,
 } from '@helpdock/ai';
@@ -21,7 +13,6 @@ import {
   type JobLogger,
   parseJobPayload,
 } from '@helpdock/jobs';
-import type { AiPauseReason } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
 import type { RetrievedChunk, Retriever } from '../../knowledge/retrieval/retrieve.js';
 import { withSystemJob } from '../../tenant/system-job.js';
@@ -34,6 +25,7 @@ import { aiMeta, type StoredAiMeta, type StoredCitation } from './ai-meta.js';
 import { isAiPaused, pauseAi } from './ai-pause.js';
 import { answerBody } from './answer-body.js';
 import { AutoReplyRepository, type ConversationRow } from './auto-reply.repository.js';
+import { type Generated, generateAutoReply } from './auto-reply-generate.js';
 import type { AutoReplySettings, AutoReplySettingsReader } from './auto-reply-settings.js';
 
 /**
@@ -51,17 +43,15 @@ import type { AutoReplySettings, AutoReplySettingsReader } from './auto-reply-se
  *               handoff: the brand's handoff text, pause, channel delivery
  * ```
  *
- * The model call runs outside any transaction, so a slow provider holds no
- * lock. That is why the pause is read twice: the second read is under the
- * ticket's row lock, which a staff reply and the widget's "Talk to a human"
- * take too, so a job that fires late — after a handoff, an agent's reply or
- * a newer message — sends nothing (DOMAIN-RULES §9: "checked immediately
- * before every send").
+ * The model call (`auto-reply-generate.ts`) runs outside any transaction, so
+ * a slow provider holds no lock. That is why the pause is read twice: the
+ * second read is under the ticket's row lock, which a staff reply and the
+ * widget's "Talk to a human" take too, so a job that fires late — after a
+ * handoff, an agent's reply or a newer message — sends nothing (DOMAIN-RULES
+ * §9: "checked immediately before every send").
  */
 
-export const AUTO_REPLY_FEATURE = 'auto_reply';
 export const AUTO_REPLY_ACTOR = 'ai:auto_reply';
-const RETRIEVE_K = 6;
 
 export interface AutoReplyDeps {
   readonly db: Db;
@@ -83,23 +73,6 @@ interface Prepared {
   readonly locale: KnowledgeLocale;
   readonly settings: AutoReplySettings;
   readonly turns: readonly { from: 'customer' | 'assistant'; text: string }[];
-}
-
-type Outcome =
-  | { readonly kind: 'answer'; readonly decision: Extract<AutoReplyDecision, { kind: 'answer' }> }
-  | {
-      readonly kind: 'handoff';
-      readonly reason: AiPauseReason;
-      readonly confidence: number | null;
-      /** False for the customer's own request: the widget already says it, and there is no answer to replace. */
-      readonly withMessage: boolean;
-    };
-
-interface Generated {
-  readonly outcome: Outcome;
-  readonly chunks: readonly RetrievedChunk[];
-  readonly callId: string | null;
-  readonly model: string | null;
 }
 
 const repository = new AutoReplyRepository();
@@ -133,7 +106,14 @@ export const runAutoReply = async (
     return;
   }
 
-  const generated = await generate(deps, payload, prepared);
+  const generated = await generateAutoReply(deps, {
+    brandId: payload.brandId,
+    ticketId: payload.ticketId,
+    text: prepared.text,
+    locale: prepared.locale,
+    turns: prepared.turns,
+    threshold: prepared.settings.threshold,
+  });
   if (generated === null) {
     return;
   }
@@ -203,92 +183,6 @@ const prepare = async (
       from: turn.authorType === 'ai' ? 'assistant' : 'customer',
       text: turn.bodyText,
     })),
-  };
-};
-
-/** Everything that may take seconds, outside any transaction. Null: stop without a word. */
-const generate = async (
-  deps: AutoReplyDeps,
-  payload: AiAutoReplyPayload,
-  prepared: Prepared,
-): Promise<Generated | null> => {
-  if (asksForHuman(prepared.text)) {
-    return {
-      outcome: {
-        kind: 'handoff',
-        reason: 'customer_request',
-        confidence: null,
-        withMessage: false,
-      },
-      chunks: [],
-      callId: null,
-      model: null,
-    };
-  }
-
-  const { chunks, mode } = await deps.retriever.retrieve({
-    brandId: payload.brandId,
-    query: prepared.text,
-    audience: 'visitor',
-    locale: prepared.locale,
-    k: RETRIEVE_K,
-  });
-  if (chunks.length === 0) {
-    return {
-      outcome: { kind: 'handoff', reason: 'low_confidence', confidence: 0, withMessage: true },
-      chunks,
-      callId: null,
-      model: null,
-    };
-  }
-
-  let completion: Awaited<ReturnType<AutoReplyDeps['ai']['complete']>>;
-  try {
-    completion = await deps.ai.complete({
-      brandId: payload.brandId,
-      feature: AUTO_REPLY_FEATURE,
-      ticketId: payload.ticketId,
-      locale: prepared.locale,
-      instructions: autoReplyInstructions(chunks, prepared.locale),
-      messages: autoReplyMessages(prepared.turns),
-      sources: chunks.map((chunk) => chunk.chunkId),
-      maxTokens: AUTO_REPLY_MAX_TOKENS,
-      temperature: 0.2,
-    });
-  } catch (error) {
-    // DOMAIN-RULES §9 and REQUIREMENTS §4.7: a spent budget or no model means
-    // the assistant stays quiet and a person answers; the visitor is never
-    // told why. The refusal is already in `ai_calls`.
-    if (error instanceof BudgetExceededError || error instanceof AiNotConfiguredError) {
-      deps.log.info(
-        { job: aiAutoReplyJob.name, brandId: payload.brandId, reason: error.name },
-        'auto-reply skipped',
-      );
-      return null;
-    }
-    throw error;
-  }
-
-  const decision = decideAutoReply({
-    answer: completion.text,
-    chunks,
-    mode,
-    locale: prepared.locale,
-    threshold: prepared.settings.threshold,
-  });
-  return {
-    outcome:
-      decision.kind === 'answer'
-        ? { kind: 'answer', decision }
-        : {
-            kind: 'handoff',
-            reason: decision.reason,
-            confidence: decision.confidence,
-            withMessage: true,
-          },
-    chunks,
-    callId: completion.callId,
-    model: completion.model,
   };
 };
 

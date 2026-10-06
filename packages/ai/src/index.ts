@@ -12,6 +12,7 @@ import type { AiPorts } from './ports.js';
 export * from './auto-reply/index.js';
 export * from './complete.js';
 export * from './embed.js';
+export * from './eval/index.js';
 export * from './guardrails/budget.js';
 export * from './guardrails/injection.js';
 export * from './guardrails/no-tools.js';

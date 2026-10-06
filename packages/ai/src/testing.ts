@@ -97,9 +97,27 @@ export const fakeVector = (text: string, dims: number): number[] => {
   return Array.from({ length: dims }, (_, index) => ((seed + index * 7_919) % 1_000) / 1_000);
 };
 
+/**
+ * Words hashed into buckets: texts that share words are close, the same text
+ * is at distance 0. Where a suite needs the vector ranker to agree with the
+ * words — the evaluation harness in mock mode — rather than only be present.
+ */
+export const bagOfWordsVector = (text: string, dims: number): number[] => {
+  const vector = Array.from({ length: dims }, () => 0.001);
+  for (const word of text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) {
+    let hash = 0;
+    for (const character of word) {
+      hash = (hash * 31 + (character.codePointAt(0) ?? 0)) % 9_973;
+    }
+    vector[hash % dims] = (vector[hash % dims] ?? 0) + 1;
+  }
+  return vector;
+};
+
 export const fakeEmbeddingsServer = (
   dims: number,
   models: readonly string[] = ['fake-embedding'],
+  vectorOf: (text: string, dims: number) => number[] = fakeVector,
 ): FakeEmbeddingsServer => {
   const requests: { url: string; request: HttpRequest }[] = [];
   let failure: number | null = null;
@@ -125,7 +143,7 @@ export const fakeEmbeddingsServer = (
       const { input } = JSON.parse(request.body ?? '{}') as { input: string[] };
       return Promise.resolve(
         answer(200, {
-          data: input.map((text, index) => ({ index, embedding: fakeVector(text, dims) })),
+          data: input.map((text, index) => ({ index, embedding: vectorOf(text, dims) })),
           usage: { prompt_tokens: input.join(' ').length },
         }),
       );

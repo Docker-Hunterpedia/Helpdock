@@ -24,6 +24,7 @@
     "test": "vitest run --coverage --project=!integration",
     "test:integration": "vitest run --project=integration",
     "test:watch": "vitest",
+    "eval:ai": "pnpm --filter @helpdock/api eval:ai",
     "check:boundaries": "node scripts/check-app-boundaries.ts",
     "check:routes": "node scripts/check-route-permissions.ts",
     "check:validation": "node scripts/check-route-validation.ts",

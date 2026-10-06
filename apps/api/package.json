@@ -24,6 +24,7 @@
     "perf:tickets": "vitest run --config vitest.perf.config.ts ticket-list",
     "perf:help-center": "vitest run --config vitest.perf.config.ts help-center",
     "perf:realtime": "vitest run --config vitest.perf.config.ts realtime",
+    "eval:ai": "vitest run --config vitest.eval.config.ts",
     "e2e": "playwright test"
   },
   "dependencies": {

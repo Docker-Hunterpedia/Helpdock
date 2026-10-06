@@ -12,7 +12,6 @@ import { signedInMockApis } from '../../../test/signed-in.js';
  * rotating. That the routes behave is `api-v1.integration.test.ts` in the api.
  */
 
-const SLOW = { timeout: 10_000 };
 const ACME = 'https://ops.acme-shop.com/hooks/helpdock';
 const LEGACY = 'https://hooks.legacy-crm.example/helpdock';
 
@@ -25,7 +24,7 @@ const renderWebhooks = async (developers = new MockDevelopersApi(), ready = 'End
     developersApi: developers,
     initialEntries: ['/admin/developers/webhooks'],
   });
-  await screen.findByRole('heading', { name: ready }, SLOW);
+  await screen.findByRole('heading', { name: ready });
   return rendered;
 };
 
@@ -166,9 +165,7 @@ describe('Developers › Webhooks', () => {
     const secret = (within(reveal).getByLabelText('Signing secret') as HTMLInputElement).value;
     expect(secret).toMatch(/^whsec_/);
     await user.click(within(reveal).getByRole('button', { name: 'Send test event' }));
-    expect(
-      await within(reveal).findByText('ping delivered · 200 in 162 ms', {}, SLOW),
-    ).toBeVisible();
+    expect(await within(reveal).findByText('ping delivered · 200 in 162 ms')).toBeVisible();
 
     await user.click(within(reveal).getByRole('button', { name: 'Done' }));
     await waitFor(() => {

@@ -44,10 +44,10 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 | M3 | Automation and SLAs | [shipped](docs/completed/M3-automation-and-slas.md) |
 | M4 | Widget and realtime | [shipped](docs/completed/M4-widget-and-realtime.md) |
 | M5 | Help center | [shipped](docs/completed/M5-help-center.md) |
-| M6 | Telegram | planned |
-| M7 | AI | planned |
-| M8 | API, webhooks, reports | planned |
-| M9 | Hardening and 1.0 release | planned |
+| M6 | Telegram | [in development](docs/in-development/M6-telegram.md) |
+| M7 | AI | [in development](docs/in-development/M7-ai.md) |
+| M8 | API, webhooks, reports | [in development](docs/in-development/M8-api-webhooks-reports.md) |
+| M9 | Hardening and 1.0 release | [in development](docs/in-development/M9-hardening-and-1-0.md) |
 
 Milestones are grouped into five phases with deliverables and exit criteria in the [PRD](docs/planning/PRD.md). All project documents live under [docs/](docs/), organised by lifecycle stage.
 

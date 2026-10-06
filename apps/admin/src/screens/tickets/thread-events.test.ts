@@ -46,3 +46,22 @@ describe('the "Still need help?" line in the thread (M5-08)', () => {
     );
   });
 });
+
+describe('the article proposal line in the thread (M7-05)', () => {
+  const proposed: TicketActivityEntry = {
+    ...entry,
+    actorType: 'staff',
+    action: 'ticket.article_proposed',
+    to: { proposalId: '0193b000-0000-7000-8000-000000000904', title: 'Customs' },
+  };
+
+  it('is drawn, naming who sent the article for approval', () => {
+    const now = Date.parse('2026-09-27T10:00:00.000Z');
+    const lina: ThreadNames = { ...names, nameFor: () => 'Lina' };
+
+    expect(buildThread([], [proposed], [])).toMatchObject([{ kind: 'event' }]);
+    expect(describeEvent(proposed, lina, en, 'en', now)).toMatch(
+      /^Lina proposed an article · waiting for approval · /,
+    );
+  });
+});

@@ -2,6 +2,8 @@ import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import { brands, type Db } from '@helpdock/db';
 import {
   aiAutoReplyJob,
+  aiClassifyJob,
+  aiTranscribeJob,
   assignmentOfflineUnassignJob,
   authEmailJob,
   BRAND_PURGE_CRON,
@@ -177,6 +179,11 @@ import { withSystemJob } from '../tenant/system-job.js';
 
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { createTranscribeProcessor } from '../transcription/transcribe.job.js';
+import { transcriptionConfigFrom } from '../transcription/transcription-config.js';
+import { registerTranscriptionHandlers } from '../transcription/transcription-events.js';
+import { createTriageProcessor } from '../triage/triage.job.js';
+import { registerTriageEventHandlers } from '../triage/triage-events.js';
 import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
 import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
 import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
@@ -289,8 +296,8 @@ export interface WorkerDependencies {
    */
   createDomainsWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /**
-   * M7-06's `ai` consumer: `ai.auto_reply`, one customer message answered or
-   * handed off. It sends through the channels' outbound paths, so it holds
+   * The `ai` consumer: M7-06's `ai.auto_reply`, one customer message answered or
+   * handed off; M7-07's `ai.classify` and M7-09's `ai.transcribe`. It sends through the channels' outbound paths, so it holds
    * the install's SMTP sender like the outbound worker.
    */
   createAiWorker(options: {
@@ -694,6 +701,22 @@ export const workerDependencies: WorkerDependencies = {
         },
       },
     });
+
+    // M7-07, M7-09. A rule's AI triage and a ready voice note each add a job
+    // on the same `ai` queue, under ids derived from the rows, by the rule above.
+    registerTriageEventHandlers({
+      add: async ({ jobId, name, payload }) => {
+        await ai.add(name, payload, { ...aiClassifyJob.options, jobId });
+      },
+    });
+    registerTranscriptionHandlers(
+      {
+        add: async ({ jobId, payload }) => {
+          await ai.add(aiTranscribeJob.name, payload, { ...aiTranscribeJob.options, jobId });
+        },
+      },
+      transcriptionConfigFrom(settings),
+    );
 
     return {
       close: async () => {
@@ -1274,10 +1297,18 @@ export const workerDependencies: WorkerDependencies = {
       ),
     });
     const autoReply = createAutoReplyProcessor(createAutoReplyDeps({ db, ai, installSmtp, log }));
+    const triage = createTriageProcessor({ db, ai, rules: createRulesEngineDeps({ log }), log });
+    const transcribe = createTranscribeProcessor({
+      db,
+      ai,
+      storage: storageFor(env),
+      config: transcriptionConfigFrom(settings),
+      log,
+    });
     const worker = new Worker(
       QUEUE_NAMES.ai,
       async (job) => {
-        const run = autoReply(job);
+        const run = autoReply(job) ?? triage(job) ?? transcribe(job);
         if (run === null) {
           throw new UnrecoverableError(`No consumer for ${job.name} on the ai queue`);
         }

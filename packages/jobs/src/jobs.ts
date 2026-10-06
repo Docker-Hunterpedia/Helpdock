@@ -1140,6 +1140,69 @@ export const brandPurgeScheduleJob = defineJob({
   schedule: { cron: BRAND_PURGE_CRON },
 });
 
+export const aiClassifyPayloadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  ruleId: z.uuid(),
+  /** The `workflow_runs` row whose log the result is written back to. */
+  runId: z.uuid(),
+  /** Which of the rule's actions it is, for the log. */
+  actionIndex: z.int().nonnegative().max(100),
+  mode: z.enum(['suggest', 'apply']),
+  fields: z
+    .array(z.enum(['tags', 'priority', 'department']))
+    .min(1)
+    .max(3),
+  /** The rule chain the run belongs to, carried on to the changes an `apply` makes. */
+  chain: z.array(z.uuid()).max(10),
+});
+export type AiClassifyPayload = z.infer<typeof aiClassifyPayloadSchema>;
+
+/**
+ * M7-07: a rule's AI triage action. Added by the `ai.triage_requested`
+ * outbox handler with the outbox row's id. Calls the model outside any
+ * transaction, then suggests or applies in one system transaction for the
+ * brand; idempotent by run and action, so a retry after the write does
+ * nothing. A refusal (no model, budget spent) is logged on the run and not
+ * retried.
+ */
+export const aiClassifyJob = defineJob({
+  name: 'ai.classify',
+  queue: QUEUE_NAMES.ai,
+  schema: aiClassifyPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: (payload) => `ai.classify:${payload.runId}:${String(payload.actionIndex)}`,
+});
+
+export const aiTranscribePayloadSchema = z.object({
+  brandId: z.uuid(),
+  attachmentId: z.uuid(),
+});
+export type AiTranscribePayload = z.infer<typeof aiTranscribePayloadSchema>;
+
+/**
+ * M7-09: a ready voice note sent to the install's Whisper-compatible
+ * endpoint; the transcript and the language it heard are stored on the
+ * attachment, for staff only. Added once per attachment (job id = the
+ * attachment's), and a done or failed transcript is not asked for again.
+ */
+export const aiTranscribeJob = defineJob({
+  name: 'ai.transcribe',
+  queue: QUEUE_NAMES.ai,
+  schema: aiTranscribePayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
 export const aiAutoReplyPayloadSchema = z.object({
   brandId: z.uuid(),
   ticketId: z.uuid(),
@@ -1206,6 +1269,9 @@ export const JOB_DEFINITIONS = Object.freeze({
   [statsRollupScheduleJob.name]: statsRollupScheduleJob,
   [brandPurgeJob.name]: brandPurgeJob,
   [brandPurgeScheduleJob.name]: brandPurgeScheduleJob,
+  [aiClassifyJob.name]: aiClassifyJob,
+  [aiTranscribeJob.name]: aiTranscribeJob,
+
   [aiAutoReplyJob.name]: aiAutoReplyJob,
 } as const);
 

@@ -64,7 +64,6 @@ export function AILogDisclosure({
   readonly call: AiCallView | undefined;
 }): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const summary = [
     call?.model ?? ai.model,
     call === undefined ? null : formatCost(call.costUsd),
@@ -72,6 +71,24 @@ export function AILogDisclosure({
   ]
     .filter((part): part is string => typeof part === 'string')
     .join(' · ');
+
+  return <AiLogDetails summary={summary} rows={logRows(ai, call, t)} />;
+}
+
+/**
+ * The disclosure itself, for any AI result that knows its figures: an
+ * auto-reply above, an agent assist result (M7-05) in `assist/`.
+ */
+export function AiLogDetails({
+  summary,
+  rows,
+}: {
+  /** "model · cost · confidence", or empty. */
+  readonly summary: string;
+  readonly rows: readonly (readonly [string, string])[];
+}): ReactNode {
+  const t = useT();
+  const tokens = useSemanticTokens();
 
   return (
     <Box
@@ -112,7 +129,7 @@ export function AILogDisclosure({
           padding: '4px 8px 8px',
         }}
       >
-        {logRows(ai, call, t).map(([term, value]) => (
+        {rows.map(([term, value]) => (
           <Box key={term} sx={{ display: 'contents' }}>
             <Typography
               component="dt"

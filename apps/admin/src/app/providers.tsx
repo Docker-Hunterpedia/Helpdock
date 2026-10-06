@@ -10,6 +10,8 @@ import { I18nextProvider } from 'react-i18next';
 import { BrowserRouter } from 'react-router';
 import type { AiApi } from '../ai/api.js';
 import { AiApiProvider } from '../ai/context.tsx';
+import type { AssistApi } from '../assist/api.js';
+import { AssistApiProvider } from '../assist/context.tsx';
 import type { AuthApi } from '../auth/api.js';
 import { createApis } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
@@ -140,6 +142,8 @@ export interface AppProvidersProps {
   readonly systemApi?: SystemApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
+  /** Defaults to the matching adapter. The ticket view and Help center › Proposals read it (M7). */
+  readonly assistApi?: AssistApi;
   /** Defaults to the matching adapter. Only the Developers page reads it (M8-01, M8-03). */
   readonly developersApi?: DevelopersApi;
   readonly queryClient?: QueryClient;
@@ -180,6 +184,7 @@ export function AppProviders({
   reportsApi,
   systemApi,
   telegramApi,
+  assistApi,
   developersApi,
   queryClient,
   router: Router = BrowserRouter,
@@ -213,6 +218,7 @@ export function AppProviders({
   const reports = reportsApi ?? fallback.reports;
   const system = systemApi ?? fallback.system;
   const telegram = telegramApi ?? fallback.telegram;
+  const assist = assistApi ?? fallback.assist;
   const developers = developersApi ?? fallback.developers;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
@@ -285,15 +291,17 @@ export function AppProviders({
                         <TelegramApiProvider api={telegram}>
                           <DevelopersApiProvider api={developers}>
                             <HelpCenterApiProvider api={helpCenter}>
-                              <ReportsApiProvider api={reports}>
-                                <SystemApiProvider api={system}>
-                                  <NotificationsProvider api={notifications} push={push}>
-                                    <ToastProvider>
-                                      <Router>{children}</Router>
-                                    </ToastProvider>
-                                  </NotificationsProvider>
-                                </SystemApiProvider>
-                              </ReportsApiProvider>
+                              <AssistApiProvider api={assist}>
+                                <ReportsApiProvider api={reports}>
+                                  <SystemApiProvider api={system}>
+                                    <NotificationsProvider api={notifications} push={push}>
+                                      <ToastProvider>
+                                        <Router>{children}</Router>
+                                      </ToastProvider>
+                                    </NotificationsProvider>
+                                  </SystemApiProvider>
+                                </ReportsApiProvider>
+                              </AssistApiProvider>
                             </HelpCenterApiProvider>
                           </DevelopersApiProvider>
                         </TelegramApiProvider>

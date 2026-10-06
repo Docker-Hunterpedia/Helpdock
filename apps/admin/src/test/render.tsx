@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router';
 import type { AiApi } from '../ai/api.js';
 import { MockAiApi } from '../ai/mock-api.js';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
+import type { AssistApi } from '../assist/api.js';
+import { MockAssistApi } from '../assist/mock-api.js';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import type { AutomationApi } from '../automation/api.js';
@@ -65,6 +67,7 @@ export interface RenderAppOptions {
   /** Defaults to the System fixture: a brand that is not being deleted. */
   readonly systemApi?: SystemApi;
   readonly telegramApi?: TelegramApi;
+  readonly assistApi?: AssistApi;
   readonly developersApi?: DevelopersApi;
   readonly initialEntries?: readonly string[];
 }
@@ -87,6 +90,7 @@ export interface RenderedApp extends RenderResult {
   readonly aiApi: AiApi;
   readonly knowledgeApi: KnowledgeApi;
   readonly telegramApi: TelegramApi;
+  readonly assistApi: AssistApi;
   readonly developersApi: DevelopersApi;
 }
 
@@ -113,6 +117,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const aiApi = options.aiApi ?? new MockAiApi();
   const knowledgeApi = options.knowledgeApi ?? new MockKnowledgeApi();
   const telegramApi = options.telegramApi ?? new MockTelegramApi();
+  const assistApi =
+    options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
   const developersApi = options.developersApi ?? new MockDevelopersApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
@@ -137,6 +143,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       reportsApi={options.reportsApi ?? fakeReportsApi()}
       systemApi={options.systemApi ?? fakeSystemApi()}
       telegramApi={telegramApi}
+      assistApi={assistApi}
       developersApi={developersApi}
       queryClient={queryClient}
       router={({ children }) => (
@@ -166,6 +173,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     aiApi,
     knowledgeApi,
     telegramApi,
+    assistApi,
     developersApi,
   };
 }

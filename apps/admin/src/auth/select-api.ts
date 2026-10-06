@@ -1,6 +1,9 @@
 import type { AiApi } from '../ai/api.js';
 import { HttpAiApi } from '../ai/http-api.js';
 import { MockAiApi } from '../ai/mock-api.js';
+import type { AssistApi } from '../assist/api.js';
+import { HttpAssistApi } from '../assist/http-api.js';
+import { MockAssistApi } from '../assist/mock-api.js';
 import type { AutomationApi } from '../automation/api.js';
 import { HttpAutomationApi } from '../automation/http-api.js';
 import { MockAutomationApi } from '../automation/mock-api.js';
@@ -92,6 +95,8 @@ export interface AdminApis {
   readonly system: SystemApi;
   /** M6: Channels › Telegram and a Telegram ticket's chat. */
   readonly telegram: TelegramApi;
+  /** M7-05, M7-09: agent assist and transcripts on a ticket, Help center › Proposals. */
+  readonly assist: AssistApi;
   /** M8-01, M8-03: the Developers page. */
   readonly developers: DevelopersApi;
 }
@@ -145,6 +150,7 @@ export function createApis(
       reports: new HttpReportsApi(transport),
       system: new HttpSystemApi(() => transport.currentAccessToken()),
       telegram: new HttpTelegramApi(transport),
+      assist: new HttpAssistApi(transport),
       developers: new HttpDevelopersApi(transport),
     };
   }
@@ -158,6 +164,14 @@ export function createApis(
   // this session names them the way the api would.
   const contacts = new MockContactsApi();
   const ticketing = new MockTicketingApi(blockList);
+  const tickets = new MockTicketsApi(
+    uploads,
+    Date.now(),
+    blockList,
+    (id) => contacts.nameOf(id),
+    ticketing,
+  );
+  const helpCenter = new MockHelpCenterApi();
 
   return {
     auth: new MockAuthApi(staff),
@@ -167,18 +181,12 @@ export function createApis(
     // Spam tab (M1-11); and the ticketing fixture is the ticket fixture's list
     // of tags and fields, so a tag made in Ticketing › Tags can go on a ticket.
     ticketing,
-    tickets: new MockTicketsApi(
-      uploads,
-      Date.now(),
-      blockList,
-      (id) => contacts.nameOf(id),
-      ticketing,
-    ),
+    tickets,
     uploader: uploads,
     email: new MockEmailApi(),
     channels: new MockChannelsApi(),
     automation: new MockAutomationApi(),
-    helpCenter: new MockHelpCenterApi(),
+    helpCenter,
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
@@ -189,6 +197,9 @@ export function createApis(
     reports: new HttpReportsApi(),
     system: new HttpSystemApi(),
     telegram: new MockTelegramApi(),
+    // It reads the ticket fixture for closed tickets and their messages, and
+    // files an approved proposal's draft in the help center fixture.
+    assist: new MockAssistApi({ tickets, helpCenter }),
     developers: new MockDevelopersApi(),
   };
 }

@@ -219,6 +219,28 @@ describe('the builder', () => {
     }, LOAD);
   });
 
+  it('adds an AI triage action that suggests the fields ticked (M7-07)', async () => {
+    const { user, automation } = await renderAt('/admin/automation/rules/new?kind=event');
+    const create = vi.spyOn(automation, 'createRule');
+
+    await user.type(await screen.findByLabelText('Rule name · required', {}, LOAD), 'Triage');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Field' }), 'priority');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Value' }), 'urgent');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Action 1' }), 'ai_triage');
+    expect(screen.getByRole('combobox', { name: 'Mode' })).toHaveValue('suggest');
+    await user.click(screen.getByRole('checkbox', { name: 'Department' }));
+    await user.click(screen.getByRole('button', { name: 'Save rule' }));
+
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          actions: [{ type: 'ai_triage', mode: 'suggest', fields: ['tags', 'priority'] }],
+        }),
+      );
+    }, LOAD);
+  });
+
   it('turns an event rule into a scheduled one', async () => {
     const { user } = await renderAt('/admin/automation/rules/new?kind=event');
 

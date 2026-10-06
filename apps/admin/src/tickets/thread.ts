@@ -11,8 +11,9 @@ import type { PendingMessage } from './pending.js';
  * `ticket.note_added` each accompany a row that is already a bubble — so
  * drawing them all would say everything twice. What is left is what only the
  * log knows: a field moved, the status moved, (M3-06) a macro moved
- * several at once, which is one entry "via macro …", and (M5-08) the help
- * center article a conversation or a web form ticket came from.
+ * several at once, which is one entry "via macro …", (M5-08) the help
+ * center article a conversation or a web form ticket came from, and (M7-05)
+ * an article drafted from the ticket and sent for approval.
  *
  * Ordering is by time, and a pending send sorts last within its own instant so
  * that what somebody just typed sits at the bottom where they left it.
@@ -28,6 +29,7 @@ const THREAD_EVENT_ACTIONS: readonly string[] = [
   'ticket.status.changed',
   'ticket.macro_applied',
   'ticket.source_article',
+  'ticket.article_proposed',
 ];
 
 export type ThreadItem =

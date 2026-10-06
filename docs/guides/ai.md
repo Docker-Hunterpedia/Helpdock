@@ -4,16 +4,17 @@ How Helpdock talks to language models: the providers an install is configured
 with and their credentials, the model each brand uses, the one embedding model
 of the install and what changing it does, the guardrails every call passes
 through, the per-brand budget, and the knowledge the assistant reads and how
-it is retrieved, and how auto-reply answers customers (M7-01, M7-02, M7-03, M7-04,
-M7-06, M7-08;
+it is retrieved (M7-01, M7-02, M7-03, M7-04, M7-08), how auto-reply answers
+customers (M7-06), and the features agents use: agent assist on a ticket, AI
+triage in workflow rules and voice transcription (M7-05, M7-07, M7-09;
 [REQUIREMENTS §4.7](../planning/REQUIREMENTS.md#47-ai),
 [ARCHITECTURE §10](../planning/ARCHITECTURE.md#10-ai-subsystem),
 [ADR 0005](../decisions/0005-single-embedding-model-per-install.md),
 [ADR 0018](../decisions/0018-pi-ai-provider-layer.md),
-[ADR 0020](../decisions/0020-knowledge-chunking-and-fusion.md)).
+[ADR 0020](../decisions/0020-knowledge-chunking-and-fusion.md),
+[ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)).
 
-This is the foundation the AI features build on, and auto-reply. Agent assist,
-triage and knowledge ingest arrive with their own deliverables. Everything
+Everything
 below is configured in admin under **AI** (M7-10, see [The screens](#the-screens)),
 through the API, or pinned in the environment.
 
@@ -103,6 +104,31 @@ Voice notes from the widget and Telegram can be transcribed for agents
 | `transcription.endpoint` | `HD_TRANSCRIPTION_ENDPOINT` | `https://api.openai.com/v1/audio/transcriptions`. Empty turns transcription off |
 | `transcription.model` | `HD_TRANSCRIPTION_MODEL` | `whisper-1` (the default) |
 | `transcription.apiKey` | `HD_TRANSCRIPTION_API_KEY` | Write-only, like provider keys |
+
+How it runs:
+
+```
+attachment.ready (audio, processed)   the `transcription` subscriber marks the attachment
+                                      transcript_status = pending and adds ai.transcribe
+ai.transcribe (`ai` queue)            downloads the Opus variant (or the original), posts it as
+                                      multipart with response_format=verbose_json, stores the
+                                      text and the language the endpoint heard; status = done
+```
+
+- The endpoint is reached through the SSRF-safe client, like every
+  admin-supplied URL; a local whisper.cpp or faster-whisper server needs its
+  range in `OUTBOUND_ALLOW_CIDRS`.
+- A 4xx answer marks the transcript `failed` at once; a 5xx or an unreachable
+  endpoint is retried twice and then marked `failed`. Audio over 25 MB, the
+  Whisper limit, is not sent.
+- Each request is an `ai_calls` row with feature `transcribe` and the
+  transcript as the response. It costs 0 in the log (the install has no
+  per-minute price) and is not stopped by the budget.
+- The transcript is shown to staff under the voice note
+  (`GET …/tickets/:ticketId/transcripts`, `ticket:read`), with the language
+  and a Translate action. It is never sent to the visitor, and no visitor
+  response carries it.
+- Voice notes from before the endpoint was set are not transcribed later.
 
 ## Per brand
 
@@ -218,6 +244,74 @@ are UTC. The spend is the sum of the brand's logged cost, embeddings included.
 
 Embedding is not stopped by the budget: a brand over budget loses its answers,
 not its index.
+
+## Agent assist
+
+The composer's **Assist** menu (M7-05, `Admin/Ticket-AI`), when the brand has
+agent assist on (AI › Assistant). Every item is one model call, made for the
+agent who asked and returned to them; nothing reaches the customer until the
+agent sends it.
+
+| Item | What it does | Logged as |
+|---|---|---|
+| Suggest reply | Retrieves knowledge with the **staff** audience (public and internal), drafts a reply in the customer's language with `[n]` citations. `validateCitations` drops invented markers. The card lists each source as Public or Internal; **Insert** leaves internal citations out of a public reply and adds a line per public source with its link (DOMAIN-RULES §5). A note keeps everything | `assist.suggest_reply` |
+| Summarize ticket | Two to five points, in the agent's language, over the thread | `assist.summarize` |
+| Suggest tags, priority, department | Chooses only among the brand's existing tags and departments; the suggestion is stored on the ticket and drawn as the Suggested fields card. Accepting goes through the ticket's own endpoints (audited and evented like any change); each field can be dismissed | `assist.suggest_fields` |
+| Translate reply to … | The agent's draft into the customer's language; "Replace text" or "Keep mine" | `assist.translate` |
+| Rewrite tone | Friendlier, more formal or shorter. Another tone reruns on the agent's own text, never on the last rewrite, and the draft changes only on "Replace text" | `assist.rewrite` |
+| Draft article from ticket | Closed tickets only. Written from the **public** messages, grounded in **public** knowledge only; the agent edits it and sends it for approval (see [Help center › Proposals](help-center.md#article-proposals)) | `assist.draft_article` |
+
+Under each customer message in another language than the agent's, **Translate**
+shows the message translated by the model (`assist.translate`), with "Show
+original". Under each customer message that PII redaction changes, "N items
+redacted before AI · **Show redacted**" shows the message as a model receives
+it — `[EMAIL_1]`, `[PHONE_1]` — numbered per message
+(`GET …/tickets/:ticketId/ai/redactions`, `ticket:read`; the admin offers it to
+agents, not Viewers). Every assist result carries the AI log disclosure:
+model, tokens, cost and redactions from its `ai_calls` row.
+
+**The budget.** At 80 % of a window the menu opens on a warning. At the hard
+stop every item is disabled with the date the window resets — unless the brand
+keeps assist on past the budget ("Keep assist after the hard stop", on by
+default), in which case assist calls `complete()` with `allowOverBudget` and
+only auto-reply stops. The call is still logged and counted.
+
+**How a call runs.** The assist routes hold no transaction while the model
+answers ([ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)):
+the ticket is read under the agent's own department policy, then the model is
+called, then — for suggested fields only — the result is written, each step in
+a short transaction of its own. An agent cannot assist on a ticket they cannot
+see: the route answers 404.
+
+Refusals carry `error.assist.reason`: `assist-off`, `budget-exceeded`,
+`not-configured`, `provider-failed` (502; the call is in the AI log),
+`ticket-not-closed`, `proposal-exists`, `proposal-decided`,
+`nothing-to-work-from`, `unreadable-answer` (502).
+
+## AI triage
+
+A workflow rule action (M7-07, [Automation](automation.md#ai-triage)): the
+assistant reads the ticket and decides the tags, priority and department the
+action names, choosing only among the brand's own. In **suggest** mode the
+result fills the ticket's Suggested fields card for an agent to accept; in
+**apply** mode the rule makes the changes itself.
+
+```
+rule run          the action writes ai.triage_requested to the outbox (same transaction as the run)
+relay → handler   adds ai.classify on the `ai` queue (job id = outbox row)
+ai.classify       complete() as `triage.classify`, outside any transaction; then, in one
+                  system transaction: claim the receipt ai.classify:<run>:<action>,
+                  suggest or apply, write the outcome into the run's log
+```
+
+An `apply` changes the ticket exactly as the rule's own actions do — activity
+rows with actor `rule:<id>`, one ticket event carrying the rule chain (so the
+depth guard still holds), the SLA clocks, the rotation when the department
+moves and the assignee cannot follow. The run's log shows the action as
+`queued`, then `suggested`, `applied`, `nothing` or `failed` with the reason
+(`budget-exceeded`, `not-configured`, `unreadable-answer`). Triage is
+automation, so the budget's hard stop applies to it; a provider failure is
+retried by BullMQ.
 
 ## Embeddings
 
@@ -544,6 +638,21 @@ closed or has been quiet for 24 hours.
 | `GET /api/brands/:brandId/ai/calls` | `ai:manage` | The brand's AI activity, keyset-paged |
 | `GET /api/brands/:brandId/tickets/:ticketId/ai-calls` | `ticket:read` | The ticket's AI log, with the redaction map |
 | `POST /api/brands/:brandId/tickets/:ticketId/ai/resume` | `ticket:write` | "Return to assistant": ends the auto-reply pause, audited. Answers the ticket's `ai` state |
+| `GET /api/brands/:brandId/tickets/:ticketId/assist` | `ticket:write` | What the Assist menu opens on: the mode, the hard stop, budget windows at 80 % or more, whether the ticket is closed, its proposal, the pending suggested fields |
+| `POST …/tickets/:ticketId/assist/suggest-reply` | `ticket:write` | A reply with citations and the call's figures |
+| `POST …/tickets/:ticketId/assist/summarize` | `ticket:write` | `{ locale }`: the points, in that language |
+| `POST …/tickets/:ticketId/assist/suggest-fields` | `ticket:write` | Stores and returns the suggested tags, priority and department |
+| `POST …/tickets/:ticketId/assist/suggestions/dismiss` | `ticket:write` | `{ field, tagId? }`: takes one off the card |
+| `POST …/tickets/:ticketId/assist/translate` | `ticket:write` | `{ messageId \| attachmentId \| text, target }` |
+| `POST …/tickets/:ticketId/assist/rewrite` | `ticket:write` | `{ text, tone }` |
+| `POST …/tickets/:ticketId/assist/draft-article` | `ticket:write` | `{ locale }`: a title and a Markdown body, from a closed ticket |
+| `POST …/tickets/:ticketId/assist/proposals` | `ticket:write` | Sends a draft for approval. 409 `ticket-not-closed`, `proposal-exists` |
+| `GET …/tickets/:ticketId/ai/redactions` | `ticket:read` | Each customer message as a model receives it, when redaction changed it |
+| `GET …/tickets/:ticketId/transcripts` | `ticket:read` | The ticket's voice note transcripts |
+| `GET /api/brands/:brandId/help-center/proposals` | `help_center:manage` | `?status=waiting\|decided`, and how many wait |
+| `GET …/help-center/proposals/:proposalId` | `help_center:manage` | The draft rendered, its source ticket, the call's figures |
+| `POST …/help-center/proposals/:proposalId/approve` | `help_center:manage` | `{ sectionId, locale, visibility }`: a draft article; 409 `proposal-decided` |
+| `POST …/help-center/proposals/:proposalId/reject` | `help_center:manage` | `{ reason }`; 409 `proposal-decided` |
 | `GET /api/brands/:brandId/knowledge/sources` | `ai:manage` | Sources with visibility, schedule, next sync, status and progress, counts; the embedding model; whether rendering and each OAuth app are available |
 | `POST /api/brands/:brandId/knowledge/sources` | `ai:manage` | Add a crawl, Notion or Drive source. 400 `rendering-disabled` |
 | `GET`, `PATCH`, `DELETE /api/brands/:brandId/knowledge/sources/:sourceId` | `ai:manage` | Read, edit (name, visibility, schedule, config, Notion token), remove. 409 `article-source-fixed` |
@@ -556,7 +665,9 @@ closed or has been quiet for 24 hours.
 | `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected` |
 
 A refusal carries `error.ai.reason`, as `aiRefusalSchema` in `@helpdock/schemas`
-declares, or for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`). Request and response shapes are the `ai*` schemas there.
+declares, for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`), and
+for assist and proposals `error.assist.reason` (`assistRefusalSchema`). Request
+and response shapes are the `ai*`, `knowledge*` and `assist.ts` schemas there.
 
 ## The screens
 
@@ -621,11 +732,21 @@ const { text } = await ai.complete({
 ```
 
 Do not call `complete()` inside a request's transaction: a model call takes
-seconds, and every port opens its own short transaction for the brand. Tests
+seconds, and every port opens its own short transaction for the brand. A route
+that calls a model declares `@StepTransactions()` and opens its steps with
+`inRequestTenant` (`tenant/step-transactions.ts`, ADR 0024); work that follows
+a domain change goes through the outbox to the `ai` queue instead. The task
+prompts and the parsers of their answers are in `@helpdock/ai`
+(`assist/prompts.ts`, `assist/answers.ts`). Tests
 use `createFakeModel()`, `fakeEmbeddingsServer()` and `InMemoryAiPorts` from
 `@helpdock/ai`, so nothing reaches a provider.
 
 ## Known gaps
+
+- Assist answers arrive whole; streaming them into the card is not built.
+- The Arabic system prompt (`systemPromptAr`) is not yet chosen for assist: every
+  assist call sends the brand's main prompt.
+- A transcription costs 0 in the log: there is no per-minute price setting.
 
 - A budget alert reaches the audit log and the settings response; an email or
   a bell entry for it waits for a design of its own (notifications are about a

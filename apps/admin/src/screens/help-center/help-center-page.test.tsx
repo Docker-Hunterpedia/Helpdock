@@ -34,6 +34,7 @@ const openRefunds = async (user: Awaited<ReturnType<typeof renderHelpCenter>>['u
 describe('who sees what', () => {
   it('gives an Agent the Articles tab alone and nothing to change', () => {
     expect(helpCenterTabsFor('agent').map((tab) => tab.key)).toEqual(['articles']);
+    expect(helpCenterTabsFor('teamLeader').map((tab) => tab.key)).toContain('proposals');
     expect(helpCenterTabsFor('viewer').map((tab) => tab.key)).toEqual([
       'articles',
       'settings',

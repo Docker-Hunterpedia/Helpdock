@@ -35,11 +35,17 @@ export function EmailMessageCard({
   email,
   author,
   time,
+  body,
+  facts,
 }: {
   readonly message: TicketMessage;
   readonly email: EmailMessageView;
   readonly author: string;
   readonly time: string;
+  /** M7-05, M7-08: drawn instead of the body — a translation, or what the model received. */
+  readonly body?: ReactNode;
+  /** M7-05, M7-08: the AI facts line under the body. */
+  readonly facts?: ReactNode;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -155,18 +161,23 @@ export function EmailMessageCard({
             </Typography>
           ) : null}
 
-          <Box
-            sx={{
-              fontSize: 14,
-              lineHeight: '20px',
-              wordBreak: 'break-word',
-              '& p': { margin: 0, marginBlockEnd: 2 },
-              '& p:last-child': { marginBlockEnd: 0 },
-              '& a': { color: tokens['text.link'] },
-            }}
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: `body_html` is sanitised by the api before it is stored (ADR 0007), with every image taken out; see `MessageBubble`.
-            dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
-          />
+          {body === undefined ? (
+            <Box
+              sx={{
+                fontSize: 14,
+                lineHeight: '20px',
+                wordBreak: 'break-word',
+                '& p': { margin: 0, marginBlockEnd: 2 },
+                '& p:last-child': { marginBlockEnd: 0 },
+                '& a': { color: tokens['text.link'] },
+              }}
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: `body_html` is sanitised by the api before it is stored (ADR 0007), with every image taken out; see `MessageBubble`.
+              dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
+            />
+          ) : (
+            <Box sx={{ lineHeight: '20px', wordBreak: 'break-word' }}>{body}</Box>
+          )}
+          {facts}
 
           {email.remoteImages.count === 0 ? null : (
             <RemoteImages ticketId={message.ticketId} messageId={message.id} email={email} />

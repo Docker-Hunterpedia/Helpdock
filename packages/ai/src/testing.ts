@@ -78,6 +78,10 @@ export const createFakeModel = (): FakeModel => {
   };
 };
 
+/** A faux answer the provider failed with, for a feature's failure path. */
+export const fakeModelError = (message: string): FauxResponseStep =>
+  fauxAssistantMessage('', { stopReason: 'error', errorMessage: message });
+
 export interface FakeEmbeddingsServer {
   readonly http: HttpTransport;
   readonly requests: readonly { readonly url: string; readonly request: HttpRequest }[];
@@ -122,7 +126,9 @@ export const fakeEmbeddingsServer = (
       if (url.endsWith('/models')) {
         return Promise.resolve(answer(200, { data: models.map((id) => ({ id })) }));
       }
-      const { input } = JSON.parse(request.body ?? '{}') as { input: string[] };
+      const { input } = JSON.parse(typeof request.body === 'string' ? request.body : '{}') as {
+        input: string[];
+      };
       return Promise.resolve(
         answer(200, {
           data: input.map((text, index) => ({ index, embedding: fakeVector(text, dims) })),

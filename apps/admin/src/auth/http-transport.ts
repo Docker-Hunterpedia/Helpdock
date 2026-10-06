@@ -1,5 +1,6 @@
 import type {
   AiRefusal,
+  AssistRefusal,
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
@@ -15,6 +16,7 @@ import type {
 } from '@helpdock/schemas';
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
 import { AiError } from '../ai/api.js';
+import { AssistError } from '../assist/api.js';
 import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
 import { WebhooksError } from '../developers/api.js';
@@ -206,6 +208,7 @@ export class HttpTransport {
 const toError = async (
   response: Response,
 ): Promise<
+  | AssistError
   | AiError
   | AuthError
   | ChannelsError
@@ -230,6 +233,7 @@ const toError = async (
   let ai: AiRefusal | undefined;
   let knowledge: KnowledgeRefusal | undefined;
   let telegram: TelegramRefusal | undefined;
+  let assist: AssistRefusal | undefined;
   let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
 
   try {
@@ -245,6 +249,7 @@ const toError = async (
     ai = body.ai?.reason;
     knowledge = body.knowledge?.reason;
     telegram = body.telegram?.reason;
+    assist = body.assist?.reason;
     webhooks = body.webhooks;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
@@ -289,6 +294,10 @@ const toError = async (
 
   if (telegram !== undefined) {
     return new TelegramError(telegram);
+  }
+
+  if (assist !== undefined) {
+    return new AssistError(assist);
   }
 
   if (webhooks !== undefined) {

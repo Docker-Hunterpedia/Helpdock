@@ -17,11 +17,11 @@ Depends on M3, M4, M5 (shipped) and M6 (in progress in parallel; M7-06 Telegram 
 | M7-02 | Embeddings per D §8 | | in review: [Embeddings](#m7-02-embeddings) |
 | M7-03 | Ingest | | in review: [Ingest](#m7-03-ingest); the screen is M7-10 (`Admin/AI-Knowledge`) |
 | M7-04 | Hybrid retrieval with `audience` | | in review: [Retrieval](#m7-04-retrieval) |
-| M7-05 | Agent assist | | planned |
+| M7-05 | Agent assist | | in review: [Agent assist](#m7-05-agent-assist) — the Assist menu, Suggested fields, translate, Show redacted, Help center › Proposals |
 | M7-06 | Auto-reply on widget, Telegram and email with confidence threshold, transparent handoff, " | | in review: [Auto-reply](#m7-06-auto-reply) |
-| M7-07 | Auto-triage as a workflow action | | planned |
+| M7-07 | Auto-triage as a workflow action | | in review: [AI triage](#m7-07-ai-triage) |
 | M7-08 | Guardrails | | in review: [Guardrails](#m7-08-guardrails); output on the ticket is the API, the panel is M7-10 |
-| M7-09 | Voice transcription job (Whisper-compatible endpoint) shown to agents | | planned |
+| M7-09 | Voice transcription job (Whisper-compatible endpoint) shown to agents | | in review: [Transcription](#m7-09-transcription) |
 | M7-10 | Admin | | in review: [Admin](#m7-10-admin) — Providers, Knowledge, Assistant and the wizard step |
 | M7-11 | Evaluation harness | | planned |
 
@@ -44,6 +44,7 @@ Copied from the PRD, ticked as they are met.
 | `0041_knowledge_ingest.sql` | `knowledge_sources.schedule`, `sync_started_at`, `progress_done`, `progress_total`, `last_error_code`, `created_by`; one help center source per brand (partial unique index); the `knowledge_sync_log` tenant table with RLS |
 | `0042_ai_assistant_modes.sql` | `ai_settings.system_prompt_ar` and `ai_settings.modes` (jsonb, null = every mode off) for M7-10 |
 | `0045_auto_reply_handoff.sql` | M7-06 on `tickets`: `ai_paused_at`, `ai_paused_until`, `ai_pause_reason` (handoff persistence, DOMAIN-RULES §9) and `ai_eligible_at`, `ai_answered_at`, `ai_handed_off_at` (deflection, §15), with a partial index for the report. No new table |
+| `0046_ai_assist_and_transcripts.sql` | `article_proposals` and `ticket_field_suggestions` (department-scoped children of a ticket: the shared insert trigger, a follow trigger of their own on a move, RLS, in the isolation suite); `attachments.transcript_status`, `transcript_text`, `transcript_language`, `transcribed_at` |
 
 ## Deliverable notes
 
@@ -106,6 +107,29 @@ Copied from the PRD, ticked as they are met.
 - Per-brand system prompt, editable by Team Leaders (`ai:manage`), prepended after the feature's own instructions.
 - Retention: the nightly run nulls AI call bodies past the brand's AI-log window and keeps counts and cost; the Data retention card's "next purge" now counts them.
 
+### M7-05 Agent assist
+
+Built from `Admin/Ticket-AI` and `Admin/HelpCenter-ArticleApproval`; see [the AI guide](../guides/ai.md#agent-assist) and [Help center](../guides/help-center.md#article-proposals).
+
+- **Tasks** in `packages/ai/src/assist/`: the instructions per task (`prompts.ts`), lenient JSON readers that keep only the brand's own tag and department ids (`answers.ts`), and the Markdown subset an article draft is written in, rendered to escaped HTML (`markdown.ts`). `complete()` takes `allowOverBudget` for a brand that keeps assist on past the hard stop.
+- **API** in `apps/api/src/assist/`: the assist routes (`ticket:write`) call the model with no transaction open — `@StepTransactions()` and `inRequestTenant` ([ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)) — after reading the ticket under the agent's own department policy, the brand's mode (`parseAiAssistantModes`) and its budget. Suggest reply retrieves with the `staff` audience and validates citations; draft article reads public messages and `visitor` knowledge only. Suggested fields are stored in `ticket_field_suggestions` (one row per ticket); accepting uses the ticket's own endpoints. "Show redacted" runs the same `PiiRedactor` per customer message. Refusals are `error.assist.reason`.
+- **Proposals.** `article_proposals`; `POST …/assist/proposals` (closed ticket, one waiting at a time, audited, a `ticket.article_proposed` activity row the thread draws); Help center › Proposals under `help_center:manage` lists, approves into a draft article through `HelpCenterArticlesService` (create, save, visibility) and rejects with a reason, each audited.
+- **Admin** in `apps/admin/src/screens/tickets/assist/`: AssistMenu (budget banner, disabled items with their reasons, the tone submenu), AISuggestionCard for the suggested reply (CitationList with Internal / "removed on Insert"; Insert strips internal markers and lists public sources), Rewritten (ToneChips, Keep mine / Replace text) and Translated, SummaryCard, SuggestedFieldsCard in the details panel, per-message Translate / Show original and Show redacted (RedactionToken), and DraftArticleDialog; the AIBadge and the AI log disclosure (`AiLogDetails`) are M7-06's, in `screens/tickets/ai/`, reused here. `apps/admin/src/screens/help-center/proposals-tab.tsx` is the Proposals tab. The composer's disabled "Translate" placeholder is gone; Assist replaces it.
+- **Tests.** Unit: `packages/ai/src/assist/*.test.ts`, `packages/ai/src/complete.test.ts` (over budget), `packages/schemas/src/assist.test.ts`, `apps/api/src/assist/assist-units.test.ts`, `apps/admin/src/screens/tickets/assist/*.test.ts(x)`, `apps/admin/src/screens/help-center/proposals-tab.test.tsx`, `thread-events.test.ts`. Integration: `apps/api/src/assist/assist.integration.test.ts` (faux model: citations and redaction, the agent of another department, mode off and the hard stop with and without keep-assist, provider failure, summary, fields, translate, rewrite, redactions, draft → propose → approve/reject with audit). Browser: `apps/admin/e2e/assist.spec.ts` (the Assist menu and a suggested reply through Insert, Show redacted, a voice note’s transcript, Translate / Show original on a customer message, Draft article through Proposals), en and ar, with axe.
+
+### M7-07 AI triage
+
+- Rule action `ai_triage` `{ mode: 'suggest' | 'apply', fields: ('tags' | 'priority' | 'department')[] }` in `@helpdock/schemas`; the builder offers it with a mode select and three checkboxes; the run log reads it as "AI triage suggests tags, priority (suggested)".
+- The action writes `ai.triage_requested` to the outbox with the run's id — the engine now chooses a run's id before its actions run — and the handler adds `ai.classify` on the `ai` queue (job id = outbox row). `apps/api/src/triage/triage.job.ts` calls `complete()` as `triage.classify` outside any transaction, then in one system transaction claims `ai.classify:<run>:<action>`, suggests (Suggested fields, source `rule:<id>`) or applies through `applyTriageActions` (the rule actions' own code, plus a department move that drops a team and an assignee who cannot follow), and writes the outcome into the run's `details.actions[i].triage`. Refusals are recorded as `failed` and not retried; provider failures retry.
+- Tests: `apps/api/src/triage/triage-units.test.ts`; the integration suite runs a rule through `evaluateEventRules`, reads the outbox row and runs the job twice (applied once), in both modes; `automation-page.test.tsx` saves a rule with the action.
+
+### M7-09 Transcription
+
+- `transcribe()` in `@helpdock/ai` (`transcribe.ts`): multipart `POST` to the configured Whisper-compatible endpoint with `response_format=verbose_json`, logged as `transcribe` (cost 0). The api reads `transcription.*` from M7-10's settings (`transcription-config.ts`).
+- The `transcription` subscriber of `attachment.ready` marks a ready audio attachment `pending` and adds `ai.transcribe` (job id `ai.transcribe:<attachmentId>`); the job downloads the Opus variant, stores the text and language on the attachment, and marks a 4xx refusal or a last failed attempt `failed`.
+- `GET …/tickets/:ticketId/transcripts` (`ticket:read`); the VoiceNote draws "Transcript", "Transcribing…" while pending, the language, and Translate. Voice notes from any channel now play in the thread, not only Telegram's.
+- Tests: `packages/ai/src/transcribe.test.ts`, the integration suite with a fake Whisper server (done, refused), the handler's no-endpoint case, the admin transcript test and e2e.
+
 ### M7-10 Admin
 
 Built from `Admin/AI-Providers`, `Admin/AI-Knowledge`, `Admin/AI-Assistant` and `Admin/Wizard-AI`.
@@ -126,7 +150,10 @@ Built from `Admin/AI-Providers`, `Admin/AI-Knowledge`, `Admin/AI-Assistant` and 
 
 - A budget alert lands in the audit log and the settings response only. Staff notifications are ticket-shaped (`notifications.ticket_id` is required and the panel draws a ticket); an email or bell entry for budgets needs its own artboard and subscribes to `ai.budget_alert`.
 - OAuth login is not run inside admin; credentials are pasted (ADR 0018).
-- Streaming completions arrive with the features that stream (M7-05, M7-06).
+- Streaming completions arrive with auto-reply (M7-06); assist answers arrive whole.
+- Assist sends the brand's main system prompt; choosing `systemPromptAr` for an Arabic ticket is not done yet.
+- Transcription has no per-minute price, so its calls cost 0 in the log; voice notes received before an endpoint was configured are not transcribed later.
+- The rule builder's AI triage row has no artboard of its own; it reuses the builder's select and checkbox row pattern from `AdminRuleBuilder`.
 - M7-10 does not draw: the providers table's model count and health column (no health check exists; discovery is per provider on demand), the ticked-model list of "Discover models" (every discovered model is offered), "saved … by" lines (the api does not return who saved a provider), and the re-embed progress per source (the api counts chunks across every brand). The budget's "Alert at 80 %" is not a toggle: the alert is always recorded (M7-08). On Knowledge, the drawer's "Edit" of a crawl's address, page cap and patterns is not built (visibility and schedule are changed in the drawer; a different crawl is a new source).
 - A Notion or Drive item deleted at the service leaves at the next sync, not at once; there are no webhooks from either.
 - Drive has no token alternative to OAuth; Notion takes an internal integration token.

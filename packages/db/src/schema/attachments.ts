@@ -18,6 +18,7 @@ import {
   attachmentScanStatusEnum,
   attachmentStatusEnum,
   attachmentUploaderTypeEnum,
+  transcriptStatusEnum,
 } from './enums.js';
 import { ticketMessages } from './ticket-messages.js';
 import { tickets } from './tickets.js';
@@ -117,6 +118,16 @@ export const attachments = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /** When the worker finished, either way. Null while pending or processing. */
     processedAt: timestamp('processed_at', { withTimezone: true }),
+    /**
+     * M7-09. A voice note's transcript, for staff only: no visitor DTO has
+     * these columns. Null status while no transcription was asked for — the
+     * install has no endpoint, or the attachment is not audio.
+     */
+    transcriptStatus: transcriptStatusEnum('transcript_status'),
+    transcriptText: text('transcript_text'),
+    /** The language the endpoint detected, as it named it (`arabic`, `en`). */
+    transcriptLanguage: text('transcript_language'),
+    transcribedAt: timestamp('transcribed_at', { withTimezone: true }),
   },
   (table) => [
     // The thread's read: every attachment of a message, in one index scan.

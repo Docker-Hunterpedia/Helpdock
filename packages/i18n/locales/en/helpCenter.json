@@ -4,7 +4,9 @@
     "label": "Help center sections",
     "articles": "Articles",
     "settings": "Settings",
-    "insights": "Insights"
+    "insights": "Insights",
+    "proposals": "Proposals",
+    "proposalsWaiting": "Proposals {{count}}"
   },
   "insights": {
     "heading": "Insights",
@@ -412,5 +414,42 @@
       "widget": "Channels › Widget",
       "cache": "Saving a card clears this help center’s cached pages."
     }
+  },
+  "proposals": {
+    "heading": "Article proposals",
+    "waiting": "Waiting",
+    "decided": "Decided",
+    "noneWaiting": "No articles are waiting for approval.",
+    "noneDecided": "Nothing has been decided yet.",
+    "footnote": "Agents propose from closed tickets with Assist › Draft article. You see proposals for the departments you lead.",
+    "review": "Review proposal",
+    "status": {
+      "waiting": "Waiting for approval",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "reject": "Reject…",
+    "approve": "Approve and open in editor",
+    "draftedFrom_one": "Drafted from {{count}} message · read only until approved",
+    "draftedFrom_other": "Drafted from {{count}} messages · read only until approved",
+    "rejectedBecause": "Rejected: {{reason}}",
+    "openArticle": "Open the draft article",
+    "source": "Source",
+    "proposedBy": "{{name}} proposed at {{time}}",
+    "someone": "Someone",
+    "whereItGoes": "Where it goes",
+    "section": "Section",
+    "language": "Language",
+    "visibility": "Visibility",
+    "aiDraft": "AI draft",
+    "cites": "Cites",
+    "citesNothing": "Nothing",
+    "approveHint": "Approving creates a draft article in the section and opens it in the editor. Nothing is published, and the assistant cannot use it, until you publish.",
+    "approved": "Draft article created.",
+    "rejected": "Proposal rejected.",
+    "rejectTitle": "Reject this proposal?",
+    "rejectReason": "Reason",
+    "rejectHint": "The agent who proposed it sees this.",
+    "rejectSubmit": "Reject"
   }
 }

@@ -1,13 +1,14 @@
 # Operating Helpdock
 
-How a running install is observed: what it logs, what it measures, what it
-traces, and where to look when something is wrong.
+How a running install is observed (what it logs, measures and traces) and how
+it is kept: backups, restores, upgrades, master key rotation, and what to do
+when Redis is lost.
 
 Specs: [ARCHITECTURE §14](../planning/ARCHITECTURE.md#14-observability) for the
 observability contract, [§13](../planning/ARCHITECTURE.md#13-background-jobs-bullmq-queues)
 for the queues, and [DOMAIN-RULES §10](../planning/DOMAIN-RULES.md#10-operations-and-recovery)
-for recovery. Backup, restore, upgrade and key rotation are written up by M9-06;
-this guide covers what M0-10 shipped.
+for recovery. Every key named here is in the
+[configuration reference](configuration.md).
 
 ---
 
@@ -380,9 +381,197 @@ grep '^APP_MASTER_KEY=' .env | cut -d= -f2- | openssl dgst -sha256 | cut -c1-24
 Run the same line against your backup copy. Equal fingerprints mean the backup
 opens what the database holds.
 
-Rotation (`APP_MASTER_KEY_PREVIOUS` and `helpdock keys rotate`) arrives with
-M9-06; each encrypted value already records the key generation that wrote it, so
-the two keys can coexist when it does.
+To replace the key, see [Rotating the master key](#rotating-the-master-key).
+
+---
+
+## Backups
+
+Three things, and only three, make an install
+([DOMAIN-RULES §10](../planning/DOMAIN-RULES.md#10-operations-and-recovery)):
+
+| What | How | Why |
+|---|---|---|
+| Postgres | `pg_dump -Fc`, below | Every ticket, contact, setting and encrypted secret |
+| The object storage bucket | Your provider's replication or versioning, or `mc mirror` | The only copy of attachments and help center images |
+| `docker/.env` | A copy kept somewhere other than the server | `APP_MASTER_KEY`: without it every stored secret, and every password, is unrecoverable |
+
+Redis is not backed up; see [Losing Redis](#losing-redis).
+
+```bash
+cd Helpdock/docker
+docker compose exec -T postgres \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > ../helpdock-$(date +%F).dump
+```
+
+For the bucket any S3 tool works. With MinIO's client (`mc`), which the image
+of the Compose file's `minio` service carries:
+
+```bash
+mc alias set hd "$S3_ENDPOINT" "$S3_ACCESS_KEY_ID" "$S3_SECRET_ACCESS_KEY"
+mc mirror --overwrite "hd/$S3_BUCKET" ./helpdock-bucket
+```
+
+`scripts/restore-drill.sh backup <dir>` does all three from a running stack,
+and records row counts and object hashes to check a restore against
+([restore drill](restore-drill.md)).
+
+**Targets.** A daily dump gives a recovery point of 24 hours; the restore below
+fits a recovery time of one hour. For less data loss, run Postgres's
+[continuous archiving](https://www.postgresql.org/docs/17/continuous-archiving.html);
+Helpdock does not ship it.
+
+## Restoring
+
+Onto a fresh server with Docker, from a dump, the bucket (or its copy) and
+`.env`. A dump from an older release is fine: the api brings it forward with
+the migrations it runs at boot.
+
+1. **Get the same release** as the saved `.env`'s `HELPDOCK_VERSION`, as the
+   [install guide](install.md#install) does, so the Compose file matches the
+   image.
+2. **Put `.env` back** at `Helpdock/docker/.env`, unchanged. Its master key
+   opens the secrets in the dump, and its passwords are what the new Postgres
+   is created with.
+3. **Start Postgres and Redis only.** Not the api: it would migrate the empty
+   database, and the dump would then collide with it.
+
+   ```bash
+   cd Helpdock/docker
+   docker compose up -d postgres redis
+   ```
+
+4. **Restore the dump as the owner role.**
+
+   ```bash
+   docker compose exec -T postgres \
+     sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --exit-on-error' < ../helpdock-2026-10-05.dump
+   ```
+
+   A dump carries no roles. `docker/postgres/init.sql` created the runtime role
+   `helpdock_app` on the new volume from `HELPDOCK_APP_PASSWORD`, and the dump's
+   grants and row-level security policies apply to it.
+5. **Point at the bucket.** If the old bucket survived, `.env` already names
+   it. Otherwise create the bucket the `S3_*` keys name and copy the backup
+   into it: `mc mb "hd/$S3_BUCKET" && mc mirror ./helpdock-bucket "hd/$S3_BUCKET"`.
+6. **Start everything**, `docker compose up -d`, and wait for `api` to be
+   healthy (`docker compose ps`).
+7. **Check it.** `/ready` answers 200, an agent signs in, and an attachment on
+   an old ticket opens. Everyone signs in again, because sessions lived in the
+   old Redis.
+
+`scripts/restore-drill.sh restore <dir>` and `verify <dir>` script steps 3 to 7
+([restore drill](restore-drill.md)).
+
+## Upgrading
+
+Migrations are forward-only and run when the api boots, so an upgrade is a new
+image tag and a restart.
+
+1. Read the release notes. They flag any migration a restore cannot undo; none
+   is planned for 1.x.
+2. Take a dump ([Backups](#backups)).
+3. Check out the release's Compose file and pin its image in `.env`, rather
+   than tracking `latest`:
+
+   ```bash
+   cd Helpdock
+   git fetch --tags && git checkout v1.2.3
+   cd docker
+   sed -i 's/^HELPDOCK_VERSION=.*/HELPDOCK_VERSION=1.2.3/' .env
+   docker compose pull
+   docker compose up -d
+   docker compose logs -f api
+   ```
+
+4. One api replica takes the migration lock and migrates while the others
+   wait. The log says `Applied N migration(s)`, then the api reports healthy.
+
+**If a migration fails**, the api logs the error and exits before it listens,
+and Compose restarts it into the same failure; it never serves a half-migrated
+database. Recover by [restoring](#restoring) the dump from step 2 with
+`HELPDOCK_VERSION` set back to the previous release, and report the error.
+
+## Rotating the master key
+
+`APP_MASTER_KEY` can be replaced without losing anything stored under it. Do it
+when the key may have been exposed, or on a schedule.
+
+Each encrypted value records the id of the key that wrote it, so the api and
+the worker read values under either key while `APP_MASTER_KEY_PREVIOUS` is set.
+`node dist/cli.js keys rotate` then re-encrypts every stored secret under the
+new key in one transaction: SMTP, IMAP and inbound-parse credentials, widget
+signing and CAPTCHA secrets, Telegram tokens, webhook secrets, knowledge
+connector credentials, AI provider keys, staff authenticator secrets, the token
+signing key, and sign-in links still waiting in the outbox. The list is
+`ENVELOPE_COLUMNS` in `packages/db/src/master-key-rotation.ts`. A value neither
+key opens rolls the whole run back, and the message names where it is.
+
+1. **Back up** ([Backups](#backups)), `.env` included.
+2. **Set both keys** in `.env`: the old key moves to `APP_MASTER_KEY_PREVIOUS`,
+   and a new one (`openssl rand -base64 32`) goes in `APP_MASTER_KEY`.
+3. **Restart** the api and the worker so both read the two keys:
+   `docker compose up -d api worker`.
+4. **Rotate.**
+
+   ```bash
+   docker compose exec api node dist/cli.js keys rotate
+   ```
+
+   It prints, per place, how many values it re-encrypted and how many were
+   already under the new key, and writes an `install.master_key_rotated` row to
+   the install's audit log. It never prints a value or a key. Running it again
+   re-encrypts nothing and says so.
+5. **Keep the previous key for a while.** Staff passwords are hashed with a
+   pepper derived from the master key, and a hash cannot be re-encrypted
+   without the password. While the previous key is set, a password made under
+   it still works and is re-hashed under the new key at that person's next
+   sign-in. Unused recovery codes are in the same position.
+6. **Remove `APP_MASTER_KEY_PREVIOUS`**, run `docker compose up -d api worker`,
+   and run `keys rotate` once more. With no previous key it changes nothing,
+   and fails if any stored value still needs the old one.
+
+Two things are keyed by the current key alone, so they reset at step 3:
+trusted browsers ask for a code once more
+([authentication](authentication.md#trusting-a-browser)), and help center view
+counting sees every visitor as new. Once the previous key is gone, at step 6:
+
+- Anyone who did not sign in while both keys were set uses **Forgot password**,
+  and redraws their recovery codes.
+- CSAT links signed under the previous key stop working.
+
+Losing both keys is not recoverable. The [restore drill](restore-drill.md)
+rehearses this procedure on a restored stack.
+
+## Losing Redis
+
+Redis keeps its data in the `redis_data` volume with an append-only file, so a
+restart loses nothing. Losing the volume loses everything in it, and nothing
+durable lives only there:
+
+| Lost | Effect | Comes back |
+|---|---|---|
+| Sessions and refresh tokens | Every agent and admin is signed out | At their next sign-in |
+| Trusted browsers, used TOTP steps | Each browser asks for a code again | — |
+| Rate-limit counters | Limits start from zero | As traffic arrives |
+| Queued jobs | Jobs waiting in BullMQ are gone | The relay publishes outbox rows not yet published; `sla.rebuild` recreates SLA timers at worker boot; repeating jobs (mail polling, sweeps) are registered again at worker boot |
+| The help center page cache | Pages render cold once | On the next view |
+
+Restart the api and the worker once Redis is back, empty
+(`docker compose up -d --force-recreate api worker`), so the worker
+re-registers its repeating jobs and rebuilds the SLA timers.
+
+Jobs that had been published to the queue and not yet run are not re-sent on
+their own: an email or a webhook delivery waiting at that moment is lost.
+Every consumer is idempotent ([DOMAIN-RULES
+§6](../planning/DOMAIN-RULES.md#6-transactional-outbox)), so they can be
+published again safely by clearing `published_at` on the recent outbox rows;
+the relay then republishes them:
+
+```bash
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "UPDATE outbox SET published_at = NULL WHERE published_at > now() - interval '\''15 minutes'\''"'
+```
 
 ---
 
@@ -390,5 +579,3 @@ the two keys can coexist when it does.
 
 - The artboard's Postgres size per brand is not drawn ([above](#where-the-numbers-come-from)),
   nor its image name, which the status read does not carry.
-- **M9-06** adds backup, restore, upgrade and key rotation to this guide, and
-  **M9-10** rehearses them (DOMAIN-RULES §10).

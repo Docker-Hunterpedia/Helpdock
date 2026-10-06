@@ -25,7 +25,7 @@ S3_BUCKET=helpdock
 S3_ACCESS_KEY_ID=helpdock
 S3_SECRET_ACCESS_KEY=${password}
 # MinIO addresses a bucket as a path; virtual-host style would need DNS for
-# `helpdock.minio`, which nothing in this stack provides.
+# helpdock.minio, which nothing in this stack provides.
 S3_FORCE_PATH_STYLE=true
 OUTBOUND_ALLOW_CIDRS=
 

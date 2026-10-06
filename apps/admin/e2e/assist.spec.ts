@@ -74,6 +74,32 @@ test.describe('agent assist on a ticket', () => {
     await expect(page.getByText('وهل يجب أن أدفع رسوم جمارك عند الاستلام في برلين؟')).toBeVisible();
     expect(await violations(page)).toEqual([]);
   });
+
+  test('translates a customer message and shows the original again', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    // The ticket whose customer wrote in the other language, so "Translate" is offered.
+    await openTicket(page, locale, locale === 'ar' ? 'HD-1041' : 'HD-1039');
+
+    await page
+      .getByRole('button', { name: t('tickets:assist.translate'), exact: true })
+      .first()
+      .click();
+    const translated =
+      locale === 'ar'
+        ? 'مرحباً، يصل استرداد البطاقة خلال خمسة أيام عمل.'
+        : 'Hello, how much is shipping to Germany for my order?';
+    await expect(page.getByText(translated)).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+
+    const original = page.getByRole('button', { name: t('tickets:assist.showOriginal') }).first();
+    await original.click();
+    await expect(original).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText(translated)).toBeHidden();
+  });
 });
 
 test.describe('article proposals', () => {

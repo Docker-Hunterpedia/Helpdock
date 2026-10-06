@@ -531,10 +531,12 @@ key opens rolls the whole run back, and the message names where it is.
    and run `keys rotate` once more. With no previous key it changes nothing,
    and fails if any stored value still needs the old one.
 
-Two things are keyed by the current key alone, so they reset at step 3:
+Three things are keyed by the current key alone, so they reset at step 3:
 trusted browsers ask for a code once more
-([authentication](authentication.md#trusting-a-browser)), and help center view
-counting sees every visitor as new. Once the previous key is gone, at step 6:
+([authentication](authentication.md#trusting-a-browser)), help center view
+counting sees every visitor as new, and a Notion or Google Drive connection
+started in admin but not yet returned from the provider has to be started
+again. Once the previous key is gone, at step 6:
 
 - Anyone who did not sign in while both keys were set uses **Forgot password**,
   and redraws their recovery codes.

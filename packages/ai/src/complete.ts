@@ -142,11 +142,11 @@ interface PreparedPrompt {
   readonly redactions: readonly Redaction[];
 }
 
-const preparePrompt = (
-  request: CompleteRequest,
-  target: AiTarget,
-  redact: boolean,
-): PreparedPrompt => {
+/**
+ * The prompt as the model receives it. PII redaction is not a setting: the
+ * engineering rules run it before any LLM call, so no brand can turn it off.
+ */
+const preparePrompt = (request: CompleteRequest, target: AiTarget): PreparedPrompt => {
   const brandPrompt =
     request.locale === 'ar' && (target.systemPromptAr ?? '').trim() !== ''
       ? (target.systemPromptAr ?? '')
@@ -155,9 +155,6 @@ const preparePrompt = (
     .map((part) => part.trim())
     .filter((part) => part !== '')
     .join('\n\n');
-  if (!redact) {
-    return { system, messages: request.messages, redactions: [] };
-  }
 
   const redactor = new PiiRedactor();
   return {
@@ -174,8 +171,7 @@ export const createComplete =
   ({ ports, transport, clock }: CompleteDeps) =>
   async (request: CompleteRequest): Promise<CompleteResult> => {
     const target = await ports.target(request.brandId);
-    const { piiRedaction } = await ports.guardrails(request.brandId);
-    const prompt = preparePrompt(request, target, piiRedaction);
+    const prompt = preparePrompt(request, target);
     const logged = { system: prompt.system, messages: prompt.messages };
 
     const record = (

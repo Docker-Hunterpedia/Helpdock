@@ -8,7 +8,6 @@ import type {
   TicketTranscripts,
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
-import type { AiRepository } from '../ai/ai.repository.js';
 import type { BudgetMeter } from '../ai/budget-meter.js';
 import type { AssistRepository } from './assist.repository.js';
 import { readAssistModes } from './assist-modes.js';
@@ -34,12 +33,10 @@ export const resetsAt = (window: Pick<WindowStatus, 'period' | 'periodStart'>): 
 
 export class AssistStateService {
   readonly #repository: AssistRepository;
-  readonly #ai: AiRepository;
   readonly #budget: BudgetMeter;
 
-  constructor(repository: AssistRepository, ai: AiRepository, budget: BudgetMeter) {
+  constructor(repository: AssistRepository, budget: BudgetMeter) {
     this.#repository = repository;
-    this.#ai = ai;
     this.#budget = budget;
   }
 
@@ -47,7 +44,6 @@ export class AssistStateService {
     const ticket = await this.#requireTicket(tx, ticketId);
     const modes = await readAssistModes(tx, brandId);
     const { windows } = await this.#budget.read(tx, brandId);
-    const settings = await this.#ai.settings(tx, brandId);
     const suggestions = await this.#repository.suggestions(tx, ticketId);
     const spent = exceededWindow(windows) !== undefined;
 
@@ -64,7 +60,6 @@ export class AssistStateService {
           resetsAt: resetsAt(window),
         })),
       keepAssistAfterHardStop: modes.keepAssistAfterHardStop,
-      piiRedaction: settings?.piiRedaction ?? true,
       ticketClosed: ticket.closed,
       proposal: (await this.#repository.latestProposal(tx, ticketId)) ?? null,
       suggestions: suggestions === undefined ? null : suggestionView(suggestions),
@@ -74,19 +69,10 @@ export class AssistStateService {
   /**
    * Each customer message as the model receives it, for "Show redacted". The
    * same redactor `complete()` runs, one per message so its placeholders
-   * number from 1 as the agent reads them. Nothing when the brand has turned
-   * redaction off: then the model received the message as written.
+   * number from 1 as the agent reads them.
    */
-  async redactions(
-    tx: DbTransaction,
-    brandId: string,
-    ticketId: string,
-  ): Promise<TicketRedactions> {
+  async redactions(tx: DbTransaction, ticketId: string): Promise<TicketRedactions> {
     await this.#requireTicket(tx, ticketId);
-    const settings = await this.#ai.settings(tx, brandId);
-    if (settings?.piiRedaction === false) {
-      return { items: [] };
-    }
     const messages = await this.#repository.thread(tx, ticketId);
     return {
       items: messages

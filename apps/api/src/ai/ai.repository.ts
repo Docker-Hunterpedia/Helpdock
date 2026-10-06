@@ -23,12 +23,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 
 export type AiSettingsValues = Pick<
   AiSettingsRow,
-  | 'providerId'
-  | 'modelId'
-  | 'piiRedaction'
-  | 'injectionFilter'
-  | 'dailyBudgetUsd'
-  | 'monthlyBudgetUsd'
+  'providerId' | 'modelId' | 'injectionFilter' | 'dailyBudgetUsd' | 'monthlyBudgetUsd'
 >;
 
 export interface BrandCallRow

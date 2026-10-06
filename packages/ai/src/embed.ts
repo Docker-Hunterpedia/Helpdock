@@ -65,7 +65,6 @@ export const createEmbed =
   ({ ports, http, clock }: EmbedDeps) =>
   async (request: EmbedRequest): Promise<EmbedResult> => {
     const config = await ports.embedding();
-    const { piiRedaction } = await ports.guardrails(request.brandId);
     const url = joinUrl(config.baseUrl, 'embeddings');
     const vectors: number[][] = [];
 
@@ -73,7 +72,7 @@ export const createEmbed =
       const redactor = new PiiRedactor();
       const batch = request.texts
         .slice(offset, offset + EMBED_BATCH_SIZE)
-        .map((text) => (piiRedaction ? redactor.redact(text) : text));
+        .map((text) => redactor.redact(text));
       const record = (fields: {
         status: 'ok' | 'error';
         tokensIn: number;

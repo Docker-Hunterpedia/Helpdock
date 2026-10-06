@@ -62,8 +62,7 @@ export class AssistModule {
         },
         {
           provide: AssistStateService,
-          useFactory: (): AssistStateService =>
-            new AssistStateService(repository, aiRepository, budget),
+          useFactory: (): AssistStateService => new AssistStateService(repository, budget),
         },
         {
           provide: ProposalsService,

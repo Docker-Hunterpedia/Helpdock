@@ -3,9 +3,9 @@ import type { Redaction } from './guardrails/pii.js';
 
 /**
  * What `createAi` needs from the application, so this package holds the
- * rules — redaction, the budget gate, no tools, the call log — and knows
- * nothing about Postgres, settings or Nest. The api implements every port
- * against the `settings` table, `ai_settings` and `ai_calls`; a test
+ * rules — redaction on every call, the budget gate, no tools, the call log —
+ * and knows nothing about Postgres, settings or Nest. The api implements every
+ * port against the `settings` table, `ai_settings` and `ai_calls`; a test
  * implements them in memory.
  */
 
@@ -17,10 +17,6 @@ export interface AiTarget {
   readonly systemPrompt: string;
   /** M7-10: the prompt for Arabic conversations; empty when `systemPrompt` serves both. */
   readonly systemPromptAr?: string;
-}
-
-export interface BrandGuardrails {
-  readonly piiRedaction: boolean;
 }
 
 /** The install's one embedding model (ADR 0005). */
@@ -68,7 +64,6 @@ export interface AiCallRecord {
 export interface AiPorts {
   /** Throws {@link AiNotConfiguredError} when neither the brand nor the install names a model. */
   target(brandId: string): Promise<AiTarget>;
-  guardrails(brandId: string): Promise<BrandGuardrails>;
   /** Throws `BudgetExceededError` once a window is spent. */
   assertWithinBudget(brandId: string): Promise<void>;
   /** Writes the `ai_calls` row and returns its id. */

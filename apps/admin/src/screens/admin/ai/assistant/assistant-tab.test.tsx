@@ -78,10 +78,7 @@ describe('AI › Assistant', () => {
       within(guardrails).getByRole('switch', { name: 'Injection filter on ingested content' }),
     );
 
-    expect(save).toHaveBeenCalledWith(
-      BRAND,
-      expect.objectContaining({ piiRedaction: true, injectionFilter: false }),
-    );
+    expect(save).toHaveBeenCalledWith(BRAND, expect.objectContaining({ injectionFilter: false }));
   });
 
   it('refuses a limit of zero under its field', async () => {

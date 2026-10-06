@@ -306,7 +306,6 @@ export class MockAiApi implements AiApi {
       ...held,
       providerId: request.providerId,
       modelId: request.modelId,
-      piiRedaction: request.piiRedaction,
       injectionFilter: request.injectionFilter,
       budget: request.budget,
       usage: { ...held.usage, windows: windowsOf(request.budget, held.usage) },
@@ -384,7 +383,6 @@ const brandFixture = (brandId: string): BrandAiSettings => {
       ? 'You are the support assistant for Helpdock, a help desk product.\nTone: warm, brief, plain words.\nOnly answer from the knowledge you are given and cite it. If you are not sure, hand off.'
       : '',
     systemPromptAr: '',
-    piiRedaction: true,
     injectionFilter: true,
     budget,
     modes: first

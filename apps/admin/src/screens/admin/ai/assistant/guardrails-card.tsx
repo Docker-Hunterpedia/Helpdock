@@ -35,7 +35,6 @@ export function GuardrailsCard({
     (injectionFilter: boolean) =>
       api.saveBrandSettings(brandId, {
         ...settingsUpdateOf(settings),
-        piiRedaction: true,
         injectionFilter,
       }),
     t('aiSettings:guardrails.saved'),

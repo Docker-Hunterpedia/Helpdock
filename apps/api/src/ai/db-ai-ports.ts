@@ -4,7 +4,6 @@ import {
   AiNotConfiguredError,
   type AiPorts,
   type AiTarget,
-  type BrandGuardrails,
   createAi,
   type EmbeddingConfig,
   EmbeddingNotConfiguredError,
@@ -62,11 +61,6 @@ export class DbAiPorts implements AiPorts {
       systemPrompt: row?.systemPrompt ?? '',
       systemPromptAr: row?.systemPromptAr ?? '',
     };
-  }
-
-  async guardrails(brandId: string): Promise<BrandGuardrails> {
-    const row = await this.#inBrand(brandId, (tx) => this.#repository.settings(tx, brandId));
-    return { piiRedaction: row?.piiRedaction ?? true };
   }
 
   assertWithinBudget(brandId: string): Promise<void> {

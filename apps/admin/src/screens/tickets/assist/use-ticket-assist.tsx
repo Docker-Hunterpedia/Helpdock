@@ -120,7 +120,7 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
   const redactions = useQuery({
     queryKey: assistKeys.redactions(brandId, ticketId),
     queryFn: () => api.redactions(brandId, ticketId),
-    enabled: enabled && state.data?.piiRedaction === true,
+    enabled,
   });
   const transcripts = useQuery({
     queryKey: assistKeys.transcripts(brandId, ticketId),

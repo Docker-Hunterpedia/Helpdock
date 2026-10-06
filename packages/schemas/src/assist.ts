@@ -105,8 +105,6 @@ export const assistStateSchema = z.object({
   budget: z.array(aiBudgetWindowSchema.extend({ resetsAt: z.iso.datetime() })),
   /** At the hard stop the brand keeps assist on for staff. */
   keepAssistAfterHardStop: z.boolean(),
-  /** Whether PII redaction runs before calls, which decides "Show redacted". */
-  piiRedaction: z.boolean(),
   ticketClosed: z.boolean(),
   proposal: assistProposalRefSchema.nullable(),
   suggestions: fieldSuggestionsSchema.nullable(),

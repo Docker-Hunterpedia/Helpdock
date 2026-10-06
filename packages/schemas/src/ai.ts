@@ -39,7 +39,7 @@ export type AiRefusal = z.infer<typeof aiRefusalSchema>;
 
 // ------------------------------------------------------------------ providers
 
-/** The same slug rule as `aiProviderIdSchema` in `@helpdock/config`; a test in the api holds them together. */
+/** Lower-case slug, chosen by the admin, that a brand's override and the settings registry name. */
 export const aiProviderIdSchema = z
   .string()
   .regex(
@@ -286,7 +286,10 @@ export const brandAiSettingsSchema = z.object({
   systemPrompt: z.string(),
   /** The prompt for Arabic conversations; empty when `systemPrompt` serves both. */
   systemPromptAr: z.string(),
-  piiRedaction: z.boolean(),
+  /**
+   * PII redaction has no field: it runs before every call (AGENTS.md), so the
+   * Assistant tab shows it as always on rather than as a setting.
+   */
   injectionFilter: z.boolean(),
   budget: aiBudgetSchema,
   modes: aiAssistantModesSchema,
@@ -308,7 +311,6 @@ export const brandAiSettingsUpdateSchema = z
   .strictObject({
     providerId: aiProviderIdSchema.nullable(),
     modelId: z.string().min(1).max(200).nullable(),
-    piiRedaction: z.boolean(),
     injectionFilter: z.boolean(),
     budget: aiBudgetSchema,
   })

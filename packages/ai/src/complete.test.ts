@@ -117,19 +117,6 @@ describe('complete()', () => {
     expect(JSON.stringify(ports.calls[0]?.prompt)).not.toContain('mona@example.com');
   });
 
-  it('sends the text unredacted when the brand turned the guardrail off', async () => {
-    ports.piiRedaction = false;
-    fake.reply('ok');
-
-    await ai.complete({
-      brandId,
-      feature: 'test',
-      messages: [{ role: 'user', text: 'a@example.com' }],
-    });
-
-    expect(JSON.stringify(fake.sent[0]?.context.messages)).toContain('a@example.com');
-  });
-
   it('replays earlier assistant turns', async () => {
     fake.reply('Five days.');
 

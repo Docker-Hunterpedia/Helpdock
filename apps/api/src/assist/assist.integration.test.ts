@@ -386,7 +386,6 @@ describe.skipIf(!hasDocker)('agent assist, triage and transcription', () => {
       expect(state.body).toMatchObject({
         enabled: true,
         blocked: null,
-        piiRedaction: true,
         ticketClosed: false,
         proposal: null,
         suggestions: null,

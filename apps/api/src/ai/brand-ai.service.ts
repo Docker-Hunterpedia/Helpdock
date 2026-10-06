@@ -42,7 +42,6 @@ export interface BrandAiContext {
 const valuesOf = (row: AiSettingsRow | undefined): AiSettingsValues => ({
   providerId: row?.providerId ?? null,
   modelId: row?.modelId ?? null,
-  piiRedaction: row?.piiRedaction ?? true,
   injectionFilter: row?.injectionFilter ?? true,
   dailyBudgetUsd: row?.dailyBudgetUsd ?? null,
   monthlyBudgetUsd: row?.monthlyBudgetUsd ?? null,
@@ -73,7 +72,6 @@ export class BrandAiService {
       modelId: values.modelId,
       systemPrompt: row?.systemPrompt ?? '',
       systemPromptAr: row?.systemPromptAr ?? '',
-      piiRedaction: values.piiRedaction,
       injectionFilter: values.injectionFilter,
       budget: { dailyUsd: values.dailyBudgetUsd, monthlyUsd: values.monthlyBudgetUsd },
       modes: parseAiAssistantModes(row?.modes),
@@ -102,7 +100,6 @@ export class BrandAiService {
     const after: AiSettingsValues = {
       providerId: body.providerId,
       modelId: body.modelId,
-      piiRedaction: body.piiRedaction,
       injectionFilter: body.injectionFilter,
       dailyBudgetUsd: body.budget.dailyUsd,
       monthlyBudgetUsd: body.budget.monthlyUsd,

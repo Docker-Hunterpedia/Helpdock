@@ -123,7 +123,6 @@ export class MockAssistApi implements AssistApi {
           ? []
           : [budgetWindow(this.budget === 'warning' ? 'warning' : 'exceeded')],
       keepAssistAfterHardStop: this.budget !== 'exceeded',
-      piiRedaction: true,
       ticketClosed: ticket?.status.systemState === 'closed',
       proposal: proposal === undefined ? null : { id: proposal.id, status: proposal.status },
       suggestions: this.#suggestions.get(ticketId) ?? null,

@@ -49,7 +49,6 @@ export const aiSettings = pgTable(
      * defaults: every mode off, so a brand turns AI on deliberately.
      */
     modes: jsonb('modes').$type<Record<string, unknown>>(),
-    piiRedaction: boolean('pii_redaction').notNull().default(true),
     injectionFilter: boolean('injection_filter').notNull().default(true),
     dailyBudgetUsd: numeric('daily_budget_usd', { precision: 12, scale: 4, mode: 'number' }),
     monthlyBudgetUsd: numeric('monthly_budget_usd', { precision: 12, scale: 4, mode: 'number' }),

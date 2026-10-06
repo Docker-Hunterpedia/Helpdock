@@ -138,12 +138,15 @@ much it has spent today and this month.
 | Setting | Who may change it | Default |
 |---|---|---|
 | Model (`providerId` + `modelId`) | Admin (`brand:manage`) | The install default |
-| PII redaction | Admin | On |
 | Injection filter on ingested content | Admin | On |
 | Daily and monthly budget, US dollars | Admin | No limit |
 | System prompt — tone, language policy, forbidden topics — for English and for Arabic conversations | Admin and Team Leader (`ai:manage`) | Empty; an empty Arabic prompt means the English one serves both |
 | Modes: agent assist, auto-reply per channel (widget, email, Telegram) with a confidence threshold 0–1, the handoff message in English and Arabic, keep agent assist on after the hard stop | Admin | Every mode off; threshold 0.70; built-in handoff wording; keep assist on |
 | AI reply satisfies the first-response SLA | Admin | On. The same `aiCountsAsFirstResponse` Ticketing › SLAs edits |
+
+PII redaction is not a setting: it runs before every call for every brand (see
+[PII redaction](#pii-redaction)), and the Assistant tab's Guardrails card shows
+it as always on.
 
 Admins change the model, guardrails and budget with `PUT …/ai/settings` (the
 whole form) and the modes with `PUT …/ai/modes`; Team Leaders and Admins
@@ -184,7 +187,7 @@ at most 100); a call's ticket is named only when the reader may open it.
 
 ### PII redaction
 
-Before any text reaches a model, these are replaced with numbered
+Before any text reaches a model, whatever the brand's settings, these are replaced with numbered
 placeholders — `[EMAIL_1]`, `[PHONE_1]`, `[CARD_1]`, `[IBAN_1]` — and the same
 value gets the same placeholder throughout a call:
 

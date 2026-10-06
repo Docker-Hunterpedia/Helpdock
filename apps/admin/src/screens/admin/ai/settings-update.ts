@@ -8,7 +8,6 @@ import type { BrandAiSettings, BrandAiSettingsUpdate } from '@helpdock/schemas';
 export const settingsUpdateOf = (settings: BrandAiSettings): BrandAiSettingsUpdate => ({
   providerId: settings.providerId,
   modelId: settings.modelId,
-  piiRedaction: settings.piiRedaction,
   injectionFilter: settings.injectionFilter,
   budget: settings.budget,
 });

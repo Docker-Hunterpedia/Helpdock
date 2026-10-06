@@ -180,9 +180,9 @@ export class AssistController {
   @Requires('ticket:read')
   @ZodSerializerDto(TicketRedactionsDto)
   redactions(
-    @Param(new ZodValidationPipe(AssistParamDto)) { brandId, ticketId }: AssistParamDto,
+    @Param(new ZodValidationPipe(AssistParamDto)) { ticketId }: AssistParamDto,
   ): Promise<TicketRedactions> {
-    return this.#state.redactions(getTx(), brandId, ticketId);
+    return this.#state.redactions(getTx(), ticketId);
   }
 
   @Get('transcripts')

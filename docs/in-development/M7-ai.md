@@ -45,6 +45,7 @@ Copied from the PRD, ticked as they are met.
 | `0042_ai_assistant_modes.sql` | `ai_settings.system_prompt_ar` and `ai_settings.modes` (jsonb, null = every mode off) for M7-10 |
 | `0045_auto_reply_handoff.sql` | M7-06 on `tickets`: `ai_paused_at`, `ai_paused_until`, `ai_pause_reason` (handoff persistence, DOMAIN-RULES §9) and `ai_eligible_at`, `ai_answered_at`, `ai_handed_off_at` (deflection, §15), with a partial index for the report. No new table |
 | `0046_ai_assist_and_transcripts.sql` | `article_proposals` and `ticket_field_suggestions` (department-scoped children of a ticket: the shared insert trigger, a follow trigger of their own on a move, RLS, in the isolation suite); `attachments.transcript_status`, `transcript_text`, `transcript_language`, `transcribed_at` |
+| `0047_drop_ai_pii_redaction_toggle.sql` | Drops `ai_settings.pii_redaction`: redaction runs before every call (AGENTS.md), so the column was an opt-out the rules forbid |
 
 ## Deliverable notes
 
@@ -100,7 +101,7 @@ Copied from the PRD, ticked as they are met.
 
 ### M7-08 Guardrails
 
-- PII redaction (`packages/ai/src/guardrails/pii.ts`) on every `complete()` and `embed()`, per the brand's toggle: emails, phones (Western and both Arabic digit sets), Luhn-valid cards, mod-97-valid IBANs, as numbered placeholders that are restored in the answer and stored as a map for agents.
+- PII redaction (`packages/ai/src/guardrails/pii.ts`) on every `complete()` and `embed()`, with no brand setting to turn it off (the Guardrails card shows it as always on): emails, phones (Western and both Arabic digit sets), Luhn-valid cards, mod-97-valid IBANs, as numbered placeholders that are restored in the answer and stored as a map for agents.
 - Injection filter (`screenIngestedText`) with documented heuristics in English and Arabic, called by M7-03's ingest on every chunk; the brand toggle is stored in `ai_settings.injection_filter`.
 - No tools: `complete()` never builds a context with tools and `assertNoTools` checks the one it sends.
 - Budget: daily and monthly US-dollar limits in `ai_settings`; spend is summed from `ai_calls`. The first call past 80 % of a window records `ai_budget_alerts` and writes an `ai.budget_alert` outbox event, whose handler writes an audit row; at 100 % `complete()` throws `BudgetExceededError` and logs a `refused` call.

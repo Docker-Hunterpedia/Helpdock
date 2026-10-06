@@ -431,7 +431,6 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
     const update = {
       providerId: 'ollama',
       modelId: 'qwen3:8b',
-      piiRedaction: true,
       injectionFilter: true,
       budget: { dailyUsd: 1, monthlyUsd: null },
     };
@@ -443,7 +442,7 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
         providerId: null,
         modelId: null,
         systemPrompt: '',
-        piiRedaction: true,
+        injectionFilter: true,
         budget: { dailyUsd: null, monthlyUsd: null },
         usage: { todayUsd: 0, windows: [] },
       });

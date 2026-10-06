@@ -72,10 +72,15 @@ describe('brandAiSettingsUpdateSchema', () => {
   const body = {
     providerId: 'openai',
     modelId: 'gpt-4o-mini',
-    piiRedaction: true,
     injectionFilter: true,
     budget: { dailyUsd: 5, monthlyUsd: null },
   };
+
+  it('has no PII redaction toggle: redaction runs before every call', () => {
+    expect(brandAiSettingsUpdateSchema.safeParse({ ...body, piiRedaction: false }).success).toBe(
+      false,
+    );
+  });
 
   it('takes a provider and a model together, or neither', () => {
     expect(brandAiSettingsUpdateSchema.safeParse(body).success).toBe(true);

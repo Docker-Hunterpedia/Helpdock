@@ -114,7 +114,9 @@ const embeddingsHttp: HttpTransport = (url, request) => {
   if (url.endsWith('/models')) {
     return Promise.resolve({ status: 200, body: JSON.stringify({ data: [{ id: 'bag' }] }) });
   }
-  const { input } = JSON.parse(request.body ?? '{}') as { input: string[] };
+  const { input } = JSON.parse(typeof request.body === 'string' ? request.body : '{}') as {
+    input: string[];
+  };
   return Promise.resolve({
     status: 200,
     body: JSON.stringify({

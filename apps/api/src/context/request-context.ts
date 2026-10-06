@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { DbTransaction } from '@helpdock/db';
+import type { DbTransaction, TenantContext } from '@helpdock/db';
 import type { Principal } from '../auth/principal.js';
 
 /**
@@ -51,6 +51,11 @@ export class RequestContext {
   scopeKind: TenantScopeKind | null = null;
   /** The open transaction, for the duration of the handler only. */
   tx: DbTransaction | null = null;
+  /**
+   * Set instead of `tx` on a `@StepTransactions()` route: the tenant context
+   * each of its short transactions is opened with (`tenant/step-transactions.ts`).
+   */
+  tenant: TenantContext | null = null;
   /**
    * Where the request came from, as Fastify resolved it under `TRUST_PROXY`.
    * Filled by a `preHandler` hook (`client-facts.ts`) because this middleware

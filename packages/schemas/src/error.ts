@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { aiRefusalSchema } from './ai.js';
 import { webhooksRefusalSchema } from './api.js';
+import { assistRefusalSchema } from './assist.js';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { domainsRefusalSchema } from './domains.js';
@@ -95,6 +96,8 @@ export const errorResponseSchema = z.object({
     helpCenter: z.object({ reason: hcRefusalSchema }).optional(),
     /** Only on a refused AI settings change (M7-01, M7-02). */
     ai: z.object({ reason: aiRefusalSchema }).optional(),
+    /** Only on a refused agent assist request or proposal decision (M7-05). */
+    assist: z.object({ reason: assistRefusalSchema }).optional(),
     /** Only on a refused knowledge source action (M7-03). */
     knowledge: z.object({ reason: knowledgeRefusalSchema }).optional(),
     /** Only on a refused Telegram bot action (M6-05). */

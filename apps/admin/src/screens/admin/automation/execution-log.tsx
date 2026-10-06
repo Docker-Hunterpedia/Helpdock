@@ -229,9 +229,7 @@ const detailOf = (run: WorkflowRun, text: RuleText, t: ReturnType<typeof useT>):
       const done =
         changed.length === 0
           ? t('rules:log.nothingChanged')
-          : changed
-              .map((outcome) => text.action(outcome.action))
-              .join(t('rules:text.listSeparator'));
+          : changed.map((outcome) => text.outcome(outcome)).join(t('rules:text.listSeparator'));
       return run.depth > 1 ? t('rules:log.atDepth', { detail: done, depth: run.depth }) : done;
     }
     case 'skipped': {

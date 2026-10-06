@@ -11,6 +11,11 @@ import argon2 from 'argon2';
  * the same master key can key other things (the trusted-device cookie does)
  * without any two of them sharing key material.
  *
+ * During a master key rotation (DOMAIN-RULES §10) a hash may still be under
+ * the pepper of `APP_MASTER_KEY_PREVIOUS`. Rotation cannot re-pepper it, because
+ * that needs the password, so a hash the previous pepper verifies is reported
+ * as needing a rehash and is replaced at that sign-in.
+ *
  * The **parameters** are the current OWASP minimum for Argon2id — 19 MiB of
  * memory, two passes, one lane. A hash that was made with anything weaker, or
  * by an older version of this code, is replaced on the next successful sign-in,
@@ -37,6 +42,20 @@ const PEPPER_INFO = 'helpdock:auth:password-pepper';
 export const derivePepper = (masterKey: Buffer): Buffer =>
   Buffer.from(hkdfSync('sha256', masterKey, Buffer.alloc(0), PEPPER_INFO, PEPPER_BYTES));
 
+/**
+ * `argon2.verify` compares in constant time and answers false for a wrong
+ * password or a wrong pepper. It *throws* for a digest that is not a PHC string
+ * at all, which a row written by something other than this code could be; that
+ * is a refusal like any other, not a 500.
+ */
+const verifyWith = async (digest: string, password: string, pepper: Buffer): Promise<boolean> => {
+  try {
+    return await argon2.verify(digest, password, { secret: pepper });
+  } catch {
+    return false;
+  }
+};
+
 export interface PasswordVerification {
   readonly valid: boolean;
   /** The hash is valid but weaker than {@link ARGON2_PARAMETERS}; replace it. */
@@ -49,10 +68,13 @@ export interface PasswordVerification {
  */
 export class PasswordHasher {
   readonly #pepper: Buffer;
+  readonly #previousPepper: Buffer | undefined;
   #decoy: Promise<string> | null = null;
 
-  constructor(masterKey: Buffer) {
+  constructor(masterKey: Buffer, previousMasterKey?: Buffer) {
     this.#pepper = derivePepper(masterKey);
+    this.#previousPepper =
+      previousMasterKey === undefined ? undefined : derivePepper(previousMasterKey);
   }
 
   hash(password: string): Promise<string> {
@@ -60,18 +82,15 @@ export class PasswordHasher {
   }
 
   async verify(digest: string, password: string): Promise<PasswordVerification> {
-    // `argon2.verify` compares in constant time and answers false for a wrong
-    // password or a wrong pepper. It *throws* for a digest that is not a PHC
-    // string at all, which a row written by something other than this code
-    // could be; that is a refusal like any other, not a 500.
-    let valid: boolean;
-    try {
-      valid = await argon2.verify(digest, password, { secret: this.#pepper });
-    } catch {
-      valid = false;
+    if (await verifyWith(digest, password, this.#pepper)) {
+      return { valid: true, needsRehash: this.#needsRehash(digest) };
     }
 
-    return { valid, needsRehash: valid && this.#needsRehash(digest) };
+    const previous =
+      this.#previousPepper !== undefined &&
+      (await verifyWith(digest, password, this.#previousPepper));
+
+    return { valid: previous, needsRehash: previous };
   }
 
   /**
@@ -93,10 +112,12 @@ export class PasswordHasher {
       throw error;
     });
 
-    try {
-      await argon2.verify(await this.#decoy, password, { secret: this.#pepper });
-    } catch {
-      // Same outcome as a real wrong password: nothing to report to the caller.
+    // A known address with a wrong password is tried under both peppers while
+    // a rotation is under way, so an unknown one costs both as well.
+    const decoy = await this.#decoy;
+    await verifyWith(decoy, password, this.#pepper);
+    if (this.#previousPepper !== undefined) {
+      await verifyWith(decoy, password, this.#previousPepper);
     }
   }
 

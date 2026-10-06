@@ -69,7 +69,9 @@ export type TicketActivityAction =
    * was opened from ("Still need help?"): `to.articleId`, `to.title`,
    * `to.locale`. Written once, when the ticket is created.
    */
-  | 'ticket.source_article';
+  | 'ticket.source_article'
+  /** M7-05. An agent sent an article drafted from this ticket for approval: `to.proposalId`, `to.title`. */
+  | 'ticket.article_proposed';
 
 /**
  * The actor behind a change, in the three words the activity log records.

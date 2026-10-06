@@ -143,7 +143,8 @@
     "add_note": "Add internal note",
     "notify": "Notify",
     "escalate": "Escalate",
-    "close": "Close"
+    "close": "Close",
+    "ai_triage": "AI triage"
   },
   "assignTargets": {
     "assign_team": "Team",
@@ -186,8 +187,13 @@
       "add_note": "Add an internal note",
       "notify": "Notify {{who}}",
       "escalate": "Escalate",
-      "close": "Close"
-    }
+      "close": "Close",
+      "ai_triage": {
+        "suggest": "AI triage suggests {{fields}}",
+        "apply": "AI triage sets {{fields}}"
+      }
+    },
+    "triageOutcome": "{{action}} ({{status}})"
   },
   "builder": {
     "newTitle": "New rule",
@@ -262,7 +268,10 @@
     "notifyMessage": "Message (optional)",
     "incomplete": "Fill in every condition and action before saving.",
     "cancel": "Cancel",
-    "save": "Save rule"
+    "save": "Save rule",
+    "triageMode": "Mode",
+    "triageFields": "Fields the assistant decides",
+    "triageHint": "The assistant reads the ticket after the rule has run and picks only among the brand's existing tags and departments. Each run is logged with its cost and shows in the execution log."
   },
   "testRun": {
     "heading": "Test run",
@@ -344,5 +353,21 @@
     "enabled": "Rule {{name}} turned on",
     "disabled": "Rule {{name}} turned off",
     "reordered": "Order saved"
+  },
+  "triageModes": {
+    "suggest": "Suggest for an agent to accept",
+    "apply": "Apply to the ticket"
+  },
+  "triageFields": {
+    "tags": "Tags",
+    "priority": "Priority",
+    "department": "Department"
+  },
+  "triageStatus": {
+    "queued": "queued",
+    "suggested": "suggested",
+    "applied": "applied",
+    "nothing": "nothing to change",
+    "failed": "failed"
   }
 }

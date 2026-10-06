@@ -81,7 +81,11 @@ export const createAuthRuntime = ({
 
   const staff = new StaffRepository({ db });
   const refresh = new RefreshStore(redis, sessionLifetime(env));
-  const hasher = new PasswordHasher(masterKey);
+  const previousMasterKey =
+    env.APP_MASTER_KEY_PREVIOUS === undefined
+      ? undefined
+      : decodeMasterKey(env.APP_MASTER_KEY_PREVIOUS);
+  const hasher = new PasswordHasher(masterKey, previousMasterKey);
   const audit = new DbAuthAuditTrail({ db, logger });
 
   const sessions = new SessionService({

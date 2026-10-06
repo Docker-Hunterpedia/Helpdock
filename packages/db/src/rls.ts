@@ -175,6 +175,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'knowledge_chunks', departmentScoped: false },
   // M7-03. A source's sync log is the source's, and so the brand's.
   { name: 'knowledge_sync_log', departmentScoped: false },
+  // M7-05, M7-07. An article drafted from a ticket, and the fields suggested
+  // for one, quote the ticket: they follow its department like its other
+  // children, so a Team Leader reviews only their departments' proposals.
+  { name: 'article_proposals', departmentScoped: true },
+  { name: 'ticket_field_suggestions', departmentScoped: true },
   // M8-01, M8-02, M8-03. An API key acts for the whole brand, so its keys,
   // their idempotency records, the webhook endpoints and their delivery log
   // are the brand's. A delivery names a ticket in its payload, but it is a

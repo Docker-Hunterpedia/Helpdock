@@ -4,6 +4,7 @@ import * as brandPurge from './brand-purge.js';
 import * as client from './client.js';
 import * as embeddingSpace from './embedding-space.js';
 import * as index from './index.js';
+import * as masterKeyRotation from './master-key-rotation.js';
 import * as migrate from './migrate.js';
 import * as rls from './rls.js';
 import * as roles from './roles.js';
@@ -19,6 +20,7 @@ const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'brand-purge.ts': brandPurge,
   'client.ts': client,
   'embedding-space.ts': embeddingSpace,
+  'master-key-rotation.ts': masterKeyRotation,
   'migrate.ts': migrate,
   'rls.ts': rls,
   'roles.ts': roles,
@@ -58,6 +60,7 @@ describe('@helpdock/db', () => {
   it('has a schema barrel that knows about every table file', () => {
     expect(sourceFilesIn(new URL('schema/', import.meta.url))).toEqual([
       'accounts.ts',
+      'ai-assist.ts',
       'ai.ts',
       'api-keys.ts',
       'assignment.ts',

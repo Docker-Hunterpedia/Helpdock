@@ -1,4 +1,5 @@
 import { MockAiApi } from '../ai/mock-api.js';
+import { MockAssistApi } from '../assist/mock-api.js';
 import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE, MockAuthApi } from '../auth/mock-api.js';
 import type { AdminApis } from '../auth/select-api.js';
 import { MockAutomationApi } from '../automation/mock-api.js';
@@ -64,6 +65,7 @@ export async function signedInMockApis(): Promise<AdminApis> {
     reports: new HttpReportsApi(),
     system: new HttpSystemApi(),
     telegram: new MockTelegramApi(),
+    assist: new MockAssistApi(),
     developers: new MockDevelopersApi(),
   };
 }

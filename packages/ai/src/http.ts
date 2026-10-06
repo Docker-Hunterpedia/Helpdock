@@ -7,7 +7,7 @@
 export interface HttpRequest {
   readonly method: 'GET' | 'POST';
   readonly headers: Readonly<Record<string, string>>;
-  readonly body?: string;
+  readonly body?: string | Uint8Array;
 }
 
 export interface HttpResponse {

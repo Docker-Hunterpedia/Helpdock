@@ -1,5 +1,6 @@
 export * from './accounts.js';
 export * from './ai.js';
+export * from './ai-assist.js';
 export * from './api-keys.js';
 export * from './assignment.js';
 export * from './attachments.js';

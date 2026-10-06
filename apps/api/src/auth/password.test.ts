@@ -113,3 +113,35 @@ describe('PasswordHasher', () => {
     expect(elapsedMs).toBeGreaterThan(5);
   });
 });
+
+describe('PasswordHasher during a master key rotation', () => {
+  it('accepts a hash made under the previous key and asks for it to be replaced', async () => {
+    const before = await new PasswordHasher(OTHER_KEY).hash('correct horse battery');
+    const rotating = new PasswordHasher(MASTER_KEY, OTHER_KEY);
+
+    await expect(rotating.verify(before, 'correct horse battery')).resolves.toEqual({
+      valid: true,
+      needsRehash: true,
+    });
+    await expect(rotating.verify(before, 'wrong horse battery')).resolves.toEqual({
+      valid: false,
+      needsRehash: false,
+    });
+  });
+
+  it('hashes under the new key, which the new key alone then verifies', async () => {
+    const replaced = await new PasswordHasher(MASTER_KEY, OTHER_KEY).hash('correct horse battery');
+
+    await expect(
+      new PasswordHasher(MASTER_KEY).verify(replaced, 'correct horse battery'),
+    ).resolves.toEqual({ valid: true, needsRehash: false });
+  });
+
+  it('refuses a hash under the previous key once that key is gone', async () => {
+    const before = await new PasswordHasher(OTHER_KEY).hash('correct horse battery');
+
+    await expect(
+      new PasswordHasher(MASTER_KEY).verify(before, 'correct horse battery'),
+    ).resolves.toMatchObject({ valid: false });
+  });
+});

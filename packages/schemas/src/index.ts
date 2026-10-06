@@ -3,6 +3,7 @@ export const PACKAGE_NAME = '@helpdock/schemas' as const;
 export * from './ai.js';
 export * from './api.js';
 export * from './assignment.js';
+export * from './assist.js';
 export * from './audit-log.js';
 export * from './auth.js';
 export * from './brand.js';

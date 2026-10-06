@@ -15,6 +15,7 @@ import { DbAiUsage } from './ai/db-ai-usage.js';
 import { ApiKeysModule } from './api-keys/api-keys.module.js';
 import { ApiV1Module } from './api-v1/api-v1.module.js';
 import { AssignmentModule } from './assignment/assignment.module.js';
+import { AssistModule, type AssistModuleOptions } from './assist/assist.module.js';
 import { AuditLogModule } from './audit/audit-log.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule, type AuthModuleOptions } from './auth/auth.module.js';
@@ -129,6 +130,8 @@ export interface AppModuleOptions {
   readonly webForm?: Pick<WebFormModuleOptions, 'captchaTransport'>;
   /** M7: model discovery's HTTP, which suites replace so nothing reaches a provider. */
   readonly ai?: Pick<AiModuleOptions, 'http'>;
+  /** M7-05: retrieval's HTTP and the model, which suites replace with fakes. */
+  readonly assist?: Pick<AssistModuleOptions, 'http' | 'transport'>;
   /** M7-03: the Notion and Google Drive APIs, which suites replace with fakes. */
   readonly knowledge?: KnowledgeOverrides;
   /** Controllers a test mounts alongside the real ones. Empty in production. */
@@ -300,6 +303,8 @@ export class AppModule implements NestModule {
         // M7-01, M7-02, M7-08: providers, models, embeddings, a brand's AI
         // settings and a ticket's AI log. Re-embedding runs in the worker.
         AiModule.forRoot({ env: options.env, ...options.ai }),
+        // M7-05: agent assist, article proposals; M7-09: transcripts on a ticket.
+        AssistModule.forRoot({ env: options.env, ...options.assist }),
         // M7-03: knowledge sources, uploads, the sync log and connector
         // sign-in. Syncing and embedding run in the worker.
         KnowledgeModule.forRoot({

@@ -15,8 +15,6 @@ import { signedInMockApis } from '../../../../test/signed-in.js';
 
 vi.mock('../../../../knowledge/leave.js', () => ({ leaveTo: vi.fn() }));
 
-const SLOW = { timeout: 10_000 };
-
 const renderKnowledge = async (
   knowledgeApi = new MockKnowledgeApi(),
   path = '/admin/ai/knowledge',
@@ -28,7 +26,7 @@ const renderKnowledge = async (
     knowledgeApi,
     initialEntries: [path],
   });
-  await screen.findByRole('table', { name: 'Knowledge sources' }, SLOW);
+  await screen.findByRole('table', { name: 'Knowledge sources' });
   return { ...rendered, knowledgeApi };
 };
 

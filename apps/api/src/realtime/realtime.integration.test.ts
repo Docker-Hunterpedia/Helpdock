@@ -477,14 +477,15 @@ describe.skipIf(!hasDocker)('the realtime gateway', () => {
       const first = await signIn();
       const second = await signIn({ at: 1 });
       const signingOut = await connect(0, first.token);
+      // The signing-out browser's second tab, on the replica that also holds
+      // the other browser: its closing is the proof that the replica acted on
+      // the revocation, and spared the other browser while doing so.
+      const signingOutTab = await connect(1, first.token);
       const otherBrowser = await connect(1, second.token);
 
       await signOut(0, first.token, first.refreshCookie);
 
-      expect(await eventually(() => !signingOut.connected)).toBe(true);
-      // The message has reached both replicas by now; give the second a beat to
-      // act on it if it were going to.
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(await eventually(() => !signingOut.connected && !signingOutTab.connected)).toBe(true);
       expect(otherBrowser.connected).toBe(true);
     });
 

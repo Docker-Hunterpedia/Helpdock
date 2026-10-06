@@ -12,8 +12,6 @@ import { signedInMockApis } from '../../../../test/signed-in.js';
  * re-embed confirmation and 2000-dimension limit.
  */
 
-const SLOW = { timeout: 10_000 };
-
 const renderProviders = async (aiApi = new MockAiApi()) => {
   const { auth, staff } = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
@@ -22,7 +20,7 @@ const renderProviders = async (aiApi = new MockAiApi()) => {
     aiApi,
     initialEntries: ['/admin/ai'],
   });
-  await screen.findByRole('table', { name: 'Providers' }, SLOW);
+  await screen.findByRole('table', { name: 'Providers' });
   return { ...rendered, aiApi };
 };
 

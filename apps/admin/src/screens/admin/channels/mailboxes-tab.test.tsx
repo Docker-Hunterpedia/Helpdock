@@ -6,7 +6,6 @@ import { renderApp } from '../../../test/render.tsx';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /** The first render builds the shell, the brand and three queries; a busy machine needs longer than 1 s. */
-const SLOW = { timeout: 10_000 };
 
 /**
  * Channels › Mailboxes and the mailbox form against the fixture: what the
@@ -43,7 +42,7 @@ describe('Channels › Mailboxes', () => {
   it('redirects /admin/channels to the Mailboxes tab and draws each health state', async () => {
     await open('/admin/channels');
 
-    expect(await screen.findByText('support@helpdock.io', {}, SLOW)).toBeVisible();
+    expect(await screen.findByText('support@helpdock.io')).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Mailboxes' })).toHaveAttribute('aria-selected', 'true');
     expect(within(rowFor('support@helpdock.io')).getByText('Healthy')).toBeVisible();
     expect(within(rowFor('billing@helpdock.io')).getByText('IMAP sign-in failed')).toBeVisible();
@@ -57,7 +56,7 @@ describe('Channels › Mailboxes', () => {
 
   it('deletes a mailbox after asking', async () => {
     const { user } = await open('/admin/channels/mailboxes');
-    await screen.findByText('returns@helpdock.io', {}, SLOW);
+    await screen.findByText('returns@helpdock.io');
 
     await user.click(
       within(rowFor('returns@helpdock.io')).getByRole('button', {
@@ -74,7 +73,7 @@ describe('Channels › Mailboxes', () => {
 
   it('copies an endpoint, and shows a replaced secret exactly once', async () => {
     const { user } = await open('/admin/channels/mailboxes');
-    await screen.findByText('Inbound parse endpoints', {}, SLOW);
+    await screen.findByText('Inbound parse endpoints');
 
     await user.click(screen.getByRole('button', { name: 'Copy the SendGrid URL' }));
     // user-event installs its own clipboard, so what was copied can be read back.
@@ -99,7 +98,7 @@ describe('Channels › Mailboxes', () => {
 describe('the mailbox form', { timeout: 60_000 }, () => {
   it('adds an IMAP mailbox after checking the fields, then opens it', async () => {
     const { user, channelsApi } = await open('/admin/channels/mailboxes/new');
-    await screen.findByRole('heading', { name: 'Add mailbox', level: 1 }, SLOW);
+    await screen.findByRole('heading', { name: 'Add mailbox', level: 1 });
 
     await user.click(screen.getByRole('button', { name: 'Add mailbox' }));
     expect(await screen.findAllByText('Required')).not.toHaveLength(0);
@@ -117,7 +116,7 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
     await user.click(screen.getByRole('button', { name: 'Add mailbox' }));
 
     expect(
-      await screen.findByRole('heading', { name: 'sales@helpdock.io', level: 1 }, SLOW),
+      await screen.findByRole('heading', { name: 'sales@helpdock.io', level: 1 }),
     ).toBeVisible();
     const created = (await channelsApi.mailboxes()).mailboxes.find(
       (row) => row.address === 'sales@helpdock.io',
@@ -127,14 +126,14 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
 
   it('keeps an address another mailbox has on the form, as a refusal', async () => {
     const { user } = await open('/admin/channels/mailboxes/new');
-    await screen.findByRole('heading', { name: 'Add mailbox', level: 1 }, SLOW);
+    await screen.findByRole('heading', { name: 'Add mailbox', level: 1 });
 
     await user.click(screen.getByRole('radio', { name: /Inbound parse webhook/ }));
     await user.type(screen.getByLabelText('Email address'), 'support@helpdock.io');
     await user.type(screen.getByLabelText('Display name'), 'Duplicate');
     await user.click(screen.getByRole('button', { name: 'Add mailbox' }));
 
-    expect(await screen.findByRole('alert', {}, SLOW)).toHaveTextContent(
+    expect(await screen.findByRole('alert')).toHaveTextContent(
       'Another mailbox already receives mail for that address.',
     );
   });
@@ -142,7 +141,7 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
   it('tests IMAP with the stored password, and draws what the server refused', async () => {
     const { user } = await open('/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e1');
     expect(
-      await screen.findByRole('heading', { name: 'billing@helpdock.io', level: 1 }, SLOW),
+      await screen.findByRole('heading', { name: 'billing@helpdock.io', level: 1 }),
     ).toBeVisible();
     expect(screen.getByText(/IMAP sign-in failed since/)).toBeVisible();
     expect(screen.getByText(/Saved .* by Lina Haddad/)).toBeVisible();
@@ -177,7 +176,7 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
     const { user, channelsApi } = await open(
       '/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e4',
     );
-    await screen.findByRole('heading', { name: 'support@helpdock.io', level: 1 }, SLOW);
+    await screen.findByRole('heading', { name: 'support@helpdock.io', level: 1 });
     expect(screen.getByRole('button', { name: 'Save mailbox' })).toBeDisabled();
 
     await user.click(screen.getByRole('radio', { name: /Load through the Helpdock image proxy/ }));
@@ -198,12 +197,12 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
     await user.click(screen.getByRole('button', { name: 'Delete mailbox' }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Delete mailbox' }));
-    expect(await screen.findByRole('heading', { name: 'Channels', level: 1 }, SLOW)).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Channels', level: 1 })).toBeVisible();
   });
 
   it('says so when the mailbox does not exist', async () => {
     await open('/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000ff');
 
-    expect(await screen.findByText('No such mailbox', {}, SLOW)).toBeVisible();
+    expect(await screen.findByText('No such mailbox')).toBeVisible();
   });
 });

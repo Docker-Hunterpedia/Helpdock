@@ -14,7 +14,6 @@ import { limitOf } from './budget-card.tsx';
  * languages and the activity list.
  */
 
-const SLOW = { timeout: 10_000 };
 const BRAND = MOCK_BRANDS[0]?.id ?? '';
 
 const renderAssistant = async (aiApi = new MockAiApi()) => {
@@ -25,7 +24,7 @@ const renderAssistant = async (aiApi = new MockAiApi()) => {
     aiApi,
     initialEntries: ['/admin/ai/assistant'],
   });
-  await screen.findByRole('region', { name: 'Modes' }, SLOW);
+  await screen.findByRole('region', { name: 'Modes' });
   return { ...rendered, aiApi };
 };
 

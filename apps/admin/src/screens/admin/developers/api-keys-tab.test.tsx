@@ -12,8 +12,6 @@ import { signedInMockApis } from '../../../test/signed-in.js';
  * `api-v1.integration.test.ts` in the api.
  */
 
-const SLOW = { timeout: 10_000 };
-
 const renderKeys = async (developers = new MockDevelopersApi(), ready = 'API keys') => {
   const { auth, staff, ticketing } = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
@@ -23,7 +21,7 @@ const renderKeys = async (developers = new MockDevelopersApi(), ready = 'API key
     developersApi: developers,
     initialEntries: ['/admin/developers'],
   });
-  await screen.findByRole('heading', { name: ready }, SLOW);
+  await screen.findByRole('heading', { name: ready });
   return rendered;
 };
 

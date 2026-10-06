@@ -1,4 +1,4 @@
-import type { DbTransaction, WebhookRow } from '@helpdock/db';
+import type { DbTransaction } from '@helpdock/db';
 import { createOutboxDispatcher, type OutboxEventContext, silentLogger } from '@helpdock/jobs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -11,21 +11,17 @@ import {
 } from './webhook-events.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
 
-const enqueueOutbox = vi.hoisted(() => vi.fn(async (_tx: unknown, _entry: unknown) => 'outbox-id'));
-vi.mock('@helpdock/jobs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@helpdock/jobs')>()),
-  enqueueOutbox,
-}));
-const webhookDataFor = vi.hoisted(() => vi.fn());
-vi.mock('./webhook-payload.js', () => ({ webhookDataFor }));
+/**
+ * The subscriber's decisions that need no database. What it writes once an
+ * endpoint has asked for an event — the delivery row with the ticket inside
+ * it, and the `webhook.delivery_requested` row behind it — is proved against
+ * real Postgres in `webhook-events.integration.test.ts`.
+ */
 
 const BRAND = '0192a000-0000-7000-8000-0000000000b1';
 const OUTBOX = '0192a000-0000-7000-8000-0000000000a1';
 const TICKET = '0192a000-0000-7000-8000-0000000000c1';
-const NOW = new Date('2026-10-05T10:00:00Z');
 const tx = {} as DbTransaction;
-
-const endpoint = (id: string) => ({ id }) as WebhookRow;
 
 const context = (event: string, payload: Record<string, unknown>): OutboxEventContext => ({
   outboxId: OUTBOX,
@@ -58,46 +54,10 @@ describe('the webhooks subscriber', () => {
   const insertDelivery = vi.fn();
   const subscribedTo = vi.fn();
   const repository = { insertDelivery, subscribedTo } as unknown as WebhooksRepository;
-  const handle = createWebhookSourceHandler(repository, () => NOW);
+  const handle = createWebhookSourceHandler(repository);
 
   beforeEach(() => {
     vi.clearAllMocks();
-    webhookDataFor.mockResolvedValue({ ticket: { id: TICKET } });
-  });
-
-  it('creates one delivery per subscribed endpoint, keyed by the outbox row, and asks for each', async () => {
-    subscribedTo.mockResolvedValue([endpoint('w1'), endpoint('w2')]);
-    insertDelivery.mockImplementation(async (_tx, values) => ({ id: `d-${values.webhookId}` }));
-
-    await handle(context('ticket.created', { ticketId: TICKET }));
-
-    expect(subscribedTo).toHaveBeenCalledWith(tx, 'ticket.created');
-    expect(insertDelivery).toHaveBeenCalledWith(tx, {
-      brandId: BRAND,
-      webhookId: 'w1',
-      eventId: OUTBOX,
-      event: 'ticket.created',
-      payload: {
-        id: OUTBOX,
-        event: 'ticket.created',
-        createdAt: NOW.toISOString(),
-        brandId: BRAND,
-        data: { ticket: { id: TICKET } },
-      },
-    });
-    expect(enqueueOutbox.mock.calls.map(([, entry]) => entry)).toEqual([
-      { brandId: BRAND, event: WEBHOOK_DELIVERY_REQUESTED_EVENT, payload: { deliveryId: 'd-w1' } },
-      { brandId: BRAND, event: WEBHOOK_DELIVERY_REQUESTED_EVENT, payload: { deliveryId: 'd-w2' } },
-    ]);
-  });
-
-  it('asks for nothing again when a redelivered event finds its deliveries made', async () => {
-    subscribedTo.mockResolvedValue([endpoint('w1')]);
-    insertDelivery.mockResolvedValue(undefined);
-
-    await handle(context('ticket.created', { ticketId: TICKET }));
-
-    expect(enqueueOutbox).not.toHaveBeenCalled();
   });
 
   it('reads nothing when no endpoint asked for the event', async () => {
@@ -105,16 +65,7 @@ describe('the webhooks subscriber', () => {
 
     await handle(context('ticket.closed', { ticketId: TICKET }));
 
-    expect(webhookDataFor).not.toHaveBeenCalled();
-    expect(insertDelivery).not.toHaveBeenCalled();
-  });
-
-  it('sends nothing when the thing the event was about is gone', async () => {
-    subscribedTo.mockResolvedValue([endpoint('w1')]);
-    webhookDataFor.mockResolvedValue(undefined);
-
-    await handle(context('ticket.updated', { ticketId: TICKET }));
-
+    expect(subscribedTo).toHaveBeenCalledWith(tx, 'ticket.closed');
     expect(insertDelivery).not.toHaveBeenCalled();
   });
 

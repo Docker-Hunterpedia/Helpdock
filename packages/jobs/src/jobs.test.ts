@@ -4,7 +4,6 @@ import {
   assignmentOfflineUnassignJob,
   authEmailJob,
   authEmailJobId,
-  BRAND_PURGE_CRON,
   brandPurgeJob,
   brandPurgeJobId,
   brandPurgeScheduleJob,
@@ -47,7 +46,6 @@ import {
   rulesTimeBasedJob,
   rulesTimeBasedJobId,
   rulesTimeBasedScheduleJob,
-  STATS_ROLLUP_CRON,
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
@@ -57,7 +55,6 @@ import {
   telegramPollJob,
   telegramPollSchedulerId,
   telegramSendJob,
-  WEBHOOK_DELIVER_ATTEMPTS,
   webhookDeliverJob,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
@@ -265,8 +262,8 @@ describe('webhook.deliver', () => {
 
   it('runs on the webhooks queue with eight attempts and exponential backoff', () => {
     expect(webhookDeliverJob.queue).toBe('webhooks');
-    expect(webhookDeliverJob.options.attempts).toBe(WEBHOOK_DELIVER_ATTEMPTS);
-    expect(WEBHOOK_DELIVER_ATTEMPTS).toBe(8);
+    // docs/guides/webhooks.md promises eight attempts, the last about an hour after the event.
+    expect(webhookDeliverJob.options.attempts).toBe(8);
     expect(webhookDeliverJob.options.backoff).toEqual({ type: 'exponential', delay: 30_000 });
   });
 
@@ -624,8 +621,8 @@ describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
   it('rolls up hourly off the top of the hour, one job per brand and tick', () => {
     const payload = parseJobPayload(statsRollupJob, { brandId, tick: '2026-10-05T09:07:00.000Z' });
 
-    expect(statsRollupScheduleJob.schedule).toEqual({ cron: STATS_ROLLUP_CRON });
-    expect(STATS_ROLLUP_CRON).toBe('7 * * * *');
+    // The M8 milestone doc names the cron; a change here is a change there.
+    expect(statsRollupScheduleJob.schedule).toEqual({ cron: '7 * * * *' });
     expect(statsRollupJob.queue).toBe('maintenance');
     expect(statsRollupJobId(payload)).toBe(
       `stats.rollup.${brandId}.${Date.parse('2026-10-05T09:07:00.000Z')}`,
@@ -643,7 +640,6 @@ describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
   });
 
   it('looks for brands past their grace nightly, an hour after retention', () => {
-    expect(brandPurgeScheduleJob.schedule).toEqual({ cron: BRAND_PURGE_CRON });
-    expect(BRAND_PURGE_CRON).toBe('0 4 * * *');
+    expect(brandPurgeScheduleJob.schedule).toEqual({ cron: '0 4 * * *' });
   });
 });

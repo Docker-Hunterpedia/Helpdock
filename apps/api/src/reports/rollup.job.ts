@@ -1,18 +1,18 @@
 import { brands, type Db, type DbTransaction } from '@helpdock/db';
 import {
   type JobLogger,
-  PayloadValidationError,
-  parseJobPayload,
+  parseJobPayloadOrFail,
   type StatsRollupPayload,
   statsRollupJob,
   statsRollupJobId,
   statsRollupScheduleJob,
 } from '@helpdock/jobs';
 import { parseBrandSettings } from '@helpdock/schemas';
-import { type Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import type { BrandObjects } from '../media/brand-objects.js';
 import type { StorageUsageStore } from '../observability/storage-usage.js';
+import { liveBrandIds } from '../tenant/live-brands.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { RollupRepository } from './rollup.repository.js';
 import {
@@ -122,7 +122,9 @@ export interface StatsRollupQueue {
 
 /**
  * The hourly tick. `brands` is a global table, so listing it needs no tenant
- * context; everything a brand's run reads is read in that brand's own.
+ * context; everything a brand's run reads is read in that brand's own. Active
+ * brands only: `runBrandRollup` refuses any other, and a disabled brand has
+ * nothing new to count.
  */
 export const scheduleStatsRollup = async ({
   db,
@@ -134,13 +136,13 @@ export const scheduleStatsRollup = async ({
   readonly now?: Date;
 }): Promise<number> => {
   const tick = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000).toISOString();
-  const active = await db.select({ id: brands.id }).from(brands).where(eq(brands.status, 'active'));
-  for (const { id: brandId } of active) {
+  const live = await liveBrandIds(db, 'active');
+  for (const brandId of live) {
     const payload = { brandId, tick };
     await queue.add(payload, statsRollupJobId(payload));
   }
 
-  return active.length;
+  return live.length;
 };
 
 export interface StatsProcessorOptions {
@@ -165,7 +167,7 @@ export const createStatsProcessor =
           log.info({ job: job.name, brands: brandCount }, 'report rollups scheduled'),
         );
       case statsRollupJob.name: {
-        const payload = parsePayload(job.data);
+        const payload = parseJobPayloadOrFail(statsRollupJob, job.data);
         return runBrandRollup({
           db,
           brandId: payload.brandId,
@@ -183,16 +185,3 @@ export const createStatsProcessor =
         return undefined;
     }
   };
-
-/** A payload that is wrong now will be wrong on every retry, so it fails for good. */
-const parsePayload = (data: unknown): StatsRollupPayload => {
-  try {
-    return parseJobPayload(statsRollupJob, data);
-  } catch (error) {
-    if (error instanceof PayloadValidationError) {
-      throw new UnrecoverableError(error.message);
-    }
-    /* c8 ignore next -- parseJobPayload throws nothing else. */
-    throw error;
-  }
-};

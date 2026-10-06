@@ -1,7 +1,7 @@
-import type { JobsOptions } from 'bullmq';
+import { type Job, type JobsOptions, UnrecoverableError } from 'bullmq';
 import { z } from 'zod';
 import { QUEUE_NAMES, type QueueName } from './queues.js';
-import { parsePayload } from './validation.js';
+import { PayloadValidationError, parsePayload } from './validation.js';
 
 /**
  * The job registry. A job is a name, the queue it runs on, a Zod schema for its
@@ -52,6 +52,40 @@ export const parseJobPayload = <TName extends string, TPayload>(
   definition: JobDefinition<TName, TPayload>,
   data: unknown,
 ): TPayload => parsePayload(`payload for job ${definition.name}`, definition.schema, data);
+
+/**
+ * {@link parseJobPayload} for a consumer: a payload that fails its schema is
+ * thrown as BullMQ's `UnrecoverableError`, so the job fails for good instead
+ * of retrying what would be wrong again.
+ */
+export const parseJobPayloadOrFail = <TName extends string, TPayload>(
+  definition: JobDefinition<TName, TPayload>,
+  data: unknown,
+): TPayload => {
+  try {
+    return parseJobPayload(definition, data);
+  } catch (error) {
+    if (error instanceof PayloadValidationError) {
+      throw new UnrecoverableError(error.message);
+    }
+    /* c8 ignore next -- parseJobPayload throws nothing else. */
+    throw error;
+  }
+};
+
+/**
+ * Whether this attempt is the job's last, so a consumer can mark a delivery
+ * dead rather than retrying. BullMQ counts the attempts before this one; an
+ * `UnrecoverableError` ends the job whatever the count. The definition's
+ * attempts stand in when the job was added without its own.
+ */
+export const isLastAttempt = (
+  definition: Pick<JobDefinition, 'options'>,
+  job: Pick<Job, 'attemptsMade' | 'opts'>,
+  error: unknown,
+): boolean =>
+  error instanceof UnrecoverableError ||
+  job.attemptsMade + 1 >= (job.opts.attempts ?? definition.options.attempts ?? 1);
 
 /**
  * The `job_receipts` key a delivery of this job claims. A definition with a

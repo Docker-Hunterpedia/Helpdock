@@ -1,6 +1,6 @@
 import { createKeyring, encryptSecret } from '@helpdock/config';
 import { silentLogger } from '@helpdock/jobs';
-import { type Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 import { noSurveyEmails } from '../testing/csat-doubles.js';
 import {
@@ -13,7 +13,6 @@ import { BRAND, DELIVERY, deliveryRow, settingsRow, TICKET } from '../testing/em
 import type { SendFacts } from './email.repository.js';
 import {
   createEmailSendHandler,
-  isLastAttempt,
   NoSmtpServerError,
   type SurveyEmailSource,
 } from './email-send.job.js';
@@ -155,22 +154,5 @@ describe('the email.send handler', () => {
     await expect(run()).rejects.toThrow('refused');
     expect(transports.closed).toBe(1);
     expect(repository.deliveries[0]?.status).toBe('queued');
-  });
-});
-
-describe('isLastAttempt', () => {
-  const job = (attemptsMade: number, attempts = 5) => ({ attemptsMade, opts: { attempts } }) as Job;
-
-  it('counts the attempts before this one', () => {
-    expect(isLastAttempt(job(3), new Error('x'))).toBe(false);
-    expect(isLastAttempt(job(4), new Error('x'))).toBe(true);
-  });
-
-  it('treats an unrecoverable error as the last attempt, whatever the count', () => {
-    expect(isLastAttempt(job(0), new UnrecoverableError('bad payload'))).toBe(true);
-  });
-
-  it("falls back to the job definition's attempts", () => {
-    expect(isLastAttempt({ attemptsMade: 4, opts: {} } as Job, new Error('x'))).toBe(true);
   });
 });

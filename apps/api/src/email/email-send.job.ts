@@ -6,11 +6,12 @@ import {
   type EmailSendPayload,
   emailSendJob,
   emailSendPayloadSchema,
+  isLastAttempt,
   type JobHandler,
   type JobLogger,
 } from '@helpdock/jobs';
 import { EMAIL_ERROR_MAX_LENGTH } from '@helpdock/schemas';
-import { type Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bullmq';
 import type { EmailRepository } from './email.repository.js';
 import { templatesFor } from './outgoing-settings.js';
 import { type CsatSurveyEmail, renderDelivery } from './render-delivery.js';
@@ -125,11 +126,6 @@ export const createEmailSendHandler =
     );
   };
 
-/** Whether this attempt is the job's last: BullMQ counts the ones before it. */
-export const isLastAttempt = (job: Job, error: unknown): boolean =>
-  error instanceof UnrecoverableError ||
-  job.attemptsMade + 1 >= (job.opts.attempts ?? emailSendJob.options.attempts ?? 1);
-
 export const createEmailSendProcessor = ({
   db,
   log,
@@ -151,7 +147,7 @@ export const createEmailSendProcessor = ({
     } catch (error) {
       const parsed = emailSendPayloadSchema.safeParse(job.data);
       if (parsed.success) {
-        const dead = isLastAttempt(job, error);
+        const dead = isLastAttempt(emailSendJob, job, error);
         await withSystem(db, parsed.data.brandId, (tx) =>
           repository.recordFailure(tx, parsed.data.deliveryId, {
             attempts: job.attemptsMade + 1,

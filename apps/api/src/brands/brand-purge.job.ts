@@ -14,12 +14,11 @@ import {
   brandPurgeJobId,
   brandPurgeScheduleJob,
   type JobLogger,
-  PayloadValidationError,
-  parseJobPayload,
+  parseJobPayloadOrFail,
   RETENTION_BATCH_SIZE,
 } from '@helpdock/jobs';
 import { BRAND_DELETION_GRACE_DAYS, brandPurgeAfter } from '@helpdock/schemas';
-import { type Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bullmq';
 import { and, eq, lte } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { BrandObjects } from '../media/brand-objects.js';
@@ -206,7 +205,7 @@ export const createBrandPurgeProcessor =
           log.info({ job: job.name, brands: count }, 'brand purges scheduled'),
         );
       case brandPurgeJob.name: {
-        const payload = parsePayload(job.data);
+        const payload = parseJobPayloadOrFail(brandPurgeJob, job.data);
         return runBrandPurge({
           ...deps,
           brandId: payload.brandId,
@@ -220,15 +219,3 @@ export const createBrandPurgeProcessor =
         return undefined;
     }
   };
-
-const parsePayload = (data: unknown): BrandPurgePayload => {
-  try {
-    return parseJobPayload(brandPurgeJob, data);
-  } catch (error) {
-    if (error instanceof PayloadValidationError) {
-      throw new UnrecoverableError(error.message);
-    }
-    /* c8 ignore next -- parseJobPayload throws nothing else. */
-    throw error;
-  }
-};

@@ -1,11 +1,6 @@
 import { decryptSecret, type Keyring } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
-import {
-  type JobLogger,
-  PayloadValidationError,
-  parseJobPayload,
-  webhookDeliverJob,
-} from '@helpdock/jobs';
+import { type JobLogger, parseJobPayloadOrFail, webhookDeliverJob } from '@helpdock/jobs';
 import {
   policies,
   SafeFetchError,
@@ -14,7 +9,7 @@ import {
   type SafeFetchResponse,
   safeFetch,
 } from '@helpdock/net';
-import { type Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bullmq';
 import { withSystemJob } from '../tenant/system-job.js';
 import { type WebhookRequest, webhookRequest } from './webhook-request.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
@@ -133,15 +128,7 @@ export const createWebhookDeliverProcessor = ({
   };
 
   return async (job: Job): Promise<void> => {
-    const { brandId, deliveryId } = (() => {
-      try {
-        return parseJobPayload(webhookDeliverJob, job.data);
-      } catch (error) {
-        throw error instanceof PayloadValidationError
-          ? new UnrecoverableError(error.message)
-          : error;
-      }
-    })();
+    const { brandId, deliveryId } = parseJobPayloadOrFail(webhookDeliverJob, job.data);
     const principal = `webhook.deliver:${deliveryId}`;
 
     const target = await withSystemJob(db, brandId, principal, (tx) =>
@@ -170,8 +157,10 @@ export const createWebhookDeliverProcessor = ({
       webhookRequest(delivery, decryptSecret(webhook.secret, keyring), sentAt),
     );
 
-    // The row's count survives a replay's fresh job; BullMQ's survives an
-    // attempt that died before it could write the row. The larger is the truth.
+    // A replay inserts a fresh row, so the row's count is this job's own; it
+    // survives an attempt that died before BullMQ counted it, and BullMQ's
+    // count survives an attempt that died before it could write the row. The
+    // larger is the truth.
     const attempts = Math.max(delivery.attempts, job.attemptsMade) + 1;
     const last = attempts >= (job.opts.attempts ?? webhookDeliverJob.options.attempts ?? 1);
     const status = outcome.ok ? 'succeeded' : last ? 'failed' : 'pending';

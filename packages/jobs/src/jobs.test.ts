@@ -1,3 +1,4 @@
+import { UnrecoverableError } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 import {
   assignmentOfflineUnassignJob,
@@ -22,6 +23,7 @@ import {
   helpCenterSearchReindexJobId,
   helpCenterSearchReindexSweepJob,
   idempotencyKeyFor,
+  isLastAttempt,
   JOB_DEFINITIONS,
   knowledgeConfigureJob,
   knowledgeEmbedJob,
@@ -37,6 +39,7 @@ import {
   outboxEventJob,
   outboxRelayJob,
   parseJobPayload,
+  parseJobPayloadOrFail,
   RULES_TIME_BASED_CRON,
   retentionJobId,
   rulesEvaluateJob,
@@ -140,6 +143,38 @@ describe('outbox.event payloads', () => {
       expect((error as Error).message).toContain('payload for job outbox.event');
       expect((error as PayloadValidationError).issues[0]?.path).toBe('outboxId');
     }
+  });
+});
+
+describe('parseJobPayloadOrFail', () => {
+  it('returns a payload that fits', () => {
+    expect(parseJobPayloadOrFail(outboxEventJob, validEvent)).toEqual(validEvent);
+  });
+
+  it('fails a wrong payload for good, since a retry would fail the same way', () => {
+    expect(() => parseJobPayloadOrFail(outboxEventJob, { ...validEvent, brandId: 'nope' })).toThrow(
+      UnrecoverableError,
+    );
+    expect(() => parseJobPayloadOrFail(outboxEventJob, { ...validEvent, brandId: 'nope' })).toThrow(
+      'payload for job outbox.event',
+    );
+  });
+});
+
+describe('isLastAttempt', () => {
+  const job = (attemptsMade: number, attempts = 5) => ({ attemptsMade, opts: { attempts } });
+
+  it('counts the attempts before this one', () => {
+    expect(isLastAttempt(emailSendJob, job(3), new Error('x'))).toBe(false);
+    expect(isLastAttempt(emailSendJob, job(4), new Error('x'))).toBe(true);
+  });
+
+  it('treats an unrecoverable error as the last attempt, whatever the count', () => {
+    expect(isLastAttempt(emailSendJob, job(0), new UnrecoverableError('bad payload'))).toBe(true);
+  });
+
+  it("falls back to the job definition's attempts", () => {
+    expect(isLastAttempt(emailSendJob, { attemptsMade: 4, opts: {} }, new Error('x'))).toBe(true);
   });
 });
 

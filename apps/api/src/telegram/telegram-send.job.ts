@@ -13,9 +13,10 @@ import {
   ticketMessages,
   withSystem,
 } from '@helpdock/db';
-import { createI18n, type Locale } from '@helpdock/i18n';
+import type { Locale } from '@helpdock/i18n';
 import {
   createJobProcessor,
+  isLastAttempt,
   type JobHandler,
   type JobLogger,
   type TelegramSendPayload,
@@ -30,6 +31,7 @@ import type { ObjectStorage } from '../media/storage.js';
 import { apiForBot, type TelegramApiFactory } from './bot-api-factory.js';
 import type { TelegramRepository } from './telegram.repository.js';
 import { planOutgoingFile, readOutgoingFile, replyAttachments } from './telegram-attachments.js';
+import { telegramText } from './telegram-text.js';
 
 /**
  * The `telegram.send` consumer (M6-02, M6-04): an agent's reply to its chat,
@@ -72,8 +74,6 @@ export class AttachmentNotReadyError extends Error {
   }
 }
 
-const t = (locale: Locale) => createI18n({ lng: locale }).getFixedT(locale, 'telegram');
-
 export const createTelegramSendHandler =
   (deps: TelegramSendDependencies): JobHandler<TelegramSendPayload> =>
   async ({ payload, brandId, tx, log }) => {
@@ -101,7 +101,7 @@ export const createTelegramSendHandler =
         // A press answered late has stopped spinning anyway; the confirmation still matters.
         await api.answerCallbackQuery(payload.callbackQueryId).catch(() => undefined);
       }
-      await api.sendMessage(payload.chatId, t(payload.locale)('bot.languageSet'));
+      await api.sendMessage(payload.chatId, telegramText(payload.locale)('bot.languageSet'));
     });
     log.info({ brandId, botId: bot.id, notice: payload.notice }, 'telegram notice sent');
   };
@@ -114,16 +114,13 @@ const sendWelcome = async (
   locale: Locale,
 ): Promise<void> => {
   const own = locale === 'ar' ? bot.welcomeAr : bot.welcomeEn;
-  const welcome = own === null || own.trim() === '' ? t(locale)('bot.welcome') : own;
+  const words = telegramText(locale);
+  const welcome = own === null || own.trim() === '' ? words('bot.welcome') : own;
   if (!bot.languagePick) {
     await api.sendMessage(chatId, welcome);
     return;
   }
-  await api.sendMessage(
-    chatId,
-    `${welcome}\n\n${t(locale)('bot.languagePrompt')}`,
-    languageKeyboard(),
-  );
+  await api.sendMessage(chatId, `${welcome}\n\n${words('bot.languagePrompt')}`, languageKeyboard());
 };
 
 const sendReply = async (
@@ -213,11 +210,6 @@ const withPermanentAsFinal = async (send: () => Promise<void>): Promise<void> =>
   }
 };
 
-/** Whether this attempt is the job's last: BullMQ counts the ones before it. */
-const isLastAttempt = (job: Job, error: unknown): boolean =>
-  error instanceof UnrecoverableError ||
-  job.attemptsMade + 1 >= (job.opts.attempts ?? telegramSendJob.options.attempts ?? 1);
-
 const errorText = (error: unknown): string =>
   (error instanceof TelegramApiFailure ||
   error instanceof UnrecoverableError ||
@@ -252,7 +244,7 @@ export const createTelegramSendProcessor = ({
           repository.recordFailure(tx, deliveryId, {
             attempts: job.attemptsMade + 1,
             error: errorText(error),
-            dead: isLastAttempt(job, error),
+            dead: isLastAttempt(telegramSendJob, job, error),
             at: now(),
           }),
         ).catch((recordError: unknown) => {

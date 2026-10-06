@@ -30,6 +30,7 @@ describe('fakeEmbeddingsServer', () => {
     const server = fakeEmbeddingsServer(8, ['m'], bagOfWordsVector);
     const response = await server.http('https://embeddings.example/v1/embeddings', {
       method: 'POST',
+      headers: {},
       body: JSON.stringify({ model: 'm', input: ['one two'] }),
     });
     const { data } = JSON.parse(response.body) as { data: { embedding: number[] }[] };

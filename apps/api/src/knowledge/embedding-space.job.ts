@@ -1,7 +1,6 @@
 import type { Ai } from '@helpdock/ai';
 import type { Settings } from '@helpdock/config';
 import {
-  brands,
   buildEmbeddingIndex,
   type Db,
   knowledgeChunks,
@@ -18,6 +17,7 @@ import {
 } from '@helpdock/jobs';
 import type { Job } from 'bullmq';
 import { and, asc, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { liveBrandIds } from '../tenant/live-brands.js';
 import { withSystemJob } from '../tenant/system-job.js';
 
 /**
@@ -127,10 +127,12 @@ export const reembedChunks = async ({
     return { embedded: 0, ready: space.status === 'ready' };
   }
 
-  const live = await db.select({ id: brands.id }).from(brands).where(ne(brands.status, 'deleted'));
+  // A brand in its deletion grace is re-embedded too: restored, its chunks
+  // must already sit in the space the install moved to.
+  const live = await liveBrandIds(db, 'not-deleted');
   let embedded = 0;
   try {
-    for (const { id: brandId } of live) {
+    for (const brandId of live) {
       embedded += await reembedBrand({ db, ai, jobId, brandId, model, batchSize, now });
     }
   } catch (error) {

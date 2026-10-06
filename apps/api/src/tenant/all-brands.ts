@@ -1,4 +1,5 @@
-import { brands, type Db, type DbTransaction, withTenant } from '@helpdock/db';
+import { type Db, type DbTransaction, withTenant } from '@helpdock/db';
+import { liveBrandIds } from './live-brands.js';
 
 /**
  * A transaction over every brand, as the system principal, for the questions
@@ -6,7 +7,10 @@ import { brands, type Db, type DbTransaction, withTenant } from '@helpdock/db';
  * Telegram webhook belongs to, whose an API key is (M8-01), which pollers a booting worker re-registers,
  * what the install's System page lists. `brands` is a global table, so reading
  * its ids needs no context; the context is then set to exactly those ids, the
- * way ARCHITECTURE §6 asks an all-brands path to.
+ * way ARCHITECTURE §6 asks an all-brands path to. A purged brand is left out
+ * (`live-brands.ts`); one in its deletion grace is still found, because the
+ * route that found it answers 410 for it, and the pollers check
+ * `isBrandGone` before they fetch.
  *
  * `principalId` names the path, so the database's own logging says who asked.
  */
@@ -15,7 +19,7 @@ export const withAllBrands = async <T>(
   principalId: string,
   fn: (tx: DbTransaction) => Promise<T[]>,
 ): Promise<T[]> => {
-  const brandIds = (await db.select({ id: brands.id }).from(brands)).map((row) => row.id);
+  const brandIds = await liveBrandIds(db, 'not-deleted');
   if (brandIds.length === 0) {
     return [];
   }

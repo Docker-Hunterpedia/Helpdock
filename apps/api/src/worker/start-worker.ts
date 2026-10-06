@@ -1,5 +1,5 @@
 import { createKeyring, type Env, type Settings } from '@helpdock/config';
-import { brands, type Db } from '@helpdock/db';
+import type { Db } from '@helpdock/db';
 import {
   aiAutoReplyJob,
   aiClassifyJob,
@@ -58,7 +58,6 @@ import {
 } from '@helpdock/jobs';
 import type { BlockedEvent } from '@helpdock/net';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
-import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { safeAiTransport } from '../ai/ai-http.js';
 import { createAutoReplyProcessor } from '../ai/auto-reply/auto-reply.job.js';
@@ -175,6 +174,7 @@ import {
   createTelegramSendHandler,
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
+import { liveBrandIds } from '../tenant/live-brands.js';
 import { withSystemJob } from '../tenant/system-job.js';
 
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
@@ -462,8 +462,7 @@ const knowledgeQueuesOf = (queue: Queue): KnowledgeQueues => ({
 
 /** Every brand's daily and weekly sources, re-registered on boot (DOMAIN-RULES §10). */
 const scheduleAllKnowledgeSources = async (db: Db, queues: KnowledgeQueues): Promise<void> => {
-  const active = await db.select({ id: brands.id }).from(brands).where(eq(brands.status, 'active'));
-  for (const { id: brandId } of active) {
+  for (const brandId of await liveBrandIds(db, 'active')) {
     await withSystemJob(db, brandId, 'knowledge.schedule.boot', (tx) =>
       scheduleBrandSources(tx, brandId, queues),
     );

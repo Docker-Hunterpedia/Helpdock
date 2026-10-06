@@ -1,7 +1,8 @@
 import { csatCommentKeyboard, csatKeyboard, type TelegramBotApi } from '@helpdock/channels';
 import type { DbTransaction } from '@helpdock/db';
-import { createI18n, type Locale } from '@helpdock/i18n';
+import type { Locale } from '@helpdock/i18n';
 import type { JobLogger, TelegramSendPayload } from '@helpdock/jobs';
+import { telegramCsatText } from '../telegram/telegram-text.js';
 import type { CsatRepository } from './csat.repository.js';
 import { recordCsatAnswer } from './csat-answers.js';
 import { type CsatTokens, csatSurveyUrl } from './tokens.js';
@@ -62,8 +63,6 @@ export class CsatTelegramTaps {
   }
 }
 
-const t = (locale: Locale) => createI18n({ lng: locale }).getFixedT(locale, ['telegram', 'csat']);
-
 const RATING_WORDS = [
   'csat:ratings.1',
   'csat:ratings.2',
@@ -116,7 +115,7 @@ export class CsatTelegramNotices {
       return;
     }
     const { survey, reference } = found;
-    const words = t(notice.locale);
+    const words = telegramCsatText(notice.locale);
     const commentUrl = csatSurveyUrl(
       this.#tokens,
       this.#appUrl,

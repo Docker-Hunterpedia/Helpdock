@@ -19,7 +19,7 @@ import {
   telegramBots,
   ticketMessages,
 } from '@helpdock/db';
-import { createI18n, type Locale } from '@helpdock/i18n';
+import type { Locale } from '@helpdock/i18n';
 import { TELEGRAM_ERROR_MAX_LENGTH } from '@helpdock/schemas';
 import { and, eq } from 'drizzle-orm';
 import type { StorageAttachmentSink } from '../channels/inbound/attachment-sink.js';
@@ -33,6 +33,7 @@ import { apiForBot, type TelegramApiFactory } from './bot-api-factory.js';
 import type { BotLocator, TelegramRepository } from './telegram.repository.js';
 import { enqueueTelegramNotice } from './telegram-events.js';
 import type { TelegramConversationRouter, TelegramRouteOutcome } from './telegram-router.js';
+import { telegramText } from './telegram-text.js';
 
 /**
  * One Telegram update into one brand (M6-01 to M6-04): the part the webhook
@@ -156,7 +157,7 @@ export class TelegramInboundService {
             event,
             botTelegramId: bot.telegramId,
             files,
-            locationLabel: t(locale)('thread.location'),
+            locationLabel: telegramText(locale)('thread.location'),
           },
           now,
         );
@@ -393,8 +394,6 @@ export class TelegramInboundService {
     }
   }
 }
-
-const t = (locale: Locale) => createI18n({ lng: locale }).getFixedT(locale, 'telegram');
 
 /** Telegram's `language_code` for a contact who has not chosen yet. */
 const guessLocale = (languageCode: string | null): Locale | undefined => {

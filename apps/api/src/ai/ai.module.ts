@@ -4,6 +4,7 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import { SETTINGS } from '../runtime/tokens.js';
 import { AiRepository } from './ai.repository.js';
 import { safeAiTransport } from './ai-http.js';
+import { AutoReplyStaffController, AutoReplyStaffService } from './auto-reply/auto-reply-staff.js';
 import { BrandAiController } from './brand-ai.controller.js';
 import { BrandAiService } from './brand-ai.service.js';
 import { BudgetMeter } from './budget-meter.js';
@@ -31,8 +32,10 @@ export class AiModule {
     const transport = http ?? safeAiTransport(env.OUTBOUND_ALLOW_CIDRS);
     return {
       module: AiModule,
-      controllers: [InstallAiController, BrandAiController],
+      controllers: [InstallAiController, BrandAiController, AutoReplyStaffController],
       providers: [
+        // M7-06's "Return to assistant".
+        AutoReplyStaffService,
         {
           provide: InstallAiService,
           inject: [SETTINGS],

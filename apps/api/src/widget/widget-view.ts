@@ -1,5 +1,6 @@
 import type { Attachment as AttachmentRow, TicketMessage as TicketMessageRow } from '@helpdock/db';
 import type { WidgetAttachment, WidgetConversation, WidgetMessage } from '@helpdock/schemas';
+import { readAiMeta, toWidgetMessageAi } from '../ai/auto-reply/ai-meta.js';
 import { firstNameOf } from '../csat/csat.service.js';
 import type { TicketWithStatus } from './widget.repository.js';
 
@@ -49,11 +50,22 @@ export const toWidgetMessage = (
     clientId: author === 'visitor' ? row.clientId : null,
     author,
     agent: agentName === null ? null : { name: agentName, avatarUrl: null },
-    text: row.bodyText,
-    html: author === 'visitor' ? null : row.bodyHtml,
+    text: answerOf(row) ?? row.bodyText,
+    html: author === 'visitor' || answerOf(row) !== undefined ? null : row.bodyHtml,
     attachments: files.map(toWidgetAttachment),
+    ...aiOf(row),
     createdAt: row.createdAt.toISOString(),
   };
+};
+
+/** M7-06: an assistant answer's text without the sources list, which the widget draws itself. */
+const answerOf = (row: TicketMessageRow): string | undefined =>
+  row.authorType === 'ai' ? (readAiMeta(row.aiMeta)?.answer ?? undefined) : undefined;
+
+/** M7-06: an assistant message's sources and the visitor's feedback on it. */
+const aiOf = (row: TicketMessageRow): Pick<WidgetMessage, 'ai'> => {
+  const ai = row.authorType === 'ai' ? toWidgetMessageAi(row.aiMeta) : undefined;
+  return ai === undefined ? {} : { ai };
 };
 
 export const toWidgetConversation = (
@@ -68,6 +80,7 @@ export const toWidgetConversation = (
   channel: ticket.channel,
   lastSeq,
   continuedById,
+  aiHandedOff: ticket.aiEligibleAt !== null && ticket.aiPausedAt !== null,
   createdAt: ticket.createdAt.toISOString(),
   updatedAt: ticket.updatedAt.toISOString(),
 });

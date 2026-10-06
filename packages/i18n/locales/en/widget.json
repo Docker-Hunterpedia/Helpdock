@@ -158,6 +158,20 @@
     "another": "Send another message",
     "failed": "We could not send your message. Try again."
   },
+  "ai": {
+    "author": "{{brand}} assistant",
+    "badge": "AI",
+    "sources": "Sources",
+    "source": "Source {{n}}, {{title}}",
+    "helpful": "Was this helpful?",
+    "yes": "Yes, helpful",
+    "no": "No, not helpful",
+    "thanks": "Thanks, that helps us improve.",
+    "talkToHuman": "Talk to a human",
+    "connecting": "Connecting you with the team…",
+    "steppedBack": "The assistant has stepped back. A person will reply here.",
+    "steppedBackEmail": "The assistant has stepped back. A person will reply here and at {{email}}."
+  },
   "csat": {
     "question": "How was this conversation?",
     "legend": "Your rating, 1 is very bad and 5 is excellent",

@@ -9,6 +9,7 @@ import { createEmbed, type EmbedRequest, type EmbedResult } from './embed.js';
 import type { HttpTransport } from './http.js';
 import type { AiPorts } from './ports.js';
 
+export * from './auto-reply/index.js';
 export * from './complete.js';
 export * from './embed.js';
 export * from './guardrails/budget.js';

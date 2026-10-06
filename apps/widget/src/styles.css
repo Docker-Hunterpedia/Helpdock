@@ -946,6 +946,138 @@ button:disabled {
   background: var(--hd-bg-muted);
 }
 
+/* The assistant (M7-06, DESIGN §6.6 "AI answer") */
+.hd-avatar-ai {
+  color: var(--hd-action-primary);
+}
+
+.hd-author-ai {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hd-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  block-size: 20px;
+  padding-inline: 4px;
+  border: 1px solid color-mix(in srgb, var(--hd-action-primary) 40%, var(--hd-bg-surface));
+  border-radius: var(--hd-radius-md);
+  background: var(--hd-action-primary-tint);
+  color: var(--hd-text-primary);
+  font-weight: 600;
+}
+
+.hd-bubble-ai {
+  border-color: color-mix(in srgb, var(--hd-action-primary) 40%, var(--hd-bg-surface));
+}
+
+.hd-cite {
+  font-size: 12px;
+  color: var(--hd-text-link);
+}
+
+.hd-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-block-start: 8px;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--hd-border-default);
+  white-space: normal;
+}
+
+.hd-source-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hd-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 44px;
+  color: var(--hd-text-link);
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: none;
+}
+
+.hd-source + .hd-source,
+.hd-source-list li + li {
+  border-block-start: 1px solid var(--hd-border-default);
+}
+
+.hd-source-number {
+  font-size: 12px;
+  color: var(--hd-text-secondary);
+}
+
+.hd-ai-feedback,
+.hd-ai-thanks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.hd-ai-thanks {
+  color: var(--hd-status-success-text);
+}
+
+.hd-ai-feedback {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.hd-icon-button-outlined {
+  border: 1px solid var(--hd-border-strong);
+  background: var(--hd-bg-surface);
+  color: var(--hd-text-primary);
+}
+
+.hd-handoff {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.hd-handoff-title {
+  font-weight: 600;
+  color: var(--hd-text-primary);
+}
+
+.hd-talk {
+  flex-shrink: 0;
+  padding: 8px 12px 0;
+  background: var(--hd-bg-surface);
+  border-block-start: 1px solid var(--hd-border-default);
+}
+
+.hd-talk + .hd-suggestions,
+.hd-talk + .hd-composer {
+  border-block-start: 0;
+}
+
+.hd-button-accent-outline {
+  border: 1px solid var(--hd-action-primary);
+  background: var(--hd-bg-surface);
+  color: var(--hd-action-primary);
+}
+
+.hd-button-accent-outline:hover {
+  background: var(--hd-action-primary-tint);
+}
+
 /* Satisfaction card (M8-06, Widget/CSAT-EN) */
 .hd-csat-card {
   display: flex;

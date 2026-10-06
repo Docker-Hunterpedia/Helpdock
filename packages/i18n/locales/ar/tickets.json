@@ -590,5 +590,43 @@
       "en": "الإنجليزية",
       "ar": "العربية"
     }
+  },
+  "autoReply": {
+    "author": "المساعد",
+    "badge": "AI",
+    "answerMeta": "رد تلقائي",
+    "handoffMeta": "رسالة التحويل",
+    "sources": "المصادر",
+    "source": "المصدر {{n}}، {{title}}",
+    "public": "عام",
+    "internal": "داخلي",
+    "log": "سجل الذكاء الاصطناعي",
+    "logModel": "النموذج",
+    "logTokens": "الرموز",
+    "tokensValue": "{{tokensIn}} داخلة · {{tokensOut}} خارجة",
+    "logCost": "التكلفة",
+    "logRedactions": "الإخفاءات",
+    "logConfidence": "الثقة",
+    "confidenceValue": "{{confidence}} · الحد {{threshold}}",
+    "logSources": "المصادر",
+    "sourcesValue": "{{retrieved}} مسترجعة (للزوار) · {{cited}} مستشهد بها · جميعها صالحة",
+    "event": {
+      "low_confidence": "حُوّلت إلى شخص · الثقة {{confidence}} أقل من {{threshold}}",
+      "invalid_citation": "حُوّلت إلى شخص · استشهدت الإجابة بمصدر لم يُعطَ للمساعد",
+      "customer_request": "المساعد متوقف · طلب العميل التحدث إلى شخص",
+      "staff_reply": "المساعد متوقف · ردّ {{name}}",
+      "staff_assigned": "المساعد متوقف · تولّى {{name}} التذكرة",
+      "resumed": "أعاد {{name}} المحادثة إلى المساعد",
+      "someone": "أحد الموظفين"
+    },
+    "paused": "المساعد متوقف",
+    "pausedAt": "حُوّلت عند",
+    "resume": "إعادة إلى المساعد",
+    "resumed": "سيجيب المساعد في هذه المحادثة مجددًا.",
+    "resumeFailed": "تعذّرت إعادة المحادثة إلى المساعد. حاول مرة أخرى.",
+    "card": "الذكاء الاصطناعي في هذه التذكرة",
+    "calls": "الاستدعاءات",
+    "tokens": "الرموز",
+    "cost": "التكلفة"
   }
 }

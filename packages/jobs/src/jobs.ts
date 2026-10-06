@@ -1140,6 +1140,38 @@ export const brandPurgeScheduleJob = defineJob({
   schedule: { cron: BRAND_PURGE_CRON },
 });
 
+export const aiAutoReplyPayloadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  /** The customer message to answer. A newer one makes this job stand down. */
+  messageId: z.uuid(),
+});
+export type AiAutoReplyPayload = z.infer<typeof aiAutoReplyPayloadSchema>;
+
+/**
+ * M7-06: answers one customer message, or hands the conversation to the team
+ * (DOMAIN-RULES §9). Added by the `ai` subscriber of `ticket.created` and
+ * `ticket.replied` under {@link aiAutoReplyJobId}, so the two events a widget
+ * start writes for one message add one job. Two attempts: a provider that
+ * failed twice leaves the message to a person rather than answering late.
+ * Every attempt re-reads the pause right before it sends.
+ */
+export const aiAutoReplyJob = defineJob({
+  name: 'ai.auto_reply',
+  queue: QUEUE_NAMES.ai,
+  schema: aiAutoReplyPayloadSchema,
+  options: {
+    attempts: 2,
+    backoff: { type: 'fixed', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: ({ messageId }) => `ai.auto_reply:${messageId}`,
+});
+
+/** BullMQ refuses a custom job id with a colon. One job per customer message. */
+export const aiAutoReplyJobId = (messageId: string): string => `ai.auto_reply.${messageId}`;
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -1174,6 +1206,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [statsRollupScheduleJob.name]: statsRollupScheduleJob,
   [brandPurgeJob.name]: brandPurgeJob,
   [brandPurgeScheduleJob.name]: brandPurgeScheduleJob,
+  [aiAutoReplyJob.name]: aiAutoReplyJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

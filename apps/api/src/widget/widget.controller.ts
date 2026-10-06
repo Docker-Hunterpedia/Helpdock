@@ -6,6 +6,7 @@ import type {
   WidgetConfig,
   WidgetConversation,
   WidgetConversationList,
+  WidgetMessage,
   WidgetMessagePage,
   WidgetQueue,
   WidgetSendResponse,
@@ -40,7 +41,10 @@ import {
   WidgetConversationParamDto,
   WidgetDownloadDto,
   WidgetDownloadQueryDto,
+  WidgetFeedbackRequestDto,
+  WidgetMessageDto,
   WidgetMessagePageDto,
+  WidgetMessageParamDto,
   WidgetMessagesQueryDto,
   WidgetQueueDto,
   WidgetReadRequestDto,
@@ -214,6 +218,39 @@ export class WidgetController {
     @Req() request: FastifyRequest,
   ): Promise<WidgetQueue> {
     return this.#conversations.queue(brandId, factsOf(request), conversationId);
+  }
+
+  /** M7-06: "Talk to a human" — the assistant steps back for the rest of the conversation. */
+  @Post('conversations/:conversationId/handoff')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(WidgetConversationDto)
+  handoff(
+    @Param(new ZodValidationPipe(WidgetConversationParamDto))
+    { brandId, conversationId }: WidgetConversationParamDto,
+    @Req() request: FastifyRequest,
+  ): Promise<WidgetConversation> {
+    return this.#conversations.handoff(brandId, factsOf(request), conversationId);
+  }
+
+  /** M7-06: "Was this helpful?" on an assistant answer. */
+  @Post('conversations/:conversationId/messages/:messageId/feedback')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(WidgetMessageDto)
+  feedback(
+    @Param(new ZodValidationPipe(WidgetMessageParamDto))
+    { brandId, conversationId, messageId }: WidgetMessageParamDto,
+    @Body(new ZodValidationPipe(WidgetFeedbackRequestDto)) body: WidgetFeedbackRequestDto,
+    @Req() request: FastifyRequest,
+  ): Promise<WidgetMessage> {
+    return this.#conversations.feedback(
+      brandId,
+      factsOf(request),
+      conversationId,
+      messageId,
+      body.feedback,
+    );
   }
 
   /** Typing over REST, for a client on the SSE fallback. */

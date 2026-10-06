@@ -36,6 +36,27 @@ beforeEach(() => {
 afterEach(() => fake.unregister());
 
 describe('complete()', () => {
+  it("uses the brand's Arabic prompt for an Arabic conversation, and its own otherwise", async () => {
+    ports.systemPromptAr = 'أجب بلهجة ودودة.';
+    fake.reply('حسنًا.', 'Fine.');
+
+    await ai.complete({
+      brandId,
+      feature: 'auto_reply',
+      locale: 'ar',
+      messages: [{ role: 'user', text: 'مرحبا' }],
+    });
+    await ai.complete({
+      brandId,
+      feature: 'auto_reply',
+      locale: 'en',
+      messages: [{ role: 'user', text: 'Hi' }],
+    });
+
+    expect(fake.sent[0]?.context.systemPrompt).toBe('أجب بلهجة ودودة.');
+    expect(fake.sent[1]?.context.systemPrompt).toBe('Answer as Acme support.');
+  });
+
   it('sends the configured model with an explicit key and logs the call with its cost', async () => {
     fake.reply('Refunds take five days.');
 

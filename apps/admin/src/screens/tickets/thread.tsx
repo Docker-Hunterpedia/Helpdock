@@ -13,6 +13,9 @@ import { ticketRoute } from '../../app/route-paths.js';
 import { linkReferences } from '../../tickets/merge.js';
 import type { PendingMessage } from '../../tickets/pending.js';
 import type { ThreadItem } from '../../tickets/thread.js';
+import { AiEventText } from './ai/ai-event.tsx';
+import { AutoReplyMessage } from './ai/auto-reply-message.tsx';
+import type { ThreadAi } from './ai/use-ticket-ai.tsx';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import { EmailMessageCard, ThreadMismatch } from './email-message-card.tsx';
 import { messageTime, ticketReference } from './format.js';
@@ -81,6 +84,7 @@ export function Thread({
   merges,
   deliveryFooter,
   telegram,
+  ai,
   onRetry,
   onDiscard,
 }: {
@@ -92,6 +96,8 @@ export function Thread({
   readonly deliveryFooter?: ((message: TicketMessage) => ReactNode) | undefined;
   /** M6: the "via @bot" and "Sent" lines, voice notes and locations of a Telegram thread. */
   readonly telegram?: ThreadTelegram | undefined;
+  /** M7-06: the AI log behind auto-replies, for their disclosures. */
+  readonly ai?: ThreadAi | undefined;
   onRetry(pending: PendingMessage): void;
   onDiscard(pending: PendingMessage): void;
 }): ReactNode {
@@ -147,6 +153,22 @@ export function Thread({
                   mismatch={item.message.email.mismatch}
                   now={now}
                   {...(merges?.onMergeInto === undefined ? {} : { onMerge: merges.onMergeInto })}
+                />
+              ) : item.message.kind === 'system' && item.message.ai !== undefined ? (
+                <SystemEvent>
+                  <AiEventText
+                    message={item.message}
+                    ai={item.message.ai}
+                    staffName={names.staffName(item.message.authorId)}
+                    time={messageTime(item.message.createdAt, locale, now)}
+                  />
+                </SystemEvent>
+              ) : item.message.ai !== undefined && item.message.authorType === 'ai' ? (
+                <AutoReplyMessage
+                  message={item.message}
+                  ai={item.message.ai}
+                  call={ai?.callFor(item.message.ai.callId)}
+                  time={messageTime(item.message.createdAt, locale, now)}
                 />
               ) : item.message.kind === 'system' ? (
                 <SystemEvent>

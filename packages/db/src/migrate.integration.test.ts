@@ -59,6 +59,7 @@ const MIGRATION_TAGS = [
   '0044_report_daily_assignee',
   '0045_auto_reply_handoff',
   '0046_ai_assist_and_transcripts',
+  '0047_drop_ai_pii_redaction_toggle',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

@@ -1,43 +1,161 @@
 # M8 API, webhooks, reports
 
-Status: in progress
+Status: shipped
 Started: 2026-10-05
+Shipped: 2026-10-07
 Owner: @Docker-Hunterpedia
 
 ## Scope
 
+Integrations and operations. A brand issues scoped API keys and speaks to
+`/api/v1` (tickets and messages, contacts, articles, webhooks) with
+idempotency keys and an OpenAPI document generated from the Zod route
+schemas. Outbound webhooks carry seven events, signed with HMAC-SHA256,
+delivered through the SSRF-safe client with retries, a delivery log and
+replay. Reports roll up tickets, SLA, CSAT, agents, busiest hours, searches
+and AI into daily tables and a screen with CSV export. The System page shows
+version and migrations, queues with Bull Board, channels, storage, LLM spend
+and product metrics. CSAT surveys go out on close by email, in the widget and
+on Telegram. A brand can be deleted with a 30-day grace and a full purge.
+
 Full deliverable list and specs: [PRD §4 · M8 API, webhooks, reports](../planning/PRD.md#m8-api-webhooks-reports).
-Depends on M1 and M3, both shipped. Runs in parallel with M7.
+Depends on M1 and M3, both shipped. Ran in parallel with
+[M6 Telegram](M6-telegram.md), [M7 AI](M7-ai.md) and M9 Hardening; M8-05's
+Channels card reads M6's bot status, M8-06's Telegram survey rides M6's
+notice job, and M7 binds the AI seam M8-04 and M8-05 left open.
+
+Built from the design canvas artboards `Admin/Developers-ApiKeys`,
+`Admin/Developers-Webhooks`, `Admin/Reports`, `Admin/System-1.0`,
+`Admin/Brand-Danger`, `Email/CSAT-EN-AR`, `Widget/CSAT-EN`, `Widget/CSAT-AR`
+and panels 5 and 6 of `Telegram/Chat-EN` and `Telegram/Chat-AR`. The
+operator's views are the [API](../guides/api.md),
+[webhooks](../guides/webhooks.md), [reports](../guides/reports.md) and
+[operations](../guides/operations.md) guides.
 
 ## Deliverables
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M8-01 | Tenant API keys | | built, in review; screen built: [Developers page](#m8-01-m8-03-developers-page) |
-| M8-02 | REST v1 | | built, in review |
-| M8-03 | Outbound webhooks | | built, in review; screen built: [Developers page](#m8-01-m8-03-developers-page) |
-| M8-04 | Reports | | built (api and screen), PR pending: [Reports](#m8-04-reports) |
-| M8-05 | System page | | built (api and screen), PR pending: [System page](#m8-05-system-page) |
-| M8-06 | CSAT delivery wired on close for email, widget, Telegram | | built, PR pending: [CSAT delivery](#m8-06-csat-delivery) |
-| M8-07 | Brand deletion with 30-day grace and full purge (rows, S3 prefix, Redis keys, Caddy domain); product metrics on the System page | | built (api and screens), PR pending: [Brand deletion](#m8-07-brand-deletion-and-product-metrics) |
+| M8-01 | Tenant API keys: `hd_live_*` shown once, SHA-256 stored, scopes, per-key throttle, last used, revoke | | shipped (#147): [Tenant API keys](#m8-01-tenant-api-keys), [Developers page](#m8-01-m8-03-developers-page) |
+| M8-02 | REST v1: tickets CRUD + messages, contacts upsert/search, articles search/get, webhooks CRUD; idempotency keys; OpenAPI 3.1 at `/api/docs` | | shipped (#147): [REST v1](#m8-02-rest-v1) |
+| M8-03 | Outbound webhooks: events, HMAC-SHA256 signature, retries with backoff, delivery log, replay | | shipped (#147): [Outbound webhooks](#m8-03-outbound-webhooks), [Developers page](#m8-01-m8-03-developers-page) |
+| M8-04 | Reports: volume, times, SLA, backlog, CSAT, workload, busiest hours, searches, AI deflection and cost; CSV export; `stats.rollup` cron | | shipped (#147): [Reports](#m8-04-reports) |
+| M8-05 | System page: version, migrations, queue health with Bull Board, channel status, storage usage, LLM spend | | shipped (#147): [System page](#m8-05-system-page) |
+| M8-06 | CSAT delivery wired on close for email, widget, Telegram | | shipped (#147): [CSAT delivery](#m8-06-csat-delivery) |
+| M8-07 | Brand deletion with 30-day grace and full purge (rows, S3 prefix, Redis keys, Caddy domain); product metrics on the System page | | shipped (#147): [Brand deletion and product metrics](#m8-07-brand-deletion-and-product-metrics) |
 
 ## Exit criteria
 
-Copied from the PRD, ticked as they are met.
+Copied from the PRD. Both are met. The integration tests run against real
+Postgres and Redis (Testcontainers) in CI's `integration` job.
 
-- [x] A ticket created via the API triggers a signed `ticket.created` webhook received by a test endpoint (`apps/api/src/api-v1/api-v1.integration.test.ts`).
-- [x] Reports match seeded data in an integration test: `apps/api/src/reports/reports.integration.test.ts`, "the summary matches the seeded tickets".
+- [x] **A ticket created via the API triggers a signed `ticket.created`
+      webhook received by a test endpoint.**
+      `apps/api/src/api-v1/api-v1.integration.test.ts` › "outbound webhooks
+      (M8-03)" › "a ticket created through the API is delivered as a signed
+      ticket.created webhook". An API key with `tickets:write` and
+      `webhooks:manage` registers an endpoint through `/api/v1/webhooks` and
+      creates a ticket through `/api/v1/tickets`; the worker runs the one
+      `webhook.deliver` job to a local test endpoint, and the test verifies
+      `X-Helpdock-Signature` with the endpoint's secret, reads the
+      `ticket.created` envelope naming the ticket, finds the delivery
+      `succeeded` in the log and replays it. In a browser against the real
+      api:
+      `apps/admin/e2e/api/developers.api.spec.ts` (a created key answers
+      `/api/v1` and is refused once revoked; an endpoint added and pinged
+      through the worker).
+- [x] **Reports match seeded data in an integration test.**
+      `apps/api/src/reports/reports.integration.test.ts` › "the summary
+      matches the seeded tickets": volume by day, channel, priority and status
+      with spam, merged and deleted tickets left out; the stacked breakdowns;
+      first-response and resolution percentiles less paused time; SLA
+      compliance from the initial clocks; the backlog per day; CSAT; each
+      agent's work; busiest hours; top and zero-result searches; AI cost from
+      `ai_calls`; and never another brand's tickets.
 
-## Open questions
+## Effort
 
-- REQUIREMENTS §4.12 lists the webhook events; the M8 brief also named `ticket.status_changed` and `message.created`. The shipped list follows REQUIREMENTS (`ticket.updated` carries status changes, `ticket.replied` every thread message but notes). Adding the other two is an alias each in `webhooks/webhook-events.ts` if they are wanted.
-- An API key's public message is `author_type = system` and is not emailed (only an agent's public reply is). Whether an integration may speak as an agent or as the customer is open.
+| | |
+|---|---|
+| Estimated | 4–5 weeks (PRD status board) |
+| Started | 2026-10-05 |
+| Shipped | 2026-10-07 |
+| Actual | 2 days, in parallel with M6, M7 and M9 |
+
+AI coding agents built API keys, REST v1 and webhooks first, then reports and
+the System page, then CSAT delivery and brand deletion, then the screens. The
+branches were merged onto one integration branch, which the maintainer
+reviewed and merged as one pull request with M6, M7 and the M9 work.
+
+## Migrations
+
+- `0037_report_rollups`: `report_daily`, `report_agent_daily`
+  (department-scoped), `report_search_daily` and `report_help_center_daily`
+  (brand-scoped), the rollup tables of M8-04.
+- `0039_api_keys_and_webhooks`: `api_keys`, `api_idempotency_keys`,
+  `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and
+  their RLS policies.
+- `0043_csat_delivery`: `csat_responses.rated_via` (`csat_answer_channel`:
+  `link`, `widget`, `telegram`; earlier answers backfilled `link`) and
+  `skipped_at`; `email_delivery_kind` gains `csat`;
+  `email_deliveries.csat_response_id` with a unique partial index. No new
+  tenant table.
+- `0044_report_daily_assignee`: `report_daily.assignee_id`, the ticket's
+  assignee in the rollup's grain, and `report_daily.rollup_version` (existing
+  rows 1) (M8-04).
+
+All eight new tables are tenant tables, in `TENANT_TABLES` and the RLS
+negative suite, which M8-07 also made prove that a purge leaves no row.
+
+## Gaps and follow-ups
+
+Written down and carried forward. None of them blocks M9.
+
+| Gap | Why it was accepted | Where it is written down |
+|---|---|---|
+| **An API key's public message is a system message** | It is `author_type = system` and is not emailed (only an agent's public reply is). Whether an integration may speak as an agent or as the customer is an open question. | [REST v1](#m8-02-rest-v1) |
+| **`ticket.status_changed` and `message.created` are not webhook events** | The shipped list follows REQUIREMENTS §4.12: `ticket.updated` carries status changes and `ticket.replied` every thread message but notes. Each is an alias in `webhooks/webhook-events.ts` if wanted. | [Outbound webhooks](#m8-03-outbound-webhooks) |
+| **Reports differ from `Admin/Reports`** | Response and resolution times are the period's median and p90, not a line per day; CSAT has no "% of surveys answered" or comment count; the heatmap runs Monday to Sunday (brands have no week-start setting). | [Reports](#m8-04-reports) |
+| **The Developers page differs from its artboards** | The retry schedule and the headers are the real ones (30 s doubling to 32 min, a 15 s timeout, `X-Helpdock-Signature: t=…,v1=…`) rather than the artboard's illustration; a key has no description line, because keys have no description field; the delivery log's caption is the delivery time without the ticket reference, which the log does not carry; the attempt chips show each earlier attempt as failed, because only the last attempt's answer is stored. | [Developers page](#m8-01-m8-03-developers-page) |
+| **The System page differs from `Admin/System-1.0`** | Storage shows Postgres as one install-wide figure, not per brand (a brand's share would mean reading every row); Version has no image name, and the migration list has names without times (Drizzle records none); Channels show no brand name or Widget rows; the queue button is in the header only. | [System page](#m8-05-system-page), [operations](../guides/operations.md#where-the-numbers-come-from) |
+| **Brand deletion asks for the ticket prefix, not the brand's name** | `Admin/Brand-Danger` asks for the name; the api checks the prefix (`confirmPrefix`), which is unique across the install, so the screen asks for that ("Type HD to confirm"). | [Brand deletion](#m8-07-brand-deletion-and-product-metrics) |
+| **Feedback settings have no delay or channel choice** | `AdminTicketingFeedback` has one toggle, so the survey goes out at once on the ticket's own channel. The tab says so. | [CSAT delivery](#m8-06-csat-delivery) |
+| **Storage is measured at most every six hours** | `stats.rollup` lists a brand's prefix only when its reading is older than that, so the System page's figure can lag a large upload. | [System page](#m8-05-system-page) |
+| **Only the last webhook attempt's answer is stored** | The delivery keeps one status code and excerpt; earlier attempts are counted, not recorded. | [Developers page](#m8-01-m8-03-developers-page) |
+
+## Decisions settled
+
+| Decision | Where |
+|---|---|
+| Bull Board is served by the api behind a one-use pass and its own session, amending ADR 0004 | [ADR 0017](../decisions/0017-bull-board-behind-a-one-use-pass.md) |
+| API scopes are permissions of their own that no role holds, and the OpenAPI document is generated from the Zod route schemas | [ADR 0019](../decisions/0019-api-scopes-and-openapi-from-zod.md) |
+| The webhook events are REQUIREMENTS §4.12's seven; status changes ride `ticket.updated` | [Outbound webhooks](#m8-03-outbound-webhooks) |
+| The report charts are plain SVG components; no charting dependency joins the ARCHITECTURE §1 stack | [Reports](#m8-04-reports) |
+| A webhook endpoint's name is resolved and checked when it is saved, not only when it is called; plain `http` only inside `OUTBOUND_ALLOW_CIDRS` | [Developers page](#m8-01-m8-03-developers-page) |
+| A deleted brand's row stays `deleted`, so its ticket prefix stays reserved | [Brand deletion](#m8-07-brand-deletion-and-product-metrics) |
+
+## External dependencies
+
+None. Everything is tested against local stand-ins.
+
+## What an operator can do with this milestone
+
+Create scoped API keys on Admin › Developers and build against `/api/v1`
+with the documentation at `/api/docs`; add webhook endpoints, read every
+delivery with the request that was sent, replay or ping one, and rotate the
+secret. Read Reports over any range, by department, channel and agent, and
+export each as CSV. Read the System page for version, migrations, queues (and
+open Bull Board), every channel's health, storage per brand, LLM spend and the
+product metrics. Customers are asked to rate a closed ticket on the channel
+they used. An install admin can schedule a brand for deletion, restore it
+within 30 days, or let the purge remove every row, object, Redis key and
+domain.
 
 ## M8-01 Tenant API keys
 
 - Table `api_keys` (brand): name, `prefix` (first 12 characters), `key_hash` (SHA-256, unique across the install), `scopes text[]`, `rate_limit_per_minute` (default 600), `created_by`, `last_used_at`, `revoked_at`/`revoked_by`. In `TENANT_TABLES` and the RLS negative suite.
 - Admin routes, `brand:manage`: `GET`/`POST /api/brands/:brandId/api-keys`, `DELETE …/:keyId` (revoke). The key is in the create answer only. `api_key.created` and `api_key.revoked` audit rows carry the prefix and scopes, never the key.
-- `ApiKeyPrincipalResolver` (`api-keys/api-key-principal-resolver.ts`) wraps the session resolver in `bootstrap.ts`: an `hd_live_` bearer is hashed and looked up in an all-brands system transaction (`tenant/all-brands.ts`, shared with inbound parse), throttled per key in Redis (sliding window, bucket `api-key`), and becomes `{ type: 'apikey', id, brandId, scopes }`. `last_used_at` is written at most once a minute.
+- `ApiKeyPrincipalResolver` (`api-keys/api-key-principal-resolver.ts`) wraps the session resolver in `bootstrap.ts`: an `hd_live_` bearer is hashed and looked up in an all-brands system transaction (`tenant/all-brands.ts`, shared with inbound parse and Telegram), throttled per key in Redis (sliding window, bucket `api-key`), and becomes `{ type: 'apikey', id, brandId, scopes }`. `last_used_at` is written at most once a minute.
 - The six scopes are permissions of their own (`auth/permissions.ts`); no role holds one. An API key's tenant context is its brand with every department ([ADR 0019](../decisions/0019-api-scopes-and-openapi-from-zod.md)).
 
 ## M8-02 REST v1
@@ -45,7 +163,8 @@ Copied from the PRD, ticked as they are met.
 - Controllers in `apps/api/src/api-v1/` over the admin's own services: `TicketsService` (create on the `api` channel, read, update, soft delete, messages), `ContactsService` (new `upsert`, by `externalId` then by identifier), `HelpCenterSearch` and `readArticle` with the public audience, `WebhooksService`.
 - `Idempotency-Key` on the creating `POST`s (`idempotency.interceptor.ts`), stored in `api_idempotency_keys` (brand) in the request's transaction for 24 hours: same request replays with `Idempotent-Replayed: true`, a different one is 422 (`conflict`), a concurrent one waits.
 - `/api/docs` (page) and `/api/docs/openapi.json` (OpenAPI 3.1), generated with `z.toJSONSchema` from the route schemas in `openapi.ts`; `openapi.test.ts` fails when a v1 route is missing from it.
-- `contact.created` is now an outbox event, written by `insertContact` for every path that creates a contact; `csat.received` is written when a customer rates (the rules engine already listened for it).
+- A public message posted with an API key is `author_type = system`; it is shown to the customer but not emailed, as only an agent's public reply is.
+- `contact.created` is an outbox event, written by `insertContact` for every path that creates a contact; `csat.received` is written when a customer rates (the rules engine already listened for it).
 - Guide: [docs/guides/api.md](../guides/api.md).
 
 ## M8-03 Outbound webhooks
@@ -55,11 +174,6 @@ Copied from the PRD, ticked as they are met.
 - `webhook.deliver` signs `X-Helpdock-Signature: t=<ts>,v1=<hex HMAC-SHA256 of "ts.body">`, POSTs through `safeFetch` with the `webhook` policy, `maxRedirects: 0` and `OUTBOUND_ALLOW_CIDRS`; 8 attempts, exponential from 30 s; the endpoint is switched off after 10 failed deliveries in a row.
 - Admin routes (`brand:manage`) at `/api/brands/:brandId/webhooks` and API routes (`webhooks:manage`) at `/api/v1/webhooks`: CRUD, rotate secret, delivery log, replay.
 - Guide: [docs/guides/webhooks.md](../guides/webhooks.md).
-
-## Migrations
-
-- `0039_api_keys_and_webhooks.sql`: `api_keys`, `api_idempotency_keys`, `webhooks`, `webhook_deliveries`, the `webhook_delivery_status` enum, and their RLS policies.
-- `0044_report_daily_assignee.sql`: `report_daily.assignee_id`, the ticket's assignee in the rollup's grain, for the Agent filter and per-agent times, SLA and CSAT, and `report_daily.rollup_version` (existing rows 1) (M8-04).
 
 ## Deliverable notes
 
@@ -88,20 +202,22 @@ Copied from the PRD, ticked as they are met.
   with `=`, `+`, `-`, `@`, tab or CR are prefixed with `'` (`csvCell` in
   `@helpdock/schemas`).
 - **AI seam:** `AiUsageSource` (`apps/api/src/reports/ai-usage.ts`, token
-  `AI_USAGE_SOURCE`, bound by `ReportsModule.forRoot({ aiUsage })`). Until M7
-  binds a reader of `ai_calls`, `NoAiUsage` answers `{ available: false }` in
-  reports, `{ configured: false }` for LLM spend and `null` for deflection.
+  `AI_USAGE_SOURCE`, bound by `ReportsModule.forRoot({ aiUsage })`). M8 shipped
+  `NoAiUsage`, which answers `{ available: false }` in reports,
+  `{ configured: false }` for LLM spend and `null` for deflection; M7-01's
+  `DbAiUsage` (`apps/api/src/ai/db-ai-usage.ts`) now binds it, reading
+  `ai_calls` for cost and the `tickets` AI timestamps for deflection.
 - **Screen** (artboard `Admin/Reports`, `apps/admin/src/screens/reports/`):
   date range, department and channel filters; four MetricTiles compared with
   the previous period from a second read; a ChartCard per report with "Table"
   and "Export CSV" (through `HttpTransport.requestBlob`, saved as
-  `reportExportFileName`, now in `@helpdock/schemas`); the AI cards "not
-  available" until M7. The sidebar offers Reports to Admin, Team Leader and
-  Viewer. No charting dependency is in the ARCHITECTURE §1 stack, so the
-  charts are plain SVG components (`charts.tsx`): column, line with an end
-  label, share rows and Heatmap, per DESIGN §9 (legend, direct labels, Table
-  view, Tooltip naming the series). The adapter is `ReportsApi`
-  (`apps/admin/src/reports/`), on the shared transport.
+  `reportExportFileName`, in `@helpdock/schemas`); the two AI cards. The
+  sidebar offers Reports to Admin, Team Leader and Viewer. No charting
+  dependency is in the ARCHITECTURE §1 stack, so the charts are plain SVG
+  components (`charts.tsx`): column, line with an end label, share rows and
+  Heatmap, per DESIGN §9 (legend, direct labels, Table view, Tooltip naming
+  the series). The adapter is `ReportsApi` (`apps/admin/src/reports/`), on
+  the shared transport.
 - **Closing the artboard gaps** (migration `0044_report_daily_assignee`):
   `report_daily` gains the ticket's assignee in its grain, so the summary
   carries volume per day by channel, priority and status (the last from the
@@ -127,7 +243,7 @@ Copied from the PRD, ticked as they are met.
   `reports/api.test.ts`, `ui/usage-meter.test.tsx`; Playwright
   `e2e/reports.spec.ts` (en and ar, axe, the api failing, the stacked
   breakdowns and the Agent filter); `reports.integration.test.ts` checks the
-  new figures and exports against the seeded tickets.
+  figures and exports against the seeded tickets.
 - Guide: [reports](../guides/reports.md).
 
 ### M8-01, M8-03 Developers page
@@ -142,7 +258,7 @@ Copied from the PRD, ticked as they are met.
   i18n namespace in `en` and `ar`. The adapter is `apps/admin/src/developers/`
   (`DevelopersApi`, mock and http).
 - **Api additions for the screen** (all `brand:manage`):
-  - `GET /api/brands/:brandId/webhooks` now answers the overview: each endpoint
+  - `GET /api/brands/:brandId/webhooks` answers the overview: each endpoint
     with `createdByName`, `last24h` (finished and succeeded deliveries) and its
     newest delivery. `/api/v1/webhooks` keeps the plain list.
   - `POST …/webhooks/:webhookId/test`: a `ping` delivery through the
@@ -152,7 +268,7 @@ Copied from the PRD, ticked as they are met.
   - `GET …/webhooks/:webhookId/deliveries/:deliveryId`: the delivery with
     `request` (URL, body, and the headers of the last attempt). The headers come
     from one builder (`webhooks/webhook-request.ts`) that the job sends with too,
-    and the job now signs with the clock reading it records as
+    and the job signs with the clock reading it records as
     `last_attempt_at`, so the signature shown is the one sent.
   - API keys answer `createdByName` and `revokedByName`.
   - Adding or changing an endpoint resolves its name first
@@ -189,7 +305,8 @@ Copied from the PRD, ticked as they are met.
   hours old (`S3BrandObjects.usage`, prefix `brands/<id>/`), kept in the Redis
   hash `hd:storage:usage`, shown in total and per brand.
 - **LLM spend:** `AiUsageSource.installSpend`, per brand (`brands`, each
-  against its own monthly budget) and in total.
+  against its own monthly budget) and in total, from M7-01's `DbAiUsage`;
+  "not configured" until the install has a default provider and model.
 - **Migrations and Postgres:** the api replica names the migrations it finds
   recorded at boot (`MigrationResult.recorded`, newest first) beside the count;
   `pg_database_size` gives the database's size, install-wide.
@@ -202,12 +319,12 @@ Copied from the PRD, ticked as they are met.
 - **Screen** (artboard `Admin/System-1.0`): the health cards, a Product
   metrics row, Queues, Channels grouped by kind with an attention count,
   Version and migrations, Storage (UsageMeter against the soft limit, per brand
-  with "pending deletion" marked), Audit log, LLM spend (install-wide, "not
-  available" until M7) and Brands pending deletion. "Open queue dashboard" asks
-  for the one-use pass and opens the board in a new tab opened before the
-  request, so popup blockers let it through. The page's api adapter now sends
-  the access token (it did not before, which a real install would have
-  refused); `SystemApi` is provided by `SystemApiProvider` from `createApis`.
+  with "pending deletion" marked), Audit log, LLM spend (install-wide) and
+  Brands pending deletion. "Open queue dashboard" asks for the one-use pass and
+  opens the board in a new tab opened before the request, so popup blockers
+  let it through. The page's api adapter sends the access token (it did not
+  before, which a real install would have refused); `SystemApi` is provided by
+  `SystemApiProvider` from `createApis`.
 - **Where the screen differs from the artboard:** Storage shows Postgres as
   one install-wide figure, not per brand (a brand's share would mean reading
   every row; see [operations](../guides/operations.md#where-the-numbers-come-from));
@@ -230,10 +347,11 @@ Copied from the PRD, ticked as they are met.
   `telegram.notice` of kind `csat_survey`; any other channel → an
   `email_deliveries` row of kind `csat` and its `email.send`. Spam, merged and
   CSAT-off closes still get no survey, and only the run that inserts the survey
-  sends it, so a redelivered job sends nothing.
+  sends it, so a redelivered job sends nothing. This closes the M1 gap "CSAT
+  surveys are not delivered".
 - **Feedback settings.** `AdminTicketingFeedback` has one toggle and no delay or
   channel choice, so the survey goes out at once on the ticket's own channel.
-  The tab's delivery note now says so.
+  The tab's delivery note says so.
 - **Email** (`packages/channels/src/email/csat-survey.ts`, the CustomerEmail
   survey variant): five link cells, each the single-use link with
   `?rating=<n>&lang=<locale>`. The rating page opens with that score pressed and
@@ -294,7 +412,7 @@ Copied from the PRD, ticked as they are met.
   leaves a row.
 - **Product metrics:** `GET /api/install/system/metrics` — activation,
   help center self-service per brand (widget views, from
-  `report_help_center_daily`), AI deflection (seam).
+  `report_help_center_daily`), AI deflection through the seam M7-06 binds.
 - **Telegram:** the webhook names a bot, not a brand, so `BrandGoneGuard`
   does not see it; `TelegramWebhookService` answers 410 through `isBrandGone`
   after the secret check (`telegram.integration.test.ts`).
@@ -313,4 +431,4 @@ Copied from the PRD, ticked as they are met.
 
 ## Pull requests
 
-- None yet.
+- #147 feat: M6 Telegram, M7 AI, M8 API/webhooks/reports and M9 hardening towards 1.0 (M8-01 to M8-07, with M6, M7 and the M9 code-side work)

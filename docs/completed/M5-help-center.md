@@ -145,7 +145,7 @@ Written down and carried forward. None of them blocks M6, M7 or M8.
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
 | **Images in internal articles are not gated** | An image is served by the same public redirect as any other. The article page itself is gated, the image address is a UUIDv7 nobody can list, and the redirect is a five-minute presigned URL. Tying each image to the visibility of every article that uses it would need a reference table kept in step with every save and publish. | [Pages](#m5-03-pages) |
-| ~~No comment form after a "No" vote~~ | Closed in (M9-04 branch): a "No" is recorded and opens the "What was missing?" step of `HelpCenter/Article-AR` panel 2; Send records the note with the vote, Skip goes to the thanks. | [help center guide](../guides/help-center.md#was-this-helpful) |
+| ~~No comment form after a "No" vote~~ | Closed by M9-04 (#147): a "No" is recorded and opens the "What was missing?" step of `HelpCenter/Article-AR` panel 2; Send records the note with the vote, Skip goes to the thanks. | [help center guide](../guides/help-center.md#was-this-helpful) |
 | **No spelling correction and no "Popular searches"** on the search pages | The search port answers neither. | This doc |
 | **Typos are forgiven in titles only** | Trigram matching over bodies needs an index that row-level security cannot use (ADR 0011). | [Search](#m5-05-search) |
 | **Partial widget queries are logged** | The widget searches while the visitor types, and each partial query is logged as its own search. The help center's search box submits a whole query. | [Search](#m5-05-search) |
@@ -161,7 +161,7 @@ Written down and carried forward. None of them blocks M6, M7 or M8.
 | The Custom CSS card does not check contrast or focus on the result | Nothing checks the rendered page at save time. The axe runs of the Playwright suites cover the shipped styles. | This doc |
 | A CDN in front of a help center hides up to five minutes of views | It may serve a public page for up to five minutes (`s-maxage=300`) without the api seeing the request, so the view is not counted. | [Pages](#m5-03-pages) |
 | The staff cookie is not revoked by spending the pass | It ends with the admin session's refresh family (sign-out, sign-out everywhere, password reset, role change) or after eight hours. | [Pages](#m5-03-pages) |
-| ~~The CSAT page's "Browse the help center" link is not drawn~~ | Closed in (M9-04 branch): the thanks and the spent-link screens link to the brand's help center while it has a public article and is not internal-only. | [tickets guide](../guides/tickets.md) |
+| ~~The CSAT page's "Browse the help center" link is not drawn~~ | Closed by M9-04 (#147): the thanks and the spent-link screens link to the brand's help center while it has a public article and is not internal-only. | [tickets guide](../guides/tickets.md) |
 | Section pages and `/help-center/open` have no artboards | Section pages follow the category artboard's note. `/help-center/open` shows a status line and the DESIGN §6.4 Banner. | This doc |
 
 ## Decisions settled

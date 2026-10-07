@@ -22,7 +22,7 @@ A change to either is a planning change, not a test change.
   Postgres and Redis on the same host. No CDN.
 - **Dataset**: five brands; the measured one has 50 000 tickets, 200 000
   messages, 20 000 contacts and 2 000 help center articles in two languages.
-  (Knowledge chunks arrive with M7.)
+  (The dataset has no knowledge chunks yet.)
 - **Load**: ten minutes measured after two of warm-up, p95 by nearest rank.
 
 The numbers mean something only on that host. On a laptop, or a CI runner

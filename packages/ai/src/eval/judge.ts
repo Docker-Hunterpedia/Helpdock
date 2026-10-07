@@ -61,11 +61,21 @@ export const judgeVerdictSchema = z.object({
 });
 export type JudgeVerdict = z.infer<typeof judgeVerdictSchema>;
 
-const FENCE = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/;
+const FENCE = '```';
+
+/** The inside of a reply that is one ```json fence; the reply itself otherwise. */
+const unfence = (text: string): string => {
+  const trimmed = text.trim();
+  if (trimmed.length < FENCE.length * 2 || !trimmed.startsWith(FENCE) || !trimmed.endsWith(FENCE)) {
+    return text;
+  }
+  const inner = trimmed.slice(FENCE.length, -FENCE.length);
+  return inner.startsWith('json') ? inner.slice('json'.length) : inner;
+};
 
 /** The verdict in a judge's reply, fenced or bare; null when there is none. */
 export const parseJudgeVerdict = (text: string): JudgeVerdict | null => {
-  const unfenced = FENCE.exec(text)?.[1] ?? text;
+  const unfenced = unfence(text);
   const start = unfenced.indexOf('{');
   const end = unfenced.lastIndexOf('}');
   if (start === -1 || end <= start) {

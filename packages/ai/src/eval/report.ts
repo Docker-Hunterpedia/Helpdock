@@ -155,7 +155,9 @@ export const itemFindings = (result: EvalItemResult): string[] => {
   return findings;
 };
 
-const escapeCell = (text: string): string => text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+// Backslashes first, so an escape this adds is never escaped again.
+const escapeCell = (text: string): string =>
+  text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 export const renderEvalMarkdown = (report: EvalReport): string => {
   const flagged = report.results

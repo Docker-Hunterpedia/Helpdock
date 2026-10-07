@@ -46,7 +46,9 @@ const markerOf = (href: string): { latitude: string; longitude: string } | undef
 export const splitLocation = (
   bodyHtml: string,
 ): { readonly html: string; readonly location: SharedLocation } | undefined => {
-  if (!bodyHtml.includes('openstreetmap.org')) {
+  // A cheap way past the parser for the many messages without a marker link;
+  // the host check is markerOf's, on the parsed URL.
+  if (!bodyHtml.includes('mlat=')) {
     return undefined;
   }
   const document = new DOMParser().parseFromString(bodyHtml, 'text/html');

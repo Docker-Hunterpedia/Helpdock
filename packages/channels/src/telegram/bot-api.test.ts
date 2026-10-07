@@ -2,7 +2,12 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { GrammyError, HttpError } from 'grammy';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { TelegramApiFailure, TelegramBotApi, toTelegramFailure } from './bot-api.js';
+import {
+  TelegramApiFailure,
+  TelegramBotApi,
+  toTelegramFailure,
+  withoutTrailingSlashes,
+} from './bot-api.js';
 
 /** A local HTTP server standing in for api.telegram.org. */
 
@@ -221,6 +226,18 @@ describe('TelegramBotApi', () => {
     await expect(
       new TelegramBotApi({ token: TOKEN, apiRoot: 'http://127.0.0.1:1' }).getMe(),
     ).rejects.toMatchObject({ kind: 'connect' });
+  });
+});
+
+describe('withoutTrailingSlashes', () => {
+  it('drops every trailing slash and nothing else, in linear time', () => {
+    const started = performance.now();
+    expect(withoutTrailingSlashes('https://api.telegram.org/')).toBe('https://api.telegram.org');
+    expect(withoutTrailingSlashes('https://api.telegram.org')).toBe('https://api.telegram.org');
+    expect(withoutTrailingSlashes(`https://a.example${'/'.repeat(200_000)}`)).toBe(
+      'https://a.example',
+    );
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });
 

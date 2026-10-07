@@ -33,7 +33,7 @@ export const KNOWLEDGE_FILE_MAX_BYTES = 25 * 1024 * 1024;
 const baseName = (fileName: string): string => fileName.replace(/\.[^.]+$/, '');
 
 const firstHeading = (text: string): string | undefined =>
-  /^#{1,6}\s+(.+)$/m.exec(text)?.[1]?.trim();
+  /^#{1,6}[ \t]+(\S.*)$/m.exec(text)?.[1]?.trim();
 
 const extractPdf = async (bytes: Uint8Array, fileName: string): Promise<ExtractedDocument> => {
   // A copy: pdf.js transfers the buffer it is given to its worker and detaches it.

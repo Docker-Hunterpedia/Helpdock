@@ -12,7 +12,7 @@ other half.
 | `pnpm audit` | `ci.yml` › `checks` | every pull request and push to `main` | a high or critical advisory |
 | Route, validation and boundary checks | `ci.yml` › `checks` (`pnpm check:*`) | every pull request and push to `main` | an undeclared route, an unvalidated input, an app importing another |
 | Semgrep, Helpdock's rules | `ci.yml` › `semgrep` | every pull request and push to `main` | any finding |
-| CodeQL `security-extended` | `codeql.yml` | pull requests, `main`, and Mondays | findings go to the Security tab |
+| CodeQL `security-extended` | `codeql.yml` | pull requests, `main`, and Mondays | any open alert on the pull request; findings go to the Security tab |
 | ZAP baseline | `zap.yml` | pushes to `release/**`, `v*` tags, or by hand | any alert `.zap/rules.tsv` does not lower |
 | SBOM (CycloneDX) | `release.yml` | every `v*` tag | — (it is an inventory, attached to the Release) |
 
@@ -54,6 +54,39 @@ const response = await fetch(url, {
 
 The reviewer reads the reason. "The linter was wrong" is a reason to fix the
 rule, in the same pull request, with a fixture that proves it.
+
+## CodeQL
+
+[`codeql.yml`](../../.github/workflows/codeql.yml) runs the
+`security-extended` JavaScript/TypeScript queries on every pull request, on
+`main` and on Mondays, and writes the findings to the repository's Security
+tab and as review comments on the pull request. **When it finds something**,
+fix the code: rewrite a regex with overlapping quantifiers as string
+operations or a linear one, compare a parsed URL's `hostname` instead of
+searching for a substring, use `crypto.getRandomValues` where a value stands
+in for a secret, and strip a multi-character pattern until a pass changes
+nothing. Dismissing an alert is not available on a pull request.
+
+A query that is wrong for this codebase is taken away in
+[`.github/codeql/codeql-config.yml`](../../.github/codeql/codeql-config.yml)
+with the reason beside it. There is one: `js/insufficient-password-hash`,
+which reads the SHA-256 of a 256-bit API key
+(`apps/api/src/api-keys/api-key-credential.ts`) and the HMAC over an OAuth
+`state` (`apps/api/src/knowledge/oauth-state.ts`) as password hashing. A query
+filter applies to the whole repository, so a fast hash of an actual password
+is for review to catch; passwords are argon2id (DOMAIN-RULES §2).
+
+## Dependency audit
+
+`pnpm audit --audit-level high` runs in `ci.yml` › `checks`. **When it
+fails**, bump the direct dependency when a patched release exists. When the
+advisory is in a transitive dependency whose dependant has not released a bump,
+add an `overrides` entry to [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml)
+(pnpm 11+ reads them from there, not from `package.json`), scoped to the
+vulnerable range (`'shell-quote@<1.11.0': '>=1.11.0'`) with the path it came
+through on the line above, and remove it once the dependant pins the patched
+version. Regenerate the lockfile with `pnpm install` and confirm with
+`pnpm install --frozen-lockfile` and `pnpm audit --audit-level high`.
 
 ## ZAP baseline
 

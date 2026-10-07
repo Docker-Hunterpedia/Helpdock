@@ -88,6 +88,14 @@ export const toTelegramFailure = (error: unknown, token?: string): TelegramApiFa
 const redact = (text: string, token: string | undefined): string =>
   token === undefined || token === '' ? text : text.split(token).join('<token>');
 
+export const withoutTrailingSlashes = (url: string): string => {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') {
+    end -= 1;
+  }
+  return url.slice(0, end);
+};
+
 export interface TelegramBotApiOptions {
   readonly token: string;
   readonly apiRoot?: string;
@@ -100,7 +108,7 @@ export class TelegramBotApi {
 
   constructor({ token, apiRoot = DEFAULT_TELEGRAM_API_ROOT }: TelegramBotApiOptions) {
     this.#token = token;
-    this.#apiRoot = apiRoot.replace(/\/+$/, '');
+    this.#apiRoot = withoutTrailingSlashes(apiRoot);
     this.#api = new Api(token, { apiRoot: this.#apiRoot, timeoutSeconds: TIMEOUT_SECONDS });
   }
 
@@ -208,6 +216,9 @@ export class TelegramBotApi {
 
     let response: Response;
     try {
+      // The Bot API root is install configuration (TELEGRAM_API_ROOT), never a
+      // URL a user supplied; the path is the one Telegram answered getFile with.
+      // nosemgrep: helpdock-fetch-non-constant-url
       response = await fetch(`${this.#apiRoot}/file/bot${this.#token}/${file.file_path}`, {
         signal: AbortSignal.timeout(TIMEOUT_SECONDS * 1_000),
       });

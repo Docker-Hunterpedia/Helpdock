@@ -43,7 +43,11 @@ const nextId = (): string => {
 };
 
 const randomTail = (length: number): string =>
-  Array.from({ length }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  Array.from(crypto.getRandomValues(new Uint8Array(Math.ceil(length / 2))), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  )
+    .join('')
+    .slice(0, length);
 
 interface StoredDelivery {
   readonly delivery: WebhookDelivery;

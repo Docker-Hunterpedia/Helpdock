@@ -88,7 +88,7 @@ describe('a Telegram ticket', () => {
       name: 'Open the location 24.7136, 46.6753 on OpenStreetMap',
     });
     expect(map).toHaveAttribute('href', expect.stringContaining('mlat=24.7136'));
-    expect(within(thread()).queryByText(/openstreetmap\.org/)).toBeNull();
+    expect(within(thread()).queryByText(/^https:\/\/www\.openstreetmap\.org\//)).toBeNull();
   });
 
   it('says which reply Telegram refused, and retries it', async () => {
@@ -161,6 +161,19 @@ describe('the Telegram thread helpers', () => {
     expect(splitLocation('<p>Hello</p>')).toBeUndefined();
     expect(
       splitLocation('<p><a href="https://www.openstreetmap.org/about">openstreetmap.org</a></p>'),
+    ).toBeUndefined();
+  });
+
+  it('is not fooled by a marker link on a host that only contains the map host', () => {
+    expect(
+      splitLocation(
+        '<p><a href="https://www.openstreetmap.org.evil.example/?mlat=1&amp;mlon=2">x</a></p>',
+      ),
+    ).toBeUndefined();
+    expect(
+      splitLocation(
+        '<p><a href="https://evil.example/?u=www.openstreetmap.org&amp;mlat=1&amp;mlon=2">x</a></p>',
+      ),
     ).toBeUndefined();
   });
 

@@ -85,4 +85,14 @@ describe('composeRequirements', () => {
       EMPTY: { required: 'no', default: '—' },
     });
   });
+
+  it('skips a bare, a lower-case and an unterminated reference, in linear time', () => {
+    const started = performance.now();
+    const found = composeRequirements(
+      `a: \${BARE}\nb: \${lower:-x}\nc: \${BAD-NAME:-x}\nd: \${LAST:-ok}\n${'${A:-|'.repeat(50_000)}`,
+    );
+
+    expect(Object.fromEntries(found)).toEqual({ LAST: { required: 'no', default: '`ok`' } });
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });

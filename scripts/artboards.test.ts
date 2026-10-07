@@ -77,6 +77,13 @@ describe('parseDcSource', () => {
     expect(dc.defaults).toEqual({ accent: '#0F766E' });
   });
 
+  it('removes a script that removing another one exposes', () => {
+    const runtime = '<script src="./support.js"></script>';
+    const nested = `<div>${runtime.slice(0, 4)}${runtime}${runtime.slice(4)}</div>`;
+
+    expect(parseDcSource(nested).html).toBe('<div></div>');
+  });
+
   it('handles a page with no logic script', () => {
     expect(parseDcSource('<div>static</div>')).toEqual({
       html: '<div>static</div>',

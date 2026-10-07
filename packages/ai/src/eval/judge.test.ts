@@ -35,6 +35,15 @@ describe('parseJudgeVerdict', () => {
     expect(parseJudgeVerdict(`Verdict: ${JSON.stringify(verdict)} — done.`)).toEqual(verdict);
   });
 
+  it('reads a fence without a language, and one of many blanks in linear time', () => {
+    expect(parseJudgeVerdict(`\`\`\`\n${JSON.stringify(verdict)}\n\`\`\`\n`)).toEqual(verdict);
+
+    const started = performance.now();
+    expect(parseJudgeVerdict(`\`\`\`${' '.repeat(200_000)}\`\`\``)).toBeNull();
+    expect(parseJudgeVerdict(`\`\`\`json${' '.repeat(200_000)}`)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it('defaults the notes', () => {
     const { notes: _notes, ...rest } = verdict;
     expect(parseJudgeVerdict(JSON.stringify(rest))).toEqual({ ...rest, notes: '' });

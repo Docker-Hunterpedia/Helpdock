@@ -28,3 +28,14 @@ allowBuilds:
   # A transitive dependency of `@mariozechner/pi-ai`. Its only install script
   # is a no-op `preinstall` echo; the published package is already built.
   '@google/genai': false
+# Transitive dependencies with advisories (`pnpm audit --audit-level high` in
+# `ci.yml`) whose direct dependants have not yet released a bump. Each entry is
+# removed once the dependant pins a patched version; the reason is in
+# docs/guides/security-scanning.md.
+overrides:
+  # critical, via @changesets/cli > launch-editor
+  'shell-quote@<1.11.0': '>=1.11.0'
+  # high, via @mariozechner/pi-ai > proxy-agent > pac-proxy-agent > get-uri
+  'basic-ftp@<=6.2.0': '>=6.2.1'
+  # high, via vitest > vite > postcss
+  'source-map-js@<1.2.2': '>=1.2.2'

@@ -39,7 +39,7 @@
     "@playwright/test": "1.63.0",
     "@types/node": "24.13.5",
     "@vitest/coverage-v8": "5.0.1",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "turbo": "2.10.13",
     "typescript": "7.0.2",
     "vitest": "5.0.1"

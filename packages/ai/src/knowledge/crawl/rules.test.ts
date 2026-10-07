@@ -45,6 +45,17 @@ Sitemap: https://docs.example.com/sitemap.xml
     expect(rules.crawlDelay).toBeUndefined();
   });
 
+  it('drops a comment after a rule, and a line of many hashes in linear time', () => {
+    const started = performance.now();
+    const rules = parseRobots(
+      `User-agent: *\nDisallow: /private/ # staff\n${'#'.repeat(200_000)}\n`,
+    );
+
+    expect(rules.isAllowed('/private/x')).toBe(false);
+    expect(rules.ruleCount).toBe(1);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it('has the two fixed answers for a missing and an unreadable file', () => {
     expect(ALLOW_ALL.isAllowed('/x')).toBe(true);
     expect(DISALLOW_ALL.isAllowed('/x')).toBe(false);

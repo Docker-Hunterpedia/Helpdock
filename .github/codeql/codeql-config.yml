@@ -1,0 +1,19 @@
+# CodeQL's configuration (`codeql.yml` › `config-file`). The query packs come
+# from the workflow (`queries: security-extended`); this file only takes
+# queries away, and says why. docs/guides/security-scanning.md › CodeQL.
+name: Helpdock
+
+query-filters:
+  # `js/insufficient-password-hash` reads any value whose name says "key",
+  # "token" or "auth" as a password and asks for a slow hash. Helpdock has two
+  # such values and neither is a password: `apps/api/src/api-keys/
+  # api-key-credential.ts` stores the SHA-256 of a 256-bit random API key, and
+  # `apps/api/src/knowledge/oauth-state.ts` signs an OAuth `state` with an
+  # HMAC under a key derived from APP_MASTER_KEY. A slow hash stretches a
+  # low-entropy secret; it has nothing to add to 256 random bits and would cost
+  # every authenticated request. Passwords are argon2id (DOMAIN-RULES §2) and
+  # never pass through either file. Excluded as a whole because a query filter
+  # cannot be scoped to a path; a fast hash of a real password is for review
+  # and the ASVS walk-through to catch.
+  - exclude:
+      id: js/insufficient-password-hash

@@ -1,7 +1,6 @@
-import { expect, test } from '@playwright/test';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
-import { freshTotpCode } from './totp.js';
+import { expect, openAdmin, test } from './admin-session.js';
+import { SKIP_ENV } from './install.js';
 
 /**
  * M1-06 against the real api: a tag, a custom field and a ticket template made
@@ -34,22 +33,6 @@ const TAG = `Chargeback ${RUN}`;
 const FIELD_LABEL = `Plan tier ${RUN}`;
 const FIELD_KEY = `plan_tier_${RUN}`;
 const TEMPLATE = `Refund request ${RUN}`;
-
-/** Signed in as the seeded install admin, through the second factor. */
-const signInAsAdmin = async (page: import('@playwright/test').Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await freshTotpCode(process.env[TOTP_SECRET_ENV] ?? ''));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
 
 const ADD_BUTTON = {
   tags: t('ticketing:tags.add'),
@@ -101,7 +84,7 @@ const apiSession = async (
 
 test.describe('M1-06 against the real api', () => {
   test('creates a tag, which then appears in the list', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openTab(page, 'tags');
 
     await page.getByRole('button', { name: t('ticketing:tags.add'), exact: true }).click();
@@ -146,7 +129,7 @@ test.describe('M1-06 against the real api', () => {
   });
 
   test('creates a select custom field on the ticket', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openTab(page, 'customFields');
 
     await page
@@ -185,7 +168,7 @@ test.describe('M1-06 against the real api', () => {
   });
 
   test('creates a template that fills a subject, a tag and a custom value', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openTab(page, 'templates');
 
     await page.getByRole('button', { name: t('ticketing:templates.add'), exact: true }).click();
@@ -225,7 +208,7 @@ test.describe('M1-06 against the real api', () => {
   });
 
   test('creates a ticket from that template, through the api', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     const { token, brandId } = await apiSession(page);
     const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
 

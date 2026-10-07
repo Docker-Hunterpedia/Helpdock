@@ -46,7 +46,7 @@ test.describe('the widget across an api restart', () => {
   let replica: ApiReplica | undefined;
   let site: CustomerSite;
   let admin: Page;
-  let visitorContext: BrowserContext;
+  let visitorContext: BrowserContext | undefined;
   let visitor: Page;
   let brandId = '';
 
@@ -58,10 +58,12 @@ test.describe('the widget across an api restart', () => {
     visitor = await visitorContext.newPage();
   });
 
+  // The replica first: a `beforeAll` that failed before the context existed
+  // must still take the process down, or the port is busy for the next run.
   test.afterAll(async () => {
-    await visitorContext.close();
-    await site.close();
     await replica?.kill();
+    await site?.close();
+    await visitorContext?.close();
   });
 
   test('a send the api died under lands once, and the widget catches up when it is back', async () => {

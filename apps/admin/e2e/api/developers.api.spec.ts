@@ -1,7 +1,7 @@
-import { type Browser, expect, type Page, test } from '@playwright/test';
-import { generate } from 'otplib';
+import type { Page } from '@playwright/test';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import { expect, openAdmin, test } from './admin-session.js';
+import { SKIP_ENV } from './install.js';
 
 /**
  * M8-01 and M8-03 against the real api: an API key created on the Developers
@@ -13,8 +13,9 @@ import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } fr
  * key hash, the destination check that resolves the endpoint's name, and the
  * `ping` going through the outbox and the `webhook.deliver` job.
  *
- * One sign-in for the whole file: the api allows twenty sign-in attempts per
- * address in fifteen minutes, and the suite shares that budget.
+ * One page for the whole file, from the worker's signed-in context
+ * (`admin-session.ts`): the second test carries on from the Developers page
+ * the first one left open.
  */
 
 test.skip(
@@ -31,29 +32,14 @@ const ENDPOINT = `https://hooks.example.com/helpdock/${RUN}`;
 
 let page: Page;
 
-const signInAsAdmin = async (browser: Browser): Promise<Page> => {
-  const signedIn = await browser.newPage();
-  await signedIn.goto('/sign-in');
-  await signedIn.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await signedIn
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await signedIn.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-  await signedIn
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
-  await signedIn.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await signedIn.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-  return signedIn;
-};
-
 const openDevelopers = async (): Promise<void> => {
   await page.getByRole('link', { name: t('admin:nav.developers'), exact: true }).click();
   await page.getByRole('heading', { level: 1, name: t('developers:title') }).waitFor();
 };
 
-test.beforeAll(async ({ browser }) => {
-  page = await signInAsAdmin(browser);
+test.beforeAll(async ({ adminContext }) => {
+  page = await adminContext.newPage();
+  await openAdmin(page);
 });
 
 test.afterAll(async () => {

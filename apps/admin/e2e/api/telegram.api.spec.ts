@@ -1,8 +1,7 @@
-import { expect, type Page, test } from '@playwright/test';
 import { strings } from '../strings.js';
+import { expect, openAdmin, test } from './admin-session.js';
 import { E2E_BOT_TOKEN, E2E_BOT_USERNAME, E2E_REFUSED_TOKEN } from './fake-telegram.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
-import { freshTotpCode } from './totp.js';
+import { SKIP_ENV } from './install.js';
 
 /**
  * M6-05 against the real api, with a local stand-in for api.telegram.org: a
@@ -24,24 +23,9 @@ test.describe.configure({ mode: 'serial' });
 
 const t = strings('en');
 
-const signInAsAdmin = async (page: Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await freshTotpCode(process.env[TOTP_SECRET_ENV] ?? ''));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
 test.describe('Channels › Telegram against the real api', () => {
   test('refuses a token, adds a bot, tests and saves it, and deletes it', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
     await page.getByRole('tab', { name: t('channels:tabs.telegram') }).click();
     await expect(

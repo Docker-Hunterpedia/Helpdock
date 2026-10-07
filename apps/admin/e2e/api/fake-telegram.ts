@@ -10,7 +10,8 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
  * (ARCHITECTURE §2), and this one answers only what the screen asks for.
  */
 
-export const E2E_TELEGRAM_PORT = Number(process.env.HD_E2E_TELEGRAM_PORT ?? 3097);
+/** Not 3097: `widget-restart` starts an api replica there (`HD_E2E_REPLICA_API_PORT`). */
+export const E2E_TELEGRAM_PORT = Number(process.env.HD_E2E_TELEGRAM_PORT ?? 3096);
 export const E2E_TELEGRAM_ROOT = `http://127.0.0.1:${String(E2E_TELEGRAM_PORT)}`;
 
 /** A token the stand-in knows: `@e2e_support_bot`. */

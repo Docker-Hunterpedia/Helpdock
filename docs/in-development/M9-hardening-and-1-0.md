@@ -128,8 +128,14 @@ its row in [asvs-l2](../completed/asvs-l2.md) updated (198 Met, 33 Partial,
 
 The integration suites now sign in through `apps/api/src/testing/staff-sign-in.ts`,
 which enrols the seeded Admin's authenticator on first use and trusts the
-browser after, and `e2e:api` takes a fresh authenticator step per sign-in
-(`apps/admin/e2e/api/totp.ts`).
+browser after. `e2e:api` signs the seeded account in once per worker, in a
+browser context every spec gets a page of (`apps/admin/e2e/api/admin-session.ts`),
+taking a fresh authenticator step when it does (`apps/admin/e2e/api/totp.ts`):
+signing in per test ran past the twenty attempts an address gets in fifteen
+minutes and waited for the clock before each code. The Compose smoke test
+(`scripts/compose-smoke.sh`) walks the wizard's administrator through the
+enrolment the first sign-in now demands, computing the code from the secret
+the api hands back.
 
 ## M9-03 Outbox concurrency
 

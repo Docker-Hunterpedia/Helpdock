@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { generate } from 'otplib';
 
 /**
@@ -17,10 +17,14 @@ import { generate } from 'otplib';
  * process after a failed test, and that process would otherwise begin from
  * the clock, present the step the last worker had just spent, and be refused —
  * which turned one failure into a failed sign-in for every spec after it.
+ *
+ * It lives under this app's own `test-results/`, which is git-ignored and
+ * belongs to whoever runs the suite, rather than in the shared system temp
+ * directory where another user on the machine could pre-create or swap the file.
  */
 
 const PERIOD_SECONDS = 30;
-const STATE_DIR = path.join(tmpdir(), 'helpdock-e2e-totp');
+const STATE_DIR = fileURLToPath(new URL('../../test-results/totp-state/', import.meta.url));
 
 const currentStep = (): number => Math.floor(Date.now() / 1000 / PERIOD_SECONDS);
 

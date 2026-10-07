@@ -186,10 +186,13 @@ test('Skip leaves the "What was missing?" step without sending a note', async ({
 }) => {
   const t = strings(pageLocale);
   await page.goto(path(`/${pageLocale}/articles/refund-timelines?feedback=no`));
+  // Only the help center's own origin counts: the article embeds a video whose
+  // player posts its own telemetry, which says nothing about the feedback form.
   const posts: string[] = [];
   page.on('request', (request) => {
-    if (request.method() === 'POST') {
-      posts.push(request.url());
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.origin === new URL(page.url()).origin) {
+      posts.push(url.pathname);
     }
   });
 

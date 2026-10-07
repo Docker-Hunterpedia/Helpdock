@@ -37,8 +37,8 @@ that hold `report:read`.
   resolution, SLA met and CSAT, then an "Unassigned" row with the open tickets
   nobody has, left out when the report is one agent's), Busiest hours (weekday
   by hour, in the brand's time zone), Help center top searches and Searches with
-  no results. AI deflection rate and AI cost say "not available" until M7
-  records AI calls.
+  no results. AI deflection rate and AI cost come from `ai_calls` and the
+  auto-reply timestamps ([AI guide](ai.md#deflection)).
 - **Table and Export CSV** on every card: "Table" swaps the chart for the same
   numbers as a table, and "Export CSV" downloads that report's rows with the
   filters in force, named as below. The two search cards export the same
@@ -179,9 +179,6 @@ would run outside that transaction.
 
 ## Known gaps
 
-- **AI deflection and cost** read "not available" until M7 adds `ai_calls`. The
-  seam is `AiUsageSource` in `apps/api/src/reports/ai-usage.ts`, bound in
-  `ReportsModule.forRoot({ aiUsage })`.
 - **The screen draws what the summary carries.** Response and resolution times
   are the period's median and p90 rather than a line per day, and CSAT has no
   "% of surveys answered" or comment count.

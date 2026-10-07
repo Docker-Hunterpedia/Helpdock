@@ -310,7 +310,7 @@ that the install can measure about itself:
 |---|---|
 | Activation | The first ticket from any channel that is not manual (email, widget, Telegram, form, API), in any brand, and whether it came within 7 days of the wizard. The wizard's end is when the first brand was created. |
 | Help center self-service | Per brand, over the last 30 days: widget article views not followed by a ticket from the same visitor within an hour, over widget views. Only a view in the widget names a visitor a ticket can also name, so the rate is over those; every view is counted beside it. Read from `report_help_center_daily`, which `stats.rollup` writes. |
-| AI deflection | Per brand, null until M7 records auto-replies. |
+| AI deflection | Per brand, from the auto-reply timestamps on `tickets` (M7-06); null for a brand the assistant has never taken part in. |
 
 The System page's **Product metrics** row draws them for the whole install:
 the day of activation, help center self-service summed over every brand (so a
@@ -359,7 +359,7 @@ than one at a time.
 
 `APP_MASTER_KEY` in `.env` is 32 bytes of base64 that every secret Helpdock
 stores is encrypted with: SMTP and OAuth credentials, CAPTCHA secrets, the token
-signing key, and from M7 the LLM provider keys. It is also the input the
+signing key, and the LLM provider keys. It is also the input the
 password pepper and the trusted-device cookie signature are derived from.
 
 **Back it up with the database, somewhere other than the server.** Nothing can

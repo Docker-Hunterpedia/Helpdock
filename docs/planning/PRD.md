@@ -91,9 +91,9 @@ Update this table in the same PR that changes a milestone's status.
 | 1 Core desk | M3 Automation and SLAs | M1 | 4–5 | shipped | 2026-09-27 | 2026-09-27 |
 | 2 Customer surfaces | M4 Widget and realtime | M1, M3 | 5–6 | shipped | 2026-09-27 | 2026-09-27 |
 | 2 Customer surfaces | M5 Help center | M1 | 5–6 | shipped | 2026-09-27 | 2026-09-27 |
-| 2 Customer surfaces | M6 Telegram | M2 | 2 | in progress | 2026-10-05 | |
-| 3 Intelligence | M7 AI | M3, M4, M5, M6 | 7–9 | in progress | 2026-10-05 | |
-| 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | in progress | 2026-10-05 | |
+| 2 Customer surfaces | M6 Telegram | M2 | 2 | shipped | 2026-10-05 | 2026-10-07 |
+| 3 Intelligence | M7 AI | M3, M4, M5, M6 | 7–9 | shipped | 2026-10-05 | 2026-10-07 |
+| 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress | 2026-10-05 | |
 | | **Total** | | **46–59** | | | |
 
@@ -306,7 +306,7 @@ Depends on: M2 (adapter interface), M1 (media pipeline).
 
 Exit criteria:
 
-- [x] A Telegram message creates a ticket and the agent reply arrives in the chat, tested against a mocked Bot API. See [the milestone doc](../in-development/M6-telegram.md#exit-criteria).
+- [x] A Telegram message creates a ticket and the agent reply arrives in the chat, tested against a mocked Bot API. See [the milestone doc](../completed/M6-telegram.md#exit-criteria).
 
 ---
 
@@ -334,12 +334,12 @@ Depends on: M5 (articles as knowledge), M4 and M6 (auto-reply surfaces), M3 (rul
 
 Exit criteria:
 
-- [x] Auto-reply answers a question from an uploaded PDF with a citation, and hands off when confidence is below threshold, in an E2E test with a mocked provider. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
-- [ ] The evaluation run meets every threshold in DOMAIN-RULES §9 for both English and Arabic. The harness and nightly workflow are in (M7-11); the run needs the real-provider `AI_EVAL_API_KEY` secret listed under external dependencies.
-- [x] After a handoff, no auto-reply is sent for the rest of the conversation even if a queued job fires late. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
-- [x] A visitor-audience query never retrieves an internal chunk (SQL-level test), and a fabricated citation is dropped. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
-- [x] Budget hard stop disables auto-reply and is visible in admin. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
-- [x] PII redaction is covered by unit tests for emails, phones, cards (Luhn), IBANs. See [the milestone doc](../in-development/M7-ai.md#exit-criteria).
+- [x] Auto-reply answers a question from an uploaded PDF with a citation, and hands off when confidence is below threshold, in an E2E test with a mocked provider. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
+- [ ] The evaluation run meets every threshold in DOMAIN-RULES §9 for both English and Arabic. The harness and nightly workflow are in (M7-11) and pass in mock mode; the run against a real provider needs the `AI_EVAL_API_KEY` secret listed under external dependencies. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
+- [x] After a handoff, no auto-reply is sent for the rest of the conversation even if a queued job fires late. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
+- [x] A visitor-audience query never retrieves an internal chunk (SQL-level test), and a fabricated citation is dropped. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
+- [x] Budget hard stop disables auto-reply and is visible in admin. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
+- [x] PII redaction is covered by unit tests for emails, phones, cards (Luhn), IBANs. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
 
 ---
 
@@ -363,8 +363,8 @@ Depends on: M1, M3. May run in parallel with M7.
 
 Exit criteria:
 
-- [x] A ticket created via the API triggers a signed `ticket.created` webhook received by a test endpoint. See [the milestone doc](../in-development/M8-api-webhooks-reports.md#exit-criteria).
-- [x] Reports match seeded data in an integration test. See [the milestone doc](../in-development/M8-api-webhooks-reports.md#exit-criteria).
+- [x] A ticket created via the API triggers a signed `ticket.created` webhook received by a test endpoint. See [the milestone doc](../completed/M8-api-webhooks-reports.md#exit-criteria).
+- [x] Reports match seeded data in an integration test. See [the milestone doc](../completed/M8-api-webhooks-reports.md#exit-criteria).
 
 #### M9 Hardening and 1.0
 
@@ -443,3 +443,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-09-27 | M2 and M3 shipped. All sixteen deliverables merged (M2: #97, #99; M3: #100, #101, #102, #103) and all nine exit criteria met, each proved by a named test in [docs/completed/M2-email-channel.md](../completed/M2-email-channel.md#exit-criteria) and [docs/completed/M3-automation-and-slas.md](../completed/M3-automation-and-slas.md#exit-criteria). Actual effort one day for both, run in parallel, against estimates of 3–4 and 4–5 weeks. The gaps carried forward are in each doc; the M2 external dependency on a real SMTP provider and IMAP mailbox stays `needed`, as CI uses Mailpit and GreenMail. M4 Widget and realtime (M1, M3), M5 Help center (M1), M6 Telegram (M2) and M8 API, webhooks, reports (M1, M3) may now start. |
 | 2026-09-27 | M4 and M5 started in parallel; issues #106–#126, artboards on the design canvas. |
 | 2026-09-27 | M4 and M5 shipped. All twenty-one deliverables merged (M4: #129, #132, #133; M5: #131, #134, #135, #136) and all nine exit criteria met, each proved by a named test in [docs/completed/M4-widget-and-realtime.md](../completed/M4-widget-and-realtime.md#exit-criteria) and [docs/completed/M5-help-center.md](../completed/M5-help-center.md#exit-criteria). Two brands on two origins and an api restart mid-send are proved in a browser against the real api. M5's first criterion is met short of a certificate for a real domain: the M5-07 external dependency on a registered domain stays `needed`. The widget's initial bundle keeps to 40 KB by loading the real transport as a lazy chunk, a departure from D §14's "everything for first paint" that ADR 0012's amendment leaves to a reviewer. Close-out found that a brand added after setup had no ticket statuses, so no ticket could be filed in it, and fixed it. Actual effort one day for both, run in parallel, against estimates of 5–6 weeks each. The gaps carried forward are in each doc, including the widget and api-page Playwright suites that CI does not run yet. M6 Telegram (M2) and M8 API, webhooks, reports (M1, M3) may start; M7 AI waits for M6. |
+| 2026-10-07 | M6, M7 and M8 shipped, with the code-side half of M9. All twenty-three deliverables merged in one pull request (#147) and eight of nine exit criteria met, each proved by a named test in [docs/completed/M6-telegram.md](../completed/M6-telegram.md#exit-criteria), [docs/completed/M7-ai.md](../completed/M7-ai.md#exit-criteria) and [docs/completed/M8-api-webhooks-reports.md](../completed/M8-api-webhooks-reports.md#exit-criteria). M7's evaluation criterion stays open: the harness passes in mock mode and the nightly workflow is in, but the run against a real provider waits on the `AI_EVAL_API_KEY` external dependency, which stays `needed`, as do the staging Telegram bot token and the Notion and Google OAuth apps. Actual effort two days for the three, run in parallel, against estimates of 2, 7–9 and 4–5 weeks. The gaps carried forward are in each doc. M9 continues: ASVS gaps closed, Semgrep, ZAP and the dependency audit in CI, the load-test suites, the accessibility audit, the user guides, master key rotation and the restore and onboarding tooling shipped in #147; the external pentest, the §14 host run, the clean-VM onboarding and restore drills, the usability pass and the 1.0.0 tag remain. |

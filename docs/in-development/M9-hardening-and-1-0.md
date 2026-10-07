@@ -7,22 +7,22 @@ Owner: @Docker-Hunterpedia
 ## Scope
 
 Full deliverable list and specs: [PRD §4 · M9 Hardening and 1.0](../planning/PRD.md#m9-hardening-and-10).
-Depends on everything above. Code-side deliverables (security scanning, load tests, docs, release pipeline, accessibility audit) start in parallel; the external pentest, outside usability testers, clean-VM onboarding and restore drill need people and hardware and are tracked as external dependencies.
+Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which also carried M9's code-side work. What remains needs people and hardware: the external pentest, the §14 host run, the outside usability testers, the clean-VM onboarding run and restore drill, and the 1.0.0 tag; they are tracked as external dependencies.
 
 ## Deliverables
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
 | M9-01 | External pentest of widget + API; fix all High and Medium findings | | planned |
-| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | built in branch: walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation |
-| M9-03 | Load tests | | in progress: suites built and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); the §14 host run is outstanding |
-| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | | built in branch (M9-04): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); screen-reader pass outstanding |
-| M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | | in review |
-| M9-06 | User docs under `docs/guides/` | | built in branch: every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
-| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outs | | tooling built and run locally ([notes](#m9-07-onboarding-test)); **the clean-VM run and the three outside testers need people** and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
-| M9-08 | Release pipeline | | verified; external dependency (GHCR visibility, signing key) open |
+| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. Re-walk the chapters M6, M7 and M8 touched |
+| M9-03 | Load tests | | in progress: suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); **the §14 host run is outstanding** |
+| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** |
+| M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); ZAP's first release run is still to come |
+| M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
+| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); **the clean-VM run and the three outside testers need people** and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
+| M9-08 | Release pipeline | | verified ([notes](#m9-08-release-pipeline)); external dependency (GHCR visibility, signing key) open |
 | M9-09 | Tag `1.0.0` | | planned |
-| M9-10 | Restore drill | | tooling built and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
+| M9-10 | Restore drill | | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
 
 ## M9-04 Accessibility audit
 
@@ -295,8 +295,7 @@ the one-hour target.
 
 ## Gaps carried from earlier milestones
 
-Closed on this branch, each with unit and integration tests and its guide
-updated:
+Closed in #147, each with unit and integration tests and its guide updated:
 
 | Gap | From | Now |
 |---|---|---|
@@ -308,4 +307,4 @@ updated:
 
 ## Pull requests
 
-- None yet.
+- #147 feat: M6 Telegram, M7 AI, M8 API/webhooks/reports and M9 hardening towards 1.0 (M9-02, M9-04, M9-05, M9-06; the M9-03 suites and the M9-07 and M9-10 tooling; the carried gaps above)

@@ -123,7 +123,7 @@ Written down and carried forward. None of them blocks M4, M5, M6 or M8.
 | **The escalation action picker does not check reach** | It lists every team and active person of the brand. An action that cannot be carried out is skipped when the step runs. | [SLA guide](../guides/slas.md#known-gaps) |
 | **`workflow_runs` keep the department the ticket had when the rule ran** | A run is a record of that moment, so a moved ticket's earlier runs stay readable to the old department's readers. | This doc |
 | **A Team Leader narrower than the brand cannot change a rule** | A rule acts on every department of the brand. They can read rules and their departments' log. | [automation](../guides/automation.md#who-may-do-what) |
-| ~~Nothing emits `csat.received` yet~~ | Closed by M8-06 (M8-06 branch): every recorded answer, by link, widget or Telegram, emits it, and rules with the CSAT received event run on it. | [automation](../guides/automation.md#a-rule) |
+| ~~Nothing emits `csat.received` yet~~ | Closed by M8-06 (#147): every recorded answer, by link, widget or Telegram, emits it, and rules with the CSAT received event run on it. | [automation](../guides/automation.md#a-rule) |
 | ~~Auto-unassign still ignores business hours~~ | Closed in M9: `assignment.offline_unassign` reads the department's calendar and puts itself off to the next opening. | [ticketing settings](../guides/ticketing-settings.md#assignment) |
 | **No screenshot baselines for the M3 screens** | The screenshots spec covers M0 and M1 screens; the shell baselines predate the Automation link and the bell. | [development guide](../guides/development.md#browser-tests) |
 

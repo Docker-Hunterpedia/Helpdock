@@ -1,4 +1,4 @@
-import type { DbTransaction, WorkflowRuleRow } from '@helpdock/db';
+import { type DbTransaction, uuidv7, type WorkflowRuleRow } from '@helpdock/db';
 import type { JobLogger } from '@helpdock/jobs';
 import {
   type ActionOutcome,
@@ -95,6 +95,8 @@ const applyInSavepoint = async (
     readonly rule: WorkflowRuleRow;
     readonly chain: readonly string[];
     readonly now: Date;
+    /** The log row this run is written as, chosen first so an action can name it (M7-07). */
+    readonly runId: string;
   },
   actions: readonly RuleAction[],
   beforeActions?: (savepoint: DbTransaction) => Promise<boolean>,
@@ -114,6 +116,7 @@ const applyInSavepoint = async (
           tx: savepoint,
           brandId: run.brandId,
           ruleId: run.rule.id,
+          runId: run.runId,
           chain: [...run.chain, run.rule.id],
           now: run.now,
         },
@@ -207,15 +210,17 @@ export const evaluateEventRules = async (
       continue;
     }
 
+    const runId = uuidv7();
     const outcomes = await applyInSavepoint(
       deps,
       tx,
-      { brandId, ticketId, rule, chain, now },
+      { brandId, ticketId, rule, chain, now, runId },
       parsed.actions,
     );
     const verdict: RunVerdict = outcomes === null ? 'failed' : 'applied';
     await deps.rules.insertRun(tx, {
       ...base,
+      id: runId,
       result: verdict,
       details:
         outcomes === null || outcomes === 'skipped' ? { error: 'internal' } : { actions: outcomes },
@@ -333,15 +338,17 @@ export const runScheduledRules = async (
         depth: 1,
         chain: [],
       };
+      const plannedRunId = uuidv7();
       let runId: string | undefined;
       const outcomes = await applyInSavepoint(
         deps,
         tx,
-        { brandId, ticketId, rule, chain: [], now },
+        { brandId, ticketId, rule, chain: [], now, runId: plannedRunId },
         parsed.actions,
         async (savepoint) => {
           runId = await deps.rules.claimMatch(savepoint, {
             ...base,
+            id: plannedRunId,
             result: 'applied',
             matchKey: ticket.statusChangedAt.toISOString(),
           });

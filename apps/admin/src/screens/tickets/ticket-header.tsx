@@ -29,6 +29,7 @@ export interface HeaderViewer {
 export function TicketHeader({
   ticket,
   departmentName,
+  channelHandle,
   viewers,
   actions,
   now,
@@ -39,6 +40,8 @@ export function TicketHeader({
 }: {
   readonly ticket: Ticket;
   readonly departmentName: string | undefined;
+  /** The contact on the channel, as the chip names them: Telegram's username (M6-02). */
+  readonly channelHandle?: string | undefined;
   /** The other people in `ticket:<id>` right now, whoever is replying first. */
   readonly viewers: readonly HeaderViewer[];
   /** The ⋯ menu's entries, in the artboard's order. */
@@ -104,7 +107,11 @@ export function TicketHeader({
         <StatusBadge status={ticket.status} />
         <PriorityBadge priority={ticket.priority} />
         <SlaTimer ticket={ticket} now={now} />
-        <ChannelLabel channel={ticket.channel} departmentName={departmentName} />
+        <ChannelLabel
+          channel={ticket.channel}
+          departmentName={departmentName}
+          handle={channelHandle}
+        />
       </Box>
 
       {first === undefined ? null : (

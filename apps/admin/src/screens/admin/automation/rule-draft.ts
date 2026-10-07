@@ -109,6 +109,8 @@ export const newAction = (type: RuleActionType): RuleAction => {
       return { type, body: '' };
     case 'notify':
       return { type, recipient: { kind: 'department_leads' }, message: null };
+    case 'ai_triage':
+      return { type, mode: 'suggest', fields: ['tags', 'priority', 'department'] };
     default:
       return { type };
   }

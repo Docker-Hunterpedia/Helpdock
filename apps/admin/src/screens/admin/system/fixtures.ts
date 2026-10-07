@@ -1,4 +1,13 @@
-import type { AuditLogPage, AuditRecord, SystemQueuePage, SystemStatus } from '@helpdock/schemas';
+import {
+  type AuditLogPage,
+  type AuditRecord,
+  type Brand,
+  type BrandDeletion,
+  defaultBrandSettings,
+  type ProductMetrics,
+  type SystemQueuePage,
+  type SystemStatus,
+} from '@helpdock/schemas';
 import type { SystemApi } from './system-api.js';
 
 /**
@@ -26,6 +35,13 @@ export const healthySystemStatus = (overrides: Partial<SystemStatus> = {}): Syst
     status: 'ok',
     version: '17.6',
     migrationsApplied: 4,
+    migrations: [
+      '0003_outbox_notify_relay',
+      '0002_tenant_rls_policies',
+      '0001_app_role_and_ticket_sequences',
+      '0000_core_tables',
+    ],
+    sizeBytes: 3.2 * 1024 ** 3,
     runtimeRole: {
       name: 'helpdock_app',
       superuser: false,
@@ -110,6 +126,12 @@ export const fakeSystemApi = (overrides: Partial<SystemApi> = {}): SystemApi => 
   status: async () => healthySystemStatus(),
   queues: async () => fullQueuePage(),
   auditLog: async () => auditLogPage(),
+  productMetrics: async () => productMetrics(),
+  queueBoardPass: async () => QUEUE_BOARD_PASS,
+  brands: async () => installBrands(),
+  brandDeletion: async (brandId) => brandDeletionOf(brandId),
+  deleteBrand: async (brandId) => pendingDeletion(brandId, Date.now()),
+  restoreBrand: async (brandId) => activeDeletion(brandId),
   ...overrides,
 });
 
@@ -240,3 +262,166 @@ export const auditLogPage = (overrides: Partial<AuditLogPage> = {}): AuditLogPag
   ],
   ...overrides,
 });
+
+// ---------------------------------------------------------------- M8-05, M8-07
+
+/** The mock session's first brand (`auth/mock-api.ts`), so Brand › Danger zone finds itself. */
+export const SESSION_BRAND = '0192c3f0-1a2b-7c3d-8e4f-000000000001';
+export const OLD_STORE_BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b3';
+export const PILOT_BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b4';
+
+const DAY_MS = 86_400_000;
+const GRACE_MS = 30 * DAY_MS;
+const GIB = 1024 ** 3;
+
+export const QUEUE_BOARD_PASS = '/api/install/system/queue-board/pass-0123456789abcdef';
+
+type BrandStorage = NonNullable<
+  Extract<SystemStatus['storage'], { configured: true }>['brands']
+>[number];
+
+const brandStorage = (brandId: string, name: string, gibibytes: number): BrandStorage => ({
+  brandId,
+  name,
+  usedBytes: gibibytes * GIB,
+  objects: Math.round(gibibytes * 1000),
+  measuredAt: '2026-10-05T04:00:00.000Z',
+});
+
+const brandSpend = (
+  brandId: string,
+  name: string,
+  tokens: number,
+  costUsd: number,
+  budgetUsd: number | null,
+) => ({ brandId, name, tokens, costUsd, budgetUsd });
+
+/**
+ * A System status with storage and LLM spend measured per brand, and two
+ * channels, one failing.
+ */
+export const measuredSystemStatus = (): SystemStatus =>
+  healthySystemStatus({
+    channels: [
+      {
+        id: '0192c3f0-1a2b-7c3d-8e4f-0000000000c1',
+        name: 'support@helpdock.io',
+        kind: 'email',
+        status: 'ok',
+        detail: 'polled 12 s ago',
+        checkedAt: new Date().toISOString(),
+      },
+      {
+        id: '0192c3f0-1a2b-7c3d-8e4f-0000000000c2',
+        name: '@acmeshop_help_bot',
+        kind: 'telegram',
+        status: 'error',
+        detail: 'Token rejected',
+        checkedAt: new Date().toISOString(),
+      },
+    ],
+    storage: {
+      configured: true,
+      usedBytes: 18.4 * GIB,
+      softLimitBytes: 50 * GIB,
+      brands: [
+        brandStorage(SESSION_BRAND, 'Helpdock', 11.2),
+        brandStorage(ACME_BRAND, 'Acme Store', 6.4),
+        brandStorage(OLD_STORE_BRAND, 'Old Store', 0.8),
+      ],
+    },
+    aiSpend: {
+      configured: true,
+      tokens: 11_900_000,
+      costUsd: 134.6,
+      budgetUsd: null,
+      alertAtPercent: 80,
+      brands: [
+        brandSpend(ACME_BRAND, 'Acme Store', 7_100_000, 86.4, 100),
+        brandSpend(SESSION_BRAND, 'Helpdock', 4_800_000, 48.2, 100),
+        brandSpend(OLD_STORE_BRAND, 'Old Store', 0, 0, null),
+      ],
+    },
+  });
+
+/** `GET /api/install/system/metrics`: activated on day 2, AI not recording yet. */
+export const productMetrics = (overrides: Partial<ProductMetrics> = {}): ProductMetrics => ({
+  observedAt: new Date().toISOString(),
+  activation: {
+    wizardCompletedAt: '2026-09-01T09:00:00.000Z',
+    firstChannelTicketAt: '2026-09-03T11:00:00.000Z',
+    activated: true,
+  },
+  windowDays: 30,
+  brands: [
+    {
+      brandId: SESSION_BRAND,
+      name: 'Helpdock',
+      selfService: { articleViews: 9412, widgetViews: 2000, followedByTicket: 432, rate: 0.784 },
+      aiDeflectionRate: null,
+    },
+  ],
+  ...overrides,
+});
+
+const installBrand = (
+  id: string,
+  name: string,
+  prefix: string,
+  status: Brand['status'],
+): Brand => ({
+  id,
+  name,
+  prefix,
+  defaultLocale: 'en',
+  timezone: 'Asia/Amman',
+  status,
+  settings: defaultBrandSettings(),
+});
+
+/** `GET /api/install/brands`: two active brands and two in their grace. */
+export const installBrands = (): Brand[] => [
+  installBrand(SESSION_BRAND, 'Helpdock', 'HD', 'active'),
+  installBrand(ACME_BRAND, 'Acme Store', 'ACM', 'active'),
+  installBrand(OLD_STORE_BRAND, 'Old Store', 'OST', 'deleting'),
+  installBrand(PILOT_BRAND, 'Pilot brand', 'PLT', 'deleting'),
+];
+
+export const activeDeletion = (brandId: string): BrandDeletion => ({
+  brandId,
+  status: 'active',
+  requestedAt: null,
+  purgeAfter: null,
+  requestedBy: null,
+});
+
+/** A deletion requested at `requestedAt` (epoch ms), with its 30-day grace. */
+export const pendingDeletion = (
+  brandId: string,
+  requestedAt: number,
+  requestedBy: BrandDeletion['requestedBy'] = null,
+): BrandDeletion => ({
+  brandId,
+  status: 'deleting',
+  requestedAt: new Date(requestedAt).toISOString(),
+  purgeAfter: new Date(requestedAt + GRACE_MS).toISOString(),
+  requestedBy,
+});
+
+/** Old Store has 26 days left and Pilot brand 3: the artboard's two rows. */
+export const brandDeletionOf = (brandId: string, now = Date.now()): BrandDeletion => {
+  if (brandId === OLD_STORE_BRAND) {
+    return pendingDeletion(brandId, now - 4 * DAY_MS, {
+      userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000a',
+      name: 'Lina Haddad',
+    });
+  }
+  if (brandId === PILOT_BRAND) {
+    return pendingDeletion(brandId, now - 27 * DAY_MS, {
+      userId: '0192c3f0-1a2b-7c3d-8e4f-00000000000b',
+      name: null,
+    });
+  }
+
+  return activeDeletion(brandId);
+};

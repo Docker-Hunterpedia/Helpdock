@@ -2,7 +2,11 @@ import { type RenderResult, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
+import type { AiApi } from '../ai/api.js';
+import { MockAiApi } from '../ai/mock-api.js';
 import { AppProviders, createAdminQueryClient } from '../app/providers.tsx';
+import type { AssistApi } from '../assist/api.js';
+import { MockAssistApi } from '../assist/mock-api.js';
 import type { AuthApi } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import type { AutomationApi } from '../automation/api.js';
@@ -11,19 +15,29 @@ import type { ChannelsApi } from '../channels/api.js';
 import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { MockDevelopersApi } from '../developers/mock-api.js';
 import type { DomainsApi } from '../domains/api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
 import type { EmailApi } from '../email/api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import type { KnowledgeApi } from '../knowledge/api.js';
+import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import type { ReportsApi } from '../reports/api.js';
+import { fakeSystemApi } from '../screens/admin/system/fixtures.js';
+import type { SystemApi } from '../screens/admin/system/system-api.js';
+import { fakeReportsApi } from '../screens/reports/fixtures.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
 import type { TicketsApi } from '../tickets/api.js';
@@ -46,6 +60,15 @@ export interface RenderAppOptions {
   readonly helpCenterApi?: HelpCenterApi;
   readonly browserPush?: BrowserPush;
   readonly domainsApi?: DomainsApi;
+  readonly aiApi?: AiApi;
+  readonly knowledgeApi?: KnowledgeApi;
+  /** Defaults to the reports fixture, so no test reaches for a real api. */
+  readonly reportsApi?: ReportsApi;
+  /** Defaults to the System fixture: a brand that is not being deleted. */
+  readonly systemApi?: SystemApi;
+  readonly telegramApi?: TelegramApi;
+  readonly assistApi?: AssistApi;
+  readonly developersApi?: DevelopersApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -64,6 +87,11 @@ export interface RenderedApp extends RenderResult {
   readonly helpCenterApi: HelpCenterApi;
   readonly browserPush: BrowserPush;
   readonly domainsApi: DomainsApi;
+  readonly aiApi: AiApi;
+  readonly knowledgeApi: KnowledgeApi;
+  readonly telegramApi: TelegramApi;
+  readonly assistApi: AssistApi;
+  readonly developersApi: DevelopersApi;
 }
 
 /**
@@ -86,6 +114,12 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const helpCenterApi = options.helpCenterApi ?? new MockHelpCenterApi();
   const browserPush = options.browserPush ?? new MockBrowserPush();
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
+  const aiApi = options.aiApi ?? new MockAiApi();
+  const knowledgeApi = options.knowledgeApi ?? new MockKnowledgeApi();
+  const telegramApi = options.telegramApi ?? new MockTelegramApi();
+  const assistApi =
+    options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
+  const developersApi = options.developersApi ?? new MockDevelopersApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -104,6 +138,13 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       helpCenterApi={helpCenterApi}
       browserPush={browserPush}
       domainsApi={domainsApi}
+      aiApi={aiApi}
+      knowledgeApi={knowledgeApi}
+      reportsApi={options.reportsApi ?? fakeReportsApi()}
+      systemApi={options.systemApi ?? fakeSystemApi()}
+      telegramApi={telegramApi}
+      assistApi={assistApi}
+      developersApi={developersApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -129,5 +170,10 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     helpCenterApi,
     browserPush,
     domainsApi,
+    aiApi,
+    knowledgeApi,
+    telegramApi,
+    assistApi,
+    developersApi,
   };
 }

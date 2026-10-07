@@ -1,5 +1,4 @@
 import {
-  brandDomains,
   brands,
   type DbTransaction,
   type HcMedia as HcMediaRow,
@@ -22,7 +21,8 @@ import {
   hcMediaPath,
   hcThemeSchema,
 } from '@helpdock/schemas';
-import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import { readPrimaryDomain } from './site-url.js';
 
 /**
  * Everything about a brand the help center pages need besides its articles
@@ -117,18 +117,6 @@ export const readSiteConfig = async (
     .from(widgetSettings)
     .where(eq(widgetSettings.brandId, brandId))
     .limit(1);
-  const [domain] = await tx
-    .select({ domain: brandDomains.domain })
-    .from(brandDomains)
-    .where(
-      and(
-        eq(brandDomains.brandId, brandId),
-        eq(brandDomains.kind, 'helpcenter'),
-        isNotNull(brandDomains.verifiedAt),
-      ),
-    )
-    .orderBy(desc(brandDomains.isPrimary), asc(brandDomains.createdAt))
-    .limit(1);
   const images = await readSiteImages(tx, [
     settings?.logoMediaId ?? null,
     settings?.faviconMediaId ?? null,
@@ -147,7 +135,7 @@ export const readSiteConfig = async (
     links: parsedOr(hcLinksSchema, settings?.links ?? {}, EMPTY_LINKS),
     customCss: settings?.customCss ?? '',
     widgetOrigins: widget?.allowedOrigins ?? [],
-    primaryDomain: domain?.domain ?? null,
+    primaryDomain: await readPrimaryDomain(tx, brandId),
   };
 };
 

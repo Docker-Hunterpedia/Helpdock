@@ -1,7 +1,6 @@
-import { expect, test } from '@playwright/test';
-import { generate } from 'otplib';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import { expect, openAdmin, test } from './admin-session.js';
+import { SKIP_ENV } from './install.js';
 
 /**
  * M1-01 against the real api: a department created, a team added to it, the
@@ -35,22 +34,6 @@ const RUN = String(Date.now()).slice(-6);
 const DEPARTMENT = `Billing ${RUN}`;
 const TEAM = `Front line ${RUN}`;
 
-/** Signed in as the seeded install admin, through the second factor. */
-const signInAsAdmin = async (page: import('@playwright/test').Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
 const openTicketing = async (page: import('@playwright/test').Page): Promise<void> => {
   await page.getByRole('link', { name: new RegExp(t('admin:nav.ticketing')) }).click();
   await page.getByRole('table').waitFor();
@@ -58,7 +41,7 @@ const openTicketing = async (page: import('@playwright/test').Page): Promise<voi
 
 test.describe('ticketing settings against the real api', () => {
   test('creates a department, which then appears in the list', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openTicketing(page);
 
     await page.getByRole('button', { name: t('ticketing:departments.add'), exact: true }).click();
@@ -80,7 +63,7 @@ test.describe('ticketing settings against the real api', () => {
   });
 
   test('adds a team to it and puts the administrator on it', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openTicketing(page);
 
     await page
@@ -116,7 +99,7 @@ test.describe('ticketing settings against the real api', () => {
   });
 
   test('deletes the department it made, and keeps the brand’s last one', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openTicketing(page);
 
     await page

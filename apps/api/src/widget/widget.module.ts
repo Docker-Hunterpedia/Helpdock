@@ -13,6 +13,7 @@ import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { CaptchaVerifier, DbCaptchaKeys, safeCaptchaTransport } from '../captcha/captcha-keys.js';
+import { CsatRepository } from '../csat/csat.repository.js';
 import { EmailRepository } from '../email/email.repository.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { SettingsInstallSmtp } from '../email/transport.js';
@@ -36,6 +37,7 @@ import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
 import { TicketRepository } from '../tickets/tickets.repository.js';
+import { OnlineAgents } from './online-agents.js';
 import { WidgetController } from './widget.controller.js';
 import { WidgetGateway } from './widget.gateway.js';
 import { WidgetRepository } from './widget.repository.js';
@@ -46,6 +48,8 @@ import { WIDGET_DIST, WidgetBundleController } from './widget-bundle.controller.
 import { resolveWidgetDist } from './widget-bundle.js';
 import { WidgetConfigService } from './widget-config.service.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
+import { WidgetCsatController } from './widget-csat.controller.js';
+import { WidgetCsatService } from './widget-csat.service.js';
 import { WidgetGate } from './widget-gate.js';
 import { WidgetHub } from './widget-hub.js';
 import { brandVisitorsRoom, RedisWidgetBroadcast } from './widget-relay.js';
@@ -107,12 +111,12 @@ class WidgetLifecycle implements OnModuleInit, OnModuleDestroy {
     await this.#hub.start();
     this.#unsubscribe = this.#presence.onChange((brandId) => {
       void this.#config
-        .agentsOnline(brandId)
-        .then((agentsOnline) =>
+        .presence(brandId)
+        .then((presence) =>
           this.#broadcast.emit({
             room: brandVisitorsRoom(brandId),
             event: WIDGET_EVENTS.presence,
-            data: { agentsOnline },
+            data: presence,
             seq: null,
           }),
         )
@@ -163,6 +167,7 @@ export class WidgetModule {
       controllers: [
         WidgetSettingsController,
         WidgetController,
+        WidgetCsatController,
         WidgetArticlesController,
         WidgetStreamController,
         WidgetBundleController,
@@ -199,7 +204,12 @@ export class WidgetModule {
             new WidgetConfigService({
               gate,
               businessHours: new BusinessHoursService(slaRepository, new SlaService(slaRepository)),
-              presence,
+              online: new OnlineAgents({
+                db,
+                presence,
+                settings: settingsRepository,
+                widget,
+              }),
               captcha: captchaKeys,
               assetOrigin: env.APP_URL,
               popular: feedback,
@@ -256,6 +266,17 @@ export class WidgetModule {
               ),
               lifecycleReads,
               limiter: new RateLimiter(redis),
+            }),
+        },
+        {
+          provide: WidgetCsatService,
+          inject: [WidgetGate, WidgetConversationsService, REDIS],
+          useFactory: (gate: WidgetGate, conversations: WidgetConversationsService, redis: Redis) =>
+            new WidgetCsatService({
+              gate,
+              conversations,
+              repository: new CsatRepository(),
+              broadcast: new RedisWidgetBroadcast(redis),
             }),
         },
         {

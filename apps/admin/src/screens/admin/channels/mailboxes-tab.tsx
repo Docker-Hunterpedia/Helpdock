@@ -26,6 +26,7 @@ import { useToast } from '../../../ui/toasts.tsx';
 import { ago, clockTime } from './format.js';
 import { HealthDot, HealthLegend } from './health.tsx';
 import { InboundParseCard } from './inbound-parse-card.tsx';
+import { NoteCard } from './note-card.tsx';
 
 /**
  * Channels › Mailboxes (M2-08), the `Admin · email channel` artboard: the
@@ -306,39 +307,6 @@ function HealthCell({ mailbox }: { readonly mailbox: Mailbox }): ReactNode {
           {t('channels:health.fix')}
         </MuiLink>
       ) : null}
-    </Box>
-  );
-}
-
-function NoteCard({
-  heading,
-  children,
-}: {
-  readonly heading: string;
-  readonly children: ReactNode;
-}): ReactNode {
-  const tokens = useSemanticTokens();
-
-  return (
-    <Box
-      sx={{
-        paddingBlock: '14px',
-        paddingInline: 4,
-        borderRadius: '10px',
-        border: `1px solid ${tokens['border.default']}`,
-        backgroundColor: tokens['bg.surface'],
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-        fontSize: 13,
-        lineHeight: '18px',
-        color: 'text.secondary',
-      }}
-    >
-      <Typography variant="bodyStrong" component="h3" sx={{ fontSize: 13, color: 'text.primary' }}>
-        {heading}
-      </Typography>
-      <Box>{children}</Box>
     </Box>
   );
 }

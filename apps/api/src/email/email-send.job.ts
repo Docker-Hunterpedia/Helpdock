@@ -1,19 +1,20 @@
 import { describeSmtpError } from '@helpdock/channels';
 import type { Keyring } from '@helpdock/config';
-import { type Db, withSystem } from '@helpdock/db';
+import { type Db, type DbTransaction, type EmailDelivery, withSystem } from '@helpdock/db';
 import {
   createJobProcessor,
   type EmailSendPayload,
   emailSendJob,
   emailSendPayloadSchema,
+  isLastAttempt,
   type JobHandler,
   type JobLogger,
 } from '@helpdock/jobs';
 import { EMAIL_ERROR_MAX_LENGTH } from '@helpdock/schemas';
-import { type Job, UnrecoverableError } from 'bullmq';
+import type { Job } from 'bullmq';
 import type { EmailRepository } from './email.repository.js';
 import { templatesFor } from './outgoing-settings.js';
-import { renderDelivery } from './render-delivery.js';
+import { type CsatSurveyEmail, renderDelivery } from './render-delivery.js';
 import { brandSmtpServer, type InstallSmtp, type SmtpTransportFactory } from './transport.js';
 
 /**
@@ -34,11 +35,22 @@ import { brandSmtpServer, type InstallSmtp, type SmtpTransportFactory } from './
  * stays in BullMQ's failed set.
  */
 
+/**
+ * M8-06: what a survey email needs from the survey, and the survey's `sent_at`
+ * once the relay took it. The CSAT module's (`csat/csat-email.ts`).
+ */
+export interface SurveyEmailSource {
+  /** Undefined when the delivery is not a survey's, or its survey is gone. */
+  forDelivery(tx: DbTransaction, delivery: EmailDelivery): Promise<CsatSurveyEmail | undefined>;
+  markSent(tx: DbTransaction, surveyId: string, at: Date): Promise<void>;
+}
+
 export interface EmailSendDependencies {
   readonly repository: EmailRepository;
   readonly keyring: Keyring;
   readonly installSmtp: InstallSmtp;
   readonly transports: SmtpTransportFactory;
+  readonly surveys: SurveyEmailSource;
   readonly now?: () => Date;
 }
 
@@ -56,6 +68,7 @@ export const createEmailSendHandler =
     keyring,
     installSmtp,
     transports,
+    surveys,
     now = () => new Date(),
   }: EmailSendDependencies): JobHandler<EmailSendPayload> =>
   async ({ payload, brandId, tx, log }) => {
@@ -75,6 +88,7 @@ export const createEmailSendHandler =
       log.info({ brandId, deliveryId: delivery.id }, 'email.send skipped: the ticket is gone');
       return;
     }
+    const survey = delivery.kind === 'csat' ? await surveys.forDelivery(tx, delivery) : undefined;
 
     const settings = await repository.settings(tx, brandId);
     const server = brandSmtpServer(settings, keyring) ?? (await installSmtp.read())?.server;
@@ -87,6 +101,7 @@ export const createEmailSendHandler =
       facts,
       thread: await repository.threadIds(tx, delivery),
       templates: (kind) => templatesFor(settings, kind),
+      survey,
     });
 
     const transport = transports(server, {
@@ -99,18 +114,17 @@ export const createEmailSendHandler =
       transport.close();
     }
 
-    await repository.markSent(tx, delivery.id, now());
+    const sentAt = now();
+    await repository.markSent(tx, delivery.id, sentAt);
+    if (delivery.csatResponseId !== null) {
+      await surveys.markSent(tx, delivery.csatResponseId, sentAt);
+    }
     // The recipient and the Message-ID, never the body (REQUIREMENTS §5.1).
     log.info(
       { brandId, deliveryId: delivery.id, kind: delivery.kind, messageId: delivery.messageId },
       'email sent',
     );
   };
-
-/** Whether this attempt is the job's last: BullMQ counts the ones before it. */
-export const isLastAttempt = (job: Job, error: unknown): boolean =>
-  error instanceof UnrecoverableError ||
-  job.attemptsMade + 1 >= (job.opts.attempts ?? emailSendJob.options.attempts ?? 1);
 
 export const createEmailSendProcessor = ({
   db,
@@ -133,7 +147,7 @@ export const createEmailSendProcessor = ({
     } catch (error) {
       const parsed = emailSendPayloadSchema.safeParse(job.data);
       if (parsed.success) {
-        const dead = isLastAttempt(job, error);
+        const dead = isLastAttempt(emailSendJob, job, error);
         await withSystem(db, parsed.data.brandId, (tx) =>
           repository.recordFailure(tx, parsed.data.deliveryId, {
             attempts: job.attemptsMade + 1,

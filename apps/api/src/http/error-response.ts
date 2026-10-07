@@ -1,5 +1,7 @@
 import { TenantContextError } from '@helpdock/db';
 import type {
+  AiRefusal,
+  AssistRefusal,
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
@@ -9,15 +11,20 @@ import type {
   FieldError,
   HcRefusal,
   IdentityProblem,
+  KnowledgeRefusal,
   SetupRefusal,
   StaffRefusal,
+  TelegramRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
+  WebhooksRefusal,
   WidgetErrorCode,
 } from '@helpdock/schemas';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
+import { AiFailure } from '../ai/ai-failure.js';
+import { AssistFailure } from '../assist/assist-failure.js';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ChannelsFailure } from '../channels/channels-failure.js';
@@ -25,9 +32,12 @@ import { ContactFailure } from '../contacts/contact-failure.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
+import { KnowledgeFailure } from '../knowledge/knowledge-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
+import { TelegramFailure } from '../telegram/telegram-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
+import { WebhooksFailure } from '../webhooks/webhooks-failure.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
 
 /**
@@ -61,10 +71,20 @@ export interface MappedError {
   readonly channels?: ChannelsRefusal;
   /** Only on a refused custom-domain action; see `domains/domains-failure.ts`. */
   readonly domains?: DomainsRefusal;
+  /** Only on a refused Telegram bot action; see `telegram/telegram-failure.ts`. */
+  readonly telegram?: TelegramRefusal;
   /** Only on a refused widget request; see `widget/widget-failure.ts`. */
   readonly widget?: WidgetErrorCode;
   /** Only on a refused help center change; see `help-center/help-center-failure.ts`. */
   readonly helpCenter?: HcRefusal;
+  /** Only on a refused AI settings change; see `ai/ai-failure.ts`. */
+  readonly ai?: AiRefusal;
+  /** Only on a refused assist request; see `assist/assist-failure.ts`. */
+  readonly assist?: AssistRefusal;
+  /** Only on a refused knowledge source action; see `knowledge/knowledge-failure.ts`. */
+  readonly knowledge?: KnowledgeRefusal;
+  /** Only on a refused webhook endpoint; see `webhooks/webhooks-failure.ts`. */
+  readonly webhooks?: { readonly reason: WebhooksRefusal; readonly address?: string };
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -75,6 +95,8 @@ const CODE_BY_STATUS: Readonly<Record<number, ErrorCode>> = {
   [HttpStatus.FORBIDDEN]: 'forbidden',
   [HttpStatus.NOT_FOUND]: 'not_found',
   [HttpStatus.CONFLICT]: 'conflict',
+  // M8-02: an Idempotency-Key reused with a different request.
+  [HttpStatus.UNPROCESSABLE_ENTITY]: 'conflict',
   [HttpStatus.TOO_MANY_REQUESTS]: 'rate_limited',
 };
 
@@ -190,6 +212,17 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M6-05. Before the generic branch, for the reason the ones above give.
+  if (error instanceof TelegramFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      telegram: error.reason,
+      unexpected: false,
+    };
+  }
+
   // M5-07. Before the generic branch, for the reason the ones above give.
   if (error instanceof DomainsFailure) {
     return {
@@ -197,6 +230,19 @@ export const mapError = (error: unknown): MappedError => {
       code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
       message: error.message,
       domains: error.reason,
+      unexpected: false,
+    };
+  }
+
+  if (error instanceof WebhooksFailure) {
+    return {
+      status: error.getStatus(),
+      code: 'validation_failed',
+      message: error.message,
+      webhooks: {
+        reason: error.reason,
+        ...(error.address === undefined ? {} : { address: error.address }),
+      },
       unexpected: false,
     };
   }
@@ -219,6 +265,38 @@ export const mapError = (error: unknown): MappedError => {
       code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
       message: error.message,
       helpCenter: error.reason,
+      unexpected: false,
+    };
+  }
+
+  // M7. Before the generic branch, for the reason the ones above give.
+  if (error instanceof AiFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      ai: error.reason,
+      unexpected: false,
+    };
+  }
+
+  // M7-05. A provider failure is a 502 the agent can retry, not an internal error.
+  if (error instanceof AssistFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'internal_error',
+      message: error.message,
+      assist: error.reason,
+      unexpected: false,
+    };
+  }
+
+  if (error instanceof KnowledgeFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      knowledge: error.reason,
       unexpected: false,
     };
   }
@@ -272,7 +350,12 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
     ...(mapped.domains === undefined ? {} : { domains: { reason: mapped.domains } }),
+    ...(mapped.telegram === undefined ? {} : { telegram: { reason: mapped.telegram } }),
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
     ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
+    ...(mapped.ai === undefined ? {} : { ai: { reason: mapped.ai } }),
+    ...(mapped.knowledge === undefined ? {} : { knowledge: { reason: mapped.knowledge } }),
+    ...(mapped.assist === undefined ? {} : { assist: { reason: mapped.assist } }),
+    ...(mapped.webhooks === undefined ? {} : { webhooks: mapped.webhooks }),
   },
 });

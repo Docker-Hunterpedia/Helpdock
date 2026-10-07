@@ -8,6 +8,7 @@ import type {
 import type {
   ContactCreateRequest,
   ContactDetail,
+  ContactExport,
   ContactIdentityInput,
   ContactIdentityKind,
   ContactList,
@@ -38,8 +39,10 @@ import {
 } from './identity.js';
 import {
   type ContactErasureProvider,
+  type ContactExportProvider,
   type ContactTimelineProvider,
   NoContactErasureProvider,
+  NoContactExportProvider,
   type TicketStatsProvider,
 } from './providers.js';
 
@@ -59,8 +62,11 @@ import {
  */
 
 export interface ContactActor {
+  /** A staff member's user id, or an API key's id when `principalType` says so. */
   readonly userId: string;
   readonly role: 'admin' | 'team_leader' | 'agent' | 'viewer';
+  /** M8-02: the public API acts as its key. Absent means a staff member. */
+  readonly principalType?: 'staff' | 'apikey';
 }
 
 export interface ContactContext {
@@ -78,6 +84,8 @@ export interface ContactsServiceOptions {
   readonly timeline: ContactTimelineProvider;
   /** What an erasure removes from tickets. Defaults to nothing, for a brand with none. */
   readonly erasure?: ContactErasureProvider;
+  /** The tickets an export carries. Defaults to none, for a brand with none. */
+  readonly exporter?: ContactExportProvider;
 }
 
 export class ContactsService {
@@ -87,6 +95,7 @@ export class ContactsService {
   readonly #stats: TicketStatsProvider;
   readonly #timeline: ContactTimelineProvider;
   readonly #erasure: ContactErasureProvider;
+  readonly #exporter: ContactExportProvider;
 
   constructor({
     repository,
@@ -95,11 +104,13 @@ export class ContactsService {
     stats,
     timeline,
     erasure = new NoContactErasureProvider(),
+    exporter = new NoContactExportProvider(),
   }: ContactsServiceOptions) {
     this.#repository = repository;
     this.#merges = merges;
     this.#settings = settings;
     this.#erasure = erasure;
+    this.#exporter = exporter;
     this.#stats = stats;
     this.#timeline = timeline;
   }
@@ -193,6 +204,7 @@ export class ContactsService {
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
+      actorType: actor.principalType,
       action: 'contact.created',
       targetType: 'contact',
       targetId: contact.id,
@@ -200,6 +212,62 @@ export class ContactsService {
     });
 
     return this.detail(context, contact.id);
+  }
+
+  /**
+   * M8-02's upsert, for an integration that knows a person by its own id or by
+   * an address: the contact with this `externalId`, or else the first one
+   * holding one of these identifiers, is updated and given the identifiers it
+   * lacks; otherwise one is created. An identifier that belongs to somebody
+   * else is refused as on any other write, rather than silently merged.
+   */
+  async upsert(
+    context: ContactContext,
+    request: ContactCreateRequest,
+  ): Promise<{ readonly contactId: string; readonly created: boolean }> {
+    const { tx, brandId } = context;
+    const claims = await this.#normaliseAll(request.identities);
+    const matchedId = await this.#match(context, request.externalId ?? null, claims);
+    if (matchedId === undefined) {
+      return { contactId: (await this.create(context, request)).id, created: true };
+    }
+
+    const changes = {
+      name: request.name,
+      ...(request.locale === undefined ? {} : { locale: request.locale }),
+      ...(request.timezone === undefined ? {} : { timezone: request.timezone }),
+      ...(request.externalId === undefined ? {} : { externalId: request.externalId }),
+      ...(request.accountId === undefined ? {} : { accountId: request.accountId }),
+    };
+    await this.update(context, matchedId, changes);
+    const contact = await this.#require(tx, matchedId);
+    for (const claim of claims) {
+      if ((await findByIdentity(tx, brandId, claim.kind, claim.value)) === undefined) {
+        await this.#attach(context, contact, claim);
+      }
+    }
+
+    return { contactId: matchedId, created: false };
+  }
+
+  async #match(
+    { tx, brandId }: ContactContext,
+    externalId: string | null,
+    claims: readonly NormalisedClaim[],
+  ): Promise<string | undefined> {
+    if (externalId !== null) {
+      const byExternalId = await this.#repository.findByExternalId(tx, externalId);
+      if (byExternalId !== undefined) {
+        return byExternalId.id;
+      }
+    }
+    for (const claim of claims) {
+      const identity = await findByIdentity(tx, brandId, claim.kind, claim.value);
+      if (identity !== undefined) {
+        return identity.contactId;
+      }
+    }
+    return undefined;
   }
 
   async update(
@@ -241,6 +309,7 @@ export class ContactsService {
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
+      actorType: actor.principalType,
       action: 'contact.updated',
       targetType: 'contact',
       targetId: contactId,
@@ -269,6 +338,7 @@ export class ContactsService {
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
+      actorType: actor.principalType,
       action: 'contact.identity.added',
       targetType: 'contact',
       targetId: contactId,
@@ -300,6 +370,7 @@ export class ContactsService {
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
+      actorType: actor.principalType,
       action: 'contact.identity.removed',
       targetType: 'contact',
       targetId: contactId,
@@ -328,6 +399,7 @@ export class ContactsService {
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
+      actorType: actor.principalType,
       action: 'contact.note.added',
       targetType: 'contact',
       targetId: contactId,
@@ -359,6 +431,7 @@ export class ContactsService {
       await writeContactAudit(tx, {
         brandId,
         actorId: actor.userId,
+        actorType: actor.principalType,
         action: 'contact.duplicate.dismissed',
         targetType: 'contact',
         targetId: contactId,
@@ -375,6 +448,51 @@ export class ContactsService {
    * permission can give back. The audit row names the contact and counts what
    * went, and carries no value of any kind.
    */
+  /**
+   * Everything this brand holds about one contact, for the contact to have
+   * (ASVS 8.3.2). Admin only, as erasure is: it is the whole of a person's
+   * history in one document. The export itself is audited, without its
+   * contents.
+   */
+  async export(context: ContactContext, contactId: string): Promise<ContactExport> {
+    const { tx, brandId, actor } = context;
+    if (actor.role !== 'admin') {
+      throw new ContactFailure('export-forbidden');
+    }
+
+    const contact = await this.#require(tx, contactId);
+    const identities = await this.#repository.identitiesOf(tx, [contactId]);
+    const ticketsOf = await this.#exporter.ticketsOf(tx, brandId, contactId);
+
+    await writeContactAudit(tx, {
+      brandId,
+      actorId: actor.userId,
+      action: 'contact.exported',
+      targetType: 'contact',
+      targetId: contactId,
+      meta: {
+        tickets: ticketsOf.length,
+        messages: ticketsOf.reduce((total, ticket) => total + ticket.messages.length, 0),
+      },
+    });
+
+    return {
+      exportedAt: new Date().toISOString(),
+      brandId,
+      contact: {
+        id: contact.id,
+        name: contact.name,
+        timezone: contact.timezone,
+        externalId: contact.externalId,
+        custom: contact.custom,
+        createdAt: contact.createdAt.toISOString(),
+        anonymisedAt: contact.anonymisedAt?.toISOString() ?? null,
+        identities: identities.map(identityView),
+      },
+      tickets: ticketsOf,
+    };
+  }
+
   async anonymise(context: ContactContext, contactId: string): Promise<ContactDetail> {
     const { tx, brandId, actor } = context;
     if (actor.role !== 'admin') {
@@ -406,6 +524,7 @@ export class ContactsService {
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
+      actorType: actor.principalType,
       action: 'contact.anonymised',
       targetType: 'contact',
       targetId: contactId,

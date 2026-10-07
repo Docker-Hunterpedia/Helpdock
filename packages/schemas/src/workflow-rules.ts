@@ -263,6 +263,13 @@ export const ruleNotifyRecipientSchema = z.discriminatedUnion('kind', [
 ]);
 export type RuleNotifyRecipient = z.infer<typeof ruleNotifyRecipientSchema>;
 
+/** `suggest` fills the ticket's Suggested fields card; `apply` changes the ticket. */
+export const aiTriageModeSchema = z.enum(['suggest', 'apply']);
+export type AiTriageMode = z.infer<typeof aiTriageModeSchema>;
+
+export const aiTriageFieldSchema = z.enum(['tags', 'priority', 'department']);
+export type AiTriageField = z.infer<typeof aiTriageFieldSchema>;
+
 export const ruleActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('set_status'), statusId: z.uuid() }),
   z.object({ type: z.literal('set_priority'), priority: ticketPrioritySchema }),
@@ -298,6 +305,21 @@ export const ruleActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('escalate') }),
   /** Moves the ticket to the brand's Closed status, as an agent closing it would. */
   z.object({ type: z.literal('close') }),
+  /**
+   * M7-07: the assistant reads the ticket and suggests or sets the fields
+   * named, after the rule's transaction commits (the `ai.classify` job). Only
+   * existing tags and departments; the result is written back to the run's
+   * log as {@link aiTriageOutcomeSchema}.
+   */
+  z.object({
+    type: z.literal('ai_triage'),
+    mode: aiTriageModeSchema,
+    fields: z
+      .array(aiTriageFieldSchema)
+      .min(1)
+      .max(3)
+      .refine((fields) => new Set(fields).size === fields.length, 'names a field twice'),
+  }),
 ]);
 export type RuleAction = z.infer<typeof ruleActionSchema>;
 export type RuleActionInput = z.input<typeof ruleActionSchema>;
@@ -317,6 +339,7 @@ export const RULE_ACTION_TYPES = [
   'notify',
   'escalate',
   'close',
+  'ai_triage',
 ] as const satisfies readonly RuleActionType[];
 
 // ---------------------------------------------------------------------- rules
@@ -451,8 +474,25 @@ export const actionOutcomeSchema = z.object({
   effect: z.enum(['changed', 'unchanged', 'unavailable']),
   /** For `notify`, who it reached. */
   recipientIds: z.array(z.uuid()).optional(),
+  /** For `ai_triage`: `queued` when the rule ran, then what the job did. */
+  triage: z.lazy(() => aiTriageOutcomeSchema).optional(),
 });
 export type ActionOutcome = z.infer<typeof actionOutcomeSchema>;
+
+/**
+ * What an AI triage action came to (M7-07), in the run's log. `queued` until
+ * the job runs; `failed` names why (`budget-exceeded`, `not-configured`,
+ * `provider-failed`, `unreadable-answer`) and changes nothing.
+ */
+export const aiTriageOutcomeSchema = z.object({
+  status: z.enum(['queued', 'suggested', 'applied', 'nothing', 'failed']),
+  tagIds: z.array(z.uuid()).optional(),
+  priority: ticketPrioritySchema.optional(),
+  departmentId: z.uuid().optional(),
+  reason: z.string().max(60).optional(),
+  callId: z.string().optional(),
+});
+export type AiTriageOutcome = z.infer<typeof aiTriageOutcomeSchema>;
 
 export const ruleChainLinkSchema = z.object({ ruleId: z.uuid(), ruleName: z.string() });
 export type RuleChainLink = z.infer<typeof ruleChainLinkSchema>;

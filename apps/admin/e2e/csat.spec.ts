@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { MOCK_CSAT_TICKET, MOCK_CSAT_TOKENS } from '../src/csat/mock-api.js';
+import { MOCK_CSAT_HELP_CENTER, MOCK_CSAT_TICKET, MOCK_CSAT_TOKENS } from '../src/csat/mock-api.js';
 import { expect, test } from './fixtures.js';
 import { strings } from './strings.js';
 
@@ -71,6 +71,26 @@ test.describe('the rating page', () => {
     ).toBeVisible();
   });
 
+  test('opens a survey email’s link with its score pressed, recording nothing until Send (M8-06)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    let rated = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().includes('/csat/')) {
+        rated += 1;
+      }
+    });
+    await page.goto(`/csat/${MOCK_CSAT_TOKENS.open}?rating=5&lang=${locale}`);
+
+    await expect(
+      page.getByRole('button', { name: new RegExp(t('csat:ratings.5')) }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(rated).toBe(0);
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('asks for a rating before sending', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await openLink(page, MOCK_CSAT_TOKENS.open, locale);
@@ -97,6 +117,29 @@ test.describe('the rating page', () => {
       expect(await violations(page)).toEqual([]);
     });
   }
+
+  test('links to the brand’s help center after a rating and on a spent link, only when it is published', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const browse = page.getByRole('link', { name: t('csat:browseHelpCenter') });
+
+    await openLink(page, MOCK_CSAT_TOKENS.open, locale);
+    await expect(page.getByRole('button', { name: t('csat:submit') })).toBeVisible();
+    await expect(browse).toHaveCount(0);
+    await page.getByRole('button', { name: new RegExp(t('csat:ratings.5')) }).click();
+    await page.getByRole('button', { name: t('csat:submit') }).click();
+    await expect(browse).toHaveAttribute('href', MOCK_CSAT_HELP_CENTER);
+    expect(await violations(page)).toEqual([]);
+
+    await openLink(page, MOCK_CSAT_TOKENS.used, locale);
+    await expect(browse).toHaveAttribute('href', MOCK_CSAT_HELP_CENTER);
+
+    await openLink(page, MOCK_CSAT_TOKENS.expired, locale);
+    await expect(page.getByRole('alert')).toHaveText(t('csat:spent'));
+    await expect(browse).toHaveCount(0);
+  });
 
   test('draws a mistyped link as a spent one', async ({ page, appLocale: locale }) => {
     const t = strings(locale);

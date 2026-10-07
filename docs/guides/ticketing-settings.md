@@ -239,9 +239,12 @@ merges into `brands.settings` rather than replacing it.
 | Track time on tickets (`timeTrackingEnabled`) | off | The Time card, the Log time dialog and the "Log time…" menu item. While it is off, a manual entry is refused and a reply's timer is dropped. See [time tracking](tickets.md#time-tracking) |
 | Start the timer when an agent opens the composer (`timerStartsWithComposer`) | off | The timer starts when the caret enters the reply box and is logged with the reply. Disabled on the screen while time tracking is off |
 
-The aside says how the link reaches a customer: with the closing message on the
-ticket's channel, once those channels exist (M8-06). Until then the agent copies
-it from the ticket.
+The aside says how the survey reaches a customer: when the ticket closes, on the
+ticket's channel — an email with the five scores, a card in the widget
+conversation, or a Telegram message with score buttons (M8-06, see
+[satisfaction surveys](tickets.md#satisfaction-surveys)). The link is also on
+the ticket for the agent to share another way. The setting has no delay and no
+channel choice, because the artboard draws none.
 
 The artboard's "Open the rating page as a customer sees it" preview link is not
 drawn: there is no survey to open until a ticket closes, and a preview needs a
@@ -605,9 +608,11 @@ department has turned the timer off since. Otherwise it unassigns their open
 tickets there and routes each again.
 
 DOMAIN-RULES §12 says the timer never fires "during business hours closed
-periods". Departments have business hours since M3-01, but the job does not
-read them yet, so every period counts as open
-([M3 gaps](../completed/M3-automation-and-slas.md#gaps-and-follow-ups)).
+periods". When it is due while the department is closed — its own hours and
+holidays if it has them, otherwise the brand's ([SLAs](slas.md#business-hours))
+— the job puts itself off to the next opening (a new delayed job whose payload
+carries `deferredTo`), and every check above runs again then. A department
+whose calendar never opens never unassigns.
 
 ### Agents in a department
 

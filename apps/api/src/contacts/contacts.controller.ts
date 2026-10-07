@@ -1,5 +1,16 @@
-import type { ContactDetail, ContactList, ContactTimeline } from '@helpdock/schemas';
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from '@nestjs/common';
+import type { ContactDetail, ContactExport, ContactList, ContactTimeline } from '@helpdock/schemas';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Requires } from '../auth/route-declaration.js';
 import { contactContext } from './contact-context.js';
@@ -8,6 +19,7 @@ import {
   ContactCreateRequestDto,
   ContactDetailDto,
   ContactDuplicateParamDto,
+  ContactExportDto,
   ContactIdentityInputDto,
   ContactIdentityParamDto,
   ContactIdParamDto,
@@ -133,6 +145,21 @@ export class ContactsController {
     { contactId, suggestionId }: ContactDuplicateParamDto,
   ): Promise<ContactDetail> {
     return this.#contacts.dismissDuplicate(contactContext(), contactId, suggestionId);
+  }
+
+  /**
+   * The access half of erasure (ASVS 8.3.2): one JSON document with the
+   * contact, their tickets and the conversation, downloaded as a file. Admin
+   * only, decided in the service as erasure is.
+   */
+  @Get(':contactId/export')
+  @Requires('contact:read')
+  @Header('content-disposition', 'attachment; filename="contact-export.json"')
+  @ZodSerializerDto(ContactExportDto)
+  export(
+    @Param(new ZodValidationPipe(ContactIdParamDto)) { contactId }: ContactIdParamDto,
+  ): Promise<ContactExport> {
+    return this.#contacts.export(contactContext(), contactId);
   }
 
   @Post(':contactId/anonymise')

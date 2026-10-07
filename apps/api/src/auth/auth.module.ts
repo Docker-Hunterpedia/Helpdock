@@ -7,18 +7,21 @@ import type { Logger } from '../logging/logger.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { DbAuthAuditTrail } from './auth-audit.js';
 import { OutboxAuthMail } from './auth-email.js';
 import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
 import { OauthService } from './oauth/oauth.service.js';
 import { PasswordHasher } from './password.js';
 import { RateLimiter } from './rate-limit.js';
+import { sessionLifetime } from './session/lifetime.js';
 import { RefreshStore } from './session/refresh-store.js';
 import { SessionService } from './session/session.service.js';
 import type { SigningKeys } from './session/signing-keys.js';
 import { StaffRepository } from './staff.repository.js';
 import { TotpChallengeStore } from './totp/challenge-store.js';
 import { TrustedDeviceStore } from './totp/trusted-device.js';
+import { TotpStepStore } from './totp/used-steps.js';
 
 /**
  * M0-05. Everything under `/api/auth`, plus the pieces `bootstrap.ts` needs to
@@ -77,8 +80,13 @@ export const createAuthRuntime = ({
   }
 
   const staff = new StaffRepository({ db });
-  const refresh = new RefreshStore(redis);
-  const hasher = new PasswordHasher(masterKey);
+  const refresh = new RefreshStore(redis, sessionLifetime(env));
+  const previousMasterKey =
+    env.APP_MASTER_KEY_PREVIOUS === undefined
+      ? undefined
+      : decodeMasterKey(env.APP_MASTER_KEY_PREVIOUS);
+  const hasher = new PasswordHasher(masterKey, previousMasterKey);
+  const audit = new DbAuthAuditTrail({ db, logger });
 
   const sessions = new SessionService({
     staff,
@@ -88,6 +96,7 @@ export const createAuthRuntime = ({
     logger,
     appUrl: env.APP_URL,
     settings,
+    audit,
   });
 
   const auth = new AuthService({
@@ -95,6 +104,7 @@ export const createAuthRuntime = ({
     sessions,
     hasher,
     challenges: new TotpChallengeStore(redis),
+    steps: new TotpStepStore(redis),
     trustedDevices: new TrustedDeviceStore({ redis, masterKey }),
     tokens: new EmailTokenStore(redis),
     exchanges: new ExchangeStore(redis),
@@ -103,6 +113,7 @@ export const createAuthRuntime = ({
     settings,
     keyring,
     mail: new OutboxAuthMail({ db, keyring, staff }),
+    audit,
     logger,
     appUrl: env.APP_URL,
   });

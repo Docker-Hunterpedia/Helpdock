@@ -1,7 +1,7 @@
-import type { JobsOptions } from 'bullmq';
+import { type Job, type JobsOptions, UnrecoverableError } from 'bullmq';
 import { z } from 'zod';
 import { QUEUE_NAMES, type QueueName } from './queues.js';
-import { parsePayload } from './validation.js';
+import { PayloadValidationError, parsePayload } from './validation.js';
 
 /**
  * The job registry. A job is a name, the queue it runs on, a Zod schema for its
@@ -52,6 +52,40 @@ export const parseJobPayload = <TName extends string, TPayload>(
   definition: JobDefinition<TName, TPayload>,
   data: unknown,
 ): TPayload => parsePayload(`payload for job ${definition.name}`, definition.schema, data);
+
+/**
+ * {@link parseJobPayload} for a consumer: a payload that fails its schema is
+ * thrown as BullMQ's `UnrecoverableError`, so the job fails for good instead
+ * of retrying what would be wrong again.
+ */
+export const parseJobPayloadOrFail = <TName extends string, TPayload>(
+  definition: JobDefinition<TName, TPayload>,
+  data: unknown,
+): TPayload => {
+  try {
+    return parseJobPayload(definition, data);
+  } catch (error) {
+    if (error instanceof PayloadValidationError) {
+      throw new UnrecoverableError(error.message);
+    }
+    /* c8 ignore next -- parseJobPayload throws nothing else. */
+    throw error;
+  }
+};
+
+/**
+ * Whether this attempt is the job's last, so a consumer can mark a delivery
+ * dead rather than retrying. BullMQ counts the attempts before this one; an
+ * `UnrecoverableError` ends the job whatever the count. The definition's
+ * attempts stand in when the job was added without its own.
+ */
+export const isLastAttempt = (
+  definition: Pick<JobDefinition, 'options'>,
+  job: Pick<Job, 'attemptsMade' | 'opts'>,
+  error: unknown,
+): boolean =>
+  error instanceof UnrecoverableError ||
+  job.attemptsMade + 1 >= (job.opts.attempts ?? definition.options.attempts ?? 1);
 
 /**
  * The `job_receipts` key a delivery of this job claims. A definition with a
@@ -244,6 +278,12 @@ export const assignmentOfflineUnassignPayloadSchema = z.object({
   departmentId: z.uuid(),
   /** When presence noticed they went offline; the timer counts from here. */
   since: z.iso.datetime(),
+  /**
+   * Set when the timer fired while the department was closed and was put off
+   * to its next opening (DOMAIN-RULES §12). Part of the key, so the deferred
+   * run is a delivery of its own rather than a duplicate of the first.
+   */
+  deferredTo: z.iso.datetime().optional(),
 });
 
 export type AssignmentOfflineUnassignPayload = z.infer<
@@ -270,7 +310,8 @@ export const assignmentOfflineUnassignJob = defineJob({
     removeOnFail: false,
   },
   idempotencyKey: (payload) =>
-    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}`,
+    `assignment.offline_unassign:${payload.userId}:${payload.departmentId}:${payload.since}` +
+    (payload.deferredTo === undefined ? '' : `:${payload.deferredTo}`),
 });
 
 export const emailSendPayloadSchema = z.object({
@@ -572,7 +613,7 @@ export const notifyPushJob = defineJob({
     `notify.push:${payload.subscriptionId}:${payload.notificationId ?? payload.testId}`,
 });
 
-export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite'] as const;
+export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite', 'securityChange'] as const;
 
 export const authEmailPayloadSchema = z.object({
   brandId: z.uuid(),
@@ -587,15 +628,19 @@ export const authEmailPayloadSchema = z.object({
    * holds it in the clear.
    */
   urlEncrypted: z.string().min(1),
-  /** How long the link lasts, in the unit the kind's catalog key counts in. */
-  expiresIn: z.int().positive(),
+  /**
+   * How long the link lasts, in the unit the kind's catalog key counts in.
+   * Absent for a `securityChange`, whose link is to a page and does not expire.
+   */
+  expiresIn: z.int().positive().optional(),
   /** Extra interpolation the invite's sentences need: inviter, brand and role. */
   values: z.record(z.string(), z.string()).optional(),
 });
 export type AuthEmailPayload = z.infer<typeof authEmailPayloadSchema>;
 
 /**
- * A sign-in link, a password reset or a staff invitation, sent from the
+ * A sign-in link, a password reset, a staff invitation or a notice that a
+ * credential changed, sent from the
  * install's system sender in the recipient's language. Added by the
  * `auth.email_requested` outbox handler with a job id derived from the outbox
  * row, so a redelivered event adds nothing, and keyed by that row, so one
@@ -805,6 +850,425 @@ export const helpCenterMediaProcessJob = defineJob({
   idempotencyKey: (payload) => `help_center.media_process:${payload.mediaId}`,
 });
 
+/**
+ * M7-02: brings the install's embedding space in line with the `embedding.*`
+ * settings (DOMAIN-RULES §8, ADR 0005). Every minute it compares the settings
+ * with the `embedding_space` row; a new model or dimension drops the vector
+ * index, resizes `knowledge_chunks.embedding`, sets `reindexing` and adds
+ * {@link knowledgeReembedJob}. A settled space costs one read. A tick rather
+ * than an outbox event because the settings may change in the environment as
+ * well as in admin, and because the space is install-wide while every outbox
+ * row belongs to a brand.
+ */
+export const knowledgeConfigureJob = defineJob({
+  name: 'knowledge.configure',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: 100 },
+  schedule: { everyMs: 60_000 },
+});
+
+/**
+ * M7-02: embeds every chunk of every brand that is not yet in the target
+ * model, brand by brand and batch by batch, then builds the HNSW index and
+ * flips the space to `ready`. Added by {@link knowledgeConfigureJob} under the
+ * fixed id {@link KNOWLEDGE_REEMBED_JOB_ID}, so it runs once at a time; a run
+ * that fails leaves the space `reindexing` and the next tick resumes it from
+ * the chunks still left.
+ */
+export const knowledgeReembedJob = defineJob({
+  name: 'knowledge.reembed',
+  queue: QUEUE_NAMES.knowledge,
+  schema: z.object({}),
+  // Removed on failure too: a failed job kept under the fixed id would make
+  // every later `add` a no-op, and the tick could never resume. The failure
+  // stays visible as `embedding_space.last_error`.
+  options: { attempts: 1, removeOnComplete: true, removeOnFail: true },
+});
+
+export const KNOWLEDGE_REEMBED_JOB_ID = 'knowledge.reembed';
+
+export const knowledgeSyncPayloadSchema = z.object({
+  brandId: z.uuid(),
+  sourceId: z.uuid(),
+  /** What started it, for the first line of the sync log. */
+  trigger: z.enum(['upload', 'manual', 'schedule', 'created', 'changed']),
+  /** The staff member who pressed "Sync now" or saved the source. */
+  actorId: z.string().max(100).optional(),
+});
+export type KnowledgeSyncPayload = z.infer<typeof knowledgeSyncPayloadSchema>;
+
+/**
+ * M7-03: reads one source — an uploaded file, a website crawl, Notion pages,
+ * Drive folders — into documents and chunks, removes what the source no
+ * longer has, and embeds the new chunks. Added by the `knowledge.sync_requested`
+ * outbox handler (upload confirmed, "Sync now", source created or changed)
+ * with the outbox row's id, and by the source's own job scheduler for daily
+ * and weekly sources. Not one transaction: a crawl takes minutes, so each
+ * document is written in a short transaction of its own, and a second run
+ * that finds the source already syncing leaves it alone. Idempotent by
+ * content: a document whose hash is unchanged is skipped.
+ */
+export const knowledgeSyncJob = defineJob({
+  name: 'knowledge.sync',
+  queue: QUEUE_NAMES.knowledge,
+  schema: knowledgeSyncPayloadSchema,
+  options: {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The job scheduler that repeats a daily or weekly source's sync. */
+export const knowledgeSyncSchedulerId = (sourceId: string): string =>
+  `knowledge.sync.schedule.${sourceId}`;
+
+export const knowledgeEmbedPayloadSchema = z.object({ brandId: z.uuid() });
+export type KnowledgeEmbedPayload = z.infer<typeof knowledgeEmbedPayloadSchema>;
+
+/**
+ * M7-03: embeds every chunk of one brand that has no vector in the target
+ * model yet — the chunks an article publish just wrote, most often. Added by
+ * the article subscriber after it rewrites an article's chunks, with an id
+ * derived from the outbox row; a second run finds nothing left to embed. A
+ * failure (no embedding model, a provider down) leaves the chunks for the
+ * next run or for `knowledge.reembed`; full-text retrieval finds them meanwhile.
+ */
+export const knowledgeEmbedJob = defineJob({
+  name: 'knowledge.embed',
+  queue: QUEUE_NAMES.knowledge,
+  schema: knowledgeEmbedPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 3_600, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+export const webhookDeliverPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `webhook_deliveries` row: its frozen body, its endpoint, and its log. */
+  deliveryId: z.uuid(),
+});
+
+export type WebhookDeliverPayload = z.infer<typeof webhookDeliverPayloadSchema>;
+
+/** Attempts before a delivery is marked `failed` (M8-03). */
+export const WEBHOOK_DELIVER_ATTEMPTS = 8;
+
+/**
+ * M8-03: one event to one endpoint (ARCHITECTURE §13, `webhooks` queue). The
+ * delivery row is written by the `webhooks` subscriber of the domain event,
+ * beside a `webhook.delivery_requested` outbox row whose handler adds this job
+ * once the row has committed, as `email.send` does.
+ *
+ * Eight attempts, doubling from 30 seconds: the last one is 32 minutes after
+ * the one before it and about an hour after the first, so a receiver that is
+ * down for a deploy or a short outage still gets the event. Idempotent by
+ * delivery: a delivery that already succeeded is not sent again.
+ */
+export const webhookDeliverJob = defineJob({
+  name: 'webhook.deliver',
+  queue: QUEUE_NAMES.webhooks,
+  schema: webhookDeliverPayloadSchema,
+  options: {
+    attempts: WEBHOOK_DELIVER_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `webhook.deliver:${payload.deliveryId}`,
+});
+
+/**
+ * What a bot sends that is not an agent's reply: M6-04's welcome and language
+ * confirmation, and M8-06's survey on close, the thanks after a tap and "This
+ * survey has closed." for a tap that came too late.
+ */
+export const telegramNoticeKindSchema = z.enum([
+  'welcome',
+  'language_set',
+  'csat_survey',
+  'csat_rated',
+  'csat_closed',
+]);
+export type TelegramNoticeKind = z.infer<typeof telegramNoticeKindSchema>;
+
+/** M8-06: the survey a `csat_*` notice is about, and the tap it answers. */
+export const telegramCsatNoticeSchema = z.object({
+  surveyId: z.uuid(),
+  /** The score a `csat_rated` thanks the contact for. */
+  rating: z.int().min(1).max(5).optional(),
+  /** The survey message whose buttons a tap's answer replaces. */
+  messageId: z.string().min(1).max(32).optional(),
+});
+export type TelegramCsatNotice = z.infer<typeof telegramCsatNoticeSchema>;
+
+export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('reply'),
+    brandId: z.uuid(),
+    /** The `telegram_deliveries` row: the whole job is about it, and it is the natural key. */
+    deliveryId: z.uuid(),
+  }),
+  z.object({
+    kind: z.literal('notice'),
+    brandId: z.uuid(),
+    /** The outbox row that asked for it, which is what a redelivery repeats. */
+    sourceOutboxId: z.uuid(),
+    botId: z.uuid(),
+    chatId: z.string().min(1).max(32),
+    notice: telegramNoticeKindSchema,
+    locale: z.enum(['en', 'ar']),
+    /** The button press a `language_set` or `csat_*` notice answers, so the spinner on it stops. */
+    callbackQueryId: z.string().min(1).max(128).optional(),
+    csat: telegramCsatNoticeSchema.optional(),
+  }),
+]);
+
+export type TelegramSendPayload = z.infer<typeof telegramSendPayloadSchema>;
+
+/** Attempts before a reply to a chat is `failed` (M6-02). */
+export const TELEGRAM_SEND_JOB_ATTEMPTS = 5;
+
+/**
+ * M6-02 and M6-04's outbound Telegram (ARCHITECTURE §13, `outbound` queue): an
+ * agent's reply to a chat, or the `/start` welcome and the language
+ * confirmation. Asked for through the outbox — `telegram.reply` beside the
+ * `telegram_deliveries` row, `telegram.notice` beside the inbound update that
+ * called for it — and added by those events' handlers with the outbox row's id.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "Telegram send keyed by
+ * `ticket_message_id`"): a reply is keyed by its delivery, which is one per
+ * ticket message; a notice by the outbox row that asked for it.
+ */
+export const telegramSendJob = defineJob({
+  name: 'telegram.send',
+  queue: QUEUE_NAMES.outbound,
+  schema: telegramSendPayloadSchema,
+  options: {
+    attempts: TELEGRAM_SEND_JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) =>
+    payload.kind === 'reply'
+      ? `telegram.send:${payload.deliveryId}`
+      : `telegram.notice:${payload.sourceOutboxId}`,
+});
+
+export const telegramPollPayloadSchema = z.object({
+  brandId: z.uuid(),
+  botId: z.uuid(),
+});
+
+export type TelegramPollPayload = z.infer<typeof telegramPollPayloadSchema>;
+
+/** How often a bot is polled in development. */
+export const TELEGRAM_POLL_INTERVAL_MS = 3_000;
+
+/**
+ * M6-01's long polling, for development only (`TELEGRAM_POLLING=true`): one
+ * `getUpdates` per bot every {@link TELEGRAM_POLL_INTERVAL_MS}, from the
+ * offset on the bot's row. One BullMQ job scheduler per bot, id
+ * {@link telegramPollSchedulerId}, upserted on boot and when `telegram_bot.changed`
+ * says a bot came or went, as `email.poll` is for mailboxes.
+ *
+ * One attempt and no receipt for the reason `email.poll` has none: the next
+ * tick is the retry, and every message dedupes by its own id.
+ */
+export const telegramPollJob = defineJob({
+  name: 'telegram.poll',
+  queue: QUEUE_NAMES.inbound,
+  schema: telegramPollPayloadSchema,
+  options: {
+    attempts: 1,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { age: 7 * 86_400, count: 1_000 },
+  },
+});
+
+/** The scheduler id of one bot's poller. */
+export const telegramPollSchedulerId = (botId: string): string => `telegram.poll.${botId}`;
+
+export const statsRollupPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The hour of the tick that added it, as an ISO instant; the job id is built from it. */
+  tick: z.iso.datetime(),
+});
+export type StatsRollupPayload = z.infer<typeof statsRollupPayloadSchema>;
+
+/**
+ * M8-04: rebuilds **one** brand's report rollups for the trailing days, and
+ * backfills a brand that has none. Added hourly per active brand by
+ * {@link statsRollupScheduleJob} (ARCHITECTURE §13, `maintenance` queue). No
+ * receipt: a run deletes the days it covers and writes them again, so a
+ * repeat leaves the same rows behind.
+ */
+export const statsRollupJob = defineJob({
+  name: 'stats.rollup',
+  queue: QUEUE_NAMES.maintenance,
+  schema: statsRollupPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The BullMQ job id of one brand's rollup for one tick. Dots, for the reason {@link retentionJobId} gives. */
+export const statsRollupJobId = ({ brandId, tick }: StatsRollupPayload): string =>
+  `stats.rollup.${brandId}.${Date.parse(tick)}`;
+
+/** Seven minutes past every hour, off the top of the hour the other crons use. */
+export const STATS_ROLLUP_CRON = '7 * * * *';
+
+/** The hourly tick that fans {@link statsRollupJob} out per active brand. */
+export const statsRollupScheduleJob = defineJob({
+  name: 'stats.rollup.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: STATS_ROLLUP_CRON },
+});
+
+export const brandPurgePayloadSchema = z.object({ brandId: z.uuid() });
+export type BrandPurgePayload = z.infer<typeof brandPurgePayloadSchema>;
+
+/**
+ * M8-07: the hard purge of a brand whose 30-day grace is over (DOMAIN-RULES
+ * §11) — every tenant row, the brand's object prefix and its Redis keys. Added
+ * by {@link brandPurgeScheduleJob} for each brand that is due, keyed by the
+ * brand, so it runs once however often the tick sees it. Every step deletes
+ * "what is left", so a retry after a crash finishes the job rather than
+ * repeating it.
+ */
+export const brandPurgeJob = defineJob({
+  name: 'brand.purge',
+  queue: QUEUE_NAMES.maintenance,
+  schema: brandPurgePayloadSchema,
+  options: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 300_000 },
+    removeOnComplete: { age: 30 * 86_400, count: 1_000 },
+    removeOnFail: false,
+  },
+});
+
+/** One purge per brand: a brand is purged once. */
+export const brandPurgeJobId = ({ brandId }: BrandPurgePayload): string => `brand.purge.${brandId}`;
+
+/** 04:00 UTC every night, an hour after retention, so the two never compete for the disk. */
+export const BRAND_PURGE_CRON = '0 4 * * *';
+
+/** The nightly tick that adds {@link brandPurgeJob} for each brand whose grace is over. */
+export const brandPurgeScheduleJob = defineJob({
+  name: 'brand.purge.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: BRAND_PURGE_CRON },
+});
+
+export const aiClassifyPayloadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  ruleId: z.uuid(),
+  /** The `workflow_runs` row whose log the result is written back to. */
+  runId: z.uuid(),
+  /** Which of the rule's actions it is, for the log. */
+  actionIndex: z.int().nonnegative().max(100),
+  mode: z.enum(['suggest', 'apply']),
+  fields: z
+    .array(z.enum(['tags', 'priority', 'department']))
+    .min(1)
+    .max(3),
+  /** The rule chain the run belongs to, carried on to the changes an `apply` makes. */
+  chain: z.array(z.uuid()).max(10),
+});
+export type AiClassifyPayload = z.infer<typeof aiClassifyPayloadSchema>;
+
+/**
+ * M7-07: a rule's AI triage action. Added by the `ai.triage_requested`
+ * outbox handler with the outbox row's id. Calls the model outside any
+ * transaction, then suggests or applies in one system transaction for the
+ * brand; idempotent by run and action, so a retry after the write does
+ * nothing. A refusal (no model, budget spent) is logged on the run and not
+ * retried.
+ */
+export const aiClassifyJob = defineJob({
+  name: 'ai.classify',
+  queue: QUEUE_NAMES.ai,
+  schema: aiClassifyPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: (payload) => `ai.classify:${payload.runId}:${String(payload.actionIndex)}`,
+});
+
+export const aiTranscribePayloadSchema = z.object({
+  brandId: z.uuid(),
+  attachmentId: z.uuid(),
+});
+export type AiTranscribePayload = z.infer<typeof aiTranscribePayloadSchema>;
+
+/**
+ * M7-09: a ready voice note sent to the install's Whisper-compatible
+ * endpoint; the transcript and the language it heard are stored on the
+ * attachment, for staff only. Added once per attachment (job id = the
+ * attachment's), and a done or failed transcript is not asked for again.
+ */
+export const aiTranscribeJob = defineJob({
+  name: 'ai.transcribe',
+  queue: QUEUE_NAMES.ai,
+  schema: aiTranscribePayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+export const aiAutoReplyPayloadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  /** The customer message to answer. A newer one makes this job stand down. */
+  messageId: z.uuid(),
+});
+export type AiAutoReplyPayload = z.infer<typeof aiAutoReplyPayloadSchema>;
+
+/**
+ * M7-06: answers one customer message, or hands the conversation to the team
+ * (DOMAIN-RULES §9). Added by the `ai` subscriber of `ticket.created` and
+ * `ticket.replied` under {@link aiAutoReplyJobId}, so the two events a widget
+ * start writes for one message add one job. Two attempts: a provider that
+ * failed twice leaves the message to a person rather than answering late.
+ * Every attempt re-reads the pause right before it sends.
+ */
+export const aiAutoReplyJob = defineJob({
+  name: 'ai.auto_reply',
+  queue: QUEUE_NAMES.ai,
+  schema: aiAutoReplyPayloadSchema,
+  options: {
+    attempts: 2,
+    backoff: { type: 'fixed', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: ({ messageId }) => `ai.auto_reply:${messageId}`,
+});
+
+/** BullMQ refuses a custom job id with a colon. One job per customer message. */
+export const aiAutoReplyJobId = (messageId: string): string => `ai.auto_reply.${messageId}`;
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -830,6 +1294,19 @@ export const JOB_DEFINITIONS = Object.freeze({
   [helpCenterMediaProcessJob.name]: helpCenterMediaProcessJob,
   [helpCenterSearchReindexJob.name]: helpCenterSearchReindexJob,
   [helpCenterSearchReindexSweepJob.name]: helpCenterSearchReindexSweepJob,
+  [knowledgeConfigureJob.name]: knowledgeConfigureJob,
+  [knowledgeReembedJob.name]: knowledgeReembedJob,
+  [webhookDeliverJob.name]: webhookDeliverJob,
+  [telegramSendJob.name]: telegramSendJob,
+  [telegramPollJob.name]: telegramPollJob,
+  [statsRollupJob.name]: statsRollupJob,
+  [statsRollupScheduleJob.name]: statsRollupScheduleJob,
+  [brandPurgeJob.name]: brandPurgeJob,
+  [brandPurgeScheduleJob.name]: brandPurgeScheduleJob,
+  [aiClassifyJob.name]: aiClassifyJob,
+  [aiTranscribeJob.name]: aiTranscribeJob,
+
+  [aiAutoReplyJob.name]: aiAutoReplyJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

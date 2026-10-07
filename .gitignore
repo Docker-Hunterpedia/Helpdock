@@ -10,6 +10,8 @@ build/
 coverage/
 .turbo/
 *.log
+# The AI evaluation's reports (`pnpm eval:ai`); CI attaches them as an artifact
+eval-report/
 
 # Environment — .env.example is the documented template and stays tracked
 .env

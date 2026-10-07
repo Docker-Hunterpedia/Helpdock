@@ -2,6 +2,7 @@ import { semantic } from '@helpdock/ui/tokens.json';
 import type { MockOptions } from './mock.js';
 import type {
   AgentSummary,
+  AiPart,
   ArticleDetail,
   Availability,
   ContentPolicy,
@@ -15,6 +16,61 @@ import type {
  * in both languages. Used by the unit tests and the Playwright harness only;
  * none of it reaches `widget.js`.
  */
+/** M7-06: `Widget/AI-EN` and `-AR` board 1, the assistant's answer and its two sources. */
+export const SAMPLE_AI_ANSWER: Record<
+  WidgetLocale,
+  { readonly body: string; readonly ai: AiPart }
+> = {
+  en: {
+    body: 'Card refunds show up 3 to 5 business days after we issue them [1]. We email you the moment the refund is issued [2].',
+    ai: {
+      kind: 'answer',
+      citations: [
+        {
+          marker: 1,
+          title: 'Refund timelines',
+          url: 'https://help.example.com/en/articles/refund-timelines',
+          article_id: 'refund-timelines',
+        },
+        {
+          marker: 2,
+          title: 'Returns and refunds policy',
+          url: 'https://help.example.com/en/articles/start-return',
+          article_id: 'start-return',
+        },
+      ],
+      feedback: null,
+    },
+  },
+  ar: {
+    body: 'يظهر المبلغ المسترد على البطاقة بعد 3 إلى 5 أيام عمل من إصداره [1]. ونرسل لك بريداً فور إصدار الاسترداد [2].',
+    ai: {
+      kind: 'answer',
+      citations: [
+        {
+          marker: 1,
+          title: 'مدة استرداد المبالغ',
+          url: 'https://help.example.com/ar/articles/refund-timelines',
+          article_id: 'refund-timelines',
+        },
+        {
+          marker: 2,
+          title: 'سياسة الإرجاع والاسترداد',
+          url: 'https://help.example.com/ar/articles/start-return',
+          article_id: 'start-return',
+        },
+      ],
+      feedback: null,
+    },
+  },
+};
+
+/** Board 3: the brand's handoff text, in the same bubble. */
+export const SAMPLE_AI_HANDOFF: Record<WidgetLocale, string> = {
+  en: "I'm not sure about this one, so I'm passing you to the team rather than guess. Someone will reply here shortly.",
+  ar: 'لست متأكداً من الإجابة، لذلك سأحوّلك إلى الفريق بدلاً من التخمين. سيرد عليك أحدهم هنا قريباً.',
+};
+
 export const LINA: AgentSummary = { id: 'agent-lina', name: 'Lina Haddad', avatar_url: null };
 const KARIM: AgentSummary = { id: 'agent-karim', name: 'Karim Nasser', avatar_url: null };
 const SARA: AgentSummary = { id: 'agent-sara', name: 'Sara Ali', avatar_url: null };

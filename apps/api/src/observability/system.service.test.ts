@@ -1,11 +1,13 @@
 import type { Db, DbTransaction } from '@helpdock/db';
 import { RELAY_STATUS_KEY } from '@helpdock/jobs';
-import { systemQueuePageSchema, systemStatusSchema } from '@helpdock/schemas';
+import { type ChannelStatus, systemQueuePageSchema, systemStatusSchema } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
+import { NoAiUsage } from '../reports/ai-usage.js';
 import type { ReadinessService } from '../runtime/readiness.service.js';
 import type { BootFacts } from './boot-facts.js';
 import type { QueueRegistry } from './queues.js';
+import type { StorageUsageRecord, StorageUsageStore } from './storage-usage.js';
 import { SystemService } from './system.service.js';
 
 /**
@@ -18,6 +20,7 @@ import { SystemService } from './system.service.js';
 const BOOT_FACTS: BootFacts = {
   runtimeRole: { roleName: 'helpdock_app', superuser: false, bypassRls: false, ownedTables: 0 },
   migrationsApplied: 4,
+  migrations: ['0003_outbox_notify_relay', '0002_tenant_rls_policies'],
 };
 
 const AUDIT_ROW = {
@@ -38,8 +41,17 @@ const fakeTx = (rows: readonly (typeof AUDIT_ROW)[]): DbTransaction =>
     }),
   }) as unknown as DbTransaction;
 
+const BRAND_ID = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+
+/** `execute` for the server facts; `select … from` for the brand names storage is shown with. */
 const fakeDb = (rows: Record<string, unknown>[]): Db =>
-  ({ execute: async () => rows }) as unknown as Db;
+  ({
+    execute: async () => rows,
+    select: () => ({ from: async () => [{ id: BRAND_ID, name: 'Acme' }] }),
+  }) as unknown as Db;
+
+const fakeStorage = (readings: readonly StorageUsageRecord[]): StorageUsageStore =>
+  ({ all: async () => readings }) as unknown as StorageUsageStore;
 
 const fakeRedis = (relay: string | null) =>
   ({
@@ -73,12 +85,25 @@ const fakeQueues = (names: readonly string[]): QueueRegistry =>
 
 const QUEUE_NAMES = ['inbound', 'outbound', 'sla', 'rules', 'ai', 'knowledge', 'media'];
 
+const CHANNEL: ChannelStatus = {
+  id: '01924f00-0000-7000-8000-0000000000c1',
+  name: '@acme_support_bot',
+  kind: 'telegram',
+  status: 'ok',
+  detail: 'healthy',
+  checkedAt: '2026-09-19T10:00:00.000Z',
+};
+
 const serviceWith = ({
   relay = null,
-  rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2 }],
+  channels = async () => [CHANNEL],
+  rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2, bytes: '3200' }],
+  readings = [],
 }: {
   relay?: string | null;
+  channels?: () => Promise<readonly ChannelStatus[]>;
   rows?: Record<string, unknown>[];
+  readings?: readonly StorageUsageRecord[];
 } = {}) =>
   new SystemService(
     fakeDb(rows),
@@ -86,6 +111,9 @@ const serviceWith = ({
     fakeReadiness(),
     fakeQueues(QUEUE_NAMES),
     BOOT_FACTS,
+    channels,
+    fakeStorage(readings),
+    new NoAiUsage(),
   );
 
 const inRequest = <T>(run: () => Promise<T>): Promise<T> => {
@@ -112,6 +140,11 @@ describe('SystemService.status', () => {
     expect(status.build.nodeVersion).toBe(process.version);
     expect(status.database.version).toBe('17.6');
     expect(status.database.migrationsApplied).toBe(4);
+    expect(status.database.migrations).toEqual([
+      '0003_outbox_notify_relay',
+      '0002_tenant_rls_policies',
+    ]);
+    expect(status.database.sizeBytes).toBe(3200);
     expect(status.database.runtimeRole).toEqual({
       name: 'helpdock_app',
       superuser: false,
@@ -155,7 +188,36 @@ describe('SystemService.status', () => {
 
     expect(status.storage).toEqual({ configured: false });
     expect(status.aiSpend).toEqual({ configured: false });
-    expect(status.channels).toEqual([]);
+  });
+
+  it('lists every channel the reader found (M2, M6)', async () => {
+    const status = await inRequest(() => serviceWith().status());
+
+    expect(status.channels).toEqual([CHANNEL]);
+  });
+
+  it("reports storage from the worker's readings, per brand, once there are any", async () => {
+    const readings = [
+      { brandId: BRAND_ID, bytes: 2048, objects: 3, measuredAt: '2026-10-05T07:07:00.000Z' },
+    ];
+
+    const status = await inRequest(() => serviceWith({ readings }).status());
+
+    expect(systemStatusSchema.safeParse(status).success).toBe(true);
+    expect(status.storage).toEqual({
+      configured: true,
+      usedBytes: 2048,
+      softLimitBytes: null,
+      brands: [
+        {
+          brandId: BRAND_ID,
+          name: 'Acme',
+          usedBytes: 2048,
+          objects: 3,
+          measuredAt: '2026-10-05T07:07:00.000Z',
+        },
+      ],
+    });
   });
 
   it('carries the install-scope audit rows as ISO timestamps', async () => {
@@ -179,14 +241,25 @@ describe('SystemService.status', () => {
         },
       } as unknown as QueueRegistry,
       BOOT_FACTS,
+      async () => {
+        throw new Error('no connection');
+      },
+      {
+        all: async () => {
+          throw new Error('redis went away');
+        },
+      } as unknown as StorageUsageStore,
+      new NoAiUsage(),
     );
 
     const status = await inRequest(() => service.status());
 
     expect(systemStatusSchema.safeParse(status).success).toBe(true);
     expect(status.database.version).toBeNull();
+    expect(status.database.sizeBytes).toBeNull();
     expect(status.database.migrationsApplied).toBe(4);
     expect(status.queues).toEqual({ queues: [], total: 0, deadLettered: 0 });
+    expect(status.storage).toEqual({ configured: false });
   });
 });
 

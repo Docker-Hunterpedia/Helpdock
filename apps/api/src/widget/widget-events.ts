@@ -76,7 +76,12 @@ export const createWidgetConversationHandler =
     await broadcast.emit({
       room,
       event: WIDGET_EVENTS.conversation,
-      data: { conversationId: view.id, state: view.state, continuedById: view.continuedById },
+      data: {
+        conversationId: view.id,
+        state: view.state,
+        continuedById: view.continuedById,
+        aiHandedOff: view.aiHandedOff,
+      },
       seq: null,
     });
     await broadcast.emit({

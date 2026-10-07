@@ -8,6 +8,8 @@ import type {
   RenderedMacro,
   Ticket,
   TicketActivityList,
+  TicketAiCalls,
+  TicketAiState,
   TicketCcRequest,
   TicketCreateRequest,
   TicketDetail,
@@ -35,6 +37,8 @@ import {
   macroRunResponseSchema,
   renderedMacroSchema,
   ticketActivityListSchema,
+  ticketAiCallsSchema,
+  ticketAiStateSchema,
   ticketDetailSchema,
   ticketListSchema,
   ticketMergeResultSchema,
@@ -243,6 +247,18 @@ export class HttpTicketsApi implements TicketsApi {
   async unmerge(brandId: string, ticketId: string): Promise<TicketMergeResult> {
     return ticketMergeResultSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/unmerge`),
+    );
+  }
+
+  async aiCalls(brandId: string, ticketId: string): Promise<TicketAiCalls> {
+    return ticketAiCallsSchema.parse(
+      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/ai-calls`),
+    );
+  }
+
+  async resumeAssistant(brandId: string, ticketId: string): Promise<TicketAiState> {
+    return ticketAiStateSchema.parse(
+      await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/ai/resume`),
     );
   }
 

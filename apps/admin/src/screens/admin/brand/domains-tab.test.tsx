@@ -10,8 +10,6 @@ import { signedInMockApis } from '../../../test/signed-in.js';
  * That the routes behave is `domains.integration.test.ts` in the api.
  */
 
-const SLOW = { timeout: 10_000 };
-
 const renderDomains = async () => {
   const { auth, staff, ticketing, domains } = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
@@ -21,8 +19,8 @@ const renderDomains = async () => {
     domainsApi: domains,
     initialEntries: ['/admin/brand/domains'],
   });
-  await screen.findByRole('heading', { name: 'Help center domains' }, SLOW);
-  await screen.findByText('help.helpdock.com', {}, SLOW);
+  await screen.findByRole('heading', { name: 'Help center domains' });
+  await screen.findByText('help.helpdock.com');
   return rendered;
 };
 
@@ -189,6 +187,6 @@ describe('Brand › Domains', () => {
       initialEntries: ['/admin/brand/domains'],
     });
 
-    expect(await screen.findByText('The domains could not be loaded.', {}, SLOW)).toBeVisible();
+    expect(await screen.findByText('The domains could not be loaded.')).toBeVisible();
   });
 });

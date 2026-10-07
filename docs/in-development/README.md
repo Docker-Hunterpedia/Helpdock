@@ -1,12 +1,16 @@
 # In development
 
-No milestone is in development.
+In development since 2026-10-05:
+
+- [M6 Telegram](M6-telegram.md)
+- [M7 AI](M7-ai.md)
+- [M8 API, webhooks, reports](M8-api-webhooks-reports.md)
+- [M9 Hardening and 1.0](M9-hardening-and-1-0.md)
 
 M0 Skeleton shipped on 2026-09-19, M1 Ticketing core on 2026-09-25, and M2
 Email channel, M3 Automation and SLAs, M4 Widget and realtime and M5 Help
 center on 2026-09-27; their documents are in
-[`../completed/`](../completed/README.md). M6 Telegram and M8 API, webhooks,
-reports may start ([PRD status board](../planning/PRD.md#status-board)).
+[`../completed/`](../completed/README.md).
 
 When a milestone starts, add a file here named `M<n>-<slug>.md` using this template:
 

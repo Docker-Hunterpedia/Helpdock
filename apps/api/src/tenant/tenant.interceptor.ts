@@ -6,11 +6,13 @@ import {
   Injectable,
   type NestInterceptor,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import type { Principal } from '../auth/principal.js';
 import { currentRequestContext, type RequestContext } from '../context/request-context.js';
 import { DB } from '../runtime/tokens.js';
 import { auditInstallScopeAccess } from './install-scope.js';
+import { STEP_TRANSACTIONS } from './step-transactions.js';
 import { tenantScopeFor } from './tenant-scope.js';
 
 /** What the interceptor reads of the Fastify request; a test double supplies less. */
@@ -34,9 +36,11 @@ const headerValue = (value: string | string[] | undefined): string | null =>
 @Injectable()
 export class TenantInterceptor implements NestInterceptor {
   readonly #db: Db;
+  readonly #reflector: Reflector;
 
-  constructor(@Inject(DB) db: Db) {
+  constructor(@Inject(DB) db: Db, @Inject(Reflector) reflector: Reflector) {
     this.#db = db;
+    this.#reflector = reflector;
   }
 
   intercept(executionContext: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -73,6 +77,19 @@ export class TenantInterceptor implements NestInterceptor {
         userAgent: headerValue(request.headers?.['user-agent']),
       },
     };
+
+    // A route that calls a model opens its own short transactions with this
+    // same context (`step-transactions.ts`); nothing is held open meanwhile.
+    if (
+      this.#reflector.getAllAndOverride<boolean | undefined>(STEP_TRANSACTIONS, [
+        executionContext.getHandler(),
+        executionContext.getClass(),
+      ]) === true &&
+      context.scopeKind === 'brand'
+    ) {
+      context.tenant = tenantContext;
+      return next.handle();
+    }
 
     return from(
       this.#runInTransaction({

@@ -3,7 +3,12 @@ import { uuidv7 } from '@helpdock/db';
 import type { AuthSessionResponse, Session } from '@helpdock/schemas';
 import type { Redis } from 'ioredis';
 import type { Logger } from '../../logging/logger.js';
-import { brandPreferenceKey, PRINCIPAL_REVOKED_CHANNEL } from '../redis-keys.js';
+import type { AuthAuditTrail } from '../auth-audit.js';
+import {
+  brandPreferenceKey,
+  PRINCIPAL_REVOKED_CHANNEL,
+  type PrincipalRevokedMessage,
+} from '../redis-keys.js';
 import { buildSession, toClaimBrands } from '../session-view.js';
 import type { Queryable, StaffMembership, StaffRepository } from '../staff.repository.js';
 import { ACCESS_TOKEN_TTL_SECONDS, issueAccessToken } from './access-token.js';
@@ -36,6 +41,7 @@ export class SessionService {
   readonly #logger: Logger;
   readonly #appUrl: string;
   readonly #settings: Settings;
+  readonly #audit: AuthAuditTrail | undefined;
 
   constructor({
     staff,
@@ -45,6 +51,7 @@ export class SessionService {
     logger,
     appUrl,
     settings,
+    audit,
   }: {
     readonly staff: StaffRepository;
     readonly refresh: RefreshStore;
@@ -53,6 +60,8 @@ export class SessionService {
     readonly logger: Logger;
     readonly appUrl: string;
     readonly settings: Settings;
+    /** Where a reused refresh token is recorded. `createAuthRuntime` always passes one. */
+    readonly audit?: AuthAuditTrail;
   }) {
     this.#staff = staff;
     this.#refresh = refresh;
@@ -61,6 +70,7 @@ export class SessionService {
     this.#logger = logger;
     this.#appUrl = appUrl;
     this.#settings = settings;
+    this.#audit = audit;
   }
 
   /**
@@ -129,12 +139,27 @@ export class SessionService {
       return { status: 'rejected' };
     }
 
+    if (outcome.status === 'expired') {
+      this.#logger.info(
+        { userId: outcome.userId, familyId },
+        'A session family reached its absolute lifetime; the browser signs in again',
+      );
+      await this.#announceRevocation(outcome.userId, 'session-expired', [familyId]);
+      return { status: 'rejected' };
+    }
+
     if (outcome.status === 'reused') {
       this.#logger.warn(
         { userId: outcome.userId, familyId },
         'A rotated refresh token was presented again; the session family was revoked',
       );
-      await this.#announceRevocation(outcome.userId, 'refresh-token-reuse');
+      await this.#announceRevocation(outcome.userId, 'refresh-token-reuse', [familyId]);
+      await this.#audit?.record({
+        action: 'auth.refresh_token.reused',
+        userId: outcome.userId,
+        actor: 'system',
+        meta: { familyId },
+      });
       return { status: 'reused' };
     }
 
@@ -185,7 +210,7 @@ export class SessionService {
   async revokeFamily(familyId: string, reason: string): Promise<void> {
     const userId = await this.#refresh.revokeFamily(familyId);
     if (userId !== null) {
-      await this.#announceRevocation(userId, reason);
+      await this.#announceRevocation(userId, reason, [familyId]);
     }
   }
 
@@ -209,19 +234,21 @@ export class SessionService {
     reason: string,
   ): Promise<number> {
     const families = await this.#refresh.familiesOf(userId);
-    let revoked = 0;
+    const revoked: string[] = [];
 
     for (const family of families) {
       if (family.familyId === keepFamilyId) {
         continue;
       }
       await this.#refresh.revokeFamily(family.familyId);
-      revoked += 1;
+      revoked.push(family.familyId);
     }
 
-    await this.#announceRevocation(userId, reason);
+    if (revoked.length > 0) {
+      await this.#announceRevocation(userId, reason, revoked);
+    }
 
-    return revoked;
+    return revoked.length;
   }
 
   /**
@@ -317,15 +344,27 @@ export class SessionService {
    * M0-13 is the subscriber; publishing without one costs nothing and means the
    * gateway has something to listen to on the day it arrives.
    *
+   * `familyIds` narrows it to those browsers, so signing out of one leaves the
+   * person's other browsers connected. Without it every socket of theirs goes:
+   * the "everywhere" revocations, and a role change, which every family's
+   * claims are stale after.
+   *
    * A failure to publish must not fail the sign-out that caused it: the family
    * is already gone, and the access token expires within ten minutes anyway.
    */
-  async #announceRevocation(userId: string, reason: string): Promise<void> {
+  async #announceRevocation(
+    userId: string,
+    reason: string,
+    familyIds?: readonly string[],
+  ): Promise<void> {
+    const message: PrincipalRevokedMessage = {
+      principalType: 'staff',
+      principalId: userId,
+      reason,
+      ...(familyIds === undefined ? {} : { familyIds: [...familyIds] }),
+    };
     try {
-      await this.#redis.publish(
-        PRINCIPAL_REVOKED_CHANNEL,
-        JSON.stringify({ principalType: 'staff', principalId: userId, reason }),
-      );
+      await this.#redis.publish(PRINCIPAL_REVOKED_CHANNEL, JSON.stringify(message));
     } catch (error) {
       this.#logger.error({ err: error, userId }, 'Could not publish principal.revoked');
     }

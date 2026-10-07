@@ -1,64 +1,19 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { WidgetAccessUpdate, WidgetAppearance, WidgetSettings } from '@helpdock/schemas';
-import { type APIResponse, test as base, type Page } from '@playwright/test';
-import { generate } from 'otplib';
+import type { APIResponse, Page } from '@playwright/test';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, TOTP_SECRET_ENV } from './install.js';
 
 /**
  * What the widget specs against the real api share: the seeded account signed
- * in once, calling the admin api as it, and a customer's site to embed the
+ * in once (`admin-session.ts`, whose `admin` page the specs drive beside a
+ * visitor), calling the admin api as it, and a customer's site to embed the
  * widget on.
  */
 
 const t = strings('en');
 
-const signInAsAdmin = async (page: Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
-/**
- * `admin`: one page of the admin app, signed in as the seeded account once per
- * worker and shared by every widget spec. Sign-in is limited to twenty
- * attempts per address in fifteen minutes (`SIGN_IN_IP_RULE`), and the whole
- * suite signs in from one address, so a spec that needs the admin beside a
- * visitor borrows this one rather than spending another attempt.
- *
- * A spec may leave it on any screen and in any brand; each starts with
- * {@link openAdmin}.
- */
-export const test = base.extend<Record<never, never>, { admin: Page }>({
-  admin: [
-    async ({ browser }, use, workerInfo) => {
-      const { baseURL } = workerInfo.project.use;
-      const context = await browser.newContext(baseURL === undefined ? {} : { baseURL });
-      const page = await context.newPage();
-      await signInAsAdmin(page);
-      await use(page);
-      await context.close();
-    },
-    { scope: 'worker' },
-  ],
-});
-
-export { expect } from '@playwright/test';
-
-/** Reloads the admin at its home, which lands it in the account's first brand. */
-export const openAdmin = async (page: Page): Promise<void> => {
-  await page.goto('/');
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
+export { expect, openAdmin, test } from './admin-session.js';
 
 /**
  * The admin api, as the signed-in page's account. A fresh access token per

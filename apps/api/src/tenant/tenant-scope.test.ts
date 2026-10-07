@@ -169,4 +169,19 @@ describe('tenantScopeFor', () => {
 
     expect(scope?.departmentIds).toEqual([]);
   });
+
+  it('gives an api key every department of its one brand, and records it by key id', () => {
+    const scope = tenantScopeFor({
+      principal: { type: 'apikey', id: USER, brandId: BRAND_A, scopes: ['tickets:read'] },
+      scopeKind: 'brand',
+      targetBrandId: BRAND_A,
+    });
+
+    expect(scope).toEqual({
+      brandIds: [BRAND_A],
+      departmentIds: 'all',
+      principalType: 'apikey',
+      principalId: USER,
+    });
+  });
 });

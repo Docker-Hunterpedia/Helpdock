@@ -8,15 +8,13 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
   Typography,
 } from '@mui/material';
-import { Languages, Paperclip, Zap } from 'lucide-react';
+import { Paperclip, Send, Zap } from 'lucide-react';
 import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import {
   type ComposerEmail,
@@ -29,13 +27,10 @@ import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 
 /**
  * DESIGN §6.3 Composer: the Reply / Internal note segmented control and the
- * recipient caption, the textarea, and a toolbar with attach, canned response,
- * translate, "then set status" and the primary send.
- *
- * Translation does nothing yet and says so on the control itself rather than
- * only in a tooltip: it is M7. A disabled control whose only explanation is a
- * hover is invisible to a keyboard and to a screen reader (DESIGN §10), so it
- * carries its sentence in text only a screen reader reads.
+ * recipient caption, the textarea, and a toolbar with attach, Assist (M7-05),
+ * canned response, "then set status" and the primary send. What assist
+ * suggests sits above the textarea and never replaces the agent's text
+ * without their say.
  *
  * **Macros and canned responses are M3-06.** The button opens the picker
  * (`macro-picker.tsx`), and so does `/` typed into an empty reply; what a macro
@@ -89,10 +84,19 @@ export interface ComposerProps {
    * To and Cc, and the signature it will carry; a note is unchanged.
    */
   readonly email?: ComposerEmail | undefined;
+  /**
+   * M6-02: a ticket that answers in a Telegram chat. A reply then says which
+   * chat it goes to and that the bot sends it as plain text, unsigned.
+   */
+  readonly telegram?: { readonly bot: string; readonly username: string | null } | undefined;
   /** M3-06: opens the macro picker. Absent for a reader who cannot reply. */
   onOpenMacros?: (() => void) | undefined;
   /** Whether the picker is open, for the button's `aria-expanded`. */
   readonly macrosOpen?: boolean | undefined;
+  /** M7-05: the Assist button and its menu, when the brand runs agent assist. */
+  readonly assist?: ReactNode;
+  /** M7-05: a suggested reply, a rewrite or a translation waiting above the text. */
+  readonly suggestion?: ReactNode;
 }
 
 export function Composer({
@@ -114,8 +118,11 @@ export function Composer({
   onSend,
   onBodyFocus,
   email,
+  telegram,
   onOpenMacros,
   macrosOpen = false,
+  assist,
+  suggestion,
 }: ComposerProps): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -126,6 +133,7 @@ export function Composer({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const note = mode === 'note';
   const emailReply = email !== undefined && !note;
+  const telegramReply = telegram !== undefined && !note;
 
   // A layout effect: refs are attached and the caret moves before the browser
   // paints, so `r` never shows a frame of the composer without a caret in it.
@@ -174,6 +182,21 @@ export function Composer({
 
         {emailReply ? (
           <FromSelect email={email} />
+        ) : telegramReply ? (
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
+              marginInlineStart: 'auto',
+            }}
+          >
+            <Send size={14} aria-hidden="true" />
+            {t('tickets:telegram.composerTo')}
+            {telegram.username === null ? null : <bdi>@{telegram.username}</bdi>}
+          </Typography>
         ) : (
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {note
@@ -186,6 +209,8 @@ export function Composer({
       </Box>
 
       {emailReply ? <RecipientLines email={email} /> : null}
+
+      {suggestion}
 
       <TextField
         id={bodyId}
@@ -209,6 +234,11 @@ export function Composer({
       />
 
       {emailReply ? <SignaturePreview signature={email.signature} /> : null}
+      {telegramReply ? (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <bdi>{t('tickets:telegram.composerFoot', { bot: telegram.bot })}</bdi>
+        </Typography>
+      ) : null}
 
       {attachments.length === 0 ? null : (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
@@ -257,6 +287,8 @@ export function Composer({
           <Paperclip size={16} aria-hidden="true" />
         </IconButton>
 
+        {assist}
+
         <Button
           variant="text"
           size="small"
@@ -268,17 +300,6 @@ export function Composer({
         >
           {t('tickets:composer.canned')}
         </Button>
-
-        <Unavailable available={false} reason={t('tickets:composer.translateUnavailable')}>
-          <Button
-            variant="text"
-            size="small"
-            disabled
-            startIcon={<Languages size={14} aria-hidden="true" />}
-          >
-            {t('tickets:composer.translate')}
-          </Button>
-        </Unavailable>
 
         <TextField
           id={statusId}
@@ -314,38 +335,5 @@ export function Composer({
         </Button>
       </Box>
     </Paper>
-  );
-}
-
-/**
- * A control a later milestone turns on. The reason travels as a tooltip *and*
- * as text only a screen reader reads, because a tooltip is never the only
- * carrier of meaning (DESIGN §6.4) and a disabled control cannot be hovered
- * by a keyboard at all.
- */
-function Unavailable({
-  available,
-  reason,
-  children,
-}: {
-  readonly available: boolean;
-  readonly reason: string;
-  readonly children: ReactNode;
-}): ReactNode {
-  if (available) {
-    return children;
-  }
-
-  return (
-    // Non-interactive and above the toolbar: an open tooltip must never sit on
-    // the Send button below it and swallow the click.
-    <Tooltip title={reason} placement="top" disableInteractive>
-      <Box component="span" sx={{ display: 'inline-flex' }}>
-        {children}
-        <Box component="span" sx={visuallyHidden}>
-          {reason}
-        </Box>
-      </Box>
-    </Tooltip>
   );
 }

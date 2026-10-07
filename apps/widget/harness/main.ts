@@ -1,5 +1,11 @@
 import { defineWidgetElement, ELEMENT_NAME, installCommandApi } from '../src/embed.js';
-import { LINA, type SampleOptions, sampleMockOptions } from '../src/transport/fixtures.js';
+import {
+  LINA,
+  SAMPLE_AI_ANSWER,
+  SAMPLE_AI_HANDOFF,
+  type SampleOptions,
+  sampleMockOptions,
+} from '../src/transport/fixtures.js';
 import { MockTransport } from '../src/transport/mock.js';
 import type { WidgetLocale, WidgetMode } from '../src/transport/types.js';
 
@@ -24,7 +30,13 @@ const options: SampleOptions = {
 };
 
 const mock = new MockTransport(sampleMockOptions(locale, options));
-Object.assign(window, { helpdock: { mock, agent: LINA } });
+Object.assign(window, {
+  helpdock: {
+    mock,
+    agent: LINA,
+    ai: { answer: SAMPLE_AI_ANSWER[locale], handoff: SAMPLE_AI_HANDOFF[locale] },
+  },
+});
 
 defineWidgetElement({ createTransport: () => mock, pageLocale: () => locale });
 installCommandApi(window as unknown as Record<string, unknown>);

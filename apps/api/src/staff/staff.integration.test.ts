@@ -24,11 +24,12 @@ import {
   trustedDeviceKey,
   userFamiliesKey,
 } from '../auth/redis-keys.js';
-import { REFRESH_COOKIE } from '../auth/session/cookies.js';
+import { refreshCookieOf } from '../auth/session/cookies.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
+import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 import { anonymisedEmail, FORMER_STAFF_NAME } from './anonymise.js';
 
 /**
@@ -47,6 +48,8 @@ const REDIS_IMAGE = 'redis:7-alpine';
 const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 13).toString('base64');
 const APP_URL = 'https://support.example.com';
+/** Over https the cookies carry the `__Secure-` prefix (ASVS 3.4.4). */
+const REFRESH_COOKIE = refreshCookieOf({ APP_URL }).name;
 const NEW_PASSWORD = 'a brand new password';
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -140,6 +143,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
     const first = await request('POST', '/api/auth/sign-in', {
       body: { email: seeded.email, password: seeded.password },
     });
+    await forgetUsedTotpSteps(runtime.redis);
     const second = await request('POST', '/api/auth/totp', {
       body: {
         challengeId: (first.json() as { challengeId: string }).challengeId,
@@ -190,11 +194,29 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
     );
     expect(accepted.statusCode).toBe(201);
 
+    // An Admin must have a second factor (ASVS 4.3.1), so accepting as one
+    // hands over an enrolment challenge; the session comes from spending it.
+    const outcome = accepted.json() as { kind: string; challengeId?: string };
+    const session =
+      outcome.kind === 'totp-enrolment-required'
+        ? await enrolWith(outcome.challengeId ?? '')
+        : accepted;
+
     return {
       member: invited.json() as StaffMember,
-      accessToken: (accepted.json() as { accessToken: string }).accessToken,
-      refreshCookie: cookieOf(accepted, REFRESH_COOKIE) ?? '',
+      accessToken: (session.json() as { accessToken: string }).accessToken,
+      refreshCookie: cookieOf(session, REFRESH_COOKIE) ?? '',
     };
+  };
+
+  const enrolWith = async (challengeId: string) => {
+    const staged = await request('POST', '/api/auth/enrolment/start', { body: { challengeId } });
+    const { secret } = staged.json() as { secret: string };
+    const enrolled = await request('POST', '/api/auth/enrolment/confirm', {
+      body: { challengeId, code: await generate({ secret, period: 30 }) },
+    });
+    expect(enrolled.statusCode).toBe(201);
+    return enrolled;
   };
 
   /** One row of the staff list, by address. */
@@ -1025,8 +1047,11 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       expect(enrolled.statusCode).toBe(201);
       const { secret } = enrolled.json() as { secret: string };
 
+      // Each code is accepted once (ASVS 2.8.4), so the three proofs below use
+      // three consecutive steps, all inside the window of one.
+      const now = Math.floor(Date.now() / 1000);
       const confirmed = await request('POST', '/api/auth/totp/confirm', {
-        body: { code: await generate({ secret, period: 30 }) },
+        body: { code: await generate({ secret, period: 30, epoch: now - 30 }) },
         headers: bearer(person.accessToken),
       });
       expect(confirmed.statusCode).toBe(201);
@@ -1034,7 +1059,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       expect(first).toHaveLength(10);
 
       const regenerated = await request('POST', '/api/me/recovery-codes/regenerate', {
-        body: { code: await generate({ secret, period: 30 }) },
+        body: { code: await generate({ secret, period: 30, epoch: now }) },
         headers: bearer(person.accessToken),
       });
       expect(regenerated.statusCode).toBe(201);
@@ -1047,7 +1072,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
       expect(wrongCode.statusCode).toBe(401);
 
       const disabled = await request('POST', '/api/me/totp/disable', {
-        body: { code: await generate({ secret, period: 30 }) },
+        body: { code: await generate({ secret, period: 30, epoch: now + 30 }) },
         headers: bearer(person.accessToken),
       });
       expect(disabled.statusCode).toBe(204);

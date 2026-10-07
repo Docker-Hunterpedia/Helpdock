@@ -1,7 +1,6 @@
-import { expect, type Page, test } from '@playwright/test';
-import { generate } from 'otplib';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import { expect, openAdmin, test } from './admin-session.js';
+import { SKIP_ENV } from './install.js';
 
 /**
  * M1-15 against the real api: one ticket taken from typing it in to closing it.
@@ -26,25 +25,9 @@ const SUBJECT = 'Refund for order 42 has not arrived';
 const REPLY = 'The refund is on its way today.';
 const NOTE = 'Finance confirmed the batch by phone.';
 
-/** Signed in as the seeded install admin, through the second factor. */
-const signInAsAdmin = async (page: Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
 test.describe('the ticket workspace against the real api', () => {
   test('creates a ticket, replies, notes and closes it', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
 
     await page
       .getByRole('link', { name: new RegExp(t('admin:nav.tickets')) })

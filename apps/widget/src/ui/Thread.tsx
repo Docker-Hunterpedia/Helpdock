@@ -3,7 +3,9 @@ import { useEffect, useRef } from 'preact/hooks';
 import { dayLabel, formatTime, initials } from '../format.js';
 import { deliveryOf, type PendingMessage } from '../state/thread.js';
 import type { AgentSummary, WidgetMessage } from '../transport/types.js';
+import { AssistantMessage, HandoffLine, type OpenArticle } from './Assistant.js';
 import { AttachmentView } from './Attachments.js';
+import { CsatCard } from './CsatCard.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
 
@@ -14,11 +16,19 @@ import { Icon } from './icons.js';
  * Typing, queue position and connection banners live outside it: they are
  * ephemeral and must not be read out as messages.
  */
-export function Thread() {
+export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
   const { t, locale } = useWidget();
   const state = useWidgetState();
-  const { config, thread, conversation, reconnected, firstMessageNotice, visitorEmail, typing } =
-    state;
+  const {
+    config,
+    thread,
+    conversation,
+    reconnected,
+    firstMessageNotice,
+    visitorEmail,
+    typing,
+    csat,
+  } = state;
   const scroller = useRef<HTMLDivElement>(null);
   const count = thread.confirmed.length + thread.pending.length;
 
@@ -27,7 +37,7 @@ export function Thread() {
     if (element) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [count, typing]);
+  }, [count, typing, csat]);
 
   if (!config) {
     return null;
@@ -76,7 +86,12 @@ export function Thread() {
     );
   }
 
-  for (const message of thread.confirmed) {
+  const handoffBefore = handoffPosition(thread.confirmed, conversation?.ai_handed_off === true);
+
+  thread.confirmed.forEach((message, index) => {
+    if (index === handoffBefore) {
+      items.push(<HandoffLine key="handoff" />);
+    }
     addDay(message.created_at);
     if (reconnected && reconnected.firstNewSeq === message.seq && reconnected.newCount > 0) {
       items.push(
@@ -88,17 +103,32 @@ export function Thread() {
       );
     }
     items.push(
-      <MessageItem key={message.seq} message={message} conversationId={conversation?.id ?? null} />,
+      message.author.kind === 'ai' ? (
+        <AssistantMessage key={message.seq} message={message} onOpenArticle={onOpenArticle} />
+      ) : (
+        <MessageItem
+          key={message.seq}
+          message={message}
+          conversationId={conversation?.id ?? null}
+        />
+      ),
     );
     if (message.author.kind === 'visitor') {
       addNotice();
     }
+  });
+  if (handoffBefore === thread.confirmed.length) {
+    items.push(<HandoffLine key="handoff" />);
   }
 
   for (const pending of thread.pending) {
     addDay(pending.created_at);
     items.push(<PendingItem key={pending.client_id} pending={pending} />);
     addNotice();
+  }
+
+  if (conversation?.status === 'ended' && csat) {
+    items.push(<CsatCard key="csat" card={csat} />);
   }
 
   return (
@@ -119,6 +149,26 @@ export function Thread() {
     </div>
   );
 }
+
+/**
+ * Where the handoff line goes (M7-06): after the assistant's handoff message;
+ * otherwise before the first person to answer after the assistant last
+ * spoke, or at the end while nobody has. `-1` while the assistant has the
+ * conversation.
+ */
+export const handoffPosition = (messages: readonly WidgetMessage[], handedOff: boolean): number => {
+  if (!handedOff) {
+    return -1;
+  }
+  const lastAi = messages.findLastIndex((message) => message.author.kind === 'ai');
+  if (lastAi >= 0 && messages[lastAi]?.ai?.kind === 'handoff') {
+    return lastAi + 1;
+  }
+  const agent = messages.findIndex(
+    (message, index) => index > lastAi && message.author.kind === 'agent',
+  );
+  return agent >= 0 ? agent : messages.length;
+};
 
 function Avatar({ name, size }: { name: string; size: 'sm' | 'md' }) {
   return (

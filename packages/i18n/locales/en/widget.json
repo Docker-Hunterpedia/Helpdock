@@ -157,5 +157,43 @@
     "sentBody": "Your reference is {{ref}}. We will reply to {{email}}.",
     "another": "Send another message",
     "failed": "We could not send your message. Try again."
+  },
+  "ai": {
+    "author": "{{brand}} assistant",
+    "badge": "AI",
+    "sources": "Sources",
+    "source": "Source {{n}}, {{title}}",
+    "helpful": "Was this helpful?",
+    "yes": "Yes, helpful",
+    "no": "No, not helpful",
+    "thanks": "Thanks, that helps us improve.",
+    "talkToHuman": "Talk to a human",
+    "connecting": "Connecting you with the team…",
+    "steppedBack": "The assistant has stepped back. A person will reply here.",
+    "steppedBackEmail": "The assistant has stepped back. A person will reply here and at {{email}}."
+  },
+  "csat": {
+    "question": "How was this conversation?",
+    "legend": "Your rating, 1 is very bad and 5 is excellent",
+    "choice": "{{rating}}, {{label}}",
+    "ratings": {
+      "1": "Very bad",
+      "2": "Bad",
+      "3": "Okay",
+      "4": "Good",
+      "5": "Excellent"
+    },
+    "low": "1 · Very bad",
+    "high": "5 · Excellent",
+    "comment": "Anything we should know?",
+    "optional": "(optional)",
+    "skip": "Skip",
+    "send": "Send rating",
+    "failed": "Your rating could not be sent. Try again.",
+    "thanks": "Thanks, your rating was sent.",
+    "rated": "You rated this conversation {{rating}} · {{label}}",
+    "skipped": "You skipped the rating",
+    "closedTitle": "This rating has closed",
+    "closedBody": "Ratings stay open for 30 days after a conversation ends."
   }
 }

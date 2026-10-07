@@ -13,7 +13,10 @@
       "!**/.turbo",
       "!**/skills-lock.json",
       "!packages/ui/fonts",
+      "!docs/design/artboards",
+      "!apps/api/src/auth/breached/breached-passwords.json",
       "!.agents",
+      "!.semgrep",
       "!.claude"
     ]
   },

@@ -42,6 +42,8 @@ const survey = (overrides: Partial<CsatResponse> = {}): CsatResponse => ({
   rating: null,
   comment: null,
   ratedAt: null,
+  ratedVia: null,
+  skippedAt: null,
   createdAt: NOW,
   ...overrides,
 });

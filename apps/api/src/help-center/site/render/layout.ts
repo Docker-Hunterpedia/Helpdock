@@ -223,6 +223,7 @@ export const renderDocument = (view: ChromeView, main: string): string => {
 ${head(view)}
 </head>
 <body>
+<a class="hd-skip" href="#hd-main">${esc(view.t('nav.skip'))}</a>
 ${view.banner ?? ''}
 ${header(view)}
 ${main}

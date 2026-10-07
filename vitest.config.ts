@@ -23,6 +23,7 @@ export default defineConfig({
         // runs as its own step. Without Docker the suites skip themselves.
         resolve: {
           alias: {
+            '@helpdock/ai': fileURLToPath(new URL('packages/ai/src/index.ts', import.meta.url)),
             // Workspace packages resolve to `dist/` through their `exports` map,
             // which would make a test run against the last build instead of the
             // source. Each workspace project sets the same alias for itself.

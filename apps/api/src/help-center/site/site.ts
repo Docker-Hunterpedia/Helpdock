@@ -9,6 +9,12 @@ import type {
 import { hcFeedbackFormSchema, localeSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { HelpCenterFeedback, HelpCenterSearch } from '../ports.js';
+import {
+  type FeedbackStep,
+  feedbackHref,
+  feedbackStepOf,
+  nextFeedbackStep,
+} from './feedback-step.js';
 import { type CachedPage, etagOf, type PageCache, type PageCacheKey } from './page-cache.js';
 import { HC_FALLBACK_PREFIX, parseSitePath, SiteLinks, type SiteRoute } from './paths.js';
 import { NONCE } from './render/layout.js';
@@ -247,8 +253,9 @@ export class HelpCenterSite {
       return this.#html(request, renderWall(context, returnPath), 'private');
     }
 
-    const feedbackAnswered = route.kind === 'article' && request.query.feedback === '1';
-    const cacheable = audience === 'public' && !feedbackAnswered && route.kind !== 'search';
+    const feedback: FeedbackStep =
+      route.kind === 'article' ? feedbackStepOf(request.query.feedback) : 'ask';
+    const cacheable = audience === 'public' && feedback === 'ask' && route.kind !== 'search';
     const key: PageCacheKey = {
       brandId: where.brandId,
       host: request.host ?? '',
@@ -270,7 +277,7 @@ export class HelpCenterSite {
       return this.#search(request, context, where.brandId);
     }
 
-    const rendered = await this.#render(route, context, where.brandId, feedbackAnswered);
+    const rendered = await this.#render(route, context, where.brandId, feedback);
     const page: CachedPage = {
       status: rendered.page.status,
       html: rendered.page.html,
@@ -380,7 +387,7 @@ export class HelpCenterSite {
     route: SiteRoute,
     context: PageContext,
     brandId: string,
-    feedbackAnswered: boolean,
+    feedback: FeedbackStep,
   ): Promise<{ page: Rendered; view: CachedPage['view'] }> {
     const { locale, audience } = context;
     switch (route.kind) {
@@ -409,7 +416,7 @@ export class HelpCenterSite {
         });
         if (lookup.state === 'found') {
           return {
-            page: renderArticle(context, lookup.article, { feedbackAnswered }),
+            page: renderArticle(context, lookup.article, { feedback }),
             view: { articleId: lookup.article.id, locale: lookup.article.locale },
           };
         }
@@ -557,6 +564,7 @@ export class HelpCenterSite {
       fresh === null
         ? request
         : { ...request, cookies: { ...request.cookies, [VISITOR_COOKIE]: fresh } };
+    const helpful = body.data.helpful === 'yes';
     // Staff answering on their own help center are not readers: no vote is counted.
     try {
       if (staff === null)
@@ -565,7 +573,8 @@ export class HelpCenterSite {
           articleId: lookup.article.id,
           locale: lookup.article.locale,
           visitorKey: this.#visitorKey(keyed),
-          helpful: body.data.helpful === 'yes',
+          helpful,
+          ...(helpful || body.data.comment === undefined ? {} : { comment: body.data.comment }),
         });
     } catch (error) {
       this.#deps.log.warn(
@@ -576,7 +585,10 @@ export class HelpCenterSite {
     return {
       ...redirect(
         303,
-        `${where.links.article(body.data.locale, body.data.slug)}?feedback=1#feedback`,
+        feedbackHref(
+          where.links.article(body.data.locale, body.data.slug),
+          nextFeedbackStep(body.data),
+        ),
         true,
       ),
       cookies:

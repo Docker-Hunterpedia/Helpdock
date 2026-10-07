@@ -1,7 +1,8 @@
 import type { DbTransaction } from '@helpdock/db';
 import type { JobHandler } from './consumer.js';
-import { OUTBOX_EVENT_NAME, type OutboxEventPayload } from './jobs.js';
+import { OUTBOX_EVENT_NAME, type OutboxEventPayload, outboxEventPayloadSchema } from './jobs.js';
 import type { JobLogger } from './logger.js';
+import { lockOrderingKeys, outboxOrderingKeys } from './ordering.js';
 import { parsePayload } from './validation.js';
 
 /**
@@ -141,11 +142,17 @@ export const registerEventHandler = (
   outboxEvents.register(event, handler, subscriber);
 };
 
-/** The `outbox.event` handler to hand {@link ./consumer.js createWorker}. */
+/**
+ * The `outbox.event` handler to hand {@link ./consumer.js createWorker}. It
+ * takes the event's ordering locks before any subscriber runs, so no other
+ * worker process runs an event of the same ticket until this one commits
+ * (`ordering.ts`).
+ */
 export const createOutboxEventHandler =
   (dispatcher: OutboxDispatcher = outboxEvents): JobHandler<OutboxEventPayload> =>
-  ({ payload, tx, log }) =>
-    dispatcher.dispatch({
+  async ({ payload, tx, log }) => {
+    await lockOrderingKeys(tx, outboxOrderingKeys(payload));
+    await dispatcher.dispatch({
       outboxId: payload.outboxId,
       brandId: payload.brandId,
       event: payload.event,
@@ -153,3 +160,14 @@ export const createOutboxEventHandler =
       tx,
       log,
     });
+  };
+
+/**
+ * The ordering keys of a raw `outbox.event` job, for {@link ./consumer.js createWorker}'s
+ * `serialize` option. A payload that does not parse has none: it is refused as
+ * unrecoverable by the processor anyway, and must not hold up anything else.
+ */
+export const outboxJobOrderingKeys = (data: unknown): readonly string[] => {
+  const parsed = outboxEventPayloadSchema.safeParse(data);
+  return parsed.success ? outboxOrderingKeys(parsed.data) : [];
+};

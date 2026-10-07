@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
 import {
   auditLog,
   type CsatResponse,
@@ -10,8 +9,16 @@ import {
 import type { CsatBrand, CsatSubmitRequest, CsatSurveyView, TicketCsat } from '@helpdock/schemas';
 import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
+import { publicHelpCenterUrl } from '../help-center/site/site-url.js';
 import type { CsatRepository, SurveyWithTicket } from './csat.repository.js';
-import { type CsatTokenSubject, type CsatTokens, hashCsatToken } from './tokens.js';
+import { recordCsatAnswer } from './csat-answers.js';
+import {
+  type CsatTokenSubject,
+  type CsatTokens,
+  csatSurveyUrl,
+  hashCsatToken,
+  sameTokenHash,
+} from './tokens.js';
 
 /**
  * The survey from both sides: the agent's summary on the ticket, and the
@@ -48,19 +55,15 @@ export const firstNameOf = (name: string): string | null => {
   return first === '' ? null : first;
 };
 
-const sameHash = (stored: string, presented: string): boolean => {
-  const a = Buffer.from(stored, 'utf8');
-  const b = Buffer.from(presented, 'utf8');
-
-  return a.length === b.length && timingSafeEqual(a, b);
-};
-
 export interface CsatServiceOptions {
   readonly db: Db;
   readonly repository: CsatRepository;
   readonly tokens: CsatTokens;
   readonly limiter: RateLimiter;
-  /** `APP_URL`: the admin app hosts the rating page (ADR 0010). */
+  /**
+   * `APP_URL`: the admin app hosts the rating page (ADR 0010), and a help
+   * center without its own domain answers under it.
+   */
   readonly appUrl: string;
   readonly now?: () => Date;
 }
@@ -108,7 +111,7 @@ export class CsatService {
     const subject = await this.#admit(token, ip);
 
     return this.#inBrand(token, subject, async (tx, found, brand) => {
-      await this.#audit(tx, subject, found, 'csat.viewed');
+      await this.#auditViewed(tx, subject, found);
 
       return this.#publicView(tx, found, brand);
     });
@@ -117,26 +120,28 @@ export class CsatService {
   /**
    * Records the answer once. A second submission answers `used`, an expired
    * link `expired` — the same screens the page draws for a link opened late —
-   * and neither changes the stored answer.
+   * and neither changes the stored answer. A Telegram tap with no comment yet
+   * leaves the link open for one submission, which replaces the tap's score.
    */
   async submit(token: string, ip: string, request: CsatSubmitRequest): Promise<CsatSurveyView> {
     const subject = await this.#admit(token, ip);
 
     return this.#inBrand(token, subject, async (tx, found, brand) => {
-      const rated = await this.#options.repository.rate(tx, subject.surveyId, {
-        rating: request.rating,
-        // A blank comment is no comment.
-        comment: request.comment || null,
-        at: this.#now(),
+      const rated = await recordCsatAnswer(tx, this.#options.repository, {
+        brandId: subject.brandId,
+        surveyId: subject.surveyId,
+        answer: {
+          rating: request.rating,
+          // A blank comment is no comment.
+          comment: request.comment || null,
+          via: 'link',
+          at: this.#now(),
+        },
       });
 
-      if (!rated) {
-        return this.#publicView(tx, found, brand);
-      }
-
-      await this.#audit(tx, subject, found, 'csat.rated', { rating: request.rating });
-
-      return { state: 'rated', brand, rating: request.rating };
+      return rated === undefined
+        ? this.#publicView(tx, found, brand)
+        : { state: 'rated', brand, rating: request.rating };
     });
   }
 
@@ -174,12 +179,17 @@ export class CsatService {
       if (
         found === undefined ||
         brand === undefined ||
-        !sameHash(found.survey.tokenHash, hashCsatToken(token))
+        !sameTokenHash(found.survey.tokenHash, hashCsatToken(token))
       ) {
         throw new NotFoundException('No such rating link');
       }
 
-      return fn(tx, found, { name: brand.name, locale: brand.defaultLocale, accent: null });
+      return fn(tx, found, {
+        name: brand.name,
+        locale: brand.defaultLocale,
+        accent: null,
+        helpCenterUrl: await publicHelpCenterUrl(tx, subject.brandId, this.#options.appUrl),
+      });
     });
   }
 
@@ -188,7 +198,8 @@ export class CsatService {
     { survey, reference, subject }: SurveyWithTicket,
     brand: CsatBrand,
   ): Promise<CsatSurveyView> {
-    if (survey.ratedAt !== null) {
+    const tapped = survey.ratedVia === 'telegram' && survey.comment === null;
+    if (survey.ratedAt !== null && !tapped) {
       return { state: 'used', brand };
     }
     if (survey.expiresAt.getTime() <= this.#now().getTime()) {
@@ -201,6 +212,7 @@ export class CsatService {
       state: 'open',
       brand,
       ticket: { reference, subject, closedBy: closer === undefined ? null : firstNameOf(closer) },
+      ...(tapped && survey.rating !== null ? { rating: survey.rating } : {}),
     };
   }
 
@@ -215,30 +227,23 @@ export class CsatService {
     return survey.sentAt === null ? 'pending' : 'sent';
   }
 
-  /** The link whose hash is the stored one: under the current key, or the previous. */
   #linkFor(brandId: string, survey: CsatResponse): string | null {
-    const token = this.#options.tokens
-      .candidates({ brandId, surveyId: survey.id })
-      .find((candidate) => sameHash(survey.tokenHash, hashCsatToken(candidate)));
-
-    return token === undefined ? null : new URL(`/csat/${token}`, this.#options.appUrl).toString();
+    return csatSurveyUrl(this.#options.tokens, this.#options.appUrl, { brandId, survey });
   }
 
-  async #audit(
+  async #auditViewed(
     tx: DbTransaction,
     subject: CsatTokenSubject,
     { survey }: SurveyWithTicket,
-    action: 'csat.viewed' | 'csat.rated',
-    meta: Record<string, unknown> = {},
   ): Promise<void> {
     await tx.insert(auditLog).values({
       brandId: subject.brandId,
       actorType: 'system',
       actorId: `csat:${subject.surveyId}`,
-      action,
+      action: 'csat.viewed',
       targetType: 'ticket',
       targetId: survey.ticketId,
-      meta,
+      meta: {},
     });
   }
 }

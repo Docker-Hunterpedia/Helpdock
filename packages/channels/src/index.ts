@@ -2,6 +2,7 @@ export const PACKAGE_NAME = '@helpdock/channels' as const;
 
 export * from './adapter.js';
 export * from './captcha.js';
+export * from './email/csat-survey.js';
 export * from './email/customer-layout.js';
 export * from './email/email-adapter.js';
 export * from './email/imap/imap-client.js';
@@ -18,3 +19,7 @@ export * from './email/smtp-sender.js';
 export * from './html/sanitize.js';
 export * from './html/sanitize-article.js';
 export * from './html/text.js';
+export * from './telegram/bot-api.js';
+export * from './telegram/render.js';
+export * from './telegram/telegram-adapter.js';
+export * from './telegram/update.js';

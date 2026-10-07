@@ -49,6 +49,7 @@ export class DomainCheckController {
    * is the certificate authority and the database behind it.
    */
   readonly #limiter = createIpRateLimiter({
+    bucket: 'domain-check',
     limit: 60,
     windowMs: 60_000,
     maxTrackedIps: 1024,

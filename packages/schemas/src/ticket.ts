@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ticketAiStateSchema, ticketMessageAiSchema } from './ai.js';
 import { ticketCsatSchema } from './csat.js';
 import { emailMessageViewSchema } from './email-inbound.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
@@ -268,6 +269,12 @@ export const ticketSchema = z.object({
    * Optional for the reason `tags` is.
    */
   sla: ticketSlaSummarySchema.nullable().optional(),
+  /**
+   * M7-06: whether the assistant may still answer this conversation
+   * (DOMAIN-RULES §9) — the AIPausedStrip and the list's "AI paused" Label.
+   * Optional for the reason `tags` is.
+   */
+  ai: ticketAiStateSchema.optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -307,6 +314,8 @@ export const ticketMessageSchema = z.object({
    * figures. Absent on every message that did not arrive by email.
    */
   email: emailMessageViewSchema.optional(),
+  /** M7-06: an auto-reply's sources and AI log, or the pause a System event records. */
+  ai: ticketMessageAiSchema.optional(),
   createdAt: z.iso.datetime(),
 });
 export type TicketMessage = z.infer<typeof ticketMessageSchema>;
@@ -567,6 +576,35 @@ export type TicketList = z.infer<typeof ticketListSchema>;
 // --------------------------------------------------------------------------
 
 /**
+ * The three fields a ticket cannot be written without — subject, body and
+ * department — unless a template fills them. Shared by the admin's create and
+ * the public API's (M8-02), which differ in what else they accept.
+ */
+export const requireUnlessTemplate = (
+  value: {
+    readonly templateId?: string | undefined;
+    readonly subject?: string | undefined;
+    readonly bodyHtml?: string | undefined;
+    readonly departmentId?: string | undefined;
+  },
+  ctx: z.RefinementCtx,
+): void => {
+  if (value.templateId !== undefined) {
+    return;
+  }
+
+  for (const field of ['subject', 'bodyHtml', 'departmentId'] as const) {
+    if (value[field] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'Required unless the request names a template',
+      });
+    }
+  }
+};
+
+/**
  * Manual creation. The body is the first message of the thread, so a ticket is
  * never created empty — a ticket with no message is a row nobody can answer.
  */
@@ -618,21 +656,7 @@ export const ticketCreateRequestSchema = z
      */
     clientId: z.uuid().optional(),
   })
-  .superRefine((value, ctx) => {
-    if (value.templateId !== undefined) {
-      return;
-    }
-
-    for (const field of ['subject', 'bodyHtml', 'departmentId'] as const) {
-      if (value[field] === undefined) {
-        ctx.addIssue({
-          code: 'custom',
-          path: [field],
-          message: 'Required unless the request names a template',
-        });
-      }
-    }
-  });
+  .superRefine(requireUnlessTemplate);
 export type TicketCreateRequest = z.infer<typeof ticketCreateRequestSchema>;
 
 /**

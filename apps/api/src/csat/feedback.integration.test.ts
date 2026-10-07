@@ -9,6 +9,11 @@ import {
   type Db,
   type DbHandle,
   departments,
+  hcArticles,
+  hcArticleVersions,
+  hcCategories,
+  hcSections,
+  hcSettings,
   outbox,
   ticketTimeEntries,
   userBrandRoles,
@@ -40,6 +45,8 @@ import { registerNotificationHandlers } from '../notifications/notification-even
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { noCsatDelivery } from '../testing/csat-doubles.js';
+import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { CsatRepository } from './csat.repository.js';
 import { CSAT_PUBLIC_RULE } from './csat.service.js';
@@ -165,23 +172,11 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
   const timePath = (ticketId: string) => `${ticketPath(ticketId)}/time-entries`;
   const publicPath = (token: string) => `/api/public/csat/${token}`;
 
-  const signIn = async (email: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({
-        email,
-        password: email === seeded.email ? seeded.password : PASSWORD,
-      }),
+  const signIn = (email: string): Promise<string> =>
+    signInForTest(app, {
+      email,
+      password: email === seeded.email ? seeded.password : PASSWORD,
     });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
-    return body.accessToken;
-  };
 
   const addPerson = async (db: Db, name: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);
@@ -282,9 +277,12 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
     // The worker's handlers, registered in this process as start-up does.
     worker = new Redis(redisContainer.getConnectionUrl());
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    ignoreAuthEmailInThisSuite();
     registerCsatEventHandlers({
       repository: new CsatRepository(),
       tokens: new CsatTokens(createKeyring(envFor())),
+      // Sending the survey is `delivery.integration.test.ts`'s (M8-06).
+      delivery: noCsatDelivery,
     });
     // M3-07: an assignment writes `ticket.assigned`, a note or reply is also
     // the notifications module's, and the worker handles both.
@@ -601,12 +599,63 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
       expect(status).toBe(200);
       expect(body).toEqual({
         state: 'open',
-        brand: { name: expect.any(String), locale: 'en', accent: null },
+        brand: { name: expect.any(String), locale: 'en', accent: null, helpCenterUrl: null },
         ticket: {
           reference: `${ticket.prefix}-${String(ticket.number)}`,
           subject: 'Invoice shows the wrong VAT number',
           closedBy: null,
         },
+      });
+    });
+
+    it('links the brand’s help center once it has a public article, and not while internal-only (M9-04)', async () => {
+      const { ticket } = await createTicket({ subject: 'Where do I find my invoices?' });
+      const token = await closeAndSurvey(ticket.id);
+      const helpCenterUrl = async () =>
+        (await call<CsatSurveyView>('GET', publicPath(token), null)).body.brand.helpCenterUrl;
+
+      expect(await helpCenterUrl()).toBeNull();
+
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        const [category] = await tx
+          .insert(hcCategories)
+          .values({ brandId: seeded.brandId, slug: 'billing', names: { en: 'Billing' } })
+          .returning();
+        const [section] = await tx
+          .insert(hcSections)
+          .values({
+            brandId: seeded.brandId,
+            categoryId: String(category?.id),
+            slug: 'invoices',
+            names: { en: 'Invoices' },
+          })
+          .returning();
+        const [article] = await tx
+          .insert(hcArticles)
+          .values({ brandId: seeded.brandId, sectionId: String(section?.id), slug: 'invoices' })
+          .returning();
+        await tx.insert(hcArticleVersions).values({
+          brandId: seeded.brandId,
+          articleId: String(article?.id),
+          locale: 'en',
+          status: 'published',
+          title: 'Finding your invoices',
+          publishedTitle: 'Finding your invoices',
+          publishedAt: new Date(),
+        });
+      });
+      expect(await helpCenterUrl()).toBe(`${APP_URL}/hc/${seeded.brandId}/`);
+
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.insert(hcSettings).values({ brandId: seeded.brandId, access: 'internal_only' }),
+      );
+      expect(await helpCenterUrl()).toBeNull();
+
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await tx.delete(hcSettings);
+        await tx.delete(hcArticles);
+        await tx.delete(hcSections);
+        await tx.delete(hcCategories);
       });
     });
 

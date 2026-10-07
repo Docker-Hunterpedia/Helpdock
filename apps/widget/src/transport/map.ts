@@ -6,6 +6,7 @@ import type {
   WidgetConfig as WireConfig,
   ContentPolicy as WireContentPolicy,
   WidgetConversation as WireConversation,
+  WidgetCsat as WireCsat,
   WidgetPrechatFieldView as WireField,
   WidgetMessage as WireMessage,
 } from '@helpdock/schemas';
@@ -18,6 +19,7 @@ import type {
   ContentPolicy,
   ConversationStatus,
   ConversationSummary,
+  CsatCard,
   FieldDefinition,
   KindPolicy,
   WidgetConfig,
@@ -34,13 +36,20 @@ import type {
 /** The recorder's cap; the api's policy caps bytes, not seconds. */
 export const VOICE_MAX_SECONDS = 120;
 
-/** `open` is the calendar, `agentsOnline` the people: together, the header's three states. */
+/**
+ * `open` is the calendar, `agentsOnline` the people: together, the header's
+ * three states. `agents` is who, by first name, and empty when the brand hides
+ * agents; the api sends no staff id, so the UI's key is the position.
+ */
 export const toAvailability = (wire: WireAvailability): Availability => ({
   state: !wire.open ? 'closed' : wire.agentsOnline ? 'online' : 'open_offline',
   next_open_at: wire.nextOpenAt,
   timezone: wire.timezone,
-  // The api says whether anybody is online, never who (DOMAIN-RULES §1.3).
-  agents_online: [],
+  agents_online: wire.agents.map((agent, index) => ({
+    id: `online-${index}`,
+    name: agent.name,
+    avatar_url: agent.avatarUrl,
+  })),
 });
 
 const toKindPolicy = (policy: MediaPolicy): KindPolicy => ({
@@ -154,13 +163,29 @@ export const toMessage = (wire: WireMessage, brandName: string): WidgetMessage =
       ? { kind: 'visitor' }
       : wire.author === 'system'
         ? { kind: 'system' }
-        : {
-            kind: 'agent',
-            agent: agentOf(wire.agent?.name ?? null, wire.agent?.avatarUrl ?? null, brandName),
-          },
+        : wire.author === 'ai'
+          ? { kind: 'ai' }
+          : {
+              kind: 'agent',
+              agent: agentOf(wire.agent?.name ?? null, wire.agent?.avatarUrl ?? null, brandName),
+            },
   body: wire.text,
   attachments: wire.attachments.map(toAttachment),
   system: null,
+  ...(wire.ai === undefined
+    ? {}
+    : {
+        ai: {
+          kind: wire.ai.kind,
+          citations: wire.ai.citations.map((citation) => ({
+            marker: citation.marker,
+            title: citation.title,
+            url: citation.url,
+            article_id: citation.articleId,
+          })),
+          feedback: wire.ai.feedback,
+        },
+      }),
   created_at: wire.createdAt,
 });
 
@@ -185,4 +210,13 @@ export const toConversation = (
   department: null,
   visitor_email: visitorEmail,
   read_seq: 0,
+  ai_handed_off: wire.aiHandedOff ?? false,
+});
+
+/** M8-06: the satisfaction card, as the UI draws it. */
+export const toCsat = (wire: WireCsat): CsatCard => ({
+  state: wire.state,
+  rating: wire.rating,
+  comment: wire.comment,
+  skipped_at: wire.skippedAt,
 });

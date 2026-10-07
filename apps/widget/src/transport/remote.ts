@@ -3,8 +3,11 @@ import type {
   WidgetArticleSearch,
   WidgetConversationEvent,
   WidgetConversationList,
+  WidgetCsat,
+  WidgetCsatResponse,
   WidgetEnvelope,
   WidgetMessagePage,
+  WidgetPresence,
   WidgetQueue,
   WidgetReceipt,
   WidgetSendResponse,
@@ -28,6 +31,7 @@ import {
   toAvailability,
   toConfig,
   toConversation,
+  toCsat,
   toMessage,
   toWireKind,
 } from './map.js';
@@ -137,6 +141,7 @@ interface Current {
   readonly id: string;
   status: ConversationStatus;
   readonly visitorEmail: string | null;
+  aiHandedOff: boolean;
 }
 
 export function createRemoteTransport(options: RemoteTransportOptions): WidgetTransport {
@@ -193,6 +198,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
           department: null,
           visitor_email: current.visitorEmail,
           read_seq: 0,
+          ai_handed_off: current.aiHandedOff,
         };
 
   const moveTo = (status: ConversationStatus): void => {
@@ -200,6 +206,18 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       return;
     }
     current.status = status;
+    const conversation = summary();
+    if (conversation !== null) {
+      emit({ type: 'conversation', conversation });
+    }
+  };
+
+  /** M7-06: the assistant stepped back, once and for good; the UI hides "Talk to a human". */
+  const handOver = (handedOff: boolean): void => {
+    if (current === null || !handedOff || current.aiHandedOff) {
+      return;
+    }
+    current.aiHandedOff = true;
     const conversation = summary();
     if (conversation !== null) {
       emit({ type: 'conversation', conversation });
@@ -251,14 +269,22 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       case EVENTS.conversation: {
         const moved = envelope.data as WidgetConversationEvent;
         if (mine(moved.conversationId)) {
+          handOver(moved.aiHandedOff === true);
           moveTo(statusOf(moved, null));
         }
         return;
       }
+      case EVENTS.csat: {
+        const csat = envelope.data as WidgetCsat;
+        if (mine(csat.conversationId)) {
+          emit({ type: 'csat', csat: toCsat(csat) });
+        }
+        return;
+      }
       case EVENTS.presence: {
-        const { agentsOnline } = envelope.data as { agentsOnline: boolean };
+        const { agentsOnline, agents } = envelope.data as WidgetPresence;
         if (availability !== null) {
-          availability = { ...availability, agentsOnline };
+          availability = { ...availability, agentsOnline, agents };
           emit({ type: 'presence', availability: toAvailability(availability) });
         }
         return;
@@ -377,7 +403,12 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
     visitorEmail: string | null,
   ): Promise<ConversationSummary> => {
     const position = await positionOf(conversation);
-    current = { id: conversation.id, status: statusOf(conversation, position), visitorEmail };
+    current = {
+      id: conversation.id,
+      status: statusOf(conversation, position),
+      visitorEmail,
+      aiHandedOff: conversation.aiHandedOff ?? false,
+    };
     return toConversation(conversation, position, visitorEmail);
   };
 
@@ -600,6 +631,50 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
 
     async requestTranscript(conversationId, email) {
       await http.post(conversationPath(conversationId, '/transcript'), { email });
+    },
+
+    async handOff(conversationId) {
+      const conversation = await http.post<WireConversation>(
+        conversationPath(conversationId, '/handoff'),
+        {},
+      );
+      if (current?.id === conversationId) {
+        current.aiHandedOff = conversation.aiHandedOff ?? true;
+      }
+      return toConversation(
+        conversation,
+        await positionOf(conversation),
+        current?.visitorEmail ?? null,
+      );
+    },
+
+    async sendFeedback(conversationId, messageId, feedback) {
+      await http.post(conversationPath(conversationId, `/messages/${messageId}/feedback`), {
+        feedback,
+      });
+    },
+
+    async getCsat(conversationId) {
+      const { csat } = await http.get<WidgetCsatResponse>(
+        conversationPath(conversationId, '/csat'),
+      );
+      return csat === null ? null : toCsat(csat);
+    },
+
+    async rateConversation(conversationId, rating, comment) {
+      const { csat } = await http.post<WidgetCsatResponse>(
+        conversationPath(conversationId, '/csat'),
+        { rating, ...(comment.trim() === '' ? {} : { comment }) },
+      );
+      return csat === null ? null : toCsat(csat);
+    },
+
+    async skipCsat(conversationId) {
+      const { csat } = await http.post<WidgetCsatResponse>(
+        conversationPath(conversationId, '/csat/skip'),
+        {},
+      );
+      return csat === null ? null : toCsat(csat);
     },
 
     async submitContactForm(input) {

@@ -1,7 +1,7 @@
-import { expect, type Page, test } from '@playwright/test';
-import { generate } from 'otplib';
+import type { Page } from '@playwright/test';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import { expect, openAdmin, test } from './admin-session.js';
+import { SKIP_ENV } from './install.js';
 
 /**
  * M1-04 against the real api: a contact created in a browser, stored in
@@ -26,22 +26,6 @@ const t = strings('en');
 const CONTACT_NAME = 'Mona Khalil';
 const CONTACT_EMAIL = 'mona.khalil@example.com';
 
-/** Signed in as the seeded install admin, through the second factor. */
-const signInAsAdmin = async (page: Page): Promise<void> => {
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(process.env[ACCOUNT_EMAIL_ENV] ?? '');
-  await page
-    .getByLabel(t('auth:signIn.passwordLabel'))
-    .fill(process.env[ACCOUNT_PASSWORD_ENV] ?? '');
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-
-  await page
-    .getByLabel(t('auth:totp.codeLabel'))
-    .fill(await generate({ secret: process.env[TOTP_SECRET_ENV] ?? '' }));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
 const openContacts = async (page: Page): Promise<void> => {
   await page.getByRole('link', { name: new RegExp(t('admin:nav.contacts')) }).click();
   await page.getByRole('heading', { name: t('contacts:title'), level: 1 }).waitFor();
@@ -51,7 +35,7 @@ test.describe('contacts against the real api', () => {
   test('creates a contact and opens it, with the address normalised on the way in', async ({
     page,
   }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openContacts(page);
 
     await expect(page.getByText(t('contacts:empty.heading'))).toBeVisible();
@@ -72,7 +56,7 @@ test.describe('contacts against the real api', () => {
   });
 
   test('shows the new contact in the list and finds it by its address', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openContacts(page);
 
     await expect(page.getByRole('table').getByText(CONTACT_NAME)).toBeVisible();
@@ -82,7 +66,7 @@ test.describe('contacts against the real api', () => {
   });
 
   test('refuses the same address a second time, from the unique index itself', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openContacts(page);
 
     await page.getByRole('button', { name: t('contacts:newContact') }).click();
@@ -97,7 +81,7 @@ test.describe('contacts against the real api', () => {
   });
 
   test('adds a note to the contact and reads it back', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await openContacts(page);
     await page.getByRole('link', { name: CONTACT_NAME, exact: true }).click();
     await page.getByRole('heading', { name: CONTACT_NAME, level: 1 }).waitFor();

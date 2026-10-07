@@ -196,6 +196,44 @@ export const brandIdParamSchema = z.object({
 });
 export type BrandIdParam = z.infer<typeof brandIdParamSchema>;
 
+/** DOMAIN-RULES §11: a deleted brand is restorable for this long, then purged. */
+export const BRAND_DELETION_GRACE_DAYS = 30;
+
+/** When a brand whose deletion was requested at `requestedAt` may be purged. */
+export const brandPurgeAfter = (requestedAt: Date): Date =>
+  new Date(requestedAt.getTime() + BRAND_DELETION_GRACE_DAYS * 86_400_000);
+
+/**
+ * The install-admin brand routes (M8-07) name the brand `:id`, not
+ * `:brandId`: they run in install scope, and `:brandId` is what makes a
+ * route brand-scoped.
+ */
+export const installBrandParamSchema = z.object({ id: z.uuid() });
+export type InstallBrandParam = z.infer<typeof installBrandParamSchema>;
+
+/**
+ * What asking for a deletion takes: the brand's prefix, typed out, so a
+ * mistyped id or a stray click cannot start the clock on the wrong brand.
+ */
+export const brandDeletionRequestSchema = z.object({ confirmPrefix: z.string().min(1).max(20) });
+export type BrandDeletionRequest = z.infer<typeof brandDeletionRequestSchema>;
+
+/** Where a brand is in its deletion (M8-07). Both times are null for an active brand. */
+export const brandDeletionSchema = z.object({
+  brandId: z.uuid(),
+  status: brandStatusSchema,
+  requestedAt: z.iso.datetime().nullable(),
+  /** The end of the grace: restorable until then, purged by the next nightly run after. */
+  purgeAfter: z.iso.datetime().nullable(),
+  /**
+   * Who asked, from the install-scope audit row (`brand.deletion_requested`).
+   * Null for an active brand; `name` is null for an account that no longer
+   * exists.
+   */
+  requestedBy: z.object({ userId: z.string().min(1), name: z.string().nullable() }).nullable(),
+});
+export type BrandDeletion = z.infer<typeof brandDeletionSchema>;
+
 /**
  * What `PATCH /api/brands/:brandId` accepts. The prefix is absent on purpose:
  * it is printed in every ticket number ever issued, so REQUIREMENTS §3 makes it

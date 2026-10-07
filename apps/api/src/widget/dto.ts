@@ -16,7 +16,12 @@ import {
   widgetConversationParamSchema,
   widgetConversationSchema,
   widgetConversationSettingsSchema,
+  widgetCsatRequestSchema,
+  widgetCsatResponseSchema,
+  widgetFeedbackRequestSchema,
   widgetMessagePageSchema,
+  widgetMessageParamSchema,
+  widgetMessageSchema,
   widgetMessagesQuerySchema,
   widgetQueueSchema,
   widgetReadRequestSchema,
@@ -71,8 +76,13 @@ export class WidgetMessagesQueryDto extends createZodDto(widgetMessagesQuerySche
 export class WidgetMessagePageDto extends createZodDto(widgetMessagePageSchema) {}
 export class WidgetReadRequestDto extends createZodDto(widgetReadRequestSchema) {}
 export class WidgetTypingRequestDto extends createZodDto(widgetTypingRequestSchema) {}
+export class WidgetMessageParamDto extends createZodDto(widgetMessageParamSchema) {}
+export class WidgetMessageDto extends createZodDto(widgetMessageSchema) {}
+export class WidgetFeedbackRequestDto extends createZodDto(widgetFeedbackRequestSchema) {}
 export class WidgetTranscriptRequestDto extends createZodDto(widgetTranscriptRequestSchema) {}
 export class WidgetQueueDto extends createZodDto(widgetQueueSchema) {}
+export class WidgetCsatResponseDto extends createZodDto(widgetCsatResponseSchema) {}
+export class WidgetCsatRequestDto extends createZodDto(widgetCsatRequestSchema) {}
 export class WidgetStreamQueryDto extends createZodDto(widgetStreamQuerySchema) {}
 export class WidgetUploadRequestDto extends createZodDto(attachmentPresignRequestSchema) {}
 export class WidgetUploadResponseDto extends createZodDto(attachmentPresignResponseSchema) {}

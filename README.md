@@ -2,7 +2,22 @@
 
 Open-source customer support platform: ticketing, help center, live chat widget and grounded AI, in one deploy that serves many brands. A self-hosted alternative to Zoho Desk, Zendesk and Freshdesk.
 
-> **Status:** pre-alpha. M0 Skeleton, M1 Ticketing core, M2 Email channel and M3 Automation and SLAs have shipped. What works today: `docker compose up` and the first-run wizard; sign-in with a password and a second factor; staff, roles and brands; the ticket workspace with views, assignment, merge and split; email in and out; business hours and SLAs; workflow rules and macros; and staff notifications — in English and Arabic. There is no widget, help center or AI yet. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, and [docs/completed/](docs/completed/README.md) for what each milestone built, plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
+> **Status:** pre-1.0. M0 to M5 have shipped: the first-run wizard, sign-in with a second factor, staff, roles and brands, the ticket workspace, email in and out, business hours and SLAs, workflow rules and macros, notifications, the chat widget and the help center, in English and Arabic. Telegram, AI, the public API and the 1.0 hardening are being built. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, and [docs/completed/](docs/completed/README.md) for what each milestone built, plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
+
+## Install
+
+Docker Engine with Compose v2, a Linux server with 2 vCPU and 4 GB of memory, two DNS names pointing at it, and ports 80 and 443 open. Each release is published as `ghcr.io/docker-hunterpedia/helpdock:<version>` ([releases](https://github.com/Docker-Hunterpedia/Helpdock/releases)).
+
+```bash
+git clone --depth 1 --branch v<version> https://github.com/Docker-Hunterpedia/Helpdock.git
+cd Helpdock/docker
+cp ../.env.example .env
+# Fill in .env: HELPDOCK_VERSION=<version>, APP_URL, APP_MASTER_KEY (openssl rand -base64 32),
+# the database passwords, the S3 bucket, ADMIN_HOST and API_HOST.
+docker compose up -d
+```
+
+Then open `https://<ADMIN_HOST>` and finish the first-run wizard. [docs/guides/install.md](docs/guides/install.md) walks through every step, [configuration.md](docs/guides/configuration.md) lists every key, and [operations.md](docs/guides/operations.md) covers backups, upgrades and master key rotation. **Back up `.env` with the database**: without `APP_MASTER_KEY` nothing encrypted can be read back.
 
 ## Why Helpdock
 
@@ -29,12 +44,16 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 | M3 | Automation and SLAs | [shipped](docs/completed/M3-automation-and-slas.md) |
 | M4 | Widget and realtime | [shipped](docs/completed/M4-widget-and-realtime.md) |
 | M5 | Help center | [shipped](docs/completed/M5-help-center.md) |
-| M6 | Telegram | planned |
-| M7 | AI | planned |
-| M8 | API, webhooks, reports | planned |
-| M9 | Hardening and 1.0 release | planned |
+| M6 | Telegram | [in development](docs/in-development/M6-telegram.md) |
+| M7 | AI | [in development](docs/in-development/M7-ai.md) |
+| M8 | API, webhooks, reports | [in development](docs/in-development/M8-api-webhooks-reports.md) |
+| M9 | Hardening and 1.0 release | [in development](docs/in-development/M9-hardening-and-1-0.md) |
 
 Milestones are grouped into five phases with deliverables and exit criteria in the [PRD](docs/planning/PRD.md). All project documents live under [docs/](docs/), organised by lifecycle stage.
+
+## Design
+
+The design system is [DESIGN.md](DESIGN.md). Every screen, from the admin app to the widget, help center and emails, is drawn before it is built; [docs/design/](docs/design/README.md) shows each one as a rendered image, grouped by milestone, with its artboard source.
 
 ## Development
 

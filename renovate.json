@@ -44,5 +44,15 @@
       "matchPackageNames": ["node", "@types/node"],
       "allowedVersions": "<25"
     }
+  ],
+  "customManagers": [
+    {
+      "description": "The Semgrep CLI the ci workflow installs with pipx (M9-05).",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["pipx install semgrep==(?<currentValue>[0-9.]+)"],
+      "depNameTemplate": "semgrep",
+      "datasourceTemplate": "pypi"
+    }
   ]
 }

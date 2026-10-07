@@ -30,6 +30,15 @@ export class QueueRegistry {
   }
 
   /**
+   * The handles themselves, for Bull Board (M8-05). The board is the one
+   * place the api acts on a job — an install admin retrying or cleaning one
+   * by hand — and it never adds one.
+   */
+  queues(): readonly Queue[] {
+    return [...this.#queues.values()];
+  }
+
+  /**
    * Every queue's depth, in the declared order so the page and the metric agree
    * on what "the first five" means.
    */

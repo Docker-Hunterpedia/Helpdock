@@ -3,12 +3,14 @@ import {
   BookOpen,
   Building2,
   ChartColumn,
+  Code,
   type LucideIcon,
   Mail,
   Server,
   Settings,
   ShieldUser,
   SlidersHorizontal,
+  Sparkles,
   Ticket,
   Users,
   Workflow,
@@ -26,6 +28,8 @@ export type NavKey =
   | 'ticketing'
   | 'automation'
   | 'channels'
+  | 'ai'
+  | 'developers'
   | 'staff'
   | 'system';
 
@@ -82,7 +86,11 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   // M5-01, M5-02: every role reads the brand's articles; the api decides who
   // may change them (DOMAIN-RULES §1.2).
   helpCenter: item('helpCenter', ROUTES.helpCenter, BookOpen),
-  reports: item('reports', ROUTES.reports, ChartColumn, { placeholder: true }),
+  // M8-04: `report:read` is an Admin's, a Team Leader's and a Viewer's
+  // (DOMAIN-RULES §1.2); an Agent is not offered it.
+  reports: item('reports', ROUTES.reports, ChartColumn, {
+    roles: ['admin', 'teamLeader', 'viewer'],
+  }),
   settings: item('settings', ROUTES.settings, Settings, { placeholder: true }),
   // The brand's own settings. Admin only: DOMAIN-RULES §1.2 keeps brand-wide
   // configuration, and §11 the retention windows, with the Admin.
@@ -104,6 +112,12 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   // Admin, and a Team Leader owns the widget's theme and content policy, so
   // the page is theirs too with the Widget tab alone (`channels/tabs.ts`).
   channels: item('channels', ROUTES.channels, Mail, { roles: ['admin', 'teamLeader'] }),
+  // M7-10: Providers (install admins), Knowledge and Assistant. The two roles
+  // that hold `ai:manage` (DOMAIN-RULES §1.2); `ai/tabs.ts` narrows the tabs.
+  ai: item('ai', ROUTES.ai, Sparkles, { roles: ['admin', 'teamLeader'] }),
+  // M8-01, M8-03: API keys and webhooks act for the whole brand, every
+  // department included, so they are the Admin's alone (`brand:manage`).
+  developers: item('developers', ROUTES.developers, Code, { roles: ['admin'] }),
   // "Staff and roles" is the Admin and Team Leader screen: they are the two
   // roles that hold `staff:manage` (DOMAIN-RULES §1.2).
   staff: item('staff', ROUTES.staff, ShieldUser, { roles: ['admin', 'teamLeader'] }),
@@ -126,6 +140,8 @@ export const ADMIN_NAV: readonly NavItem[] = [
   NAV_BY_KEY.ticketing,
   NAV_BY_KEY.automation,
   NAV_BY_KEY.channels,
+  NAV_BY_KEY.ai,
+  NAV_BY_KEY.developers,
   NAV_BY_KEY.staff,
   NAV_BY_KEY.system,
 ];

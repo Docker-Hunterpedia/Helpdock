@@ -20,7 +20,12 @@ import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createWorker, type JobHandler } from './consumer.js';
-import { createOutboxEventHandler, SETTINGS_CHANGED_EVENT } from './dispatcher.js';
+import {
+  createOutboxDispatcher,
+  createOutboxEventHandler,
+  outboxJobOrderingKeys,
+  SETTINGS_CHANGED_EVENT,
+} from './dispatcher.js';
 import { type OutboxEventPayload, outboxEventJob } from './jobs.js';
 import type { JobLogger } from './logger.js';
 import { enqueueOutbox } from './outbox.js';
@@ -261,5 +266,141 @@ describe.skipIf(!hasDocker)('idempotent consumers', () => {
 
     expect(job.failedReason).toContain('No outbox handler is registered for ticket.replied');
     expect(job.attemptsMade).toBe(outboxEventJob.options.attempts);
+  });
+
+  describe('per-ticket order under concurrency', () => {
+    const TICKETS = [uuidv7(), uuidv7(), uuidv7()];
+    const EVENTS_PER_TICKET = 8;
+
+    interface Run {
+      readonly ticketId: string;
+      readonly n: number;
+      readonly startedAt: number;
+      readonly endedAt: number;
+    }
+
+    /** How long a run takes, so two of one ticket running at once would show as an overlap. */
+    const HANDLER_MS = 10;
+
+    const deferred = () => {
+      let release = (): void => undefined;
+      const promise = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { promise, release };
+    };
+
+    /**
+     * A subscriber that records when it ran. The first ticket's first event
+     * can be held open, which makes "the other tickets ran while this one was
+     * mid-flight" a fact the test waits for rather than a race it hopes to win.
+     */
+    const recordingDispatcher = (runs: Run[], holdFirst?: Promise<void>) => {
+      const dispatcher = createOutboxDispatcher();
+      dispatcher.register('ticket.updated', async ({ payload }) => {
+        const startedAt = performance.now();
+        const ticketId = String(payload.ticketId);
+        const n = Number(payload.n);
+        if (holdFirst !== undefined && ticketId === TICKETS[0] && n === 0) {
+          await holdFirst;
+        }
+        await new Promise((resolve) => setTimeout(resolve, HANDLER_MS));
+        runs.push({ ticketId, n, startedAt, endedAt: performance.now() });
+      });
+      return dispatcher;
+    };
+
+    /** Round-robin across the tickets, so each ticket's events are interleaved with the others'. */
+    const publishInterleaved = async (): Promise<void> => {
+      await withSystem(db, brandId, async (tx) => {
+        for (let n = 0; n < EVENTS_PER_TICKET; n += 1) {
+          for (const ticketId of TICKETS) {
+            await enqueueOutbox(tx, { brandId, event: 'ticket.updated', payload: { ticketId, n } });
+          }
+        }
+      });
+      await runRelayCycle({ db, queue, brandIds: [brandId] });
+    };
+
+    const runsOf = (runs: readonly Run[], ticketId: string) =>
+      runs.filter((run) => run.ticketId === ticketId);
+
+    const waitForRuns = (runs: Run[], count: number) =>
+      vi.waitFor(
+        () => {
+          expect(runs).toHaveLength(count);
+        },
+        { timeout: 30_000, interval: 50 },
+      );
+
+    const overlapsWithinATicket = (runs: readonly Run[]): boolean =>
+      TICKETS.some((ticketId) => {
+        const mine = runsOf(runs, ticketId).sort((a, b) => a.startedAt - b.startedAt);
+        return mine.some(
+          (run, index) => index > 0 && run.startedAt < (mine[index - 1]?.endedAt ?? 0),
+        );
+      });
+
+    it('runs one ticket’s events one at a time, in the order they were written', async () => {
+      const runs: Run[] = [];
+      const firstEvent = deferred();
+      workers.push(
+        createWorker(
+          outboxEventJob,
+          createOutboxEventHandler(recordingDispatcher(runs, firstEvent.promise)),
+          {
+            redis: connection,
+            db,
+            log: recordingLogger(),
+            concurrency: 8,
+            serialize: outboxJobOrderingKeys,
+          },
+        ),
+      );
+
+      await publishInterleaved();
+
+      // While the first ticket's first event is held, another ticket's event
+      // runs to the end — different tickets do run side by side, which is the
+      // point — and the held ticket's later events wait behind its first. (Not
+      // *every* other event: eight held slots would leave none for them.)
+      await vi.waitFor(
+        () => {
+          expect(runs.some((run) => run.ticketId !== TICKETS[0])).toBe(true);
+        },
+        { timeout: 30_000, interval: 50 },
+      );
+      expect(runsOf(runs, TICKETS[0] ?? '')).toHaveLength(0);
+
+      firstEvent.release();
+      await waitForRuns(runs, TICKETS.length * EVENTS_PER_TICKET);
+
+      for (const ticketId of TICKETS) {
+        expect(runsOf(runs, ticketId).map((run) => run.n)).toEqual(
+          Array.from({ length: EVENTS_PER_TICKET }, (_unused, n) => n),
+        );
+      }
+      expect(overlapsWithinATicket(runs)).toBe(false);
+    });
+
+    it('never runs two events of one ticket at once across two worker processes', async () => {
+      const runs: Run[] = [];
+      for (let replica = 0; replica < 2; replica += 1) {
+        workers.push(
+          createWorker(outboxEventJob, createOutboxEventHandler(recordingDispatcher(runs)), {
+            redis: connection,
+            db,
+            log: recordingLogger(),
+            concurrency: 4,
+            serialize: outboxJobOrderingKeys,
+          }),
+        );
+      }
+
+      await publishInterleaved();
+      await waitForRuns(runs, TICKETS.length * EVENTS_PER_TICKET);
+
+      expect(overlapsWithinATicket(runs)).toBe(false);
+    });
   });
 });

@@ -4,10 +4,12 @@ import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
 import { YourAccountPage } from '../screens/account/account-page.tsx';
+import { AiPage } from '../screens/admin/ai/ai-page.tsx';
 import { AutomationPage } from '../screens/admin/automation/automation-page.tsx';
 import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
 import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
+import { DevelopersPage } from '../screens/admin/developers/developers-page.tsx';
 import { AuditLogPage } from '../screens/admin/system/audit-log-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
@@ -23,6 +25,7 @@ import { OpenHelpCenter } from '../screens/help-center/site/open-help-center.tsx
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { PlaceholderPage } from '../screens/placeholder-page.tsx';
+import { ReportsPage } from '../screens/reports/reports-page.tsx';
 import { SetupPage } from '../screens/setup/setup-page.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
 import { StaffScreen } from '../screens/staff.tsx';
@@ -90,6 +93,8 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
           {/* M3-08. Install-wide like the rest of System; the api refuses anybody else. */}
           <Route path={ROUTES.systemAuditLog} element={<AuditLogPage />} />
+          {/* M8-04. Offered to the roles holding `report:read`; the api refuses anyone else. */}
+          <Route path={ROUTES.reports} element={<ReportsPage />} />
           <Route path={ROUTES.staff} element={<StaffScreen />} />
           {/* M1-04. `new` and `accounts/:id` are static-first, which React
               Router ranks above `:contactId`, so a contact can never be
@@ -114,6 +119,10 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
           <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
           <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
+          {/* M7-10. `/admin/ai` alone opens the first tab the reader has. */}
+          <Route path={ROUTES.ai} element={<AiPage />} />
+          <Route path={ROUTES.aiTab} element={<AiPage />} />
+          <Route path={ROUTES.telegramBot} element={<ChannelsPage />} />
           {/* M5-01, M5-02, M5-09. `/help-center` alone opens Articles. */}
           <Route path={ROUTES.helpCenter} element={<HelpCenterPage />} />
           <Route path={ROUTES.helpCenterTab} element={<HelpCenterPage />} />
@@ -124,6 +133,9 @@ export function AppRoutes(): ReactNode {
               its first. */}
           <Route path={ROUTES.brand} element={<BrandPage />} />
           <Route path={ROUTES.brandTab} element={<BrandPage />} />
+          {/* M8-01, M8-03: API keys and Webhooks; `/admin/developers` alone opens API keys. */}
+          <Route path={ROUTES.developers} element={<DevelopersPage />} />
+          <Route path={ROUTES.developersTab} element={<DevelopersPage />} />
           {/* Your account: Security (M0-06), Notifications (M3-07) and Email
               signature (M2-05) are tabs of one page, and `/me` alone opens
               the first. */}

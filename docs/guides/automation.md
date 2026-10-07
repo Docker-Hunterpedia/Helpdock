@@ -40,7 +40,7 @@ day).
 | Assigned | The assignee or the team changed |
 | Tag added | A tag was put on the ticket |
 | SLA warning, SLA breach | M3-02's `sla.warning` and `sla.breached` events |
-| CSAT received | `csat.received`, once a survey answer emits it |
+| CSAT received | `csat.received`: a customer answered a survey on the rating page, in the widget or with a Telegram button (M8-06) |
 
 **If.** The ticket matches *all* or *any* of the rule's groups, and each group
 *all* or *any* of its conditions. A rule with no groups runs on every ticket its
@@ -64,7 +64,8 @@ department: its own hours and holidays if it has them, otherwise the brand's
 
 **Then.** Actions run in order: set status, set priority, set a custom field,
 assign to a team, an agent or the department's round-robin, add or remove a tag,
-send a canned response, add an internal note, notify, escalate, close.
+send a canned response, add an internal note, notify, escalate, close, and AI
+triage.
 
 - Assigning to a team in another department **moves the ticket there**, and
   takes it off an assignee who cannot follow; a ticket left unassigned is handed
@@ -96,6 +97,26 @@ send a canned response, add an internal note, notify, escalate, close.
 
 Every change a rule makes is in the ticket's activity log with actor
 `rule:<id>` and *via* `rule`.
+
+### AI triage
+
+*AI triage* (M7-07) has the assistant decide the ticket's **tags**,
+**priority** and **department** — any of the three, at least one — choosing
+only among the brand's existing tags and departments:
+
+| Mode | What happens |
+|---|---|
+| Suggest for an agent to accept | The ticket's Suggested fields card shows the choice; nothing changes until an agent accepts a field |
+| Apply to the ticket | The rule makes the changes itself, as its other actions would: activity with actor `rule:<id>`, the SLA clocks, the rotation when the department moves |
+
+The model is not called while the rule runs: the action queues the work
+through the outbox, and the `ai.classify` job does it seconds later, outside
+any transaction, logging the call as `triage.classify` against the brand's AI
+budget. The run's execution log shows the action as *queued*, then what the
+job made of it — *suggested*, *applied*, *nothing to change* or *failed* —
+because the job writes its outcome back into the run. A retry never applies
+twice. The test run says the triage would be queued and calls no model. See
+[the AI guide](ai.md#ai-triage).
 
 ## Order
 

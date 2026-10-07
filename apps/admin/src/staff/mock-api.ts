@@ -14,6 +14,15 @@ import type {
 import { AuthError } from '../auth/api.js';
 import { type StaffApi, StaffError } from './api.js';
 
+/** The one password the fixtures answer `password-breached` for, as the api's bundled list would. */
+export const MOCK_BREACHED_PASSWORD = 'passwordpassword';
+
+export const assertNotMockBreached = (password: string): void => {
+  if (password.toLowerCase() === MOCK_BREACHED_PASSWORD) {
+    throw new AuthError('password-breached');
+  }
+};
+
 /**
  * The fixture the staff screens, the security page and the invite screen run
  * against until an install is in front of them. It is deliberately the whole of
@@ -303,10 +312,11 @@ export class MockStaffApi implements StaffApi {
     return this.#profile;
   }
 
-  async changePassword(currentPassword: string, _newPassword: string): Promise<void> {
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     if (currentPassword !== MOCK_CURRENT_PASSWORD) {
       throw new AuthError('invalid-credentials');
     }
+    assertNotMockBreached(newPassword);
 
     this.#sessions = { sessions: this.#sessions.sessions.filter((session) => session.current) };
   }

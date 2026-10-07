@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 
 /**
  * Every Redis key and channel the auth service touches, in one place.
@@ -31,6 +32,9 @@ export const totpChallengeKey = (challengeId: string): string => `auth:totp:${ch
 
 /** Set when a challenge burns its last attempt; blocks sign-in for this account. */
 export const totpLockKey = (userId: string): string => `auth:totp-lock:${userId}`;
+
+/** The last time step an authenticator code of this account was accepted at. */
+export const totpUsedStepKey = (userId: string): string => `auth:totp-step:${userId}`;
 
 /** A browser the user chose to trust, addressed by the hash of its cookie's nonce. */
 export const trustedDeviceKey = (userId: string, nonceHash: string): string =>
@@ -70,6 +74,19 @@ export const rateLimitKey = (bucket: string, subject: string): string =>
  * M0-13 subscribes; this milestone only publishes.
  */
 export const PRINCIPAL_REVOKED_CHANNEL = 'principal.revoked';
+
+/**
+ * What is published on {@link PRINCIPAL_REVOKED_CHANNEL}. `familyIds` names the
+ * browsers whose refresh families were revoked; absent, the revocation covers
+ * every browser the person has.
+ */
+export const principalRevokedSchema = z.object({
+  principalType: z.literal('staff'),
+  principalId: z.uuid(),
+  reason: z.string(),
+  familyIds: z.array(z.string().min(1)).max(1_000).optional(),
+});
+export type PrincipalRevokedMessage = z.infer<typeof principalRevokedSchema>;
 
 /**
  * The hash a secret is stored under. SHA-256 and not argon2 on purpose: these

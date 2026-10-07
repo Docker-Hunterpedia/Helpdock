@@ -1,4 +1,5 @@
 import {
+  aiCalls,
   attachments,
   auditLog,
   type DbTransaction,
@@ -18,6 +19,7 @@ import {
   eq,
   inArray,
   isNotNull,
+  isNull,
   lt,
   notExists,
   notInArray,
@@ -258,6 +260,46 @@ export class RetentionRepository {
     return rows.length;
   }
 
+  /**
+   * M7: AI calls older than the cutoff whose bodies are still there.
+   * DOMAIN-RULES §11: "bodies nulled, counts kept" — the row stays, with its
+   * tokens, cost and prompt hash, for reports and for the budget meter.
+   */
+  async countAiCallBodies(tx: DbTransaction, brandId: string, cutoff: Date): Promise<number> {
+    const [row] = await tx
+      .select({ total: count() })
+      .from(aiCalls)
+      .where(this.#aiCallBodies(brandId, cutoff));
+
+    return row?.total ?? 0;
+  }
+
+  async purgeAiCallBodiesBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = tx
+      .select({ id: aiCalls.id })
+      .from(aiCalls)
+      .where(this.#aiCallBodies(brandId, cutoff))
+      .limit(limit);
+    const rows = await tx
+      .update(aiCalls)
+      .set({
+        prompt: null,
+        response: null,
+        redactions: null,
+        sources: null,
+        bodiesPurgedAt: new Date(),
+      })
+      .where(inArray(aiCalls.id, batch))
+      .returning({ id: aiCalls.id });
+
+    return rows.length;
+  }
+
   /** M5-05: the help center search log, older than the cutoff. */
   async countSearchLog(tx: DbTransaction, brandId: string, cutoff: Date): Promise<number> {
     const [row] = await tx
@@ -326,6 +368,14 @@ export class RetentionRepository {
       .returning({ id: auditLog.id });
 
     return rows.length;
+  }
+
+  #aiCallBodies(brandId: string, cutoff: Date): SQL {
+    return and(
+      eq(aiCalls.brandId, brandId),
+      lt(aiCalls.createdAt, cutoff),
+      isNull(aiCalls.bodiesPurgedAt),
+    ) as SQL;
   }
 
   #ticketCondition(tx: DbTransaction, brandId: string, kind: TicketPurgeKind, cutoff: Date): SQL {

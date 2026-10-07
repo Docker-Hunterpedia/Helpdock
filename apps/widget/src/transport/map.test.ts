@@ -97,6 +97,7 @@ const wireConfig: WireConfig = {
     nextOpenAt: null,
     timezone: 'Asia/Dubai',
     agentsOnline: false,
+    agents: [],
   },
   popularArticles: [
     { id: 'a1', title: 'Refunds', excerpt: 'Card refunds…', section: null, url: 'https://hc/a1' },
@@ -177,12 +178,30 @@ describe('toConfig', () => {
 describe('toAvailability', () => {
   it('derives the three header states from the calendar and the people', () => {
     const at = (open: boolean, agentsOnline: boolean) =>
-      toAvailability({ open, agentsOnline, nextOpenAt: null, timezone: 'UTC' }).state;
+      toAvailability({ open, agentsOnline, agents: [], nextOpenAt: null, timezone: 'UTC' }).state;
 
     expect(at(true, true)).toBe('online');
     expect(at(true, false)).toBe('open_offline');
     expect(at(false, true)).toBe('closed');
     expect(at(false, false)).toBe('closed');
+  });
+
+  it('carries who is online, keyed by position because the api sends no staff id', () => {
+    const availability = toAvailability({
+      open: true,
+      agentsOnline: true,
+      agents: [
+        { name: 'Lina', avatarUrl: null },
+        { name: 'Sara', avatarUrl: 'https://cdn.acme.test/sara.webp' },
+      ],
+      nextOpenAt: null,
+      timezone: 'UTC',
+    });
+
+    expect(availability.agents_online).toEqual([
+      { id: 'online-0', name: 'Lina', avatar_url: null },
+      { id: 'online-1', name: 'Sara', avatar_url: 'https://cdn.acme.test/sara.webp' },
+    ]);
   });
 });
 
@@ -256,8 +275,29 @@ describe('toMessage', () => {
       kind: 'agent',
       agent: { id: 'brand', name: 'Acme', avatar_url: null },
     });
-    expect(ai.author.kind).toBe('agent');
+    expect(ai.author).toEqual({ kind: 'ai' });
     expect(toMessage(wireMessage({ author: 'system' }), 'Acme').author).toEqual({ kind: 'system' });
+  });
+
+  it("carries an assistant answer's sources and the visitor's feedback (M7-06)", () => {
+    const message = toMessage(
+      wireMessage({
+        author: 'ai',
+        ai: {
+          kind: 'answer',
+          citations: [{ marker: 1, title: 'Refund timelines', url: null, articleId: CONVERSATION }],
+          feedback: 'helpful',
+        },
+      }),
+      'Acme',
+    );
+
+    expect(message.ai).toEqual({
+      kind: 'answer',
+      citations: [{ marker: 1, title: 'Refund timelines', url: null, article_id: CONVERSATION }],
+      feedback: 'helpful',
+    });
+    expect(toMessage(wireMessage({}), 'Acme').ai).toBeUndefined();
   });
 });
 
@@ -282,8 +322,10 @@ describe('toConversation', () => {
       department: null,
       visitor_email: 'omar@example.com',
       read_seq: 0,
+      ai_handed_off: false,
     });
     expect(toConversation(wire, null, null).status).toBe('active');
+    expect(toConversation({ ...wire, aiHandedOff: true }, null, null).ai_handed_off).toBe(true);
     expect(toConversation({ ...wire, state: 'closed' }, 2, null).status).toBe('ended');
   });
 });

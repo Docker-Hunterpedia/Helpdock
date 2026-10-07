@@ -15,7 +15,8 @@
     "home": "Help",
     "homeInternal": "Team KB",
     "otherTopics": "Other topics",
-    "inSection": "In this section"
+    "inSection": "In this section",
+    "skip": "Skip to content"
   },
   "search": {
     "label": "Search help articles",
@@ -68,7 +69,12 @@
       "yes": "Yes",
       "no": "No",
       "thanks": "Thank you.",
-      "thanksBody": "We will use your answer to improve this article."
+      "thanksBody": "We will use your answer to improve this article.",
+      "missing": "What was missing from this article?",
+      "optional": "(optional)",
+      "hint": "Do not write your card details. We will not reply to this note; for help, use the chat.",
+      "skip": "Skip",
+      "send": "Send"
     }
   },
   "help": {

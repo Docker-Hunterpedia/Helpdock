@@ -78,6 +78,32 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # ARCHITECTURE §15: "CI runs `pnpm audit`". High and critical advisories
+      # fail the run; Renovate's vulnerability alerts open the fix for anything
+      # lower without waiting for its weekly window.
+      - name: Dependency audit
+        run: pnpm audit --audit-level high
+
+  # ARCHITECTURE §15's "Semgrep rules for Nest" (M9-05): the engineering rules of
+  # AGENTS.md that a type checker cannot see, in `.semgrep/helpdock.yml`. The
+  # fixtures run first, so a rule that stopped matching fails here rather than
+  # passing everything. Pinned like every other tool; Renovate moves it.
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Semgrep
+        run: pipx install semgrep==1.179.0
+      - name: Rule fixtures
+        run: semgrep scan --test --metrics=off .semgrep
+      - name: Scan
+        run: semgrep scan --config .semgrep/helpdock.yml --error --metrics=off apps packages scripts
+
   # The `packages/*` gate of ARCHITECTURE §15 (80 % of lines, root
   # `vitest.config.ts`). The api and admin unit suites are left out here
   # because their own gates below run them; the packages' number does not
@@ -457,7 +483,7 @@ jobs:
   ci:
     name: ci
     if: always()
-    needs: [checks, unit, admin-unit, api, integration, e2e, widget-e2e, browser-api, image]
+    needs: [checks, semgrep, unit, admin-unit, api, integration, e2e, widget-e2e, browser-api, image]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

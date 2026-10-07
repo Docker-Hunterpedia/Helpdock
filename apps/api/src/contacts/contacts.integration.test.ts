@@ -8,6 +8,7 @@ import {
   contacts,
   createDb,
   type DbHandle,
+  departments,
   userBrandRoles,
   withSystem,
 } from '@helpdock/db';
@@ -16,6 +17,7 @@ import type {
   AccountDetail,
   AccountList,
   ContactDetail,
+  ContactExport,
   ContactList,
   ContactTimeline,
 } from '@helpdock/schemas';
@@ -27,6 +29,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 import { findOrCreateContactByIdentity } from './identity.js';
 
 /**
@@ -168,6 +171,7 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
     const first = await request('POST', '/api/auth/sign-in', {
       body: { email: seeded.email, password: seeded.password },
     });
+    await forgetUsedTotpSteps(runtime.redis);
     const second = await request('POST', '/api/auth/totp', {
       body: {
         challengeId: (first.json() as { challengeId: string }).challengeId,
@@ -615,6 +619,68 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
     });
   });
 
+  describe('export (ASVS 8.3.2)', () => {
+    it('hands an Admin the contact, their tickets and the conversation, without notes', async () => {
+      const contact = await createContact({
+        name: 'Export Me',
+        identities: [{ kind: 'email', value: 'export-me@example.com' }],
+      });
+      const [department] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select({ id: departments.id }).from(departments).limit(1),
+      );
+      const ticket = await request('POST', `/api/brands/${seeded.brandId}/tickets`, {
+        body: {
+          subject: 'Where is my parcel?',
+          bodyHtml: '<p>It has been a week.</p>',
+          contactId: contact.id,
+          departmentId: department?.id,
+        },
+        headers: auth(),
+      });
+      expect(ticket.statusCode).toBe(201);
+      const ticketId = (ticket.json() as { ticket: { id: string } }).ticket.id;
+      await request('POST', `/api/brands/${seeded.brandId}/tickets/${ticketId}/messages`, {
+        body: { kind: 'note', bodyHtml: '<p>Staff only: a difficult one.</p>' },
+        headers: auth(),
+      });
+
+      const response = await request('GET', `${base()}/${contact.id}/export`, { headers: auth() });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-disposition']).toBe(
+        'attachment; filename="contact-export.json"',
+      );
+      const exported = response.json() as ContactExport;
+      expect(exported.contact).toMatchObject({
+        id: contact.id,
+        name: 'Export Me',
+        identities: [expect.objectContaining({ value: 'export-me@example.com' })],
+      });
+      expect(exported.tickets).toEqual([
+        expect.objectContaining({ id: ticketId, subject: 'Where is my parcel?' }),
+      ]);
+      expect(JSON.stringify(exported)).toContain('It has been a week.');
+      expect(JSON.stringify(exported)).not.toContain('Staff only');
+
+      const audited = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select()
+          .from(auditLog)
+          .where(and(eq(auditLog.action, 'contact.exported'), eq(auditLog.targetId, contact.id))),
+      );
+      expect(audited).toHaveLength(1);
+      expect(JSON.stringify(audited[0]?.meta)).not.toContain('export-me@example.com');
+    });
+
+    it('answers 404 for a contact of another brand', async () => {
+      const response = await request('GET', `${base()}/${crypto.randomUUID()}/export`, {
+        headers: auth(),
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe('erasure (DOMAIN-RULES §11)', () => {
     it('keeps the row, hashes the identifiers, and audits without a value', async () => {
       const contact = await createContact({
@@ -729,6 +795,7 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
       const first = await request('POST', '/api/auth/sign-in', {
         body: { email: seeded.email, password: seeded.password },
       });
+      await forgetUsedTotpSteps(runtime.redis);
       const second = await request('POST', '/api/auth/totp', {
         body: {
           challengeId: (first.json() as { challengeId: string }).challengeId,

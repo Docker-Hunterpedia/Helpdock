@@ -19,18 +19,26 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Redis } from 'ioredis';
+import { ApiKeyPrincipalResolver } from './api-keys/api-key-principal-resolver.js';
+import { ApiKeysRepository } from './api-keys/api-keys.repository.js';
 import { AppModule, type AppModuleOptions } from './app.module.js';
 import { createPrincipalResolver } from './auth/principal-resolver.js';
+import { RateLimiter } from './auth/rate-limit.js';
 import { RefreshStore } from './auth/session/refresh-store.js';
 import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
 import { INBOUND_PARSE_ROUTE, registerFormBodies } from './channels/inbound/inbound-parse-body.js';
+import { registerClientFacts } from './context/client-facts.js';
+import { registerJsonDisposition } from './http/json-disposition.js';
 import { securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { registerHttpMetrics } from './observability/http-metrics.js';
 import type { Metrics } from './observability/metrics.js';
-import { METRICS } from './observability/tokens.js';
+import { QueueBoardAccess, registerQueueBoard } from './observability/queue-board.js';
+import type { QueueRegistry } from './observability/queues.js';
+import { countRateLimitRefusalsIn } from './observability/rate-limit-refusals.js';
+import { METRICS, QUEUE_REGISTRY } from './observability/tokens.js';
 import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
 import { resolveAdminDist } from './static/admin-assets.js';
@@ -84,14 +92,16 @@ export const createRuntime = async ({
   // read (DOMAIN-RULES §1.5). The System page is served by an api replica,
   // which does.
   let migrationsApplied: number | null = null;
+  let migrations: readonly string[] | null = null;
 
   if (env.APP_ROLE === 'api') {
-    const migrations = await runMigrations({
+    const result = await runMigrations({
       migrationUrl: env.DATABASE_MIGRATION_URL,
       appRolePassword: appRolePasswordFromUrl(env.DATABASE_URL),
       log: (message) => logger.info(message),
     });
-    migrationsApplied = migrations.total;
+    migrationsApplied = result.total;
+    migrations = result.recorded;
   }
 
   const { db, close: closeDb } = createDb({ url: env.DATABASE_URL });
@@ -145,7 +155,7 @@ export const createRuntime = async ({
       settings,
       logger,
       signingKeys,
-      bootFacts: { runtimeRole: facts, migrationsApplied },
+      bootFacts: { runtimeRole: facts, migrationsApplied, migrations },
       close: async () => {
         for (const close of closers) {
           await close();
@@ -180,10 +190,18 @@ export interface CreateApiAppOptions {
   readonly objectStorage?: AppModuleOptions['objectStorage'];
   /** M2's IMAP connection and image fetcher, for suites. */
   readonly channels?: AppModuleOptions['channels'];
+  /** M6's Bot API, for suites. */
+  readonly telegram?: AppModuleOptions['telegram'];
   /** M4's siteverify call and SSE timings, for suites. */
   readonly widget?: AppModuleOptions['widget'];
   /** M4-09's siteverify call, for suites. */
   readonly webForm?: AppModuleOptions['webForm'];
+  /** M7's model discovery HTTP, for suites. */
+  readonly ai?: AppModuleOptions['ai'];
+  /** M7-05's retrieval HTTP and model, for suites. */
+  readonly assist?: AppModuleOptions['assist'];
+  /** M7-03's Notion and Google Drive APIs, for suites. */
+  readonly knowledge?: AppModuleOptions['knowledge'];
 }
 
 export const createApiApp = async ({
@@ -192,8 +210,12 @@ export const createApiApp = async ({
   brandResolver,
   objectStorage,
   channels,
+  telegram,
   widget,
   webForm,
+  ai,
+  assist,
+  knowledge,
 }: CreateApiAppOptions): Promise<ApiApp> => {
   const { env, logger } = runtime;
 
@@ -217,12 +239,22 @@ export const createApiApp = async ({
       bootFacts: runtime.bootFacts,
       auth: { signingKeys: runtime.signingKeys, logger },
       realtime: { sessionResolver, revocations: refreshStore },
-      principalResolver: createPrincipalResolver({ env, logger, session: sessionResolver }),
+      // M8-01: `hd_live_…` bearers are API keys; anything else is the session's.
+      principalResolver: new ApiKeyPrincipalResolver({
+        db: runtime.db,
+        keys: new ApiKeysRepository(),
+        limiter: new RateLimiter(runtime.redis),
+        fallback: createPrincipalResolver({ env, logger, session: sessionResolver }),
+      }),
       ...(brandResolver === undefined ? {} : { brandResolver }),
       ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(channels === undefined ? {} : { channels }),
+      ...(telegram === undefined ? {} : { telegram }),
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
+      ...(ai === undefined ? {} : { ai }),
+      ...(assist === undefined ? {} : { assist }),
+      ...(knowledge === undefined ? {} : { knowledge }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
@@ -269,10 +301,21 @@ export const createApiApp = async ({
   // ready, and on the Fastify instance rather than as a Nest interceptor so
   // that 401s, 403s and 404s are counted too (see `http-metrics.ts`).
   registerHttpMetrics(app.getHttpAdapter().getInstance(), app.get<Metrics>(METRICS));
+  registerClientFacts(app.getHttpAdapter().getInstance());
+  countRateLimitRefusalsIn(app.get<Metrics>(METRICS).rateLimitRefusals);
+  registerJsonDisposition(app.getHttpAdapter().getInstance());
 
   // M2-03 and M4-09. Before `init()`, which is when Nest adds its routes: the
   // `onRoute` hook that raises their body limit only sees routes added after it.
   registerFormBodies(app.getHttpAdapter().getInstance(), [INBOUND_PARSE_ROUTE, WEB_FORM_ROUTE]);
+
+  // M8-05: Bull Board brings its own router, so it is a Fastify plugin behind
+  // its own install-admin session check (`queue-board.ts`, ADR 0017).
+  await registerQueueBoard(app.getHttpAdapter().getInstance(), {
+    access: app.get(QueueBoardAccess),
+    queues: app.get<QueueRegistry>(QUEUE_REGISTRY).queues(),
+    secure: new URL(env.APP_URL).protocol === 'https:',
+  });
 
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

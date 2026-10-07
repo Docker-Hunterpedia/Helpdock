@@ -3,9 +3,10 @@
 How to run Helpdock on your own server with Docker Compose. Developers building
 the project instead want [the development guide](development.md).
 
-Helpdock is pre-alpha. The stack described here comes up, takes you through the
-first-run wizard and signs you in; ticketing, the help center, the widget and the
-AI are still being built ([PRD §4](../planning/PRD.md)).
+The stack runs the published image, `ghcr.io/docker-hunterpedia/helpdock`, with
+the Compose file from the same release. Every key `.env` can hold is in the
+[configuration reference](configuration.md); keeping the install running
+(backups, upgrades, key rotation) is in [operations](operations.md).
 
 ## What you need
 
@@ -36,13 +37,19 @@ asks, after the api has confirmed the domain was verified (see
 
 ## Install
 
+Pick a release from the
+[releases page](https://github.com/Docker-Hunterpedia/Helpdock/releases), and
+check out that release's Compose file:
+
 ```bash
-git clone https://github.com/Docker-Hunterpedia/Helpdock.git
+git clone --depth 1 --branch v<version> https://github.com/Docker-Hunterpedia/Helpdock.git
 cd Helpdock/docker
 cp ../.env.example .env
 ```
 
-Everything you have to fill in is in `.env`. Generate the master key first:
+Everything you have to fill in is in `.env`. Pin the image to the same release,
+`HELPDOCK_VERSION=<version>` (without the `v`); the template's `latest` works
+but is not reproducible. Generate the master key next:
 
 ```bash
 openssl rand -base64 32
@@ -68,6 +75,15 @@ REDIS_URL=redis://redis:6379
 ADMIN_HOST=admin.example.com
 API_HOST=api.example.com
 ACME_EMAIL=you@example.com
+
+HELPDOCK_VERSION=<version>
+
+# Object storage, described below.
+S3_ENDPOINT=https://s3.example.com
+S3_REGION=us-east-1
+S3_BUCKET=helpdock
+S3_ACCESS_KEY_ID=<access key>
+S3_SECRET_ACCESS_KEY=<secret key>
 ```
 
 `APP_MASTER_KEY` encrypts every secret Helpdock stores. **Back it up with the
@@ -106,6 +122,9 @@ Then:
 docker compose up -d
 docker compose ps
 ```
+
+Compose pulls `ghcr.io/docker-hunterpedia/helpdock:<version>` for the `api` and
+`worker` services, and the Postgres, Redis and Caddy images beside it.
 
 The api runs the migrations at boot, provisions the runtime database role,
 refuses to serve if that role could bypass row-level security, and starts
@@ -174,6 +193,9 @@ Step 2 is where you are signed in, because that is the first moment there is a
 brand for a session to land in. If the install requires two-factor
 authentication (`HD_AUTH_REQUIRE2FA=true`, or the `auth.require2fa` setting),
 step 4 says so and sends you to enrol an authenticator before anything else.
+Either way the install administrator must have one
+([authentication](authentication.md#who-must-have-a-second-factor)), so the next
+sign-in asks you to enrol an authenticator if you have not.
 
 ### Testing outgoing email
 
@@ -197,6 +219,10 @@ wizard saves ([ARCHITECTURE §4](../planning/ARCHITECTURE.md#4-configuration-mod
 and the wizard leaves it alone rather than storing a value nothing reads.
 
 ### Once it is finished
+
+Finishing generates the install's web push key pair, unless `.env` pins one
+with `HD_PUSH_VAPID_*` ([notifications](notifications.md#browser-push)). Keep it:
+a new pair signs every agent's browser out of push.
 
 The wizard is closed for good. `/setup` is no longer a route, and every setup
 endpoint answers `409 Conflict` — including to whoever finds the URL later.
@@ -306,45 +332,18 @@ unauthenticated.
 
 ## Upgrading
 
-Migrations are forward-only and run on api boot, so an upgrade is a pull and a
-restart. Take a dump first: a failed migration is recovered by restoring it and
-going back to the previous tag
-([DOMAIN-RULES §10](../planning/DOMAIN-RULES.md#10-operations-and-recovery)).
-
-```bash
-cd Helpdock/docker
-docker compose exec -T postgres \
-  sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > ../helpdock-$(date +%F).dump
-
-# Pin the new release in .env, rather than tracking `latest`.
-sed -i 's/^HELPDOCK_VERSION=.*/HELPDOCK_VERSION=1.2.3/' .env
-
-docker compose pull
-docker compose up -d
-docker compose logs -f api
-```
-
-Check the release notes before every upgrade; they flag any migration a restore
-cannot roll back.
+Take a dump, check out the new release's Compose file, set `HELPDOCK_VERSION`
+to it, then `docker compose pull` and `docker compose up -d`; the api migrates
+at boot. The steps, and what to do when a migration fails, are in
+[operations › Upgrading](operations.md#upgrading).
 
 ## Backups
 
-What to back up, in full, is
-[DOMAIN-RULES §10](../planning/DOMAIN-RULES.md#10-operations-and-recovery). The
-short version:
-
-- **Postgres**, with `pg_dump -Fc` (the command above).
-- **The object storage bucket.** It is the only copy of attachments and article
-  images.
-- **`.env`.** It holds `APP_MASTER_KEY`, and without that key every stored
-  secret is lost — the SMTP password the wizard saved, the OAuth secrets, all of
-  it. Keep it somewhere other than the server; [the operations
-  guide](operations.md#the-master-key) says how to check the copy you have is
-  the right one.
-
-Redis is not backed up. Losing it logs everyone out and drops queued jobs; the
-outbox relay republishes anything that had not been published, which is why
-nothing durable lives only in Redis.
+Postgres (`pg_dump -Fc`), the object storage bucket, and `.env` with its
+`APP_MASTER_KEY`: without that key every stored secret and every password is
+lost. Redis is not backed up. The commands, the restore, and the rehearsal are
+in [operations › Backups](operations.md#backups) and the
+[restore drill](restore-drill.md).
 
 ## Troubleshooting
 

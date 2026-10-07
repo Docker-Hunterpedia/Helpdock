@@ -1,5 +1,17 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
 
+/**
+ * Where an outbound webhook delivery stands (M8-03). `pending` until an
+ * attempt succeeds or the retries run out; `skipped` when the endpoint was
+ * removed or switched off before it could be sent.
+ */
+export const webhookDeliveryStatusEnum = pgEnum('webhook_delivery_status', [
+  'pending',
+  'succeeded',
+  'failed',
+  'skipped',
+]);
+
 /** Interface and content languages Helpdock ships with (REQUIREMENTS §3). */
 export const localeEnum = pgEnum('locale', ['en', 'ar']);
 
@@ -284,7 +296,16 @@ export const emailDeliveryKindEnum = pgEnum('email_delivery_kind', [
   'out_of_hours',
   // M4-08: a widget conversation sent to the address the visitor typed.
   'transcript',
+  // M8-06: the satisfaction survey sent on close, one per survey.
+  'csat',
 ]);
+
+/**
+ * M8-06. Where a satisfaction answer came from: the rating page a link opens,
+ * the widget's inline card, or a Telegram button. A Telegram tap records the
+ * score alone and leaves the link open for a comment (`Telegram/Chat-EN`).
+ */
+export const csatAnswerChannelEnum = pgEnum('csat_answer_channel', ['link', 'widget', 'telegram']);
 
 /**
  * Where an outbound email is. `failed` is the dead-letter state an Admin sees
@@ -377,3 +398,80 @@ export const hcMediaStatusEnum = pgEnum('hc_media_status', [
   'ready',
   'rejected',
 ]);
+
+/** M7-01. How one AI call ended: answered, failed at the provider, or refused before it was sent. */
+export const aiCallStatusEnum = pgEnum('ai_call_status', ['ok', 'error', 'refused']);
+
+/** M7-08. The two budget windows of a brand (REQUIREMENTS §4.7). */
+export const aiBudgetPeriodEnum = pgEnum('ai_budget_period', ['day', 'month']);
+
+/** M7-08. 80 % of a window spent, or all of it. */
+export const aiBudgetLevelEnum = pgEnum('ai_budget_level', ['warning', 'exceeded']);
+
+/** M7-02, M7-03. Where a brand's knowledge comes from (REQUIREMENTS §4.7). */
+export const knowledgeSourceKindEnum = pgEnum('knowledge_source_kind', [
+  'article',
+  'file',
+  'crawl',
+  'notion',
+  'gdrive',
+]);
+
+/** M7-03. Where a source is in its sync. */
+export const knowledgeSyncStatusEnum = pgEnum('knowledge_sync_status', [
+  'idle',
+  'queued',
+  'syncing',
+  'ok',
+  'failed',
+]);
+
+/**
+ * M7-03. When a source syncs on its own: `automatic` for articles (on
+ * publish) and files (on upload), a daily or weekly run in the brand's zone
+ * for crawls, Notion and Drive, or only when someone presses "Sync now".
+ */
+export const knowledgeSyncScheduleEnum = pgEnum('knowledge_sync_schedule', [
+  'automatic',
+  'daily',
+  'weekly',
+  'manual',
+]);
+
+/** M7-03. A line of a source's sync log: `done` closes a run. */
+export const knowledgeLogLevelEnum = pgEnum('knowledge_log_level', [
+  'info',
+  'warn',
+  'error',
+  'done',
+]);
+
+/**
+ * M7-02. Whether retrieval may rank by vector (DOMAIN-RULES §8). Only `ready`
+ * serves vectors; `reindexing` falls back to full text.
+ */
+export const embeddingStatusEnum = pgEnum('embedding_status', [
+  'unconfigured',
+  'reindexing',
+  'ready',
+]);
+
+/**
+ * Where an agent's reply to a Telegram chat is (M6-02). `failed` is a reply
+ * the last attempt could not deliver; an agent puts it back with Retry.
+ */
+export const telegramDeliveryStatusEnum = pgEnum('telegram_delivery_status', [
+  'queued',
+  'sent',
+  'failed',
+]);
+
+/** M7-05: where an article drafted from a ticket stands with its reviewer. */
+export const articleProposalStatusEnum = pgEnum('article_proposal_status', [
+  'waiting',
+  'approved',
+  'rejected',
+]);
+
+/** M7-09: a voice note's transcription job. */
+export const transcriptStatusEnum = pgEnum('transcript_status', ['pending', 'done', 'failed']);

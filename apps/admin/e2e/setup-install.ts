@@ -35,6 +35,8 @@ export interface FreshInstallOptions {
    * unless the body carries that key.
    */
   readonly setupKey?: boolean;
+  /** Plays a provider that rejects the key on the AI step (M7-10). */
+  readonly aiRefused?: boolean;
 }
 
 const json = (route: Route, body: unknown, status = 200): Promise<void> =>
@@ -68,6 +70,7 @@ export const freshInstall = async (
     testResult = { delivered: true, response: SMTP_RESPONSE },
     require2fa = false,
     setupKey = false,
+    aiRefused = false,
   }: FreshInstallOptions = {},
 ): Promise<void> => {
   await serveFreshDocument(page, setupKey);
@@ -129,6 +132,77 @@ export const freshInstall = async (
   });
 
   await page.route('**/api/install/setup/complete', (route) => json(route, { require2fa }));
+
+  await serveAiStep(page, aiRefused);
+};
+
+export const AI_MODELS = ['gpt-4.1', 'gpt-4.1-mini'] as const;
+
+/**
+ * The AI step's three install routes (M7-10). The step is signed in by the
+ * refresh cookie step 2 set; this fake has no cookie, so the refresh answers
+ * 401 and the routes below answer whatever the transport sends.
+ */
+const serveAiStep = async (page: Page, refused: boolean): Promise<void> => {
+  await page.route('**/api/auth/refresh', (route) =>
+    json(
+      route,
+      { error: { code: 'unauthenticated', message: 'no session', requestId: 'mock' } },
+      401,
+    ),
+  );
+  await page.route('**/api/install/ai/providers/*/models', (route) =>
+    refused
+      ? json(
+          route,
+          {
+            error: {
+              code: 'conflict',
+              message: 'The provider could not be asked for its models',
+              requestId: 'mock',
+              ai: { reason: 'discovery-failed' },
+            },
+          },
+          409,
+        )
+      : json(route, {
+          models: AI_MODELS.map((id) => ({
+            id,
+            name: id,
+            contextWindow: 1_047_576,
+            maxTokens: 32_768,
+            reasoning: false,
+            inputPerMillionUsd: 0.4,
+            outputPerMillionUsd: 1.6,
+          })),
+        }),
+  );
+  await page.route('**/api/install/ai/providers/*', (route) =>
+    json(route, {
+      id: 'openai',
+      kind: 'openai',
+      label: 'OpenAI',
+      baseUrl: null,
+      authType: 'apiKey',
+      oauthExpiresAt: null,
+    }),
+  );
+  await page.route('**/api/install/ai/default-model', (route) =>
+    json(route, {
+      providers: [],
+      kinds: [],
+      defaults: { providerId: 'openai', modelId: AI_MODELS[0] },
+      locked: { providers: false, defaults: false },
+    }),
+  );
+};
+
+/** Step 4 is optional; specs about something else pass it by. */
+export const skipAiStep = async (page: Page, locale: Locale): Promise<void> => {
+  const t = strings(locale);
+
+  await page.getByRole('heading', { name: t('wizard:ai.title') }).waitFor();
+  await page.getByRole('button', { name: t('wizard:ai.skip') }).click();
 };
 
 /** Fills step 1 and continues, leaving the brand step on screen. */
@@ -137,7 +211,7 @@ export const completeAccountStep = async (page: Page, locale: Locale): Promise<v
 
   await page.getByLabel(t('wizard:account.nameLabel')).fill(ADMIN_NAME);
   await page.getByLabel(t('wizard:account.emailLabel')).fill(ADMIN_EMAIL);
-  await page.getByLabel(t('wizard:account.passwordLabel')).fill(ADMIN_PASSWORD);
+  await page.getByLabel(t('wizard:account.passwordLabel'), { exact: true }).fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: t('wizard:account.submit') }).click();
   await page.getByRole('heading', { name: t('wizard:brand.title') }).waitFor();
 };

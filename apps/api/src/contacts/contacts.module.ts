@@ -11,10 +11,13 @@ import { ContactsRepository } from './contacts.repository.js';
 import { ContactsService } from './contacts.service.js';
 import {
   CONTACT_ERASURE_PROVIDER,
+  CONTACT_EXPORT_PROVIDER,
   CONTACT_TIMELINE_PROVIDER,
   type ContactErasureProvider,
+  type ContactExportProvider,
   type ContactTimelineProvider,
   NoContactErasureProvider,
+  NoContactExportProvider,
   NoContactTimelineProvider,
   NoTicketStatsProvider,
   TICKET_STATS_PROVIDER,
@@ -40,12 +43,19 @@ export interface ContactsModuleOptions {
   readonly timeline?: ContactTimelineProvider;
   /** Defaults to {@link NoContactErasureProvider}; M1-14 supplies the real one. */
   readonly erasure?: ContactErasureProvider;
+  /** Defaults to {@link NoContactExportProvider}; the tickets module supplies the real one. */
+  readonly exporter?: ContactExportProvider;
 }
 
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class ContactsModule {
-  static forRoot({ ticketStats, timeline, erasure }: ContactsModuleOptions = {}): DynamicModule {
+  static forRoot({
+    ticketStats,
+    timeline,
+    erasure,
+    exporter,
+  }: ContactsModuleOptions = {}): DynamicModule {
     return {
       module: ContactsModule,
       controllers: [ContactsController, AccountsController, ContactMergesController],
@@ -60,6 +70,7 @@ export class ContactsModule {
           useValue: timeline ?? new NoContactTimelineProvider(),
         },
         { provide: CONTACT_ERASURE_PROVIDER, useValue: erasure ?? new NoContactErasureProvider() },
+        { provide: CONTACT_EXPORT_PROVIDER, useValue: exporter ?? new NoContactExportProvider() },
         {
           provide: ContactMergesRepository,
           useFactory: (): ContactMergesRepository => new ContactMergesRepository(),
@@ -73,6 +84,7 @@ export class ContactsModule {
             TICKET_STATS_PROVIDER,
             CONTACT_TIMELINE_PROVIDER,
             CONTACT_ERASURE_PROVIDER,
+            CONTACT_EXPORT_PROVIDER,
           ],
           useFactory: (
             repository: ContactsRepository,
@@ -81,6 +93,7 @@ export class ContactsModule {
             stats: TicketStatsProvider,
             contactTimeline: ContactTimelineProvider,
             contactErasure: ContactErasureProvider,
+            contactExporter: ContactExportProvider,
           ): ContactsService =>
             new ContactsService({
               repository,
@@ -89,6 +102,7 @@ export class ContactsModule {
               stats,
               timeline: contactTimeline,
               erasure: contactErasure,
+              exporter: contactExporter,
             }),
         },
         // M1-13. The survivor's detail is what a merge answers with, so the
@@ -109,6 +123,8 @@ export class ContactsModule {
             new AccountsService({ repository }),
         },
       ],
+      // M8-02: the public API's contact routes write through the same service.
+      exports: [ContactsService, ContactsRepository],
     };
   }
 }

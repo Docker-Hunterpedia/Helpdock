@@ -228,11 +228,22 @@ than `en` or `ar` is refused with `400`.
 `GET /availability` returns `widgetAvailabilitySchema` on its own:
 
 ```json
-{ "open": false, "nextOpenAt": "2026-09-28T06:00:00.000Z", "timezone": "Asia/Riyadh", "agentsOnline": false }
+{
+  "open": true,
+  "nextOpenAt": null,
+  "timezone": "Asia/Riyadh",
+  "agentsOnline": true,
+  "agents": [{ "name": "Karim", "avatarUrl": null }, { "name": "Lina", "avatarUrl": null }]
+}
 ```
 
 `nextOpenAt` is `null` while the brand is open, and also when the brand has no
-business hours.
+business hours. `agents` lists up to five of the brand's agents who are online
+right now (not away), by first name and sorted, for the "Lina, Karim and Sara
+are online now" line. It is empty when nobody is online, and also when the
+brand turned off **Show the agent's name and photo**: `agentsOnline` still says
+whether anybody is there. It never carries a staff id or a surname. Staff have
+no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
 
 ## Conversations
 
@@ -247,6 +258,8 @@ business hours.
 | `POST /conversations/:id/typing` | `{ "typing": true }` | `204` |
 | `POST /conversations/:id/read` | `{ "seq": 12 }` | `204` |
 | `POST /conversations/:id/transcript` | `{ "email": "…" }` | `202` |
+| `POST /conversations/:id/handoff` | | `widgetConversationSchema` |
+| `POST /conversations/:id/messages/:messageId/feedback` | `widgetFeedbackRequestSchema` | `widgetMessageSchema` |
 
 The conversation list holds what this visitor may see: the conversations they
 started, plus any their verified contact may see.
@@ -344,6 +357,75 @@ shows agents. It has no field that could carry an internal note.
   access, and goes through the outbox. It works only when the brand turned
   transcripts on (`unavailable` otherwise) and only for `chat` conversations
   (`read_only` otherwise). Each conversation allows three transcripts an hour.
+
+### The assistant
+
+When the brand turns auto-reply on for the widget (AI › Assistant, M7-06),
+the assistant may answer a visitor's message before a person does. Its
+messages arrive like any other, as `message` frames and in the catch-up, with
+`author: "ai"` and an `ai` part:
+
+```json
+{
+  "author": "ai",
+  "text": "Card refunds show up 3 to 5 business days after we issue them [1].",
+  "html": null,
+  "ai": {
+    "kind": "answer",
+    "citations": [
+      { "marker": 1, "title": "Refund timelines", "url": "https://help.example.com/en/articles/refund-timelines", "articleId": "0192c3f0-…" }
+    ],
+    "feedback": null
+  }
+}
+```
+
+- `text` is the answer alone; each `[n]` in it is a citation, and
+  `citations` lists the sources by that number. They are public, published
+  sources only (DOMAIN-RULES §5). Open an article with `articleId` in the
+  client, or `url` in a browser when there is one.
+- `kind: "handoff"` is the brand's handoff text: the assistant was not sure
+  enough, and a person will answer. Draw it like an answer, without sources or
+  feedback, then the handoff line.
+- `POST …/messages/:messageId/feedback` with `{ "feedback": "helpful" }` or
+  `"not_helpful"` records "Was this helpful?" on an `answer`; the response is
+  the message with `ai.feedback` set. Anything else is `not_found`.
+- `POST …/handoff` is "Talk to a human": the assistant stops answering this
+  conversation for good, and nothing it was still preparing is sent. The
+  response is the conversation with `aiHandedOff: true`. Pressing it again
+  changes nothing. Typing "talk to a human" (or the Arabic) does the same on
+  the server.
+- `aiHandedOff` on the conversation, and on `conversation` frames, says the
+  assistant has stepped back: by its own handoff, the visitor's request, or a
+  person replying or taking the conversation. Offer "Talk to a human" only
+  while the assistant's last message is an `answer` and `aiHandedOff` is not
+  true.
+
+A visitor is never told why the assistant is quiet: with auto-reply off, a
+spent AI budget or no model configured, the chat is the ordinary chat, with
+no `ai` messages and nothing marked as AI.
+
+### Satisfaction card
+
+M8-06. When an agent ends a `chat` conversation and the brand asks for ratings,
+the conversation gets one card per close (`Widget/CSAT-EN`). Show it in place of
+the composer until it is answered or skipped.
+
+| Method and path | Body | Answer |
+|---|---|---|
+| `GET /conversations/:id/csat` | | `{ csat: widgetCsatSchema \| null }` |
+| `POST /conversations/:id/csat` | `{ rating: 1–5, comment?: string ≤ 1000 }` | `{ csat }` |
+| `POST /conversations/:id/csat/skip` | | `{ csat }` |
+
+`csat` is `{ conversationId, state, rating, comment, skippedAt }`, `state` one of
+`open`, `rated`, `skipped` (nothing recorded; do not offer the card again) and
+`expired` (30 days passed). It is `null` while the conversation is open, has no
+survey yet, or is not a `chat` conversation. A rating is recorded once: a second
+`POST` answers the card as it stands. Each change is also pushed to the
+conversation's room as a `csat` event, so a card answered on one device is not
+offered on another. Read the card over REST when you load an ended
+conversation: the survey is created by the worker just after the close, so the
+`csat` event may arrive after the `conversation` event that ended it.
 
 ## Help center
 
@@ -459,9 +541,10 @@ on `message` events and `null` on all others.
 | `message` | `widgetMessageSchema` |
 | `receipt` | `{ conversationId, kind: "delivered" \| "read", seq }` |
 | `typing` | `{ conversationId, typing, agentName }` |
-| `presence` | `{ agentsOnline }` |
+| `presence` | `{ agentsOnline, agents }`, as in [`GET /availability`](#configuration) |
 | `queue` | `{ conversationId, position }` |
 | `conversation` | `{ conversationId, state: "open" \| "closed", continuedById }` |
+| `csat` | `widgetCsatSchema`: the [satisfaction card](#satisfaction-card) appeared or changed |
 
 On a `message` event:
 

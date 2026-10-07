@@ -8,6 +8,7 @@ import type {
 } from '@helpdock/schemas';
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockAiApi } from '../../ai/mock-api.js';
 import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from '../../app/route-paths.js';
 import { renderApp } from '../../test/render.tsx';
 import type { SetupApi } from './setup-api.js';
@@ -15,7 +16,7 @@ import { SetupClosedError, SetupThrottledError, SetupValidationError } from './s
 import { SetupPage } from './setup-page.tsx';
 
 /**
- * The wizard as a whole: four steps, the decisions each one records, and what
+ * The wizard as a whole: five steps, the decisions each one records, and what
  * the screen does with each of the api's three refusals. The steps' own field
  * rules are unit tested beside them; what is proved here is that finishing one
  * step reaches the next with the right request.
@@ -90,10 +91,23 @@ class FakeSetupApi implements SetupApi {
   }
 }
 
-const renderWizard = (api: SetupApi, onFinished = vi.fn()) => ({
-  ...renderApp(<SetupPage api={api} onFinished={onFinished} />),
+const renderWizard = (api: SetupApi, onFinished = vi.fn(), aiApi = new MockAiApi()) => ({
+  ...renderApp(
+    <SetupPage
+      api={api}
+      ai={{ api: aiApi, signIn: () => Promise.resolve() }}
+      onFinished={onFinished}
+    />,
+  ),
   onFinished,
+  aiApi,
 });
+
+/** Step 4 is optional; most tests are about something else and pass it by. */
+const skipAi = async (user: ReturnType<typeof renderApp>['user']): Promise<void> => {
+  await screen.findByRole('heading', { name: 'Connect an AI provider' });
+  await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+};
 
 const fillAccount = async (user: ReturnType<typeof renderApp>['user']): Promise<void> => {
   await user.type(screen.getByLabelText('Your name'), 'Lina');
@@ -130,9 +144,10 @@ afterEach(() => {
 });
 
 describe('the first-run wizard', () => {
-  it('walks the four steps and reports what each one decided', async () => {
+  it('walks the five steps and reports what each one decided', async () => {
     const api = new FakeSetupApi();
-    const { user, onFinished } = renderWizard(api);
+    const { user, onFinished, aiApi } = renderWizard(api);
+    const setDefault = vi.spyOn(aiApi, 'setDefaultModel');
 
     await fillAccount(user);
     expect(api.adminRequests[0]).toEqual({
@@ -159,6 +174,16 @@ describe('the first-run wizard', () => {
       tls: 'starttls',
     });
 
+    await screen.findByRole('heading', { name: 'Connect an AI provider' });
+    await user.type(
+      screen.getByLabelText('API key', { selector: '#setup-ai-credential' }),
+      'sk-live',
+    );
+    await user.click(screen.getByRole('button', { name: 'Test and find models' }));
+    expect(await screen.findByText('Connected · 4 models found')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Save and continue' }));
+    expect(setDefault).toHaveBeenCalledWith({ providerId: 'openai', modelId: 'gpt-4.1' });
+
     await screen.findByRole('heading', { name: 'Helpdock is ready' });
     // The token is spent on arrival, not on the button: the summary has to know
     // whether a second factor is required before it is drawn.
@@ -168,6 +193,7 @@ describe('the first-run wizard', () => {
     expect(screen.getByText('lina@example.com')).toBeInTheDocument();
     expect(screen.getByText('Acme · ACME')).toBeInTheDocument();
     expect(screen.getByText('smtp.example.com')).toBeInTheDocument();
+    expect(screen.getByText('OpenAI · gpt-4.1')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Open Helpdock' }));
     expect(onFinished).toHaveBeenCalledWith(DEFAULT_SIGNED_IN_ROUTE);
@@ -183,10 +209,40 @@ describe('the first-run wizard', () => {
 
     await screen.findByRole('heading', { name: 'Outgoing email' });
     await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await skipAi(user);
 
     await screen.findByRole('heading', { name: 'Helpdock is ready' });
     expect(api.smtpRequests[0]).toEqual({ skip: true });
-    expect(screen.getByText('Not configured yet')).toBeInTheDocument();
+    expect(screen.getAllByText('Not configured yet')).toHaveLength(2);
+  });
+
+  it('asks for a key before testing, and says why a provider refused it', async () => {
+    const api = new FakeSetupApi();
+    const { user } = renderWizard(api);
+
+    await fillAccount(user);
+    await screen.findByRole('heading', { name: 'Your first brand' });
+    await fillBrand(user);
+    await screen.findByRole('heading', { name: 'Outgoing email' });
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await screen.findByRole('heading', { name: 'Connect an AI provider' });
+
+    await user.click(screen.getByRole('button', { name: 'Save and continue' }));
+    expect(screen.getByText('Enter the API key, then test it.')).toBeVisible();
+
+    await user.click(screen.getByLabelText('Provider'));
+    await user.click(await screen.findByRole('option', { name: 'OpenRouter' }));
+    expect(screen.getByRole('radio', { name: /Subscription/ })).toBeDisabled();
+    await user.type(
+      screen.getByLabelText('API key', { selector: '#setup-ai-credential' }),
+      'sk-or-revoked',
+    );
+    await user.click(screen.getByRole('button', { name: 'Test and find models' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The provider could not be asked for its models.',
+    );
+    expect(screen.queryByRole('heading', { name: 'Helpdock is ready' })).toBeNull();
   });
 
   it('sends the enrolment screen next when the install requires a second factor', async () => {
@@ -199,6 +255,7 @@ describe('the first-run wizard', () => {
     await fillBrand(user);
     await screen.findByRole('heading', { name: 'Outgoing email' });
     await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await skipAi(user);
 
     await screen.findByText(/two-factor authentication/);
     await user.click(screen.getByRole('button', { name: 'Open Helpdock' }));

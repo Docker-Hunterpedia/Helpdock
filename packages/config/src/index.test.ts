@@ -1,16 +1,20 @@
 import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import * as aiProviders from './ai-providers.js';
 import * as crypto from './crypto.js';
 import * as env from './env.js';
 import * as index from './index.js';
 import * as invalidation from './invalidation.js';
+import * as reference from './reference.js';
 import * as registry from './registry.js';
 import * as settings from './settings.js';
 
 const modules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  'ai-providers.ts': aiProviders,
   'crypto.ts': crypto,
   'env.ts': env,
   'invalidation.ts': invalidation,
+  'reference.ts': reference,
   'registry.ts': registry,
   'settings.ts': settings,
 };

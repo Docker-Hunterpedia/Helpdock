@@ -31,6 +31,7 @@ import { DEFAULT_DEPARTMENT_NAME } from '@helpdock/schemas';
 import { ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { ZodError } from 'zod';
+import { assertNotBreached } from '../auth/breached/breached-passwords.js';
 import type { PasswordHasher } from '../auth/password.js';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import type { IssuedSession, SessionService } from '../auth/session/session.service.js';
@@ -41,6 +42,7 @@ import { renderSmtpTestEmail } from './setup-email.js';
 import { SetupFailure } from './setup-failure.js';
 import { setupKeyMatches } from './setup-key.js';
 import type { SetupRecord, SetupTokenStore } from './setup-token.store.js';
+import { ensureVapidKeys, generateVapidKeys, type VapidKeyGenerator } from './vapid-keys.js';
 
 /**
  * The first-run wizard, server side (M0-08).
@@ -69,6 +71,7 @@ export const SETUP_PRINCIPAL_ID = 'install.setup';
 export const SETUP_ADMIN_ACTION = 'install.setup.admin';
 export const SETUP_BRAND_ACTION = 'install.setup.brand';
 export const SETUP_SMTP_ACTION = 'install.setup.smtp';
+export const SETUP_PUSH_ACTION = 'install.setup.push';
 
 /**
  * `HDSW`, and deliberately not the migration lock's `HDMG`. Held for the length
@@ -133,6 +136,7 @@ export interface SetupServiceOptions {
   readonly setupKey?: string | undefined;
   /** Replaced by the unit suite, which has no relay to talk to. */
   readonly smtp?: SmtpTesterFactory;
+  readonly vapid?: VapidKeyGenerator;
 }
 
 export interface CreatedBrand {
@@ -161,6 +165,7 @@ export class SetupService {
   readonly #logger: Logger;
   readonly #smtp: SmtpTesterFactory;
   readonly #setupKey: string | undefined;
+  readonly #vapid: VapidKeyGenerator;
 
   constructor({
     db,
@@ -172,6 +177,7 @@ export class SetupService {
     logger,
     setupKey,
     smtp = (options) => new SmtpEmailSender(options),
+    vapid = generateVapidKeys,
   }: SetupServiceOptions) {
     this.#db = db;
     this.#settings = settings;
@@ -182,6 +188,7 @@ export class SetupService {
     this.#logger = logger;
     this.#smtp = smtp;
     this.#setupKey = setupKey;
+    this.#vapid = vapid;
   }
 
   // ------------------------------------------------------------------
@@ -204,6 +211,7 @@ export class SetupService {
       throw new SetupFailure('setup-key-invalid');
     }
 
+    assertNotBreached(input.password);
     // Outside the transaction: argon2 spends 19 MiB and two passes, and a
     // connection held for that long is a connection nobody else can have.
     const passwordHash = await this.#hasher.hash(input.password);
@@ -365,9 +373,29 @@ export class SetupService {
   // Step 4 — done
   // ------------------------------------------------------------------
 
-  /** Spends the token. Every wizard endpoint answers 409 from here on. */
+  /**
+   * Creates the install's VAPID pair if it has none (ADR 0002), then spends the
+   * token. Every wizard endpoint answers 409 from here on.
+   */
   async complete(call: SetupCallContext): Promise<SetupCompleteResponse> {
     await this.#throttle(SETUP_IP_RULE, call.ip);
+    const { record: holder } = await this.#requireToken(call.token);
+
+    if (await ensureVapidKeys(this.#settings, this.#vapid, SETUP_PRINCIPAL_ID)) {
+      await this.#inInstallScope((tx) =>
+        tx.insert(auditLog).values({
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          actorType: 'system',
+          actorId: SETUP_PRINCIPAL_ID,
+          action: SETUP_PUSH_ACTION,
+          targetType: 'setting',
+          targetId: 'push',
+          // Never the keys: the private half is a secret.
+          meta: { userId: holder.userId, vapidGenerated: true },
+        }),
+      );
+      this.#logger.info('First-run wizard: VAPID key pair generated');
+    }
 
     const record = await this.#tokens.consume(call.token);
     if (record === null) {

@@ -286,7 +286,13 @@ describe('the remote transport', () => {
     const api = fakeApi({
       'GET /config': () => ({
         brandName: 'Acme',
-        availability: { open: true, agentsOnline: false, nextOpenAt: null, timezone: 'UTC' },
+        availability: {
+          open: true,
+          agentsOnline: false,
+          agents: [],
+          nextOpenAt: null,
+          timezone: 'UTC',
+        },
         popularArticles: [],
         theme: {
           colorScheme: 'auto',
@@ -338,12 +344,15 @@ describe('the remote transport', () => {
     live.envelope('queue', { conversationId: CONVERSATION, position: null });
     live.envelope('typing', { conversationId: CONVERSATION, typing: true, agentName: null });
     live.envelope('receipt', { conversationId: CONVERSATION, kind: 'read', seq: 1 });
-    live.envelope('presence', { agentsOnline: true });
+    live.envelope('presence', { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] });
     live.envelope('conversation', {
       conversationId: CONVERSATION,
       state: 'closed',
       continuedById: null,
     });
+    const card = { state: 'open', rating: null, comment: null, skippedAt: null };
+    live.envelope('csat', { conversationId: CONVERSATION, ...card });
+    live.envelope('csat', { conversationId: BRAND, ...card });
 
     expect(live.socket.emitWithAck).toHaveBeenCalledWith('conversation:join', {
       conversationId: CONVERSATION,
@@ -357,9 +366,17 @@ describe('the remote transport', () => {
       { type: 'receipt', kind: 'read', seq: 1 },
       {
         type: 'presence',
-        availability: expect.objectContaining({ state: 'online', timezone: 'UTC' }),
+        availability: expect.objectContaining({
+          state: 'online',
+          timezone: 'UTC',
+          agents_online: [{ id: 'online-0', name: 'Lina', avatar_url: null }],
+        }),
       },
       { type: 'conversation', conversation: expect.objectContaining({ status: 'ended' }) },
+      {
+        type: 'csat',
+        csat: { state: 'open', rating: null, comment: null, skipped_at: null },
+      },
     ]);
 
     transport.sendTyping(CONVERSATION, true);
@@ -470,6 +487,51 @@ describe('the remote transport', () => {
     );
   });
 
+  it('reads, rates and skips the satisfaction card over REST (M8-06)', async () => {
+    const card = (fields: Record<string, unknown> = {}) => ({
+      csat: {
+        conversationId: CONVERSATION,
+        state: 'open',
+        rating: null,
+        comment: null,
+        skippedAt: null,
+        ...fields,
+      },
+    });
+    const path = `/conversations/${CONVERSATION}/csat`;
+    const api = fakeApi({
+      [`GET ${path}`]: () => ({ csat: null }),
+      [`POST ${path}`]: (body) => card({ state: 'rated', ...(body as object) }),
+      [`POST ${path}/skip`]: () =>
+        card({ state: 'skipped', skippedAt: '2026-10-05T10:06:00.000Z' }),
+    });
+    const transport = createRemoteTransport({
+      apiOrigin: API,
+      brand: BRAND,
+      storage: memoryStore({ [secretKeyFor(BRAND)]: SECRET }),
+      fetch: api.fetch,
+      network: null,
+    });
+
+    expect(await transport.getCsat(CONVERSATION)).toBeNull();
+    expect(await transport.rateConversation(CONVERSATION, 4, '  ')).toMatchObject({
+      state: 'rated',
+      rating: 4,
+    });
+    expect(await transport.rateConversation(CONVERSATION, 5, 'Quick')).toMatchObject({
+      comment: 'Quick',
+    });
+    expect(await transport.skipCsat(CONVERSATION)).toMatchObject({
+      state: 'skipped',
+      skipped_at: '2026-10-05T10:06:00.000Z',
+    });
+    expect(api.calls.filter((call) => call.method === 'POST').map((call) => call.body)).toEqual([
+      { rating: 4 },
+      { rating: 5, comment: 'Quick' },
+      {},
+    ]);
+  });
+
   it('files a contact form as one conversation with its files, even when the send is retried', async () => {
     let sends = 0;
     const api = fakeApi({
@@ -558,6 +620,33 @@ describe('the remote transport', () => {
     await transport.startConversation({ article_id: ARTICLE });
 
     expect(api.calls[0]?.body).toMatchObject({ articleId: ARTICLE });
+  });
+
+  it('hands a conversation to the team and records feedback over REST (M7-06)', async () => {
+    const api = fakeApi({
+      'POST /conversations': () => ({ conversation: conversation(), message: null }),
+      [`POST /conversations/${CONVERSATION}/handoff`]: () => conversation({ aiHandedOff: true }),
+      [`GET /conversations/${CONVERSATION}/queue`]: () => ({
+        conversationId: CONVERSATION,
+        position: 2,
+      }),
+      [`POST /conversations/${CONVERSATION}/messages/${ARTICLE}/feedback`]: () =>
+        message(2, { author: 'ai' }),
+    });
+    const transport = createRemoteTransport({
+      apiOrigin: API,
+      brand: BRAND,
+      storage: memoryStore({ [secretKeyFor(BRAND)]: SECRET }),
+      fetch: api.fetch,
+      network: null,
+    });
+    await transport.startConversation({});
+
+    const handedOff = await transport.handOff(CONVERSATION);
+    await transport.sendFeedback(CONVERSATION, ARTICLE, 'not_helpful');
+
+    expect(handedOff).toMatchObject({ status: 'queued', ai_handed_off: true });
+    expect(api.calls.at(-1)?.body).toEqual({ feedback: 'not_helpful' });
   });
 });
 

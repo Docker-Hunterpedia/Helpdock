@@ -132,6 +132,40 @@ describe('OutboundEmailService.queueAutoReply', () => {
   });
 });
 
+describe('OutboundEmailService.queueCsatSurvey', () => {
+  const SURVEY = '0199f4b2-4444-7000-8000-0000000000cc';
+
+  it('emails the contact alone, keyed by the survey, in the contact’s language', async () => {
+    const { service, tx, outbox } = setup();
+
+    const delivery = await service.queueCsatSurvey(tx, {
+      brandId: BRAND,
+      ticketId: TICKET,
+      surveyId: SURVEY,
+    });
+
+    expect(delivery).toMatchObject({
+      kind: 'csat',
+      csatResponseId: SURVEY,
+      ticketMessageId: null,
+      toAddress: 'mona@example.com',
+      ccAddresses: [],
+      messageId: `<hd.c.${SURVEY}@helpdock.io>`,
+    });
+    expect(outbox).toEqual([{ event: 'email.send', payload: { deliveryId: delivery?.id } }]);
+  });
+
+  it('queues nothing for a contact with no address', async () => {
+    const { repository, service, tx, outbox } = setup();
+    repository.addressingRow = addressing({ contact: null });
+
+    expect(
+      await service.queueCsatSurvey(tx, { brandId: BRAND, ticketId: TICKET, surveyId: SURVEY }),
+    ).toBeUndefined();
+    expect(outbox).toEqual([]);
+  });
+});
+
 describe('OutboundEmailService.retry', () => {
   it('puts failed and discarded sends back and asks for one send each', async () => {
     const { service, tx, repository, outbox } = setup();

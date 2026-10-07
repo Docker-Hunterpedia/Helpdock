@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>تقييم الدعم (AR)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans Arabic','IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+textarea{font-family:inherit}
+</style>
+</helmet>
+<div dir="rtl" style="width: 1200px; height: 760px; box-sizing: border-box; padding: 48px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; background: #F7F5F0; font-size: 16px; line-height: 26px;">
+  <form style="display: flex; flex-direction: column; gap: 24px; padding: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; align-self: start;">
+    <div style="display: flex; align-items: center; gap: 10px;"><span style="width: 32px; height: 32px; border-radius: 6px; background: {{accent}}; color: #FFFFFF; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; font-family: 'IBM Plex Sans', sans-serif;">H</span><span style="font-weight: 600; font-family: 'IBM Plex Sans', sans-serif;">Helpdock</span></div>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 24px; line-height: 34px; font-weight: 600;">كيف كانت مساعدتنا في طلبك؟</h1>
+      <p style="margin: 0; color: #5C564C;"><bdi style="font-family: 'IBM Plex Mono', monospace;">HD-1042</bdi> · لم يصل المبلغ المسترد بعد 10 أيام · أغلقته لينا</p>
+    </div>
+    <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 10px;">
+      <legend style="font-size: 14px; font-weight: 500; padding: 0; margin-bottom: 10px;">تقييمك</legend>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;">
+        <button type="button" aria-pressed="false" style="height: 64px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500;">1</span><span style="font-size: 12px; line-height: 16px; color: #5C564C;">سيئ جداً</span></button>
+        <button type="button" aria-pressed="false" style="height: 64px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500;">2</span><span style="font-size: 12px; line-height: 16px; color: #5C564C;">سيئ</span></button>
+        <button type="button" aria-pressed="false" style="height: 64px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500;">3</span><span style="font-size: 12px; line-height: 16px; color: #5C564C;">مقبول</span></button>
+        <button type="button" aria-pressed="true" style="height: 64px; border-radius: 6px; border: 2px solid {{accent}}; background: #ECF7F5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; color: #0A4A45;">4</span><span style="font-size: 12px; line-height: 16px; color: #0A4A45;">جيد</span></button>
+        <button type="button" aria-pressed="false" style="height: 64px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500;">5</span><span style="font-size: 12px; line-height: 16px; color: #5C564C;">ممتاز</span></button>
+      </div>
+    </fieldset>
+    <div style="display: flex; flex-direction: column; gap: 6px;"><label for="csat-comment-ar" style="font-size: 14px; font-weight: 500;">هل من شيء يجب أن نعرفه؟ <span style="font-weight: 400; color: #7D7669;">(اختياري)</span></label><textarea id="csat-comment-ar" rows="3" placeholder="ما الذي سار جيداً، أو ما الذي يمكننا تحسينه" style="padding: 10px 12px; border-radius: 6px; border: 1px solid #CFC9BD; background: #FFFFFF; font-size: 16px; line-height: 26px; color: #16181C; resize: vertical;"></textarea></div>
+    <button type="submit" style="height: 44px; border-radius: 6px; border: 0; background: {{accent}}; color: #FFFFFF; font-size: 16px; font-weight: 500;">إرسال التقييم</button>
+    <p style="margin: 0; font-size: 12px; line-height: 18px; color: #7D7669;">يعمل هذا الرابط مرة واحدة وينتهي خلال 30 يوماً. يُشارك تقييمك مع الفريق الذي تولّى طلبك.</p>
+  </form>
+
+  <div style="display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px; background: #E7F3EC; border: 1px solid #2E7D4F; color: #1F5A38; font-size: 14px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>شكراً، تم إرسال تقييمك.</div>
+      <h2 style="margin: 0; font-size: 20px; line-height: 30px; font-weight: 600;">قيّمت هذا الطلب بـ 4 · جيد</h2>
+      <p style="margin: 0; color: #5C564C;">إذا بقي شيء دون حل، فأجب على آخر رسالة من Helpdock وسنعيد فتحه.</p>
+      <a href="#hc" style="font-size: 14px;">تصفّح مركز المساعدة</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px; background: #FBEEDF; border: 1px solid #B45309; color: #7C3A06; font-size: 14px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>انتهت صلاحية رابط التقييم أو سبق استخدامه.</div>
+      <p style="margin: 0; color: #5C564C; font-size: 14px; line-height: 22px;">حالتا الانتهاء والاستخدام تشتركان في شاشة واحدة: لا نموذج، جملة واحدة، ورابط إلى مركز المساعدة.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0F766E","options":["#0F766E","#2B5FB3","#B45309","#16181C"]},"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return { accent: this.props.accent ?? '#0F766E' }; }
+}
+</script>
+</body>
+</html>

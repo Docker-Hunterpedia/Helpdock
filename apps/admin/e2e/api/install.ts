@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import { E2E_TELEGRAM_ROOT, startFakeTelegram } from './fake-telegram.js';
 
 /**
  * A real Helpdock install, started for the `api` Playwright project: Postgres
@@ -143,10 +144,15 @@ export const startInstall = async (): Promise<RunningInstall> => {
     );
   }
 
-  const [postgres, redis] = (await Promise.all([
+  const [postgres, redis, telegram] = (await Promise.all([
     new PostgreSqlContainer(POSTGRES_IMAGE).start(),
     new RedisContainer(REDIS_IMAGE).start(),
-  ])) as [StartedPostgreSqlContainer, StartedRedisContainer];
+    startFakeTelegram(),
+  ])) as [
+    StartedPostgreSqlContainer,
+    StartedRedisContainer,
+    Awaited<ReturnType<typeof startFakeTelegram>>,
+  ];
 
   const host = postgres.getHost();
   const port = String(postgres.getPort());
@@ -187,6 +193,8 @@ export const startInstall = async (): Promise<RunningInstall> => {
     S3_SECRET_ACCESS_KEY: 'secret',
     ...(servesAdmin ? { ADMIN_DIST_DIR: adminDist } : {}),
     WIDGET_DIST_DIR: widgetDist,
+    // Channels › Telegram talks to a local stand-in rather than Telegram (M6-05).
+    TELEGRAM_API_ROOT: E2E_TELEGRAM_ROOT,
     ...(setupKey === undefined ? {} : { HD_SETUP_TOKEN: setupKey }),
   });
 
@@ -258,7 +266,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
           }),
       ),
     );
-    await Promise.all([postgres.stop(), redis.stop()]);
+    await Promise.all([postgres.stop(), redis.stop(), telegram.stop()]);
   };
 
   try {

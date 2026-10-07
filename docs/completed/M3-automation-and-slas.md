@@ -116,15 +116,15 @@ Written down and carried forward. None of them blocks M4, M5, M6 or M8.
 
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
-| **The first-run wizard does not generate the VAPID pair** | ADR 0002 expects it to. Keys come from `HD_PUSH_VAPID_*` or the settings table; without them push reads "Not set up on this install". | [notifications](../guides/notifications.md#known-gaps) |
+| ~~The first-run wizard does not generate the VAPID pair~~ | Closed in M9: finishing the wizard generates the pair when the install has none. | [notifications](../guides/notifications.md#known-gaps) |
 | ~~Notification rows are not purged by retention~~ | Closed by follow-up #144: the nightly job deletes rows older than the panel's 30-day window. | [notifications](../guides/notifications.md#the-bell) |
 | **A rule's Notify shares the Escalation preference** | A preference row of its own would need an artboard. | [M3-07 notes](#m3-07-notifications) |
 | **Compliance reports for `slaCountReopens` wait for M8** | The setting is stored and served. Time waiting on the customer (`paused_total_ms`) is stored too, and nothing reports it yet. | [SLA guide](../guides/slas.md#known-gaps) |
 | **The escalation action picker does not check reach** | It lists every team and active person of the brand. An action that cannot be carried out is skipped when the step runs. | [SLA guide](../guides/slas.md#known-gaps) |
 | **`workflow_runs` keep the department the ticket had when the rule ran** | A run is a record of that moment, so a moved ticket's earlier runs stay readable to the old department's readers. | This doc |
 | **A Team Leader narrower than the brand cannot change a rule** | A rule acts on every department of the brand. They can read rules and their departments' log. | [automation](../guides/automation.md#who-may-do-what) |
-| **Nothing emits `csat.received` yet** | Rules can name the event. It fires once survey delivery (M8-06) emits it. | [automation](../guides/automation.md#a-rule) |
-| **Auto-unassign still ignores business hours** | M1 left this for M3. M3-01 built the calendar, but `assignment.offline_unassign` does not read it yet. | [ticketing settings](../guides/ticketing-settings.md#assignment) |
+| ~~Nothing emits `csat.received` yet~~ | Closed by M8-06 (M8-06 branch): every recorded answer, by link, widget or Telegram, emits it, and rules with the CSAT received event run on it. | [automation](../guides/automation.md#a-rule) |
+| ~~Auto-unassign still ignores business hours~~ | Closed in M9: `assignment.offline_unassign` reads the department's calendar and puts itself off to the next opening. | [ticketing settings](../guides/ticketing-settings.md#assignment) |
 | **No screenshot baselines for the M3 screens** | The screenshots spec covers M0 and M1 screens; the shell baselines predate the Automation link and the bell. | [development guide](../guides/development.md#browser-tests) |
 
 ## What an operator can do with this milestone

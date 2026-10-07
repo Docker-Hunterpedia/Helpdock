@@ -766,7 +766,7 @@ session — see [satisfaction surveys](#satisfaction-surveys):
 
 | Route | Declares | Answers |
 |---|---|---|
-| `GET /api/public/csat/:token` | `@Public()` | The rating page's state: `open` with the brand, reference and subject; or `used` / `expired` with the brand alone |
+| `GET /api/public/csat/:token` | `@Public()` | The rating page's state: `open` with the brand, reference and subject; or `used` / `expired` with the brand alone. The brand carries `helpCenterUrl` (below) |
 | `POST /api/public/csat/:token` | `@Public()` | `{ rating: 1–5, comment? }`. Answers `rated` once, then `used`; `expired` after 30 days |
 | `POST /tickets/:ticketId/merge` | `ticket:write` | Closes it into another ticket (M1-09, [below](#merge-and-split)) |
 | `POST /tickets/:ticketId/unmerge` | `ticket:write` | Undoes a merge inside 24 hours (M1-09) |
@@ -1371,7 +1371,9 @@ pnpm --filter @helpdock/api build
 pnpm --filter @helpdock/api perf:tickets
 ```
 
-`apps/api/src/testing/perf/`, run by `apps/api/vitest.perf.config.ts`:
+`apps/api/src/testing/perf/`, run by `apps/api/vitest.perf.config.ts`. The
+help center and realtime gates of M9-03 run on the same harness
+([performance](performance.md)).
 
 1. **Dataset** (`dataset.ts`): five brands. The measured one has 50 000
    tickets, about 200 000 messages and 20 000 contacts, the other four 10 000
@@ -1512,6 +1514,52 @@ gets none. `(ticket_id, closed_at)` is unique, so a redelivered job is a no-op,
 and a ticket reopened and closed again gets a second survey. `csat_responses`
 is department-scoped like the other children of a ticket.
 
+**Delivery on close (M8-06).** The run that creates the survey also sends it, in
+the same transaction, on the ticket's channel (`apps/api/src/csat/csat-delivery.ts`):
+
+| The ticket came in by | The customer gets | `sent_at` is set |
+|---|---|---|
+| The widget (`chat`) | A card in the conversation (`Widget/CSAT-EN`): five scores, an optional comment of up to 1000 characters, **Skip** and **Send rating**. It replaces the composer until answered or skipped, and is pushed as a `csat` socket event and read over REST (see the [widget protocol](widget-protocol.md#satisfaction-card)) | when the card is offered |
+| Telegram | The question with five buttons, 1 to 5, and **Add a comment**, which opens the rating page (`Telegram/Chat-EN`, panel 5). A tap records the score at once | when Telegram accepts the message |
+| Email, the web form, the api or a ticket filed by hand | A survey email (`Email/CSAT-EN-AR`) to the contact alone, no CCs, from the department's sender, in the contact's language or the brand's | when the relay accepts the email |
+
+Email and Telegram go through the outbox like every message to a customer: an
+`email_deliveries` row of kind `csat` (one per survey, `Message-ID`
+`<hd.c.<surveyId>@…>`, header `Auto-Submitted: auto-generated`) and its
+`email.send`, or a `telegram.notice` of kind `csat_survey`. A ticket with nobody
+to reach (no address, no chat, a brand with no sender) keeps its survey
+`pending`, and the agent can still share the link. The survey goes out at once,
+on the one channel the ticket came in by: Ticketing › Feedback has no delay and
+no channel choice.
+
+**The email's five links only open the page.** Each is the survey's link with
+`?rating=<n>&lang=<locale>`: the page opens with that score pressed and records
+nothing until the customer presses **Send**, so a mail scanner that follows every
+link in a message casts no rating. The plain-text part lists the same five links.
+
+**A Telegram tap records the score in one go.** The button's data is
+`csat:<surveyId>:<n>`. The webhook records it only if the chat that pressed it
+is the ticket's contact's; then the bot removes the score buttons, keeps **Add a
+comment** and thanks the contact: "Thanks! You rated this request 4 · Good. You
+can still add a comment on the survey page until 4 Nov." A second tap, a tap
+after the 30 days or a tap from another chat records nothing and gets "This
+survey has closed." The link stays usable once after a tap: the page opens with
+the tapped score pressed, and Send stores the comment (and the score, if changed)
+as the link's answer.
+
+**Skip** on the widget card records no answer; it stores `skipped_at` so the
+card is not offered again on any device, and draws "You skipped the rating". A
+link shared another way still works.
+
+**Every answer emits `csat.received`.** Whichever way it arrives — the page
+(`rated_via` `link`), the widget card (`widget`) or a Telegram tap (`telegram`) —
+a recorded answer writes an `audit_log` row (`csat.rated`, with the score and
+the channel) as the survey's system principal and the outbox event
+`csat.received { ticketId, surveyId, rating, via, ratedAt }`, in the same
+transaction (`apps/api/src/csat/csat-answers.ts`). Workflow rules with the **CSAT
+received** event run on it ([automation](automation.md#a-rule)); the comment is
+not in the event, so the outbox holds no customer text.
+
 **The link.** `APP_URL/csat/<token>`. The token is `<ids>.<mac>`: the brand and
 survey ids, and an HMAC-SHA256 over them under a key derived from
 `APP_MASTER_KEY` with HKDF (`apps/api/src/csat/tokens.ts`). Only a SHA-256 of it
@@ -1521,7 +1569,8 @@ is stored. It is:
 - **bound to one ticket** — it names one survey, and the survey one ticket;
 - **single-use** — the rating is written by an `UPDATE … WHERE rated_at IS NULL
   AND expires_at > now()`, so two submissions cannot both win; the second
-  answers `used`;
+  answers `used`. The one exception is a Telegram tap with no comment yet,
+  which leaves the link open for one submission (M8-06);
 - **expiring** — 30 days after the survey is created, it answers `expired`.
 
 A token signed under `APP_MASTER_KEY_PREVIOUS` still verifies, so a key
@@ -1532,15 +1581,15 @@ not.
 the api opens a transaction scoped to exactly that brand as the system principal
 `csat:<surveyId>`, reads one survey and its ticket's reference and subject, and
 writes an `audit_log` row (`csat.viewed`, `csat.rated`) for every use of a valid
-link. Both routes share a per-address budget of 30 requests in 15 minutes
+link. Opening the page, from an email's link or any other, only reads. Both routes share a per-address budget of 30 requests in 15 minutes
 (`CSAT_PUBLIC_RULE`), and both collapse the token to `:token` before the request
 line is logged. A spent link answers with the brand alone — never the subject.
 
 **The agent's view.** `GET /tickets/:ticketId` carries `csat` for the latest
-close: `pending` (created, not delivered), `sent` (a channel delivered it —
-M8-06), `rated` (with the rating and comment) or `expired`, and the link while
-it can still be used. The details panel draws it on a Satisfaction card with
-**Copy survey link**, because channels do not deliver it yet.
+close: `pending` (created, not delivered yet, or nobody to reach), `sent` (a
+channel delivered it), `rated` (with the rating and comment) or `expired`, and
+the link while it can still be used. The details panel draws it on a
+Satisfaction card with **Copy survey link**, for sharing it another way.
 
 **The contact card.** A contact's `stats.csat` is the share of their answered
 surveys rated 4 or 5, as a percentage, over the tickets the viewer can see; null
@@ -1549,7 +1598,10 @@ when they have answered none.
 **The rating page** is served by the admin bundle at `/csat/<token>` but
 mounted without any of the staff app (ADR
 [0010](../decisions/0010-csat-page-in-the-admin-bundle.md)). Its language is
-`?lang=` when it names `en` or `ar`, otherwise the brand's default; it is themed
+`?lang=` when it names `en` or `ar`, otherwise the brand's default. `?rating=`
+from 1 to 5 presses that score when the page opens, and an open link a Telegram
+tap already answered sends its score as `rating` and presses it; either way
+nothing is recorded until **Send**. It is themed
 with the brand accent when the brand has one (none do until M5/M6's themes).
 
 **Who closed it.** An open link's `ticket.closedBy` is the first name of the
@@ -1558,7 +1610,15 @@ set only when that person is still active in the brand and wrote a public reply
 on the ticket, so the page names nobody the customer has not already heard
 from. That keeps it inside §4.6's "nothing beyond their purpose". An api key, a
 rule, or a staff member who never replied is not named. A spent link sends no
-name. "Browse the help center" is not drawn yet.
+name.
+
+**Browse the help center.** The thanks and the spent-link screens end with
+"Browse the help center" (`CsatEN`), linking to `brand.helpCenterUrl`: the
+brand's help center on its primary verified domain, or `APP_URL/hc/<brandId>/`
+until it has one. The api sends it only while the help center has something
+public to read: at least one published public article and access not set to
+internal-only. Otherwise it is null and the link is left out. The preview never
+shows it, as it reads nothing.
 
 **The preview.** Ticketing › Feedback › **Open the rating page as a customer
 sees it** opens `/csat/preview?lang=<admin's language>` in a new tab. That is
@@ -1577,7 +1637,7 @@ halves joined by a dot.
 | M1-10 | Shipped. `attachments` hangs off the ticket and, once sent, off `ticket_messages.id`; `POST …/messages` takes `attachmentIds` and every message carries its `attachments` ([guide](attachments.md)) |
 | M1-11 | Shipped in branch. `is_spam` on the Spam status, `POST`/`DELETE …/spam`, `ticket.spam`, the sender block list and its inbound gate ([Spam](#spam)) |
 | M1-12 | Shipped. Time tracking and satisfaction surveys ([above](#time-tracking)) |
-| M8-06 | Delivering the survey link with the closing message on email, widget and Telegram; sets `csat_responses.sent_at` |
+| M8-06 | Built in branch. The survey sent on close by email, in the widget and on Telegram, and `csat.received` on every answer ([above](#satisfaction-surveys)) |
 | M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
 | M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |

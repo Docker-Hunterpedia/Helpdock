@@ -1,7 +1,7 @@
 import type { CsatSubmitRequest, CsatSurveyView } from '@helpdock/schemas';
 import { CSAT_COMMENT_MAX } from '@helpdock/schemas';
 import type { SemanticTokens } from '@helpdock/ui';
-import { Box, Button, TextField, Typography } from '@mui/material';
+import { Box, Button, Link, TextField, Typography } from '@mui/material';
 import { Check, Clock, Eye, TriangleAlert } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
@@ -22,8 +22,9 @@ import type { LoadState } from './csat-app.tsx';
  *
  * - "closed by Lina" is the first name of the staff member who closed the
  *   ticket, which the api sends only while the link is open (M1-15 part 2).
- * - "Browse the help center" is left out: there is no help center to link to
- *   until M5.
+ * - "Browse the help center" follows the thanks and the spent sentence when
+ *   the api sends the brand's help center address, which it does only while
+ *   that help center has something public to read.
  * - `preview` is the Feedback tab's sample: the same page with an info line
  *   above it saying nothing sent from it is recorded.
  */
@@ -48,12 +49,19 @@ export function CsatPage({
   brandName,
   state,
   preview = false,
+  initialRating = null,
   onRate,
 }: {
   readonly tokens: SemanticTokens;
   readonly brandName: string | null;
   readonly state: LoadState;
   readonly preview?: boolean;
+  /**
+   * M8-06: the score an email link carried (`?rating=`), pressed when the
+   * page opens. Nothing is recorded until Send, so a mail scanner that follows
+   * the link casts no rating. A score a Telegram tap already recorded wins.
+   */
+  readonly initialRating?: number | null;
   onRate(request: CsatSubmitRequest): Promise<CsatSurveyView>;
 }): ReactNode {
   const t = useT();
@@ -126,11 +134,16 @@ export function CsatPage({
           <Rated rating={view.rating} brandName={view.brand.name} tokens={tokens} />
         ) : null}
 
+        {view !== null && view.state !== 'open' && view.brand.helpCenterUrl !== null ? (
+          <HelpCenterLink href={view.brand.helpCenterUrl} />
+        ) : null}
+
         {view?.state === 'open' ? (
           <RatingForm
             reference={view.ticket.reference}
             subject={view.ticket.subject}
             closedBy={view.ticket.closedBy}
+            initialRating={view.rating ?? initialRating}
             tokens={tokens}
             onRate={async (request) => {
               setAnswer(await onRate(request));
@@ -177,19 +190,21 @@ function RatingForm({
   reference,
   subject,
   closedBy,
+  initialRating,
   tokens,
   onRate,
 }: {
   readonly reference: string;
   readonly subject: string;
   readonly closedBy: string | null;
+  readonly initialRating: number | null;
   readonly tokens: SemanticTokens;
   onRate(request: CsatSubmitRequest): Promise<void>;
 }): ReactNode {
   const t = useT();
   const legendId = useId();
   const errorId = useId();
-  const [rating, setRating] = useState<number | null>(null);
+  const [rating, setRating] = useState<number | null>(initialRating);
   const [comment, setComment] = useState('');
   const [missing, setMissing] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -352,6 +367,25 @@ function Rated({
         {t('csat:ratedBody', { brand: brandName })}
       </Typography>
     </Box>
+  );
+}
+
+function HelpCenterLink({ href }: { readonly href: string }): ReactNode {
+  const t = useT();
+
+  return (
+    <Link
+      href={href}
+      sx={{
+        alignSelf: 'flex-start',
+        minHeight: 44,
+        display: 'inline-flex',
+        alignItems: 'center',
+        fontSize: 14,
+      }}
+    >
+      {t('csat:browseHelpCenter')}
+    </Link>
   );
 }
 

@@ -24,6 +24,20 @@ An article not written in the language asked for is shown in the brand's default
 
 "Still need help?" links to the [web form](web-form.md). Where the brand's widget may run on the help center's address (Channels › Widget, allowed origins, for example `https://support.acme.com`), the page loads the widget and "Chat with us" opens it.
 
+Every page starts with a **Skip to content** link, hidden until a keyboard user reaches it, that moves focus past the header to the page's content (M9-04).
+
+### Was this helpful?
+
+The card at the end of an article takes one answer per visitor and article version, and a second answer replaces the first. The pages have no script, so each step is its own page load:
+
+1. **Yes** is recorded and the card turns into the thanks (`?feedback=1`).
+2. **No** is recorded and the card asks **What was missing from this article? (optional)** (`?feedback=no`), with focus in the note field. The note holds up to 1,000 characters, and the hint under it asks for no card details and says nobody replies to it.
+   - **Send** records the "No" again with the note and shows the thanks.
+   - **Skip** shows the thanks and sends nothing more.
+   - **Yes** on this step changes the answer, and any note typed is dropped.
+
+Notes are counted on Help center › Insights. Staff answering on their own help center are thanked but not counted.
+
 ## Staff on the help center
 
 Staff read internal articles, with an **Internal** badge, and an internal-only help center, once they open it from the admin:
@@ -58,3 +72,13 @@ Admins and Team Leaders (`help_center:manage`); a Viewer sees the cards read-onl
 | Custom CSS | Up to 20 000 characters, applied after the theme. Saving keeps only plain style rules and `@media` blocks; it removes `@import` and other at-rules, `url()` other than an inline image or an image uploaded here, `expression()` and script addresses, `position: fixed`, and anything with a backslash or a `<`. The card lists what it removed and why. |
 
 The help center's address and certificate are on **Brand › Domains**; the widget's own theme is on **Channels › Widget**.
+
+## Article proposals
+
+**Help center › Proposals** (M7-05, `Admin/HelpCenter-ArticleApproval`): articles the assistant drafted from closed tickets, which an agent sent for approval with **Assist › Draft article from ticket** ([the AI guide](ai.md#agent-assist)). Admins and Team Leaders (`help_center:manage`) review them; a Team Leader sees the proposals of the departments they lead, because a proposal follows its ticket's department. The tab says how many are waiting.
+
+- The draft is written from the ticket's **public** messages after PII redaction, grounded in public knowledge only, and the agent can edit it before sending. A ticket has at most one proposal waiting.
+- The review shows the draft read-only, its source ticket and the agent's note, where it would go — section, language, visibility (public or internal) — and the AI draft's model, cost, redactions and citations.
+- **Approve and open in editor** creates a **draft** article in the chosen section and visibility and opens it in the editor. Nothing is published, and the assistant cannot use it, until someone publishes it.
+- **Reject…** asks for a reason, which the proposal keeps.
+- Proposing, approving and rejecting are audited (`help_center.proposal.created`, `.approved`, `.rejected`); the ticket's thread shows "… proposed an article · waiting for approval".

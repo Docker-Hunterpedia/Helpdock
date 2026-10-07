@@ -585,9 +585,18 @@ over two databases:
   (`widget-restart`, which kills and restarts an api replica of its own on
   `HD_E2E_REPLICA_API_PORT`, 3097 by default), and a non-allowed origin
   refused (`widget`). These four share one signed-in admin page, the `admin`
-  worker fixture of `e2e/api/widget-helpers.ts`: the suite signs in from one
-  address, and the api allows twenty sign-in attempts per address in fifteen
-  minutes.
+  worker fixture of `e2e/api/admin-session.ts`. The stand-in for
+  api.telegram.org listens on `HD_E2E_TELEGRAM_PORT`, 3096 by default.
+- Every spec that runs as the seeded account uses the `test` of
+  `e2e/api/admin-session.ts`, whose `page` is a fresh page in one browser
+  context signed in once per worker, through the real form and the real second
+  factor. The api allows twenty sign-in attempts per address in fifteen
+  minutes and takes each authenticator step once, so a suite that signed in per
+  test was refused past the twentieth and waited half a minute for a fresh code
+  before each one. The context is shared rather than saved and replayed
+  because the refresh cookie rotates on every use: a second copy of a rotated
+  token reads as theft and ends the session. A spec that needs to be nobody —
+  the sign-in spec, an invitation being accepted — opens a context of its own.
 - **`setup`** drives the first-run wizard against a second install that nobody
   has set up, straight at an api that serves `dist/` itself. It has to be a
   second install, because "fresh" means the `users` table is empty and the

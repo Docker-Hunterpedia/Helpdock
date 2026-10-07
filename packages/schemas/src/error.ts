@@ -1,11 +1,16 @@
 import { z } from 'zod';
+import { aiRefusalSchema } from './ai.js';
+import { webhooksRefusalSchema } from './api.js';
+import { assistRefusalSchema } from './assist.js';
 import { authErrorSchema } from './auth.js';
 import { contactRefusalSchema, identityProblemSchema } from './contact.js';
 import { domainsRefusalSchema } from './domains.js';
 import { channelsRefusalSchema } from './email-inbound.js';
 import { hcRefusalSchema } from './help-center.js';
 import { setupRefusalSchema } from './install.js';
+import { knowledgeRefusalSchema } from './knowledge.js';
 import { staffRefusalSchema } from './staff.js';
+import { telegramRefusalSchema } from './telegram.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
 import { ticketingRefusalSchema } from './ticketing.js';
 import { widgetErrorCodeSchema } from './widget-protocol.js';
@@ -89,6 +94,21 @@ export const errorResponseSchema = z.object({
     widget: z.object({ reason: widgetErrorCodeSchema }).optional(),
     /** Only on a refused help center change (M5-01). */
     helpCenter: z.object({ reason: hcRefusalSchema }).optional(),
+    /** Only on a refused AI settings change (M7-01, M7-02). */
+    ai: z.object({ reason: aiRefusalSchema }).optional(),
+    /** Only on a refused agent assist request or proposal decision (M7-05). */
+    assist: z.object({ reason: assistRefusalSchema }).optional(),
+    /** Only on a refused knowledge source action (M7-03). */
+    knowledge: z.object({ reason: knowledgeRefusalSchema }).optional(),
+    /** Only on a refused Telegram bot action (M6-05). */
+    telegram: z.object({ reason: telegramRefusalSchema }).optional(),
+    /**
+     * Only on a refused webhook endpoint (M8-03): `address` is what the name
+     * resolved to, so the form can say which private address it was.
+     */
+    webhooks: z
+      .object({ reason: webhooksRefusalSchema, address: z.string().optional() })
+      .optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

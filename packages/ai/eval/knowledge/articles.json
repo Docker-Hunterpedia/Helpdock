@@ -1,0 +1,279 @@
+{
+  "$comment": "The fixture help center of Orbit Bikes, a fictional e-bike brand (DOMAIN-RULES §9). Every article is published in English and Arabic with the same facts; `visibility: internal` articles exist so a visitor's question about them must be handed off.",
+  "categories": [
+    {
+      "slug": "orders-and-delivery",
+      "names": { "en": "Orders and delivery", "ar": "الطلبات والتوصيل" },
+      "sections": [
+        {
+          "slug": "shipping",
+          "names": { "en": "Shipping", "ar": "الشحن" },
+          "articles": [
+            {
+              "slug": "shipping-times-and-costs",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Shipping times and costs",
+                  "bodyHtml": "<h2>Delivery options</h2><p>Standard delivery takes 3 to 5 business days from the day your bike leaves our warehouse. Standard delivery is free on orders over 150 EUR; below that it costs 9 EUR.</p><p>Express delivery arrives within 24 hours on business days and costs 19 EUR on every order.</p><h2>Where we ship</h2><p>We ship to every country in the European Union, to the United Kingdom, to the United Arab Emirates and to Saudi Arabia. We do not ship bikes to PO boxes.</p>"
+                },
+                "ar": {
+                  "title": "مدة الشحن وتكلفته",
+                  "bodyHtml": "<h2>خيارات التوصيل</h2><p>يستغرق التوصيل العادي من 3 إلى 5 أيام عمل من يوم مغادرة الدراجة لمستودعنا. التوصيل العادي مجاني للطلبات التي تزيد عن 150 يورو؛ وما دون ذلك يكلف 9 يورو.</p><p>التوصيل السريع يصل خلال 24 ساعة في أيام العمل ويكلف 19 يورو على كل طلب.</p><h2>إلى أين نشحن</h2><p>نشحن إلى جميع دول الاتحاد الأوروبي وإلى المملكة المتحدة والإمارات العربية المتحدة والمملكة العربية السعودية. لا نشحن الدراجات إلى صناديق البريد.</p>"
+                }
+              }
+            },
+            {
+              "slug": "tracking-your-order",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Tracking your order",
+                  "bodyHtml": "<h2>Your tracking link</h2><p>We email you a tracking link the moment your parcel leaves the warehouse. You can also open <strong>Where is my order</strong> in your Orbit account at any time.</p><h2>Carriers</h2><p>Bikes in Europe are delivered by DHL. Orders in the United Arab Emirates and Saudi Arabia are delivered by Aramex.</p><h2>No update?</h2><p>Carriers scan parcels at each hub, so a day without an update is normal. If the tracking has not changed for 48 hours, contact support with your order number and we will open an enquiry with the carrier.</p>"
+                },
+                "ar": {
+                  "title": "تتبع طلبك",
+                  "bodyHtml": "<h2>رابط التتبع</h2><p>نرسل لك رابط التتبع بالبريد الإلكتروني لحظة مغادرة الطرد للمستودع. يمكنك أيضًا فتح <strong>أين طلبي</strong> في حساب Orbit الخاص بك في أي وقت.</p><h2>شركات الشحن</h2><p>تُسلَّم الدراجات في أوروبا عبر DHL. أما الطلبات في الإمارات والسعودية فتُسلَّم عبر Aramex.</p><h2>لا يوجد تحديث؟</h2><p>تمسح شركات الشحن الطرود في كل مركز، لذا فإن يومًا بلا تحديث أمر طبيعي. إذا لم يتغير التتبع لمدة 48 ساعة، تواصل مع الدعم مع رقم طلبك وسنفتح استفسارًا لدى شركة الشحن.</p>"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "slug": "returns",
+          "names": { "en": "Returns and refunds", "ar": "الإرجاع والاسترداد" },
+          "articles": [
+            {
+              "slug": "returns-and-refunds",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Returns and refunds",
+                  "bodyHtml": "<h2>Returning a bike</h2><p>You have 30 days from delivery to return a bike. The bike must have been ridden less than 20 km and must come back in its original box with the charger and keys.</p><p>Request a return label from <strong>Orders</strong> in your account; the courier collects the box from your address for free.</p><h2>Refunds</h2><p>We refund within 10 business days of receiving the bike, to the original payment method. A purchase paid with a gift card is refunded to a new gift card.</p>"
+                },
+                "ar": {
+                  "title": "الإرجاع والاسترداد",
+                  "bodyHtml": "<h2>إرجاع الدراجة</h2><p>لديك 30 يومًا من تاريخ التسليم لإرجاع الدراجة. يجب ألا تكون الدراجة قد قُطعت بها مسافة تزيد عن 20 كم، ويجب أن تعود في صندوقها الأصلي مع الشاحن والمفاتيح.</p><p>اطلب ملصق الإرجاع من <strong>الطلبات</strong> في حسابك؛ يستلم المندوب الصندوق من عنوانك مجانًا.</p><h2>الاسترداد</h2><p>نعيد المبلغ خلال 10 أيام عمل من استلام الدراجة، إلى وسيلة الدفع الأصلية. أما الشراء المدفوع ببطاقة هدايا فيُسترد إلى بطاقة هدايا جديدة.</p>"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "slug": "payment",
+          "names": { "en": "Payment", "ar": "الدفع" },
+          "articles": [
+            {
+              "slug": "payment-methods",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Payment methods",
+                  "bodyHtml": "<h2>How you can pay</h2><p>We accept Visa, Mastercard and American Express cards, PayPal, Apple Pay and bank transfer. Orbit gift cards can be combined with any other method. We do not offer cash on delivery.</p><h2>Financing</h2><p>Orders above 1,000 EUR can be financed at 0% interest over 12 months through Klarna. Choose <strong>Pay over time</strong> at checkout; the decision takes about a minute.</p>"
+                },
+                "ar": {
+                  "title": "طرق الدفع",
+                  "bodyHtml": "<h2>كيف يمكنك الدفع</h2><p>نقبل بطاقات Visa وMastercard وAmerican Express، وPayPal، وApple Pay، والتحويل البنكي. يمكن الجمع بين بطاقات هدايا Orbit وأي وسيلة أخرى. لا نوفر الدفع عند الاستلام.</p><h2>التقسيط</h2><p>يمكن تقسيط الطلبات التي تزيد عن 1,000 يورو بفائدة 0% على 12 شهرًا عبر Klarna. اختر <strong>الدفع على دفعات</strong> عند إتمام الشراء؛ يستغرق القرار نحو دقيقة.</p>"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "your-bike",
+      "names": { "en": "Your bike", "ar": "دراجتك" },
+      "sections": [
+        {
+          "slug": "battery-and-charging",
+          "names": { "en": "Battery and charging", "ar": "البطارية والشحن" },
+          "articles": [
+            {
+              "slug": "battery-care",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Battery care",
+                  "bodyHtml": "<h2>Daily charging</h2><p>For everyday riding keep the battery between 20% and 80%. Charging to 100% is fine before a long ride, but doing it every day shortens the battery's life.</p><p>A full charge takes 4.5 hours with the 4 A charger that comes with the bike.</p><h2>Storage</h2><p>If you will not ride for more than a month, store the battery at about 50% charge, indoors, between 0 and 40 °C. Check it every two months and top it back up to 50%.</p>"
+                },
+                "ar": {
+                  "title": "العناية بالبطارية",
+                  "bodyHtml": "<h2>الشحن اليومي</h2><p>للقيادة اليومية حافظ على شحن البطارية بين 20% و80%. الشحن إلى 100% مقبول قبل رحلة طويلة، لكن تكراره يوميًا يقصّر عمر البطارية.</p><p>يستغرق الشحن الكامل 4.5 ساعات بالشاحن 4 أمبير المرفق مع الدراجة.</p><h2>التخزين</h2><p>إذا لم تركب الدراجة لأكثر من شهر، خزّن البطارية بشحن نحو 50%، داخل المنزل، في درجة حرارة بين 0 و40 درجة مئوية. افحصها كل شهرين وأعد شحنها إلى 50%.</p>"
+                }
+              }
+            },
+            {
+              "slug": "riding-in-the-rain",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Riding in the rain and washing the bike",
+                  "bodyHtml": "<h2>Water resistance</h2><p>The display is rated IP65 and the battery IP67, so rain and splashes are fine. Never submerge the bike or ride through water deeper than the hubs.</p><h2>Washing</h2><p>Wash with a damp cloth or a low-pressure hose. Do not use a pressure washer: it forces water past the seals. Dry the charge port before plugging the charger in.</p>"
+                },
+                "ar": {
+                  "title": "القيادة تحت المطر وغسل الدراجة",
+                  "bodyHtml": "<h2>مقاومة الماء</h2><p>الشاشة بتصنيف IP65 والبطارية IP67، لذا فالمطر والرذاذ لا يضران. لا تغمر الدراجة أبدًا في الماء ولا تقد في مياه أعمق من محور العجلة.</p><h2>الغسل</h2><p>اغسل الدراجة بقطعة قماش مبللة أو خرطوم بضغط منخفض. لا تستخدم غسالة الضغط العالي: فهي تدفع الماء عبر العوازل. جفف منفذ الشحن قبل توصيل الشاحن.</p>"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "slug": "app-and-display",
+          "names": { "en": "App and display", "ar": "التطبيق والشاشة" },
+          "articles": [
+            {
+              "slug": "pairing-the-orbit-app",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Pairing the Orbit app",
+                  "bodyHtml": "<h2>Before you start</h2><p>The Orbit app runs on iOS 16 or later and Android 11 or later, and needs Bluetooth turned on.</p><h2>Pairing mode</h2><p>Hold the power button on the display for 3 seconds until the light blinks blue. The bike stays in pairing mode for two minutes.</p><h2>The pairing code</h2><p>When the app asks for a code, enter the last four digits of your frame number. The frame number is printed under the bottom bracket and on your invoice.</p>"
+                },
+                "ar": {
+                  "title": "إقران تطبيق Orbit",
+                  "bodyHtml": "<h2>قبل أن تبدأ</h2><p>يعمل تطبيق Orbit على iOS 16 أو أحدث وAndroid 11 أو أحدث، ويحتاج إلى تشغيل البلوتوث.</p><h2>وضع الإقران</h2><p>اضغط مطولًا على زر التشغيل في الشاشة لمدة 3 ثوانٍ حتى يومض الضوء باللون الأزرق. تبقى الدراجة في وضع الإقران لمدة دقيقتين.</p><h2>رمز الإقران</h2><p>عندما يطلب التطبيق رمزًا، أدخل آخر أربعة أرقام من رقم الإطار. رقم الإطار مطبوع أسفل عمود الدواسة وعلى فاتورتك.</p>"
+                }
+              }
+            },
+            {
+              "slug": "error-codes",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Error codes on the display",
+                  "bodyHtml": "<h2>What the codes mean</h2><ul><li><strong>E04</strong> — motor temperature too high. Stop and let the motor cool for 15 minutes; the code clears by itself.</li><li><strong>E12</strong> — battery communication lost. Switch the bike off, remove the battery and reseat it firmly until it clicks.</li><li><strong>E21</strong> — speed sensor. The magnet on the rear wheel spoke is misaligned; turn it so it passes within 5 mm of the sensor.</li><li><strong>E30</strong> — brake sensor. A brake lever is stuck or its cable is pinched; if it persists, book a service.</li></ul>"
+                },
+                "ar": {
+                  "title": "رموز الأخطاء على الشاشة",
+                  "bodyHtml": "<h2>معنى الرموز</h2><ul><li><strong>E04</strong> — حرارة المحرك مرتفعة جدًا. توقف ودع المحرك يبرد لمدة 15 دقيقة؛ يختفي الرمز من تلقاء نفسه.</li><li><strong>E12</strong> — انقطاع الاتصال بالبطارية. أطفئ الدراجة وأزل البطارية ثم أعد تثبيتها بإحكام حتى تسمع صوت النقر.</li><li><strong>E21</strong> — حساس السرعة. المغناطيس على سلك العجلة الخلفية غير محاذٍ؛ أدره بحيث يمر على بعد 5 مم من الحساس.</li><li><strong>E30</strong> — حساس الفرامل. ذراع فرامل عالق أو كابله مضغوط؛ إذا استمر الخطأ، احجز صيانة.</li></ul>"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "slug": "service-and-warranty",
+          "names": { "en": "Service and warranty", "ar": "الصيانة والضمان" },
+          "articles": [
+            {
+              "slug": "service-and-maintenance",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Service and maintenance",
+                  "bodyHtml": "<h2>First service</h2><p>The first service is free and is due after 300 km or 3 months, whichever comes first. It covers spoke tension, brake adjustment and a firmware update.</p><h2>Booking</h2><p>Book any service in the Orbit app under <strong>Service</strong>; the app shows the service partners near you. A standard tune-up costs 49 EUR and takes about an hour.</p>"
+                },
+                "ar": {
+                  "title": "الصيانة",
+                  "bodyHtml": "<h2>الصيانة الأولى</h2><p>الصيانة الأولى مجانية وتستحق بعد 300 كم أو 3 أشهر، أيهما أسبق. تشمل شد الأسلاك وضبط الفرامل وتحديث البرنامج الثابت.</p><h2>الحجز</h2><p>احجز أي صيانة في تطبيق Orbit تحت <strong>الصيانة</strong>؛ يعرض التطبيق شركاء الصيانة القريبين منك. تكلف الصيانة الدورية العادية 49 يورو وتستغرق نحو ساعة.</p>"
+                }
+              }
+            },
+            {
+              "slug": "warranty-at-a-glance",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Warranty at a glance",
+                  "bodyHtml": "<p>Every Orbit bike comes with a 2-year warranty on the frame and the motor. The battery is covered for 2 years or 500 charge cycles, whichever comes first. Claims are filed in the Orbit app. The full terms are in the document <em>Warranty and repairs</em>.</p>"
+                },
+                "ar": {
+                  "title": "الضمان باختصار",
+                  "bodyHtml": "<p>تأتي كل دراجة Orbit بضمان لمدة سنتين على الإطار والمحرك. البطارية مشمولة لمدة سنتين أو 500 دورة شحن، أيهما أسبق. تُقدَّم المطالبات في تطبيق Orbit. الشروط الكاملة في مستند <em>Warranty and repairs</em>.</p>"
+                }
+              }
+            },
+            {
+              "slug": "orbit-care",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Orbit Care protection plan",
+                  "bodyHtml": "<h2>Price</h2><p>Orbit Care costs 19 EUR per year, or 150 EUR once for 3 years. You can add it up to 30 days after delivery.</p><h2>What it covers</h2><p>Theft: with a police report filed within 48 hours we refund up to 70% of the purchase price. Accidental damage: one claim per year, with a 99 EUR excess per claim. Wear parts such as tyres and brake pads are not covered.</p>"
+                },
+                "ar": {
+                  "title": "خطة حماية Orbit Care",
+                  "bodyHtml": "<h2>السعر</h2><p>تكلف Orbit Care 19 يورو سنويًا، أو 150 يورو مرة واحدة لمدة 3 سنوات. يمكنك إضافتها حتى 30 يومًا بعد التسليم.</p><h2>ما تغطيه</h2><p>السرقة: مع بلاغ شرطة مقدم خلال 48 ساعة نعيد حتى 70% من سعر الشراء. الأضرار العرضية: مطالبة واحدة سنويًا، مع تحمّل قدره 99 يورو لكل مطالبة. قطع التآكل مثل الإطارات ووسادات الفرامل غير مشمولة.</p>"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "slug": "riding",
+          "names": { "en": "Riding", "ar": "القيادة" },
+          "articles": [
+            {
+              "slug": "speed-and-legal-limits",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Speed and legal limits",
+                  "bodyHtml": "<p>Motor assistance stops at 25 km/h, the legal limit for pedal-assist bikes in the EU and the UK; you can pedal faster, but on your own. No licence, registration or insurance is required in the EU. Every model has a walk-assist mode that moves the bike at 6 km/h while you hold the button.</p>"
+                },
+                "ar": {
+                  "title": "السرعة والحدود القانونية",
+                  "bodyHtml": "<p>يتوقف دعم المحرك عند 25 كم/س، وهو الحد القانوني لدراجات الدعم بالدواسة في الاتحاد الأوروبي والمملكة المتحدة؛ يمكنك التبديل أسرع لكن بجهدك وحدك. لا تحتاج إلى رخصة أو تسجيل أو تأمين في الاتحاد الأوروبي. في كل طراز وضع مساعدة المشي الذي يحرك الدراجة بسرعة 6 كم/س ما دمت تضغط الزر.</p>"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "account",
+      "names": { "en": "Account", "ar": "الحساب" },
+      "sections": [
+        {
+          "slug": "sign-in",
+          "names": { "en": "Signing in", "ar": "تسجيل الدخول" },
+          "articles": [
+            {
+              "slug": "account-and-password",
+              "visibility": "public",
+              "versions": {
+                "en": {
+                  "title": "Account and password",
+                  "bodyHtml": "<h2>Forgotten password</h2><p>Choose <strong>Forgot password</strong> on the sign-in page. The reset link we email you is valid for 30 minutes and can be used once.</p><h2>Changing your email</h2><p>Change the email address under <strong>Account settings</strong>; we send a confirmation to the new address.</p><h2>Deleting your account</h2><p>Ask support to delete your account. Your data is erased within 30 days, except invoices we must keep by law.</p>"
+                },
+                "ar": {
+                  "title": "الحساب وكلمة المرور",
+                  "bodyHtml": "<h2>نسيت كلمة المرور</h2><p>اختر <strong>نسيت كلمة المرور</strong> في صفحة تسجيل الدخول. رابط إعادة التعيين الذي نرسله بالبريد صالح لمدة 30 دقيقة ويُستخدم مرة واحدة.</p><h2>تغيير بريدك الإلكتروني</h2><p>غيّر عنوان البريد الإلكتروني من <strong>إعدادات الحساب</strong>؛ نرسل تأكيدًا إلى العنوان الجديد.</p><h2>حذف حسابك</h2><p>اطلب من الدعم حذف حسابك. تُمحى بياناتك خلال 30 يومًا، باستثناء الفواتير التي يلزمنا القانون بحفظها.</p>"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "staff-handbook",
+      "names": { "en": "Staff handbook", "ar": "دليل الموظفين" },
+      "sections": [
+        {
+          "slug": "internal-policies",
+          "names": { "en": "Internal policies", "ar": "السياسات الداخلية" },
+          "articles": [
+            {
+              "slug": "staff-discount-codes",
+              "visibility": "internal",
+              "versions": {
+                "en": {
+                  "title": "Staff discount codes",
+                  "bodyHtml": "<p>Employees order with the code STAFF40 for 40% off one bike per year. Journalists we have vetted get PRESS15 for 15% off. Never share either code outside the company; a customer who asks about staff or press pricing is referred to a team leader.</p>"
+                },
+                "ar": {
+                  "title": "أكواد خصم الموظفين",
+                  "bodyHtml": "<p>يطلب الموظفون بالكود STAFF40 للحصول على خصم 40% على دراجة واحدة سنويًا. يحصل الصحفيون الذين تحققنا منهم على PRESS15 لخصم 15%. لا تشارك أيًا من الكودين خارج الشركة؛ يُحال العميل الذي يسأل عن أسعار الموظفين أو الصحافة إلى قائد الفريق.</p>"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

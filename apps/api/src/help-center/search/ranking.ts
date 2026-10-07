@@ -1,5 +1,6 @@
 import type { DbTransaction } from '@helpdock/db';
 import type { HcAudience, HcLocale } from '@helpdock/schemas';
+import type { QueryVector } from '../../knowledge/retrieval/retrieve.js';
 import type { SearchTerms } from './query-terms.js';
 
 /**
@@ -29,6 +30,8 @@ export interface CandidateScope {
   readonly audience: HcAudience;
   readonly locale: HcLocale;
   readonly defaultLocale: HcLocale;
+  /** The question in the active embedding model, for the semantic source (M7-04); absent when there is none. */
+  readonly queryVector?: QueryVector;
 }
 
 export interface CandidateSource {

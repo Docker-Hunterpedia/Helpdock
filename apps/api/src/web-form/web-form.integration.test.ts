@@ -43,6 +43,7 @@ import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { FakeStorage } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 
 /**
  * M4-09 against a real Postgres and a real Redis, over HTTP as a browser posts.
@@ -285,13 +286,7 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
       ),
     });
 
-    const signIn = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email: seeded.email, password: seeded.password }),
-    });
-    token = (signIn.json() as { accessToken: string }).accessToken;
+    token = await signInForTest(app, { email: seeded.email, password: seeded.password });
 
     billing = (
       await withSystem(runtime.db, seeded.brandId, (tx) =>

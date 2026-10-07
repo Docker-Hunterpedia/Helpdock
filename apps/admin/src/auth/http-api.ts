@@ -11,6 +11,7 @@ import type {
 import {
   authMethodsSchema,
   authSessionResponseSchema,
+  enrolmentCompleteResponseSchema,
   publicInviteSchema,
   recoveryCodesSchema,
   sessionSchema,
@@ -112,6 +113,24 @@ export class HttpAuthApi implements AuthApi {
     return recoveryCodesSchema.parse(
       await this.#transport.request('POST', '/auth/totp/confirm', { code }),
     );
+  }
+
+  async startEnrolment(challengeId: string): Promise<TotpEnrolment> {
+    return totpEnrolmentSchema.parse(
+      await this.#transport.request('POST', '/auth/enrolment/start', { challengeId }),
+    );
+  }
+
+  async completeEnrolment(
+    challengeId: string,
+    code: string,
+  ): Promise<RecoveryCodes & { readonly session: Session }> {
+    const response = enrolmentCompleteResponseSchema.parse(
+      await this.#transport.request('POST', '/auth/enrolment/confirm', { challengeId, code }),
+    );
+    this.#transport.keepSession(response);
+
+    return { recoveryCodes: response.recoveryCodes, session: response.session };
   }
 
   // ------------------------------------------------------------------

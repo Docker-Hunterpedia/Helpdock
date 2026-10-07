@@ -23,7 +23,10 @@ invitations and a person's own security page.
 
 Whichever of them is used, if the account has an authenticator enrolled the
 second factor is asked for afterwards. There is no path that skips it, apart
-from a browser the person has explicitly chosen to trust.
+from a browser the person has explicitly chosen to trust. An account that must
+have one and has none — an Admin, an install admin, or anybody on an install
+with `auth.require2fa` on — is sent to enrolment instead of being given a
+session ([Who must have a second factor](#who-must-have-a-second-factor)).
 
 `GET /api/auth/methods` reports which of them this install offers. The sign-in
 screen calls it and draws only the buttons that would work.
@@ -32,7 +35,8 @@ screen calls it and draws only the buttons that would work.
 
 ```
 access token   JWT, ES256, 10 minutes, in memory in the browser
-refresh token  opaque, 256 bits, rotating, 30 days, httpOnly cookie
+refresh token  opaque, 256 bits, rotating, httpOnly cookie
+               ends after 4 hours unused, and 12 hours after sign-in at most
 ```
 
 The **access token** carries everything a request needs to be authorised: the
@@ -54,6 +58,23 @@ same chain and there is no way to tell which is the legitimate one, so the whole
 family is revoked and `principal.revoked` is published. That is what makes
 rotation worth having.
 
+### How long a sign-in lasts
+
+Two limits, both from `.env` (ASVS 3.3.2):
+
+| Key | Default | |
+|---|---|---|
+| `AUTH_SESSION_IDLE_MINUTES` | `240` | A browser that has not refreshed for this long signs in again |
+| `AUTH_SESSION_MAX_HOURS` | `12` | Every browser signs in again this long after it signed in, however busy it was |
+
+The family's Redis record lives for the idle limit and each refresh renews it,
+but never past what is left of the absolute one; the cookie's `Max-Age` is the
+absolute limit. The defaults are the figure ASVS Level 2 gives. A browser the
+person chose to trust skips the second factor on the next sign-in, so a daily
+sign-in costs a password. Lowering `AUTH_SESSION_MAX_HOURS` ends families that
+are already older than the new limit at their next refresh. Neither may be more
+than 30 days.
+
 The **signing keys** are an ES256 key pair generated at first boot and stored,
 encrypted, in the `auth.jwtSigningKey` setting, so every replica verifies what
 any other replica signed. Clearing that setting and restarting signs everybody
@@ -63,8 +84,8 @@ out; that is the whole of key rotation in v1.
 
 | Cookie | What it is | Attributes |
 |---|---|---|
-| `hd_refresh` | The refresh token and its family | `HttpOnly`, `SameSite=Lax`, `Path=/api/auth`, 30 days, `Secure` when `APP_URL` is https |
-| `hd_trust` | A browser the person chose to trust | the same, 30 days |
+| `__Secure-hd_refresh` | The refresh token and its family | `HttpOnly`, `SameSite=Lax`, `Path=/api/auth`, `Max-Age` of `AUTH_SESSION_MAX_HOURS`, `Secure` |
+| `__Secure-hd_trust` | A browser the person chose to trust | the same, 30 days |
 
 `SameSite=Lax` means a cross-site POST carries neither, which is what makes
 `/api/auth/refresh` safe without a CSRF token of its own. `Path=/api/auth` means
@@ -73,7 +94,18 @@ neither is readable by a sibling subdomain.
 
 `Secure` is set only when `APP_URL` is https: a `Secure` cookie is dropped
 silently over plain http, and a local `http://localhost` install would otherwise
-be unable to sign in with nothing on screen to say why.
+be unable to sign in with nothing on screen to say why. The names carry the
+`__Secure-` prefix on the same condition — a browser accepts such a cookie only
+from a secure origin with `Secure` set, so a plain-http page or a network
+attacker cannot plant one — and are the bare `hd_refresh` and `hd_trust` on a
+plain-http install.
+
+**`__Secure-`, not `__Host-`** (ASVS 3.4.4). `__Host-` also requires
+`Path=/`, which would send the refresh token to every route in the app instead
+of the five that read it. The other half of `__Host-` — no `Domain` — already
+holds. The narrow path is worth more than the stricter prefix; the deviation is
+recorded in [asvs-l2](../completed/asvs-l2.md). Upgrading to this release
+renames the cookies, so every browser signs in once more.
 
 ### What the browser holds
 
@@ -95,6 +127,22 @@ next successful sign-in — the one moment the plaintext is in hand.
 
 A password must be at least 12 characters. There are no composition rules.
 
+### Breached passwords
+
+A new password — in the wizard, on an invitation, on a reset and on a change —
+is checked against a list of passwords already known to attackers (ASVS
+2.1.7): the 46 146 entries of 12 characters or more among the million most
+common in SecLists' `xato-net` list, compared without regard to case. The list
+ships in the image (`apps/api/src/auth/breached/`); the password is never sent
+anywhere to be checked ([ADR 0021](../decisions/0021-bundled-breached-password-list.md)).
+A match answers `400` with `error.auth.code` `password-breached`, and the
+screen says so on the field. A reset refuses it before the link is spent, so
+the same link takes a better password.
+
+Every field that chooses a password (`Admin/PasswordField`) has a show/hide
+toggle and a strength bar; the breached and too-short errors are drawn on the
+field after the api answers.
+
 ### Nothing confirms who works here
 
 An unknown address and a wrong password answer the same code, `invalid-credentials`,
@@ -108,9 +156,26 @@ out who has an account here.
 TOTP, SHA-1, six digits, a thirty-second step, and a window of one step either
 side, which covers the drift between a phone and a server.
 
-The secret is stored encrypted with AES-256-GCM under `APP_MASTER_KEY`. Turning
-`auth.require2fa` on makes an authenticator mandatory for every staff account on
-the install.
+The secret is stored encrypted with AES-256-GCM under `APP_MASTER_KEY`.
+
+**Each code works once** (ASVS 2.8.4). The thirty-second step an account's code
+was last accepted at is kept in Redis (`auth:totp-step:<user>`) for as long as
+that code could still match, and only a later step is accepted after it. A code
+that comes back — at a second challenge, or to prove a step-up — is refused as
+`totp-mismatch`, costs an attempt like any wrong code, and is logged and
+audited as `auth.second_factor.replayed`, because a valid code arriving twice
+means somebody else saw it.
+
+### Who must have a second factor
+
+- **Every Admin of any brand, and every install admin**, whatever the setting
+  (ASVS 4.3.1): their sessions decide who else works here.
+- **Everybody**, when `auth.require2fa` is on.
+
+Such an account cannot turn its second factor off, and the security page says
+why. An Admin who had none before this rule existed keeps their current session
+until it ends (at most `AUTH_SESSION_MAX_HOURS`) and is sent to enrolment at the
+next sign-in, as is somebody invited as an Admin.
 
 ### Enrolling
 
@@ -120,8 +185,16 @@ the install.
 2. `POST /api/auth/totp/confirm` with a live code enables the second factor and
    returns **ten recovery codes, once**.
 
-The screen that draws the QR code is `/sign-in/enrol`, which an install with
-`auth.require2fa` on sends an account without an authenticator to. It stages the
+Before a session exists, the same two steps take the **enrolment challenge**
+that sign-in answered with (`totp-enrolment-required`) instead:
+`POST /api/auth/enrolment/start` stages the secret, and
+`POST /api/auth/enrolment/confirm` with a live code turns it on, spends the
+challenge, sets the refresh cookie and answers the recovery codes together with
+the session. A wrong code costs one of the challenge's three attempts. The
+challenge lasts fifteen minutes.
+
+The screen that draws the QR code is `/sign-in/enrol`, which sign-in sends an
+account that must have an authenticator and has none to. It stages the
 secret, draws it as a QR code and as a key that can be typed, and hands over the
 recovery codes behind a checkbox that says they have been saved. The QR is drawn
 in the browser as SVG, because the `otpauth://` URI is a credential and asking a
@@ -130,8 +203,8 @@ roles](staff-and-roles.md#two-factor-enrolment) walks through it.
 
 Turning the second factor **off** again, and redrawing the recovery codes, are
 on the security page and each cost a live code: a session proves somebody signed
-in, not that the person at the keyboard now is the account holder. Neither is
-offered while `auth.require2fa` is on.
+in, not that the person at the keyboard now is the account holder. Turning it
+off is not offered to an account that must have one.
 
 ### Recovery codes
 
@@ -219,8 +292,41 @@ compose file (`localhost:1025`, TLS `none`) and read it at
 restart is needed. The System page has no slot for this yet: the Channels card
 lists brand channels, not the install's sender.
 
-The three messages are rendered from the `email` catalogs in `@helpdock/i18n`,
+The messages are rendered from the `email` catalogs in `@helpdock/i18n`,
 in the recipient's own language, right to left for Arabic.
+
+### When a credential changes
+
+The account holder is told by email whenever their password is changed or
+reset, their second factor is turned on or off, or their recovery codes are
+redrawn (ASVS 2.2.3, 2.5.5) — a `securityChange` auth email naming which one,
+with a link to their security page and what to do if it was not them. From
+inside a session the outbox row joins the request's transaction, so a change
+that rolls back sends nothing; a reset, which has none, goes the way the reset
+link went. The link is to a page, not a credential, and does not expire.
+
+## The audit trail
+
+Every authentication decision is a row of `audit_log` in install scope, which
+install admins read in the [audit log](audit-log.md) with **Brand: install**
+and an `auth.*` action ([ADR 0022](../decisions/0022-auth-audit-trail-in-install-scope.md),
+ASVS 7.1.3, 7.2.1):
+
+| Action | When |
+|---|---|
+| `auth.sign_in.succeeded` | A session was opened. `meta` has the first factor (`password`, `magic-link`, `oauth`, `invite`) and the second (`totp`, `recovery-code`, `trusted-browser` or none) |
+| `auth.sign_in.failed` | A first factor was refused. `meta.reason`: `wrong-password`, `unknown-account`, `unusable-account`, `locked`, `no-brand-role` |
+| `auth.second_factor.failed` / `.replayed` | A wrong authenticator or recovery code; a code used twice |
+| `auth.account.locked` | A challenge spent its last attempt |
+| `auth.step_up.refused` | A security-page check refused: wrong password, or the rate limit |
+| `auth.refresh_token.reused` | A rotated refresh token came back; the family was revoked |
+| `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated`, `auth.recovery_code.used` | A credential changed |
+
+The rows are written by the `auth` system principal in a transaction of their
+own, so a refused attempt is recorded although the request fails, and carry the
+request id, client address and user agent. An unknown address is recorded as
+`unknown-account` with no target, never spelled out. A row that cannot be
+written is logged and does not stop the sign-in.
 
 ## OAuth
 
@@ -297,6 +403,8 @@ revoked session ids can never grow without bound.
 Every revocation publishes `principal.revoked` on Redis. M0-13 is the subscriber
 that disconnects that principal's sockets within five seconds
 ([DOMAIN-RULES §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets)).
+A revocation of particular families names them in `familyIds`, and only the
+sockets of those browsers close ([realtime](realtime.md#revocation)).
 
 ## Rate limits
 
@@ -332,15 +440,15 @@ it in the UI ([ARCHITECTURE §4](../planning/ARCHITECTURE.md#4-configuration-mod
 
 | Key | Default | |
 |---|---|---|
-| `auth.require2fa` | `false` | Require an authenticator for every staff account |
+| `auth.require2fa` | `false` | Require an authenticator for every staff account. Admins and install admins need one either way |
 | `auth.magicLinkTtlMinutes` | `10` | Lifetime of a sign-in link |
 | `roles.viewerEnabled` | `true` | Whether the read-only Viewer role can be assigned ([staff and roles](staff-and-roles.md#the-viewer-toggle)) |
 | `auth.jwtSigningKey` | generated | The ES256 key pair. Secret, generated at first boot, never set by hand |
 | `oauth.google.clientId` / `…clientSecret` | empty | Empty disables the button |
 | `oauth.github.clientId` / `…clientSecret` | empty | Empty disables the button |
 
-No new `.env` key. Auth derives everything it needs from `APP_MASTER_KEY`, which
-`.env.example` already documents.
+From `.env`: `APP_MASTER_KEY`, and the two session limits in
+[How long a sign-in lasts](#how-long-a-sign-in-lasts).
 
 ## Endpoints
 
@@ -350,6 +458,8 @@ No new `.env` key. Auth derives everything it needs from `APP_MASTER_KEY`, which
 | `POST /api/auth/sign-in` | `@Public()` | Email and password |
 | `POST /api/auth/totp` | `@Public()` | Answer a second-factor challenge |
 | `POST /api/auth/recovery-code` | `@Public()` | Answer it with a recovery code |
+| `POST /api/auth/enrolment/start` | `@Public()` | Stage a secret against an enrolment challenge |
+| `POST /api/auth/enrolment/confirm` | `@Public()` | Turn it on with a live code; answers the recovery codes and the session |
 | `POST /api/auth/magic-link` | `@Public()` | Ask for a sign-in link. Always 204 |
 | `GET /api/auth/magic-link/:token` | `@Public()` | Spend one. Redirects |
 | `POST /api/auth/exchange` | `@Public()` | One-time code → access token |
@@ -385,8 +495,8 @@ screens need:
 ```
 
 `error.auth.code` is one of `invalid-credentials`, `totp-mismatch`,
-`totp-locked`, `challenge-expired`, `recovery-invalid`, `no-account` or
-`unavailable`. The admin turns it into a translated sentence; no user-facing
+`totp-locked`, `challenge-expired`, `recovery-invalid`, `no-account`,
+`unavailable` or `password-breached`. The admin turns it into a translated sentence; no user-facing
 English crosses that boundary.
 
 ## The development install
@@ -400,7 +510,8 @@ pnpm build
 pnpm --filter @helpdock/api seed:dev
 ```
 
-It migrates, then creates one brand and one install admin. It refuses to run
+It migrates, then creates one brand and one install admin, who enrols an
+authenticator at the first sign-in because an install admin must have one. It refuses to run
 with `NODE_ENV=production`, because the password is published here:
 
 | | |

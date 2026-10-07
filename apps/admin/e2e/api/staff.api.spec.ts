@@ -1,14 +1,7 @@
-import { expect, test } from '@playwright/test';
-import { generate } from 'otplib';
 import { strings } from '../strings.js';
-import {
-  ACCOUNT_EMAIL_ENV,
-  ACCOUNT_PASSWORD_ENV,
-  INVITE_TOKEN_ENV,
-  INVITEE_EMAIL,
-  SKIP_ENV,
-  TOTP_SECRET_ENV,
-} from './install.js';
+import { contextOptionsOf, expect, openAdmin, test } from './admin-session.js';
+import { INVITE_TOKEN_ENV, INVITEE_EMAIL, SKIP_ENV } from './install.js';
+import { freshTotpCode } from './totp.js';
 
 /**
  * M0-06 against the real api: an invitation accepted, a second factor enrolled,
@@ -35,29 +28,9 @@ const t = strings('en');
 
 const NEW_PASSWORD = 'an invited person password';
 
-const admin = () => ({
-  email: process.env[ACCOUNT_EMAIL_ENV] ?? '',
-  password: process.env[ACCOUNT_PASSWORD_ENV] ?? '',
-  totpSecret: process.env[TOTP_SECRET_ENV] ?? '',
-});
-
-/** Signed in as the seeded install admin, through the second factor. */
-const signInAsAdmin = async (page: import('@playwright/test').Page): Promise<void> => {
-  const { email, password, totpSecret } = admin();
-
-  await page.goto('/sign-in');
-  await page.getByLabel(t('auth:signIn.emailLabel')).fill(email);
-  await page.getByLabel(t('auth:signIn.passwordLabel')).fill(password);
-  await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
-
-  await page.getByLabel(t('auth:totp.codeLabel')).fill(await generate({ secret: totpSecret }));
-  await page.getByRole('button', { name: t('auth:totp.submit') }).click();
-  await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
-};
-
 test.describe('staff and roles against the real api', () => {
   test('shows the seeded invitation as pending, and sends another', async ({ page }) => {
-    await signInAsAdmin(page);
+    await openAdmin(page);
     await page.getByRole('link', { name: new RegExp(t('admin:nav.staff')) }).click();
 
     const table = page.getByRole('table');
@@ -81,9 +54,12 @@ test.describe('staff and roles against the real api', () => {
   });
 
   test('accepts an invitation, enrols a second factor, and signs in with both', async ({
-    page,
+    browser,
   }) => {
     const token = process.env[INVITE_TOKEN_ENV] ?? '';
+    // Somebody else's browser: a context of its own, with no session in it.
+    const context = await browser.newContext(contextOptionsOf(test.info().project.use));
+    const page = await context.newPage();
 
     // 1. The link from the invitation, read without spending it.
     await page.goto(`/invite/${token}`);
@@ -122,9 +98,7 @@ test.describe('staff and roles against the real api', () => {
     const secret = (await keyPanel.locator('bdi').textContent())?.trim() ?? '';
     expect(secret).toMatch(/^[A-Z2-7]{16,}$/);
 
-    await page
-      .getByLabel(t('auth:enrolment.step1.codeLabel'))
-      .fill(await generate({ secret, period: 30 }));
+    await page.getByLabel(t('auth:enrolment.step1.codeLabel')).fill(await freshTotpCode(secret));
     await page.getByRole('button', { name: t('auth:enrolment.step1.submit') }).click();
 
     const codes = page.getByRole('list', { name: t('auth:enrolment.step2.listLabel') });
@@ -150,7 +124,7 @@ test.describe('staff and roles against the real api', () => {
     await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
 
     await expect(page.getByRole('heading', { name: t('auth:totp.title') })).toBeVisible();
-    await page.getByLabel(t('auth:totp.codeLabel')).fill(await generate({ secret, period: 30 }));
+    await page.getByLabel(t('auth:totp.codeLabel')).fill(await freshTotpCode(secret));
     await page.getByRole('button', { name: t('auth:totp.submit') }).click();
 
     await expect(page.getByRole('navigation', { name: t('admin:nav.label') })).toBeVisible();
@@ -160,5 +134,7 @@ test.describe('staff and roles against the real api', () => {
     await expect(
       page.getByRole('heading', { name: t('auth:invite.expiredTitle'), level: 1 }),
     ).toBeVisible();
+
+    await context.close();
   });
 });

@@ -9,10 +9,16 @@
  *
  * `kind` keeps the sources apart: a reply is keyed by its ticket message,
  * each auto-reply by its ticket, since there is at most one of each per
- * ticket, and a widget transcript (M4-08) by its own delivery row.
+ * ticket, a widget transcript (M4-08) by its own delivery row, and a
+ * satisfaction survey (M8-06) by its survey.
  */
 
-export type OutboundMessageKind = 'reply' | 'acknowledgment' | 'out_of_hours' | 'transcript';
+export type OutboundMessageKind =
+  | 'reply'
+  | 'acknowledgment'
+  | 'out_of_hours'
+  | 'transcript'
+  | 'csat';
 
 const KIND_TAG: Readonly<Record<OutboundMessageKind, string>> = {
   reply: 'm',
@@ -20,6 +26,8 @@ const KIND_TAG: Readonly<Record<OutboundMessageKind, string>> = {
   out_of_hours: 'o',
   // M4-08. Keyed by the delivery, since a visitor may ask for a transcript twice.
   transcript: 't',
+  // M8-06. One survey email per survey.
+  csat: 'c',
 };
 
 /** Characters RFC 5322 allows in a dot-atom; anything else in a domain is dropped. */
@@ -39,7 +47,10 @@ export const outboundMessageId = ({
   fromAddress,
 }: {
   readonly kind: OutboundMessageKind;
-  /** The ticket message for a reply, the ticket for an auto-reply, the delivery for a transcript. */
+  /**
+   * The ticket message for a reply, the ticket for an auto-reply, the delivery
+   * for a transcript, the survey for a survey.
+   */
   readonly id: string;
   readonly fromAddress: string;
 }): string => `<hd.${KIND_TAG[kind]}.${id}@${messageIdDomain(fromAddress)}>`;

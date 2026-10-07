@@ -126,7 +126,7 @@ the ticket.
 | `by` | Counts |
 |---|---|
 | `staff` | always (a public reply from `TicketsService.addMessage`) |
-| `ai` | when the brand's `aiCountsAsFirstResponse` is on (M7's auto-reply) |
+| `ai` | when the brand's `aiCountsAsFirstResponse` is on: an auto-reply answer (M7-06); its handoff message never calls it |
 | `rule` | only when the rule action sets `countsAsResponse: true` (M3-03's "send canned response") |
 
 Auto-acknowledgments, out-of-hours notices, notes and CSAT messages never call

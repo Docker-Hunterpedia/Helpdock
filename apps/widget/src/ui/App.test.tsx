@@ -32,7 +32,29 @@ describe('launcher and window (M4-11)', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(screen.queryByRole('region', { name: 'Support chat' })).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open support chat' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Open support chat' }),
+      ),
+    );
+  });
+
+  it('is a modal dialog that keeps Tab inside it where it fills a phone screen (M9-04)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 480px)',
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    await renderWidget();
+    fireEvent.click(screen.getByRole('button', { name: 'Open support chat' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Support chat' });
+    const minimise = within(dialog).getByRole('button', { name: 'Minimise chat' });
+    const send = within(dialog).getByRole('button', { name: 'Send' });
+
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    send.focus();
+    fireEvent.keyDown(send, { key: 'Tab' });
+    expect(document.activeElement).toBe(minimise);
   });
 
   it('draws the thread as a focusable polite log with the brand greeting', async () => {

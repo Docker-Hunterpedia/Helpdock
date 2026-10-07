@@ -17,7 +17,15 @@ export const MOCK_CSAT_TOKENS = {
   expired: token('C', 'e'),
 } as const;
 
-export const MOCK_CSAT_BRAND: CsatBrand = { name: 'Helpdock', locale: 'en', accent: null };
+export const MOCK_CSAT_HELP_CENTER = 'https://help.example.com/';
+
+/** The open and used links' brand has a published help center; the expired one's has none. */
+export const MOCK_CSAT_BRAND: CsatBrand = {
+  name: 'Helpdock',
+  locale: 'en',
+  accent: null,
+  helpCenterUrl: MOCK_CSAT_HELP_CENTER,
+};
 
 export const MOCK_CSAT_TICKET = {
   reference: 'HD-1042',
@@ -51,7 +59,7 @@ export class MockCsatApi implements CsatApi {
       return { state: 'used', brand: MOCK_CSAT_BRAND };
     }
     if (token === MOCK_CSAT_TOKENS.expired) {
-      return { state: 'expired', brand: MOCK_CSAT_BRAND };
+      return { state: 'expired', brand: { ...MOCK_CSAT_BRAND, helpCenterUrl: null } };
     }
 
     throw new CsatLinkError('not-found');

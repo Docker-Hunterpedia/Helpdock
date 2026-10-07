@@ -142,13 +142,21 @@ export interface Settings {
 
 // The environment only carries strings; the declared default says what shape
 // the key holds. An unparseable value is passed through so the key's own schema
-// produces the error rather than a silent `false` or `NaN`.
+// produces the error rather than a silent `false` or `NaN`. A list or an object
+// (`HD_AI_PROVIDERS`) is JSON.
 const coerceEnvValue = (raw: string, defaultValue: unknown): unknown => {
   if (typeof defaultValue === 'boolean') {
     if (raw === 'true') {
       return true;
     }
     return raw === 'false' ? false : raw;
+  }
+  if (typeof defaultValue === 'object' && defaultValue !== null) {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      return raw;
+    }
   }
 
   return typeof defaultValue === 'number' ? Number(raw) : raw;

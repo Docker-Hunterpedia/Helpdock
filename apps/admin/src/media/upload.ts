@@ -3,6 +3,7 @@ import type {
   AttachmentKind,
   AttachmentPresignResponse,
   ContentPolicy,
+  DownloadVariant,
 } from '@helpdock/schemas';
 import {
   attachmentDownloadSchema,
@@ -133,6 +134,16 @@ export interface AttachmentUploader {
   upload(input: UploadAttachmentInput): Promise<Attachment>;
   /** The row as it stands, for a caller polling a placeholder. */
   status(brandId: string, ticketId: string, attachmentId: string): Promise<Attachment>;
+  /**
+   * A five-minute URL for one object of a ready attachment, asked for when it
+   * is about to be used — a voice note's play button (M6-03) — never for a list.
+   */
+  downloadUrl(
+    brandId: string,
+    ticketId: string,
+    attachmentId: string,
+    variant: DownloadVariant,
+  ): Promise<string>;
 }
 
 /**
@@ -184,6 +195,20 @@ export class HttpAttachmentUploader implements AttachmentUploader {
     );
 
     return attachmentDownloadSchema.parse(response).attachment;
+  }
+
+  async downloadUrl(
+    brandId: string,
+    ticketId: string,
+    attachmentId: string,
+    variant: DownloadVariant,
+  ): Promise<string> {
+    const response = await this.#transport.request(
+      'GET',
+      `/brands/${brandId}/tickets/${ticketId}/attachments/${attachmentId}?variant=${variant}`,
+    );
+
+    return attachmentDownloadSchema.parse(response).url;
   }
 
   async #putObject(

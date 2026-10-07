@@ -217,6 +217,8 @@ export function SetupLayout({ step, systemStatus, children }: SetupLayoutProps):
 
 export interface StepFrameProps {
   readonly title: string;
+  /** Beside the title, such as the AI step's "Optional". */
+  readonly badge?: ReactNode;
   readonly description: string;
   readonly children: ReactNode;
   /** The row of buttons at the foot of the card. */
@@ -227,6 +229,7 @@ export interface StepFrameProps {
 /** Heading, caption, fields, footer: the shape every step's card shares. */
 export function StepFrame({
   title,
+  badge,
   description,
   children,
   footer,
@@ -243,9 +246,12 @@ export function StepFrame({
       sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Typography variant="h1" component="h2">
-          {title}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+          <Typography variant="h1" component="h2">
+            {title}
+          </Typography>
+          {badge}
+        </Box>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {description}
         </Typography>

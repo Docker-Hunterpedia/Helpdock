@@ -1,20 +1,30 @@
 import type {
+  AiRefusal,
+  AssistRefusal,
   AuthErrorBody,
   ChannelsRefusal,
   ContactRefusal,
   DomainsRefusal,
   HcRefusal,
   IdentityProblem,
+  KnowledgeRefusal,
   StaffRefusal,
+  TelegramRefusal,
   TicketingRefusal,
   TicketLifecycleRefusal,
+  WebhooksRefusal,
 } from '@helpdock/schemas';
 import { authSessionResponseSchema, errorResponseSchema } from '@helpdock/schemas';
+import { AiError } from '../ai/api.js';
+import { AssistError } from '../assist/api.js';
 import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
+import { WebhooksError } from '../developers/api.js';
 import { DomainsError } from '../domains/api.js';
 import { HelpCenterError } from '../help-center/api.js';
+import { KnowledgeError } from '../knowledge/api.js';
 import { StaffError } from '../staff/api.js';
+import { TelegramError } from '../telegram/api.js';
 import { TicketingError } from '../ticketing/api.js';
 import { TicketLifecycleError } from '../tickets/api.js';
 import { AuthError } from './api.js';
@@ -198,14 +208,19 @@ export class HttpTransport {
 const toError = async (
   response: Response,
 ): Promise<
+  | AssistError
+  | AiError
   | AuthError
   | ChannelsError
   | ContactError
   | DomainsError
   | HelpCenterError
+  | KnowledgeError
   | StaffError
+  | TelegramError
   | TicketingError
   | TicketLifecycleError
+  | WebhooksError
 > => {
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
@@ -215,6 +230,11 @@ const toError = async (
   let channels: ChannelsRefusal | undefined;
   let domains: DomainsRefusal | undefined;
   let helpCenter: HcRefusal | undefined;
+  let ai: AiRefusal | undefined;
+  let knowledge: KnowledgeRefusal | undefined;
+  let telegram: TelegramRefusal | undefined;
+  let assist: AssistRefusal | undefined;
+  let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -226,6 +246,11 @@ const toError = async (
     channels = body.channels?.reason;
     domains = body.domains?.reason;
     helpCenter = body.helpCenter?.reason;
+    ai = body.ai?.reason;
+    knowledge = body.knowledge?.reason;
+    telegram = body.telegram?.reason;
+    assist = body.assist?.reason;
+    webhooks = body.webhooks;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -257,6 +282,26 @@ const toError = async (
 
   if (helpCenter !== undefined) {
     return new HelpCenterError(helpCenter);
+  }
+
+  if (ai !== undefined) {
+    return new AiError(ai);
+  }
+
+  if (knowledge !== undefined) {
+    return new KnowledgeError(knowledge);
+  }
+
+  if (telegram !== undefined) {
+    return new TelegramError(telegram);
+  }
+
+  if (assist !== undefined) {
+    return new AssistError(assist);
+  }
+
+  if (webhooks !== undefined) {
+    return new WebhooksError(webhooks.reason, webhooks.address);
   }
 
   if (auth === undefined) {

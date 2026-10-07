@@ -1,7 +1,16 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
-import { degradedSystemStatus, healthySystemStatus } from '../src/screens/admin/system/fixtures.js';
+import {
+  activeDeletion,
+  brandDeletionOf,
+  degradedSystemStatus,
+  healthySystemStatus,
+  installBrands,
+  measuredSystemStatus,
+  productMetrics,
+  QUEUE_BOARD_PASS,
+} from '../src/screens/admin/system/fixtures.js';
 import { expect, test } from './fixtures.js';
 import { signIn } from './flows.js';
 import { strings } from './strings.js';
@@ -25,14 +34,38 @@ const SYSTEM_ENDPOINT = '**/api/install/system';
 
 type Fixture = ReturnType<typeof healthySystemStatus>;
 
-/** Answers the one endpoint the page reads, with the body a test chose. */
+const json = (body: unknown) => ({
+  status: 200,
+  contentType: 'application/json',
+  body: JSON.stringify(body),
+});
+
+/**
+ * Answers the status read with the body a test chose, and the M8 reads the
+ * page makes beside it (product metrics, brands and their deletions, the
+ * queue board pass) from the shared fixtures.
+ */
 async function stubSystem(page: Page, body: Fixture): Promise<void> {
-  await page.route(SYSTEM_ENDPOINT, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(body),
-    });
+  await page.route(SYSTEM_ENDPOINT, (route) => route.fulfill(json(body)));
+  await page.route('**/api/install/system/metrics', (route) =>
+    route.fulfill(json(productMetrics())),
+  );
+  await page.route('**/api/install/system/queue-board', (route) =>
+    route.fulfill(json({ url: QUEUE_BOARD_PASS })),
+  );
+  await page.route(QUEUE_BOARD_PASS, (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<title>Bull Board</title>' }),
+  );
+  await page.route('**/api/install/brands', (route) =>
+    route.fulfill(json({ brands: installBrands() })),
+  );
+  await page.route('**/api/install/brands/*/deletion', (route) => {
+    const brandId = new URL(route.request().url()).pathname.split('/').at(-2) ?? '';
+    return route.fulfill(
+      json(
+        route.request().method() === 'DELETE' ? activeDeletion(brandId) : brandDeletionOf(brandId),
+      ),
+    );
   });
 }
 
@@ -67,7 +100,9 @@ test.describe('the System page', () => {
 
     await expect(page.getByRole('table', { name: t('system:queues.title') })).toBeVisible();
     await expect(page.getByRole('region', { name: t('system:channels.title') })).toBeVisible();
-    await expect(page.getByRole('region', { name: t('system:usage.title') })).toBeVisible();
+    await expect(page.getByRole('region', { name: t('system:storage.title') })).toBeVisible();
+    await expect(page.getByRole('region', { name: t('system:llm.title') })).toBeVisible();
+    await expect(page.getByRole('region', { name: t('system:pending.title') })).toBeVisible();
     await expect(page.getByRole('region', { name: t('system:audit.title') })).toBeVisible();
 
     // The version string is Latin in both locales (DESIGN §7).
@@ -89,21 +124,88 @@ test.describe('the System page', () => {
     expect(await violations(page)).toEqual([]);
   });
 
-  test('says what is not configured rather than showing a zero', async ({
+  test('says what is not measured or set up rather than showing a zero', async ({
     page,
     appLocale: locale,
   }) => {
     const t = strings(locale);
     await openSystem(page, locale, healthySystemStatus());
 
-    const usage = page.getByRole('region', { name: t('system:usage.title') });
-
-    await expect(usage.getByText(t('system:notConfigured'))).toHaveCount(2);
+    await expect(
+      page
+        .getByRole('region', { name: t('system:storage.title') })
+        .getByText(t('system:storage.pending')),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole('region', { name: t('system:llm.title') })
+        .getByText(t('system:llm.unavailable')),
+    ).toBeVisible();
     await expect(
       page
         .getByRole('region', { name: t('system:channels.title') })
         .getByText(t('system:channels.empty')),
     ).toBeVisible();
+  });
+
+  test('draws the product metrics, storage per brand and the brands pending deletion', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openSystem(page, locale, measuredSystemStatus());
+
+    const activation = page.getByRole('region', { name: t('system:metrics.activation.label') });
+    await expect(
+      activation.getByText(t('system:metrics.activation.day', { day: 2 }), { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole('table', { name: t('system:storage.byBrand') })
+        .getByText(t('system:storage.pendingDeletion'), { exact: false }),
+    ).toBeVisible();
+    const pending = page.getByRole('region', { name: t('system:pending.title') });
+    await expect(pending.getByText(t('system:pending.daysLeft', { count: 26 }))).toBeVisible();
+    await expect(pending.getByText(t('system:pending.daysLeft', { count: 3 }))).toBeVisible();
+  });
+
+  test('draws LLM spend per brand, the Postgres size, the newest migrations and who deleted a brand', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openSystem(page, locale, measuredSystemStatus());
+
+    const llm = page.getByRole('table', { name: t('system:llm.title') });
+    await expect(llm.getByRole('row').filter({ hasText: 'Acme Store' })).toContainText(
+      t('system:llm.pastAlert', { percent: 86, budget: '$100.00', alert: 80 }),
+    );
+    await expect(llm.getByRole('row').last()).toContainText(t('system:llm.install'));
+    const storage = page.getByRole('region', { name: t('system:storage.title') });
+    await expect(storage.getByText(t('system:storage.postgresCaption'))).toBeVisible();
+    await expect(
+      page.getByRole('list', { name: t('system:versionCard.recent') }).getByRole('listitem'),
+    ).toHaveText([
+      '0003_outbox_notify_relay',
+      '0002_tenant_rls_policies',
+      '0001_app_role_and_ticket_sequences',
+    ]);
+    const pending = page.getByRole('region', { name: t('system:pending.title') });
+    await expect(pending.getByText(/Lina Haddad/)).toBeVisible();
+    await expect(pending.getByText(new RegExp(t('system:pending.removedAccount')))).toBeVisible();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('restores a brand pending deletion', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await openSystem(page, locale, measuredSystemStatus());
+
+    await page
+      .getByRole('button', { name: t('system:pending.restoreBrand', { name: 'Old Store' }) })
+      .click();
+
+    await expect(page.getByText(t('system:pending.restored', { name: 'Old Store' }))).toBeVisible();
   });
 
   test('expands the queue table in place', async ({ page, appLocale: locale }) => {
@@ -118,14 +220,15 @@ test.describe('the System page', () => {
     await expect(page.getByRole('button', { name: t('system:queues.showFewer') })).toBeVisible();
   });
 
-  test('opens the queue screen from the header button', async ({ page, appLocale: locale }) => {
+  test('opens Bull Board in a new tab with a one-use pass', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await openSystem(page, locale, healthySystemStatus());
 
-    await page.getByRole('link', { name: t('system:openQueues') }).click();
+    const popup = page.waitForEvent('popup');
+    await page.getByRole('button', { name: t('system:queueBoard.open') }).click();
+    const board = await popup;
 
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('system:queues.title'));
-    await expect(page.getByText(t('system:openQueuesHint'))).toBeVisible();
+    await expect(board).toHaveURL(new RegExp(`${QUEUE_BOARD_PASS}$`));
   });
 
   test('draws a refusal as "Not allowed"', async ({ page, appLocale: locale }) => {

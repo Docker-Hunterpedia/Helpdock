@@ -125,6 +125,12 @@ const cidrListSchema = () =>
  * used both in `.env.example` and in the error {@link loadEnv} throws, so the
  * two can never drift apart.
  */
+/** Thirty days: the refresh token's lifetime before M9 bounded it (ARCHITECTURE §7). */
+const MAX_SESSION_HOURS = 30 * 24;
+const MIN_SESSION_IDLE_MINUTES = 5;
+/** Each running event holds a database connection; the pool is not unbounded. */
+const MAX_OUTBOX_CONCURRENCY = 32;
+
 export const envSchema = z.object({
   APP_URL: urlSchema('http:', 'https:').describe(
     'must be the public http(s) URL of this install, for example https://support.example.com',
@@ -247,6 +253,54 @@ export const envSchema = z.object({
     .optional()
     .describe(
       'optional; the hostname a brand points its help center domain at with a CNAME record, for example edge.example.com. Defaults to the host of APP_URL (M5-07)',
+    ),
+  // Optional rather than defaulted, as CLAMAV_HOST is: unset means off, and the
+  // type does not oblige every caller that builds an `Env` by hand to name it.
+  TELEGRAM_POLLING: z
+    .stringbool()
+    .optional()
+    .describe(
+      'optional; must be "true" or "false", default false. "true" makes the worker long-poll every Telegram bot instead of waiting for webhooks, for development on a machine Telegram cannot reach (M6-01)',
+    ),
+  TELEGRAM_API_ROOT: urlSchema('http:', 'https:')
+    .optional()
+    .describe(
+      'optional; the Bot API server, default https://api.telegram.org. Set it only for a self-hosted Bot API server',
+    ),
+  KNOWLEDGE_CRAWL_RENDER: z
+    .stringbool()
+    .optional()
+    .describe(
+      'optional; must be "true" or "false", default false. "true" lets a website crawl render pages in a headless Chromium, which the worker image must have installed (M7-03)',
+    ),
+  // Optional rather than defaulted, for the reason TELEGRAM_POLLING gives; the
+  // defaults live beside the code that reads them (`auth/session/lifetime.ts`).
+  AUTH_SESSION_IDLE_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(MIN_SESSION_IDLE_MINUTES)
+    .max(MAX_SESSION_HOURS * 60)
+    .optional()
+    .describe(
+      `optional; minutes a signed-in browser may go without using its session before it has to sign in again, between ${MIN_SESSION_IDLE_MINUTES} and ${MAX_SESSION_HOURS * 60}, default 240`,
+    ),
+  AUTH_SESSION_MAX_HOURS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_SESSION_HOURS)
+    .optional()
+    .describe(
+      `optional; hours a sign-in lasts however much it is used, between 1 and ${MAX_SESSION_HOURS}, default 12`,
+    ),
+  OUTBOX_CONCURRENCY: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OUTBOX_CONCURRENCY)
+    .optional()
+    .describe(
+      `optional; outbox events one worker runs at once, between 1 and ${MAX_OUTBOX_CONCURRENCY}, default 8. Events of one ticket still run one at a time, in order`,
     ),
 });
 

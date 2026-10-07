@@ -8,6 +8,15 @@
     "splitFrom": "مفصولة من {{ticket}}",
     "threadMismatch": "أشار إلى {{ticket}} لكن المرسل ليس مشاركًا فيها",
     "noSubject": "(بلا موضوع)",
-    "chatSubject": "محادثة دردشة"
+    "chatSubject": "محادثة دردشة",
+    "aiPaused": {
+      "low_confidence": "حُوّلت إلى شخص · الثقة {{confidence}} أقل من {{threshold}}",
+      "invalid_citation": "حُوّلت إلى شخص · استشهدت الإجابة بمصدر لم يُعطَ للمساعد",
+      "customer_request": "المساعد متوقف · طلب العميل التحدث إلى شخص",
+      "staff_reply": "المساعد متوقف · ردّ أحد الموظفين",
+      "staff_assigned": "المساعد متوقف · تولّى أحد الموظفين التذكرة"
+    },
+    "aiResumed": "أُعيدت المحادثة إلى المساعد",
+    "aiSources": "المصادر"
   }
 }

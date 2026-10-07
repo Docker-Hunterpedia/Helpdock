@@ -130,11 +130,11 @@ Written down and carried forward. None of them blocks M2, M3 or M5.
 |---|---|---|
 | **A Team Leader reads the whole brand's roster and contact timeline counts**, not only their own departments | DOMAIN-RULES §1.2 does not narrow *reading* them, and narrowing is a product decision nobody has taken. | [staff-and-roles](../guides/staff-and-roles.md#known-gaps) |
 | **Nothing re-routes a ticket nobody was eligible for** | It shows in Unassigned, which is where a person looks. Re-routing later is a rule (M3). | [M1-07 notes](#m1-07-assignment) |
-| **Auto-unassign ignores business hours** | Business hours are M3; "never while closed" is a seam in the job. | [M1-07 notes](#m1-07-assignment) |
+| ~~Auto-unassign ignores business hours~~ | Closed in M9: the job reads M3-01's calendar and waits for the next opening. | [ticketing settings](../guides/ticketing-settings.md#the-offline-timer) |
 | **Deactivation unassigns in one brand** | The hook fires for the brand the action was taken in; the rotation never picks the account anywhere. | [staff-and-roles](../guides/staff-and-roles.md#known-gaps) |
 | **Clocks are seams, not clocks** | `onMerged`, `onUnmerged` and `onReopened` fire, and `merged_ms` is stored, but SLA clocks are M3-02. | `apps/api/src/tickets/lifecycle/hooks.ts` |
 | **Nothing calls the sender gate yet** | No M1 path creates a ticket from a customer. M2, M4 and M6 call `isSenderBlocked`. | [M1-11 notes](#m1-11-spam) |
-| **CSAT surveys are not delivered** | Delivery per channel is M8-06; until then the details panel offers Copy survey link. | [M1-12 notes](#m1-12-time-tracking-and-csat) |
+| ~~CSAT surveys are not delivered~~ | Closed by M8-06 (M8-06 branch): the survey goes out on close by email, in the widget and on Telegram; Copy survey link stays for sharing it another way. | [tickets](../guides/tickets.md#satisfaction-surveys) |
 | **The rating page lives in the admin bundle** and has no "Browse the help center" link | `apps/helpcenter` has no router or theming until M5. | [ADR 0010](../decisions/0010-csat-page-in-the-admin-bundle.md) |
 | **AI call logs are not purged**; unsent composer uploads are not swept | AI call logs arrive with M7. M5 added search log purging; follow-up #143 added idle visitor purging. Unsent uploads go with their ticket. | [data-retention](../guides/data-retention.md#known-gaps) |
 | **Search misses a typo in the first three letters, has no phrase operator, and reads only the subject and first message** | The trade-offs of the token table that makes a zero-match search two index probes under `FORCE ROW LEVEL SECURITY`. | [ADR 0011](../decisions/0011-ticket-search-token-table.md) |

@@ -39,6 +39,7 @@ Run these from the repository root.
 | `pnpm check:boundaries` | Enforces the app import rule described below. |
 | `pnpm check:routes` | Fails when a controller handler declares neither `@Requires`, `@Authenticated` nor `@Public`. |
 | `pnpm check:validation` | Fails when a `@Param`, `@Query` or `@Body` on a controller handler names no Zod schema. |
+| `pnpm design:render` | Renders the artboard sources in `docs/design/artboards/` to PNGs in `docs/design/screens/`. See [docs/design/](../design/README.md). |
 | `pnpm changeset` | Records what a change should say in the next release. See [the release guide](release.md). |
 | `pnpm --filter @helpdock/api seed:dev` | Creates the development install: one brand, one admin, a published password. Refuses `NODE_ENV=production`. |
 
@@ -54,8 +55,8 @@ pnpm turbo run typecheck --filter=@helpdock/api
 ```
 apps/          api, admin, helpcenter, widget
 packages/      db, schemas, ai, channels, ui, i18n, config, net, jobs
-scripts/       repository checks run by CI
-docs/          planning, guides, decisions
+scripts/       repository checks run by CI, and the artboard renderer
+docs/          planning, guides, decisions, rendered design screens
 ```
 
 Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end. `apps/admin` adds `dev`, `e2e` and `e2e:baselines`, and its `build` is `vite build` rather than `tsc`; see [Admin app](#admin-app).
@@ -516,8 +517,13 @@ not resolve on your machine.
 `scripts/compose-smoke.sh` is the same thing as a check: it writes a throwaway
 `docker/.env`, waits for the api to be healthy, and asserts that `/health` and
 `/ready` answer 200, that `/` returns the admin build, that an unverified domain
-gets no certificate, and that `/api/me` still answers 401. CI runs it after
-building the image, and so can you:
+gets no certificate, and that `/api/me` still answers 401. Then it does what a
+new operator does: runs the first-run wizard, signs in as the administrator it
+made — which, since that account must have a second factor, answers with an
+enrolment challenge rather than a session — enrols an authenticator from the
+secret the api hands back (the script computes the code itself, with `base32`
+and `openssl`), and pushes an image through the media pipeline on the session
+that produced. CI runs it after building the image, and so can you:
 
 ```bash
 docker build -f docker/Dockerfile -t ghcr.io/docker-hunterpedia/helpdock:ci .
@@ -823,6 +829,7 @@ nobody reviews; Renovate proposes the bumps.
 | [`codeql.yml`](../../.github/workflows/codeql.yml) | pull requests, pushes to `main`, Mondays | Static analysis into the security tab. |
 | [`changesets.yml`](../../.github/workflows/changesets.yml) | pushes to `main` | Keeps the "version packages" pull request open. |
 | [`release.yml`](../../.github/workflows/release.yml) | a `v*` tag | Publishes the image and the GitHub Release. |
+| [`zap.yml`](../../.github/workflows/zap.yml) | pushes to `release/**`, `v*` tags, manually | The ZAP baseline scan against the Compose stack. |
 
 ### The `ci` workflow
 
@@ -833,7 +840,8 @@ command you can run locally:
 
 | Job | Steps |
 |---|---|
-| `checks` | `pnpm lint`, `pnpm check:boundaries`, `pnpm check:routes`, `pnpm check:validation`, `pnpm typecheck` |
+| `checks` | `pnpm lint`, `pnpm check:boundaries`, `pnpm check:routes`, `pnpm check:validation`, `pnpm typecheck`, `pnpm audit --audit-level high` |
+| `semgrep` | `semgrep scan --test .semgrep`, then Helpdock's rules over `apps`, `packages` and `scripts` ([security scanning](security-scanning.md#semgrep)) |
 | `unit` | `vitest run --coverage --project='!integration' --project='!@helpdock/api' --project='!@helpdock/admin'`: the `packages/*` 80 % gate |
 | `admin-unit` | `pnpm --filter @helpdock/admin test:coverage`: the admin's 85 % gate |
 | `api` | `pnpm --filter @helpdock/api test:coverage`: the api's unit and integration suites and its 90 % gate (Testcontainers) |
@@ -899,5 +907,6 @@ SBOM attached to the GitHub Release.
 
 `codeql.yml` analyses `javascript-typescript` with the `security-extended` query
 pack on every pull request, on pushes to `main`, and weekly — advisories appear
-for code that has not changed. Semgrep's Nest rules and a ZAP baseline scan
-against the Compose stack are **M9-05**, not part of M0.
+for code that has not changed. Semgrep's rules run in `ci.yml` and the ZAP
+baseline scan in `zap.yml`; [security scanning](security-scanning.md) covers all
+of them and what to do when one fails.

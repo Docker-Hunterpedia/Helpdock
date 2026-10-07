@@ -1,27 +1,33 @@
-import { Box, Button, Skeleton, Tooltip, Typography } from '@mui/material';
+import { Box, Skeleton, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { ServerCog, ShieldAlert } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
-import { Link as RouterLink } from 'react-router';
 import { useT } from '../../../app/i18n.js';
-import { ROUTES } from '../../../app/route-paths.js';
 import { EmptyState } from '../../../shell/empty-state.js';
 import { PageHeader } from '../../../shell/page-header.js';
 import { secondsSince } from './format.js';
 import { HealthCards } from './health-cards.js';
+import { LlmSpendCard } from './llm-spend-card.js';
+import { PendingDeletionsCard } from './pending-deletions-card.js';
+import { ProductMetricsRow } from './product-metrics-row.js';
+import { QueueDashboardButton } from './queue-dashboard-button.js';
 import { QueuesCard } from './queues-card.js';
-import { AuditCard, ChannelsCard, UsageCard } from './side-cards.js';
+import { AuditCard, ChannelsCard } from './side-cards.js';
+import { StorageCard } from './storage-card.js';
 import {
-  HttpSystemApi,
+  INSTALL_BRANDS_QUERY_KEY,
   NotAllowedError,
   SYSTEM_QUERY_KEY,
   SYSTEM_REFETCH_MS,
   type SystemApi,
 } from './system-api.js';
+import { useSystemApi } from './system-api-context.tsx';
+import { VersionCard } from './version-card.js';
 
 /**
- * The artboard `Admin/System`: four health cards, a queue table, and a column
- * of channels, usage and audit.
+ * The artboard `Admin/System-1.0` (M8-05, M8-07): four health cards, the
+ * product metrics, the queue table and the channels beside version, storage
+ * and audit, then LLM spend and the brands pending deletion.
  *
  * It refetches every ten seconds rather than holding a socket open. A status
  * page is read for a minute and closed; a poll is what it costs, and it keeps
@@ -30,7 +36,7 @@ import {
 
 export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNode {
   const t = useT();
-  const client = useMemo(() => api ?? new HttpSystemApi(), [api]);
+  const client = useSystemApi(api);
 
   const { data, error, isPending } = useQuery({
     queryKey: SYSTEM_QUERY_KEY,
@@ -38,6 +44,17 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
     refetchInterval: SYSTEM_REFETCH_MS,
     retry: false,
   });
+  // Install-wide like the rest; it names the brands in their deletion grace.
+  const brands = useQuery({
+    queryKey: INSTALL_BRANDS_QUERY_KEY,
+    queryFn: () => client.brands(),
+    retry: false,
+  });
+  const pending = useMemo(
+    () => (brands.data ?? []).filter((brand) => brand.status === 'deleting'),
+    [brands.data],
+  );
+  const pendingIds = useMemo(() => new Set(pending.map((brand) => brand.id)), [pending]);
 
   if (error instanceof NotAllowedError) {
     return (
@@ -111,43 +128,50 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
                 node: data.build.nodeVersion,
               })}
             </Typography>
-            {/* Bull Board is M8-05 (ADR 0004); until then the button opens the
-                full queue table, and the tooltip says so rather than letting a
-                label promise a screen that is not there yet. */}
-            {/* `describeChild`: without it MUI puts the tooltip text in
-                `aria-label`, which replaces the button's visible label as its
-                accessible name — the Label-in-Name failure of WCAG 2.5.3. As a
-                description it is what DESIGN §6.4 asks for instead. */}
-            <Tooltip title={t('system:openQueuesHint')} describeChild>
-              <Button
-                component={RouterLink}
-                to={ROUTES.systemQueues}
-                variant="outlined"
-                size="small"
-              >
-                {t('system:openQueues')}
-              </Button>
-            </Tooltip>
+            <QueueDashboardButton api={client} />
           </Box>
         }
       />
 
-      <HealthCards status={data} />
+      <Box sx={{ display: 'grid', gap: 6 }}>
+        <HealthCards status={data} />
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '1.6fr 1fr' },
-          gap: 4,
-          alignItems: 'start',
-        }}
-      >
-        <QueuesCard summary={data.queues} api={client} />
+        <ProductMetricsRow api={client} />
 
-        <Box sx={{ display: 'grid', gap: 4 }}>
-          <ChannelsCard channels={data.channels} />
-          <UsageCard storage={data.storage} aiSpend={data.aiSpend} />
-          <AuditCard audit={data.audit} />
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1.6fr) minmax(0, 1fr)' },
+            gap: 4,
+            alignItems: 'start',
+          }}
+        >
+          <Box sx={{ display: 'grid', gap: 4 }}>
+            <QueuesCard summary={data.queues} api={client} />
+            <ChannelsCard channels={data.channels} />
+          </Box>
+
+          <Box sx={{ display: 'grid', gap: 4 }}>
+            <VersionCard status={data} />
+            <StorageCard
+              storage={data.storage}
+              databaseBytes={data.database.sizeBytes}
+              pendingBrandIds={pendingIds}
+            />
+            <AuditCard audit={data.audit} />
+          </Box>
+        </Box>
+
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' },
+            gap: 4,
+            alignItems: 'start',
+          }}
+        >
+          <LlmSpendCard spend={data.aiSpend} />
+          <PendingDeletionsCard api={client} pending={pending} />
         </Box>
       </Box>
     </>

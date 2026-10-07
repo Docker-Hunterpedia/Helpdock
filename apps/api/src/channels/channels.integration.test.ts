@@ -45,6 +45,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { FakeStorage } from '../testing/media.js';
+import { signInForTest } from '../testing/staff-sign-in.js';
 import {
   createEmailPollProcessor,
   createMailboxChangedHandler,
@@ -83,6 +84,20 @@ const AGENT_PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 120_000;
 const SMTP_PORT = 3025;
 const IMAPS_PORT = 3993;
+/**
+ * GreenMail starts its servers, waits up to `greenmail.startup.timeout` (2 s by
+ * default) for all of them, and only then creates the users. On a busy Docker
+ * host a server misses that window: GreenMail's main thread throws, the users
+ * are never created, and the servers it did start stay up, so the ports listen
+ * and every login is "Invalid login/password". A generous timeout keeps that
+ * from happening, and waiting for the API server's log line — written after
+ * the users exist, never after a failed start — makes a failed start fail the
+ * suite's setup instead of its IMAP tests.
+ */
+const GREENMAIL_READY = Wait.forAll([
+  Wait.forListeningPorts(),
+  Wait.forLogMessage(/Starting GreenMail API server/),
+]);
 /** GreenMail's certificate is self-signed; only these suites say so. */
 const TEST_IMAP = { tls: { rejectUnauthorized: false }, timeoutMs: 10_000 };
 
@@ -182,20 +197,8 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
 
   const brandPath = () => `/api/brands/${seeded.brandId}`;
 
-  const signIn = async (email: string, password: string): Promise<string> => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-in',
-      headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, password }),
-    });
-    const body = response.json() as { kind: string; accessToken?: string };
-    if (body.kind !== 'session' || body.accessToken === undefined) {
-      throw new Error(`sign-in did not produce a session: ${response.body}`);
-    }
-
-    return body.accessToken;
-  };
+  const signIn = (email: string, password: string): Promise<string> =>
+    signInForTest(app, { email, password });
 
   const addPerson = async (db: Db, who: string): Promise<Person> => {
     const masterKey = decodeMasterKey(MASTER_KEY);
@@ -275,10 +278,10 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       new GenericContainer(GREENMAIL_IMAGE)
         .withEnvironment({
           GREENMAIL_OPTS:
-            '-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=desk:desk-password@helpdock.test',
+            '-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.startup.timeout=60000 -Dgreenmail.users=desk:desk-password@helpdock.test',
         })
         .withExposedPorts(SMTP_PORT, IMAPS_PORT)
-        .withWaitStrategy(Wait.forListeningPorts())
+        .withWaitStrategy(GREENMAIL_READY)
         .withStartupTimeout(CONTAINER_STARTUP_MS)
         .start(),
     ]);

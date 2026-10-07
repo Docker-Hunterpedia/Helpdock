@@ -167,6 +167,11 @@ export interface ConversationSummary {
   readonly visitor_email: string | null;
   /** Highest `seq` the agent side has read, for "Seen". */
   readonly read_seq: number;
+  /**
+   * M7-06: the assistant has handed this conversation to the team and will
+   * not answer in it again (DOMAIN-RULES §9). Absent from a server before M7.
+   */
+  readonly ai_handed_off?: boolean;
 }
 
 export interface VisitorSession {
@@ -187,7 +192,26 @@ export interface Attachment {
 export type MessageAuthor =
   | { readonly kind: 'visitor' }
   | { readonly kind: 'agent'; readonly agent: AgentSummary }
+  | { readonly kind: 'ai' }
   | { readonly kind: 'system' };
+
+export type AiFeedback = 'helpful' | 'not_helpful';
+
+/** A source an assistant answer cites as `[marker]`: public help center articles only. */
+export interface AiCitation {
+  readonly marker: number;
+  readonly title: string;
+  readonly url: string | null;
+  /** Opens in the widget when the article has no help center address. */
+  readonly article_id: string | null;
+}
+
+/** M7-06: what the assistant wrote — an answer with sources, or the brand's handoff text. */
+export interface AiPart {
+  readonly kind: 'answer' | 'handoff';
+  readonly citations: readonly AiCitation[];
+  readonly feedback: AiFeedback | null;
+}
 
 /** A system line the widget words itself, in the visitor's language. */
 export interface SystemEvent {
@@ -206,6 +230,8 @@ export interface WidgetMessage {
   readonly body: string;
   readonly attachments: readonly Attachment[];
   readonly system: SystemEvent | null;
+  /** On the assistant's messages only (M7-06). */
+  readonly ai?: AiPart;
   readonly created_at: string;
 }
 
@@ -234,6 +260,19 @@ export interface ContactFormInput {
   readonly article_id?: string;
 }
 
+/**
+ * M8-06: the satisfaction card of a closed conversation (`Widget/CSAT-EN`).
+ * `skipped` records nothing; `expired` is thirty days on, or an answer that
+ * arrived another way first.
+ */
+export interface CsatCard {
+  readonly state: 'open' | 'rated' | 'skipped' | 'expired';
+  readonly rating: number | null;
+  readonly comment: string | null;
+  /** When Skip was pressed, for "You skipped the rating · 10:06". */
+  readonly skipped_at: string | null;
+}
+
 export type ConnectionState = 'connecting' | 'online' | 'reconnecting';
 
 /**
@@ -251,7 +290,8 @@ export type WidgetEvent =
       readonly position: number;
       readonly eta_seconds: number | null;
     }
-  | { readonly type: 'conversation'; readonly conversation: ConversationSummary };
+  | { readonly type: 'conversation'; readonly conversation: ConversationSummary }
+  | { readonly type: 'csat'; readonly csat: CsatCard };
 
 export interface Subscription {
   readonly onEvent: (event: WidgetEvent) => void;
@@ -298,6 +338,20 @@ export interface WidgetTransport {
   /** A short-lived URL issued after the server authorises the visitor (D §4.5). */
   attachmentUrl(conversationId: string, attachmentId: string): Promise<string>;
   requestTranscript(conversationId: string, email: string): Promise<void>;
+  /** M7-06: "Talk to a human". The assistant steps back for the rest of the conversation. */
+  handOff(conversationId: string): Promise<ConversationSummary>;
+  /** M7-06: "Was this helpful?" on one of the assistant's answers. */
+  sendFeedback(conversationId: string, messageId: string, feedback: AiFeedback): Promise<void>;
+  /** M8-06: the card of an ended conversation; null while there is none to offer. */
+  getCsat(conversationId: string): Promise<CsatCard | null>;
+  /** Records the rating once; answers the card as it then stands. */
+  rateConversation(
+    conversationId: string,
+    rating: number,
+    comment: string,
+  ): Promise<CsatCard | null>;
+  /** Records nothing; the card is not offered again on any device. */
+  skipCsat(conversationId: string): Promise<CsatCard | null>;
   submitContactForm(input: ContactFormInput): Promise<{ readonly ticket_ref: string }>;
   /** M5-10: help center search, public articles only; the api logs it for Insights. */
   searchArticles(query: string, locale: WidgetLocale): Promise<readonly ArticleSummary[]>;

@@ -2,11 +2,11 @@ import { brandDomains, customFieldDefs, type DbTransaction } from '@helpdock/db'
 import {
   isWithinBusinessHours,
   nextOpening,
-  type PresenceMap,
   type WidgetAvailability,
   type WidgetConfig,
   type WidgetLocale,
   type WidgetPrechatFieldView,
+  type WidgetPresence,
 } from '@helpdock/schemas';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { CaptchaKeysReader } from '../captcha/captcha-keys.js';
@@ -14,6 +14,7 @@ import type { HelpCenterFeedback } from '../help-center/ports.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import type { BusinessHoursService } from '../sla/business-hours.service.js';
 import { popularSummaries, WIDGET_POPULAR_ARTICLES } from './article-view.js';
+import type { OnlineAgents } from './online-agents.js';
 import type { ResolvedWidgetSettings } from './resolved-settings.js';
 import type { WidgetGate, WidgetRequestFacts, WidgetScope } from './widget-gate.js';
 import { greetingIn, widgetThemeOf } from './widget-theme.js';
@@ -28,17 +29,13 @@ import { greetingIn, widgetThemeOf } from './widget-theme.js';
  *
  * Availability is the brand's calendar (M3-01's `BusinessHoursService`, the
  * brand's own hours and holidays) and M0-13's presence: whether anybody of
- * the brand is online right now.
+ * the brand is online right now, and who, when the brand shows agents.
  */
-
-export interface PresenceReader {
-  mapOf(brandId: string): Promise<PresenceMap>;
-}
 
 export class WidgetConfigService {
   readonly #gate: WidgetGate;
   readonly #businessHours: Pick<BusinessHoursService, 'calendarFor'>;
-  readonly #presence: PresenceReader;
+  readonly #online: Pick<OnlineAgents, 'presence' | 'presenceIn'>;
   readonly #captcha: CaptchaKeysReader;
   readonly #assetOrigin: string;
   readonly #popular: Pick<HelpCenterFeedback, 'popular'>;
@@ -46,7 +43,7 @@ export class WidgetConfigService {
   constructor(deps: {
     readonly gate: WidgetGate;
     readonly businessHours: Pick<BusinessHoursService, 'calendarFor'>;
-    readonly presence: PresenceReader;
+    readonly online: Pick<OnlineAgents, 'presence' | 'presenceIn'>;
     readonly captcha: CaptchaKeysReader;
     /** `APP_URL`: where the api serves `widget.js` and the widget's fonts. */
     readonly assetOrigin: string;
@@ -55,7 +52,7 @@ export class WidgetConfigService {
   }) {
     this.#gate = deps.gate;
     this.#businessHours = deps.businessHours;
-    this.#presence = deps.presence;
+    this.#online = deps.online;
     this.#captcha = deps.captcha;
     this.#assetOrigin = deps.assetOrigin;
     this.#popular = deps.popular;
@@ -138,12 +135,13 @@ export class WidgetConfigService {
       open,
       nextOpenAt: open ? null : (nextOpening(calendar, now)?.toISOString() ?? null),
       timezone: calendar.timezone,
-      agentsOnline: await this.agentsOnline(scope.brand.id),
+      ...(await this.#online.presenceIn(scope.tx, scope.brand.id, scope.settings)),
     };
   }
 
-  async agentsOnline(brandId: string): Promise<boolean> {
-    return Object.values(await this.#presence.mapOf(brandId)).includes('online');
+  /** The `presence` frame: what a presence change, a new socket or a new stream is told. */
+  presence(brandId: string): Promise<WidgetPresence> {
+    return this.#online.presence(brandId);
   }
 }
 

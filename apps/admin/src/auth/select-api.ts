@@ -1,3 +1,9 @@
+import type { AiApi } from '../ai/api.js';
+import { HttpAiApi } from '../ai/http-api.js';
+import { MockAiApi } from '../ai/mock-api.js';
+import type { AssistApi } from '../assist/api.js';
+import { HttpAssistApi } from '../assist/http-api.js';
+import { MockAssistApi } from '../assist/mock-api.js';
 import type { AutomationApi } from '../automation/api.js';
 import { HttpAutomationApi } from '../automation/http-api.js';
 import { MockAutomationApi } from '../automation/mock-api.js';
@@ -7,6 +13,9 @@ import { MockChannelsApi } from '../channels/mock-api.js';
 import type { ContactsApi } from '../contacts/api.js';
 import { HttpContactsApi } from '../contacts/http-api.js';
 import { MockContactsApi } from '../contacts/mock-api.js';
+import type { DevelopersApi } from '../developers/api.js';
+import { HttpDevelopersApi } from '../developers/http-api.js';
+import { MockDevelopersApi } from '../developers/mock-api.js';
 import type { DomainsApi } from '../domains/api.js';
 import { HttpDomainsApi } from '../domains/http-api.js';
 import { MockDomainsApi } from '../domains/mock-api.js';
@@ -16,6 +25,9 @@ import { MockEmailApi } from '../email/mock-api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { HttpHelpCenterApi } from '../help-center/http-api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import type { KnowledgeApi } from '../knowledge/api.js';
+import { HttpKnowledgeApi } from '../knowledge/http-api.js';
+import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import { HttpAttachmentUploader } from '../media/upload.js';
@@ -27,9 +39,14 @@ import {
 } from '../notifications/browser-push.js';
 import { HttpNotificationsApi } from '../notifications/http-api.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { HttpReportsApi, type ReportsApi } from '../reports/api.js';
+import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
+import type { TelegramApi } from '../telegram/api.js';
+import { HttpTelegramApi } from '../telegram/http-api.js';
+import { MockTelegramApi } from '../telegram/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { HttpTicketingApi } from '../ticketing/http-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -68,6 +85,20 @@ export interface AdminApis {
   readonly browserPush: BrowserPush;
   /** M5-07: Brand › Domains. */
   readonly domains: DomainsApi;
+  /** M7-10: `Admin/AI`. */
+  readonly ai: AiApi;
+  /** M7-10: AI › Knowledge, on M7-03's api. */
+  readonly knowledge: KnowledgeApi;
+  /** M8-04: `Admin/Reports`. */
+  readonly reports: ReportsApi;
+  /** The install-admin routes: System (M0-10, M8-05) and brand deletion (M8-07). */
+  readonly system: SystemApi;
+  /** M6: Channels › Telegram and a Telegram ticket's chat. */
+  readonly telegram: TelegramApi;
+  /** M7-05, M7-09: agent assist and transcripts on a ticket, Help center › Proposals. */
+  readonly assist: AssistApi;
+  /** M8-01, M8-03: the Developers page. */
+  readonly developers: DevelopersApi;
 }
 
 /**
@@ -114,6 +145,13 @@ export function createApis(
       notifications: new HttpNotificationsApi(transport),
       browserPush: new NavigatorBrowserPush(),
       domains: new HttpDomainsApi(transport),
+      ai: new HttpAiApi(transport),
+      knowledge: new HttpKnowledgeApi(transport),
+      reports: new HttpReportsApi(transport),
+      system: new HttpSystemApi(() => transport.currentAccessToken()),
+      telegram: new HttpTelegramApi(transport),
+      assist: new HttpAssistApi(transport),
+      developers: new HttpDevelopersApi(transport),
     };
   }
 
@@ -126,6 +164,14 @@ export function createApis(
   // this session names them the way the api would.
   const contacts = new MockContactsApi();
   const ticketing = new MockTicketingApi(blockList);
+  const tickets = new MockTicketsApi(
+    uploads,
+    Date.now(),
+    blockList,
+    (id) => contacts.nameOf(id),
+    ticketing,
+  );
+  const helpCenter = new MockHelpCenterApi();
 
   return {
     auth: new MockAuthApi(staff),
@@ -135,20 +181,25 @@ export function createApis(
     // Spam tab (M1-11); and the ticketing fixture is the ticket fixture's list
     // of tags and fields, so a tag made in Ticketing › Tags can go on a ticket.
     ticketing,
-    tickets: new MockTicketsApi(
-      uploads,
-      Date.now(),
-      blockList,
-      (id) => contacts.nameOf(id),
-      ticketing,
-    ),
+    tickets,
     uploader: uploads,
     email: new MockEmailApi(),
     channels: new MockChannelsApi(),
     automation: new MockAutomationApi(),
-    helpCenter: new MockHelpCenterApi(),
+    helpCenter,
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
+    ai: new MockAiApi(),
+    knowledge: new MockKnowledgeApi(),
+    // No fixtures for these two: the browser tests answer their routes with
+    // Playwright, which a fixture would sit in front of.
+    reports: new HttpReportsApi(),
+    system: new HttpSystemApi(),
+    telegram: new MockTelegramApi(),
+    // It reads the ticket fixture for closed tickets and their messages, and
+    // files an approved proposal's draft in the help center fixture.
+    assist: new MockAssistApi({ tickets, helpCenter }),
+    developers: new MockDevelopersApi(),
   };
 }

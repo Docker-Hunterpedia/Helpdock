@@ -1,8 +1,12 @@
+import { UnrecoverableError } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 import {
   assignmentOfflineUnassignJob,
   authEmailJob,
   authEmailJobId,
+  brandPurgeJob,
+  brandPurgeJobId,
+  brandPurgeScheduleJob,
   DOMAIN_VERIFY_CRON,
   domainVerifyJob,
   domainVerifyJobId,
@@ -18,7 +22,13 @@ import {
   helpCenterSearchReindexJobId,
   helpCenterSearchReindexSweepJob,
   idempotencyKeyFor,
+  isLastAttempt,
   JOB_DEFINITIONS,
+  knowledgeConfigureJob,
+  knowledgeEmbedJob,
+  knowledgeReembedJob,
+  knowledgeSyncJob,
+  knowledgeSyncSchedulerId,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -28,6 +38,7 @@ import {
   outboxEventJob,
   outboxRelayJob,
   parseJobPayload,
+  parseJobPayloadOrFail,
   RULES_TIME_BASED_CRON,
   retentionJobId,
   rulesEvaluateJob,
@@ -38,6 +49,13 @@ import {
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
+  statsRollupJob,
+  statsRollupJobId,
+  statsRollupScheduleJob,
+  telegramPollJob,
+  telegramPollSchedulerId,
+  telegramSendJob,
+  webhookDeliverJob,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
 import { PayloadValidationError } from './validation.js';
@@ -73,6 +91,25 @@ describe('the job registry', () => {
     expect(outboxRelayJob.schedule).toEqual({ everyMs: OUTBOX_RELAY_INTERVAL_MS });
   });
 
+  it('reconciles the embedding space every minute, and leaves the re-embed to that tick', () => {
+    expect(knowledgeConfigureJob.schedule).toEqual({ everyMs: 60_000 });
+    expect(knowledgeReembedJob.schedule).toBeUndefined();
+    expect(knowledgeReembedJob.queue).toBe('knowledge');
+  });
+
+  it('runs a source sync on the knowledge queue and names its schedule by source', () => {
+    expect(knowledgeSyncJob.queue).toBe('knowledge');
+    expect(knowledgeEmbedJob.queue).toBe('knowledge');
+    expect(knowledgeSyncSchedulerId('s1')).toBe('knowledge.sync.schedule.s1');
+    expect(
+      knowledgeSyncJob.schema.safeParse({
+        brandId: '0199b0a4-0000-7000-8000-000000000001',
+        sourceId: '0199b0a4-0000-7000-8000-000000000002',
+        trigger: 'whenever',
+      }).success,
+    ).toBe(false);
+  });
+
   it('ticks retention nightly, and leaves the per-brand job to that tick', () => {
     expect(maintenanceRetentionScheduleJob.schedule).toEqual({ cron: '0 3 * * *' });
     expect(maintenanceRetentionJob.schedule).toBeUndefined();
@@ -103,6 +140,38 @@ describe('outbox.event payloads', () => {
       expect((error as Error).message).toContain('payload for job outbox.event');
       expect((error as PayloadValidationError).issues[0]?.path).toBe('outboxId');
     }
+  });
+});
+
+describe('parseJobPayloadOrFail', () => {
+  it('returns a payload that fits', () => {
+    expect(parseJobPayloadOrFail(outboxEventJob, validEvent)).toEqual(validEvent);
+  });
+
+  it('fails a wrong payload for good, since a retry would fail the same way', () => {
+    expect(() => parseJobPayloadOrFail(outboxEventJob, { ...validEvent, brandId: 'nope' })).toThrow(
+      UnrecoverableError,
+    );
+    expect(() => parseJobPayloadOrFail(outboxEventJob, { ...validEvent, brandId: 'nope' })).toThrow(
+      'payload for job outbox.event',
+    );
+  });
+});
+
+describe('isLastAttempt', () => {
+  const job = (attemptsMade: number, attempts = 5) => ({ attemptsMade, opts: { attempts } });
+
+  it('counts the attempts before this one', () => {
+    expect(isLastAttempt(emailSendJob, job(3), new Error('x'))).toBe(false);
+    expect(isLastAttempt(emailSendJob, job(4), new Error('x'))).toBe(true);
+  });
+
+  it('treats an unrecoverable error as the last attempt, whatever the count', () => {
+    expect(isLastAttempt(emailSendJob, job(0), new UnrecoverableError('bad payload'))).toBe(true);
+  });
+
+  it("falls back to the job definition's attempts", () => {
+    expect(isLastAttempt(emailSendJob, { attemptsMade: 4, opts: {} }, new Error('x'))).toBe(true);
   });
 });
 
@@ -182,6 +251,27 @@ describe('email.send', () => {
   });
 });
 
+describe('webhook.deliver', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000dd';
+
+  it('keys every attempt of a delivery by its row, so a redelivered job sends once', () => {
+    expect(idempotencyKeyFor(webhookDeliverJob, { brandId, deliveryId }, 'a')).toBe(
+      `webhook.deliver:${deliveryId}`,
+    );
+  });
+
+  it('runs on the webhooks queue with eight attempts and exponential backoff', () => {
+    expect(webhookDeliverJob.queue).toBe('webhooks');
+    // docs/guides/webhooks.md promises eight attempts, the last about an hour after the event.
+    expect(webhookDeliverJob.options.attempts).toBe(8);
+    expect(webhookDeliverJob.options.backoff).toEqual({ type: 'exponential', delay: 30_000 });
+  });
+
+  it('refuses a payload with no delivery', () => {
+    expect(() => parseJobPayload(webhookDeliverJob, { brandId })).toThrow(PayloadValidationError);
+  });
+});
+
 describe('media.process payloads', () => {
   it('accepts the brand and the attachment', () => {
     const payload = { brandId, attachmentId: '01924f00-0000-7000-8000-0000000000bb' };
@@ -240,6 +330,14 @@ describe('assignment.offline_unassign', () => {
     );
     expect(idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first')).not.toBe(
       idempotencyKeyFor(assignmentOfflineUnassignJob, later, 'first'),
+    );
+  });
+
+  it('keys a run deferred to the next opening apart from the run that deferred it', () => {
+    const deferred = { ...payload, deferredTo: '2026-09-27T06:00:00.000Z' };
+
+    expect(idempotencyKeyFor(assignmentOfflineUnassignJob, deferred, 'first')).not.toBe(
+      idempotencyKeyFor(assignmentOfflineUnassignJob, payload, 'first'),
     );
   });
 
@@ -469,5 +567,79 @@ describe('the help center search reindex (M5-05)', () => {
     expect(idempotencyKeyFor(helpCenterSearchReindexJob, payload, 'job-1')).toBe(
       `help_center.search_reindex:${brandId}:2026-10-01T06:00:00.000Z`,
     );
+  });
+});
+
+describe('the Telegram jobs (M6)', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000dd';
+  const botId = '01924f00-0000-7000-8000-0000000000de';
+
+  it('keys a reply by its delivery and a notice by the outbox row that asked for it', () => {
+    expect(idempotencyKeyFor(telegramSendJob, { kind: 'reply', brandId, deliveryId }, 'any')).toBe(
+      `telegram.send:${deliveryId}`,
+    );
+    expect(
+      idempotencyKeyFor(
+        telegramSendJob,
+        {
+          kind: 'notice',
+          brandId,
+          sourceOutboxId: outboxId,
+          botId,
+          chatId: '42',
+          notice: 'welcome',
+          locale: 'ar',
+        },
+        'any',
+      ),
+    ).toBe(`telegram.notice:${outboxId}`);
+  });
+
+  it('refuses a notice it would not know how to word', () => {
+    expect(() =>
+      parseJobPayload(telegramSendJob, {
+        kind: 'notice',
+        brandId,
+        sourceOutboxId: outboxId,
+        botId,
+        chatId: '42',
+        notice: 'advert',
+        locale: 'en',
+      }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('sends on the outbound queue and polls on the inbound one, a scheduler per bot', () => {
+    expect(telegramSendJob.queue).toBe('outbound');
+    expect(telegramPollJob.queue).toBe('inbound');
+    expect(telegramPollJob.options.attempts).toBe(1);
+    expect(telegramPollSchedulerId(botId)).toBe(`telegram.poll.${botId}`);
+  });
+});
+
+describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
+  it('rolls up hourly off the top of the hour, one job per brand and tick', () => {
+    const payload = parseJobPayload(statsRollupJob, { brandId, tick: '2026-10-05T09:07:00.000Z' });
+
+    // The M8 milestone doc names the cron; a change here is a change there.
+    expect(statsRollupScheduleJob.schedule).toEqual({ cron: '7 * * * *' });
+    expect(statsRollupJob.queue).toBe('maintenance');
+    expect(statsRollupJobId(payload)).toBe(
+      `stats.rollup.${brandId}.${Date.parse('2026-10-05T09:07:00.000Z')}`,
+    );
+  });
+
+  it('purges a brand once, under an id that names only the brand', () => {
+    const payload = parseJobPayload(brandPurgeJob, { brandId });
+
+    expect(brandPurgeJobId(payload)).toBe(`brand.purge.${brandId}`);
+    expect(brandPurgeJob.options.removeOnFail).toBe(false);
+    expect(() => parseJobPayload(brandPurgeJob, { brandId: 'nope' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('looks for brands past their grace nightly, an hour after retention', () => {
+    expect(brandPurgeScheduleJob.schedule).toEqual({ cron: '0 4 * * *' });
   });
 });

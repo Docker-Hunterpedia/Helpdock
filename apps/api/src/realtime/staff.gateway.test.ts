@@ -8,6 +8,8 @@ import {
 } from '@helpdock/schemas';
 import type { Namespace } from 'socket.io';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RateLimiter } from '../auth/rate-limit.js';
+import { authRedis } from '../testing/auth-redis.js';
 import { RedisStub } from '../testing/redis-stub.js';
 import { silentLogger } from '../testing/silent-logger.js';
 import type { SocketSession } from './handshake.js';
@@ -17,6 +19,11 @@ import { PresenceStore } from './presence.store.js';
 import { RealtimePublisher } from './publisher.js';
 import type { RoomScopeReader } from './room-reader.js';
 import { HandshakeRefusal, type StaffSocket } from './socket.js';
+import {
+  RedisSocketEventLimiter,
+  SOCKET_EVENT_RULES,
+  type SocketEventLimiter,
+} from './socket-rate-limit.js';
 import { SocketRegistry } from './socket-registry.js';
 import { StaffGateway } from './staff.gateway.js';
 import { NoopStaffOfflineHook } from './staff-offline.hook.js';
@@ -26,6 +33,7 @@ const BRAND_B = '01937f5e-7e53-7000-8000-00000000000b';
 const DEPARTMENT = '01937f5e-7e53-7000-8000-000000000011';
 const TICKET = '01937f5e-7e53-7000-8000-0000000000a1';
 const LINA = '01937f5e-7e53-7000-8000-000000000001';
+const OMAR = '01937f5e-7e53-7000-8000-000000000002';
 
 const principal: Principal = {
   type: 'staff',
@@ -110,7 +118,12 @@ const closed = async (socket: { disconnected: boolean }): Promise<boolean> => {
   return socket.disconnected;
 };
 
-const harness = (readerOverrides: Partial<RoomScopeReader> = {}): Harness => {
+const allowEverything: SocketEventLimiter = { consume: () => Promise.resolve(true) };
+
+const harness = (
+  readerOverrides: Partial<RoomScopeReader> = {},
+  limiter: SocketEventLimiter = allowEverything,
+): Harness => {
   const redis = new RedisStub();
   const publisher = new RealtimePublisher();
   const presence = new PresenceService(
@@ -131,6 +144,7 @@ const harness = (readerOverrides: Partial<RoomScopeReader> = {}): Harness => {
     gauge,
     roomReaderAllowing(readerOverrides),
     silentLogger(),
+    limiter,
   );
 
   return { gateway, gauge, presence, revoked };
@@ -228,6 +242,55 @@ describe('StaffGateway', () => {
       expect(
         await gateway.join(socketOf('s1'), { brandId: BRAND_A, room: ticketRoom(TICKET) }),
       ).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+    });
+  });
+
+  describe('per-principal budgets', () => {
+    const limited = (): Harness => {
+      const { redis } = authRedis();
+      return harness({}, new RedisSocketEventLimiter(new RateLimiter(redis)));
+    };
+    const spend = async (times: number, send: () => Promise<unknown>) => {
+      for (let sent = 0; sent < times; sent += 1) {
+        await send();
+      }
+    };
+
+    it('refuses a join over the budget and keeps the socket open', async () => {
+      const { gateway } = limited();
+      const socket = socketOf('s1');
+      const message = { brandId: BRAND_A, room: departmentRoom(DEPARTMENT) };
+      await spend(SOCKET_EVENT_RULES['room:join'].limit, () => gateway.join(socket, message));
+
+      await expect(gateway.join(socket, message)).rejects.toMatchObject({
+        error: { code: 'rate_limited' },
+      });
+      expect(await closed(socket)).toBe(false);
+    });
+
+    it('counts every socket of the same person against one budget, and nobody else’s', async () => {
+      const { gateway } = limited();
+      const first = socketOf('s1');
+      const second = socketOf('s2');
+      const colleague = socketOf('s3');
+      colleague.data = { ...colleague.data, principal: { ...colleague.data.principal, id: OMAR } };
+      const away = { brandId: BRAND_A, status: 'away' as const };
+      await spend(SOCKET_EVENT_RULES['presence:set'].limit, () => gateway.setPresence(first, away));
+
+      await expect(gateway.setPresence(second, away)).rejects.toMatchObject({
+        error: { code: 'rate_limited' },
+      });
+      await expect(gateway.setPresence(colleague, away)).resolves.toMatchObject({ ok: true });
+    });
+
+    it('limits the heartbeat too', async () => {
+      const { gateway } = limited();
+      const socket = socketOf('s1');
+      await spend(SOCKET_EVENT_RULES['presence:heartbeat'].limit, () => gateway.heartbeat(socket));
+
+      await expect(gateway.heartbeat(socket)).rejects.toMatchObject({
+        error: { code: 'rate_limited' },
+      });
     });
   });
 
@@ -342,6 +405,7 @@ describe('StaffGateway', () => {
         new InMemorySocketConnectionsGauge(),
         roomReader,
         silentLogger(),
+        allowEverything,
         { appUrl: 'https://support.example.com' },
       );
       gateway.afterInit(namespaceCapturing(middlewares));
@@ -385,6 +449,7 @@ describe('StaffGateway', () => {
         new InMemorySocketConnectionsGauge(),
         roomReader,
         logger,
+        allowEverything,
       );
       const middlewares: ((socket: unknown, next: (error?: Error) => void) => void)[] = [];
       gateway.afterInit(namespaceCapturing(middlewares));
@@ -414,6 +479,7 @@ describe('StaffGateway', () => {
         new InMemorySocketConnectionsGauge(),
         roomReader,
         silentLogger(),
+        allowEverything,
       );
       gateway.afterInit(namespaceCapturing(middlewares));
 
@@ -473,6 +539,7 @@ describe('StaffGateway', () => {
         new InMemorySocketConnectionsGauge(),
         roomReaderAllowing(),
         silentLogger(),
+        allowEverything,
         { appUrl: null, onViewing: (event) => heard.push(event) },
       );
 

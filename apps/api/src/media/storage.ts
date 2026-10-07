@@ -137,6 +137,20 @@ export const createS3Client = (env: StorageEnv): S3Client =>
   });
 
 /**
+ * The origin a browser fetches a presigned download from: the endpoint
+ * itself when the bucket is a path, `<bucket>.<endpoint host>` when it is a
+ * subdomain. The admin's CSP names it so a voice note can play (M6-03).
+ */
+export const storageOrigin = (
+  env: Pick<Env, 'S3_ENDPOINT' | 'S3_BUCKET' | 'S3_FORCE_PATH_STYLE'>,
+): string => {
+  const endpoint = new URL(env.S3_ENDPOINT);
+  return env.S3_FORCE_PATH_STYLE
+    ? endpoint.origin
+    : `${endpoint.protocol}//${env.S3_BUCKET}.${endpoint.host}`;
+};
+
+/**
  * `Content-Disposition` for a download.
  *
  * The filename is emitted twice: once ASCII-folded for the `filename=` a very

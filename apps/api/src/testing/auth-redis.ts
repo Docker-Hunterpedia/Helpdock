@@ -1,10 +1,11 @@
 import type { Redis } from 'ioredis';
 import { CONSUME_SCRIPT } from '../auth/rate-limit.js';
 import { ROTATE_SCRIPT } from '../auth/session/refresh-store.js';
+import { CLAIM_STEP_SCRIPT } from '../auth/totp/used-steps.js';
 import { RedisStub } from './redis-stub.js';
 
 /**
- * A {@link RedisStub} that knows the two Lua scripts the auth service ships.
+ * A {@link RedisStub} that knows the Lua scripts the auth service ships.
  *
  * Each mirror is the same sequence of commands as the Lua beside it, written
  * once here rather than in every test. They are registered by the exact script
@@ -16,7 +17,7 @@ export const authRedisStub = (): RedisStub =>
   new RedisStub()
     .defineScript(ROTATE_SCRIPT, async (stub, keys, args) => {
       const [familyKey = ''] = keys;
-      const [presented, next, lastUsedAt = '', userAgent = '', ttl = '0'] = args;
+      const [presented, next, now = '0', userAgent = '', idle = '0', max = '0'] = args;
 
       const userId = await stub.hget(familyKey, 'userId');
       if (userId === null) {
@@ -28,12 +29,19 @@ export const authRedisStub = (): RedisStub =>
         return ['reused', userId];
       }
 
+      const issuedAt = Number((await stub.hget(familyKey, 'issuedAt')) ?? '0');
+      const remaining = issuedAt + Number(max) - Number(now);
+      if (remaining <= 0) {
+        await stub.del(familyKey);
+        return ['expired', userId];
+      }
+
       await stub.hset(familyKey, {
         currentHash: String(next),
-        lastUsedAt,
+        lastUsedAt: now,
         ua: userAgent,
       });
-      await stub.expire(familyKey, Number(ttl));
+      await stub.expire(familyKey, Math.min(Number(idle), remaining));
 
       return ['rotated', userId];
     })
@@ -49,6 +57,17 @@ export const authRedisStub = (): RedisStub =>
 
       await stub.zadd(counterKey, Number(now), member);
       await stub.pexpire(counterKey, Number(windowMs));
+
+      return 1;
+    })
+    .defineScript(CLAIM_STEP_SCRIPT, async (stub, keys, args) => {
+      const [stepKey = ''] = keys;
+      const [step = '0', ttl = '0'] = args;
+
+      if (Number(step) <= Number((await stub.get(stepKey)) ?? '-1')) {
+        return 0;
+      }
+      await stub.set(stepKey, step, 'EX', Number(ttl));
 
       return 1;
     });

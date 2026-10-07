@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { aiFeedbackSchema } from './ai.js';
+import { csatRatingSchema } from './csat.js';
 import { customFieldTypeSchema } from './custom-fields.js';
 import {
   ATTACHMENT_NAME_MAX,
@@ -97,6 +99,12 @@ export const widgetAttachmentParamSchema = widgetConversationParamSchema.extend(
 });
 export type WidgetAttachmentParam = z.infer<typeof widgetAttachmentParamSchema>;
 
+/** M7-06: `…/messages/:messageId/feedback`. */
+export const widgetMessageParamSchema = widgetConversationParamSchema.extend({
+  messageId: z.uuid(),
+});
+export type WidgetMessageParam = z.infer<typeof widgetMessageParamSchema>;
+
 // ---------------------------------------------------------------- config
 
 /** A pre-chat field as the widget renders it: the admin's choice, resolved. */
@@ -115,6 +123,30 @@ export const widgetPrechatFieldViewSchema = z.object({
 });
 export type WidgetPrechatFieldView = z.infer<typeof widgetPrechatFieldViewSchema>;
 
+/** How many online agents the widget is told about; it draws three avatars and their names. */
+export const WIDGET_ONLINE_AGENTS_MAX = 5;
+
+/**
+ * An online agent as a visitor may see them: a first name, never an id or a
+ * surname (DOMAIN-RULES §1.3, layer 4).
+ */
+export const widgetOnlineAgentSchema = z.object({
+  name: z.string(),
+  avatarUrl: z.url().nullable(),
+});
+export type WidgetOnlineAgent = z.infer<typeof widgetOnlineAgentSchema>;
+
+/**
+ * Who is online for the brand. `agents` is empty when nobody is, and also when
+ * the brand does not show agents' names (`showAgentIdentity`); `agentsOnline`
+ * answers "is anybody there?" either way.
+ */
+export const widgetPresenceSchema = z.object({
+  agentsOnline: z.boolean(),
+  agents: z.array(widgetOnlineAgentSchema).max(WIDGET_ONLINE_AGENTS_MAX),
+});
+export type WidgetPresence = z.infer<typeof widgetPresenceSchema>;
+
 /** "Is anybody there?" (M4-08): the brand's calendar and whether an agent is online. */
 export const widgetAvailabilitySchema = z.object({
   /** Inside the brand's business hours right now. */
@@ -124,6 +156,7 @@ export const widgetAvailabilitySchema = z.object({
   timezone: z.string(),
   /** At least one agent of the brand is online (DOMAIN-RULES §12). */
   agentsOnline: z.boolean(),
+  agents: widgetPresenceSchema.shape.agents,
 });
 export type WidgetAvailability = z.infer<typeof widgetAvailabilitySchema>;
 
@@ -365,6 +398,13 @@ export const widgetConversationSchema = z.object({
   lastSeq: z.int().nonnegative(),
   /** The conversation a reply after closing continued on (§2.3), if any. */
   continuedById: z.uuid().nullable(),
+  /**
+   * M7-06: the assistant has handed this conversation to the team — by the
+   * visitor's "Talk to a human", by its own handoff, or because a person
+   * replied — and will not answer in it again (DOMAIN-RULES §9). Optional for
+   * clients built before M7.
+   */
+  aiHandedOff: z.boolean().optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -409,6 +449,24 @@ export const widgetMessageSchema = z.object({
   /** Sanitised HTML for agent replies; null for a visitor's plain text. */
   html: z.string().nullable(),
   attachments: z.array(widgetAttachmentSchema),
+  /** M7-06: on the assistant's messages only. */
+  ai: z
+    .object({
+      /** `handoff`: the brand's handoff text, after which the team takes over. */
+      kind: z.enum(['answer', 'handoff']),
+      /** Public help center articles and sources only (DOMAIN-RULES §5). */
+      citations: z.array(
+        z.object({
+          marker: z.int().positive(),
+          title: z.string(),
+          url: z.string().nullable(),
+          /** A help center article, which the widget opens in place (M5-10). */
+          articleId: z.uuid().nullable(),
+        }),
+      ),
+      feedback: aiFeedbackSchema.nullable(),
+    })
+    .optional(),
   createdAt: z.iso.datetime(),
 });
 export type WidgetMessage = z.infer<typeof widgetMessageSchema>;
@@ -511,6 +569,10 @@ export type WidgetMessagePage = z.infer<typeof widgetMessagePageSchema>;
 export const widgetReadRequestSchema = z.object({ seq: z.int().positive() });
 export type WidgetReadRequest = z.infer<typeof widgetReadRequestSchema>;
 
+/** M7-06: "Was this helpful?" on an assistant answer. */
+export const widgetFeedbackRequestSchema = z.object({ feedback: aiFeedbackSchema });
+export type WidgetFeedbackRequest = z.infer<typeof widgetFeedbackRequestSchema>;
+
 export const widgetTypingRequestSchema = z.object({ typing: z.boolean() });
 export type WidgetTypingRequest = z.infer<typeof widgetTypingRequestSchema>;
 
@@ -532,6 +594,45 @@ export const widgetStreamQuerySchema = z.object({
   after: z.coerce.number().int().nonnegative().default(0),
 });
 export type WidgetStreamQuery = z.infer<typeof widgetStreamQuerySchema>;
+
+// ------------------------------------------------------------- CSAT (M8-06)
+
+/**
+ * The satisfaction card a closed conversation shows (`Widget/CSAT-EN`): one
+ * per close, the survey of the conversation's latest close.
+ *
+ * - `open`: ask. The card replaces the composer until answered or skipped.
+ * - `rated`: thanks, echoing the score and the comment.
+ * - `skipped`: the visitor pressed Skip. Nothing was recorded, and the card is
+ *   not offered again on any device.
+ * - `expired`: thirty days passed, or another channel's answer arrived first.
+ */
+export const widgetCsatStateSchema = z.enum(['open', 'rated', 'skipped', 'expired']);
+export type WidgetCsatState = z.infer<typeof widgetCsatStateSchema>;
+
+export const widgetCsatSchema = z.object({
+  conversationId: z.uuid(),
+  state: widgetCsatStateSchema,
+  rating: csatRatingSchema.nullable(),
+  comment: z.string().nullable(),
+  /** When Skip was pressed, for "You skipped the rating · 10:06". */
+  skippedAt: z.iso.datetime().nullable(),
+});
+export type WidgetCsat = z.infer<typeof widgetCsatSchema>;
+
+/** `GET …/csat`: the card, or null while the conversation has no survey to offer. */
+export const widgetCsatResponseSchema = z.object({ csat: widgetCsatSchema.nullable() });
+export type WidgetCsatResponse = z.infer<typeof widgetCsatResponseSchema>;
+
+/** The widget caps the comment shorter than the rating page (`Widget/CSAT-EN`). */
+export const WIDGET_CSAT_COMMENT_MAX = 1000;
+
+/** `POST …/csat`. */
+export const widgetCsatRequestSchema = z.object({
+  rating: csatRatingSchema,
+  comment: z.string().trim().max(WIDGET_CSAT_COMMENT_MAX).optional(),
+});
+export type WidgetCsatRequest = z.input<typeof widgetCsatRequestSchema>;
 
 // ------------------------------------------------------ realtime (§7)
 
@@ -563,6 +664,8 @@ export const WIDGET_EVENTS = {
   presence: 'presence',
   queue: 'queue',
   conversation: 'conversation',
+  /** M8-06: the conversation's satisfaction card appeared or changed. */
+  csat: 'csat',
 } as const;
 
 export const widgetJoinSchema = z.object({ conversationId: z.uuid() });
@@ -602,14 +705,13 @@ export const widgetTypingSchema = z.object({
 });
 export type WidgetTyping = z.infer<typeof widgetTypingSchema>;
 
-export const widgetPresenceSchema = z.object({ agentsOnline: z.boolean() });
-export type WidgetPresence = z.infer<typeof widgetPresenceSchema>;
-
 /** The conversation moved: closed, reopened, or continued on a new one (§2.3). */
 export const widgetConversationEventSchema = z.object({
   conversationId: z.uuid(),
   state: widgetConversationStateSchema,
   continuedById: z.uuid().nullable(),
+  /** M7-06: as on {@link widgetConversationSchema}. */
+  aiHandedOff: z.boolean().optional(),
 });
 export type WidgetConversationEvent = z.infer<typeof widgetConversationEventSchema>;
 
@@ -621,6 +723,7 @@ export const WIDGET_EVENT_PAYLOADS = {
   [WIDGET_EVENTS.presence]: widgetPresenceSchema,
   [WIDGET_EVENTS.queue]: widgetQueueSchema,
   [WIDGET_EVENTS.conversation]: widgetConversationEventSchema,
+  [WIDGET_EVENTS.csat]: widgetCsatSchema,
 } as const;
 
 export type WidgetServerEvent = keyof typeof WIDGET_EVENT_PAYLOADS;

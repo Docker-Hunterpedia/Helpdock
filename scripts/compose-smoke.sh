@@ -11,6 +11,10 @@
 # exercises the parts no unit test can: the real Compose network, the real
 # worker process, and the `mc` sidecar that makes the bucket.
 #
+# On the way there it does what a new operator does (M9-02): runs the first-run
+# wizard, signs in as the administrator it made, and enrols the authenticator
+# that account must have before it gets a session.
+#
 # It is the browser-less end-to-end test for the deliverable, and it runs in CI
 # as a step of the `ci` job.
 #
@@ -124,6 +128,25 @@ echo 'ok   the worker started the outbox relay'
 # M1-10: an image all the way through the media pipeline.
 # ---------------------------------------------------------------------------
 
+# A code from an authenticator secret, as RFC 6238 computes it with the
+# parameters the api uses (SHA-1, six digits, thirty-second steps). coreutils
+# and openssl only: the runner that builds the image has no Node of its own.
+totp_code() {
+  local secret="$1"
+  local padded="${secret}"
+  while (( ${#padded} % 8 != 0 )); do padded+='='; done
+  local key
+  key="$(printf '%s' "${padded}" | base32 -d | od -An -tx1 -v | tr -d ' \n')"
+  local step
+  step="$(( $(date +%s) / 30 ))"
+  local digest
+  digest="$(printf "$(printf '%016x' "${step}" | sed 's/../\\x&/g')" \
+    | openssl dgst -sha1 -mac HMAC -macopt "hexkey:${key}" | sed 's/^.* //')"
+  local offset=$(( 16#${digest:39:1} ))
+  local truncated=$(( 16#${digest:$((offset * 2)):8} & 0x7fffffff ))
+  printf '%06d' "$(( truncated % 1000000 ))"
+}
+
 api_url='http://127.0.0.1:3000'
 # Every setup call has to look like it came from this origin; the wizard refuses
 # a cross-site one, which the check above already proved.
@@ -145,11 +168,34 @@ brand_id="$(curl -sS "${same_site[@]}" -H "x-helpdock-setup: ${setup_token}" \
   || { echo 'FAIL the first-run wizard would not create a brand' >&2; exit 1; }
 echo 'ok   the first-run wizard created an admin and a brand'
 
-token="$(curl -sS -H 'content-type: application/json' \
+# The install administrator must have a second factor (DOMAIN-RULES §12, ASVS
+# 4.3.1), so the first sign-in of the account the wizard made answers with an
+# enrolment challenge rather than a session. The smoke test enrols the way the
+# admin app does: start, read the secret back, confirm it with a live code —
+# which also proves the authenticator maths against a real clock.
+sign_in="$(curl -sS -H 'content-type: application/json' \
   -d "{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}" \
-  "${api_url}/api/auth/sign-in" | jq -r '.accessToken')"
-[[ -n "${token}" && "${token}" != 'null' ]] \
-  || { echo 'FAIL the new admin could not sign in' >&2; exit 1; }
+  "${api_url}/api/auth/sign-in")"
+[[ "$(jq -r '.kind // empty' <<< "${sign_in}")" == 'totp-enrolment-required' ]] \
+  || { echo "FAIL the new admin was not sent to enrol an authenticator: ${sign_in}" >&2; exit 1; }
+echo 'ok   the first sign-in of the install admin asks for an authenticator'
+
+challenge_id="$(jq -r '.challengeId' <<< "${sign_in}")"
+totp_secret="$(curl -sS -H 'content-type: application/json' \
+  -d "{\"challengeId\":\"${challenge_id}\"}" \
+  "${api_url}/api/auth/enrolment/start" | jq -r '.secret // empty')"
+[[ -n "${totp_secret}" ]] \
+  || { echo 'FAIL enrolment did not hand back an authenticator secret' >&2; exit 1; }
+
+enrolled="$(curl -sS -H 'content-type: application/json' \
+  -d "{\"challengeId\":\"${challenge_id}\",\"code\":\"$(totp_code "${totp_secret}")\"}" \
+  "${api_url}/api/auth/enrolment/confirm")"
+token="$(jq -r '.accessToken // empty' <<< "${enrolled}")"
+[[ -n "${token}" ]] \
+  || { echo "FAIL the new admin could not sign in: ${enrolled}" >&2; exit 1; }
+[[ "$(jq -r '.recoveryCodes | length' <<< "${enrolled}")" == '10' ]] \
+  || { echo 'FAIL enrolment did not hand back ten recovery codes' >&2; exit 1; }
+echo 'ok   the new admin enrolled an authenticator and got a session'
 
 # Two forms on purpose: Fastify refuses a request that declares
 # `content-type: application/json` and sends no body, so a bodyless call must

@@ -517,8 +517,13 @@ not resolve on your machine.
 `scripts/compose-smoke.sh` is the same thing as a check: it writes a throwaway
 `docker/.env`, waits for the api to be healthy, and asserts that `/health` and
 `/ready` answer 200, that `/` returns the admin build, that an unverified domain
-gets no certificate, and that `/api/me` still answers 401. CI runs it after
-building the image, and so can you:
+gets no certificate, and that `/api/me` still answers 401. Then it does what a
+new operator does: runs the first-run wizard, signs in as the administrator it
+made — which, since that account must have a second factor, answers with an
+enrolment challenge rather than a session — enrols an authenticator from the
+secret the api hands back (the script computes the code itself, with `base32`
+and `openssl`), and pushes an image through the media pipeline on the session
+that produced. CI runs it after building the image, and so can you:
 
 ```bash
 docker build -f docker/Dockerfile -t ghcr.io/docker-hunterpedia/helpdock:ci .

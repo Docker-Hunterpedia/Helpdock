@@ -26,6 +26,15 @@ describe('readSelfAssessment', () => {
   it('counts a missing line as no confidence at all', () => {
     expect(readSelfAssessment('Refunds take 5 days [1].').self).toBe(0);
   });
+
+  it('reads a line padded with blanks, and a near miss of many blanks in linear time', () => {
+    expect(readSelfAssessment('x\n\t confidence : 70 % \t').self).toBe(0.7);
+
+    const started = performance.now();
+    const nearMiss = `confidence:0${'\t'.repeat(100_000)}x`;
+    expect(readSelfAssessment(nearMiss)).toEqual({ text: nearMiss, self: 0 });
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe('retrievalSupport', () => {

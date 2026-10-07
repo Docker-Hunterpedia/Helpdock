@@ -63,6 +63,21 @@ const GOOGLE_FONTS = /<link\b[^>]*\bhref="https:\/\/fonts\.googleapis\.com\/[^"]
 const DC_SCRIPT = /<script\b[^>]*\bdata-dc-script\b[^>]*>([\s\S]*?)<\/script>/;
 const DATA_PROPS = /\bdata-props='([^']*)'/;
 
+/**
+ * Removes every match, then what removing them exposed (`<scr<script>ipt>`
+ * becomes `<script>`), until a pass changes nothing.
+ */
+const removeEvery = (text: string, pattern: RegExp): string => {
+  let current = text;
+  for (;;) {
+    const next = current.replace(pattern, '');
+    if (next === current) {
+      return current;
+    }
+    current = next;
+  }
+};
+
 export interface DcSource {
   /** The page without the canvas runtime, the logic script and the Google Fonts links. */
   readonly html: string;
@@ -83,7 +98,7 @@ export function parseDcSource(source: string): DcSource {
     }
   }
   return {
-    html: source.replace(SUPPORT_SCRIPT, '').replace(GOOGLE_FONTS, '').replace(DC_SCRIPT, ''),
+    html: [SUPPORT_SCRIPT, GOOGLE_FONTS, DC_SCRIPT].reduce(removeEvery, source),
     logic: script?.[1] ?? '',
     defaults,
   };

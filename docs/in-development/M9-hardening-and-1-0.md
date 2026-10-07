@@ -196,7 +196,16 @@ recorded in the guide's Results table.
 - **SBOM**: already in `release.yml` (`anchore/sbom-action`, CycloneDX, from the
   pushed image, attached to the Release).
 - **Dependency audit**: `pnpm audit --audit-level high` added to `ci.yml`'s
-  `checks`, which ARCHITECTURE §15 lists and CI did not run.
+  `checks`, which ARCHITECTURE §15 lists and CI did not run. Transitive
+  advisories whose dependants have not bumped are pinned past the vulnerable
+  range in `pnpm-workspace.yaml` › `overrides`, one reason each.
+- **CodeQL**: the first full run's nineteen alerts were fixed in code
+  (polynomial regexes rewritten as string scans, URL hosts compared parsed,
+  `crypto.getRandomValues` for the mock webhook secret, comment and script
+  stripping run until stable, backslashes escaped in the eval report).
+  `.github/codeql/codeql-config.yml` turns off `js/insufficient-password-hash`,
+  which reads the SHA-256 of a 256-bit API key and the HMAC over an OAuth
+  state as password hashing, with the reason beside it.
 - Guide: [security scanning](../guides/security-scanning.md).
 
 ## M9-08 Release pipeline

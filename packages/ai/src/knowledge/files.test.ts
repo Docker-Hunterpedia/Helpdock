@@ -43,6 +43,26 @@ describe('extractFile', () => {
     });
   });
 
+  it('ignores a heading marker with nothing after it, in Markdown and in a DOCX, in linear time', async () => {
+    const started = performance.now();
+    const blanks = ' '.repeat(100_000);
+    const markdown = await extractFile(
+      new TextEncoder().encode(`#${blanks}\n# ${blanks}Title${blanks}`),
+      'text/markdown',
+      'notes.md',
+    );
+    const docx = await extractFile(
+      minimalDocx([`##${blanks}`, '## Kept']),
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'policy.docx',
+    );
+
+    expect(markdown.title).toBe('Title');
+    expect(docx.title).toBe('Kept');
+    expect(docx.parts[0]?.text).toMatch(/^##\s*\n\n## Kept$/);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
   it('titles plain text without a heading by its file name', async () => {
     const document = await extractFile(
       new TextEncoder().encode('Opening hours are 9 to 5.'),

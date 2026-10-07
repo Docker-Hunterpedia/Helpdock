@@ -81,7 +81,8 @@ export const parseRobots = (text: string, userAgent = CRAWLER_USER_AGENT): Robot
   let lastWasAgent = false;
 
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/#.*$/, '').trim();
+    const hash = raw.indexOf('#');
+    const line = (hash === -1 ? raw : raw.slice(0, hash)).trim();
     const colon = line.indexOf(':');
     if (colon < 0) {
       continue;

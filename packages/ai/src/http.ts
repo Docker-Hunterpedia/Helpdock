@@ -28,9 +28,27 @@ export class AiHttpError extends Error {
   }
 }
 
+const SLASH = '/';
+
+const trimTrailingSlashes = (text: string): string => {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === SLASH) {
+    end -= 1;
+  }
+  return text.slice(0, end);
+};
+
+const trimLeadingSlashes = (text: string): string => {
+  let start = 0;
+  while (start < text.length && text[start] === SLASH) {
+    start += 1;
+  }
+  return text.slice(start);
+};
+
 /** `base` with a trailing slash or without, joined to `path`. */
 export const joinUrl = (base: string, path: string): string =>
-  `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+  `${trimTrailingSlashes(base)}/${trimLeadingSlashes(path)}`;
 
 export const bearer = (apiKey: string | undefined): Record<string, string> =>
   apiKey === undefined || apiKey === '' ? {} : { authorization: `Bearer ${apiKey}` };

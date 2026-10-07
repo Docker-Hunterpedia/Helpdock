@@ -50,7 +50,19 @@ describe('MockDevelopersApi', () => {
       'webhook-destination-blocked',
     );
     expect(await reasonOf(add('https://localhost/hooks'))).toBe('webhook-destination-blocked');
-    expect((await add('https://hooks.example.com')).secret).toMatch(/^whsec_/);
+    expect((await add('https://hooks.example.com')).secret).toMatch(/^whsec_[0-9a-f]{43}$/);
+  });
+
+  it('draws each secret from the platform generator, so no two are alike', async () => {
+    const api = new MockDevelopersApi();
+    const [first] = (await api.webhooks(BRAND)).webhooks;
+    if (first === undefined) {
+      throw new Error('expected a seeded webhook');
+    }
+
+    const rotated = await api.rotateWebhookSecret(BRAND, first.id);
+    const again = await api.rotateWebhookSecret(BRAND, first.id);
+    expect(rotated.secret).not.toBe(again.secret);
   });
 
   it('answers a test ping pending once, then delivered', async () => {

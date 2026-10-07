@@ -55,6 +55,8 @@ jobs:
         with:
           languages: javascript-typescript
           queries: security-extended
+          # Takes queries away, each with its reason in the file.
+          config-file: .github/codeql/codeql-config.yml
 
       # No build step: the JavaScript/TypeScript extractor reads the sources.
       - name: Analyse

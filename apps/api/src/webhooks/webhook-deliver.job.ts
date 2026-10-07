@@ -96,14 +96,14 @@ export const createWebhookDeliverProcessor = ({
   repository,
   keyring,
   policy = {},
-  fetch = safeFetch,
+  fetch: deliver = safeFetch,
   now = () => new Date(),
 }: WebhookDeliverDependencies) => {
   const post = async (url: string, { headers, body }: WebhookRequest): Promise<Outcome> => {
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);
     try {
-      const response = await fetch(
+      const response = await deliver(
         url,
         { method: 'POST', headers: { ...headers }, body },
         { ...policies.webhook, ...policy, maxRedirects: 0 },

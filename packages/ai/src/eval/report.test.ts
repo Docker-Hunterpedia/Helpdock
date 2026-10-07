@@ -141,6 +141,14 @@ describe('renderEvalMarkdown', () => {
     expect(markdown).toContain('3 documents, 9 chunks, 1 flagged');
   });
 
+  it('escapes backslashes before pipes in a findings cell, so neither breaks the table', () => {
+    const markdown = renderEvalMarkdown(
+      report([result({ expectedSources: ['Ship\\ping | Returns'], citedSources: ['Other'] })]),
+    );
+
+    expect(markdown).toContain('| expected source not cited: Ship\\\\ping \\| Returns |');
+  });
+
   it('says so when nothing is flagged', () => {
     const markdown = renderEvalMarkdown(
       report([

@@ -72,7 +72,47 @@ const bootstrapRequirement = (name: EnvKey): Requirement => {
   };
 };
 
-const COMPOSE_REFERENCE = /\$\{([A-Z][A-Z0-9_]*)(?::([-?])([^}]*))?\}/g;
+const REFERENCE_OPEN = '${';
+const REFERENCE_CLOSE = '}';
+const REFERENCE_NAME = /^([A-Z][A-Z0-9_]*)(?::([-?]))?/;
+
+interface ComposeReference {
+  readonly name: string;
+  readonly operator: string | undefined;
+  readonly value: string;
+}
+
+/** Every `${NAME}`, `${NAME:?…}` and `${NAME:-…}` in the file, in one pass. */
+const composeReferences = (composeFile: string): ComposeReference[] => {
+  const references: ComposeReference[] = [];
+  let from = 0;
+  let close = -1;
+  for (;;) {
+    const open = composeFile.indexOf(REFERENCE_OPEN, from);
+    if (open === -1) {
+      return references;
+    }
+    // The closing brace found for an earlier opener still closes this one.
+    if (close < open) {
+      close = composeFile.indexOf(REFERENCE_CLOSE, open);
+      if (close === -1) {
+        return references;
+      }
+    }
+    from = open + REFERENCE_OPEN.length;
+    const inside = composeFile.slice(from, close);
+    const head = REFERENCE_NAME.exec(inside);
+    if (head?.[1] === undefined) {
+      continue;
+    }
+    const [matched, name, operator] = head;
+    if (operator === undefined && matched.length !== inside.length) {
+      continue;
+    }
+    references.push({ name, operator, value: inside.slice(matched.length) });
+    from = close + REFERENCE_CLOSE.length;
+  }
+};
 
 /**
  * What `docker-compose.yml` does without the key: `${KEY:?…}` refuses to
@@ -80,7 +120,7 @@ const COMPOSE_REFERENCE = /\$\{([A-Z][A-Z0-9_]*)(?::([-?])([^}]*))?\}/g;
  */
 export const composeRequirements = (composeFile: string): ReadonlyMap<string, Requirement> => {
   const found = new Map<string, Requirement>();
-  for (const [, name = '', operator, value = ''] of composeFile.matchAll(COMPOSE_REFERENCE)) {
+  for (const { name, operator, value } of composeReferences(composeFile)) {
     if (operator === '?') {
       found.set(name, { required: 'yes', default: '—' });
     } else if (operator === '-' && found.get(name)?.required !== 'yes') {

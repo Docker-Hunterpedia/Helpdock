@@ -92,7 +92,7 @@ const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 export const minimalDocx = (lines: readonly string[]): Uint8Array => {
   const paragraphs = lines
     .map((line) => {
-      const heading = /^(#{1,2})\s+(.*)$/.exec(line);
+      const heading = /^(#{1,2})[ \t]+(\S.*)$/.exec(line);
       const style =
         heading === null ? '' : `<w:pPr><w:pStyle w:val="Heading${heading[1]?.length}"/></w:pPr>`;
       return `<w:p>${style}<w:r><w:t>${escapeXml(heading?.[2] ?? line)}</w:t></w:r></w:p>`;

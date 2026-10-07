@@ -73,10 +73,61 @@ const RULES: readonly Rule[] = [
 // Zero-width space, non-joiner and joiner, word joiner, BOM, and the
 // bidirectional embedding, override and isolate controls.
 const INVISIBLE = /[​-‍⁠﻿‪-‮⁦-⁩]/g;
-const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+const COMMENT_OPEN = '<!--';
+const COMMENT_CLOSE = '-->';
+
+/**
+ * How many characters of a comment opener the end of `kept` contributes when
+ * `kept` followed by `text` from `at` starts one; -1 when they start none.
+ * Longest first, so the scan reads left to right.
+ */
+const openerAt = (kept: readonly string[], text: string, at: number): number => {
+  for (
+    let fromKept = Math.min(COMMENT_OPEN.length - 1, kept.length);
+    fromKept >= 0;
+    fromKept -= 1
+  ) {
+    const head = fromKept === 0 ? '' : kept.slice(-fromKept).join('');
+    if (head + text.slice(at, at + COMMENT_OPEN.length - fromKept) === COMMENT_OPEN) {
+      return fromKept;
+    }
+  }
+  return -1;
+};
+
+/**
+ * HTML comments removed in one left-to-right pass, including one that
+ * removing another exposes: `<!-<!---->-` is `<!--` once the inner comment is
+ * gone, which a single regex replace would leave in. An opener with no closer
+ * stays, so the rules still read what follows it. Linear in the text: each
+ * character is kept or skipped once, and once a closer is missing from some
+ * point on, no later opener looks for one.
+ */
+export const stripHtmlComments = (text: string): string => {
+  const kept: string[] = [];
+  let at = 0;
+  let noCloserFrom = Number.POSITIVE_INFINITY;
+  while (at < text.length) {
+    const fromKept = openerAt(kept, text, at);
+    const searchFrom = at + COMMENT_OPEN.length - fromKept;
+    const close =
+      fromKept === -1 || searchFrom >= noCloserFrom ? -1 : text.indexOf(COMMENT_CLOSE, searchFrom);
+    if (close === -1) {
+      if (fromKept !== -1) {
+        noCloserFrom = Math.min(noCloserFrom, searchFrom);
+      }
+      kept.push(text.charAt(at));
+      at += 1;
+      continue;
+    }
+    kept.length -= fromKept;
+    at = close + COMMENT_CLOSE.length;
+  }
+  return kept.join('');
+};
 
 export const screenIngestedText = (text: string): InjectionScreen => {
-  const visible = text.replace(HTML_COMMENT, '').replace(INVISIBLE, '');
+  const visible = stripHtmlComments(text).replace(INVISIBLE, '');
   const findings = new Set<string>();
 
   const kept = visible.split('\n').filter((line) => {

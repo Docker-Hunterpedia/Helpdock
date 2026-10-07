@@ -29,7 +29,8 @@ import { LOCALE_BOOST, RRF_K } from '../knowledge/fusion.js';
 
 export const SUPPORT_FLOOR = 0.6;
 
-const CONFIDENCE_LINE = /^[ \t]*confidence[ \t]*[:：][ \t]*(\d+(?:[.,]\d+)?)[ \t]*%?[ \t]*$/gim;
+// Tested against a trimmed line, so no run of blanks is matched twice.
+const CONFIDENCE_LINE = /^confidence[ \t]*[:：][ \t]*(\d+(?:[.,]\d+)?)[ \t]*%?$/i;
 
 export interface SelfAssessment {
   /** The answer without the confidence line. */
@@ -41,14 +42,16 @@ export interface SelfAssessment {
 /** Reads and removes the model's `CONFIDENCE:` line; the last one wins. */
 export const readSelfAssessment = (answer: string): SelfAssessment => {
   let self = 0;
-  const text = answer
-    .replace(CONFIDENCE_LINE, (_, figure: string) => {
-      const value = Number.parseFloat(figure.replace(',', '.'));
-      self = value > 1 ? value / 100 : value;
-      return '';
-    })
-    .trim();
-  return { text, self: clamp(self) };
+  const kept = answer.split('\n').filter((line) => {
+    const figure = CONFIDENCE_LINE.exec(line.trim())?.[1];
+    if (figure === undefined) {
+      return true;
+    }
+    const value = Number.parseFloat(figure.replace(',', '.'));
+    self = value > 1 ? value / 100 : value;
+    return false;
+  });
+  return { text: kept.join('\n').trim(), self: clamp(self) };
 };
 
 export interface SupportingChunk {

@@ -10,6 +10,7 @@ import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
 import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
 import { DevelopersPage } from '../screens/admin/developers/developers-page.tsx';
+import { SettingsPage } from '../screens/admin/settings/settings-page.tsx';
 import { AuditLogPage } from '../screens/admin/system/audit-log-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
@@ -24,7 +25,6 @@ import { HelpCenterPage } from '../screens/help-center/help-center-page.tsx';
 import { OpenHelpCenter } from '../screens/help-center/site/open-help-center.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
-import { PlaceholderPage } from '../screens/placeholder-page.tsx';
 import { ReportsPage } from '../screens/reports/reports-page.tsx';
 import { SetupPage } from '../screens/setup/setup-page.tsx';
 import { SignIn } from '../screens/sign-in.tsx';
@@ -33,7 +33,6 @@ import { TicketsPage } from '../screens/tickets/tickets-page.tsx';
 import { Totp } from '../screens/totp.tsx';
 import { TotpEnrolment } from '../screens/totp-enrolment.tsx';
 import { AppShell } from '../shell/app-shell.tsx';
-import { ALL_NAV } from '../shell/nav-items.js';
 import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from './route-paths.js';
 
 /**
@@ -79,13 +78,6 @@ export function AppRoutes(): ReactNode {
 
       <Route element={<RequireSession />}>
         <Route element={<AppShell />}>
-          {ALL_NAV.filter((item) => item.placeholder === true).map((item) => (
-            <Route
-              key={item.key}
-              path={item.path}
-              element={<PlaceholderPage navKey={item.key} />}
-            />
-          ))}
           {/* M0-10. The nav item is install-admin only, but the route is not
               hidden: a non-admin who types the path gets the api's 403 drawn
               as "Not allowed", which is one answer in one place. */}
@@ -93,6 +85,8 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
           {/* M3-08. Install-wide like the rest of System; the api refuses anybody else. */}
           <Route path={ROUTES.systemAuditLog} element={<AuditLogPage />} />
+          {/* M0-02: install-wide settings, with environment locks and write-only secrets. */}
+          <Route path={ROUTES.settings} element={<SettingsPage />} />
           {/* M8-04. Offered to the roles holding `report:read`; the api refuses anyone else. */}
           <Route path={ROUTES.reports} element={<ReportsPage />} />
           <Route path={ROUTES.staff} element={<StaffScreen />} />

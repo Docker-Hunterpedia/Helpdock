@@ -355,8 +355,15 @@ screen](staff-and-roles.md#inviting-somebody).
 
 ### Configuring a provider
 
-Set these in admin (or with the matching `HD_*` environment variable). A
-provider with no client id is reported as disabled and its button is not drawn.
+An install admin sets these under **Admin → Settings → Authentication** (or
+with the matching `HD_*` environment variable). The page shows the exact
+redirect URLs derived from `APP_URL`. A provider with no client id or client
+secret is reported as disabled and its button is not drawn.
+
+Client secrets are write-only: after one is saved the browser receives only
+`clientSecretConfigured: true` and a fixed mask. Replacing it opens an empty
+field. A value pinned by an `HD_*` variable is marked **Set by environment**
+and cannot be changed in admin.
 
 | Setting | |
 |---|---|
@@ -434,9 +441,12 @@ lock. It covers `POST /api/me/password`, `POST /api/me/totp/disable` and
 
 ## Settings
 
-Everything below is edited in admin and stored in the `settings` table. Any of
-them can be pinned from the environment with its `HD_*` name, which also locks
-it in the UI ([ARCHITECTURE §4](../planning/ARCHITECTURE.md#4-configuration-model)).
+The authentication values below are edited by an install admin under **Admin →
+Settings → Authentication** and stored in the `settings` table. Any of them can
+be pinned from the environment with its `HD_*` name, which also locks it in the
+UI ([ARCHITECTURE §4](../planning/ARCHITECTURE.md#4-configuration-model)). The
+Viewer toggle remains on **Staff and roles**; the signing key is generated and
+is never editable.
 
 | Key | Default | |
 |---|---|---|
@@ -471,6 +481,8 @@ From `.env`: `APP_MASTER_KEY`, and the two session limits in
 | `GET /api/auth/me` | `@Authenticated()` | The session: user, brands, current brand |
 | `POST /api/auth/sign-out` | `@Authenticated()` | This browser |
 | `POST /api/auth/sign-out-everywhere` | `@Authenticated()` | Every browser |
+| `GET /api/install/settings/authentication` | `@Requires('install:admin')` | Authentication settings, environment locks and OAuth redirect URLs; no secret values |
+| `PUT /api/install/settings/authentication` | `@Requires('install:admin')` | Save 2FA, sign-in-link and OAuth app settings; omitted secrets stay unchanged |
 | `POST /api/auth/totp/enrol` | `@Authenticated()` | Stage a secret for a QR code |
 | `POST /api/auth/totp/confirm` | `@Authenticated()` | Enable it, return recovery codes |
 | `GET /api/auth/invites/:token` | `@Public()` | Read an invitation without spending it |

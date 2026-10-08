@@ -1,8 +1,9 @@
 import type { Department, StaffRole } from '@helpdock/schemas';
 import { Autocomplete, Box, Chip, Paper, TextField, Typography } from '@mui/material';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { useT } from '../app/i18n.js';
 import { useSemanticTokens } from '../app/tokens.js';
+import { Field, fieldDescribedBy } from '../ui/field.tsx';
 
 /**
  * The two fields that decide what somebody may do: the four role cards and the
@@ -38,6 +39,7 @@ export function StaffRoleFields({
 }: RoleFieldsProps): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
+  const departmentsId = useId();
 
   const offered = STAFF_ROLES.filter((candidate) => candidate !== 'viewer' || viewerEnabled);
   const chosen = departments.filter((department) => departmentIds.includes(department.id));
@@ -98,33 +100,48 @@ export function StaffRoleFields({
         )}
       </Box>
 
-      <Autocomplete
-        multiple
-        options={[...departments]}
-        value={chosen}
-        getOptionLabel={(department) => department.name}
-        isOptionEqualToValue={(option, value) => option.id === value.id}
-        onChange={(_event, value) => {
-          onDepartmentsChange(value.map((department) => department.id));
-        }}
-        // An Admin sees the whole brand, so the picker would be a lie.
-        disabled={role === 'admin'}
-        renderValue={(value, getItemProps) =>
-          value.map((department, index) => {
-            const { key, ...chipProps } = getItemProps({ index });
+      <Field
+        id={departmentsId}
+        label={t('staff:inviteDialog.departmentsLabel')}
+        hint={role === 'admin' ? t('staff:departments.all') : t('staff:departments.hint')}
+      >
+        <Autocomplete
+          id={departmentsId}
+          multiple
+          options={[...departments]}
+          value={chosen}
+          getOptionLabel={(department) => department.name}
+          isOptionEqualToValue={(option, value) => option.id === value.id}
+          onChange={(_event, value) => {
+            onDepartmentsChange(value.map((department) => department.id));
+          }}
+          // An Admin sees the whole brand, so the picker would be a lie.
+          disabled={role === 'admin'}
+          renderValue={(value, getItemProps) =>
+            value.map((department, index) => {
+              const { key, ...chipProps } = getItemProps({ index });
 
-            return <Chip key={key} size="small" label={department.name} {...chipProps} />;
-          })
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label={t('staff:inviteDialog.departmentsLabel')}
-            placeholder={departments.length === 0 ? undefined : t('staff:departments.add')}
-            helperText={role === 'admin' ? t('staff:departments.all') : t('staff:departments.hint')}
-          />
-        )}
-      />
+              return <Chip key={key} size="small" label={department.name} {...chipProps} />;
+            })
+          }
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              placeholder={departments.length === 0 ? undefined : t('staff:departments.add')}
+              slotProps={{
+                ...params.slotProps,
+                htmlInput: {
+                  ...params.slotProps.htmlInput,
+                  'aria-describedby': fieldDescribedBy(departmentsId, {
+                    hint:
+                      role === 'admin' ? t('staff:departments.all') : t('staff:departments.hint'),
+                  }),
+                },
+              }}
+            />
+          )}
+        />
+      </Field>
     </>
   );
 }

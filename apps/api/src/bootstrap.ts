@@ -30,7 +30,7 @@ import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signin
 import { INBOUND_PARSE_ROUTE, registerFormBodies } from './channels/inbound/inbound-parse-body.js';
 import { registerClientFacts } from './context/client-facts.js';
 import { registerJsonDisposition } from './http/json-disposition.js';
-import { securityHeaderOptions } from './http/security-headers.js';
+import { registerPermissionsPolicy, securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { registerHttpMetrics } from './observability/http-metrics.js';
@@ -274,6 +274,7 @@ export const createApiApp = async ({
   // is the same on every replica without a second thing to configure.
   await app.register(cookie);
   await app.register(helmet, securityHeaderOptions({ appUrl: env.APP_URL }));
+  registerPermissionsPolicy(app.getHttpAdapter().getInstance());
   // M4-03. After helmet, so the widget routes' cross-origin headers win.
   registerWidgetCors(app.getHttpAdapter().getInstance());
 

@@ -1,4 +1,5 @@
 import { MOCK_TICKET_REFUND, MOCK_TICKET_SIGN_IN } from '../src/tickets/mock-api.js';
+import { expectFieldPartsStacked } from './field-layout.js';
 import { expect, test } from './fixtures.js';
 import { openTicket, openTickets, signIn } from './flows.js';
 import { strings } from './strings.js';
@@ -75,6 +76,26 @@ test.describe('the ticket list', () => {
     await expect(row).toBeVisible();
     // No separator and no stand-in: the caption is the reference alone.
     await expect(row.locator('p').last()).toHaveText('HD-1043');
+  });
+
+  test('stacks new-ticket labels above their fields', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale);
+
+    await page.getByRole('button', { name: t('tickets:newTicket.action') }).click();
+    const dialog = page.getByRole('dialog');
+    const subject = dialog.getByRole('textbox', { name: t('tickets:newTicket.subjectLabel') });
+    const message = dialog.getByRole('textbox', { name: t('tickets:newTicket.messageLabel') });
+
+    await expectFieldPartsStacked({
+      label: dialog.locator(`label[for="${await subject.getAttribute('id')}"]`),
+      control: subject,
+    });
+    await expectFieldPartsStacked({
+      label: dialog.locator(`label[for="${await message.getAttribute('id')}"]`),
+      control: message,
+    });
   });
 
   test('searches the api, and says so when nothing matches', async ({

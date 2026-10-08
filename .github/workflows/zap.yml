@@ -8,8 +8,8 @@ name: ZAP baseline
 #
 # It builds the image from the commit, starts the same Compose stack the smoke
 # test uses (`scripts/zap-stack.sh`), finishes the first-run wizard and scans
-# http://127.0.0.1:3000. Any alert the rules file does not mark IGNORE fails the
-# run. `.zap/rules.tsv` is where an accepted finding goes, with its reason;
+# http://127.0.0.1:3000. Any alert the rules file does not lower fails the run.
+# `.zap/rules.tsv` is where an accepted finding goes, with its reason;
 # `docs/guides/security-scanning.md` is the procedure.
 on:
   push:

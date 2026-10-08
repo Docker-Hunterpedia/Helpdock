@@ -168,3 +168,11 @@ export async function openSecurity(
   await page.getByRole('menuitem', { name: t('me:security.title') }).click();
   await page.getByRole('heading', { name: t('me:account.title'), level: 1 }).waitFor();
 }
+
+/** Opens the install-admin Settings page through the shell. */
+export async function openSettings(page: Page, locale: Locale): Promise<void> {
+  const t = strings(locale);
+
+  await page.getByRole('link', { name: t('admin:nav.settings'), exact: true }).click();
+  await page.getByRole('heading', { name: t('settings:signInMethods.title'), level: 2 }).waitFor();
+}

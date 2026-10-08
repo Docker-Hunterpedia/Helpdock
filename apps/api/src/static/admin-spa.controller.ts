@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Env } from '@helpdock/config';
@@ -9,7 +10,7 @@ import { ADMIN_DIST, ENV, HOST_PAGES } from '../runtime/tokens.js';
 import { cacheControlFor, INDEX_FILE, isApiPath, resolveAssetPath } from './admin-assets.js';
 import { adminContentSecurityPolicy } from './content-security-policy.js';
 import { InstallInfoService } from './install-info.service.js';
-import { rewriteInstallMeta } from './install-meta.js';
+import { hasCspNonceMeta, rewriteCspNonce, rewriteInstallMeta } from './install-meta.js';
 
 /** Pages a host other than the install's is answered with (the help center, M5-03). */
 export interface HostPages {
@@ -38,8 +39,6 @@ export class AdminSpaController {
   readonly #mediaOrigin: string;
   /** The build never changes while the process runs, so the file is read once. */
   #index: string | undefined;
-  /** Derived from that file, because it carries the hash of its inline script. */
-  #policy: string | undefined;
 
   constructor(
     @Inject(ADMIN_DIST) root: string | undefined,
@@ -89,14 +88,18 @@ export class AdminSpaController {
     // and never a wrong answer. Caching the promise instead would cache a
     // rejection for the life of the process.
     this.#index ??= await readFile(path.join(root, INDEX_FILE), 'utf8');
-    this.#policy ??= adminContentSecurityPolicy(this.#index, this.#mediaOrigin);
+    const nonce = hasCspNonceMeta(this.#index) ? randomBytes(16).toString('base64url') : undefined;
 
-    const html = rewriteInstallMeta(this.#index, await this.#installInfo.read());
+    const installHtml = rewriteInstallMeta(this.#index, await this.#installInfo.read());
+    const html = nonce === undefined ? installHtml : rewriteCspNonce(installHtml, nonce);
     await reply
       .header('cache-control', cacheControlFor(INDEX_FILE))
       // Replaces the `default-src 'none'` every api response carries, which is
       // right for JSON and would keep this page from loading anything at all.
-      .header('content-security-policy', this.#policy)
+      .header(
+        'content-security-policy',
+        adminContentSecurityPolicy(this.#index, this.#mediaOrigin, nonce),
+      )
       .type('text/html; charset=utf-8')
       .send(html);
   }

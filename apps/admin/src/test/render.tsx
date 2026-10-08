@@ -34,6 +34,8 @@ import type { ReportsApi } from '../reports/api.js';
 import { fakeSystemApi } from '../screens/admin/system/fixtures.js';
 import type { SystemApi } from '../screens/admin/system/system-api.js';
 import { fakeReportsApi } from '../screens/reports/fixtures.js';
+import type { SettingsApi } from '../settings/api.js';
+import { MockSettingsApi } from '../settings/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TelegramApi } from '../telegram/api.js';
@@ -64,6 +66,7 @@ export interface RenderAppOptions {
   readonly knowledgeApi?: KnowledgeApi;
   /** Defaults to the reports fixture, so no test reaches for a real api. */
   readonly reportsApi?: ReportsApi;
+  readonly settingsApi?: SettingsApi;
   /** Defaults to the System fixture: a brand that is not being deleted. */
   readonly systemApi?: SystemApi;
   readonly telegramApi?: TelegramApi;
@@ -89,6 +92,7 @@ export interface RenderedApp extends RenderResult {
   readonly domainsApi: DomainsApi;
   readonly aiApi: AiApi;
   readonly knowledgeApi: KnowledgeApi;
+  readonly settingsApi: SettingsApi;
   readonly telegramApi: TelegramApi;
   readonly assistApi: AssistApi;
   readonly developersApi: DevelopersApi;
@@ -116,6 +120,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const domainsApi = options.domainsApi ?? new MockDomainsApi();
   const aiApi = options.aiApi ?? new MockAiApi();
   const knowledgeApi = options.knowledgeApi ?? new MockKnowledgeApi();
+  const settingsApi = options.settingsApi ?? new MockSettingsApi();
   const telegramApi = options.telegramApi ?? new MockTelegramApi();
   const assistApi =
     options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
@@ -140,6 +145,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       domainsApi={domainsApi}
       aiApi={aiApi}
       knowledgeApi={knowledgeApi}
+      settingsApi={settingsApi}
       reportsApi={options.reportsApi ?? fakeReportsApi()}
       systemApi={options.systemApi ?? fakeSystemApi()}
       telegramApi={telegramApi}
@@ -172,6 +178,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     domainsApi,
     aiApi,
     knowledgeApi,
+    settingsApi,
     telegramApi,
     assistApi,
     developersApi,

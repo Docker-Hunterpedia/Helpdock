@@ -1,4 +1,5 @@
 import type { FastifyHelmetOptions } from '@fastify/helmet';
+import type { FastifyInstance } from 'fastify';
 
 /**
  * "Headers: HSTS, CSP, X-Content-Type-Options, Referrer-Policy" (REQUIREMENTS
@@ -12,6 +13,25 @@ import type { FastifyHelmetOptions } from '@fastify/helmet';
  */
 
 const ONE_YEAR_SECONDS = 31_536_000;
+
+export const BROWSER_PERMISSIONS_POLICY = [
+  'camera=()',
+  'display-capture=()',
+  'geolocation=()',
+  // Staff can record a voice reply from the same-origin admin application.
+  'microphone=(self)',
+  'payment=()',
+  'publickey-credentials-get=(self)',
+  'usb=()',
+].join(', ');
+
+/** Helmet has no Permissions-Policy middleware, so apply the narrow policy here. */
+export const registerPermissionsPolicy = (app: FastifyInstance): void => {
+  app.addHook('onRequest', (_request, reply, done) => {
+    void reply.header('permissions-policy', BROWSER_PERMISSIONS_POLICY);
+    done();
+  });
+};
 
 export interface SecurityHeaderOptions {
   /** `APP_URL`. HSTS is only meaningful, and only safe, on an https origin. */

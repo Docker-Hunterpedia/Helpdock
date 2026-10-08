@@ -92,6 +92,33 @@ test.describe('the security page', () => {
     await expect(list.getByRole('listitem')).toHaveCount(1);
   });
 
+  test('keeps each session action on one line beside a long browser name', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+
+    const list = page.getByRole('list', { name: t('me:sessions.listLabel') });
+    const current = list.getByRole('listitem').first();
+    const button = current.getByRole('button');
+    const details = current.locator('div').first();
+
+    await expect(button).toHaveCSS('white-space', 'nowrap');
+    const detailsBox = await details.boundingBox();
+    const buttonBox = await button.boundingBox();
+    if (detailsBox === null || buttonBox === null) {
+      throw new Error('The session details and action must have browser layout boxes');
+    }
+
+    if (locale === 'ar') {
+      expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(detailsBox.x);
+    } else {
+      expect(detailsBox.x + detailsBox.width).toBeLessThanOrEqual(buttonBox.x);
+    }
+  });
+
   test('signs out everywhere, which ends this browser too', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

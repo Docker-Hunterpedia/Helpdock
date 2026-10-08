@@ -8,11 +8,9 @@ import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
 
 /**
- * The System page is install-wide — the schema, the queues, the database role —
- * so the nav offers it only to an install admin. "Staff and roles" is offered
- * to the two roles that hold `staff:manage`. Neither is a permission: the route
- * is not hidden, the api refuses the request, and the page draws that refusal,
- * so there is one answer rather than two that could disagree.
+ * System and Settings are install-wide — schema, queues, database role and
+ * authentication providers — so the nav offers them only to an install admin.
+ * "Staff and roles" is offered to the two roles that hold `staff:manage`.
  */
 
 /** `renderApp` names the pair as props; `signedInMockApis` names them as the app does. */
@@ -48,7 +46,7 @@ describe('the admin nav', () => {
     expect(navLinks()).toContain('System');
   });
 
-  it('does not offer System to a brand admin', async () => {
+  it('does not offer install-wide destinations to a brand admin', async () => {
     renderApp(<AppRoutes />, {
       ...asProps(await withUser({ installAdmin: false })),
       initialEntries: ['/tickets'],
@@ -56,9 +54,7 @@ describe('the admin nav', () => {
     await screen.findByRole('navigation', { name: 'Main' });
 
     expect(navLinks()).not.toContain('System');
-    // The other admin destinations are still there, so this is one item hidden
-    // rather than a group that disappeared.
-    expect(navLinks()).toContain('Settings');
+    expect(navLinks()).not.toContain('Settings');
     expect(navLinks()).toContain('Staff and roles');
     expect(navLinks()).toContain('Developers');
   });
@@ -72,7 +68,7 @@ describe('the admin nav', () => {
     await screen.findByRole('navigation', { name: 'Main' });
 
     expect(navLinks()).not.toContain('Staff and roles');
-    expect(navLinks()).toContain('Settings');
+    expect(navLinks()).not.toContain('Settings');
   });
 
   /** M8-04: `report:read` is an Admin's, a Team Leader's and a Viewer's, not an Agent's. */

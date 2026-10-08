@@ -88,6 +88,10 @@ through on the line above, and remove it once the dependant pins the patched
 version. Regenerate the lockfile with `pnpm install` and confirm with
 `pnpm install --frozen-lockfile` and `pnpm audit --audit-level high`.
 
+Fastify is pinned to at least 5.12.5 both directly and through
+`@nestjs/platform-fastify` until Nest ships the patched version, closing
+GHSA-4mh8-r7rc-xpvc before 1.0.
+
 ## ZAP baseline
 
 [`zap.yml`](../../.github/workflows/zap.yml) builds the image from the commit,
@@ -113,8 +117,18 @@ docker run --rm --network host -v "$PWD/.zap:/zap/wrk:rw" ghcr.io/zaproxy/zaprox
 The report is the run's `zap-baseline` artifact. **When it fails**, read the
 alert. If it is a real problem, fix it. If it has been read and accepted — a
 header that does not apply to that response, a false positive — add its plugin
-id to [`.zap/rules.tsv`](../../.zap/rules.tsv) as `IGNORE` (or `WARN` to keep
-seeing it) with the reason on the line above. The run never opens issues.
+id to [`.zap/rules.tsv`](../../.zap/rules.tsv) as `INFO` to keep it in the
+report, or `IGNORE` when even that has no value, with the reason on the line
+above. The run never opens issues.
+
+The first full run on 2026-10-08 found no High alerts. Its actionable findings
+were the admin policy's `style-src 'unsafe-inline'` and a missing
+`Permissions-Policy`; the admin now uses a per-response Emotion nonce and the
+api sends a restrictive device policy. The remaining detections are recorded
+at `INFO` in the rules file: static fixture text, colour constants, a public
+one-pixel image, non-sensitive locale/theme storage, the expected SPA shape,
+scanner requests without browser `Sec-Fetch-*` headers, and deliberately no
+COEP because cross-origin object-storage media is a supported deployment.
 
 The scan is not wired into `release.yml`, so a scanner outage never holds up an
 image. Instead the release procedure runs it by hand on the version pull

@@ -12,6 +12,7 @@ import '@helpdock/ui/fonts.css';
 import { CssBaseline, ThemeProvider, useMediaQuery } from '@mui/material';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
+import { readCspNonce } from '../../app/csp-nonce.js';
 import type { CsatApi, CsatLinkProblem } from '../../csat/api.js';
 import { isCsatLinkError } from '../../csat/api.js';
 import { CSAT_PREVIEW_TOKEN, type CsatSample, PreviewCsatApi } from '../../csat/preview-api.js';
@@ -143,10 +144,12 @@ export function CsatApp({
   const direction = dir(locale);
   const mode = prefersDark ? 'dark' : 'light';
   const accent = brand?.accent ?? null;
+  const [cspNonce] = useState(readCspNonce);
 
   const cache = useMemo(
-    () => (direction === 'rtl' ? createRtlCache() : createLtrCache()),
-    [direction],
+    () =>
+      direction === 'rtl' ? createRtlCache('hdrtl', cspNonce) : createLtrCache('hd', cspNonce),
+    [direction, cspNonce],
   );
   const brandTheme = useMemo(() => brandThemeFor(accent), [accent]);
   const theme = useMemo(

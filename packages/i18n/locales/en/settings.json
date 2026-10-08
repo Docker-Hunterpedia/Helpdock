@@ -14,7 +14,8 @@
     "description": "Password sign-in is always on. Enable the others by adding credentials.",
     "requireTwoFactor": "Require two-factor authentication for all staff",
     "requireTwoFactorHint": "Staff without TOTP are asked to enrol at next sign-in.",
-    "magicLinkValidity": "Magic link validity (minutes)"
+    "magicLinkValidity": "Magic link validity (minutes)",
+    "magicLinkRange": "Enter a whole number from 1 to 60."
   },
   "oauth": {
     "google": "Google OAuth",
@@ -24,11 +25,19 @@
     "clientIdPlaceholder": "Iv1.…",
     "clientSecretPlaceholder": "Paste once",
     "replace": "Replace",
+    "replaceLabel": "Replace the {{provider}} client secret",
+    "secretKept": "Saved. Secrets are never shown again after saving.",
     "secretSaved": "Saved {{date}} by {{name}}. Secrets are never shown again after saving."
   },
   "status": {
     "enabled": "Enabled",
     "notConfigured": "Not configured"
+  },
+  "saved": "Authentication settings saved",
+  "error": {
+    "title": "Settings are unavailable",
+    "body": "The install settings could not be loaded. Try again.",
+    "save": "The authentication settings could not be saved. Try again."
   },
   "lock": {
     "badge": "Set by environment",

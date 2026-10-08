@@ -142,7 +142,8 @@ const seedSessions = (): StaffSessionList => ({
   sessions: [
     {
       familyId: '0192c3f0-1a2b-7c3d-8e4f-0000000000f1',
-      userAgent: 'Mozilla/5.0 (Macintosh) Chrome/141',
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
       startedAt: iso(-2),
       lastUsedAt: iso(0),
       current: true,

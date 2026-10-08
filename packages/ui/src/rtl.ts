@@ -18,10 +18,10 @@ export const RTL_STYLIS_PLUGINS: readonly Middleware[] = [prefixer, rtlPlugin];
  * physical properties. Helpdock's own styles use logical properties, which need
  * no plugin at all.
  */
-export function createRtlCache(key = 'hdrtl'): EmotionCache {
-  return createCache({ key, stylisPlugins: [...RTL_STYLIS_PLUGINS] });
+export function createRtlCache(key = 'hdrtl', nonce?: string): EmotionCache {
+  return createCache({ key, stylisPlugins: [...RTL_STYLIS_PLUGINS], ...(nonce ? { nonce } : {}) });
 }
 
-export function createLtrCache(key = 'hd'): EmotionCache {
-  return createCache({ key });
+export function createLtrCache(key = 'hd', nonce?: string): EmotionCache {
+  return createCache({ key, ...(nonce ? { nonce } : {}) });
 }

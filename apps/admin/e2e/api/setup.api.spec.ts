@@ -31,6 +31,37 @@ const BRAND_NAME = 'Acme Support';
 const BRAND_PREFIX = 'ACME';
 
 test.describe('the first-run wizard against the real api', () => {
+  test('serves browser policies without blocking the production UI', async ({ page }) => {
+    const cspErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error' && /content security policy/i.test(message.text())) {
+        cspErrors.push(message.text());
+      }
+    });
+
+    const response = await page.goto('/');
+    expect(response).not.toBeNull();
+    await expect(page.getByRole('heading', { name: t('wizard:title'), level: 1 })).toBeVisible();
+
+    const headers = response?.headers() ?? {};
+    const policy = headers['content-security-policy'] ?? '';
+    expect(policy).not.toContain("style-src 'self' 'unsafe-inline'");
+    const nonce = policy.match(/style-src 'self' 'nonce-([^']+)'/)?.[1];
+    expect(nonce).toBeTruthy();
+    await expect(page.locator('meta[name="helpdock:csp-nonce"]')).toHaveAttribute(
+      'content',
+      nonce ?? '',
+    );
+
+    const styleNonces = await page
+      .locator('style')
+      .evaluateAll((styles) => styles.map((style) => (style as HTMLStyleElement).nonce));
+    expect(styleNonces.length).toBeGreaterThan(0);
+    expect(new Set(styleNonces)).toEqual(new Set([nonce]));
+    expect(headers['permissions-policy']).toContain('microphone=(self)');
+    expect(cspErrors).toEqual([]);
+  });
+
   test('sets the install up and lands in the shell', async ({ page }) => {
     // An install with no accounts has one screen, whatever was asked for.
     await page.goto('/tickets');

@@ -4,6 +4,7 @@ import {
   MOCK_INVITE_TOKEN,
   MOCK_TOTP_SECRET,
 } from '../src/staff/mock-api.js';
+import { expectFieldPartsStacked } from './field-layout.js';
 import { expect, test } from './fixtures.js';
 import { strings } from './strings.js';
 
@@ -67,6 +68,17 @@ test.describe('accepting an invitation', () => {
 });
 
 test.describe('turning on two-factor', () => {
+  test('keeps the code label and hint outside the input', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await page.goto('/sign-in/enrol');
+
+    const label = page.locator('label', { hasText: t('auth:enrolment.step1.codeLabel') });
+    const input = page.getByLabel(t('auth:enrolment.step1.codeLabel'));
+    const hint = page.getByText(t('auth:enrolment.step1.codeHint'), { exact: true });
+
+    await expectFieldPartsStacked({ label, control: input, hint });
+  });
+
   test('draws the code and offers the key for a device with no camera', async ({
     page,
     appLocale: locale,

@@ -45,8 +45,16 @@ describe('adminContentSecurityPolicy', () => {
     expect(directive('base-uri')).toBe("base-uri 'none'");
   });
 
-  it('allows inline styles, which is what Emotion writes MUI into', () => {
+  it('keeps an older external build usable while it has no nonce marker', () => {
     expect(directive('style-src')).toBe("style-src 'self' 'unsafe-inline'");
+  });
+
+  it('admits only Emotion styles carrying this response nonce', () => {
+    const withNonce = adminContentSecurityPolicy('<script>boot();</script>', undefined, 'fresh');
+    const style = withNonce.split('; ').find((entry) => entry.startsWith('style-src '));
+
+    expect(style).toBe("style-src 'self' 'nonce-fresh'");
+    expect(style).not.toContain('unsafe-inline');
   });
 
   it('leaves no trailing space when the document has no inline script', () => {

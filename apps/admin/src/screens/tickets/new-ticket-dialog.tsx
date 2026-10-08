@@ -16,6 +16,7 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { Field, fieldDescribedBy } from '../../ui/field.tsx';
 
 /**
  * The 520 px dialog for a ticket typed in by hand.
@@ -257,93 +258,133 @@ export function NewTicketDialog({
 
             {mode === 'new' ? (
               <Box sx={{ marginBlockStart: 3, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <TextField
-                  id={nameId}
-                  label={t('tickets:newTicket.nameLabel')}
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value);
-                  }}
-                  error={errors.name !== undefined}
-                  helperText={errors.name ?? ' '}
-                />
-                <TextField
-                  id={emailId}
-                  type="email"
-                  label={t('tickets:newTicket.emailLabel')}
-                  value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                  }}
-                  error={errors.email !== undefined}
-                  helperText={errors.email ?? ' '}
-                />
+                <Field id={nameId} label={t('tickets:newTicket.nameLabel')} error={errors.name}>
+                  <TextField
+                    id={nameId}
+                    value={name}
+                    onChange={(event) => {
+                      setName(event.target.value);
+                    }}
+                    error={errors.name !== undefined}
+                    slotProps={{
+                      htmlInput: {
+                        'aria-describedby': fieldDescribedBy(nameId, { error: errors.name }),
+                        'aria-invalid': errors.name !== undefined,
+                      },
+                    }}
+                  />
+                </Field>
+                <Field id={emailId} label={t('tickets:newTicket.emailLabel')} error={errors.email}>
+                  <TextField
+                    id={emailId}
+                    type="email"
+                    value={email}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                    }}
+                    error={errors.email !== undefined}
+                    slotProps={{
+                      htmlInput: {
+                        'aria-describedby': fieldDescribedBy(emailId, { error: errors.email }),
+                        'aria-invalid': errors.email !== undefined,
+                      },
+                    }}
+                  />
+                </Field>
               </Box>
             ) : null}
           </Box>
 
-          <TextField
-            id={subjectId}
-            label={t('tickets:newTicket.subjectLabel')}
-            value={subject}
-            onChange={(event) => {
-              setSubject(event.target.value);
-            }}
-            error={errors.subject !== undefined}
-            helperText={errors.subject ?? ' '}
-            autoFocus
-          />
+          <Field id={subjectId} label={t('tickets:newTicket.subjectLabel')} error={errors.subject}>
+            <TextField
+              id={subjectId}
+              value={subject}
+              onChange={(event) => {
+                setSubject(event.target.value);
+              }}
+              error={errors.subject !== undefined}
+              autoFocus
+              slotProps={{
+                htmlInput: {
+                  'aria-describedby': fieldDescribedBy(subjectId, { error: errors.subject }),
+                  'aria-invalid': errors.subject !== undefined,
+                },
+              }}
+            />
+          </Field>
 
-          <TextField
+          <Field
             id={departmentFieldId}
-            select
             label={t('tickets:newTicket.departmentLabel')}
-            value={departmentId}
-            onChange={(event) => {
-              setDepartmentId(event.target.value);
-            }}
-            error={errors.department !== undefined}
-            helperText={
-              departments.length === 0
-                ? t('tickets:newTicket.noDepartments')
-                : (errors.department ?? ' ')
-            }
+            hint={departments.length === 0 ? t('tickets:newTicket.noDepartments') : undefined}
+            error={errors.department}
           >
-            {departments.map((department) => (
-              <MenuItem key={department.id} value={department.id}>
-                {department.name}
-              </MenuItem>
-            ))}
-          </TextField>
+            <TextField
+              id={departmentFieldId}
+              select
+              value={departmentId}
+              onChange={(event) => {
+                setDepartmentId(event.target.value);
+              }}
+              error={errors.department !== undefined}
+              slotProps={{
+                select: {
+                  'aria-label': t('tickets:newTicket.departmentLabel'),
+                  'aria-describedby': fieldDescribedBy(departmentFieldId, {
+                    hint:
+                      departments.length === 0 ? t('tickets:newTicket.noDepartments') : undefined,
+                    error: errors.department,
+                  }),
+                  'aria-invalid': errors.department !== undefined,
+                },
+              }}
+            >
+              {departments.map((department) => (
+                <MenuItem key={department.id} value={department.id}>
+                  {department.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Field>
 
-          <TextField
-            id={priorityId}
-            select
-            label={t('tickets:newTicket.priorityLabel')}
-            value={priority}
-            onChange={(event) => {
-              setPriority(event.target.value as TicketPriority);
-            }}
-          >
-            {ticketPrioritySchema.options.map((option) => (
-              <MenuItem key={option} value={option}>
-                {t(`tickets:priority.${option}`)}
-              </MenuItem>
-            ))}
-          </TextField>
+          <Field id={priorityId} label={t('tickets:newTicket.priorityLabel')}>
+            <TextField
+              id={priorityId}
+              select
+              value={priority}
+              onChange={(event) => {
+                setPriority(event.target.value as TicketPriority);
+              }}
+              slotProps={{
+                select: { 'aria-label': t('tickets:newTicket.priorityLabel') },
+              }}
+            >
+              {ticketPrioritySchema.options.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {t(`tickets:priority.${option}`)}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Field>
 
-          <TextField
-            id={bodyId}
-            multiline
-            minRows={4}
-            label={t('tickets:newTicket.messageLabel')}
-            value={body}
-            onChange={(event) => {
-              setBody(event.target.value);
-            }}
-            error={errors.body !== undefined}
-            helperText={errors.body ?? ' '}
-          />
+          <Field id={bodyId} label={t('tickets:newTicket.messageLabel')} error={errors.body}>
+            <TextField
+              id={bodyId}
+              multiline
+              minRows={4}
+              value={body}
+              onChange={(event) => {
+                setBody(event.target.value);
+              }}
+              error={errors.body !== undefined}
+              slotProps={{
+                htmlInput: {
+                  'aria-describedby': fieldDescribedBy(bodyId, { error: errors.body }),
+                  'aria-invalid': errors.body !== undefined,
+                },
+              }}
+            />
+          </Field>
         </DialogContent>
         <DialogActions sx={{ padding: 4, gap: 2 }}>
           <Button variant="text" onClick={onClose} disabled={busy}>

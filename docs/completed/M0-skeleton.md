@@ -35,6 +35,14 @@ Full deliverable list and specs: [PRD §4 — M0 Skeleton](../planning/PRD.md#m0
 | M0-14 | Transactional outbox | #17 | shipped (#30) |
 | M0-15 | Outbound HTTP client with SSRF protection | #18 | shipped (#24) |
 
+**Post-ship completion (2026-10-08).** M0-02's approved `Admin/Settings`
+artboard now has its Authentication view instead of the shell placeholder: an
+install admin can edit the global 2FA rule, sign-in-link lifetime and Google or
+GitHub OAuth app credentials. Environment-pinned values are locked, client
+secrets are write-only, redirect URLs come from `APP_URL`, and every change is
+audited under install scope. The HTTP routes are documented in the
+[authentication guide](../guides/authentication.md#endpoints).
+
 ## Exit criteria
 
 Copied from the PRD. Six of seven are met; the seventh is met in part and says

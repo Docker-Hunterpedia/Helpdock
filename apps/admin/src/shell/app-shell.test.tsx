@@ -89,14 +89,14 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { current: 'page' })).toHaveTextContent('Staff and roles');
   });
 
-  it('says what a page will hold and which milestone brings it', async () => {
+  it('opens the install-wide authentication settings instead of the M0 placeholder', async () => {
     await renderShell('/admin/settings');
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
-    expect(screen.getByText('Install-wide · applies to every brand.')).toBeInTheDocument();
-    expect(
-      screen.getByText('Install settings arrive with the rest of milestone M0.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Install-wide · applies to every brand')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Sign-in methods' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Magic link validity (minutes)')).toHaveValue(10);
+    expect(screen.queryByText('Nothing here yet')).not.toBeInTheDocument();
   });
 
   it('switches brand from the menu and marks the one in force', async () => {

@@ -438,13 +438,17 @@ export function SecurityScreen(): ReactNode {
                 component="li"
                 sx={{
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   justifyContent: 'space-between',
                   gap: 4,
                 }}
               >
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="bodyStrong" component="span" sx={{ display: 'block' }}>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography
+                    variant="bodyStrong"
+                    component="span"
+                    sx={{ display: 'block', overflowWrap: 'anywhere' }}
+                  >
                     <bdi>
                       {item.userAgent === '' ? t('me:sessions.unknownBrowser') : item.userAgent}
                     </bdi>
@@ -463,6 +467,7 @@ export function SecurityScreen(): ReactNode {
                       item.userAgent === '' ? t('me:sessions.unknownBrowser') : item.userAgent,
                   })}
                   disabled={revokeSession.isPending}
+                  sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
                   onClick={() => {
                     revokeSession.mutate(item.familyId);
                   }}

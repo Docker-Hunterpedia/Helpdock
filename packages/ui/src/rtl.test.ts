@@ -26,4 +26,9 @@ describe('createRtlCache', () => {
     expect(createRtlCache().key).toBe('hdrtl');
     expect(createLtrCache().key).toBe('hd');
   });
+
+  it('places a response nonce on every style element Emotion creates', () => {
+    expect(createRtlCache('hdrtl', 'response-nonce').sheet.nonce).toBe('response-nonce');
+    expect(createLtrCache('hd', 'response-nonce').sheet.nonce).toBe('response-nonce');
+  });
 });

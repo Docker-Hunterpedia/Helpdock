@@ -37,14 +37,21 @@ export const inlineScriptHashes = (html: string): readonly string[] =>
  * thumbnail is an `<img>` from it, and a voice note is an `<audio>` from it. No
  * other origin is allowed for any of the three.
  */
-export const adminContentSecurityPolicy = (html: string, mediaOrigin?: string): string => {
+export const adminContentSecurityPolicy = (
+  html: string,
+  mediaOrigin?: string,
+  styleNonce?: string,
+): string => {
   const bucket = mediaOrigin === undefined ? '' : ` ${mediaOrigin}`;
   return [
     "default-src 'none'",
     `script-src 'self' ${inlineScriptHashes(html).join(' ')}`.trimEnd(),
-    // Emotion writes MUI's styles into `<style>` elements at runtime. Removing
-    // this means giving that cache a nonce, which is a change in `apps/admin`.
-    "style-src 'self' 'unsafe-inline'",
+    // Official builds receive a fresh nonce from AdminSpaController, and the
+    // admin passes it to Emotion. The fallback keeps an older external admin
+    // build usable while it is being upgraded.
+    styleNonce === undefined
+      ? "style-src 'self' 'unsafe-inline'"
+      : `style-src 'self' 'nonce-${styleNonce}'`,
     `img-src 'self' data:${bucket}`,
     `media-src 'self'${bucket}`,
     "font-src 'self'",

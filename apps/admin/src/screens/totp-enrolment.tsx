@@ -5,8 +5,8 @@ import {
   Checkbox,
   FormControlLabel,
   Link,
+  OutlinedInput,
   Paper,
-  TextField,
   Typography,
 } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
@@ -19,6 +19,7 @@ import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
+import { Field, fieldDescribedBy } from '../ui/field.tsx';
 import { QrCode } from '../ui/qr-code.tsx';
 import { AuthLayout } from './auth-layout.tsx';
 
@@ -347,25 +348,43 @@ export function TotpEnrolment(): ReactNode {
           </>
         )}
 
-        <TextField
+        <Field
           id={codeFieldId}
           label={t('auth:enrolment.step1.codeLabel')}
-          value={code}
-          onChange={(event) => {
-            setCode(event.target.value.replace(/\D/g, '').slice(0, 6));
-          }}
-          error={codeError !== null}
-          helperText={codeError ?? t('auth:enrolment.step1.codeHint')}
-          slotProps={{
-            htmlInput: {
-              inputMode: 'numeric',
-              autoComplete: 'one-time-code',
-              maxLength: 6,
-              // 44 px, mono, and wide enough that six digits do not crowd.
-              style: { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 18, height: 44 },
-            },
-          }}
-        />
+          hint={t('auth:enrolment.step1.codeHint')}
+          error={codeError ?? undefined}
+        >
+          <OutlinedInput
+            id={codeFieldId}
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value.replace(/\D/g, '').slice(0, 6));
+            }}
+            error={codeError !== null}
+            fullWidth
+            sx={{
+              height: 44,
+              '& input': {
+                fontFamily: 'var(--hd-font-mono, monospace)',
+                fontSize: 18,
+                letterSpacing: '0.18em',
+                textAlign: 'center',
+              },
+            }}
+            slotProps={{
+              input: {
+                dir: 'ltr',
+                inputMode: 'numeric',
+                autoComplete: 'one-time-code',
+                maxLength: 6,
+                'aria-describedby': fieldDescribedBy(codeFieldId, {
+                  hint: t('auth:enrolment.step1.codeHint'),
+                  error: codeError ?? undefined,
+                }),
+              },
+            }}
+          />
+        </Field>
 
         <Button type="submit" variant="contained" disabled={confirm.isPending}>
           {t('auth:enrolment.step1.submit')}

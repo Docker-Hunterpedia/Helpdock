@@ -57,24 +57,6 @@
       "channels": "Mailboxes, outgoing email and the other ways customers reach this brand.",
       "ai": "Providers, knowledge and the assistant’s modes, guardrails and budget.",
       "developers": "API keys and webhooks for this brand's own integrations."
-    },
-    "empty": {
-      "heading": "Nothing here yet",
-      "body": {
-        "tickets": "Ticketing arrives with milestone M1.",
-        "contacts": "Contacts arrive with milestone M1.",
-        "helpCenter": "The help center arrives with milestone M5.",
-        "reports": "Reports arrive with milestone M8.",
-        "settings": "Install settings arrive with the rest of milestone M0.",
-        "staff": "Staff and roles arrive with the rest of milestone M0.",
-        "system": "The system page arrives with milestone M8.",
-        "ticketing": "Ticketing settings arrive with milestone M1.",
-        "automation": "Automation arrives with milestone M3.",
-        "brand": "Brand settings arrive with milestone M1.",
-        "channels": "Channels arrive with milestone M2.",
-        "ai": "Nothing to show yet.",
-        "developers": "Developers arrives with milestone M8."
-      }
     }
   },
   "notifications": {

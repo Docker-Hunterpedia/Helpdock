@@ -15,6 +15,7 @@ import { MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
 import { HttpReportsApi } from '../reports/api.js';
 import { HttpSystemApi } from '../screens/admin/system/system-api.js';
+import { MockSettingsApi } from '../settings/mock-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import { MockTelegramApi } from '../telegram/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -64,6 +65,7 @@ export async function signedInMockApis(): Promise<AdminApis> {
     knowledge: new MockKnowledgeApi(),
     reports: new HttpReportsApi(),
     system: new HttpSystemApi(),
+    settings: new MockSettingsApi(),
     telegram: new MockTelegramApi(),
     assist: new MockAssistApi(),
     developers: new MockDevelopersApi(),

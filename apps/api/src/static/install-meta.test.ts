@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { type InstallMeta, rewriteInstallMeta } from './install-meta.js';
+import {
+  CSP_NONCE_META,
+  hasCspNonceMeta,
+  type InstallMeta,
+  rewriteCspNonce,
+  rewriteInstallMeta,
+} from './install-meta.js';
 
 const page = (head: string): string => `<!doctype html><html><head>${head}</head></html>`;
 
@@ -72,5 +78,26 @@ describe('rewriteInstallMeta', () => {
     );
 
     expect(html).toContain('<meta name="helpdock:brand-count" content="2" />');
+  });
+});
+
+describe('rewriteCspNonce', () => {
+  it('detects builds that can pass the nonce to the style engine', () => {
+    expect(hasCspNonceMeta(`<meta name="${CSP_NONCE_META}" content="" />`)).toBe(true);
+    expect(hasCspNonceMeta('<main>an older external admin build</main>')).toBe(false);
+  });
+
+  it('replaces the empty build marker without touching other metadata', () => {
+    const html = page(
+      `<meta name="${CSP_NONCE_META}" content="" />` +
+        '<meta name="helpdock:brand-count" content="3" />',
+    );
+
+    expect(rewriteCspNonce(html, 'response-nonce')).toContain(
+      `<meta name="${CSP_NONCE_META}" content="response-nonce" />`,
+    );
+    expect(rewriteCspNonce(html, 'response-nonce')).toContain(
+      '<meta name="helpdock:brand-count" content="3" />',
+    );
   });
 });

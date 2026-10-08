@@ -89,6 +89,7 @@ writeFileSync(
   '<!doctype html><html><head>' +
     '<meta name="helpdock:primary-domain" content="dev.example" />' +
     '<meta name="helpdock:brand-count" content="3" />' +
+    '<meta name="helpdock:csp-nonce" content="" />' +
     `<meta name="${INSTALL_STATE_META}" content="configured" />` +
     '<meta name="helpdock:version" content="0.0.0" />' +
     `<meta name="${SETUP_KEY_META}" content="false" />` +

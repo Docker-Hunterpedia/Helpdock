@@ -44,6 +44,7 @@ import { TelegramApiProvider } from '../telegram/context.tsx';
 import type { TicketingApi } from '../ticketing/api.js';
 import type { TicketsApi } from '../tickets/api.js';
 import { ToastProvider } from '../ui/toasts.tsx';
+import { readCspNonce } from './csp-nonce.js';
 import {
   resolveInitialLocale,
   resolveInitialThemePreference,
@@ -230,13 +231,15 @@ export function AppProviders({
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
   const [i18n] = useState(() => createI18n({ lng: locale }));
+  const [cspNonce] = useState(readCspNonce);
 
   const direction = dir(locale);
   const mode = themePreference === 'auto' ? (prefersDark ? 'dark' : 'light') : themePreference;
 
   const cache = useMemo(
-    () => (direction === 'rtl' ? createRtlCache() : createLtrCache()),
-    [direction],
+    () =>
+      direction === 'rtl' ? createRtlCache('hdrtl', cspNonce) : createLtrCache('hd', cspNonce),
+    [direction, cspNonce],
   );
 
   const theme = useMemo(() => {

@@ -47,7 +47,7 @@ Built from the design canvas artboards `Admin/AI-Providers`,
 | M7-08 | Guardrails | | shipped (#147): [Guardrails](#m7-08-guardrails); output on the ticket is the API, the panel is M7-10 |
 | M7-09 | Voice transcription job (Whisper-compatible endpoint) shown to agents | | shipped (#147): [Transcription](#m7-09-transcription) |
 | M7-10 | Admin | | shipped (#147): [Admin](#m7-10-admin) — Providers, Knowledge, Assistant and the wizard step |
-| M7-11 | Evaluation harness | | shipped (#147): [Evaluation harness](#m7-11-evaluation-harness); the live run waits for the provider secret |
+| M7-11 | Evaluation harness | #161 | shipped (#147): [Evaluation harness](#m7-11-evaluation-harness); the live run waits for the provider secret and is tracked in #161 |
 
 ## Exit criteria
 

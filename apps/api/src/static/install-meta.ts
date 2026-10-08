@@ -32,6 +32,7 @@ export const BRAND_COUNT_META = 'helpdock:brand-count';
 export const INSTALL_STATE_META = 'helpdock:install-state';
 export const VERSION_META = 'helpdock:version';
 export const SETUP_KEY_META = 'helpdock:setup-key-required';
+export const CSP_NONCE_META = 'helpdock:csp-nonce';
 
 /** Escapes a value for a double-quoted HTML attribute. */
 const escapeAttribute = (value: string): string =>
@@ -45,8 +46,15 @@ const escapeAttribute = (value: string): string =>
 // metacharacter, so nothing here interpolates anything a request supplied.
 const metaPattern = (name: string): RegExp => new RegExp(`<meta\\s+name="${name}"[^>]*>`, 'i');
 
+/** Whether this admin build knows how to pass a CSP nonce to its style engine. */
+export const hasCspNonceMeta = (html: string): boolean => metaPattern(CSP_NONCE_META).test(html);
+
 const replaceMeta = (html: string, name: string, content: string): string =>
   html.replace(metaPattern(name), `<meta name="${name}" content="${escapeAttribute(content)}" />`);
+
+/** Gives the admin bundle the same per-response nonce its CSP admits for styles. */
+export const rewriteCspNonce = (html: string, nonce: string): string =>
+  replaceMeta(html, CSP_NONCE_META, nonce);
 
 /**
  * Rewrites every tag in place. A document that carries none is returned

@@ -10,3 +10,23 @@
 10049	IGNORE	(Non-Storable / Storable and Cacheable Content: hashed static assets)
 # 10104 User agent fuzzer: informational by design.
 10104	IGNORE	(User Agent Fuzzer: informational)
+# 2 sees the documentation fixture address in the mock API bundled for local
+# development. It is not an address of this deployment.
+2	INFO	(Private IP Disclosure: documented mock SSRF-refusal address)
+# The minified application contains example prose and URLs whose adjacent
+# tokens resemble comments about databases, users and queries.
+10027	INFO	(Suspicious Comments: minified fixture text, not source comments or secrets)
+# The font asset name and the mock API's one-pixel data URL are public assets.
+10094	INFO	(Base64 Disclosure: font path and public one-pixel mock image)
+# APCA colour conversion constants happen to be valid Unix timestamp integers.
+10096	INFO	(Timestamp Disclosure: colour-math constants)
+# The admin is intentionally a client-routed React application.
+10109	INFO	(Modern Web Application: expected SPA architecture)
+# Only the en/ar locale and light/dark preference live in localStorage.
+120000	INFO	(LocalStorage: non-sensitive presentation preferences only)
+# COEP would reject configured cross-origin object-storage media. The app uses
+# no SharedArrayBuffer or cross-origin-isolation feature that requires it.
+90004	INFO	(COEP absent: cross-origin media is required and isolation is not)
+# ZAP's direct HTTP requests are not browser navigations, so no Sec-Fetch-*
+# request headers exist for the passive rule to observe.
+90005	INFO	(Sec-Fetch request headers: scanner is not a browser)

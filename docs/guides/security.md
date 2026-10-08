@@ -117,7 +117,11 @@ The api's JSON responses carry a deny-everything Content-Security-Policy,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and HSTS
 when `APP_URL` is https (`apps/api/src/http/security-headers.ts`). The admin,
 the help center, the web form and the widget each send the policy their own
-content needs.
+content needs. The admin hashes its bootstrap script and gives Emotion a fresh
+style nonce on every response; it does not permit inline script or un-nonced
+style. A `Permissions-Policy` denies camera, display capture, geolocation,
+payment and USB, while allowing same-origin microphone access for voice
+replies.
 
 ## What the operator does
 

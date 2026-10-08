@@ -83,6 +83,7 @@ writeFileSync(
   '<!doctype html><html><head>' +
     '<meta name="helpdock:primary-domain" content="support.helpdock.com" />' +
     '<meta name="helpdock:brand-count" content="3" />' +
+    '<meta name="helpdock:csp-nonce" content="" />' +
     `<script>${INLINE_BOOTSTRAP}</script>` +
     `</head><body><script type="module" src="/${HASHED_ASSET}"></script></body></html>`,
 );
@@ -257,7 +258,8 @@ describe.skipIf(!hasDocker)('the api', () => {
     });
 
     it('replaces the JSON deny-all policy with one the SPA can load under', async () => {
-      const policy = (await get('/')).headers['content-security-policy'] ?? '';
+      const response = await get('/');
+      const policy = response.headers['content-security-policy'] ?? '';
 
       // A browser refuses the inline bootstrap without its hash, and the whole
       // bundle without `script-src 'self'`.
@@ -265,6 +267,14 @@ describe.skipIf(!hasDocker)('the api', () => {
         `script-src 'self' 'sha256-${createHash('sha256').update(INLINE_BOOTSTRAP, 'utf8').digest('base64')}'`,
       );
       expect(policy).not.toContain("script-src 'self' 'unsafe-inline'");
+      const styleNonce = /style-src 'self' 'nonce-([^']+)'/.exec(policy)?.[1];
+      expect(styleNonce).toBeTruthy();
+      expect(policy).not.toContain("style-src 'self' 'unsafe-inline'");
+      expect(response.body).toContain(`<meta name="helpdock:csp-nonce" content="${styleNonce}" />`);
+      const nextPolicy = (await get('/')).headers['content-security-policy'] ?? '';
+      const nextStyleNonce = /style-src 'self' 'nonce-([^']+)'/.exec(nextPolicy)?.[1];
+      expect(nextStyleNonce).toBeTruthy();
+      expect(nextStyleNonce).not.toBe(styleNonce);
       expect(policy).toContain("frame-ancestors 'none'");
     });
 

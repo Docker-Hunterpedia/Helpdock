@@ -381,7 +381,7 @@ already knows.
 | 14.3.3 | No version details in headers | Met | No `X-Powered-By`; the version is on the System page only, for admins |
 | 14.4.1 | `Content-Type` with charset on every response | Met | Fastify sets it for JSON and HTML |
 | 14.4.2 | `Content-Disposition` on API responses | Met | `attachment; filename="api.json"` on every JSON answer unless a route chose its own (`api/http/json-disposition.ts`) |
-| 14.4.3 | Content Security Policy | Met | `default-src 'none'` on the api; hashed scripts on the admin; nonces on the help center and web form |
+| 14.4.3 | Content Security Policy | Met | `default-src 'none'` on the api; hashed scripts and per-response style nonces on the admin; nonces on the help center and web form |
 | 14.4.4 | `X-Content-Type-Options: nosniff` | Met | helmet |
 | 14.4.5 | HSTS | Met | On https installs, api and Caddy |
 | 14.4.6 | Referrer-Policy | Met | `no-referrer` |

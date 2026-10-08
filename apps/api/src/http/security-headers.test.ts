@@ -1,5 +1,11 @@
+import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
-import { isHttps, securityHeaderOptions } from './security-headers.js';
+import {
+  BROWSER_PERMISSIONS_POLICY,
+  isHttps,
+  registerPermissionsPolicy,
+  securityHeaderOptions,
+} from './security-headers.js';
 
 describe('isHttps', () => {
   it.each([
@@ -42,5 +48,20 @@ describe('securityHeaderOptions', () => {
 
     expect(options.xContentTypeOptions).toBe(true);
     expect(options.referrerPolicy).toEqual({ policy: 'no-referrer' });
+  });
+});
+
+describe('registerPermissionsPolicy', () => {
+  it('denies unused device capabilities while preserving same-origin voice recording', async () => {
+    const app = Fastify();
+    registerPermissionsPolicy(app);
+    app.get('/', () => ({ ok: true }));
+
+    const response = await app.inject('/');
+    await app.close();
+
+    expect(response.headers['permissions-policy']).toBe(BROWSER_PERMISSIONS_POLICY);
+    expect(BROWSER_PERMISSIONS_POLICY).toContain('camera=()');
+    expect(BROWSER_PERMISSIONS_POLICY).toContain('microphone=(self)');
   });
 });

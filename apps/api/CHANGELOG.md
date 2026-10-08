@@ -1,5 +1,19 @@
 # @helpdock/api
 
+## 0.4.0
+
+### Minor Changes
+
+- [#147](https://github.com/Docker-Hunterpedia/Helpdock/pull/147) [`a35e65f`](https://github.com/Docker-Hunterpedia/Helpdock/commit/a35e65f8c814288d1e7143bd864833c1e58adf38) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - AI foundation (M7-01, M7-02, M7-08), API only. Install admins configure AI providers through `/api/install/ai`: an API key, subscription (OAuth) credentials or none for a local OpenAI-compatible server, stored encrypted and never returned; model discovery; the default model; and the one embedding model of the install, whose change re-embeds every knowledge chunk in the worker without ever serving two models at once. Brands set a model override, PII redaction, the injection filter, a daily and monthly budget and a system prompt through `/api/brands/:brandId/ai`. Every model call is logged to `ai_calls` with its tokens and cost, and a ticket's calls are readable at `/api/brands/:brandId/tickets/:ticketId/ai-calls`. Data retention now nulls AI call bodies after the brand's AI-log window and keeps their counts and cost. See `docs/guides/ai.md`.
+
+- [#149](https://github.com/Docker-Hunterpedia/Helpdock/pull/149) [`fd9c371`](https://github.com/Docker-Hunterpedia/Helpdock/commit/fd9c37168dd6398b117a0a9b90539953b0bbca18) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - M6 Telegram, M7 AI and M8 API, webhooks, reports are complete. This release connects Telegram bots to the desk, adds grounded AI that assists agents and answers customers from the brand's own knowledge under a budget and a persistent handoff, and opens the platform up: scoped API keys and a documented REST v1, signed outbound webhooks, reports with CSV export, the System page with Bull Board, satisfaction surveys on every channel, and brand deletion with a grace period. What each milestone built, the test behind every exit criterion, and the gaps each left open are in `docs/completed/`.
+
+- [#147](https://github.com/Docker-Hunterpedia/Helpdock/pull/147) [`a35e65f`](https://github.com/Docker-Hunterpedia/Helpdock/commit/a35e65f8c814288d1e7143bd864833c1e58adf38) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Close carried gaps: the offline auto-unassign waits for the department to open, the first-run wizard generates the web push key pair, the widget names the agents online, staff socket events have per-person budgets, and signing out of one browser closes only that browser's sockets. CI adds Helpdock's Semgrep rules and a dependency audit; release branches and tags get a ZAP baseline scan.
+
+### Patch Changes
+
+- [#151](https://github.com/Docker-Hunterpedia/Helpdock/pull/151) [`358d464`](https://github.com/Docker-Hunterpedia/Helpdock/commit/358d464cd6a05ffeeaaa8bfa3a56b21a641acd64) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Complete install authentication settings with write-only OAuth credentials, correct shared admin field and session layouts in English and Arabic, add nonce-based admin styles and a restrictive browser permissions policy, and patch the Fastify HTTP/2 trailer-response denial of service.
+
 ## 0.3.1
 
 ### Patch Changes

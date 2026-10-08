@@ -88,6 +88,10 @@ through on the line above, and remove it once the dependant pins the patched
 version. Regenerate the lockfile with `pnpm install` and confirm with
 `pnpm install --frozen-lockfile` and `pnpm audit --audit-level high`.
 
+Fastify is pinned to at least 5.12.5 both directly and through
+`@nestjs/platform-fastify` until Nest ships the patched version, closing
+GHSA-4mh8-r7rc-xpvc before 1.0.
+
 ## ZAP baseline
 
 [`zap.yml`](../../.github/workflows/zap.yml) builds the image from the commit,

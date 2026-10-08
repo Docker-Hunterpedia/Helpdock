@@ -23,6 +23,7 @@ export * from './help-center-insights.js';
 export * from './help-center-site.js';
 export * from './identity-rules.js';
 export * from './install.js';
+export * from './install-settings.js';
 export * from './knowledge.js';
 export * from './macros.js';
 export * from './media.js';

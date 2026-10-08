@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../app/i18n.js';
+import { Field, fieldDescribedBy } from '../ui/field.tsx';
 import { StaffRoleFields } from './staff-role-fields.tsx';
 
 /**
@@ -96,20 +97,29 @@ export function InviteDialog({
             {t('staff:inviteDialog.description')}
           </Typography>
 
-          <TextField
-            id={emailId}
-            type="email"
-            label={t('staff:inviteDialog.emailLabel')}
-            placeholder={t('staff:inviteDialog.emailPlaceholder')}
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-            }}
-            error={error !== null}
-            helperText={error ?? ' '}
-            autoFocus
-            slotProps={{ htmlInput: { autoComplete: 'off', maxLength: 320 } }}
-          />
+          <Field id={emailId} label={t('staff:inviteDialog.emailLabel')} error={error ?? undefined}>
+            <TextField
+              id={emailId}
+              type="email"
+              placeholder={t('staff:inviteDialog.emailPlaceholder')}
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+              }}
+              error={error !== null}
+              autoFocus
+              slotProps={{
+                htmlInput: {
+                  autoComplete: 'off',
+                  maxLength: 320,
+                  'aria-describedby': fieldDescribedBy(emailId, {
+                    error: error ?? undefined,
+                  }),
+                  'aria-invalid': error !== null,
+                },
+              }}
+            />
+          </Field>
 
           <StaffRoleFields
             role={role}

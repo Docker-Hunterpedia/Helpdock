@@ -36,6 +36,8 @@ import type { ReportsApi } from '../reports/api.js';
 import { ReportsApiProvider } from '../reports/context.tsx';
 import type { SystemApi } from '../screens/admin/system/system-api.js';
 import { SystemApiProvider } from '../screens/admin/system/system-api-context.tsx';
+import type { SettingsApi } from '../settings/api.js';
+import { SettingsApiProvider } from '../settings/context.tsx';
 import type { StaffApi } from '../staff/api.js';
 import type { TelegramApi } from '../telegram/api.js';
 import { TelegramApiProvider } from '../telegram/context.tsx';
@@ -140,6 +142,8 @@ export interface AppProvidersProps {
   readonly reportsApi?: ReportsApi;
   /** Defaults to the matching adapter. System and Brand › Danger zone read it. */
   readonly systemApi?: SystemApi;
+  /** Defaults to the matching adapter. Only install Settings reads it. */
+  readonly settingsApi?: SettingsApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
   /** Defaults to the matching adapter. The ticket view and Help center › Proposals read it (M7). */
@@ -183,6 +187,7 @@ export function AppProviders({
   knowledgeApi,
   reportsApi,
   systemApi,
+  settingsApi,
   telegramApi,
   assistApi,
   developersApi,
@@ -217,6 +222,7 @@ export function AppProviders({
   const knowledge = knowledgeApi ?? fallback.knowledge;
   const reports = reportsApi ?? fallback.reports;
   const system = systemApi ?? fallback.system;
+  const settings = settingsApi ?? fallback.settings;
   const telegram = telegramApi ?? fallback.telegram;
   const assist = assistApi ?? fallback.assist;
   const developers = developersApi ?? fallback.developers;
@@ -294,11 +300,13 @@ export function AppProviders({
                               <AssistApiProvider api={assist}>
                                 <ReportsApiProvider api={reports}>
                                   <SystemApiProvider api={system}>
-                                    <NotificationsProvider api={notifications} push={push}>
-                                      <ToastProvider>
-                                        <Router>{children}</Router>
-                                      </ToastProvider>
-                                    </NotificationsProvider>
+                                    <SettingsApiProvider api={settings}>
+                                      <NotificationsProvider api={notifications} push={push}>
+                                        <ToastProvider>
+                                          <Router>{children}</Router>
+                                        </ToastProvider>
+                                      </NotificationsProvider>
+                                    </SettingsApiProvider>
                                   </SystemApiProvider>
                                 </ReportsApiProvider>
                               </AssistApiProvider>

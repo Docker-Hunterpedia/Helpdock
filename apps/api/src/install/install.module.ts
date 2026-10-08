@@ -7,12 +7,14 @@ import { RateLimiter } from '../auth/rate-limit.js';
 import { SessionService } from '../auth/session/session.service.js';
 import type { Logger } from '../logging/logger.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
+import { InstallSettingsController } from './settings.controller.js';
+import { InstallSettingsService } from './settings.service.js';
 import { SetupController } from './setup.controller.js';
 import { SetupService } from './setup.service.js';
 import { SetupTokenStore } from './setup-token.store.js';
 
 /**
- * M0-08. Everything under `/api/install/setup`.
+ * M0-08's first-run setup and M0-02's install-wide Settings API.
  *
  * It imports the already-built `AuthModule` rather than a second copy of it:
  * the wizard opens an ordinary session for the admin it creates, and the
@@ -41,8 +43,14 @@ export class InstallModule {
     return {
       module: InstallModule,
       imports: [auth],
-      controllers: [SetupController],
+      controllers: [SetupController, InstallSettingsController],
       providers: [
+        {
+          provide: InstallSettingsService,
+          inject: [SETTINGS, ENV],
+          useFactory: (settings: Settings, env: Env): InstallSettingsService =>
+            new InstallSettingsService(settings, env),
+        },
         {
           provide: SetupService,
           inject: [DB, SETTINGS, REDIS, SessionService, PasswordHasher, ENV],

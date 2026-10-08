@@ -681,6 +681,70 @@ describe.skipIf(!hasDocker)('the api', () => {
 
       expect(rows).toEqual([]);
     });
+
+    it('reads and updates authentication settings without returning either client secret', async () => {
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/api/install/settings/authentication',
+        headers: asInstallAdmin(),
+        payload: {
+          requireTwoFactor: true,
+          magicLinkValidityMinutes: 25,
+          google: { clientId: 'google-client', clientSecret: 'google-secret' },
+          github: { clientId: 'github-client', clientSecret: 'github-secret' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        requireTwoFactor: true,
+        magicLinkValidityMinutes: 25,
+        google: {
+          clientId: 'google-client',
+          clientSecretConfigured: true,
+          enabled: true,
+        },
+        github: {
+          clientId: 'github-client',
+          clientSecretConfigured: true,
+          enabled: true,
+        },
+        redirectUrls: {
+          google: 'https://support.example.com/api/auth/oauth/google/callback',
+          github: 'https://support.example.com/api/auth/oauth/github/callback',
+        },
+      });
+      expect(response.body).not.toContain('google-secret');
+      expect(response.body).not.toContain('github-secret');
+
+      const read = await get('/api/install/settings/authentication', asInstallAdmin());
+      expect(read.statusCode).toBe(200);
+      expect(read.json()).toEqual(response.json());
+
+      const rows = await withSystemJob(runtime.db, INSTALL_SCOPE_BRAND_ID, 'assert', (tx) =>
+        tx.select().from(auditLog).where(eq(auditLog.action, 'settings.updated')),
+      );
+      expect(rows.at(-1)).toMatchObject({
+        actorId: installAdmin,
+        targetType: 'settings',
+        targetId: 'authentication',
+        meta: {
+          keys: expect.arrayContaining([
+            'auth.magicLinkTtlMinutes',
+            'oauth.google.clientId',
+            'oauth.google.clientSecret',
+            'oauth.github.clientId',
+            'oauth.github.clientSecret',
+          ]),
+        },
+      });
+    });
+
+    it('refuses authentication settings to a brand admin', async () => {
+      expect(
+        (await get('/api/install/settings/authentication', notInstallAdmin())).statusCode,
+      ).toBe(403);
+    });
   });
 
   describe('boot', () => {

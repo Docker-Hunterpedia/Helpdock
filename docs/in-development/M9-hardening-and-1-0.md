@@ -19,7 +19,7 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 | M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** |
 | M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); ZAP's first release run is still to come |
 | M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
-| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); **the clean-VM run and the three outside testers need people** and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
+| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; **the clean-VM run and the three outside testers need people** and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
 | M9-08 | Release pipeline | | verified ([notes](#m9-08-release-pipeline)); external dependency (GHCR visibility, signing key) open |
 | M9-09 | Tag `1.0.0` | | planned |
 | M9-10 | Restore drill | | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
@@ -275,6 +275,12 @@ allowed on its own site with a visitor starting a conversation from each, the
 web form switched on and sent, and the agent finding and answering a ticket,
 each step timed through the same HTTP calls the admin, the widget and the form
 make. Local runs are in [onboarding-test.md](../completed/onboarding-test.md).
+The 2026-10-08 internal usability pass also corrected the shared field layout
+on TOTP enrolment, staff invitation and new-ticket forms (external labels and
+hints no longer collide with their controls), and keeps a long active-session
+user agent beside a one-line Sign out action. EN and AR browser regressions
+cover all four layouts. It also closed the stale M0 install-Settings placeholder
+with the approved Authentication artboard and its real install-admin API.
 **Still to do by people:** the clean-VM run with a stopwatch (Telegram
 included, which needs a bot and a reachable host) and the usability pass with
 three outside testers on the three-click reply task; the document has the

@@ -1,3 +1,4 @@
+import { expectFieldPartsStacked } from './field-layout.js';
 import { expect, test } from './fixtures.js';
 import { openStaff, signIn } from './flows.js';
 import { strings } from './strings.js';
@@ -76,6 +77,32 @@ test.describe('staff and roles', () => {
 
     await expect(group.getByRole('radio')).toHaveCount(4);
     await expect(group.getByText(t('staff:roleDescriptions.viewer'))).toBeVisible();
+  });
+
+  test('keeps invite labels and guidance outside their controls', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openStaff(page, locale);
+
+    await page.getByRole('button', { name: t('staff:invite'), exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    const email = dialog.getByLabel(t('staff:inviteDialog.emailLabel'));
+    const departments = dialog.getByRole('combobox', {
+      name: t('staff:inviteDialog.departmentsLabel'),
+    });
+
+    await expectFieldPartsStacked({
+      label: dialog.locator(`label[for="${await email.getAttribute('id')}"]`),
+      control: email,
+    });
+    await expectFieldPartsStacked({
+      label: dialog.locator(`label[for="${await departments.getAttribute('id')}"]`),
+      control: departments,
+      hint: dialog.getByText(t('staff:departments.hint'), { exact: true }),
+    });
   });
 
   test('resends an invitation and says where it went', async ({ page, appLocale: locale }) => {

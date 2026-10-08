@@ -41,6 +41,9 @@ import { HttpNotificationsApi } from '../notifications/http-api.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
 import { HttpReportsApi, type ReportsApi } from '../reports/api.js';
 import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-api.js';
+import type { SettingsApi } from '../settings/api.js';
+import { HttpSettingsApi } from '../settings/http-api.js';
+import { MockSettingsApi } from '../settings/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
@@ -93,6 +96,8 @@ export interface AdminApis {
   readonly reports: ReportsApi;
   /** The install-admin routes: System (M0-10, M8-05) and brand deletion (M8-07). */
   readonly system: SystemApi;
+  /** M0-02: install-wide editable settings. */
+  readonly settings: SettingsApi;
   /** M6: Channels › Telegram and a Telegram ticket's chat. */
   readonly telegram: TelegramApi;
   /** M7-05, M7-09: agent assist and transcripts on a ticket, Help center › Proposals. */
@@ -149,6 +154,7 @@ export function createApis(
       knowledge: new HttpKnowledgeApi(transport),
       reports: new HttpReportsApi(transport),
       system: new HttpSystemApi(() => transport.currentAccessToken()),
+      settings: new HttpSettingsApi(transport),
       telegram: new HttpTelegramApi(transport),
       assist: new HttpAssistApi(transport),
       developers: new HttpDevelopersApi(transport),
@@ -196,6 +202,7 @@ export function createApis(
     // Playwright, which a fixture would sit in front of.
     reports: new HttpReportsApi(),
     system: new HttpSystemApi(),
+    settings: new MockSettingsApi(),
     telegram: new MockTelegramApi(),
     // It reads the ticket fixture for closed tickets and their messages, and
     // files an approved proposal's draft in the help center fixture.

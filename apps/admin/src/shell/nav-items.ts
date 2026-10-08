@@ -39,7 +39,6 @@ export interface NavItem {
   readonly icon: LucideIcon;
   readonly labelKey: `admin:nav.${NavKey}`;
   readonly captionKey: `admin:pages.caption.${NavKey}`;
-  readonly emptyKey: `admin:pages.empty.body.${NavKey}`;
   /**
    * Roles this destination is drawn for. Absent means everybody who can sign
    * in. It is chrome, not a permission: the api refuses the request whatever
@@ -49,14 +48,6 @@ export interface NavItem {
   readonly roles?: readonly StaffRole[];
   /** Install-wide destinations, offered to an install admin alone (M0-10). */
   readonly installAdminOnly?: boolean;
-  /**
-   * True while this destination is still the "arrives with milestone N" page.
-   * The router builds the placeholder routes from this, so a screen that
-   * becomes real is declared in one place — a hand-kept exclusion list would
-   * eventually register two routes on one path, which React Router resolves by
-   * ranking rather than by failing.
-   */
-  readonly placeholder?: boolean;
 }
 
 const item = (
@@ -66,7 +57,6 @@ const item = (
   visibility: {
     roles?: readonly StaffRole[];
     installAdminOnly?: boolean;
-    placeholder?: boolean;
   } = {},
 ): NavItem => ({
   key,
@@ -74,10 +64,8 @@ const item = (
   icon,
   labelKey: `admin:nav.${key}`,
   captionKey: `admin:pages.caption.${key}`,
-  emptyKey: `admin:pages.empty.body.${key}`,
   ...(visibility.roles === undefined ? {} : { roles: visibility.roles }),
   ...(visibility.installAdminOnly === true ? { installAdminOnly: true } : {}),
-  ...(visibility.placeholder === true ? { placeholder: true } : {}),
 });
 
 export const NAV_BY_KEY: Record<NavKey, NavItem> = {
@@ -91,7 +79,7 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   reports: item('reports', ROUTES.reports, ChartColumn, {
     roles: ['admin', 'teamLeader', 'viewer'],
   }),
-  settings: item('settings', ROUTES.settings, Settings, { placeholder: true }),
+  settings: item('settings', ROUTES.settings, Settings, { installAdminOnly: true }),
   // The brand's own settings. Admin only: DOMAIN-RULES §1.2 keeps brand-wide
   // configuration, and §11 the retention windows, with the Admin.
   brand: item('brand', ROUTES.brand, Building2, { roles: ['admin'] }),

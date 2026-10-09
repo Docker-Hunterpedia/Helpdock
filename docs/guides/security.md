@@ -72,7 +72,7 @@ resolved address, every redirect hop checked again, loopback, private,
 link-local, CGNAT, multicast and cloud metadata ranges refused, and timeouts and
 size caps on every response. `OUTBOUND_ALLOW_CIDRS` is the one way to let it
 reach an internal range, and only the ranges it names
-([configuration](configuration.md#outbound_allow_cidrs)). A Semgrep rule fails
+([configuration](configuration.md#outbound_allow_cidrs)). One call is not made through it: chat completions go through the model vendors' own clients, so a provider's base URL, like the embeddings and transcription URLs, is checked when an admin saves it (https, no private or metadata address unless allowed; [AI guide](ai.md#providers)). A Semgrep rule fails
 CI on a `fetch` of a non-constant URL outside `packages/net`
 ([security scanning](security-scanning.md#semgrep)).
 

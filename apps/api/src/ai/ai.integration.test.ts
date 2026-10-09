@@ -35,6 +35,7 @@ import {
   withSystem,
 } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
+import type { LookupFunction } from '@helpdock/net';
 import type {
   AiCallView,
   AiProvidersOverview,
@@ -116,6 +117,13 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
   let ticketId: string;
   let fake: FakeModel;
   const discovery = fakeEmbeddingsServer(4, ['qwen3:8b']);
+  /** `ollama` resolves into the allowed range; everything else is not found, as offline. */
+  const lookup: LookupFunction = async (hostname) => {
+    if (hostname === 'ollama') {
+      return [{ address: '172.18.0.5', family: 4 }];
+    }
+    throw Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' });
+  };
 
   const envFor = (): Env =>
     ({
@@ -142,7 +150,8 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       FFPROBE_PATH: 'ffprobe',
       CLAMAV_PORT: 3310,
       ADMIN_DIST_DIR: '/nonexistent',
-      OUTBOUND_ALLOW_CIDRS: [],
+      // Where the local Ollama of the provider tests lives (Compose's default range).
+      OUTBOUND_ALLOW_CIDRS: ['172.16.0.0/12'],
     }) as Env;
 
   const db = (): Db => runtime.db;
@@ -231,7 +240,7 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       logger: createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' } }),
     });
     installOwner = createDb({ url: envFor().DATABASE_MIGRATION_URL ?? '', max: 1 });
-    app = await createApiApp({ runtime, ai: { http: discovery.http } });
+    app = await createApiApp({ runtime, ai: { http: discovery.http, lookup } });
     await app.listen({ port: 0, host: '127.0.0.1' });
 
     const seeded = await seedDevInstall({ db: db(), env: envFor() });
@@ -387,6 +396,61 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
 
       expect(builtIn.body.models.map((model) => model.id)).toContain('gpt-4o-mini');
       expect(local.body.models.map((model) => model.id)).toEqual(['qwen3:8b']);
+    });
+
+    it('refuses a model endpoint over plain http or at a private address, for a provider, embeddings and transcription (ASVS 12.6.1, 9.2.2)', async () => {
+      const provider = (baseUrl: string) =>
+        call<ErrorResponse>('PUT', '/api/install/ai/providers/remote', adminToken, {
+          kind: 'openai-compatible',
+          label: 'Remote',
+          baseUrl,
+          auth: { type: 'none' },
+        });
+      const embedding = (baseUrl: string) =>
+        call<ErrorResponse>('PUT', '/api/install/ai/embedding', adminToken, {
+          provider: 'openai',
+          baseUrl,
+          model: 'fake-embedding',
+          dims: 3,
+          pricePerMillionTokens: 0.02,
+          confirmReembed: true,
+        });
+      const transcription = (endpoint: string) =>
+        call<ErrorResponse>('PUT', '/api/install/ai/transcription', adminToken, {
+          endpoint,
+          model: 'whisper-1',
+        });
+
+      const responses = await Promise.all([
+        provider('http://llm.example.com/v1'),
+        embedding('http://embeddings.example.com/v1'),
+        transcription('http://whisper.example.com/v1/audio/transcriptions'),
+        provider('https://169.254.169.254/v1'),
+        embedding('https://10.0.0.5/v1'),
+        transcription('https://192.168.1.9/v1/audio/transcriptions'),
+      ]);
+
+      expect(responses.map((response) => response.status)).toEqual([400, 400, 400, 400, 400, 400]);
+      expect(responses.map((response) => response.body.error.ai?.reason)).toEqual([
+        'https-required',
+        'https-required',
+        'https-required',
+        'destination-blocked',
+        'destination-blocked',
+        'destination-blocked',
+      ]);
+      const stored = await call<AiProvidersOverview>(
+        'GET',
+        '/api/install/ai/providers',
+        adminToken,
+      );
+      expect(stored.body.providers.map((candidate) => candidate.id)).not.toContain('remote');
+      const transcriptionNow = await call<TranscriptionSettingsView>(
+        'GET',
+        '/api/install/ai/transcription',
+        adminToken,
+      );
+      expect(transcriptionNow.body.endpoint).toBe('');
     });
 
     it('sets the default model, refusing one the provider does not offer', async () => {

@@ -1,6 +1,7 @@
 import type { SettingKey, Settings } from '@helpdock/config';
 import { auditLog, type DbTransaction, INSTALL_SCOPE_BRAND_ID } from '@helpdock/db';
 import type { TranscriptionSettingsUpdate, TranscriptionSettingsView } from '@helpdock/schemas';
+import type { AiDestinationCheck } from './ai-destination.js';
 import { AiFailure } from './ai-failure.js';
 
 /**
@@ -21,9 +22,11 @@ type TranscriptionKey = (typeof TRANSCRIPTION_KEYS)[number];
 
 export class TranscriptionSettingsService {
   readonly #settings: Settings;
+  readonly #checkDestination: AiDestinationCheck;
 
-  constructor(settings: Settings) {
+  constructor(settings: Settings, checkDestination: AiDestinationCheck) {
     this.#settings = settings;
+    this.#checkDestination = checkDestination;
   }
 
   async view(): Promise<TranscriptionSettingsView> {
@@ -60,6 +63,9 @@ export class TranscriptionSettingsService {
     }
     if (changed.some(([key]) => this.#settings.isLockedByEnv(key))) {
       throw new AiFailure('locked-by-environment');
+    }
+    if (body.endpoint !== '' && changed.some(([key]) => key === 'transcription.endpoint')) {
+      await this.#checkDestination(body.endpoint);
     }
     for (const [key, value] of changed) {
       // The registry's schema for each key validates the value again in `set`.

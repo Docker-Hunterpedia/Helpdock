@@ -1,5 +1,14 @@
 import type { Page } from '@playwright/test';
-import { expect, LOCALES, type Locale, openWidget, server, strings, test } from './fixtures.js';
+import {
+  expect,
+  LOCALES,
+  type Locale,
+  openWidget,
+  server,
+  startClockBeforeOpening,
+  strings,
+  test,
+} from './fixtures.js';
 
 /**
  * Zoom and reflow on the widget (M9-04; WCAG 1.4.4 Resize Text, 1.4.10
@@ -142,6 +151,7 @@ for (const locale of LOCALES) {
       const found: string[] = [];
       const check = audit(page, found);
 
+      await startClockBeforeOpening(page);
       await openWidget(page, locale, 'availability=closed');
       await expect(page.getByText(t('hours.closedTitle'))).toBeVisible();
       await check('out of hours strip');

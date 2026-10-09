@@ -92,6 +92,22 @@ export async function openWidget(page: Page, locale: Locale, query = ''): Promis
   await expect(page.locator('helpdock-widget .hd-content :focus')).toHaveCount(1);
 }
 
+/**
+ * Starts the page's clock on the Friday evening before the opening of the
+ * mock's `availability=closed`, which is 27 September 2026 (M7-06): an opening
+ * already past counts as open, so on any later day the strip, the header
+ * caption and the handoff line would all say the team is back. Call it before
+ * {@link openWidget}.
+ *
+ * The clock keeps running from there rather than standing still
+ * (`setFixedTime`): a send is retried for ten seconds by `Date.now()`, so
+ * under a frozen clock a send that keeps failing is retried for ever and
+ * never shows "not sent, Retry".
+ */
+export async function startClockBeforeOpening(page: Page): Promise<void> {
+  await page.clock.install({ time: new Date('2026-09-25T17:40:00Z') });
+}
+
 /** Runs a script against the mock transport the harness exposes as `window.helpdock`. */
 export async function server(page: Page, script: string): Promise<void> {
   await page.evaluate(`(() => { const { mock, agent } = window.helpdock; ${script} })()`);

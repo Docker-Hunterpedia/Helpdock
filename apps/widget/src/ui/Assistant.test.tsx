@@ -124,6 +124,24 @@ describe('the assistant in the thread (M7-06, Widget/AI-EN board 1)', () => {
     expect(screen.getByRole('link', { name: 'المصدر 1، مدة استرداد المبالغ' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'التحدث مع موظف' })).toBeTruthy();
   });
+
+  it('sets the email apart in the ordinary handoff line of an Arabic window', async () => {
+    const { mock } = await started('ar');
+    await answer(mock, 'ar');
+
+    fireEvent.click(screen.getByRole('button', { name: 'التحدث مع موظف' }));
+
+    const line = await waitFor(() => {
+      const found = screen.getByRole('log').querySelector('li.hd-handoff');
+      if (found === null) {
+        throw new Error('no handoff line in the log');
+      }
+      return found;
+    });
+    expect([...line.querySelectorAll('bdi')].map((isolate) => isolate.textContent)).toEqual([
+      'omar.k@example.com',
+    ]);
+  });
 });
 
 describe('the handoff line out of hours (M7-06, Widget/AI-EN panel 6)', () => {

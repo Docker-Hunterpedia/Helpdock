@@ -1,6 +1,7 @@
 import { initials, nextOpening } from '../format.js';
 import type { Translate } from '../i18n/translator.js';
 import type { WidgetState } from '../state/controller.js';
+import { closedUntil, teamHours } from '../state/hours.js';
 import type { ArticleSummary, WidgetLocale } from '../transport/types.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
@@ -45,8 +46,10 @@ export function headerContent(
   if (conversation?.status === 'queued' && availability?.state === 'online') {
     return { title: team, caption: t('header.caption.queued'), avatar: brandAvatar };
   }
-  if (availability?.state === 'closed' && availability.next_open_at) {
-    const { day, time } = nextOpening(availability.next_open_at, availability.timezone, locale);
+  // The hours of the team that answers: the same ones the handoff line reads (M7-06).
+  const closure = closedUntil(teamHours(conversation, availability), new Date());
+  if (closure?.next_open_at) {
+    const { day, time } = nextOpening(closure.next_open_at, closure.timezone, locale);
     return { title: team, caption: t('header.caption.closed', { day, time }), avatar: brandAvatar };
   }
   if (availability?.state === 'open_offline') {

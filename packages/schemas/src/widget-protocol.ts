@@ -160,6 +160,17 @@ export const widgetAvailabilitySchema = z.object({
 });
 export type WidgetAvailability = z.infer<typeof widgetAvailabilitySchema>;
 
+/**
+ * M7-06: the hours of the team answering a conversation — its department's,
+ * else the brand's (DOMAIN-RULES §3.1) — judged when the view was built.
+ */
+export const widgetConversationHoursSchema = widgetAvailabilitySchema.pick({
+  open: true,
+  nextOpenAt: true,
+  timezone: true,
+});
+export type WidgetConversationHours = z.infer<typeof widgetConversationHoursSchema>;
+
 export const widgetLocaleSchema = z.enum(['en', 'ar']);
 export type WidgetLocale = z.infer<typeof widgetLocaleSchema>;
 
@@ -405,6 +416,12 @@ export const widgetConversationSchema = z.object({
    * clients built before M7.
    */
   aiHandedOff: z.boolean().optional(),
+  /**
+   * M7-06: the hours of the team answering this conversation, judged when the
+   * view was built; `nextOpenAt` is null while open and for a calendar that
+   * never opens. Optional for clients built before this change.
+   */
+  hours: widgetConversationHoursSchema.optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -712,6 +729,8 @@ export const widgetConversationEventSchema = z.object({
   continuedById: z.uuid().nullable(),
   /** M7-06: as on {@link widgetConversationSchema}. */
   aiHandedOff: z.boolean().optional(),
+  /** M7-06: as on {@link widgetConversationSchema}. */
+  hours: widgetConversationHoursSchema.optional(),
 });
 export type WidgetConversationEvent = z.infer<typeof widgetConversationEventSchema>;
 

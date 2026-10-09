@@ -311,7 +311,7 @@ the one-hour target.
 
 ## Gaps carried from earlier milestones
 
-Closed in #147, each with unit and integration tests and its guide updated:
+Closed, each with unit and integration tests and its guide updated (the last row after #147):
 
 | Gap | From | Now |
 |---|---|---|
@@ -320,6 +320,7 @@ Closed in #147, each with unit and integration tests and its guide updated:
 | `agents_online` was always empty against a real api | M4 | Availability and the `presence` frame carry `agents` (first names, up to five, empty when the brand hides agents); `apps/widget/src/transport/map.ts` maps them |
 | Socket events were not rate-limited | M0 | `room:join` 120, `presence:set` 30, `presence:heartbeat` 60 per person per minute in Redis; over budget answers `rate_limited` |
 | Revocation was per person, not per browser | M0 | `principal.revoked` carries `familyIds`; only those browsers' sockets close |
+| The widget's out-of-hours handoff line was the ordinary one | M7 | A conversation and its `conversation` frame carry `hours` (its department's calendar, else the brand's); after a handoff the line takes the `moon` and says when the team opens in its zone and that the message is saved (`Widget/AI-EN`, `-AR` panel 6). The header and strip read the same hours; `widget.js` is 30.27 KB gzipped |
 
 ## Pull requests
 

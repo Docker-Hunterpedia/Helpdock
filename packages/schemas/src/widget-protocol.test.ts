@@ -6,6 +6,9 @@ import {
   WIDGET_EVENT_PAYLOADS,
   WIDGET_EVENTS,
   widgetConfigQuerySchema,
+  widgetConversationEventSchema,
+  widgetConversationHoursSchema,
+  widgetConversationSchema,
   widgetCsatRequestSchema,
   widgetMessagesQuerySchema,
   widgetPrechatAnswersSchema,
@@ -81,6 +84,52 @@ describe('WIDGET_EVENT_PAYLOADS', () => {
         WIDGET_EVENTS.csat,
       ].sort(),
     );
+  });
+});
+
+describe('hours on a conversation (M7-06)', () => {
+  const id = '0192c3f0-1a2b-7c3d-8e4f-0000000000aa';
+  const stamp = '2026-09-25T17:40:00.000Z';
+  const conversation = {
+    id,
+    reference: 'HD-1042',
+    subject: 'Refund',
+    state: 'open' as const,
+    channel: 'chat' as const,
+    lastSeq: 3,
+    continuedById: null,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+  const hours = { open: false, nextOpenAt: '2026-09-27T05:00:00.000Z', timezone: 'Asia/Dubai' };
+
+  it('accepts the hours on the conversation and on the conversation frame', () => {
+    expect(widgetConversationSchema.parse({ ...conversation, hours }).hours).toEqual(hours);
+    expect(
+      widgetConversationEventSchema.parse({
+        conversationId: id,
+        state: 'open',
+        continuedById: null,
+        hours,
+      }).hours,
+    ).toEqual(hours);
+  });
+
+  it('accepts their absence, so a client built before this change still parses', () => {
+    expect(widgetConversationSchema.parse(conversation).hours).toBeUndefined();
+    expect(
+      widgetConversationEventSchema.parse({
+        conversationId: id,
+        state: 'open',
+        continuedById: null,
+      }).hours,
+    ).toBeUndefined();
+  });
+
+  it('keeps a null opening, which is how a calendar that never opens is sent', () => {
+    expect(
+      widgetConversationHoursSchema.parse({ ...hours, nextOpenAt: null }).nextOpenAt,
+    ).toBeNull();
   });
 });
 

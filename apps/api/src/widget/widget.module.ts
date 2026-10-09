@@ -154,6 +154,7 @@ export class WidgetModule {
     const tickets = new TicketRepository();
     const lifecycleReads = new TicketLifecycleRepository();
     const slaRepository = new SlaRepository();
+    const businessHours = new BusinessHoursService(slaRepository, new SlaService(slaRepository));
     const media = new MediaRepository();
     const captchaKeys = new DbCaptchaKeys(db, keyring);
     const captcha = new CaptchaVerifier(
@@ -203,7 +204,7 @@ export class WidgetModule {
           useFactory: (gate: WidgetGate, presence: PresenceService, feedback: HelpCenterFeedback) =>
             new WidgetConfigService({
               gate,
-              businessHours: new BusinessHoursService(slaRepository, new SlaService(slaRepository)),
+              businessHours,
               online: new OnlineAgents({
                 db,
                 presence,
@@ -244,6 +245,7 @@ export class WidgetModule {
               assignment: new AssignmentRepository(),
               media,
               captcha,
+              businessHours,
             }),
         },
         {

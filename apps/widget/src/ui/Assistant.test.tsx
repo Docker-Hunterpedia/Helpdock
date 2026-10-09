@@ -58,7 +58,9 @@ describe('the assistant in the thread (M7-06, Widget/AI-EN board 1)', () => {
 
     fireEvent.click(within(group).getByRole('button', { name: 'Yes, helpful' }));
 
-    expect(screen.getByRole('status').textContent).toContain('Thanks, that helps us improve.');
+    expect(screen.getByText('Thanks, that helps us improve.')).toBeTruthy();
+    // The thread's log announces it; a status of its own inside the log would be read twice.
+    expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByRole('group', { name: 'Was this helpful?' })).toBeNull();
     expect(mock.calls.find((call) => call.method === 'sendFeedback')?.args).toEqual([
       'conversation-1',

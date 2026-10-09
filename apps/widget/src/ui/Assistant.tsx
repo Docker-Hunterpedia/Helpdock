@@ -115,7 +115,8 @@ function Feedback({ message, ai }: { message: WidgetMessage; ai: AiPart }) {
   const { controller, t } = useWidget();
   if (ai.feedback !== null) {
     return (
-      <div class="hd-ai-thanks" role="status">
+      // No role of its own: the thread's log announces what is added to it, and a status inside a log is read twice.
+      <div class="hd-ai-thanks">
         <Icon name="circleCheck" size={16} />
         {t('ai.thanks')}
       </div>

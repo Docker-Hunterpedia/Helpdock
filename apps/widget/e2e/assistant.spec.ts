@@ -38,7 +38,7 @@ for (const locale of LOCALES) {
       const helpful = log.getByRole('button', { name: t('ai.yes') });
       await helpful.focus();
       await page.keyboard.press('Enter');
-      await expect(log.getByRole('status')).toHaveText(t('ai.thanks'));
+      await expect(log.getByText(t('ai.thanks'))).toBeVisible();
 
       await talk.focus();
       await page.keyboard.press('Enter');

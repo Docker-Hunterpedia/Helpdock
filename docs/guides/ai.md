@@ -718,7 +718,10 @@ Public/Internal, and an **AI log** disclosure (model, tokens, cost, redactions,
 confidence against the threshold, sources retrieved and cited); a pause or a
 resume is a System event; while paused, the **Assistant paused** strip above
 the composer offers **Return to assistant**; and the details panel's **AI on
-this ticket** totals its calls, tokens and cost.
+this ticket** totals its calls, tokens and cost. In the ticket list the same
+conversation's row ends its caption line with **AI paused** while it is handed
+off, or **AI answered** once the assistant has taken part and is not paused;
+rows of conversations the assistant never took part in say nothing.
 
 The first-run wizard has an optional **AI provider** step after Outgoing
 email: choose a provider, paste an API key (or subscription credentials),
@@ -816,6 +819,9 @@ real calls.
   nightly evaluation needs the `AI_EVAL_API_KEY` secret, which is an external
   dependency of the milestone.
 - Assist answers arrive whole; streaming them into the card is not built.
+- The ticket list's **AI answered** means the assistant took part and is not
+  paused. A conversation handed off before the assistant ever answered, then
+  returned to it, reads that way until it answers or is paused again.
 - A transcription costs 0 in the log: there is no per-minute price setting.
 - A budget alert reaches the audit log and the settings response; an email or
   a bell entry for it waits for a design of its own (notifications are about a

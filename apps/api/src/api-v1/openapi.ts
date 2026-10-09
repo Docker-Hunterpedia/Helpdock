@@ -370,8 +370,15 @@ const operationObject = (operation: ApiOperation) => ({
   },
 });
 
+/**
+ * The version of the contract `/api/v1` speaks, which changes when the paths or
+ * shapes do. Not the release: the document is public, and a release number
+ * tells a stranger which known flaws this install may have (ASVS 14.3.3).
+ */
+export const API_V1_VERSION = '1';
+
 /** The whole document. Built once per process; it changes only with the code. */
-export const buildOpenApiDocument = (version: string) => {
+export const buildOpenApiDocument = () => {
   const paths: Record<string, Record<string, unknown>> = {};
   for (const operation of API_OPERATIONS) {
     paths[operation.path] = {
@@ -385,7 +392,7 @@ export const buildOpenApiDocument = (version: string) => {
     jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
     info: {
       title: 'Helpdock API',
-      version,
+      version: API_V1_VERSION,
       description: `Tickets, contacts, help center articles and webhooks for one brand. Authenticate with \`Authorization: Bearer hd_live_…\`; the ${IDEMPOTENCY_KEY_HEADER} header makes a POST safe to retry.`,
       license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
     },

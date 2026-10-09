@@ -9,7 +9,7 @@ Tickets, contacts, help center articles and webhook endpoints of one brand, for 
 | `<APP_URL>/api/docs` | Every operation, its scope and what it does, as a page |
 | `<APP_URL>/api/docs/openapi.json` | The OpenAPI 3.1 document, for a client generator or a viewer of your choice |
 
-Both are public: they describe the routes, nothing of any brand's data. The document is generated from the same Zod schemas the routes validate with, so it is always the running version's.
+Both are public: they describe the routes, nothing of any brand's data. The document is generated from the same Zod schemas the routes validate with, so it always describes the running code. Its `info.version` (and the page's title) is the version of the API contract, `1`, not the release of the install: both are public, and a release number would tell a stranger which known flaws to try.
 
 ## API keys
 

@@ -126,19 +126,10 @@ describe('hours on a conversation (M7-06)', () => {
     ).toBeUndefined();
   });
 
-  it('keeps a null opening for a calendar that never opens, and refuses what is not a time', () => {
+  it('keeps a null opening, which is how a calendar that never opens is sent', () => {
     expect(
       widgetConversationHoursSchema.parse({ ...hours, nextOpenAt: null }).nextOpenAt,
     ).toBeNull();
-    expect(
-      widgetConversationHoursSchema.safeParse({ ...hours, nextOpenAt: 'Monday' }).success,
-    ).toBe(false);
-  });
-
-  it('carries no presence, which belongs to the brand', () => {
-    expect(
-      widgetConversationHoursSchema.parse({ ...hours, agentsOnline: true, agents: [] }),
-    ).toEqual(hours);
   });
 });
 

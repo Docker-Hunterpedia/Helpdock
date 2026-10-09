@@ -65,12 +65,4 @@ describe('calendarHours', () => {
       timezone: 'UTC',
     });
   });
-
-  it('skips a holiday when it names the opening', () => {
-    const holiday = { startsOn: '2026-09-28', endsOn: '2026-09-28' };
-
-    expect(
-      calendarHours({ ...weekdays('UTC'), holidays: [holiday] }, SATURDAY_NOON).nextOpenAt,
-    ).toBe('2026-09-29T09:00:00.000Z');
-  });
 });

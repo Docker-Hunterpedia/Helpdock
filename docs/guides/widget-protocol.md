@@ -245,6 +245,11 @@ brand turned off **Show the agent's name and photo**: `agentsOnline` still says
 whether anybody is there. It never carries a staff id or a surname. Staff have
 no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
 
+`availability` is the brand's own calendar, read once when the widget loads.
+The hours of the team that answers a conversation, which can be its
+department's, come with the conversation as
+[`hours`](#the-teams-hours).
+
 ## Conversations
 
 | Method and path | Body / query | Response |
@@ -263,6 +268,33 @@ no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
 
 The conversation list holds what this visitor may see: the conversations they
 started, plus any their verified contact may see.
+
+### The team's hours
+
+A conversation (`widgetConversationSchema`), and the `conversation` frame,
+carry `hours` (M7-06): whether the team that answers it is open, and when it
+next opens.
+
+```json
+{ "open": false, "nextOpenAt": "2026-09-27T06:00:00.000Z", "timezone": "Asia/Riyadh" }
+```
+
+- It is the calendar of the conversation's department, else the brand's,
+  with the holidays that apply (DOMAIN-RULES §3.1): the one business-hours SLA
+  clocks and the out-of-hours unassign count in. `GET /availability` describes the
+  brand's alone, and a routing rule can file a conversation in a department
+  with other days or another zone.
+- The api judges it when it builds the response, so the answer to
+  `POST …/handoff` is true at the moment the button was pressed, and the
+  frame is true when the worker sent it. The bundled widget compares
+  `nextOpenAt` with its own clock and counts an opening already past as open.
+- `nextOpenAt` is `null` while open, and for a calendar that never opens:
+  every day closed, or no opening within ten years. 24/7 hours (every day
+  `00:00–24:00`) are `open: true`.
+- It says nothing about who is online; that is `agentsOnline`.
+- It is optional for clients built before this field, and a server before it
+  sends none. The bundled widget then falls back to the brand's
+  `availability`, and with neither it words nothing about hours.
 
 ### Starting
 
@@ -395,6 +427,16 @@ messages arrive like any other, as `message` frames and in the catch-up, with
   response is the conversation with `aiHandedOff: true`. Pressing it again
   changes nothing. Typing "talk to a human" (or the Arabic) does the same on
   the server.
+- After a handoff, word the handoff line from [`hours`](#the-teams-hours),
+  which the `POST …/handoff` response and the `conversation` frames carry.
+  While `hours.open` is false and no person has replied since, the bundled
+  widget draws "The team is away until Monday at 09:00 (Arabian Standard
+  Time)" and "Your message is saved. A person will reply here when the team is
+  back." in place of the ordinary "Connecting you with the team…" line. The
+  day is "today", "tomorrow", the weekday within six days or else the date,
+  counted in the team's zone, and a `nextOpenAt` of `null` reads "The team is
+  away right now". At the opening, or once a person has replied, the ordinary
+  line returns.
 - `aiHandedOff` on the conversation, and on `conversation` frames, says the
   assistant has stepped back: by its own handoff, the visitor's request, or a
   person replying or taking the conversation. Offer "Talk to a human" only
@@ -543,7 +585,7 @@ on `message` events and `null` on all others.
 | `typing` | `{ conversationId, typing, agentName }` |
 | `presence` | `{ agentsOnline, agents }`, as in [`GET /availability`](#configuration) |
 | `queue` | `{ conversationId, position }` |
-| `conversation` | `{ conversationId, state: "open" \| "closed", continuedById }` |
+| `conversation` | `{ conversationId, state: "open" \| "closed", continuedById, aiHandedOff, hours }`; the schema makes `aiHandedOff` and `hours` optional so a client built before them still parses, and the api always sends both |
 | `csat` | `widgetCsatSchema`: the [satisfaction card](#satisfaction-card) appeared or changed |
 
 On a `message` event:

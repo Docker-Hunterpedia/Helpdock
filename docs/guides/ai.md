@@ -590,6 +590,20 @@ It stops without a message of its own when the customer asks for a person
 to someone", "أريد موظفاً", "أريد التحدث مع موظف"), and when a staff member
 replies in public or assigns the ticket.
 
+**Out of hours, in the widget.** When the team that answers the conversation is
+closed at the moment of the handoff, the handoff line itself changes: it takes
+a moon and says "The team is away until Monday at 09:00 (Arabian Standard
+Time)", then "Your message is saved. A person will reply here and at
+omar.k@example.com when the team is back." (without the address when the
+visitor gave none). The team is the conversation's department, else the brand,
+by the calendar of [Ticketing › Business hours](slas.md#business-hours) (Monday to Friday 09:00–17:00
+in the brand's zone until hours are saved; 24/7 hours are never closed), and
+the time is in that team's zone. The day reads "today", "tomorrow", the
+weekday within six days, or else the date. A calendar that never opens reads
+"The team is away right now". At the opening, or once a person has replied,
+the widget goes back to "Connecting you with the team…". Telegram and email
+visitors get no such message.
+
 Every one of these sets `tickets.ai_paused_at` (with the reason) for the rest
 of the conversation. Every job reads it twice: before it asks the model, and
 again under the ticket's row lock immediately before it sends — the lock a

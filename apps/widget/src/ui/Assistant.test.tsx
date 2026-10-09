@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assistantAnswering } from '../state/thread.js';
-import { renderWidget } from '../test/render.js';
+import { renderWidget, withIsolates } from '../test/render.js';
 import { LINA, SAMPLE_AI_ANSWER, SAMPLE_AI_HANDOFF } from '../transport/fixtures.js';
 import type { MockOptions } from '../transport/mock.js';
 import type { WidgetMessage } from '../transport/types.js';
@@ -62,7 +62,9 @@ describe('the assistant in the thread (M7-06, Widget/AI-EN board 1)', () => {
 
     fireEvent.click(within(group).getByRole('button', { name: 'Yes, helpful' }));
 
-    expect(screen.getByRole('status').textContent).toContain('Thanks, that helps us improve.');
+    expect(screen.getByText('Thanks, that helps us improve.')).toBeTruthy();
+    // The thread's log announces it; a status of its own inside the log would be read twice.
+    expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByRole('group', { name: 'Was this helpful?' })).toBeNull();
     expect(mock.calls.find((call) => call.method === 'sendFeedback')?.args).toEqual([
       'conversation-1',
@@ -84,7 +86,7 @@ describe('the assistant in the thread (M7-06, Widget/AI-EN board 1)', () => {
     const log = screen.getByRole('log', { name: 'Messages' });
     expect(within(log).getByText('Connecting you with the team…')).toBeTruthy();
     expect(
-      within(log).getByText(/A person will reply here and at omar\.k@example\.com\./),
+      within(log).getByText(withIsolates(/A person will reply here and at omar\.k@example\.com\./)),
     ).toBeTruthy();
     expect(mock.calls.some((call) => call.method === 'handOff')).toBe(true);
   });

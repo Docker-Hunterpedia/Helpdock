@@ -2,7 +2,7 @@ import { HC_FEEDBACK_COMMENT_MAX, type HcLocale } from '@helpdock/schemas';
 import { FEEDBACK_TARGET, type FeedbackStep } from '../feedback-step.js';
 import { icon } from './icons.js';
 import type { NavLink } from './layout.js';
-import { esc, inLanguage, type Translate } from './text.js';
+import { esc, inLanguage, otherLanguage, type Translate } from './text.js';
 
 /**
  * The `<main>` of each help center page (M5-03; `HelpCenter/Home-EN|AR`,
@@ -308,8 +308,7 @@ ${feedbackButtons(t, 'no')}
 
 export const articleMain = (view: ArticleView): string => {
   const { t } = view;
-  const textDir = view.lang === 'ar' ? 'rtl' : 'ltr';
-  const langAttributes = view.lang === view.locale ? '' : ` lang="${view.lang}" dir="${textDir}"`;
+  const langAttributes = otherLanguage(view.lang, view.locale);
   const note =
     view.fallback === null
       ? ''
@@ -429,7 +428,7 @@ ${helpBanner(view.help, view, 'help.searchBody')}
   const rows = view.results
     .map(
       (result) =>
-        `<li><div class="hd-trail">${result.trail.map((part) => esc(part)).join(icon('chevron', 14, true))}</div><h2${result.lang === view.locale ? '' : ` lang="${result.lang}"`}><a href="${esc(result.href)}">${result.titleHtml}</a></h2><p${result.lang === view.locale ? '' : ` lang="${result.lang}"`}>${result.snippetHtml}</p></li>`,
+        `<li><div class="hd-trail">${result.trail.map((part) => esc(part)).join(icon('chevron', 14, true))}</div><h2${otherLanguage(result.lang, view.locale)}><a href="${esc(result.href)}">${result.titleHtml}</a></h2><p${otherLanguage(result.lang, view.locale)}>${result.snippetHtml}</p></li>`,
     )
     .join('');
   const filters =

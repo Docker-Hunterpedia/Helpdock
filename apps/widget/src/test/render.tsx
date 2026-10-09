@@ -29,3 +29,17 @@ export async function renderWidget(
   );
   return { ...view, mock, controller, t: translatorFor(locale) };
 }
+
+/**
+ * A `getByText` matcher for a sentence with `<bdi>` isolates in it (`Sentence`):
+ * the element's own text, the isolates' text included, is `expected`.
+ */
+export const withIsolates =
+  (expected: string | RegExp) =>
+  (_content: string, element: Element | null): boolean => {
+    const own = [...(element?.childNodes ?? [])]
+      .filter((node) => node.nodeType === Node.TEXT_NODE || (node as Element).tagName === 'BDI')
+      .map((node) => node.textContent)
+      .join('');
+    return typeof expected === 'string' ? own === expected : expected.test(own);
+  };

@@ -389,6 +389,41 @@ describe('HelpCenterSite search', () => {
   });
 });
 
+describe('HelpCenterSite search results in the other language (M9-04, WCAG 3.1.2)', () => {
+  const hit = (locale: 'en' | 'ar', title: string) => ({
+    articleId: articleId(1),
+    slug: 'refund-timelines',
+    locale,
+    title,
+    snippet: `${title}؟`,
+    sectionTitle: 'Refunds',
+  });
+
+  it.each([
+    ['ar', 'en', 'Where is my order?', 'lang="en" dir="ltr"'],
+    ['en', 'ar', 'أين طلبي؟', 'lang="ar" dir="rtl"'],
+  ] as const)(
+    'gives a %2$s result on a %1$s page its language and its own direction',
+    async (page, language, title, attributes) => {
+      const { site } = setup({ hits: [hit(language, title)] });
+      const response = await site.handle(
+        request(`${BASE}/${page}/search`, { query: { q: 'order' } }),
+      );
+
+      expect(response.body).toContain(`<h2 ${attributes}><a href=`);
+      expect(response.body).toContain(`<p ${attributes}>`);
+    },
+  );
+
+  it('leaves a result in the page language without either attribute', async () => {
+    const { site } = setup({ hits: [hit('ar', 'أين طلبي؟')] });
+    const response = await site.handle(request(`${BASE}/ar/search`, { query: { q: 'طلب' } }));
+
+    expect(response.body).toContain('<h2><a href=');
+    expect(response.body).toContain('<p>');
+  });
+});
+
 describe('HelpCenterSite forms and staff', () => {
   it('names the search a view came from, and counts none for staff', async () => {
     const { site, feedback } = setup();

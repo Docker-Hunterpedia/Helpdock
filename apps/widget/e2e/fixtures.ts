@@ -97,6 +97,76 @@ export async function server(page: Page, script: string): Promise<void> {
   await page.evaluate(`(() => { const { mock, agent } = window.helpdock; ${script} })()`);
 }
 
+export interface Stop {
+  readonly name: string;
+  readonly ring: boolean;
+}
+
+/**
+ * Presses Tab `count` times and reads, after each press, the accessible name
+ * of what has focus inside the widget (or "(page)" when focus left it) and
+ * whether a focus indicator is drawn: its own outline, or the outline of the
+ * field around it (`.hd-search-field:focus-within`).
+ */
+export async function tabStops(page: Page, count: number, shift = false): Promise<Stop[]> {
+  const stops: Stop[] = [];
+  for (let index = 0; index < count; index += 1) {
+    await page.keyboard.press(shift ? 'Shift+Tab' : 'Tab');
+    stops.push(
+      await page.evaluate(() => {
+        const active = document.querySelector('helpdock-widget')?.shadowRoot?.activeElement;
+        if (!(active instanceof HTMLElement)) {
+          return { name: '(page)', ring: false };
+        }
+        const drawn = (element: Element | null) => {
+          if (element === null) {
+            return false;
+          }
+          const style = getComputedStyle(element);
+          return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) >= 2;
+        };
+        const labelled = active.getAttribute('aria-labelledby');
+        const name =
+          active.getAttribute('aria-label') ??
+          (labelled
+            ? (active.getRootNode() as ShadowRoot).getElementById(labelled)?.textContent
+            : null) ??
+          (active.id
+            ? (active.getRootNode() as ShadowRoot).querySelector(`label[for="${active.id}"]`)
+                ?.textContent
+            : null) ??
+          active.textContent ??
+          '';
+        return { name: name.trim(), ring: drawn(active) || drawn(active.parentElement) };
+      }),
+    );
+  }
+  return stops;
+}
+
+/**
+ * Tabs once all the way round what is tabbable in the widget, launcher
+ * included: one press more than there are tabbable elements, plus one for the
+ * page the focus passes through. `stops` lists what had focus after each press.
+ */
+export async function tabCycle(page: Page): Promise<{ stops: Stop[]; tabbable: number }> {
+  const tabbable = await page.evaluate(() => {
+    const root = document.querySelector('helpdock-widget')?.shadowRoot;
+    return [
+      ...(root?.querySelectorAll<HTMLElement>(
+        'button, a[href], input, textarea, select, [tabindex]',
+      ) ?? []),
+    ].filter(
+      (element) =>
+        element.tabIndex >= 0 &&
+        !element.matches(':disabled') &&
+        element.getClientRects().length > 0 &&
+        getComputedStyle(element).visibility !== 'hidden',
+    ).length;
+  });
+  return { stops: await tabStops(page, tabbable + 2), tabbable };
+}
+
 /** Transitions off: a panel caught mid-fade reads as low contrast to axe (as in the admin suite). */
 export const test = base.extend({});
 test.use({ reducedMotion: 'reduce' });

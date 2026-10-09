@@ -24,9 +24,11 @@ The page calls these endpoints, which an Admin's own scripts may call too:
 
 | Request | What it does |
 |---|---|
-| `GET /api/brands/{brandId}/api-keys` | The brand's keys: name, the first 12 characters, scopes, rate limit, created and by whom (`createdByName`), last used, revoked and by whom (`revokedByName`) |
-| `POST /api/brands/{brandId}/api-keys` | `{ "name", "scopes": [...], "rateLimitPerMinute"? }`. The answer carries `key` — **the only time it is ever shown** |
+| `GET /api/brands/{brandId}/api-keys` | The brand's keys: name, the first 12 characters, scopes, rate limit, created and by whom (`createdByName`), last used, `expiresAt`, revoked and by whom (`revokedByName`) |
+| `POST /api/brands/{brandId}/api-keys` | `{ "name", "scopes": [...], "rateLimitPerMinute"?, "expiresAt"? }`. The answer carries `key` — **the only time it is ever shown** |
 | `DELETE /api/brands/{brandId}/api-keys/{keyId}` | Revokes the key. Final: a key that should work again is a new key |
+
+**Expiry (API only for now).** `expiresAt` is an ISO 8601 date and time (`2027-01-01T00:00:00Z`, or with an offset). It must be in the future (`400` otherwise), and leaving it out makes a key that never expires, as before. From that moment the key is refused with `401`, the same answer as a revoked one, and the refusal is logged and audited with `reason: "expired"` ([what a refused key leaves](#authentication-and-limits)). The date cannot be changed afterwards: a longer life is a new key. The expiry is stored and returned by the API, but the **Create API key** dialog (artboard `Admin/Developers-ApiKeys`) draws no field for it and the table shows no column: adding them needs the artboard updated first. Until then, set it by calling the create endpoint yourself.
 
 A key is `hd_live_` followed by 43 characters. Helpdock stores its SHA-256 and its first 12 characters, never the key. Creating and revoking a key are written to the audit log with the prefix and the scopes. `lastUsedAt` is updated at most once a minute.
 
@@ -53,12 +55,12 @@ Authorization: Bearer hd_live_...
 
 | Answer | When |
 |---|---|
-| `401` | No key, an unknown key, or a revoked key |
+| `401` | No key, an unknown key, a revoked key, or one past its `expiresAt` |
 | `403` | The key does not hold the route's scope |
 | `404` | Nothing with that id in the key's brand |
 | `429` | The key made more requests in the last minute than its `rateLimitPerMinute` (600 unless set, at most 10 000) |
 
-**What a refused key leaves behind.** Every `401` for a key is logged as a warning, `API key refused`, with the key's first 12 characters (`keyPrefix`), the caller's address (`ip`, as Fastify resolves it under `TRUST_PROXY`) and a `reason`: `unknown` for a key Helpdock never issued, `revoked` for one it did. The key itself is never logged. A revoked key that is presented also writes an `api_key.refused` row to its brand's [audit log](audit-log.md#api-keys) (the prefix, the reason and the address), at most once a minute per key, so a script that keeps retrying a revoked key shows once, not a thousand times.
+**What a refused key leaves behind.** Every `401` for a key is logged as a warning, `API key refused`, with the key's first 12 characters (`keyPrefix`), the caller's address (`ip`, as Fastify resolves it under `TRUST_PROXY`) and a `reason`: `unknown` for a key Helpdock never issued, `revoked` or `expired` for one it did. The key itself is never logged. A revoked or expired key that is presented also writes an `api_key.refused` row to its brand's [audit log](audit-log.md#api-keys) (the prefix, the reason and the address), at most once a minute per key, so a script that keeps retrying a revoked key shows once, not a thousand times.
 
 Errors have the shape every Helpdock route answers with: `{ "error": { "code", "message", "requestId", "fields"? } }`.
 

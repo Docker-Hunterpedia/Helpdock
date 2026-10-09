@@ -1,19 +1,19 @@
 import { apiKeys, auditLog, type Db, systemContext, withTenant } from '@helpdock/db';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { withAllBrands } from '../tenant/all-brands.js';
 
 /**
  * What the resolver learns about a key it just refused (ASVS 7.2.1): whether it
- * is a key Helpdock issued and then ended, as opposed to one that never
- * existed, so the log can say which and the key's own brand can be told. The
- * lookup ignores the revoked flag on purpose; `ApiKeysRepository.findActiveByHash`
- * is the only way a key is accepted.
+ * is a key Helpdock issued and then ended (revoked, or past its expiry), as
+ * opposed to one that never existed, so the log can say which and the key's own
+ * brand can be told. The lookup ignores both on purpose;
+ * `ApiKeysRepository.findActiveByHash` is the only way a key is accepted.
  */
 
 export interface RefusedApiKey {
   readonly id: string;
   readonly brandId: string;
-  readonly reason: 'revoked';
+  readonly reason: 'revoked' | 'expired';
 }
 
 export interface RefusalFacts {
@@ -35,14 +35,21 @@ export class RefusedApiKeys {
   async find(keyHash: string): Promise<RefusedApiKey | undefined> {
     const [row] = await withAllBrands(this.#db, API_KEY_REFUSED_AUDIT_PRINCIPAL, (tx) =>
       tx
-        .select({ id: apiKeys.id, brandId: apiKeys.brandId, revokedAt: apiKeys.revokedAt })
+        .select({
+          id: apiKeys.id,
+          brandId: apiKeys.brandId,
+          revoked: sql<boolean>`${apiKeys.revokedAt} is not null`,
+          // The database's clock, the one `findActiveByHash` judged expiry by.
+          expired: sql<boolean>`${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} <= now()`,
+        })
         .from(apiKeys)
         .where(eq(apiKeys.keyHash, keyHash))
         .limit(1),
     );
-    return row?.revokedAt == null
-      ? undefined
-      : { id: row.id, brandId: row.brandId, reason: 'revoked' };
+    if (row === undefined || (!row.revoked && !row.expired)) {
+      return undefined;
+    }
+    return { id: row.id, brandId: row.brandId, reason: row.revoked ? 'revoked' : 'expired' };
   }
 
   /** In the key's own brand, naming the key and where it was presented from, never the key. */

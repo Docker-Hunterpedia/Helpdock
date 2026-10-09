@@ -58,6 +58,8 @@ export const apiKeySchema = z.object({
   rateLimitPerMinute: z.int().positive(),
   createdAt: z.iso.datetime(),
   lastUsedAt: z.iso.datetime().nullable(),
+  /** When the key stops working; null for one that never expires. Past it, a key is refused like a revoked one. */
+  expiresAt: z.iso.datetime().nullable(),
   revokedAt: z.iso.datetime().nullable(),
   /** Who issued and who revoked the key, for the Developers page; null once they are gone. */
   createdByName: z.string().nullable(),
@@ -82,6 +84,8 @@ export const apiKeyCreateRequestSchema = z.object({
     .max(API_SCOPES.length)
     .refine((scopes) => new Set(scopes).size === scopes.length, 'Name each scope once'),
   rateLimitPerMinute: z.int().min(1).max(API_KEY_RATE_LIMIT_MAX).optional(),
+  /** Left out for a key that never expires. Must be in the future; the service checks. */
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type ApiKeyCreateRequest = z.infer<typeof apiKeyCreateRequestSchema>;
 

@@ -16,7 +16,7 @@ trail](authentication.md#the-audit-trail) lists them.
 
 ## API keys
 
-`api_key.created` and `api_key.revoked` carry the key's name, prefix and scopes. `api_key.refused` is written when a key that Helpdock issued and then revoked is presented: the actor is the key, the target is the key, and `meta` holds its `prefix` and the `reason`; the address is the row's IP column. It is written at most once a minute per key. A key that never existed leaves a warning in the api's log and no row, because there is no brand to write it to. None of them contains the key.
+`api_key.created` and `api_key.revoked` carry the key's name, prefix and scopes (and `expiresAt` on a create that set one). `api_key.refused` is written when a key that Helpdock issued and then revoked, or that is past its expiry, is presented: the actor is the key, the target is the key, and `meta` holds its `prefix` and the `reason`; the address is the row's IP column. It is written at most once a minute per key. A key that never existed leaves a warning in the api's log and no row, because there is no brand to write it to. None of them contains the key.
 
 ## Who may read it
 

@@ -18,6 +18,7 @@ import {
 import type {
   ApiKey,
   ApiKeyCreated,
+  ErrorResponse,
   TicketList,
   V1ContactUpsert,
   V1TicketDetail,
@@ -379,6 +380,51 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       });
       expect(JSON.stringify(refused)).not.toContain(created.key);
       expect(refused.some((row) => JSON.stringify(row.meta).includes('never-issued'))).toBe(false);
+    });
+
+    it('takes an optional expiry, shows it, and answers 401 once it has passed (ASVS 2.10.1, 3.5.2)', async () => {
+      const base = `/api/brands/${seeded.brandId}/api-keys`;
+      const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+      const withExpiry = await call<ApiKeyCreated>('POST', base, staffToken, {
+        name: 'short lived',
+        scopes: ['tickets:read'],
+        expiresAt,
+      });
+      const forever = await issueKey(['tickets:read']);
+      const past = await call<ErrorResponse>('POST', base, staffToken, {
+        name: 'already over',
+        scopes: ['tickets:read'],
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      });
+
+      expect(withExpiry.status).toBe(201);
+      expect(withExpiry.body.expiresAt).toBe(expiresAt);
+      expect(forever.expiresAt).toBeNull();
+      expect(past.status).toBe(400);
+      const listed = await call<{ keys: ApiKey[] }>('GET', base, staffToken);
+      expect(listed.body.keys.find((key) => key.id === withExpiry.body.id)?.expiresAt).toBe(
+        expiresAt,
+      );
+      expect((await call('GET', '/api/v1/tickets', withExpiry.body.key)).status).toBe(200);
+
+      // The hour passes.
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .update(apiKeys)
+          .set({ expiresAt: new Date(Date.now() - 1_000) })
+          .where(eq(apiKeys.id, withExpiry.body.id)),
+      );
+      expect((await call('GET', '/api/v1/tickets', withExpiry.body.key)).status).toBe(401);
+      expect((await call('GET', '/api/v1/tickets', forever.key)).status).toBe(200);
+      const refused = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(auditLog).where(eq(auditLog.targetId, withExpiry.body.id)),
+      );
+      expect(
+        refused.filter((row) => row.action === 'api_key.refused').map((row) => row.meta),
+      ).toEqual([{ prefix: withExpiry.body.key.slice(0, 12), reason: 'expired' }]);
+      expect(refused.find((row) => row.action === 'api_key.created')?.meta).toMatchObject({
+        expiresAt,
+      });
     });
 
     it('throttles a key past its per-minute budget with 429', async () => {

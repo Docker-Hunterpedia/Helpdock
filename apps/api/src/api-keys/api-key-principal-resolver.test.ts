@@ -113,6 +113,20 @@ describe('ApiKeyPrincipalResolver', () => {
     expect(audit).toHaveBeenCalledWith(revoked, { prefix: 'hd_live_test', ip: '203.0.113.7' });
   });
 
+  it('refuses an expired key as it does a revoked one, and says so', async () => {
+    const expired: RefusedApiKey = { id: ACTIVE.id, brandId: ACTIVE.brandId, reason: 'expired' };
+    const { resolver, warn, audit, fallback } = setup({ found: null, refused: expired });
+
+    await expect(resolver.resolve(withBearer(KEY))).resolves.toBeNull();
+
+    expect(fallback.resolve).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'expired', keyId: ACTIVE.id }),
+      'API key refused',
+    );
+    expect(audit).toHaveBeenCalledWith(expired, { prefix: 'hd_live_test', ip: '203.0.113.7' });
+  });
+
   it('still answers null when the refusal cannot be recorded', async () => {
     const { resolver, find } = setup({ found: null });
     find.mockRejectedValueOnce(new Error('database is down'));

@@ -35,6 +35,8 @@ export const apiKeys = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /** Written at most once a minute, so a busy key is not a write per request. */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    /** Null for a key that never expires; past it, the key is refused like a revoked one. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     revokedBy: uuid('revoked_by').references(() => users.id, { onDelete: 'set null' }),
   },

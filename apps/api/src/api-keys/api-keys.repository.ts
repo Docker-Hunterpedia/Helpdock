@@ -1,5 +1,5 @@
 import { type ApiKeyRow, apiKeys, type Db, type DbTransaction, users } from '@helpdock/db';
-import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { withAllBrands } from '../tenant/all-brands.js';
 
@@ -44,7 +44,14 @@ export class ApiKeysRepository {
     tx: DbTransaction,
     values: Pick<
       ApiKeyRow,
-      'brandId' | 'name' | 'prefix' | 'keyHash' | 'scopes' | 'rateLimitPerMinute' | 'createdBy'
+      | 'brandId'
+      | 'name'
+      | 'prefix'
+      | 'keyHash'
+      | 'scopes'
+      | 'rateLimitPerMinute'
+      | 'createdBy'
+      | 'expiresAt'
     >,
   ): Promise<ApiKeyRow> {
     const [row] = await tx.insert(apiKeys).values(values).returning();
@@ -71,9 +78,9 @@ export class ApiKeysRepository {
   }
 
   /**
-   * The live key with this hash, in any brand, and its `last_used_at` moved
-   * forward when it is more than a minute old — so a busy key costs one write
-   * a minute rather than one a request.
+   * The live key with this hash, in any brand — not revoked and not past its
+   * `expires_at` — and its `last_used_at` moved forward when it is more than a
+   * minute old, so a busy key costs one write a minute rather than one a request.
    */
   async findActiveByHash(db: Db, keyHash: string): Promise<ActiveApiKey | undefined> {
     const [key] = await withAllBrands(db, 'api-key.resolve', async (tx) => {
@@ -85,7 +92,13 @@ export class ApiKeysRepository {
           rateLimitPerMinute: apiKeys.rateLimitPerMinute,
         })
         .from(apiKeys)
-        .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)))
+        .where(
+          and(
+            eq(apiKeys.keyHash, keyHash),
+            isNull(apiKeys.revokedAt),
+            or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, sql`now()`)),
+          ),
+        )
         .limit(1);
       const [row] = rows;
       if (row !== undefined) {

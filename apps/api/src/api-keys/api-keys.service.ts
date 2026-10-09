@@ -7,7 +7,7 @@ import {
   type ApiKeyList,
   apiScopeSchema,
 } from '@helpdock/schemas';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { issueApiKey } from './api-key-credential.js';
 import type { ApiKeysRepository } from './api-keys.repository.js';
 
@@ -16,6 +16,10 @@ import type { ApiKeysRepository } from './api-keys.repository.js';
  * create; afterwards only its prefix is. Revoking is final — a key that should
  * work again is a new key — and both are written to `audit_log` in the same
  * transaction as the change.
+ *
+ * A key may be given an `expiresAt` when it is made (ASVS 2.10.1, 3.5.2), after
+ * which the resolver refuses it exactly as it does a revoked one. It cannot be
+ * changed afterwards: a longer life is a new key.
  */
 
 export interface ApiKeyActor {
@@ -44,6 +48,7 @@ export const toApiKey = (
   rateLimitPerMinute: row.rateLimitPerMinute,
   createdAt: row.createdAt.toISOString(),
   lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
+  expiresAt: row.expiresAt?.toISOString() ?? null,
   revokedAt: row.revokedAt?.toISOString() ?? null,
   createdByName: names.createdByName,
   revokedByName: names.revokedByName,
@@ -51,9 +56,11 @@ export const toApiKey = (
 
 export class ApiKeysService {
   readonly #repository: ApiKeysRepository;
+  readonly #now: () => Date;
 
-  constructor(repository: ApiKeysRepository) {
+  constructor(repository: ApiKeysRepository, now: () => Date = () => new Date()) {
     this.#repository = repository;
+    this.#now = now;
   }
 
   async list({ tx }: ApiKeyActor): Promise<ApiKeyList> {
@@ -63,6 +70,10 @@ export class ApiKeysService {
   }
 
   async create(actor: ApiKeyActor, request: ApiKeyCreateRequest): Promise<ApiKeyCreated> {
+    const expiresAt = request.expiresAt === undefined ? null : new Date(request.expiresAt);
+    if (expiresAt !== null && expiresAt <= this.#now()) {
+      throw new BadRequestException('expiresAt must be in the future');
+    }
     const issued = issueApiKey();
     const row = await this.#repository.insert(actor.tx, {
       brandId: actor.brandId,
@@ -72,6 +83,7 @@ export class ApiKeysService {
       scopes: [...request.scopes],
       rateLimitPerMinute: request.rateLimitPerMinute ?? API_KEY_RATE_LIMIT_DEFAULT,
       createdBy: actor.userId,
+      expiresAt,
     });
     await this.#audit(actor, 'api_key.created', row);
 
@@ -106,7 +118,12 @@ export class ApiKeysService {
       action,
       targetType: 'api_key',
       targetId: row.id,
-      meta: { name: row.name, prefix: row.prefix, scopes: row.scopes },
+      meta: {
+        name: row.name,
+        prefix: row.prefix,
+        scopes: row.scopes,
+        ...(row.expiresAt === null ? {} : { expiresAt: row.expiresAt.toISOString() }),
+      },
     });
   }
 }

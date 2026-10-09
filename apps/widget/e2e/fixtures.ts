@@ -144,6 +144,29 @@ export async function tabStops(page: Page, count: number, shift = false): Promis
   return stops;
 }
 
+/**
+ * Tabs once all the way round what is tabbable in the widget, launcher
+ * included: one press more than there are tabbable elements, plus one for the
+ * page the focus passes through. `stops` lists what had focus after each press.
+ */
+export async function tabCycle(page: Page): Promise<{ stops: Stop[]; tabbable: number }> {
+  const tabbable = await page.evaluate(() => {
+    const root = document.querySelector('helpdock-widget')?.shadowRoot;
+    return [
+      ...(root?.querySelectorAll<HTMLElement>(
+        'button, a[href], input, textarea, select, [tabindex]',
+      ) ?? []),
+    ].filter(
+      (element) =>
+        element.tabIndex >= 0 &&
+        !element.matches(':disabled') &&
+        element.getClientRects().length > 0 &&
+        getComputedStyle(element).visibility !== 'hidden',
+    ).length;
+  });
+  return { stops: await tabStops(page, tabbable + 2), tabbable };
+}
+
 /** Transitions off: a panel caught mid-fade reads as low contrast to axe (as in the admin suite). */
 export const test = base.extend({});
 test.use({ reducedMotion: 'reduce' });

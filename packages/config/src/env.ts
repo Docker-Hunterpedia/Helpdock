@@ -1,4 +1,4 @@
-import { isIPv4, isIPv6 } from 'node:net';
+import { isIP, isIPv4, isIPv6 } from 'node:net';
 import { z } from 'zod';
 
 // AES-256 needs a 32-byte key. `APP_MASTER_KEY` carries it as standard base64.
@@ -120,6 +120,48 @@ const cidrListSchema = () =>
     .transform((entries): readonly string[] => entries);
 
 /**
+ * Which hops the api believes `x-forwarded-*` from, in the forms Fastify's
+ * `trustProxy` takes: `true` believes every hop, so a client's own
+ * `x-forwarded-for` entry becomes `request.ip`; a list believes a hop only when
+ * its address is one of those addresses, ranges or range names.
+ *
+ * There is no hop count. Fastify 5 answers a number by trusting nothing, since
+ * a count cannot tell the proxy from a client that dialled the api itself, so
+ * accepting one here would quietly key every per-address limit on the proxy.
+ */
+export type TrustProxy = boolean | readonly string[];
+
+/** Whether any proxy is believed at all, which is what `x-request-id` follows. */
+export const proxyIsTrusted = (setting: TrustProxy): boolean => setting !== false;
+
+/** Fastify's names for the address ranges an install most often sits behind. */
+const TRUST_PROXY_RANGE_NAMES: readonly string[] = ['loopback', 'linklocal', 'uniquelocal'];
+const BOOLEAN_FLAG = z.stringbool();
+
+const isTrustedProxyEntry = (entry: string): boolean =>
+  isIP(entry) !== 0 || isCidr(entry) || TRUST_PROXY_RANGE_NAMES.includes(entry);
+
+/** `undefined` for anything that is neither a flag nor a list, rather than a guess. */
+const parseTrustProxy = (raw: string): TrustProxy | undefined => {
+  const flag = BOOLEAN_FLAG.safeParse(raw.trim());
+  if (flag.success) {
+    return flag.data;
+  }
+
+  const entries = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  return entries.length > 0 && entries.every(isTrustedProxyEntry) ? entries : undefined;
+};
+
+const trustProxySchema = () =>
+  z
+    .string()
+    .transform(parseTrustProxy)
+    .refine((setting): setting is TrustProxy => setting !== undefined);
+
+/**
  * The `.env` bootstrap layer of ARCHITECTURE §4: everything the process needs
  * before it can read the `settings` table. Every field carries the description
  * used both in `.env.example` and in the error {@link loadEnv} throws, so the
@@ -174,11 +216,10 @@ export const envSchema = z.object({
     .max(MAX_PORT)
     .default(DEFAULT_PORT)
     .describe(`optional; must be a port number between 1 and ${MAX_PORT}, default ${DEFAULT_PORT}`),
-  TRUST_PROXY: z
-    .stringbool()
+  TRUST_PROXY: trustProxySchema()
     .default(false)
     .describe(
-      'optional; must be "true" or "false", default false. Only "true" when a reverse proxy this install controls sets x-forwarded-* and x-request-id',
+      'optional; "false", "true", or a comma-separated list of proxy addresses, CIDRs or the names loopback, linklocal and uniquelocal, default false. Set it only when a reverse proxy this install controls sets x-forwarded-* and x-request-id, and prefer a list: "true" believes every hop, so a client can choose its own address',
     ),
   DATABASE_URL: urlSchema('postgres:', 'postgresql:').describe(
     'must be a postgres:// URL for the runtime role',

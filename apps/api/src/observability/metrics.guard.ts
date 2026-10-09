@@ -1,4 +1,4 @@
-import type { Env } from '@helpdock/config';
+import { type Env, proxyIsTrusted } from '@helpdock/config';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -33,7 +33,7 @@ export class MetricsGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
-    const proxied = viaProxy(request, this.#env.TRUST_PROXY);
+    const proxied = viaProxy(request, proxyIsTrusted(this.#env.TRUST_PROXY));
 
     const access = metricsAccess({
       // The socket's peer, not `request.ip`: with `TRUST_PROXY` on, `request.ip`

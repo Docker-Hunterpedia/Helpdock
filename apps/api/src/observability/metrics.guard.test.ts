@@ -10,7 +10,7 @@ const envWith = ({
   trustProxy = false,
 }: {
   readonly metricsToken?: string;
-  readonly trustProxy?: boolean;
+  readonly trustProxy?: Env['TRUST_PROXY'];
 } = {}): Env =>
   ({
     TRUST_PROXY: trustProxy,
@@ -105,6 +105,18 @@ describe('MetricsGuard', () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it('requires the token behind a proxy trusted by address, as it does for `true`', () => {
+    const guard = new MetricsGuard(
+      envWith({ metricsToken: TOKEN, trustProxy: ['172.18.0.0/16'] }),
+      recorder().logger,
+    );
+    const proxied = { remoteAddress: '172.18.0.2', forwardedFor: '203.0.113.5' };
+
+    expect(() =>
+      guard.canActivate(fakeExecutionContext({ request: requestFrom(proxied) })),
+    ).toThrow(NotFoundException);
   });
 
   it('still admits a sidecar that dials the port itself while a proxy is configured', () => {

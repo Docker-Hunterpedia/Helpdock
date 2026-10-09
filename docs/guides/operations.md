@@ -102,7 +102,7 @@ a client controls must not be able to claim a private address.
 But a socket peer only says who dialled the port. **Behind a reverse proxy it is
 always the proxy**, which sits on the private network — so a request the proxy
 forwarded in from the internet would otherwise pass on the proxy's credentials
-rather than its own. So when `TRUST_PROXY=true` and a request carries a
+rather than its own. So when `TRUST_PROXY` is set and a request carries a
 forwarding header, the private-address door is closed for it and the token is
 required. A scraper that dials the api itself carries no such header and is
 unaffected.

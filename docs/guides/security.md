@@ -136,6 +136,11 @@ replies.
   a request that came through a proxy without `METRICS_TOKEN`
   ([operations](operations.md#metrics-is-never-routed-publicly)); a proxy of
   your own should do the same.
+- Keep `TRUST_PROXY` to the proxies you run. Every per-address limit and the
+  audit log use the address the api resolves under it. The Compose file sets
+  `uniquelocal`, and the Cloudflare Caddyfile forwards the visitor's address
+  from Cloudflare's ranges only; `true` believes every hop, so a client could
+  choose its own address ([install](install.md#behind-a-proxy-of-your-own)).
 - Keep Postgres and Redis on the Compose network. The production Compose file
   publishes neither; Redis has no password there, so it must stay unreachable
   from anywhere else.

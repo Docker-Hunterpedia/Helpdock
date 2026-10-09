@@ -1,6 +1,10 @@
 import Fastify from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
-import { API_JSON_DISPOSITION, registerJsonDisposition } from './json-disposition.js';
+import {
+  API_JSON_CACHE_CONTROL,
+  API_JSON_DISPOSITION,
+  registerJsonDisposition,
+} from './json-disposition.js';
 
 const apps: ReturnType<typeof Fastify>[] = [];
 
@@ -16,6 +20,14 @@ const appWith = async () => {
   app.get('/file', async (_request, reply) =>
     reply.header('content-disposition', 'attachment; filename="export.json"').send({ a: 1 }),
   );
+  // What the widget's source maps and the admin's JSON assets are: JSON a route caches on purpose.
+  app.get('/map', async (_request, reply) =>
+    reply
+      .type('application/json')
+      .header('cache-control', 'public, max-age=300')
+      .send('{"version":3}'),
+  );
+  app.get('/missing', async (_request, reply) => reply.code(404).send({ error: 'nope' }));
   await app.ready();
   return app;
 };
@@ -41,5 +53,23 @@ describe('registerJsonDisposition (ASVS 14.4.2)', () => {
     expect((await app.inject('/file')).headers['content-disposition']).toBe(
       'attachment; filename="export.json"',
     );
+  });
+});
+
+describe('registerJsonDisposition and caching (ASVS 8.2.1)', () => {
+  it('tells caches not to store a JSON answer, an error included', async () => {
+    const app = await appWith();
+
+    expect(API_JSON_CACHE_CONTROL).toBe('no-store');
+    expect((await app.inject('/json')).headers['cache-control']).toBe(API_JSON_CACHE_CONTROL);
+    expect((await app.inject('/problem')).headers['cache-control']).toBe(API_JSON_CACHE_CONTROL);
+    expect((await app.inject('/missing')).headers['cache-control']).toBe(API_JSON_CACHE_CONTROL);
+  });
+
+  it('keeps a Cache-Control a route chose, and leaves a page without one', async () => {
+    const app = await appWith();
+
+    expect((await app.inject('/map')).headers['cache-control']).toBe('public, max-age=300');
+    expect((await app.inject('/html')).headers['cache-control']).toBeUndefined();
   });
 });

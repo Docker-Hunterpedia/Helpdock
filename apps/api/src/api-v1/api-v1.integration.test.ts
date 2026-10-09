@@ -315,6 +315,24 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect((await call('GET', '/api/v1/tickets', staffToken)).status).toBe(403);
     });
 
+    it('tells caches to keep none of it: an answer, a refusal, an admin route and the OpenAPI document (ASVS 8.2.1)', async () => {
+      const { key } = await issueKey(['tickets:read']);
+
+      const answers = [
+        await call('GET', '/api/v1/tickets', key),
+        await call('GET', '/api/v1/tickets', 'hd_live_never-issued'),
+        await call('GET', `/api/brands/${seeded.brandId}/api-keys`, staffToken),
+        await app.inject({ method: 'GET', url: '/api/docs/openapi.json' }),
+      ];
+
+      expect(answers.map((answer) => answer.headers['cache-control'])).toEqual([
+        'no-store',
+        'no-store',
+        'no-store',
+        'no-store',
+      ]);
+    });
+
     it('records when a key was last used', async () => {
       const created = await issueKey(['tickets:read']);
       await call('GET', '/api/v1/tickets', created.key);

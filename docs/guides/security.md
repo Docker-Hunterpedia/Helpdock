@@ -115,7 +115,15 @@ added or confirmed ([asvs-l2](../completed/asvs-l2.md#gaps-and-partials-closed-b
 
 The api's JSON responses carry a deny-everything Content-Security-Policy,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and HSTS
-when `APP_URL` is https (`apps/api/src/http/security-headers.ts`). The admin,
+when `APP_URL` is https (`apps/api/src/http/security-headers.ts`). Every JSON
+answer, errors included, also carries `Content-Disposition: attachment;
+filename="api.json"` (a browser that navigates to an API URL downloads it
+instead of rendering it) and `Cache-Control: no-store`, so no cache keeps a
+brand's tickets, contacts or settings (`apps/api/src/http/json-disposition.ts`,
+ASVS 8.2.1). A route that caches its JSON on purpose sets its own
+`Cache-Control` and keeps it: the widget's source maps and `config` (`no-cache`
+with an ETag), and the admin's hashed assets. Pages, scripts and fonts are not
+JSON and keep the caching they set. The admin,
 the help center, the web form and the widget each send the policy their own
 content needs. The admin hashes its bootstrap script and gives Emotion a fresh
 style nonce on every response; it does not permit inline script or un-nonced

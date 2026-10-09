@@ -19,6 +19,8 @@ retention card. Only an Admin sees the page and only an Admin may change it
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Hard-deletes inactive `widget_visitors` only when no ticket references them; a visitor with a conversation keeps its session |
 | Notification rows | **30 days** | fixed | Hard-deletes rows older than the bell's display window |
+| Webhook and Telegram delivery logs | **30 days** | fixed | Hard-deletes webhook deliveries that `succeeded`, `failed` or were `skipped`, and Telegram replies that were `sent` or `failed`, created more than 30 days ago. A delivery still `pending` or `queued` is kept. The rows hold copies of ticket and contact data (a webhook's frozen body, a Telegram chat id), so they do not stay as long as the audit log |
+| Idempotency keys of the public API | 24 hours | fixed | Hard-deletes the stored answers of `Idempotency-Key` requests past their window (they were forgotten only when the same API key sent another POST) |
 | Outbox rows and job receipts | 7 days | fixed | Hard delete, 7 days after publish or completion |
 
 A brand that never saves the form is kept under the defaults. The form sends
@@ -50,7 +52,8 @@ of rows whose bodies would be nulled.
 ```
 03:00 UTC  maintenance.retention.schedule   one job per brand, then job_receipts
            maintenance.retention (brand)    closed, spam, AI call bodies, search log and views,
-                                            audit log, idle visitors, notifications, outbox → audit row
+                                            audit log, idle visitors, notifications, webhook and
+                                            Telegram delivery logs, idempotency keys, outbox → audit row
 ```
 
 The worker registers the schedule on every boot, so a Redis that lost it gets

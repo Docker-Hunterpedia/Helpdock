@@ -332,6 +332,8 @@ Per brand, set by Admin (defaults in bold):
 | Help center search log | **180 days** | Hard delete |
 | Audit log | **2 years**, minimum 90 days | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | Hard delete |
+| Webhook and Telegram delivery logs | 30 days (fixed) | Hard delete of finished deliveries; pending ones are kept |
+| API idempotency keys | 24 hours (fixed) | Hard delete |
 | Outbox, job receipts | 7 days after publish/complete | Hard delete |
 | Knowledge chunks of a removed source | immediate | Hard delete |
 

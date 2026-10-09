@@ -3,6 +3,8 @@ import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   aiCalls,
+  apiIdempotencyKeys,
+  apiKeys,
   attachments,
   auditLog,
   brands,
@@ -398,6 +400,9 @@ describe.skipIf(!hasDocker)('data retention', () => {
         await tx.delete(tickets);
         await tx.delete(widgetVisitors);
         await tx.delete(retentionSettings);
+        await tx.delete(webhooks);
+        await tx.delete(apiKeys);
+        await tx.delete(telegramBots);
       });
     }
   });
@@ -651,6 +656,146 @@ describe.skipIf(!hasDocker)('data retention', () => {
       expect(
         (await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-ai-again' })).aiCalls,
       ).toBe(0);
+    });
+
+    it('purges delivery logs past 30 days and idempotency keys past a day, and keeps what is pending or recent (ASVS 8.3.8)', async () => {
+      const tickets4: SeededTicket[] = [];
+      for (let index = 0; index < 4; index += 1) {
+        tickets4.push(await seedTicket(brandA, { status: 'open' }));
+      }
+      const webhookCopy = (
+        webhookId: string,
+        brandId: string,
+        status: 'pending' | 'succeeded' | 'failed' | 'skipped',
+        createdAt: Date,
+      ) => ({
+        brandId,
+        webhookId,
+        eventId: uuidv7(),
+        event: 'ticket.created',
+        payload: { data: { ticket: { id: uuidv7() } } },
+        status,
+        createdAt,
+      });
+      const seeded = await withSystem(db(), brandA.id, async (tx) => {
+        const [endpoint] = await tx
+          .insert(webhooks)
+          .values({ brandId: brandA.id, url: 'https://hooks.example.com/h', secret: 'v1.sealed' })
+          .returning({ id: webhooks.id });
+        const webhookId = endpoint?.id ?? '';
+        const copies = await tx
+          .insert(webhookDeliveries)
+          .values([
+            webhookCopy(webhookId, brandA.id, 'succeeded', daysAgo(31)),
+            webhookCopy(webhookId, brandA.id, 'failed', daysAgo(45)),
+            webhookCopy(webhookId, brandA.id, 'skipped', daysAgo(60)),
+            webhookCopy(webhookId, brandA.id, 'pending', daysAgo(40)),
+            webhookCopy(webhookId, brandA.id, 'succeeded', daysAgo(2)),
+          ])
+          .returning({
+            id: webhookDeliveries.id,
+            status: webhookDeliveries.status,
+            createdAt: webhookDeliveries.createdAt,
+          });
+
+        const [bot] = await tx
+          .insert(telegramBots)
+          .values({
+            brandId: brandA.id,
+            telegramId: Date.now() + 1,
+            username: 'retention_bot',
+            displayName: 'Retention',
+            departmentId: brandA.departmentId,
+            token: 'v1.sealed',
+            tokenUpdatedAt: new Date(),
+            webhookSecret: 'v1.sealed',
+          })
+          .returning({ id: telegramBots.id });
+        const telegramCopy = (
+          ticket: SeededTicket,
+          status: 'queued' | 'sent' | 'failed',
+          createdAt: Date,
+        ) => ({
+          brandId: brandA.id,
+          departmentId: brandA.departmentId,
+          ticketId: ticket.id,
+          ticketMessageId: ticket.messageId,
+          botId: bot?.id ?? '',
+          chatId: '5550001',
+          status,
+          createdAt,
+        });
+        const [oldSent, oldFailed, oldQueued, recentSent] = await tx
+          .insert(telegramDeliveries)
+          .values([
+            telegramCopy(tickets4[0] as SeededTicket, 'sent', daysAgo(31)),
+            telegramCopy(tickets4[1] as SeededTicket, 'failed', daysAgo(50)),
+            telegramCopy(tickets4[2] as SeededTicket, 'queued', daysAgo(40)),
+            telegramCopy(tickets4[3] as SeededTicket, 'sent', daysAgo(1)),
+          ])
+          .returning({ id: telegramDeliveries.id });
+
+        const [key] = await tx
+          .insert(apiKeys)
+          .values({ brandId: brandA.id, name: 'k', prefix: 'hd_live_abcd', keyHash: uuidv7() })
+          .returning({ id: apiKeys.id });
+        const [oldKey, freshKey] = await tx
+          .insert(apiIdempotencyKeys)
+          .values(
+            ['stale', 'fresh'].map((name, index) => ({
+              brandId: brandA.id,
+              apiKeyId: key?.id ?? '',
+              key: name,
+              requestHash: 'hash',
+              response: '{}',
+              createdAt: index === 0 ? new Date(Date.now() - 25 * 3_600_000) : new Date(),
+            })),
+          )
+          .returning({ id: apiIdempotencyKeys.id });
+        return { copies, webhookId, oldSent, oldFailed, oldQueued, recentSent, oldKey, freshKey };
+      });
+      // The same ages in another brand, which brand A's run must not touch.
+      await withSystem(db(), brandB.id, async (tx) => {
+        const [endpoint] = await tx
+          .insert(webhooks)
+          .values({ brandId: brandB.id, url: 'https://hooks.example.com/b', secret: 'v1.sealed' })
+          .returning({ id: webhooks.id });
+        await tx
+          .insert(webhookDeliveries)
+          .values(webhookCopy(endpoint?.id ?? '', brandB.id, 'succeeded', daysAgo(90)));
+      });
+
+      const counts = await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-logs' });
+
+      expect(counts).toMatchObject({
+        webhookDeliveries: 3,
+        telegramDeliveries: 2,
+        idempotencyKeys: 1,
+      });
+      const left = await withSystem(db(), brandA.id, async (tx) => ({
+        webhooks: (await tx.select({ id: webhookDeliveries.id }).from(webhookDeliveries)).map(
+          (row) => row.id,
+        ),
+        telegram: (await tx.select({ id: telegramDeliveries.id }).from(telegramDeliveries)).map(
+          (row) => row.id,
+        ),
+        keys: (await tx.select({ id: apiIdempotencyKeys.id }).from(apiIdempotencyKeys)).map(
+          (row) => row.id,
+        ),
+      }));
+      const keptWebhooks = seeded.copies
+        .filter((row) => row.status === 'pending' || row.createdAt > daysAgo(30))
+        .map((row) => row.id);
+      expect(left.webhooks.sort()).toEqual(keptWebhooks.sort());
+      expect(left.telegram.sort()).toEqual([seeded.oldQueued?.id, seeded.recentSent?.id].sort());
+      expect(left.keys).toEqual([seeded.freshKey?.id]);
+      const otherBrand = await withSystem(db(), brandB.id, (tx) =>
+        tx.select({ id: webhookDeliveries.id }).from(webhookDeliveries),
+      );
+      expect(otherBrand).toHaveLength(1);
+      expect(
+        await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-logs-again' }),
+      ).toMatchObject({ webhookDeliveries: 0, telegramDeliveries: 0, idempotencyKeys: 0 });
     });
 
     it('removes expired closed and spam tickets with their messages, rows and objects, and nothing else', async () => {

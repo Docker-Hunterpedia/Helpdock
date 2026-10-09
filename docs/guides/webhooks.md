@@ -103,6 +103,8 @@ With Express, read the body raw: `app.post('/hooks/helpdock', express.raw({ type
 
 Each delivery records its status (`pending`, `succeeded`, `failed`, or `skipped` when the endpoint was switched off before it was sent), the number of attempts, the last answer's status code, its first 1 KB as text, how long it took, and the error if there was no answer. Nothing else of your response is kept, followed or displayed. **Replay** sends a delivery's body again as a new delivery, with the same event id and `replayOf` naming the original.
 
+The log keeps **30 days**. The nightly retention run deletes deliveries that finished (`succeeded`, `failed` or `skipped`) more than 30 days ago, with their frozen body; a delivery still `pending` is kept ([Data retention](data-retention.md#the-windows)). The window is fixed, not a setting.
+
 ## Network safety
 
 Every delivery goes through Helpdock's outbound client ([DOMAIN-RULES §13](../planning/DOMAIN-RULES.md#13-outbound-network-safety)): ports 80, 443, 8080 and 8443, no credentials in the URL, and never a private, loopback, link-local or cloud-metadata address — checked on the address the name resolves to, at delivery time. Blocked attempts are logged with the destination, and show as **Refused** in the delivery log. To deliver to an internal service on purpose, an operator adds its range to `OUTBOUND_ALLOW_CIDRS`.

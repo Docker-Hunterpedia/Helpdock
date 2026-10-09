@@ -101,7 +101,7 @@ With Express, read the body raw: `app.post('/hooks/helpdock', express.raw({ type
 
 ## The delivery log
 
-Each delivery records its status (`pending`, `succeeded`, `failed`, or `skipped` when the endpoint was switched off before it was sent), the number of attempts, the last answer's status code, its first 1 KB as text, how long it took, and the error if there was no answer. Nothing else of your response is kept, followed or displayed. **Replay** sends a delivery's body again as a new delivery, with the same event id and `replayOf` naming the original.
+Each delivery records its status (`pending`, `succeeded`, `failed`, or `skipped` when the endpoint was switched off, or the brand scheduled for deletion, before it was sent), the number of attempts, the last answer's status code, its first 1 KB as text, how long it took, and the error if there was no answer. Nothing else of your response is kept, followed or displayed. **Replay** sends a delivery's body again as a new delivery, with the same event id and `replayOf` naming the original.
 
 ## Network safety
 

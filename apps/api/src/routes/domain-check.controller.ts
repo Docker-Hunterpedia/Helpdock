@@ -41,7 +41,7 @@ export class DomainCheckController {
    * handshakes from one address is far more than that needs and far less than a
    * certificate authority's own limits.
    *
-   * The key is `request.ip`, which under `TRUST_PROXY=true` is what
+   * The key is `request.ip`, which under `TRUST_PROXY` is what
    * `x-forwarded-for` says. In the deployed topology Caddy calls this route
    * directly, over the Compose network and without that header, so the key is
    * Caddy's own address and the limit is effectively one budget for the

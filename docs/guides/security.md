@@ -12,7 +12,7 @@ describes: GitHub's private vulnerability reporting, never a public issue.
 
 | Who | Wants | Stopped by |
 |---|---|---|
-| A visitor on a brand's site | Another visitor's conversation, or to flood the desk | A per-visitor secret only the api issues and only its hash stored, the origin allow-list, per-visitor and per-address limits, optional CAPTCHA ([widget protocol](widget-protocol.md)) |
+| A visitor on a brand's site | Another visitor's conversation, or to flood the desk | A per-visitor secret only the api issues and only its hash stored, the origin allow-list, per-visitor limits on every write and every socket event, per-address limits, optional CAPTCHA ([widget protocol](widget-protocol.md)) |
 | A staff member of brand A | Brand B's data, or a department they are not in | Row-level security on every tenant table, below |
 | Someone on the internet | A staff account | Argon2id with a pepper, the breached-password list, a mandatory second factor for Admins, sign-in rate limits ([authentication](authentication.md)) |
 | Someone with a stolen database dump | Credentials stored in it | Secrets encrypted under a key that is not in the database; password hashes they cannot test without it |
@@ -136,6 +136,11 @@ replies.
   a request that came through a proxy without `METRICS_TOKEN`
   ([operations](operations.md#metrics-is-never-routed-publicly)); a proxy of
   your own should do the same.
+- Keep `TRUST_PROXY` to the proxies you run. Every per-address limit and the
+  audit log use the address the api resolves under it. The Compose file sets
+  `uniquelocal`, and the Cloudflare Caddyfile forwards the visitor's address
+  from Cloudflare's ranges only; `true` believes every hop, so a client could
+  choose its own address ([install](install.md#behind-a-proxy-of-your-own)).
 - Keep Postgres and Redis on the Compose network. The production Compose file
   publishes neither; Redis has no password there, so it must stay unreachable
   from anywhere else.

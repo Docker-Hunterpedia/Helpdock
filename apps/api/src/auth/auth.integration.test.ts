@@ -15,14 +15,15 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import { desc, eq, like, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { generate } from 'otplib';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
 import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
+import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
 import { PRINCIPAL_REVOKED_CHANNEL } from './redis-keys.js';
-import { refreshCookieOf, trustedDeviceCookie } from './session/cookies.js';
+import { oauthNonceCookie, refreshCookieOf, trustedDeviceCookie } from './session/cookies.js';
 
 /**
  * The whole of M0-05 over HTTP, against a real Postgres and a real Redis: the
@@ -44,6 +45,7 @@ const APP_URL = 'https://support.example.com';
 /** Over https the cookies carry the `__Secure-` prefix (ASVS 3.4.4). */
 const REFRESH_COOKIE = refreshCookieOf({ APP_URL }).name;
 const TRUSTED_DEVICE_COOKIE = trustedDeviceCookie(APP_URL).name;
+const OAUTH_NONCE_COOKIE = oauthNonceCookie(APP_URL, OAUTH_STATE_TTL_SECONDS).name;
 
 /**
  * The origin a redirect lands on. Compared as a parsed origin, not a prefix:
@@ -599,6 +601,83 @@ describe.skipIf(!hasDocker)('the auth service', () => {
 
     it('refuses a provider it does not have', async () => {
       expect((await get('/api/auth/oauth/facebook/start')).statusCode).toBe(403);
+    });
+
+    // F4 (M9-01): a captured callback URL must not sign a victim's browser in as
+    // whoever began the flow.
+    describe('with Google configured', () => {
+      const callbackWith = (state: string, nonce?: string) =>
+        get(
+          `/api/auth/oauth/google/callback?code=c&state=${state}`,
+          nonce === undefined ? {} : { cookie: `${OAUTH_NONCE_COOKIE}=${nonce}` },
+        );
+
+      const begin = async () => {
+        const started = await get('/api/auth/oauth/google/start');
+        return {
+          started,
+          state: new URL(String(started.headers.location)).searchParams.get('state') ?? '',
+          nonce: started.cookies.find((cookie) => cookie.name === OAUTH_NONCE_COOKIE)?.value ?? '',
+        };
+      };
+
+      beforeAll(async () => {
+        await runtime.settings.set('oauth.google.clientId', 'client-id', { updatedBy: 'test' });
+        await runtime.settings.set('oauth.google.clientSecret', 'client-secret', {
+          updatedBy: 'test',
+        });
+      });
+
+      afterAll(async () => {
+        await runtime.settings.set('oauth.google.clientId', '', { updatedBy: 'test' });
+        await runtime.settings.set('oauth.google.clientSecret', '', { updatedBy: 'test' });
+      });
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
+      });
+
+      it('gives the browser that starts a flow a short-lived cookie only the OAuth routes receive', async () => {
+        const { started, nonce } = await begin();
+
+        expect(started.statusCode).toBe(302);
+        expect(started.cookies.find((cookie) => cookie.name === OAUTH_NONCE_COOKIE)).toMatchObject({
+          httpOnly: true,
+          secure: true,
+          sameSite: 'Lax',
+          path: '/api/auth/oauth',
+          maxAge: OAUTH_STATE_TTL_SECONDS,
+        });
+        expect(nonce).not.toBe('');
+      });
+
+      it('refuses a callback from a browser without that cookie and signs nobody in', async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const { state } = await begin();
+
+        const response = await callbackWith(state);
+
+        expect(response.statusCode).toBe(302);
+        expect(new URL(String(response.headers.location)).searchParams.get('error')).toBe(
+          'no-account',
+        );
+        expect(response.cookies.some((cookie) => cookie.name === REFRESH_COOKIE)).toBe(false);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      it('takes the browser that started the flow on to the provider, and clears the cookie either way', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 500 }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { state, nonce } = await begin();
+
+        const response = await callbackWith(state, nonce);
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(response.cookies.find((cookie) => cookie.name === OAUTH_NONCE_COOKIE)).toMatchObject(
+          { value: '', path: '/api/auth/oauth' },
+        );
+      });
     });
   });
 

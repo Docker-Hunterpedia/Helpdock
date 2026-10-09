@@ -13,7 +13,7 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | planned; vendor, budget and test window required |
+| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | in progress: the internal pre-pentest review is fixed ([notes](#m9-01-internal-pre-pentest-review)); **the vendor, budget and test window are still required** |
 | M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. Re-walk the chapters M6, M7 and M8 touched |
 | M9-03 | Load tests | #154 | in progress: suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); **the §14 host run is outstanding** |
 | M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** (zoom, forced colours, screen-reader markup and mixed direction are Playwright specs since 2026-10-09) |
@@ -23,6 +23,32 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 | M9-08 | Release pipeline | #158 | public multi-architecture image and SBOM verified on `v0.4.0`; keyless Cosign signing implemented ([notes](#m9-08-release-pipeline)); close after the live signature is verified |
 | M9-09 | Tag `1.0.0` | #159 | planned after every release gate passes |
 | M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
+
+## M9-01 Internal pre-pentest review
+
+An internal review of the widget and API surface found no High finding, two
+Medium and four Low. This is what became of them. The external test is still to
+be booked and run; its findings are fixed under this deliverable too.
+
+| Id | Finding | Outcome |
+|---|---|---|
+| F1 (Medium) | `/widget` socket events bypassed every throttle | Fixed. Every event spends a 120-a-minute per-visitor budget in Redis before it is parsed or reaches Postgres ([widget protocol](../guides/widget-protocol.md#throttles)). No per-address socket budget: see the note below. |
+| F2 (Medium) | `TRUST_PROXY=true` with `Caddyfile.cloudflare` keyed every per-address limit on Cloudflare's edge | Fixed. `TRUST_PROXY` takes an address list; Compose sets `uniquelocal`; the Cloudflare Caddyfile trusts Cloudflare's ranges and forwards `CF-Connecting-IP` ([install](../guides/install.md#behind-cloudflare)). The review proposed a hop count, which Fastify 5 answers by trusting nothing, so none is offered. |
+| F3 (Low) | A widget socket outlived the identity link that granted its rooms | Fixed for sockets: they are disconnected, on every replica, when the link is withdrawn or changed. An open SSE stream is not cut and ends at `WIDGET_SSE_MAX_AGE_MS`. A removed origin or rotated signing secret does not disconnect sockets either. |
+| F4 (Low) | OAuth callback not bound to the browser that started it | Fixed with the `hd_oauth` cookie ([authentication](../guides/authentication.md#oauth)). |
+| F5 (Low) | API keys and webhook deliveries ignored a brand's deletion grace | Fixed: `410` for the key, `skipped` for the delivery. |
+| F6 (Low) | The magic link is spent by a `GET` | **Not fixed: needs an artboard.** The admin never sees the token (the api spends it and redirects), so the fix is a new admin screen that asks for a click and a `POST /api/auth/magic-link/consume`. |
+
+**Outstanding from this review**
+
+- **The widget socket's address is the proxy's.** `socket.handshake.address` is
+  the TCP peer, which behind Caddy is Caddy, so the handshake's `widget-ip`
+  budget (300 per 5 minutes per brand) is shared by every visitor of a brand.
+  A per-address socket-event budget would share the same key, which is why F1
+  has none. Resolving the handshake address under `TRUST_PROXY` is the fix.
+- **Live checks for the vendor** (the proxy half of F2 was checked against
+  Caddy 2.10 here, not on a Cloudflare zone): the real `request.ip` through
+  Cloudflare, and the cluster-wide disconnect of F3 across two replicas.
 
 ## M9-04 Accessibility audit
 

@@ -3,7 +3,7 @@ import type { Redis } from 'ioredis';
 import type { Namespace } from 'socket.io';
 import type { Logger } from '../logging/logger.js';
 import { quietly } from '../realtime/redis-io.adapter.js';
-import { parseWidgetEmit, WIDGET_EMIT_CHANNEL } from './widget-relay.js';
+import { parseWidgetEmit, visitorRoom, WIDGET_EMIT_CHANNEL } from './widget-relay.js';
 
 /**
  * The last hop on each api replica: a widget event off Redis, to this
@@ -67,6 +67,15 @@ export class WidgetHub {
     for (const listener of this.#streams.get(room) ?? []) {
       listener(event, envelope);
     }
+  }
+
+  /**
+   * Disconnects every `/widget` socket the visitor has, on every replica: a
+   * room's membership was judged once, at join, and outlives whatever granted
+   * it. The client reconnects and each `conversation:join` is judged afresh.
+   */
+  disconnectVisitor(visitorId: string): void {
+    this.#namespace?.in(visitorRoom(visitorId)).disconnectSockets(true);
   }
 
   /** An SSE stream's subscription to a room. Returns the unsubscribe. */

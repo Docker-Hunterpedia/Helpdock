@@ -50,11 +50,13 @@ import {
   TotpEnrolmentDto,
   TotpRequestDto,
 } from './dto.js';
+import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
 import { Authenticated, Public } from './route-declaration.js';
 import {
   type CookieSpec,
   decodeRefreshCookie,
   encodeRefreshCookie,
+  oauthNonceCookie,
   refreshCookieOf,
   trustedDeviceCookie,
 } from './session/cookies.js';
@@ -92,6 +94,7 @@ export class AuthController {
   readonly #sessions: SessionService;
   readonly #env: Env;
   readonly #refreshCookie: CookieSpec;
+  readonly #oauthNonceCookie: CookieSpec;
   readonly #trustCookie: CookieSpec;
 
   constructor(
@@ -103,6 +106,7 @@ export class AuthController {
     this.#sessions = sessions;
     this.#env = env;
     this.#refreshCookie = refreshCookieOf(env);
+    this.#oauthNonceCookie = oauthNonceCookie(env.APP_URL, OAUTH_STATE_TTL_SECONDS);
     this.#trustCookie = trustedDeviceCookie(env.APP_URL);
   }
 
@@ -288,7 +292,8 @@ export class AuthController {
     @Param(new ZodValidationPipe(OauthProviderParamDto)) { provider }: OauthProviderParamDto,
     @Res() reply: FastifyReply,
   ): Promise<void> {
-    const url = await this.#auth.startOauth(this.#provider(provider));
+    const { url, browserNonce } = await this.#auth.startOauth(this.#provider(provider));
+    reply.setCookie(this.#oauthNonceCookie.name, browserNonce, this.#oauthNonceCookie.attributes);
     await reply.redirect(url, HttpStatus.FOUND);
   }
 
@@ -300,6 +305,9 @@ export class AuthController {
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
+    const browserNonce = request.cookies[this.#oauthNonceCookie.name];
+    // Spent whatever happens next: one round trip, one cookie.
+    reply.clearCookie(this.#oauthNonceCookie.name, this.#oauthNonceCookie.attributes);
     if (code === undefined || state === undefined) {
       // The provider refused, or the person declined on its consent screen.
       await this.#redirect(reply, '/oauth/callback', { error: 'unavailable', provider });
@@ -312,6 +320,7 @@ export class AuthController {
         provider: this.#provider(provider),
         code,
         state,
+        browserNonce,
         userAgent: request.headers['user-agent'],
       });
     } catch (error) {

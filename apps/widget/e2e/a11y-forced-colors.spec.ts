@@ -1,5 +1,14 @@
 import { expect, type Page } from '@playwright/test';
-import { LOCALES, type Locale, openWidget, server, strings, tabCycle, test } from './fixtures.js';
+import {
+  LOCALES,
+  type Locale,
+  openWidget,
+  server,
+  startClockBeforeOpening,
+  strings,
+  tabCycle,
+  test,
+} from './fixtures.js';
 
 /**
  * The widget in forced colours (Windows High Contrast; M9-04, WCAG 1.4.1 and
@@ -252,6 +261,7 @@ for (const locale of LOCALES) {
           found.push(...problems.map((problem) => `${state}: ${problem}`));
         };
 
+        await startClockBeforeOpening(page);
         await openWidget(page, locale, query('availability=closed'));
         await expect(page.getByText(t('hours.closedTitle'))).toBeVisible();
         await read('out of hours');

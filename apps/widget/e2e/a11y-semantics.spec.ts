@@ -1,5 +1,13 @@
 import type { Page } from '@playwright/test';
-import { expect, LOCALES, openWidget, server, strings, test } from './fixtures.js';
+import {
+  expect,
+  LOCALES,
+  openWidget,
+  server,
+  startClockBeforeOpening,
+  strings,
+  test,
+} from './fixtures.js';
 
 /**
  * What a screen reader is told, asserted on the DOM (M9-04, WCAG 4.1.2 and
@@ -189,6 +197,7 @@ for (const locale of LOCALES) {
     test('out of hours gives way to Reconnecting and Back online: one strip at a time is a status', async ({
       page,
     }) => {
+      await startClockBeforeOpening(page);
       await openWidget(page, locale, 'availability=closed');
 
       await expect(page.getByText(t('hours.closedTitle'))).toBeVisible();

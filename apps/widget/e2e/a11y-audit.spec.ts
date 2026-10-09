@@ -4,6 +4,7 @@ import {
   LOCALES,
   openWidget,
   server,
+  startClockBeforeOpening,
   strings,
   tabStops,
   test,
@@ -126,8 +127,7 @@ for (const locale of LOCALES) {
         const found: string[] = [];
         const check = audit(page, found);
 
-        // The fixture opens on 27 September; an opening already past counts as open.
-        await page.clock.setFixedTime('2026-09-25T17:40:00Z');
+        await startClockBeforeOpening(page);
         await openWidget(page, locale, query('availability=closed'));
         await expect(page.getByText(t('hours.closedTitle'))).toBeVisible();
         await check('out of hours');

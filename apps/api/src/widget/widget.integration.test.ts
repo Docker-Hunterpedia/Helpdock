@@ -29,12 +29,15 @@ import {
 import { outboxEvents, silentLogger } from '@helpdock/jobs';
 import {
   canonicalIdentityJson,
+  defaultWeeklyHours,
   SOCKET_IO_PATH,
   type TicketDetail,
+  type WeeklyHours,
   WIDGET_EVENTS,
   WIDGET_NAMESPACE,
   type WidgetAvailability,
   type WidgetConfig,
+  type WidgetConversation,
   type WidgetConversationList,
   type WidgetEnvelope,
   type WidgetJoinAck,
@@ -60,8 +63,12 @@ import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceService } from '../realtime/presence.service.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { BusinessHoursService } from '../sla/business-hours.service.js';
+import { SlaRepository } from '../sla/sla.repository.js';
+import { SlaService } from '../sla/sla.service.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { WidgetConversationsService } from './widget-conversations.service.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
 import { WIDGET_VISITOR_WRITE_RULE } from './widget-gate.js';
 import { RedisWidgetBroadcast } from './widget-relay.js';
@@ -367,7 +374,13 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
     // M8-03: every contact the suite makes writes `contact.created`.
     registerContactEventHandlers();
     ignoreAuthEmailInThisSuite();
-    registerWidgetEventHandlers(new RedisWidgetBroadcast(worker));
+    const hours = new BusinessHoursService(
+      new SlaRepository(),
+      new SlaService(new SlaRepository()),
+    );
+    registerWidgetEventHandlers(new RedisWidgetBroadcast(worker), {
+      calendarsFor: (brandId, tx) => hours.calendarsFor(brandId, tx),
+    });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
     ada = { id: seeded.userId, email: seeded.email, token: '' };
@@ -1086,6 +1099,69 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       );
       expect(availability.status).toBe(200);
       expect(typeof availability.body.open).toBe('boolean');
+    });
+
+    describe('the hours of a conversation (M7-06)', () => {
+      const SATURDAY = new Date('2026-09-26T12:00:00.000Z');
+      const WEEKDAYS = defaultWeeklyHours();
+      const ALL_DAY = Array.from({ length: 7 }, () => [{ start: '00:00', end: '24:00' }]);
+
+      const hoursAt = async (visitor: Visitor, conversationId: string, now: Date) =>
+        (
+          await app
+            .get(WidgetConversationsService)
+            .get(
+              seeded.brandId,
+              { origin: SHOP, authorization: `Visitor ${visitor.secret}`, ip: null },
+              conversationId,
+              now,
+            )
+        ).hours;
+
+      const saveBrandHours = async (weekly: WeeklyHours): Promise<void> => {
+        const saved = await staff('PUT', `/api/brands/${seeded.brandId}/business-hours`, ada, {
+          brand: { timezone: 'UTC', weekly },
+          departments: [],
+        });
+        expect(saved.status).toBe(200);
+      };
+
+      it('is the default Monday-to-Friday week in the brand zone when no hours were saved', async () => {
+        const visitor = await newVisitor();
+        const opened = await start(visitor);
+        const conversationId = opened.body.conversation.id;
+
+        expect(await hoursAt(visitor, conversationId, SATURDAY)).toEqual({
+          open: false,
+          nextOpenAt: '2026-09-28T09:00:00.000Z',
+          timezone: 'UTC',
+        });
+        const overHttp = await widget<WidgetConversation>(
+          'GET',
+          `/conversations/${conversationId}`,
+          {
+            visitor,
+          },
+        );
+        expect(overHttp.body.hours).toMatchObject({ timezone: 'UTC' });
+        expect(opened.body.conversation.hours).toMatchObject({ timezone: 'UTC' });
+      });
+
+      it('is open, with no opening, when the brand saved 24/7 hours', async () => {
+        const visitor = await newVisitor();
+        const conversationId = (await start(visitor)).body.conversation.id;
+
+        await saveBrandHours(ALL_DAY);
+        try {
+          expect(await hoursAt(visitor, conversationId, SATURDAY)).toEqual({
+            open: true,
+            nextOpenAt: null,
+            timezone: 'UTC',
+          });
+        } finally {
+          await saveBrandHours(WEEKDAYS);
+        }
+      });
     });
 
     it('names the agents online by first name, unless the brand hides who they are', async () => {

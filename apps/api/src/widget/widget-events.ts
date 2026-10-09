@@ -1,8 +1,11 @@
+import type { DbTransaction } from '@helpdock/db';
 import { type OutboxEventHandler, registerEventHandler } from '@helpdock/jobs';
 import { WIDGET_EVENTS } from '@helpdock/schemas';
+import type { DepartmentCalendars } from '../sla/business-hours.service.js';
 import { TICKET_EVENTS, ticketEventPayloadSchema } from '../tickets/ticket-events.js';
 import { resolveWidgetSettings } from './resolved-settings.js';
 import { WidgetRepository } from './widget.repository.js';
+import { calendarHours } from './widget-hours.js';
 import { conversationRoom, type WidgetBroadcast } from './widget-relay.js';
 import { WidgetSettingsRepository } from './widget-settings.repository.js';
 import { toWidgetConversation, toWidgetMessage } from './widget-view.js';
@@ -17,8 +20,9 @@ import { toWidgetConversation, toWidgetMessage } from './widget-view.js';
  *   read here, so it cannot reach a visitor's socket even by mistake. This is
  *   also how an agent's reply "reaches the widget in real time".
  * - `ticket.closed`, `ticket.reopened`, `ticket.updated` → `conversation`
- *   (open or closed, continued or not) and `queue` (the position, or null once
- *   somebody holds it).
+ *   (open or closed, continued or not, handed off or not, and the hours of the
+ *   team that answers it, judged now: M7-06) and `queue` (the position, or null
+ *   once somebody holds it).
  *
  * A frame nobody is listening for is dropped by every replica's hub; REST is
  * the truth and the client catches up from its cursor (§7).
@@ -58,9 +62,18 @@ export const createWidgetMessageHandler =
     });
   };
 
+export interface WidgetConversationDeps {
+  /** `BusinessHoursService.calendarsFor`: the calendars a brand's departments count in. */
+  readonly calendarsFor: (brandId: string, tx: DbTransaction) => Promise<DepartmentCalendars>;
+  readonly now?: () => Date;
+}
+
 export const createWidgetConversationHandler =
-  (broadcast: WidgetBroadcast): OutboxEventHandler =>
-  async ({ tx, payload }) => {
+  (
+    broadcast: WidgetBroadcast,
+    { calendarsFor, now = () => new Date() }: WidgetConversationDeps,
+  ): OutboxEventHandler =>
+  async ({ tx, brandId, payload }) => {
     const parsed = ticketEventPayloadSchema.parse(payload);
     const widget = new WidgetRepository();
     const entry = await widget.conversation(tx, parsed.ticketId);
@@ -70,7 +83,13 @@ export const createWidgetConversationHandler =
       return;
     }
     const continued = (await widget.continuations(tx, [entry.ticket.id])).get(entry.ticket.id);
-    const view = toWidgetConversation(entry, 0, continued ?? null);
+    const calendarOf = await calendarsFor(brandId, tx);
+    const view = toWidgetConversation(
+      entry,
+      0,
+      continued ?? null,
+      calendarHours(calendarOf(entry.ticket.departmentId), now()),
+    );
     const room = conversationRoom(entry.ticket.id);
 
     await broadcast.emit({
@@ -81,6 +100,7 @@ export const createWidgetConversationHandler =
         state: view.state,
         continuedById: view.continuedById,
         aiHandedOff: view.aiHandedOff,
+        hours: view.hours,
       },
       seq: null,
     });
@@ -93,15 +113,18 @@ export const createWidgetConversationHandler =
   };
 
 /** Called by the worker's start-up with the other handlers (`worker/start-worker.ts`). */
-export const registerWidgetEventHandlers = (broadcast: WidgetBroadcast): void => {
+export const registerWidgetEventHandlers = (
+  broadcast: WidgetBroadcast,
+  conversation: WidgetConversationDeps,
+): void => {
   registerEventHandler(
     TICKET_EVENTS.replied,
     createWidgetMessageHandler(broadcast),
     WIDGET_SUBSCRIBER,
   );
 
-  const conversation = createWidgetConversationHandler(broadcast);
+  const handler = createWidgetConversationHandler(broadcast, conversation);
   for (const event of [TICKET_EVENTS.closed, TICKET_EVENTS.reopened, TICKET_EVENTS.updated]) {
-    registerEventHandler(event, conversation, WIDGET_SUBSCRIBER);
+    registerEventHandler(event, handler, WIDGET_SUBSCRIBER);
   }
 };

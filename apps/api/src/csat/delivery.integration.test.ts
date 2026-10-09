@@ -60,6 +60,9 @@ import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { registerRulesEventHandlers } from '../rules/rules-jobs.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { BusinessHoursService } from '../sla/business-hours.service.js';
+import { SlaRepository } from '../sla/sla.repository.js';
+import { SlaService } from '../sla/sla.service.js';
 import { telegramApiFactory } from '../telegram/bot-api-factory.js';
 import { TelegramRepository } from '../telegram/telegram.repository.js';
 import { registerTelegramEventHandlers } from '../telegram/telegram-events.js';
@@ -361,7 +364,13 @@ describe.skipIf(!hasDocker)('CSAT delivery on close (M8-06)', () => {
     const widgetBroadcast = new RedisWidgetBroadcast(worker);
     const outbound = new OutboundEmailService(new EmailRepository(), NO_INSTALL_SMTP);
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
-    registerWidgetEventHandlers(widgetBroadcast);
+    const hours = new BusinessHoursService(
+      new SlaRepository(),
+      new SlaService(new SlaRepository()),
+    );
+    registerWidgetEventHandlers(widgetBroadcast, {
+      calendarsFor: (brandId, tx) => hours.calendarsFor(brandId, tx),
+    });
     registerCsatEventHandlers({
       repository: csatRepository,
       tokens: csatTokens(),

@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import type { AiCitation, AiPart, ArticleSummary, WidgetMessage } from '../transport/types.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
+import { Sentence } from './Sentence.js';
 
 /**
  * The assistant in the thread (M7-06, `Widget/AI-EN`, `Widget/AI-AR`, DESIGN
@@ -196,7 +197,11 @@ export function HandoffLine() {
       <span>
         <strong class="hd-handoff-title">{t('ai.connecting')}</strong>
         <br />
-        {visitorEmail ? t('ai.steppedBackEmail', { email: visitorEmail }) : t('ai.steppedBack')}
+        {visitorEmail ? (
+          <Sentence id="ai.steppedBackEmail" vars={{ email: visitorEmail }} isolate={['email']} />
+        ) : (
+          t('ai.steppedBack')
+        )}
       </span>
     </li>
   );

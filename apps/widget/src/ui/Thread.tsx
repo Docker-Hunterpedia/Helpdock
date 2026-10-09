@@ -8,6 +8,7 @@ import { AttachmentView } from './Attachments.js';
 import { CsatCard } from './CsatCard.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
+import { Sentence } from './Sentence.js';
 
 /**
  * The thread (`WidgetStatesEN` columns 2–6): an `<ol>` inside a `role="log"`
@@ -68,9 +69,19 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
     noticeShown = true;
     items.push(
       <li key="notice" class="hd-system">
-        {firstMessageNotice === 'closed'
-          ? t('thread.replyAfterOpening', { email: visitorEmail })
-          : t('thread.talkingTo', { team, email: visitorEmail })}
+        {firstMessageNotice === 'closed' ? (
+          <Sentence
+            id="thread.replyAfterOpening"
+            vars={{ email: visitorEmail }}
+            isolate={['email']}
+          />
+        ) : (
+          <Sentence
+            id="thread.talkingTo"
+            vars={{ team, email: visitorEmail }}
+            isolate={['email']}
+          />
+        )}
       </li>,
     );
   };

@@ -112,7 +112,7 @@ h1, h2, h3 { text-wrap: pretty; }
 .hd-search { display: flex; gap: 8px; inline-size: 100%; max-inline-size: 720px; }
 .hd-hero .hd-search { margin-block-start: 16px; max-inline-size: 640px; }
 .hd-search-field {
-  flex-grow: 1; display: flex; align-items: center; gap: 12px; block-size: 48px; padding-inline: 16px;
+  flex-grow: 1; min-inline-size: 0; display: flex; align-items: center; gap: 12px; block-size: 48px; padding-inline: 16px;
   border-radius: var(--hd-radius-md); border: 1px solid var(--hd-border-strong); background: var(--hd-bg-surface); color: var(--hd-text-secondary);
 }
 .hd-search-field input { font-size: 16px; }

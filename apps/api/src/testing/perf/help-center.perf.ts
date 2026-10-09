@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DOMAIN_RULES_14, type PerfDataset, seedPerfDataset } from './dataset.js';
+import { DOMAIN_RULES_14, type PerfDataset, scaleDataset, seedPerfDataset } from './dataset.js';
 import {
   DOMAIN_RULES_14_HELP_CENTER,
   type SeededHelpCenter,
@@ -50,8 +50,6 @@ const settings = {
   scale: envNumber('PERF_SCALE', 1),
 };
 
-const scaled = (value: number): number => Math.max(1, Math.round(value * settings.scale));
-
 /** How many articles per language the cached scenario rotates through. */
 const CACHED_ARTICLES = 40;
 
@@ -65,16 +63,8 @@ describe.skipIf(!hasDocker)('help center TTFB (M9-03, DOMAIN-RULES §14)', () =>
       replicas: settings.replicas,
       seed: async (app, passwordHash) => {
         dataset = await seedPerfDataset(app.db, {
-          measured: {
-            ...DOMAIN_RULES_14.measured,
-            tickets: scaled(DOMAIN_RULES_14.measured.tickets),
-            contacts: scaled(DOMAIN_RULES_14.measured.contacts),
-          },
-          others: {
-            ...DOMAIN_RULES_14.others,
-            tickets: scaled(DOMAIN_RULES_14.others.tickets),
-            contacts: scaled(DOMAIN_RULES_14.others.contacts),
-          },
+          measured: scaleDataset(DOMAIN_RULES_14.measured, settings.scale),
+          others: scaleDataset(DOMAIN_RULES_14.others, settings.scale),
           passwordHash,
           log: (message) => process.stdout.write(`${message}\n`),
         });

@@ -4,6 +4,7 @@ import {
   type Db,
   type DbTransaction,
   departments,
+  knowledgeSources,
   seedBrandStatuses,
   seedBrandViews,
   tags,
@@ -17,7 +18,7 @@ import { type SQL, sql } from 'drizzle-orm';
 /**
  * The dataset of DOMAIN-RULES §14, for the ticket list's performance gate
  * (M1-15): five brands, and in the measured one 50 000 tickets, 200 000
- * messages and 20 000 contacts.
+ * messages, 20 000 contacts and 50 000 knowledge chunks.
  *
  * The rows are written by `INSERT … SELECT generate_series(…)` inside the
  * brand's own system transaction, so they pass through the same row-level
@@ -38,13 +39,14 @@ import { type SQL, sql } from 'drizzle-orm';
  *   handful.
  *
  * Every random choice is seeded (`setseed`), so two runs of the same options
- * produce the same rows. Articles and knowledge chunks, which §14 also lists,
- * have no tables until M5 and are left out.
+ * produce the same rows. The help-center suite adds the 2 000 articles after
+ * this common corpus is written.
  */
 
 export interface DatasetScale {
   readonly tickets: number;
   readonly contacts: number;
+  readonly knowledgeChunks: number;
   /** Messages per ticket on average; each ticket gets between 1 and 2n − 1. */
   readonly messagesPerTicket: number;
 }
@@ -60,9 +62,24 @@ export interface DatasetOptions {
 }
 
 export const DOMAIN_RULES_14: Omit<DatasetOptions, 'passwordHash' | 'log'> = {
-  measured: { tickets: 50_000, contacts: 20_000, messagesPerTicket: 4 },
-  others: { tickets: 10_000, contacts: 4_000, messagesPerTicket: 4 },
+  measured: {
+    tickets: 50_000,
+    contacts: 20_000,
+    knowledgeChunks: 50_000,
+    messagesPerTicket: 4,
+  },
+  others: { tickets: 10_000, contacts: 4_000, knowledgeChunks: 0, messagesPerTicket: 4 },
 };
+
+const scaledCount = (count: number, factor: number): number =>
+  count === 0 ? 0 : Math.max(1, Math.round(count * factor));
+
+export const scaleDataset = (dataset: DatasetScale, factor: number): DatasetScale => ({
+  tickets: scaledCount(dataset.tickets, factor),
+  contacts: scaledCount(dataset.contacts, factor),
+  knowledgeChunks: scaledCount(dataset.knowledgeChunks, factor),
+  messagesPerTicket: dataset.messagesPerTicket,
+});
 
 export interface SeededAccount {
   readonly id: string;
@@ -94,6 +111,12 @@ const AGENT_DEPARTMENTS = ['Technical', 'Returns'] as const;
 
 const STAFF_PER_BRAND = 20;
 const TAGS_PER_BRAND = 30;
+const KNOWLEDGE_CHUNKS_PER_DOCUMENT = 50;
+
+const KNOWLEDGE_PARAGRAPH_EN =
+  'Open the account settings, choose the relevant order, and follow the steps shown. Changes apply to new requests immediately. If an option is unavailable, review the plan limits or ask the support team for help.';
+const KNOWLEDGE_PARAGRAPH_AR =
+  'افتح إعدادات الحساب واختر الطلب المطلوب ثم اتبع الخطوات الظاهرة. تطبق التغييرات فورا على الطلبات الجديدة. إذا لم يظهر الخيار فراجع حدود الخطة أو تواصل مع فريق الدعم.';
 
 const TOPICS = [
   'Refund for',
@@ -318,6 +341,78 @@ const insertTicketTags = (tx: DbTransaction, tagIds: readonly string[]) =>
     ON CONFLICT DO NOTHING
   `);
 
+const insertKnowledgeDocuments = (
+  tx: DbTransaction,
+  brandId: string,
+  sourceId: string,
+  count: number,
+) =>
+  tx.execute(sql`
+    INSERT INTO knowledge_documents (
+      id, brand_id, source_id, external_id, title, content_hash
+    )
+    SELECT gen_random_uuid(), ${brandId}::uuid, ${sourceId}::uuid,
+           'perf-document-' || document.number,
+           'Performance knowledge document ' || document.number,
+           md5(${brandId} || ':document:' || document.number)
+    FROM generate_series(1, ${count}) AS document(number)
+  `);
+
+const insertKnowledgeChunkRows = (
+  tx: DbTransaction,
+  brandId: string,
+  sourceId: string,
+  count: number,
+) =>
+  tx.execute(sql`
+    WITH numbered_documents AS (
+      SELECT id, row_number() OVER (ORDER BY external_id) AS number
+      FROM knowledge_documents
+      WHERE source_id = ${sourceId}::uuid
+    )
+    INSERT INTO knowledge_chunks (
+      id, brand_id, source_id, document_id, ordinal, locale, visibility,
+      content, content_hash, token_count, meta
+    )
+    SELECT gen_random_uuid(), ${brandId}::uuid, ${sourceId}::uuid, document.id,
+           (chunk.number - 1) % ${KNOWLEDGE_CHUNKS_PER_DOCUMENT},
+           CASE WHEN chunk.number % 2 = 0 THEN 'ar' ELSE 'en' END,
+           'internal',
+           repeat(
+             CASE WHEN chunk.number % 2 = 0
+               THEN ${KNOWLEDGE_PARAGRAPH_AR}
+               ELSE ${KNOWLEDGE_PARAGRAPH_EN}
+             END || ' ',
+             8
+           ) || '# ' || chunk.number,
+           md5(${brandId} || ':chunk:' || chunk.number),
+           450,
+           jsonb_build_object('section', 'Performance corpus', 'chunk', chunk.number)
+    FROM generate_series(1, ${count}) AS chunk(number)
+    JOIN numbered_documents AS document
+      ON document.number = 1 + ((chunk.number - 1) / ${KNOWLEDGE_CHUNKS_PER_DOCUMENT})
+  `);
+
+const insertKnowledgeCorpus = async (
+  tx: DbTransaction,
+  brandId: string,
+  chunkCount: number,
+): Promise<void> => {
+  if (chunkCount === 0) {
+    return;
+  }
+  const [source] = await tx
+    .insert(knowledgeSources)
+    .values({ brandId, kind: 'file', name: 'Performance knowledge corpus' })
+    .returning({ id: knowledgeSources.id });
+  if (source === undefined) {
+    throw new Error('The performance knowledge source could not be created');
+  }
+  const documentCount = Math.ceil(chunkCount / KNOWLEDGE_CHUNKS_PER_DOCUMENT);
+  await insertKnowledgeDocuments(tx, brandId, source.id, documentCount);
+  await insertKnowledgeChunkRows(tx, brandId, source.id, chunkCount);
+};
+
 const seedBrand = async (
   db: Db,
   shape: BrandShape,
@@ -368,11 +463,14 @@ const seedBrand = async (
     await insertTickets(tx, seeded, shape.prefix, shape.scale.tickets, await statusIdsOf(tx));
     await insertMessages(tx, shape.scale.messagesPerTicket);
     await insertTicketTags(tx, seeded.tagIds);
+    await insertKnowledgeCorpus(tx, brandId, shape.scale.knowledgeChunks);
 
     return seeded;
   });
 
-  log(`Seeded ${shape.name}: ${shape.scale.tickets} tickets.`);
+  log(
+    `Seeded ${shape.name}: ${shape.scale.tickets} tickets, ${shape.scale.knowledgeChunks} knowledge chunks.`,
+  );
   return brand;
 };
 

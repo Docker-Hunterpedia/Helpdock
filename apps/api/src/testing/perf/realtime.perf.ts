@@ -11,7 +11,7 @@ import {
 } from '@helpdock/schemas';
 import { io, type Socket } from 'socket.io-client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DOMAIN_RULES_14, type PerfDataset, seedPerfDataset } from './dataset.js';
+import { DOMAIN_RULES_14, type PerfDataset, scaleDataset, seedPerfDataset } from './dataset.js';
 import { envNumber, hasDocker, type PerfStack, signIn, startPerfStack } from './stack.js';
 import { summarise } from './stats.js';
 
@@ -50,8 +50,6 @@ const settings = {
   scale: envNumber('PERF_SCALE', 1),
 };
 
-const scaled = (value: number): number => Math.max(1, Math.round(value * settings.scale));
-
 /** The site the widget is embedded on; the brand allows it. */
 const ORIGIN = 'https://shop.perf.test';
 const VISITOR_MESSAGE_EVERY_MS = 60_000;
@@ -80,16 +78,8 @@ describe.skipIf(!hasDocker)('realtime delivery, agent reply to widget (M9-03, §
       env: { TRUST_PROXY: 'true' },
       seed: async (app, passwordHash) => {
         dataset = await seedPerfDataset(app.db, {
-          measured: {
-            ...DOMAIN_RULES_14.measured,
-            tickets: scaled(DOMAIN_RULES_14.measured.tickets),
-            contacts: scaled(DOMAIN_RULES_14.measured.contacts),
-          },
-          others: {
-            ...DOMAIN_RULES_14.others,
-            tickets: scaled(DOMAIN_RULES_14.others.tickets),
-            contacts: scaled(DOMAIN_RULES_14.others.contacts),
-          },
+          measured: scaleDataset(DOMAIN_RULES_14.measured, settings.scale),
+          others: scaleDataset(DOMAIN_RULES_14.others, settings.scale),
           passwordHash,
           log: (message) => process.stdout.write(`${message}\n`),
         });

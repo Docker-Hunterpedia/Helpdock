@@ -10,7 +10,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SearchMode } from '../../tickets/ticket-query.js';
 import { TicketRepository } from '../../tickets/tickets.repository.js';
-import { DOMAIN_RULES_14, type PerfDataset, seedPerfDataset } from './dataset.js';
+import { DOMAIN_RULES_14, type PerfDataset, scaleDataset, seedPerfDataset } from './dataset.js';
 import { type LoadResult, type LoadScenario, type LoadSession, runLoad } from './load.js';
 import { hasDocker, envNumber as number, type PerfStack, signIn, startPerfStack } from './stack.js';
 
@@ -61,8 +61,6 @@ const settings = {
   scale: number('PERF_SCALE', 1),
 };
 
-const scaled = (value: number): number => Math.max(1, Math.round(value * settings.scale));
-
 /** One list request: which session asks, and the query string it sends. */
 interface ListCase {
   readonly name: string;
@@ -109,16 +107,8 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
       replicas: settings.replicas,
       seed: async (app, passwordHash) => {
         dataset = await seedPerfDataset(app.db, {
-          measured: {
-            ...DOMAIN_RULES_14.measured,
-            tickets: scaled(DOMAIN_RULES_14.measured.tickets),
-            contacts: scaled(DOMAIN_RULES_14.measured.contacts),
-          },
-          others: {
-            ...DOMAIN_RULES_14.others,
-            tickets: scaled(DOMAIN_RULES_14.others.tickets),
-            contacts: scaled(DOMAIN_RULES_14.others.contacts),
-          },
+          measured: scaleDataset(DOMAIN_RULES_14.measured, settings.scale),
+          others: scaleDataset(DOMAIN_RULES_14.others, settings.scale),
           passwordHash,
           log: (message) => process.stdout.write(`${message}\n`),
         });

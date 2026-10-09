@@ -52,6 +52,18 @@ one Playwright shard no longer carries unrelated work. The required `ci`
 context still waits for every shard, merged coverage gate, security scan,
 integration suite, browser suite and image smoke test.
 
+Documentation-only pull requests run the repository checks and the required
+`ci` aggregate without starting the database, coverage, browser, Semgrep
+or image jobs. A push to `main`, an empty or incomplete change classification,
+and every pull request containing a non-document path run the complete suite.
+The separate CodeQL pull-request workflow also ignores documentation-only
+changes; its `main` push and weekly scheduled runs remain unchanged.
+Skipped jobs are accepted by the aggregate only after the path classifier
+itself succeeds, so a classification failure cannot turn a code change into a
+short run. Coverage shards also retain a console reporter and attempt to upload
+their blob report after a failed test step, which makes failures diagnosable
+without weakening either coverage gate.
+
 ## Exit criteria
 
 Copied from the PRD. Six of seven are met; the seventh is met in part and says

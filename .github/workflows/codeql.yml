@@ -11,6 +11,9 @@ name: CodeQL
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   push:
     branches: [main]
   schedule:

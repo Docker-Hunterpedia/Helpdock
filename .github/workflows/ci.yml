@@ -14,6 +14,7 @@ concurrency:
 # workflow that pushes anything anywhere.
 permissions:
   contents: read
+  pull-requests: read
 
 # Every job below repeats the same short setup (checkout, pnpm, Node, install)
 # rather than sharing a workspace: jobs run on separate runners, and an install
@@ -37,6 +38,63 @@ permissions:
 #   jobs that run those suites install it.
 
 jobs:
+  # A documentation-only pull request still gets the cheap repository checks,
+  # but it does not need databases, browsers, coverage instrumentation or an
+  # image build. Pushes to main and any PR that changes a non-document path
+  # fail closed to the complete suite. Keeping this decision inside the
+  # workflow means the required `ci` context is always created.
+  scope:
+    name: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_full: ${{ steps.classify.outputs.run_full }}
+    steps:
+      - name: Classify the changed paths
+        id: classify
+        env:
+          CHANGED_FILE_COUNT: ${{ github.event.pull_request.changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "$EVENT_NAME" != 'pull_request' ]; then
+            echo 'run_full=true' >> "$GITHUB_OUTPUT"
+            echo 'A push to main always runs the complete suite.'
+            exit 0
+          fi
+
+          changed_files_json=$(mktemp)
+          trap 'rm -f "$changed_files_json"' EXIT
+          gh api --paginate --slurp \
+            "repos/$REPOSITORY/pulls/$PR_NUMBER/files" \
+            > "$changed_files_json"
+
+          listed_file_count=$(jq '[.[][]] | length' "$changed_files_json")
+          run_full=$(jq -r '
+            [
+              .[][]
+              | .filename, (.previous_filename // empty)
+            ]
+            | if length == 0 then
+                true
+              else
+                any(.[]; (startswith("docs/") or endswith(".md")) | not)
+              end
+          ' "$changed_files_json")
+
+          # The REST endpoint is capped at 3,000 files. A missing or truncated
+          # response must never turn a code change into a documentation run.
+          if [ "$listed_file_count" -eq 0 ] || \
+            [ "$listed_file_count" -ne "$CHANGED_FILE_COUNT" ]; then
+            run_full=true
+          fi
+
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
+          echo "Changed files classified: $listed_file_count/$CHANGED_FILE_COUNT"
+          echo "Complete suite required: $run_full"
+
   # Cheap, local and first to fail: lint, the three source checks and the
   # typecheck.
   checks:
@@ -90,6 +148,8 @@ jobs:
   # passing everything. Pinned like every other tool; Renovate moves it.
   semgrep:
     name: semgrep
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -110,6 +170,8 @@ jobs:
   # depend on them.
   unit:
     name: unit
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -146,6 +208,8 @@ jobs:
   # zero; the merge job loads the config's real threshold and is required.
   admin-unit:
     name: admin-unit shard (${{ matrix.shard }}/2)
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -181,11 +245,13 @@ jobs:
           --coverage
           --coverage.thresholds.lines=0
           --maxWorkers=2
+          --reporter=default
           --reporter=blob
           --shard=${{ matrix.shard }}/2
           --outputFile.blob=.vitest/blob/report-${{ matrix.shard }}.json
 
       - name: Upload the coverage shard
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: admin-coverage-${{ matrix.shard }}
@@ -194,7 +260,8 @@ jobs:
 
   admin-coverage:
     name: admin-unit
-    needs: admin-unit
+    needs: [scope, admin-unit]
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -231,6 +298,8 @@ jobs:
   # As above, shards only collect; the merge job enforces the real 90 % gate.
   api:
     name: api shard (${{ matrix.shard }}/2)
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -276,11 +345,13 @@ jobs:
           --coverage
           --coverage.thresholds.lines=0
           --maxWorkers=2
+          --reporter=default
           --reporter=blob
           --shard=${{ matrix.shard }}/2
           --outputFile.blob=.vitest/blob/report-${{ matrix.shard }}.json
 
       - name: Upload the coverage shard
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: api-coverage-${{ matrix.shard }}
@@ -289,7 +360,8 @@ jobs:
 
   api-coverage:
     name: api
-    needs: api
+    needs: [scope, api]
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -322,6 +394,8 @@ jobs:
   # The integration suites under `packages/*`; the api's run in the job above.
   integration:
     name: integration
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -363,6 +437,8 @@ jobs:
   # screenshot comparison and the real-api run are in `browser-api` below.
   e2e:
     name: e2e (${{ matrix.shard }}/4)
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -416,6 +492,8 @@ jobs:
   # The widget on its harness page with the mock transport.
   widget-e2e:
     name: widget-e2e
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -462,6 +540,8 @@ jobs:
   # exit criterion that every auth method works end to end).
   browser-api:
     name: browser-api
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -539,6 +619,8 @@ jobs:
   # it. Needs no Node: Docker builds everything from the Dockerfile.
   image:
     name: image
+    needs: scope
+    if: needs.scope.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -592,6 +674,7 @@ jobs:
     needs:
       [
         checks,
+        scope,
         semgrep,
         unit,
         admin-unit,
@@ -613,7 +696,8 @@ jobs:
         run: |
           echo "results: $RESULTS"
           for result in $RESULTS; do
-            if [ "$result" != 'success' ]; then
-              exit 1
-            fi
+            case "$result" in
+              success | skipped) ;;
+              *) exit 1 ;;
+            esac
           done

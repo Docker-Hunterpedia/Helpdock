@@ -20,8 +20,9 @@ what is inside it.
    version pull request.
 4. That merge releases: `changesets.yml` tags the merge commit `v<version>` and
    calls [`release.yml`](../../.github/workflows/release.yml), which builds and
-   pushes the multi-architecture image, generates a CycloneDX SBOM and creates
-   the GitHub Release.
+   pushes the multi-architecture image, signs its immutable digest with the
+   workflow's GitHub OIDC identity, generates a CycloneDX SBOM and creates the
+   GitHub Release.
 
 Nothing is published to npm. Every workspace is `"private": true`.
 
@@ -127,15 +128,39 @@ Release as a pre-release and does **not** move `:latest`.
 | **Tags** | `ghcr.io/docker-hunterpedia/helpdock:<version>`, plus `:latest` when it is not a pre-release. |
 | **Provenance** | The commit the tag points at is baked in as `HELPDOCK_GIT_SHA`, as `org.opencontainers.image.revision` and is what the System page shows next to the version. |
 | **Registry** | GHCR, with the run's own `GITHUB_TOKEN` and `packages: write`. No personal access token is stored anywhere. |
+| **Signature** | Cosign keyless signing over the multi-architecture image digest. GitHub OIDC issues the short-lived Fulcio certificate; no private signing key is stored. The workflow verifies the signature and its exact workflow identity before continuing. |
 | **SBOM** | `anchore/sbom-action` in CycloneDX JSON, generated **from the pushed image** so it covers the base image's Debian packages and ffmpeg, not only `node_modules`. Attached to the Release as `helpdock-<version>.cdx.json`. |
 | **Release** | Created from the tag. Its body is the `CHANGELOG.md` section for that version, followed by GitHub's generated list of merged pull requests. |
 
-> **For the repository owner, once.** The first push creates the package as
-> **private**. Make it public at
-> `https://github.com/orgs/Docker-Hunterpedia/packages` → helpdock → Package
-> settings → Change visibility, and link it to the repository so the Packages
-> sidebar shows it. Until then `docker pull` fails for everybody but you, and
-> [the install guide](install.md) does not work as written.
+The package is public and linked to this repository. A new registry or renamed
+package starts private; make it public before calling that release complete.
+
+### Verify the image signature
+
+Verify the immutable digest, not a mutable tag. For example, to resolve and
+verify `0.4.0`:
+
+```sh
+image='ghcr.io/docker-hunterpedia/helpdock'
+version='0.4.0'
+digest="$(docker buildx imagetools inspect "$image:$version" --format '{{.Manifest.Digest}}')"
+
+cosign verify \
+  --certificate-identity 'https://github.com/Docker-Hunterpedia/Helpdock/.github/workflows/release.yml@refs/heads/main' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  "$image@$digest"
+```
+
+The normal Changesets release and the **Run workflow** recovery path use the
+`refs/heads/main` identity above. A `v*` tag pushed by hand invokes the workflow
+at that tag instead; verify it with the exact
+`.../release.yml@refs/tags/v<version>` identity printed in that run.
+
+To sign an existing release without rebuilding it, run **Release** from the
+Actions tab on `main` and enter its `v<version>` tag. This resolves the registry
+digest, signs and verifies it, and deliberately skips the image build, SBOM and
+GitHub Release steps. Use the same path to recover when a release published
+successfully but Sigstore was temporarily unavailable.
 
 The `v*` tag also starts [`zap.yml`](../../.github/workflows/zap.yml), the ZAP
 baseline scan against the tagged commit's stack, as does any push to a
@@ -146,6 +171,7 @@ the next patch ([security scanning](security-scanning.md)).
 
 - Check `docker pull ghcr.io/docker-hunterpedia/helpdock:<version>` from a
   machine that is not signed in.
+- Resolve that tag's digest and verify its Cosign signature as above.
 - Check the System page of a fresh install reports that version and that commit.
 - Upgrade, backup and restore procedures for operators are in
   [the operations guide](operations.md) and
@@ -154,9 +180,13 @@ the next patch ([security scanning](security-scanning.md)).
 ## If something goes wrong
 
 The tag is the input, so a failed run is re-runnable from the Actions tab
-without touching the repository: for an automatic release, re-run the failed
-`release` job of the `Changesets` run. A tag pointing at the wrong commit is the
-one case that needs care: delete it locally and on the remote, then tag again.
-The `protect-release-tags` ruleset lets anyone with write access create a `v*`
-tag but only a repository admin move or delete one. A version already pulled by
-somebody is never re-tagged — publish the next patch instead.
+without touching the repository. If only the signing step failed after the
+image was pushed, use **Release → Run workflow** with the existing tag so the
+workflow signs that exact digest and does not rebuild it. For an earlier
+failure, re-run the failed `release` job of the `Changesets` run.
+
+A tag pointing at the wrong commit is the one case that needs care: delete it
+locally and on the remote, then tag again. The `protect-release-tags` ruleset
+lets anyone with write access create a `v*` tag but only a repository admin move
+or delete one. A version already pulled by somebody is never re-tagged — publish
+the next patch instead.

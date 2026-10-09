@@ -17,10 +17,10 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 | M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. Re-walk the chapters M6, M7 and M8 touched |
 | M9-03 | Load tests | #154 | in progress: suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); **the §14 host run is outstanding** |
 | M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** |
-| M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | #152, #156 | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); #152 patches the open Fastify advisory; ZAP's first release run is tracked in #156 |
+| M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | #152, #156 | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); #152 patches the open Fastify advisory; the first release-tag ZAP run passed and #156 is closed |
 | M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
 | M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; **the clean-VM run and the three outside testers need people** (#157) and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
-| M9-08 | Release pipeline | #158 | verified ([notes](#m9-08-release-pipeline)); external dependency (GHCR visibility, signing key) open |
+| M9-08 | Release pipeline | #158 | public multi-architecture image and SBOM verified on `v0.4.0`; keyless Cosign signing implemented ([notes](#m9-08-release-pipeline)); close after the live signature is verified |
 | M9-09 | Tag `1.0.0` | #159 | planned after every release gate passes |
 | M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
 
@@ -63,9 +63,9 @@ Copied from the PRD, ticked as they are met.
 - ~~**Outbox event concurrency.**~~ Settled: events run eight at a time,
   ordered per ticket ([M9-03 outbox concurrency](#m9-03-outbox-concurrency),
   ADR 0023).
-- **ZAP's first release run** will tell which passive alerts need a line in
-  `.zap/rules.tsv`. The image could not be built in the development sandbox
-  (Docker Hub rate limit), so the stack script has not run end to end yet.
+- ~~**ZAP's first release run.**~~ Settled on `v0.4.0`: the release-tag run
+  passed 62 checks across 16 URLs with 0 failures and 0 warnings. No new
+  `.zap/rules.tsv` exception was needed.
 
 ## M9-02 ASVS Level 2
 
@@ -199,6 +199,8 @@ recorded in the guide's Results table.
   sharing `scripts/compose-env.sh`), past the first-run wizard, ZAP's baseline
   scan with `.zap/rules.tsv`. The release procedure runs it on the version pull
   request's branch before merging ([release](../guides/release.md#the-short-version)).
+  The first release-tag run, on `v0.4.0`, passed with 0 failures, 0 warnings,
+  7 informational alerts, 1 ignored rule and 62 passes across 16 URLs (#156).
 - **SBOM**: already in `release.yml` (`anchore/sbom-action`, CycloneDX, from the
   pushed image, attached to the Release).
 - **Dependency audit**: `pnpm audit --audit-level high` added to `ci.yml`'s
@@ -216,14 +218,22 @@ recorded in the guide's Results table.
 
 ## M9-08 Release pipeline
 
-Verified against ARCHITECTURE §16; nothing was missing in the workflows.
+Verified against ARCHITECTURE §16 and exercised on `v0.4.0`.
 `changesets.yml` keeps the version pull request open and, once it merges, tags
 `v<version>` and calls `release.yml`, which builds `linux/amd64` and
 `linux/arm64` with QEMU and Buildx, pushes `:<version>` and `:latest` (not for
 pre-releases) to GHCR with the run's own token, generates the CycloneDX SBOM
 from the pushed image and creates the Release from the `CHANGELOG.md` section
-plus GitHub's generated notes. What remains is the external dependency in the
-PRD: making the GHCR package public and the image signing key.
+plus GitHub's generated notes. The public `v0.4.0` image was pulled without
+registry credentials and its index contains both architectures; its SBOM is
+attached to the GitHub Release.
+
+The workflow now keylessly signs that immutable index digest with Cosign and a
+short-lived GitHub OIDC/Fulcio certificate, then verifies the exact workflow
+identity and issuer. No signing key or secret is stored. A manual mode signs an
+existing tag without rebuilding or moving it, so `v0.4.0` can be brought under
+the same policy after this change merges. #158 closes only after that live
+signature is verified from the public registry.
 
 ## M9-06 User docs
 

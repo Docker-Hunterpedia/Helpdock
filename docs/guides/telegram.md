@@ -34,8 +34,9 @@ The routes behind the dialog:
 | `displayName` | What the Channels list calls it. |
 | `token` | BotFather's token. Helpdock calls `getMe` with it before saving: a token Telegram does not know is refused (`token-invalid`), and a bot already connected to any brand is refused (`bot-taken`). |
 | `departmentId` | Where a new conversation from this bot is filed. A reply stays in its ticket's department. |
-| `welcomeEn`, `welcomeAr` | What the bot answers to `/start`, per language. Leave them empty for the default text. |
-| `languagePick` | Whether `/start` also offers **English** / **العربية** buttons. Defaults to on. |
+| `welcomeEn`, `welcomeAr` | The welcome, per language, sent in the contact's language: after the contact picks one when the bot asks for a language, at once when it does not. Leave one empty for the default text in that language. |
+| `languagePrompt` | The question `/start` asks first when `languagePick` is on: one text for both languages, up to 200 characters. Empty or `null` sends the default, "Choose your language · اختر لغتك". |
+| `languagePick` | Whether `/start` asks for a language, with **English** / **العربية** buttons, before the welcome. Defaults to on. |
 
 The token is encrypted with `APP_MASTER_KEY` and never returned; a read says only `tokenSet: true`, the bot's username, and the token's last four characters (`tokenHint`) so two tokens can be told apart. To replace it (after `/revoke` in BotFather), open the bot's page, press **Replace** next to the masked token, paste the new one and **Save** (`PUT …/bots/:botId` with `token`). A token for a *different* bot is refused (`token-other-bot`): that is a new bot, so add it as one.
 
@@ -48,7 +49,7 @@ Open a bot from the list. One form, saved with **Save** at its foot (Discard put
 | Connection | The token as `•••• 4f2a` with **Replace**, and **Test connection**: `getMe` with the saved token, answered in place ("Connected · 14:36 — getMe returned @acme_support_bot · “Acme Support” · id 7310042215", or Telegram's refusal). Nothing is sent to any chat. |
 | Webhook | The address Telegram should post to, with Copy; whether Telegram has it ("Set", "Not set", "Telegram posts to another address" or "Polling"); the pending updates and Telegram's last delivery error from `getWebhookInfo`; and **Set webhook**, which is off on an install that polls. |
 | Routing | The department new conversations from this bot open tickets in. |
-| Welcome and language | Whether `/start` offers the **English** / **العربية** buttons, the question that goes with them (the catalog's, shown in both languages), and the welcome per language. Leave a welcome empty to send the default. Changes apply to the next `/start`. |
+| Welcome and language | Whether `/start` asks for a language, the **Language prompt** it asks with (one text for both languages, shown as the contact will see it), and the welcome per language. Clear the prompt, or leave the default in it, to send the default; leave a welcome empty to send the default welcome. Changes apply to the next `/start`. |
 
 Beside the form, **Activity** shows when the last update arrived and the last reply was delivered, the replies that failed in the last 24 hours, and the open tickets of the bot's chats, with a link to the failed jobs on the System page. **Delete bot…** is under it (see [Removing a bot](#removing-a-bot)).
 
@@ -123,9 +124,14 @@ A tap records the score at once. The bot then removes the score buttons, keeps *
 
 ## `/start` and the language pick
 
-When a customer opens the bot, Telegram sends `/start`. Helpdock records the contact and the chat, opens no ticket, and the bot answers with the welcome in the contact's language — the one they chose before, else the language of their Telegram app if it is English or Arabic, else the brand's default language. With `languagePick` on, the welcome ends with "Which language should we answer in?" and two buttons.
+When a customer opens the bot, Telegram sends `/start`. Helpdock records the contact and the chat and opens no ticket. What the bot says next depends on **Ask for a language, then send a welcome** (`languagePick`, on by default):
 
-Pressing a button sets the contact's language, which is also the language of their email and survey texts, and the bot confirms in that language. The default texts are in the `telegram` namespace of `packages/i18n`.
+- **On.** The bot first sends the language prompt: one line that names both languages, with two buttons that name each language in its own script, **English** and **العربية**. The welcome waits for the answer. The prompt is "Choose your language · اختر لغتك" unless the bot has its own in **Language prompt**.
+- **Off.** The bot sends the welcome at once, in the contact's language: the one they chose before, else the language of their Telegram app if it is English or Arabic, else the brand's default language.
+
+Pressing a button sets the contact's language, which is also the language of their email and survey texts. The bot then rewrites the prompt to "Language: English" (or "اللغة: العربية"), which takes its buttons away so it cannot be pressed twice, and sends the welcome in the language chosen: the bot's own text for that language, or the default if it has none. If Telegram refuses the rewrite, the welcome is still sent.
+
+The prompt is one text for both languages because the contact's language is not known yet. Write your own in **Language prompt** on the bot's page (up to 200 characters, plain text). The field starts with the default; clear it, or leave the default in it, and the bot keeps sending the default, which is built from the two catalogs and follows them. The field is off while the bot does not ask for a language. A change applies to the next `/start`; chats that already picked a language keep it. The default texts are in the `telegram` namespace of `packages/i18n`.
 
 ## Development: long polling
 

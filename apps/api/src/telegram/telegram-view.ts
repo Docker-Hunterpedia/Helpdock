@@ -45,6 +45,7 @@ export const toTelegramBot = (
   tokenUpdatedAt: bot.tokenUpdatedAt.toISOString(),
   tokenUpdatedByName,
   welcome: { en: bot.welcomeEn, ar: bot.welcomeAr },
+  languagePrompt: bot.languagePrompt,
   languagePick: bot.languagePick,
   webhook: {
     url: bot.webhookUrl,

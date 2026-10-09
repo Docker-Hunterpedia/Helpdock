@@ -65,6 +65,8 @@ export class FakeTelegram {
   readonly pending = new Map<string, unknown[]>();
   /** Chats `sendMessage` refuses with 403, as for a user who blocked the bot. */
   readonly blockedChats = new Set<string>();
+  /** Chats whose `editMessageText` is refused with 400, as for a message that already says that. */
+  readonly refusedEdits = new Set<string>();
   #server: Server | undefined;
   #messageId = 100;
   url = '';
@@ -159,6 +161,10 @@ export class FakeTelegram {
           chat: { id: Number(body.chat_id), type: 'private' },
           ...(method === 'sendMessage' ? { text: body.text } : {}),
         });
+      case 'editMessageText':
+        return this.refusedEdits.has(String(body.chat_id))
+          ? refusal(400, 'Bad Request: message is not modified')
+          : ok(true);
       default:
         return ok(true);
     }

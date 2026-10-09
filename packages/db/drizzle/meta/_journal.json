@@ -323,6 +323,13 @@
       "when": 1791329143918,
       "tag": "0047_drop_ai_pii_redaction_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791577488671,
+      "tag": "0048_telegram_language_prompt",
+      "breakpoints": true
     }
   ]
 }

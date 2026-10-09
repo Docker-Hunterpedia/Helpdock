@@ -28,15 +28,16 @@ import {
   withSystem,
 } from '@helpdock/db';
 import { silentLogger, type TelegramSendPayload } from '@helpdock/jobs';
-import type {
-  TelegramBot,
-  TelegramBotList,
-  TelegramBotStatus,
-  TelegramDeliveryList,
-  TelegramTestResult,
-  TelegramTicketContextResponse,
-  TelegramWebhookResult,
-  Ticket,
+import {
+  TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH,
+  type TelegramBot,
+  type TelegramBotList,
+  type TelegramBotStatus,
+  type TelegramDeliveryList,
+  type TelegramTestResult,
+  type TelegramTicketContextResponse,
+  type TelegramWebhookResult,
+  type Ticket,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -375,6 +376,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
         tokenSet: true,
         tokenHint: TOKEN.slice(-4),
         welcome: { en: 'Welcome to Acme support.', ar: null },
+        languagePrompt: null,
         languagePick: true,
         mode: 'webhook',
         health: { state: 'waiting' },
@@ -453,6 +455,16 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
         name: 'acme_support_bot',
         telegramId: 7_000_001,
       });
+    });
+
+    it('refuses a language prompt too long for one line above two buttons', async () => {
+      const tooLong = await call('PUT', `${botsPath()}/${bot.id}`, ada, {
+        displayName: 'Acme Help',
+        departmentId: support,
+        languagePrompt: 'x'.repeat(TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH + 1),
+      });
+
+      expect(tooLong.status).toBe(400);
     });
 
     it('tests a typed token before the bot exists, and refuses one Telegram does not know', async () => {
@@ -876,40 +888,47 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
   // ----------------------------------------------------- /start, language
 
   describe('/start and the language pick (M6-04)', () => {
-    const chat = 4_242_005;
+    const CATALOG_PROMPT = 'Choose your language · اختر لغتك';
+    const OWN_PROMPT = 'Acme: pick a language · اختر لغتك';
+    const KEYBOARD = {
+      inline_keyboard: [
+        [
+          { text: 'English', callback_data: 'lang:en' },
+          { text: 'العربية', callback_data: 'lang:ar' },
+        ],
+      ],
+    };
 
-    it('welcomes with the bot’s own text and both languages, without opening a ticket', async () => {
-      await deliver(textUpdate(nextUpdate(), chat, '/start'));
-      await runOutbox();
-
-      expect(await ticketForChat(chat)).toEqual([]);
-      const [welcome] = sentTo(chat);
-      expect(welcome?.body).toEqual({
-        chat_id: String(chat),
-        text: 'Welcome to Acme support.\n\nWhich language should we answer in?',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: 'English', callback_data: 'lang:en' },
-              { text: 'العربية', callback_data: 'lang:ar' },
-            ],
-          ],
-        },
+    /** The bot as the admin screen saves it: the whole form, a field changed. */
+    const saveBot = (fields: Record<string, unknown>) =>
+      call<TelegramBot>('PUT', `${botsPath()}/${bot.id}`, ada, {
+        displayName: 'Acme Help',
+        departmentId: support,
+        welcomeEn: 'Welcome to Acme support.',
+        ...fields,
       });
-    });
 
-    it('sets the contact’s language from the button and confirms in it', async () => {
-      await deliver({
+    const pressLanguage = (
+      chat: number,
+      locale: 'en' | 'ar',
+      promptMessageId: number,
+      queryId = `cq-${String(chat)}`,
+    ) =>
+      deliver({
         update_id: nextUpdate(),
         callback_query: {
-          id: 'cq-ar',
+          id: queryId,
           from: { id: chat, is_bot: false, first_name: 'Mona' },
-          message: { message_id: 1, date: 0, chat: { id: chat, type: 'private' } },
-          data: 'lang:ar',
+          message: {
+            message_id: promptMessageId,
+            date: 0,
+            chat: { id: chat, type: 'private' },
+          },
+          data: `lang:${locale}`,
         },
       });
-      await runOutbox();
 
+    const contactLocale = async (chat: number) => {
       const [identity] = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx
           .select({ locale: contacts.locale })
@@ -919,20 +938,115 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
             and(eq(contactIdentities.kind, 'telegram'), eq(contactIdentities.value, String(chat))),
           ),
       );
-      expect(identity?.locale).toBe('ar');
+      return identity?.locale;
+    };
+
+    const catalogChat = 4_242_005;
+    const ownChat = 4_242_012;
+    const blankedChat = 4_242_015;
+
+    it('asks the language first, in both languages, with the catalog’s question when the bot has none', async () => {
+      expect(bot.languagePrompt).toBeNull();
+
+      await deliver(textUpdate(nextUpdate(), catalogChat, '/start'));
+      await runOutbox();
+
+      expect(await ticketForChat(catalogChat)).toEqual([]);
+      // Only the question: the welcome waits for the answer.
+      expect(sentTo(catalogChat).map((entry) => entry.body)).toEqual([
+        { chat_id: String(catalogChat), text: CATALOG_PROMPT, reply_markup: KEYBOARD },
+      ]);
+    });
+
+    it('asks with the bot’s own question when it has one, and the catalog’s again once it is blanked', async () => {
+      const saved = await saveBot({ languagePrompt: OWN_PROMPT });
+      expect(saved.body.languagePrompt).toBe(OWN_PROMPT);
+
+      await deliver(textUpdate(nextUpdate(), ownChat, '/start'));
+      await runOutbox();
+
+      expect(sentTo(ownChat).map((entry) => entry.body)).toEqual([
+        { chat_id: String(ownChat), text: OWN_PROMPT, reply_markup: KEYBOARD },
+      ]);
+
+      const blanked = await saveBot({ languagePrompt: '   ' });
+      expect(blanked.body.languagePrompt).toBeNull();
+      await deliver(textUpdate(nextUpdate(), blankedChat, '/start'));
+      await runOutbox();
+      expect(sentTo(blankedChat).at(-1)?.body.text).toBe(CATALOG_PROMPT);
+    });
+
+    it('records the language from the button, rewrites the prompt to it and welcomes in it, in that order', async () => {
+      const before = telegram.calls.length;
+
+      await pressLanguage(catalogChat, 'ar', 7, 'cq-ar');
+      await runOutbox();
+
+      expect(await contactLocale(catalogChat)).toBe('ar');
       const [chatRow] = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx
           .select()
           .from(telegramChats)
-          .where(eq(telegramChats.chatId, String(chat))),
+          .where(eq(telegramChats.chatId, String(catalogChat))),
       );
       expect(chatRow?.languageChosenAt).toBeInstanceOf(Date);
-      expect(telegram.callsOf('answerCallbackQuery').at(-1)?.body).toEqual({
-        callback_query_id: 'cq-ar',
+      expect(telegram.calls.slice(before).map((entry) => [entry.method, entry.body])).toEqual([
+        ['answerCallbackQuery', { callback_query_id: 'cq-ar' }],
+        [
+          'editMessageText',
+          { chat_id: String(catalogChat), message_id: 7, text: 'اللغة: العربية' },
+        ],
+        [
+          'sendMessage',
+          {
+            chat_id: String(catalogChat),
+            text: 'مرحبًا! أرسل لنا سؤالك وسيرد عليك الفريق هنا.',
+          },
+        ],
+      ]);
+    });
+
+    it('welcomes with the bot’s own text for the language chosen', async () => {
+      await pressLanguage(ownChat, 'en', 9);
+      await runOutbox();
+
+      expect(await contactLocale(ownChat)).toBe('en');
+      expect(telegram.callsOf('editMessageText').at(-1)?.body).toEqual({
+        chat_id: String(ownChat),
+        message_id: 9,
+        text: 'Language: English',
       });
-      expect(sentTo(chat).at(-1)?.body.text).toBe(
-        'شكرًا لك. سنرد عليك بالعربية. أرسل رسالتك متى شئت.',
+      expect(sentTo(ownChat).at(-1)?.body).toEqual({
+        chat_id: String(ownChat),
+        text: 'Welcome to Acme support.',
+      });
+    });
+
+    it('still welcomes when Telegram refuses to rewrite the prompt', async () => {
+      const chat = 4_242_013;
+      telegram.refusedEdits.add(String(chat));
+
+      await pressLanguage(chat, 'en', 11);
+      await runOutbox();
+
+      expect(sentTo(chat).map((entry) => entry.body.text)).toEqual(['Welcome to Acme support.']);
+    });
+
+    it('welcomes at once, in the Telegram app’s language, when the bot does not ask', async () => {
+      const chat = 4_242_014;
+      await saveBot({ languagePick: false });
+
+      await deliver(
+        textUpdate(nextUpdate(), chat, '/start', {
+          from: { id: chat, is_bot: false, first_name: 'Mona', language_code: 'ar' },
+        }),
       );
+      await runOutbox();
+      await saveBot({ languagePick: true });
+
+      expect(sentTo(chat).map((entry) => entry.body)).toEqual([
+        { chat_id: String(chat), text: 'مرحبًا! أرسل لنا سؤالك وسيرد عليك الفريق هنا.' },
+      ]);
     });
   });
 

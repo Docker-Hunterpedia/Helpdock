@@ -189,6 +189,15 @@ export class TelegramBotApi {
     await this.#call(() => this.#api.answerCallbackQuery(callbackQueryId));
   }
 
+  /**
+   * Rewrites a sent message's text (M6-04). Telegram drops the inline keyboard
+   * of a message edited without a new one, which is what the language prompt
+   * wants once the contact has chosen.
+   */
+  async editMessageText(chatId: string, messageId: string, text: string): Promise<void> {
+    await this.#call(() => this.#api.editMessageText(chatId, Number(messageId), text));
+  }
+
   /** Replaces a sent message's buttons (M8-06); without `replyMarkup` it removes them. */
   async editMessageReplyMarkup(
     chatId: string,

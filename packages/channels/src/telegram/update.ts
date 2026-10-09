@@ -119,6 +119,8 @@ export type TelegramEvent =
       readonly sender: TelegramSender;
       readonly callbackQueryId: string;
       readonly locale: 'en' | 'ar';
+      /** The language prompt the button is under. */
+      readonly messageId: string;
     }
   | {
       /** M8-06: a score button under the satisfaction survey. */
@@ -262,8 +264,9 @@ export const classifyUpdate = (raw: unknown): TelegramEvent => {
 
   if (update.callback_query !== undefined) {
     const query = update.callback_query;
-    const chat = query.message?.chat;
-    if (chat === undefined || chat.type !== 'private') {
+    const under = query.message;
+    const chat = under?.chat;
+    if (under === undefined || chat === undefined || chat.type !== 'private') {
       return { kind: 'ignored', updateId, reason: 'not-private' };
     }
     const sender = {
@@ -273,13 +276,13 @@ export const classifyUpdate = (raw: unknown): TelegramEvent => {
       languageCode: query.from.language_code ?? null,
     };
     const survey = parseCsatCallback(query.data ?? '');
-    if (survey !== null && query.message !== undefined) {
+    if (survey !== null) {
       return {
         kind: 'csat',
         updateId,
         callbackQueryId: query.id,
         ...survey,
-        messageId: String(query.message.message_id),
+        messageId: String(under.message_id),
         sender,
       };
     }
@@ -293,6 +296,7 @@ export const classifyUpdate = (raw: unknown): TelegramEvent => {
       updateId,
       callbackQueryId: query.id,
       locale: match[1] === 'ar' ? 'ar' : 'en',
+      messageId: String(under.message_id),
       sender,
     };
   }

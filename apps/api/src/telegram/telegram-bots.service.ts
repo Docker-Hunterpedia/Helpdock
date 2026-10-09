@@ -273,6 +273,7 @@ export class TelegramBotsService {
       departmentId: request.departmentId,
       welcomeEn: blankToNull(request.welcomeEn),
       welcomeAr: blankToNull(request.welcomeAr),
+      languagePrompt: blankToNull(request.languagePrompt),
       languagePick: request.languagePick,
     };
   }

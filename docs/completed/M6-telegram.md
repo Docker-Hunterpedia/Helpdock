@@ -12,8 +12,9 @@ becomes a ticket, or continues the chat's open one, through the same
 lifecycle calls email and the widget make; the agent's public reply, text and
 files, is delivered back to the chat through the outbox. Photos, documents,
 voice notes, audio and video go through the M1 media pipeline; locations are
-filed as text with a map link. `/start` sends the bot's welcome and offers
-English or Arabic. Admins add a bot on Channels › Telegram, test its token,
+filed as text with a map link. `/start` asks for English or Arabic first, with
+the bot's own question or the default, then sends the welcome in the language
+chosen. Admins add a bot on Channels › Telegram, test its token,
 set the webhook and read its health; the ticket view shows which chat a
 ticket is with and what happened to each reply.
 
@@ -84,6 +85,10 @@ reviewed and merged as one pull request with M7, M8 and the M9 work.
 - `0040_telegram_chat_identity`: `telegram_chats.username` (the customer's `@username` as
   of their last message) and `telegram_chats.language_chosen_at` (set when they press a
   language button), for the ticket view's identity card. No new table.
+- `0048_telegram_language_prompt`: `telegram_bots.language_prompt`, nullable text; null is
+  the catalog's question. No new table: `telegram_bots` was already in `TENANT_TABLES`
+  with its `FORCE`d row-level policy and is covered by the RLS negative suite, so the
+  isolation test did not change.
 
 ## Gaps and follow-ups
 
@@ -91,7 +96,7 @@ Written down and carried forward. None of them blocks M9.
 
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
-| **The language prompt is the catalog's, not a per-bot field** | The artboard draws an editable "Language prompt" sent before the welcome; M6-04 sends the catalog's question under the welcome in the contact's language. The screen shows that text read-only in both languages. Making it editable needs a column and a change to the `/start` flow. | [`/start` and the language pick](#m6-04-start-and-the-language-pick) |
+| ~~The language prompt is the catalog's, not a per-bot field~~ | Closed by the language-prompt follow-up (migration `0048`): `telegram_bots.language_prompt`, edited on the bot's page, sent first by `/start`. | [`/start` and the language pick](#m6-04-start-and-the-language-pick) |
 | **No "Behind" health for a bot** | Mailboxes have four states; a bot has `healthy`, `failing` and `waiting`. Telegram's pending-update count shows on the bot's page, not as a state on the list. | [Admin screen](#m6-05-admin-screen) |
 | **A file still processing holds a reply's later files back** | The text and earlier files are sent; the rest go on BullMQ's next attempt (five, backing off from 10 s). A video that takes longer than that ends `failed`, and Retry sends what is left. | [Telegram guide](../guides/telegram.md#agent-replies) |
 | ~~Voice notes play only in a Telegram thread~~ | Closed by M7-09 (#147): the VoiceNote draws an audio attachment from any channel, with its transcript once there is one. | [M7-09 Transcription](M7-ai.md#m7-09-transcription) |
@@ -123,8 +128,8 @@ department, set the webhook in one press, and read its health and activity.
 Customers write to the bot and get a ticket; agents answer from the ticket
 view, with files, and see whether Telegram accepted each reply, with Retry when
 it did not. Customers' photos, documents, voice notes and locations arrive on
-the ticket; `/start` greets them in their language and lets them choose
-English or Arabic. For development, long polling stands in for the webhook.
+the ticket; `/start` asks them to choose English or Arabic, then greets them
+in the language they chose. For development, long polling stands in for the webhook.
 
 ## M6-01 grammY adapter
 
@@ -191,14 +196,29 @@ contact's language, `telegram:thread.location`) with an OpenStreetMap link.
 ## M6-04 `/start` and the language pick
 
 `/start` records the contact and chat, opens no ticket, and writes a `telegram.notice`
-outbox row; the job sends the bot's own welcome for the language (or
-`telegram:bot.welcome`), followed by the prompt and English / العربية buttons when
-`language_pick` is on. The welcome's language is the contact's, else the Telegram app's
-`language_code` when it is `en` or `ar`, else the brand default. A button press
-(`callback_data` `lang:en` / `lang:ar`) sets `contacts.locale`, and the job answers the
-callback query and confirms in the chosen language. The prompt itself is the catalog's
-text, not a per-bot field (see the gaps). M8-06's satisfaction survey reuses the notice
-job and the callback path with `csat:<surveyId>:<n>` buttons.
+outbox row, as `Telegram/Chat-EN` and `-AR` draw it. With `language_pick` on (the default)
+the notice is `language_prompt`: the job sends the language prompt, which is the bot's own
+`language_prompt` or, when that is null, the catalog's "Choose your language · اختر لغتك"
+(`defaultLanguagePrompt()` in `@helpdock/i18n`, the two `telegram:bot.languagePrompt`
+texts joined, English first), with the English / العربية buttons. The welcome waits for the
+press. With `language_pick` off the notice is `welcome` and goes at once, in the contact's
+language, else the Telegram app's `language_code` when it is `en` or `ar`, else the brand
+default.
+
+A button press (`callback_data` `lang:en` / `lang:ar`) sets `contacts.locale` and writes a
+`language_set` notice carrying the prompt's message id (`promptMessageId`). The job answers
+the callback query, rewrites the prompt with `editMessageText` to `telegram:bot.languageChosen`
+("Language: English" / "اللغة: العربية"), which also drops its buttons, and then sends the
+welcome in the language chosen: `welcome_en` / `welcome_ar`, else `telegram:bot.welcome`. The
+callback answer and the rewrite are best effort, because the notice job is retried and
+Telegram refuses an edit that changes nothing; a refused rewrite does not keep the welcome
+from being sent. Nothing changed in how updates are deduplicated, and nothing is sent from a
+request handler: all three messages are outbox rows sent by `telegram.send`.
+
+A prompt sent before this change carried the welcome above the question; a press on one of
+those rewrites the whole message to the choice and then sends the welcome. M8-06's
+satisfaction survey reuses the notice job and the callback path with
+`csat:<surveyId>:<n>` buttons.
 
 ## M6-03 Agent-reply attachments
 
@@ -235,6 +255,8 @@ Added with the screen:
   stored in the clear), for `•••• 4f2a`. `TelegramTestResult` carries the bot's `name`.
 - `GET …/bots/:botId/status` carries `activity` (last reply delivered, failed sends in 24 h,
   open tickets of the bot's chats) for the Activity card.
+- `languagePrompt` (nullable, up to 200 characters, blank is stored as null) on create, `PUT`
+  and read; it is the one field the follow-up added to the API.
 - Deleting a bot calls `deleteWebhook` first, best effort.
 - `GET /api/brands/:brandId/tickets/:ticketId/telegram` (`ticket:read`): the chat a ticket
   is with (bot, chat id, username, name, language and whether it was chosen) and the
@@ -256,7 +278,11 @@ under `apps/admin/src/screens/admin/channels/telegram/`, with the adapter pair i
 - **A bot's page** (`/admin/channels/telegram/:botId`): Connection (masked token,
   Replace, Test connection), Webhook (address with Copy, state, pending updates, last
   error, Set webhook, the polling note), Routing, Welcome and language, saved together;
-  the Activity card and the Delete card beside it.
+  the Activity card and the Delete card beside it. Welcome and language holds the
+  "Ask for a language, then send a welcome" switch, the editable **Language prompt** (one
+  line, `dir="auto"`, up to 200 characters, disabled while the switch is off) and the welcome
+  per language. The prompt field shows what `/start` sends, so a bot without its own starts
+  with the catalog's text in it; saving it blank or unchanged keeps `languagePrompt` null.
 - **Delete** asks for `@username` typed exactly before the button turns on.
 - Strings in `channels:telegram.*` (`en`, `ar`).
 
@@ -285,10 +311,10 @@ ChannelIdentityCard (`apps/admin/src/screens/tickets/telegram/`), behind
 
 | Kind | Name |
 |---|---|
-| Outbox events | `telegram.reply` `{ deliveryId }`, `telegram.notice` `{ botId, chatId, notice, locale, callbackQueryId? }`, `telegram_bot.changed` `{ botId }` |
+| Outbox events | `telegram.reply` `{ deliveryId }`, `telegram.notice` `{ botId, chatId, notice, locale, callbackQueryId?, promptMessageId? }`, `telegram_bot.changed` `{ botId }` |
 | Jobs | `telegram.send` (`outbound`, payload `kind: 'reply' \| 'notice'`), `telegram.poll` (`inbound`, development) |
 | Config | `TELEGRAM_POLLING`, `TELEGRAM_API_ROOT` |
-| i18n | namespace `telegram` (`bot.welcome`, `bot.languagePrompt`, `bot.languageSet`, `thread.location`) |
+| i18n | namespace `telegram` (`bot.welcome`, `bot.languagePrompt`, `bot.languageChosen`, `thread.location`) |
 | Permissions | none new: `brand:manage` for bots, `ticket:read` / `ticket:write` for deliveries and the ticket's chat |
 | Routes added with the screen | `POST …/telegram/bots/test`, `GET …/tickets/:ticketId/telegram` |
 

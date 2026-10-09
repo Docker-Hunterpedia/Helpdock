@@ -67,7 +67,12 @@ test.describe('reference screens @screenshot', () => {
 
     await signIn(page, locale);
     await page.getByRole('link', { name: new RegExp(t('admin:nav.settings')) }).click();
-    await page.getByRole('heading', { level: 1 }).waitFor();
+    // The page heading is part of the shell and renders before the settings
+    // request settles. Wait for loaded form content so the baseline can never
+    // capture the transient loading state.
+    await page
+      .getByRole('heading', { level: 2, name: t('settings:signInMethods.title') })
+      .waitFor();
 
     await expect(page).toHaveScreenshot('shell-settings.png', { fullPage: true });
   });

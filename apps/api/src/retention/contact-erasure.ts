@@ -2,6 +2,7 @@ import { attachments, type DbTransaction, ticketMessages } from '@helpdock/db';
 import { and, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import type { ContactErasureProvider, ContactErasureResult } from '../contacts/providers.js';
 import { enqueueObjectPurge } from '../media/object-purge.js';
+import { eraseAiRedactions, eraseTelegramChats, eraseWebhookPayloads } from './erase-copies.js';
 
 /**
  * The half of a contact's erasure that lives on tickets (DOMAIN-RULES §11,
@@ -21,6 +22,10 @@ import { enqueueObjectPurge } from '../media/object-purge.js';
  * the message is different: `external_message_id` is an email `Message-ID`
  * (whose right-hand side is the sender's mail host) or a Telegram message id
  * in a chat with that person. Those are cleared. The body stays, as §11 says.
+ *
+ * **Copies in other tables** (ASVS 8.3.2): the Telegram chat rows, the redaction
+ * maps of model calls on their tickets, and the webhook deliveries that carry
+ * them (`erase-copies.ts`).
  *
  * Every read runs under the caller's row-level security; erasure is Admin only
  * and an Admin's scope is every department, so nothing of the contact's is out
@@ -75,6 +80,12 @@ export class DbContactErasureProvider implements ContactErasureProvider {
       .where(and(authoredByContact, isNotNull(ticketMessages.externalMessageId)))
       .returning({ id: ticketMessages.id });
 
-    return { attachments: sent.length, messages: rewritten.length };
+    return {
+      attachments: sent.length,
+      messages: rewritten.length,
+      telegramChats: await eraseTelegramChats(tx, brandId, contactId),
+      aiCalls: await eraseAiRedactions(tx, brandId, contactId),
+      webhookDeliveries: await eraseWebhookPayloads(tx, brandId, contactId),
+    };
   }
 }

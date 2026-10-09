@@ -337,7 +337,7 @@ Per brand, set by Admin (defaults in bold):
 
 - `maintenance.retention` runs nightly per brand and logs counts to the audit log.
 - **Brand deletion**: Admin soft-deletes → 30-day grace with the brand disabled (widget, help center, channels answer 410) → hard purge of every row, S3 prefix, Redis key, and Caddy domain. Ticket numbers of a deleted brand are never reused because the prefix is reserved.
-- **Contact erasure** (privacy request): agent action "Anonymise contact" replaces name, emails, phone, Telegram id and visitor ids with hashes, deletes attachments they sent, rewrites message author fields, and keeps ticket bodies unless the brand's ticket retention says otherwise. Recorded in the audit log without the erased values.
+- **Contact erasure** (privacy request): agent action "Anonymise contact" replaces name, emails, phone, Telegram id and visitor ids with hashes, deletes attachments they sent, rewrites message author fields, deletes their Telegram chat rows, clears the AI redaction maps of calls on their tickets and deletes the webhook deliveries that carry their data, and keeps ticket bodies unless the brand's ticket retention says otherwise. Recorded in the audit log without the erased values.
 - **Staff deletion**: see §12; authored content is kept with the author shown as "Former staff".
 
 ---

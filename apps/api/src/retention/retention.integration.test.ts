@@ -18,12 +18,17 @@ import {
   outbox,
   retentionSettings,
   seedBrandStatuses,
+  telegramBots,
+  telegramChats,
+  telegramDeliveries,
   ticketMessages,
   ticketStatuses,
   tickets,
   userBrandRoles,
   users,
   uuidv7,
+  webhookDeliveries,
+  webhooks,
   widgetVisitors,
   withSystem,
 } from '@helpdock/db';
@@ -35,6 +40,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { findOrCreateContactByIdentity } from '../contacts/identity.js';
 import { createLogger } from '../logging/logger.js';
 import {
   attachmentObjectKeys,
@@ -65,7 +71,9 @@ import { runBrandRetention, scheduleRetention } from './retention.job.js';
  *    and a second run removes nothing.
  * 4. **The form's routes** are Admin-only and validated.
  * 5. **An erasure takes the person's files** and their channel ids, keeps the
- *    bodies, and audits counts only.
+ *    bodies, and audits counts only. It also takes what other tables copied
+ *    of them: the Telegram chat, the AI redaction map and webhook payloads
+ *    (ASVS 8.3.2).
  */
 
 const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
@@ -932,6 +940,189 @@ describe.skipIf(!hasDocker)('data retention', () => {
 
       await drainObjectPurges(brandA.id);
       expect(storage.removed).toEqual(expect.arrayContaining([...ticket.keys]));
+    });
+
+    it('takes the Telegram chat, the AI redaction map and the webhook copies, and leaves other people alone', async () => {
+      const contactId = uuidv7();
+      const bystanderId = uuidv7();
+      const CHAT = '5550001234';
+      await withSystem(db(), brandA.id, async (tx) => {
+        await tx.insert(contacts).values([
+          { id: contactId, brandId: brandA.id, name: 'Mona Khalil' },
+          { id: bystanderId, brandId: brandA.id, name: 'Omar Saleh' },
+        ]);
+        await tx.insert(contactIdentities).values({
+          brandId: brandA.id,
+          contactId,
+          kind: 'telegram',
+          value: CHAT,
+          source: 'telegram.bot',
+        });
+      });
+      const ticket = await seedTicket(brandA, { status: 'open', contactId });
+      const bystanderTicket = await seedTicket(brandA, { status: 'open', contactId: bystanderId });
+      await withSystem(db(), brandA.id, async (tx) => {
+        const [bot] = await tx
+          .insert(telegramBots)
+          .values({
+            brandId: brandA.id,
+            telegramId: Date.now(),
+            username: 'acme_support_bot',
+            displayName: 'Acme support',
+            departmentId: brandA.departmentId,
+            token: 'v1.sealed',
+            tokenUpdatedAt: new Date(),
+            webhookSecret: 'v1.sealed',
+          })
+          .returning({ id: telegramBots.id });
+        const botId = bot?.id ?? '';
+        await tx.insert(telegramChats).values([
+          {
+            brandId: brandA.id,
+            botId,
+            chatId: CHAT,
+            contactId,
+            username: 'mona_k',
+            ticketId: ticket.id,
+          },
+          {
+            brandId: brandA.id,
+            botId,
+            chatId: '5559998888',
+            contactId: bystanderId,
+            username: 'omar_s',
+          },
+        ]);
+        const delivery = (ticketId: string, ticketMessageId: string, chatId: string) => ({
+          brandId: brandA.id,
+          departmentId: brandA.departmentId,
+          ticketId,
+          ticketMessageId,
+          botId,
+          chatId,
+          status: 'sent' as const,
+        });
+        await tx
+          .insert(telegramDeliveries)
+          .values([
+            delivery(ticket.id, ticket.messageId, CHAT),
+            delivery(bystanderTicket.id, bystanderTicket.messageId, '5559998888'),
+          ]);
+
+        const call = (ticketId: string) => ({
+          brandId: brandA.id,
+          ticketId,
+          feature: 'assist.suggest_reply',
+          provider: 'openai',
+          model: 'gpt-test',
+          status: 'ok' as const,
+          redactionCount: 1,
+          redactions: [
+            { placeholder: '[EMAIL_1]', kind: 'email', original: 'mona@customer.example' },
+          ],
+        });
+        await tx.insert(aiCalls).values([call(ticket.id), call(bystanderTicket.id)]);
+
+        const [endpoint] = await tx
+          .insert(webhooks)
+          .values({
+            brandId: brandA.id,
+            url: 'https://hooks.example.com/helpdock',
+            events: ['ticket.created', 'contact.created', 'csat.received'],
+            secret: 'v1.sealed',
+          })
+          .returning({ id: webhooks.id });
+        const webhookId = endpoint?.id ?? '';
+        const copy = (
+          event: string,
+          data: Record<string, unknown>,
+          status: 'pending' | 'succeeded',
+        ) => ({
+          brandId: brandA.id,
+          webhookId,
+          eventId: uuidv7(),
+          event,
+          status,
+          payload: { id: uuidv7(), event, brandId: brandA.id, data },
+        });
+        await tx
+          .insert(webhookDeliveries)
+          .values([
+            copy(
+              'contact.created',
+              { contact: { id: contactId, name: 'Mona Khalil' } },
+              'succeeded',
+            ),
+            copy('ticket.created', { ticket: { id: ticket.id, contactId } }, 'pending'),
+            copy(
+              'csat.received',
+              { survey: { id: uuidv7(), ticketId: ticket.id, comment: 'Thanks' } },
+              'succeeded',
+            ),
+            copy(
+              'ticket.created',
+              { ticket: { id: bystanderTicket.id, contactId: bystanderId } },
+              'succeeded',
+            ),
+            copy('contact.created', { contact: { id: bystanderId } }, 'succeeded'),
+          ]);
+      });
+
+      const response = await call<ContactDetail>(
+        'POST',
+        `/api/brands/${brandA.id}/contacts/${contactId}/anonymise`,
+        adminToken,
+      );
+      expect(response.status).toBe(201);
+
+      const after = await withSystem(db(), brandA.id, async (tx) => ({
+        chats: await tx.select().from(telegramChats),
+        deliveries: await tx.select().from(telegramDeliveries),
+        calls: await tx.select().from(aiCalls),
+        webhookCopies: await tx.select().from(webhookDeliveries),
+        audit: (
+          await tx
+            .select()
+            .from(auditLog)
+            .where(and(eq(auditLog.action, 'contact.anonymised'), eq(auditLog.targetId, contactId)))
+        )[0],
+      }));
+      expect(after.chats.map((chat) => chat.chatId)).toEqual(['5559998888']);
+      const deliveryChatIds = after.deliveries.map((delivery) => delivery.chatId);
+      expect(deliveryChatIds).toContain('5559998888');
+      expect(
+        deliveryChatIds.filter((id) => /^erased:telegram:[0-9a-f]{32}$/.test(id)),
+      ).toHaveLength(1);
+      expect(JSON.stringify(after.deliveries)).not.toContain(CHAT);
+      expect(after.calls.find((row) => row.ticketId === ticket.id)?.redactions).toBeNull();
+      expect(
+        after.calls.find((row) => row.ticketId === bystanderTicket.id)?.redactions,
+      ).not.toBeNull();
+      expect(
+        after.webhookCopies.map(
+          (row) => row.payload.data as { ticket?: { id: string }; contact?: { id: string } },
+        ),
+      ).toEqual([
+        { ticket: { id: bystanderTicket.id, contactId: bystanderId } },
+        { contact: { id: bystanderId } },
+      ]);
+      expect(after.audit?.meta).toMatchObject({
+        telegramChatCount: 1,
+        aiCallCount: 1,
+        webhookDeliveryCount: 3,
+      });
+      expect(JSON.stringify(after.audit?.meta)).not.toContain(CHAT);
+
+      // A later message from the same chat meets nobody and files a new contact.
+      const next = await withSystem(db(), brandA.id, (tx) =>
+        findOrCreateContactByIdentity(tx, brandA.id, {
+          kind: 'telegram',
+          value: CHAT,
+          source: 'telegram.bot',
+        }),
+      );
+      expect(next).toMatchObject({ created: true });
+      expect(next.contact.id).not.toBe(contactId);
     });
   });
 });

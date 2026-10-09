@@ -91,6 +91,9 @@ full. What it removes from tickets:
 - **Channel ids of their messages** (`external_message_id`: an email
   `Message-ID` names the sender's mail host). The message bodies stay, under the
   brand's retention.
+- **Copies in other tables**: their Telegram chats (chat id and username), the
+  redaction maps of AI calls on their tickets, and the webhook deliveries that
+  carry their data.
 
 ## Deleting a brand
 

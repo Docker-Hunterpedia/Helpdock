@@ -12,6 +12,7 @@ import {
 } from './visitor-credential.js';
 import type { WidgetRepository } from './widget.repository.js';
 import type { WidgetGate, WidgetRequestFacts, WidgetScope } from './widget-gate.js';
+import type { WidgetHub } from './widget-hub.js';
 
 /**
  * `POST /api/widget/:brandId/session` (M4-02; DOMAIN-RULES §4.1–4.2).
@@ -27,32 +28,38 @@ import type { WidgetGate, WidgetRequestFacts, WidgetScope } from './widget-gate.
  *   security event is logged and audited.
  * - **No identity** → any earlier link is cleared, so a person who signed out
  *   of the host site is signed out of the verified history on the next load.
+ *   Sockets the visitor still has open are cut then, since they joined their
+ *   conversation rooms under the link that was just withdrawn.
  */
 export class WidgetSessionService {
   readonly #gate: WidgetGate;
   readonly #widget: WidgetRepository;
+  readonly #hub: Pick<WidgetHub, 'disconnectVisitor'>;
   readonly #keyring: Keyring;
   readonly #logger: Logger;
 
   constructor(deps: {
     readonly gate: WidgetGate;
     readonly widget: WidgetRepository;
+    readonly hub: Pick<WidgetHub, 'disconnectVisitor'>;
     readonly keyring: Keyring;
     readonly logger: Logger;
   }) {
     this.#gate = deps.gate;
     this.#widget = deps.widget;
+    this.#hub = deps.hub;
     this.#keyring = deps.keyring;
     this.#logger = deps.logger;
   }
 
-  session(
+  async session(
     brandId: string,
     facts: WidgetRequestFacts,
     request: WidgetSessionRequest,
     now: Date = new Date(),
   ): Promise<WidgetSession> {
-    return this.#gate.session(brandId, facts, async (scope) => {
+    let linkWithdrawn = false;
+    const response = await this.#gate.session(brandId, facts, async (scope) => {
       const { tx } = scope;
       let issued: string | null = null;
       let visitor = scope.visitor;
@@ -65,6 +72,8 @@ export class WidgetSessionService {
       }
 
       const verifiedContactId = await this.#verifiedContact(scope, visitor, request.identity, now);
+      linkWithdrawn =
+        visitor.verifiedContactId !== null && verifiedContactId !== visitor.verifiedContactId;
       if (verifiedContactId !== visitor.verifiedContactId || issued === null) {
         visitor = await this.#widget.updateVisitor(tx, visitor.id, {
           verifiedContactId,
@@ -82,6 +91,11 @@ export class WidgetSessionService {
         verified: visitor.verifiedContactId !== null,
       };
     });
+    if (linkWithdrawn) {
+      this.#hub.disconnectVisitor(response.visitorId);
+    }
+
+    return response;
   }
 
   async #verifiedContact(

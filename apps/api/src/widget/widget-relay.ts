@@ -36,6 +36,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const conversationRoom = (conversationId: string): string =>
   `conversation:${conversationId}`;
 export const brandVisitorsRoom = (brandId: string): string => `visitors:${brandId}`;
+/** Every socket one visitor has open, so a change to who they are reaches them all. Never emitted to. */
+export const visitorRoom = (visitorId: string): string => `visitor:${visitorId}`;
 
 export const widgetRoomSchema = z.string().refine((room) => {
   const [kind, id = ''] = room.split(':');

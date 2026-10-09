@@ -32,7 +32,12 @@ import { WidgetConversationsService } from './widget-conversations.service.js';
 import { WidgetFailure } from './widget-failure.js';
 import { WidgetGate, type WidgetRequestFacts } from './widget-gate.js';
 import { WidgetHub } from './widget-hub.js';
-import { brandVisitorsRoom, conversationRoom, widgetEnvelope } from './widget-relay.js';
+import {
+  brandVisitorsRoom,
+  conversationRoom,
+  visitorRoom,
+  widgetEnvelope,
+} from './widget-relay.js';
 
 /** What the handshake proved, kept on the socket for its lifetime. */
 export interface WidgetSocketData {
@@ -76,8 +81,10 @@ const factsOf = (data: WidgetSocketData): WidgetRequestFacts => ({
  *   against the brand's allow-list, and the address throttle — the same gate
  *   every REST route passes. No visitor, no connection.
  * - **Rooms**: `conversation:<id>`, joined only through `conversation:join`,
- *   which runs the same ownership check as `GET …/conversations/:id`; and
- *   `visitors:<brandId>`, joined on connect, for presence.
+ *   which runs the same ownership check as `GET …/conversations/:id`;
+ *   `visitors:<brandId>`, joined on connect, for presence; and
+ *   `visitor:<id>`, joined on connect, so the visitor's sockets can be cut
+ *   together when the link that granted their conversations is withdrawn.
  * - **Events**: sending over the socket is the REST send with an
  *   acknowledgement — same `clientId` dedupe, same `seq` — and typing and read
  *   receipts go to the agents. Every event is re-judged through the gate, so
@@ -128,7 +135,7 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   async handleConnection(socket: WidgetSocket): Promise<void> {
-    await socket.join(brandVisitorsRoom(socket.data.brandId));
+    await socket.join([brandVisitorsRoom(socket.data.brandId), visitorRoom(socket.data.visitorId)]);
     try {
       socket.emit(
         WIDGET_EVENTS.presence,

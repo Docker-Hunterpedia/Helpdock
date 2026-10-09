@@ -223,9 +223,9 @@ export class WidgetModule {
         },
         {
           provide: WidgetSessionService,
-          inject: [WidgetGate],
-          useFactory: (gate: WidgetGate) =>
-            new WidgetSessionService({ gate, widget, keyring, logger }),
+          inject: [WidgetGate, WidgetHub],
+          useFactory: (gate: WidgetGate, hub: WidgetHub) =>
+            new WidgetSessionService({ gate, widget, hub, keyring, logger }),
         },
         {
           provide: WidgetConversationsService,

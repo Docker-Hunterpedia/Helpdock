@@ -754,6 +754,50 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         );
       });
 
+      it('cuts a verified visitor’s open sockets when the link to the contact is withdrawn (F3, M9-01)', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const laptop = await newVisitor();
+        await identify(laptop, { user_id: 'cust-43', ts: now });
+        const opened = await start(laptop);
+        const conversationId = opened.body.conversation.id;
+        const phone = await newVisitor();
+        await identify(phone, { user_id: 'cust-43', ts: now });
+        const socket = await connect(phone);
+        const joined: WidgetJoinAck = await socket.emitWithAck(WIDGET_EVENTS.join, {
+          conversationId,
+        });
+        expect(joined.ok).toBe(true);
+        const closed = new Promise<string>((resolve) => {
+          socket.once('disconnect', resolve);
+          setTimeout(() => resolve('still connected'), 3_000).unref();
+        });
+
+        // Signing out on the host site: the next load carries no identity.
+        await widget('POST', '/session', { visitor: phone, payload: {} });
+
+        expect(await closed).toBe('io server disconnect');
+        const reconnected = await connect(phone);
+        const again: WidgetJoinAck = await reconnected.emitWithAck(WIDGET_EVENTS.join, {
+          conversationId,
+        });
+        expect(again).toMatchObject({ ok: false, error: { code: 'not_found' } });
+      });
+
+      it('leaves a visitor’s sockets alone when a load changes nothing about who they are', async () => {
+        const visitor = await newVisitor();
+        const socket = await connect(visitor);
+        let disconnected = false;
+        socket.once('disconnect', () => {
+          disconnected = true;
+        });
+
+        await widget('POST', '/session', { visitor, payload: {} });
+        const ack = await socket.emitWithAck(WIDGET_EVENTS.leave, { conversationId: uuidv7() });
+
+        expect(ack).toMatchObject({ ok: true });
+        expect(disconnected).toBe(false);
+      });
+
       it('shows a verified visitor their email tickets only when the brand allows it', async () => {
         const now = Math.floor(Date.now() / 1000);
         const visitor = await newVisitor();

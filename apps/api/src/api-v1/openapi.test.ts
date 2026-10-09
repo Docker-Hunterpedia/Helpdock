@@ -80,7 +80,7 @@ describe('the OpenAPI document', () => {
       expect.objectContaining({ name: 'Idempotency-Key', in: 'header' }),
     );
     expect(Object.keys(create.responses)).toEqual(
-      expect.arrayContaining(['201', '401', '403', '429']),
+      expect.arrayContaining(['201', '401', '403', '410', '429']),
     );
 
     const read = document.paths['/api/v1/tickets/{ticketId}']?.get as {

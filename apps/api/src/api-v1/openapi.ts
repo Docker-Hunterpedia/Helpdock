@@ -365,6 +365,7 @@ const operationObject = (operation: ApiOperation) => ({
     '401': { description: 'No API key, or a revoked one', content: json(ERROR) },
     '403': { description: `The key does not hold ${operation.scope}`, content: json(ERROR) },
     '404': { description: 'Not found in this brand', content: json(ERROR) },
+    '410': { description: "The key's brand is scheduled for deletion", content: json(ERROR) },
     '429': { description: 'The key is over its per-minute rate limit', content: json(ERROR) },
   },
 });

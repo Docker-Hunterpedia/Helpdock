@@ -10,6 +10,7 @@ import {
   safeFetch,
 } from '@helpdock/net';
 import type { Job } from 'bullmq';
+import { isBrandGone } from '../brands/brand-availability.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { type WebhookRequest, webhookRequest } from './webhook-request.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
@@ -24,6 +25,8 @@ import type { WebhooksRepository } from './webhooks.repository.js';
  *   1 KB the delivery log keeps, and never parsed or rendered.
  * - **Idempotent by delivery.** Only a `pending` delivery is sent; a success is
  *   final, so a redelivered job sends nothing (DOMAIN-RULES §6).
+ * - **Not for a brand being deleted.** A delivery of a brand in its grace is
+ *   marked skipped, not sent (DOMAIN-RULES §11).
  * - **Retried** by BullMQ with exponential backoff; each attempt is recorded
  *   on the row. The last failed attempt marks the delivery `failed` and adds
  *   one to the endpoint's run of failures, and at
@@ -55,6 +58,8 @@ export interface WebhookDeliverDependencies {
   /** `OUTBOUND_ALLOW_CIDRS`, the lookup in tests, and the blocked-attempt log. */
   readonly policy?: SafeFetchPolicy;
   readonly fetch?: WebhookFetch;
+  /** Whether the brand is `deleting` or `deleted`; a suite passes a stand-in for the read. */
+  readonly brandIsGone?: (brandId: string) => Promise<boolean>;
   readonly now?: () => Date;
 }
 
@@ -97,6 +102,7 @@ export const createWebhookDeliverProcessor = ({
   keyring,
   policy = {},
   fetch: deliver = safeFetch,
+  brandIsGone = (brandId) => isBrandGone(db, brandId),
   now = () => new Date(),
 }: WebhookDeliverDependencies) => {
   const post = async (url: string, { headers, body }: WebhookRequest): Promise<Outcome> => {
@@ -142,6 +148,14 @@ export const createWebhookDeliverProcessor = ({
       return;
     }
     const { delivery, webhook } = target;
+    // A brand in its deletion grace is switched off: nothing is sent on its
+    // behalf (DOMAIN-RULES §11), and a restore does not replay what it missed.
+    if (await brandIsGone(brandId)) {
+      await withSystemJob(db, brandId, principal, (tx) =>
+        repository.markSkipped(tx, deliveryId, 'The brand is being deleted'),
+      );
+      return;
+    }
     if (!webhook.enabled) {
       await withSystemJob(db, brandId, principal, (tx) =>
         repository.markSkipped(tx, deliveryId, 'The endpoint is switched off'),

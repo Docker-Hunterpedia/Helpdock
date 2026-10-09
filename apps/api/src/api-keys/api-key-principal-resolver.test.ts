@@ -25,10 +25,13 @@ const staff = {
 const setup = ({
   found = ACTIVE,
   allowed = true,
+  gone = false,
 }: {
   /** `null` is "no live key has this hash". */
   found?: ActiveApiKey | null;
   allowed?: boolean;
+  /** The key's brand is `deleting` or `deleted`. */
+  gone?: boolean;
 } = {}) => {
   const findActiveByHash = vi.fn(async () => found ?? undefined);
   const consume = vi.fn(async () => allowed);
@@ -38,6 +41,7 @@ const setup = ({
     keys: { findActiveByHash },
     limiter: { consume },
     fallback,
+    brandIsGone: async () => gone,
   });
   return { resolver, findActiveByHash, consume, fallback };
 };
@@ -63,6 +67,18 @@ describe('ApiKeyPrincipalResolver', () => {
 
     await expect(resolver.resolve(withBearer(KEY))).resolves.toBeNull();
     expect(fallback.resolve).not.toHaveBeenCalled();
+  });
+
+  // F5 (M9-01): the brand's own admin issued the key, but an install admin has
+  // switched the brand off. Its other surfaces answer 410; so does its key.
+  it('answers 410 for a key whose brand is in its deletion grace, before spending its budget', async () => {
+    const { resolver, consume } = setup({ gone: true });
+
+    const refusal = await resolver.resolve(withBearer(KEY)).catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(HttpException);
+    expect((refusal as HttpException).getStatus()).toBe(410);
+    expect(consume).not.toHaveBeenCalled();
   });
 
   it('answers 429 once the key is over its per-minute budget', async () => {

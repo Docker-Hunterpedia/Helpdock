@@ -54,6 +54,7 @@ Authorization: Bearer hd_live_...
 | `401` | No key, an unknown key, or a revoked key |
 | `403` | The key does not hold the route's scope |
 | `404` | Nothing with that id in the key's brand |
+| `410` | The key's brand is scheduled for deletion. The key works again if the brand is restored |
 | `429` | The key made more requests in the last minute than its `rateLimitPerMinute` (600 unless set, at most 10 000) |
 
 Errors have the shape every Helpdock route answers with: `{ "error": { "code", "message", "requestId", "fields"? } }`.

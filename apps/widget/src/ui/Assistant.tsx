@@ -212,7 +212,11 @@ export function HandoffLine({ closure }: { closure: Closure | null }) {
         <span>
           <strong class="hd-handoff-title">{t('ai.connecting')}</strong>
           <br />
-          {visitorEmail ? t('ai.steppedBackEmail', { email: visitorEmail }) : t('ai.steppedBack')}
+          {visitorEmail ? (
+            <Sentence id="ai.steppedBackEmail" vars={{ email: visitorEmail }} isolate={['email']} />
+          ) : (
+            t('ai.steppedBack')
+          )}
         </span>
       </li>
     );

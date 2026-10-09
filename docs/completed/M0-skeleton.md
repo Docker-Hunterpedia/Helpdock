@@ -43,6 +43,15 @@ secrets are write-only, redirect URLs come from `APP_URL`, and every change is
 audited under install scope. The HTTP routes are documented in the
 [authentication guide](../guides/authentication.md#endpoints).
 
+**CI feedback-time maintenance (2026-10-09).** M0-11 keeps every existing
+suite and coverage threshold while distributing the two large Vitest coverage
+runs over two runners and the mocked admin Playwright suite over four. Vitest's
+blob reports are merged before the 85% admin and 90% api gates are evaluated;
+the api-rendered browser pages moved to the existing real-api browser job so
+one Playwright shard no longer carries unrelated work. The required `ci`
+context still waits for every shard, merged coverage gate, security scan,
+integration suite, browser suite and image smoke test.
+
 ## Exit criteria
 
 Copied from the PRD. Six of seven are met; the seventh is met in part and says

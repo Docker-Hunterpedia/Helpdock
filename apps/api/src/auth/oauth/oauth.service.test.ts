@@ -54,6 +54,12 @@ const configure = async (provider: 'google' | 'github'): Promise<void> => {
 
 const stateOf = (url: string): string => new URL(url).searchParams.get('state') ?? '';
 
+/** A flow begun in one browser: the state in the URL, and the nonce that browser's cookie carries. */
+const started = async (provider: 'google' | 'github') => {
+  const { url, browserNonce } = await service.start(provider);
+  return { state: stateOf(url), browserNonce };
+};
+
 describe('isEnabled', () => {
   it('is off until a client id is set, which is what hides the button', async () => {
     await expect(service.isEnabled('google')).resolves.toBe(false);
@@ -72,7 +78,7 @@ describe('start', () => {
   it('builds the provider URL with the redirect this install owns', async () => {
     await configure('google');
 
-    const url = new URL(await service.start('google'));
+    const url = new URL((await service.start('google')).url);
 
     expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
     expect(url.searchParams.get('redirect_uri')).toBe(oauthRedirectUri(APP_URL, 'google'));
@@ -83,7 +89,7 @@ describe('start', () => {
   it('sends PKCE, and keeps the verifier on the server', async () => {
     await configure('google');
 
-    const url = new URL(await service.start('google'));
+    const url = new URL((await service.start('google')).url);
     const challenge = url.searchParams.get('code_challenge') ?? '';
     const stored = JSON.parse(
       (await stub.get(oauthStateKey(hashToken(stateOf(url.toString()))))) ?? '{}',
@@ -97,16 +103,17 @@ describe('start', () => {
   it('stores the state hashed and never in the clear', async () => {
     await configure('google');
 
-    const state = stateOf(await service.start('google'));
+    const { state, browserNonce } = await started('google');
 
     expect(stub.keys()).toEqual([oauthStateKey(hashToken(state))]);
     expect(stub.keys().join(' ')).not.toContain(state);
+    expect((await stub.get(oauthStateKey(hashToken(state)))) ?? '').not.toContain(browserNonce);
   });
 
   it('draws a new state every time, so one cannot be replayed', async () => {
     await configure('google');
 
-    expect(stateOf(await service.start('google'))).not.toBe(stateOf(await service.start('google')));
+    expect((await started('google')).state).not.toBe((await started('google')).state);
   });
 });
 
@@ -115,43 +122,74 @@ describe('complete', () => {
     await configure('google');
 
     await expect(
-      service.complete({ provider: 'google', code: 'c', state: 'forged' }),
+      service.complete({
+        provider: 'google',
+        code: 'c',
+        state: 'forged',
+        browserNonce: 'whatever',
+      }),
     ).rejects.toBeInstanceOf(OauthError);
   });
+
+  // F4 (M9-01): the state alone is bearer. Whoever holds a captured callback URL
+  // could finish someone else's flow in a victim's browser, signing the victim
+  // in as the attacker.
+  it.each([
+    ['a browser that did not start the flow', 'a-nonce-this-flow-never-issued'],
+    ['a browser with no cookie at all', undefined],
+  ])(
+    'refuses a callback from %s, before it asks the provider for anything',
+    async (_who, nonce) => {
+      await configure('google');
+      const { state } = await started('google');
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(
+        service.complete({ provider: 'google', code: 'c', state, browserNonce: nonce }),
+      ).rejects.toBeInstanceOf(OauthError);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('refuses a state that belongs to the other provider', async () => {
     await configure('google');
     await configure('github');
-    const state = stateOf(await service.start('google'));
+    const { state, browserNonce } = await started('google');
 
-    await expect(service.complete({ provider: 'github', code: 'c', state })).rejects.toBeInstanceOf(
-      OauthError,
-    );
+    await expect(
+      service.complete({ provider: 'github', code: 'c', state, browserNonce }),
+    ).rejects.toBeInstanceOf(OauthError);
   });
 
   it('spends the state, so a callback cannot be replayed', async () => {
     await configure('google');
-    const state = stateOf(await service.start('google'));
+    const { state, browserNonce } = await started('google');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 500 })));
 
-    await expect(service.complete({ provider: 'google', code: 'c', state })).rejects.toBeDefined();
-    await expect(service.complete({ provider: 'google', code: 'c', state })).rejects.toBeDefined();
+    await expect(
+      service.complete({ provider: 'google', code: 'c', state, browserNonce }),
+    ).rejects.toBeDefined();
+    await expect(
+      service.complete({ provider: 'google', code: 'c', state, browserNonce }),
+    ).rejects.toBeDefined();
 
     expect(stub.keys()).toEqual([]);
   });
 
   it('sends the code verifier to the token endpoint and nothing else of the state', async () => {
     await configure('google');
-    const state = stateOf(await service.start('google'));
+    const { state, browserNonce } = await started('google');
     const stored = JSON.parse((await stub.get(oauthStateKey(hashToken(state)))) ?? '{}') as {
       codeVerifier: string;
     };
     const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(service.complete({ provider: 'google', code: 'c', state })).rejects.toBeInstanceOf(
-      OauthError,
-    );
+    await expect(
+      service.complete({ provider: 'google', code: 'c', state, browserNonce }),
+    ).rejects.toBeInstanceOf(OauthError);
 
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     const body = new URLSearchParams(String((init as RequestInit).body));
@@ -163,7 +201,7 @@ describe('complete', () => {
 
   it('takes only a verified primary address from GitHub', async () => {
     await configure('github');
-    const state = stateOf(await service.start('github'));
+    const { state, browserNonce } = await started('github');
     vi.stubGlobal(
       'fetch',
       vi
@@ -180,7 +218,9 @@ describe('complete', () => {
         .mockResolvedValueOnce(new Response(JSON.stringify({ name: 'Lina', login: 'lina' }))),
     );
 
-    await expect(service.complete({ provider: 'github', code: 'c', state })).resolves.toEqual({
+    await expect(
+      service.complete({ provider: 'github', code: 'c', state, browserNonce }),
+    ).resolves.toEqual({
       email: 'lina@helpdock.com',
       name: 'Lina',
     });
@@ -188,7 +228,7 @@ describe('complete', () => {
 
   it('refuses a GitHub account whose primary address is unverified', async () => {
     await configure('github');
-    const state = stateOf(await service.start('github'));
+    const { state, browserNonce } = await started('github');
     vi.stubGlobal(
       'fetch',
       vi
@@ -201,19 +241,19 @@ describe('complete', () => {
         ),
     );
 
-    await expect(service.complete({ provider: 'github', code: 'c', state })).rejects.toBeInstanceOf(
-      OauthError,
-    );
+    await expect(
+      service.complete({ provider: 'github', code: 'c', state, browserNonce }),
+    ).rejects.toBeInstanceOf(OauthError);
   });
 
   it('refuses when the provider answers the token request with an error', async () => {
     await configure('github');
-    const state = stateOf(await service.start('github'));
+    const { state, browserNonce } = await started('github');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 401 })));
 
-    await expect(service.complete({ provider: 'github', code: 'c', state })).rejects.toBeInstanceOf(
-      OauthError,
-    );
+    await expect(
+      service.complete({ provider: 'github', code: 'c', state, browserNonce }),
+    ).rejects.toBeInstanceOf(OauthError);
   });
 });
 

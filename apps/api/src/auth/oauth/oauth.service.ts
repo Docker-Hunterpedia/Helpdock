@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Settings } from '@helpdock/config';
 import type { OauthProvider } from '@helpdock/schemas';
 import { oauthProviderSchema } from '@helpdock/schemas';
@@ -20,6 +20,10 @@ import {
  * - **State.** 256 bits of randomness, stored server-side under its own hash
  *   and spent on the callback. A callback with no matching state is somebody
  *   else's callback being replayed at this install, and it is refused.
+ * - **A browser.** The state is also tied to the browser that started the flow,
+ *   by a nonce it holds in a cookie and the server holds only the hash of. The
+ *   callback is a plain GET, so without this a copy of its URL finishes the
+ *   attacker's sign-in in a victim's browser.
  * - **PKCE.** The code verifier never leaves the server, so a stolen
  *   authorization code is not a session where the provider supports it.
  * - **A fixed redirect.** Built from `APP_URL`, never echoed from the request,
@@ -39,6 +43,7 @@ const FETCH_TIMEOUT_MS = 10_000;
 const stateRecordSchema = z.object({
   provider: oauthProviderSchema,
   codeVerifier: z.string().min(1),
+  browserNonceHash: z.string().min(1),
   createdAt: z.number().int(),
 });
 
@@ -76,6 +81,15 @@ const base64url = (input: Buffer): string => input.toString('base64url');
 
 const challengeFor = (verifier: string): string =>
   base64url(createHash('sha256').update(verifier).digest());
+
+const holdsNonce = (nonce: string | undefined, expectedHash: string): boolean => {
+  if (nonce === undefined) {
+    return false;
+  }
+  const presented = Buffer.from(hashToken(nonce));
+  const expected = Buffer.from(expectedHash);
+  return presented.length === expected.length && timingSafeEqual(presented, expected);
+};
 
 /** One timeout for every provider call, so a hung provider is not a hung request. */
 const postForm = async (url: string, body: URLSearchParams): Promise<unknown> => {
@@ -149,8 +163,11 @@ export class OauthService {
     return clientId !== '';
   }
 
-  /** The provider URL to redirect the browser to, with the state already stored. */
-  async start(provider: OauthProvider): Promise<string> {
+  /**
+   * The provider URL to redirect the browser to, with the state already stored,
+   * and the nonce that browser must present on the callback.
+   */
+  async start(provider: OauthProvider): Promise<{ url: string; browserNonce: string }> {
     const { clientId } = await this.#credentials(provider);
     if (clientId === '') {
       throw new OauthError(`${provider} sign-in is not configured on this install`);
@@ -159,10 +176,16 @@ export class OauthService {
     const config = OAUTH_PROVIDERS[provider];
     const state = base64url(randomBytes(STATE_BYTES));
     const codeVerifier = base64url(randomBytes(VERIFIER_BYTES));
+    const browserNonce = base64url(randomBytes(STATE_BYTES));
 
     await this.#redis.set(
       oauthStateKey(hashToken(state)),
-      JSON.stringify({ provider, codeVerifier, createdAt: Math.floor(Date.now() / 1000) }),
+      JSON.stringify({
+        provider,
+        codeVerifier,
+        browserNonceHash: hashToken(browserNonce),
+        createdAt: Math.floor(Date.now() / 1000),
+      }),
       'EX',
       OAUTH_STATE_TTL_SECONDS,
     );
@@ -176,22 +199,25 @@ export class OauthService {
     url.searchParams.set('code_challenge', challengeFor(codeVerifier));
     url.searchParams.set('code_challenge_method', 'S256');
 
-    return url.toString();
+    return { url: url.toString(), browserNonce };
   }
 
   /**
    * Spends the state and the code and answers with the verified address. A
    * state that does not belong to this provider is refused even if it is
-   * otherwise valid, so one provider's callback cannot complete another's flow.
+   * otherwise valid, so one provider's callback cannot complete another's flow,
+   * and so is one from a browser that does not hold the flow's nonce.
    */
   async complete({
     provider,
     code,
     state,
+    browserNonce,
   }: {
     readonly provider: OauthProvider;
     readonly code: string;
     readonly state: string;
+    readonly browserNonce: string | undefined;
   }): Promise<OauthIdentity> {
     const raw = await this.#redis.getdel(oauthStateKey(hashToken(state)));
     if (raw === null) {
@@ -201,6 +227,9 @@ export class OauthService {
     const record = stateRecordSchema.safeParse(JSON.parse(raw));
     if (!record.success || record.data.provider !== provider) {
       throw new OauthError('The state does not belong to this provider');
+    }
+    if (!holdsNonce(browserNonce, record.data.browserNonceHash)) {
+      throw new OauthError('This sign-in was not started in this browser');
     }
 
     const { clientId, clientSecret } = await this.#credentials(provider);

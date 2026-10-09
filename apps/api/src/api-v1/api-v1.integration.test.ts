@@ -312,6 +312,16 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect((await call('POST', '/api/v1/tickets', key, newTicket('Nope'))).status).toBe(403);
       expect((await call('GET', '/api/v1/contacts', key)).status).toBe(403);
       expect((await call('GET', `/api/brands/${seeded.brandId}/tickets`, key)).status).toBe(403);
+      // Nor the routes that only declare "signed in": they act for a person, so a key gets 403, not a 500.
+      for (const path of [
+        '/api/me',
+        '/api/me/profile',
+        '/api/me/sessions',
+        '/api/me/notification-preferences',
+        '/api/brands',
+      ]) {
+        expect((await call('GET', path, key)).status, path).toBe(403);
+      }
       // And a staff session does not reach the public API.
       expect((await call('GET', '/api/v1/tickets', staffToken)).status).toBe(403);
     });

@@ -100,6 +100,17 @@ describe('PermissionGuard', () => {
       expect(context.scopeKind).toBe('principal');
       expect(context.targetBrandId).toBeNull();
     });
+
+    it('refuses an API key with 403: a key reaches /api/v1 and no route that acts for a person (ADR 0019)', () => {
+      const key: Principal = {
+        type: 'apikey',
+        id: USER,
+        brandId: BRAND_A,
+        scopes: ['tickets:read'],
+      };
+
+      expect(() => run({ route: 'me', principal: key })).toThrow(ForbiddenException);
+    });
   });
 
   describe('@Requires(permission)', () => {

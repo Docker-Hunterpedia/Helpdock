@@ -151,6 +151,12 @@ export class PermissionGuard implements CanActivate {
     }
 
     if (declaration.kind === 'authenticated') {
+      // ADR 0019: a key reaches `/api/v1` and nothing else. What is behind
+      // `@Authenticated()` acts for a person (their profile, their sessions)
+      // and has no answer for a key.
+      if (principal.type === 'apikey') {
+        throw new ForbiddenException('An API key cannot use this route');
+      }
       requestContext.scopeKind = 'principal';
       return true;
     }

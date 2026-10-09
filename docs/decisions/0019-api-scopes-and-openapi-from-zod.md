@@ -30,6 +30,8 @@ Looking a key up happens before any brand is known, so the resolver reads `api_k
 
 `webhooks:manage` does not by itself let a key receive data. A webhook delivery carries tickets, messages, contacts or articles, so the service refuses (`403`, `webhook-event-scope`) an endpoint, from a key, whose events need a read scope the key lacks (`scopesForEvents` in `@helpdock/schemas`), on create, update, secret rotation and replay. Staff acting through the Admin's settings are unaffected.
 
+The second decision above had a hole: a route that only declares `@Authenticated()` ("signed in", such as `/api/me`) names no permission, so no scope was ever compared with it, and a key was let through to handlers that act for a person (`requireStaffPrincipalId` then threw, a 500). `PermissionGuard` now answers a key `403` on every `@Authenticated()` route.
+
 ## Alternatives considered
 
 - **Map scopes onto the staff permissions** (`tickets:read` → `ticket:read`). Rejected: every staff route would accept keys, including ones that assume a staff principal.

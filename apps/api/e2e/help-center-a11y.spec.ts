@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { createI18n } from '@helpdock/i18n';
-import { test as base, expect, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { HELP_CENTER_URL, HELP_CENTER_WALL_URL } from './fixtures.ts';
+import { FALLBACK_ARTICLE, PAGES, path, strings, test } from './help-center-pages.ts';
 
 /**
  * The accessibility audit of the published help center (M9-04,
@@ -13,19 +13,7 @@ import { HELP_CENTER_URL, HELP_CENTER_WALL_URL } from './fixtures.ts';
  * (`HelpCenter/Article-AR` panels 2 and 3).
  */
 
-const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
-
-const test = base.extend<{ pageLocale: 'en' | 'ar' }>({
-  pageLocale: ['en', { option: true }],
-});
-
 test.use({ reducedMotion: 'reduce', baseURL: HELP_CENTER_URL });
-
-const strings = (locale: 'en' | 'ar') => {
-  const t = createI18n({ lng: locale }).getFixedT(locale, 'hcSite');
-  return (key: string, options?: Record<string, unknown>): string =>
-    (t as unknown as (key: string, options?: Record<string, unknown>) => string)(key, options);
-};
 
 async function violations(page: Page): Promise<string[]> {
   await page.evaluate(() => document.fonts.ready);
@@ -42,23 +30,6 @@ async function violations(page: Page): Promise<string[]> {
   );
 }
 
-const path = (rest: string) => `/hc/${BRAND}${rest}`;
-
-/** Every page type a reader can reach, by the path after the locale, and the status it answers. */
-const PAGES = [
-  ['home', '', 200],
-  ['category', '/categories/returns-and-refunds', 200],
-  ['section', '/sections/refunds', 200],
-  ['article', '/articles/refund-timelines', 200],
-  ['article, comment step', '/articles/refund-timelines?feedback=no', 200],
-  ['article, thanks', '/articles/refund-timelines?feedback=1', 200],
-  ['search, nothing asked', '/search', 200],
-  ['search, results', '/search?q=refund', 200],
-  ['search, nothing found', '/search?q=warranty', 200],
-  ['not found', '/articles/approving-large-refunds', 404],
-  ['archived', '/articles/returning-sale-items', 410],
-] as const;
-
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(scheme, () => {
     test.use({ colorScheme: scheme });
@@ -73,7 +44,7 @@ for (const scheme of ['light', 'dark'] as const) {
         }
       }
       if (pageLocale === 'ar') {
-        await page.goto(path('/ar/articles/how-to-start-a-return'));
+        await page.goto(path(FALLBACK_ARTICLE));
         for (const line of await violations(page)) {
           found.push(`article in the default language: ${line}`);
         }

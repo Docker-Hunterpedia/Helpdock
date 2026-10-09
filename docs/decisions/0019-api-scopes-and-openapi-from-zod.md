@@ -26,6 +26,10 @@ Looking a key up happens before any brand is known, so the resolver reads `api_k
 - Messages an API key posts have `author_type = system` and are recorded in the activity log as `apikey` via `api`; a public reply from a key does not send email, because only a staff member's public reply does (M2-05). Integrations that need to speak as an agent are a later decision.
 - The OpenAPI document is generated at boot from code, never committed; a client generator points at `/api/docs/openapi.json`.
 
+## Amendment (M9-02, ASVS 4.1.3)
+
+`webhooks:manage` does not by itself let a key receive data. A webhook delivery carries tickets, messages, contacts or articles, so the service refuses (`403`, `webhook-event-scope`) an endpoint, from a key, whose events need a read scope the key lacks (`scopesForEvents` in `@helpdock/schemas`), on create, update, secret rotation and replay. Staff acting through the Admin's settings are unaffected.
+
 ## Alternatives considered
 
 - **Map scopes onto the staff permissions** (`tickets:read` → `ticket:read`). Rejected: every staff route would accept keys, including ones that assume a staff principal.

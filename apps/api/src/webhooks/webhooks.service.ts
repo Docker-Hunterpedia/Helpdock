@@ -3,6 +3,7 @@ import { decryptSecret, encryptSecret, type Keyring } from '@helpdock/config';
 import { auditLog, type WebhookDeliveryRow, type WebhookRow } from '@helpdock/db';
 import { enqueueOutbox } from '@helpdock/jobs';
 import {
+  scopesForEvents,
   WEBHOOK_DELIVERY_PAGE_SIZE,
   WEBHOOK_TEST_EVENT,
   type Webhook,
@@ -25,6 +26,7 @@ import { WEBHOOK_DELIVERY_REQUESTED_EVENT } from './webhook-events.js';
 import { webhookRequest, webhookRequestBody } from './webhook-request.js';
 import { issueWebhookSecret } from './webhook-signature.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
+import { WebhooksFailure } from './webhooks-failure.js';
 
 /** The window of the Developers page's success rate. */
 const OVERVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -83,6 +85,20 @@ type WebhookAuditAction =
   | 'webhook.delivery_replayed'
   | 'webhook.tested';
 
+/**
+ * A delivery carries the data `GET /api/v1/...` shows a key holding the matching
+ * read scope, so a key may manage only endpoints whose events it could read
+ * (ASVS 4.1.3). Staff are held to `brand:manage` by the route and read all of it.
+ */
+const requireReadableEvents = (actor: BrandActor, events: readonly string[]): void => {
+  if (actor.principalType === 'apikey') {
+    const missing = scopesForEvents(events).filter((scope) => !actor.scopes.includes(scope));
+    if (missing.length > 0) {
+      throw new WebhooksFailure('webhook-event-scope');
+    }
+  }
+};
+
 export interface WebhooksServiceOptions {
   /** Where an endpoint's name resolves, checked when it is added or changed. */
   readonly checkDestination: WebhookDestinationCheck;
@@ -129,6 +145,7 @@ export class WebhooksService {
   }
 
   async create(actor: BrandActor, request: WebhookCreateRequest): Promise<WebhookWithSecret> {
+    requireReadableEvents(actor, request.events);
     await this.#checkDestination(request.url);
     const secret = issueWebhookSecret();
     const row = await this.#repository.insert(actor.tx, {
@@ -150,7 +167,10 @@ export class WebhooksService {
     webhookId: string,
     request: WebhookUpdateRequest,
   ): Promise<Webhook> {
-    await this.#require(actor.tx, webhookId);
+    const current = await this.#require(actor.tx, webhookId);
+    // The events the endpoint would end up with, so a key cannot repoint an
+    // endpoint it could not have subscribed.
+    requireReadableEvents(actor, request.events ?? current.events);
     if (request.url !== undefined) {
       await this.#checkDestination(request.url);
     }
@@ -182,7 +202,7 @@ export class WebhooksService {
 
   /** A new secret, shown once. Deliveries signed from now on use it. */
   async rotateSecret(actor: BrandActor, webhookId: string): Promise<WebhookWithSecret> {
-    await this.#require(actor.tx, webhookId);
+    requireReadableEvents(actor, (await this.#require(actor.tx, webhookId)).events);
     const secret = issueWebhookSecret();
     const row = await this.#repository.update(actor.tx, webhookId, {
       secret: encryptSecret(secret, this.#keyring),
@@ -291,6 +311,8 @@ export class WebhooksService {
     if (original === undefined) {
       throw new NotFoundException('No such delivery');
     }
+    const webhook = await this.#require(actor.tx, webhookId);
+    requireReadableEvents(actor, [...webhook.events, original.event]);
     const replay = await this.#repository.insertDelivery(actor.tx, {
       brandId: actor.brandId,
       webhookId,

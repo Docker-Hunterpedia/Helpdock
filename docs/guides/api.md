@@ -39,9 +39,11 @@ A key is `hd_live_` followed by 43 characters. Helpdock stores its SHA-256 and i
 | `contacts:read` | Search and read contacts; a ticket read also names its contact |
 | `contacts:write` | Create and update contacts (upsert) |
 | `articles:read` | Search and read **published, public** help center articles |
-| `webhooks:manage` | Manage webhook endpoints, read their delivery log, replay deliveries |
+| `webhooks:manage` | Manage webhook endpoints, read their delivery log, replay deliveries — only for events the key could read itself (below) |
 
-A key reaches every department of its brand and no other brand. Its scopes are the only permissions it holds: a key cannot call the admin's routes, and a signed-in staff member cannot call `/api/v1`.
+**Webhook events follow read scopes.** A delivery carries the same data a read would, so `webhooks:manage` alone cannot subscribe to it: `ticket.*` and `csat.received` need `tickets:read`, `contact.created` needs `contacts:read`, `article.published` needs `articles:read`. A key that lacks one gets `403` with `error.webhooks.reason: "webhook-event-scope"` when it creates an endpoint, when it changes one (checked against the events the endpoint would have afterwards, so a key cannot repoint an endpoint it could not have made), and when it rotates the secret of, or replays a delivery of, an endpoint whose events exceed its scopes. The Admin's Developers page is not held to scopes: it acts as a staff member with `brand:manage`.
+
+A key reaches Its scopes are the only permissions it holds: a key cannot call the admin's routes, and a signed-in staff member cannot call `/api/v1`.
 
 ## Authentication and limits
 

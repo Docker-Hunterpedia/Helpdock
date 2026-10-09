@@ -224,7 +224,8 @@ export const API_OPERATIONS: readonly ApiOperation[] = [
     method: 'post',
     path: '/api/v1/webhooks',
     operationId: 'createWebhook',
-    summary: 'Add an endpoint; the signing secret is returned this once',
+    summary:
+      'Add an endpoint (the key needs the read scope of each event); the signing secret is returned this once',
     tag: 'Webhooks',
     scope: 'webhooks:manage',
     body: webhookCreateRequestSchema,

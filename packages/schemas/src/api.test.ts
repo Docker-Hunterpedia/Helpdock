@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   apiKeyCreateRequestSchema,
   idempotencyKeySchema,
+  scopesForEvents,
   v1TicketCreateRequestSchema,
   webhookCreateRequestSchema,
   webhookUpdateRequestSchema,
@@ -49,6 +50,23 @@ describe('webhookCreateRequestSchema', () => {
 
   it('refuses an update that changes nothing', () => {
     expect(webhookUpdateRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('scopesForEvents', () => {
+  it('names the read scope each event needs, once', () => {
+    expect(scopesForEvents(['ticket.created', 'ticket.closed', 'csat.received'])).toEqual([
+      'tickets:read',
+    ]);
+    expect(scopesForEvents(['contact.created', 'article.published'])).toEqual([
+      'contacts:read',
+      'articles:read',
+    ]);
+  });
+
+  it('needs nothing for a test ping, an unknown event or none at all', () => {
+    expect(scopesForEvents(['ping', 'ticket.deleted'])).toEqual([]);
+    expect(scopesForEvents([])).toEqual([]);
   });
 });
 

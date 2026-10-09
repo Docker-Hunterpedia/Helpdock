@@ -479,7 +479,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
 
   describe('outbound webhooks (M8-03)', () => {
     it('a ticket created through the API is delivered as a signed ticket.created webhook', async () => {
-      const { key } = await issueKey(['tickets:write', 'webhooks:manage']);
+      const { key } = await issueKey(['tickets:read', 'tickets:write', 'webhooks:manage']);
       await runWorker(); // Earlier tests' events, before anybody subscribed.
       received.length = 0;
 
@@ -548,7 +548,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     });
 
     it('refuses a private address or plain http when the endpoint is added', async () => {
-      const { key } = await issueKey(['webhooks:manage']);
+      const { key } = await issueKey(['tickets:read', 'webhooks:manage']);
 
       const blocked = await call<{ error: { webhooks?: unknown } }>(
         'POST',
@@ -573,7 +573,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     });
 
     it('never reaches an endpoint the outbound policy blocks at delivery time, and logs why', async () => {
-      const { key } = await issueKey(['tickets:write', 'webhooks:manage']);
+      const { key } = await issueKey(['tickets:read', 'tickets:write', 'webhooks:manage']);
       await runWorker();
       received.length = 0;
 
@@ -607,7 +607,13 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     });
 
     it('sends contact.created and a public ticket.replied, and never a note', async () => {
-      const { key } = await issueKey(['tickets:write', 'contacts:write', 'webhooks:manage']);
+      const { key } = await issueKey([
+        'tickets:read',
+        'tickets:write',
+        'contacts:read',
+        'contacts:write',
+        'webhooks:manage',
+      ]);
       const ticket = await call<V1TicketDetail>(
         'POST',
         '/api/v1/tickets',
@@ -688,6 +694,62 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
         lastDelivery: { id: ping.body.id, status: 'succeeded' },
       });
       expect(JSON.stringify(overview.body)).not.toContain(webhook.body.secret);
+    });
+
+    it('holds webhooks:manage to the scopes of the events it subscribes to (ASVS 4.1.3)', async () => {
+      const manageOnly = await issueKey(['webhooks:manage']);
+      const withTickets = await issueKey(['tickets:read', 'webhooks:manage']);
+      const adminMade = await call<WebhookWithSecret>(
+        'POST',
+        `/api/brands/${seeded.brandId}/webhooks`,
+        staffToken,
+        { url: receiverUrl, events: ['contact.created'] },
+      );
+      const refused = await call<{ error: { code: string; webhooks?: unknown } }>(
+        'POST',
+        '/api/v1/webhooks',
+        manageOnly.key,
+        { url: receiverUrl, events: ['ticket.created'] },
+      );
+
+      expect(refused.status).toBe(403);
+      expect(refused.body.error).toMatchObject({
+        code: 'forbidden',
+        webhooks: { reason: 'webhook-event-scope' },
+      });
+      const allowed = await call('POST', '/api/v1/webhooks', withTickets.key, {
+        url: receiverUrl,
+        events: ['ticket.created'],
+      });
+      expect(allowed.status).toBe(201);
+
+      // Nor can it take over an endpoint the Admin made for contacts: repoint it,
+      // rotate its secret, or replay what it sent.
+      const target = `/api/v1/webhooks/${adminMade.body.id}`;
+      const ping = await call<WebhookDelivery>(
+        'POST',
+        `/api/brands/${seeded.brandId}/webhooks/${adminMade.body.id}/test`,
+        staffToken,
+      );
+      expect(
+        (await call('PATCH', target, manageOnly.key, { url: 'https://attacker.example.com/h' }))
+          .status,
+      ).toBe(403);
+      expect((await call('POST', `${target}/rotate-secret`, manageOnly.key)).status).toBe(403);
+      expect(
+        (await call('POST', `${target}/deliveries/${ping.body.id}/replay`, withTickets.key)).status,
+      ).toBe(403);
+      const unchanged = await call<{ url: string }>('GET', target, manageOnly.key);
+      expect(unchanged.body.url).toBe(receiverUrl);
+
+      // The Developers page, a staff session, is not held to scopes.
+      const staffEdit = await call(
+        'PATCH',
+        `/api/brands/${seeded.brandId}/webhooks/${adminMade.body.id}`,
+        staffToken,
+        { events: ['contact.created', 'ticket.created'] },
+      );
+      expect(staffEdit.status).toBe(200);
     });
   });
 });

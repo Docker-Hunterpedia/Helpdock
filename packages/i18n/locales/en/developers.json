@@ -167,7 +167,8 @@
     "refusals": {
       "webhook-https-required": "Use https://. Webhooks are never sent over plain HTTP.",
       "webhook-destination-blocked": "Address resolves to a private network ({{address}}) — refused. Helpdock only delivers to public addresses.",
-      "webhook-destination-blocked-unknown": "That address is private — refused. Helpdock only delivers to public addresses."
+      "webhook-destination-blocked-unknown": "That address is private — refused. Helpdock only delivers to public addresses.",
+      "webhook-event-scope": "This API key cannot read these events, so it cannot subscribe to them."
     },
     "eventHints": {
       "ticket.created": "A ticket is opened on any channel or the API",

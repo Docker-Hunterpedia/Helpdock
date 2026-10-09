@@ -20,7 +20,7 @@ Both take the same requests, except the two the page alone uses:
 
 | Request | What it does |
 |---|---|
-| `POST …/webhooks` | `{ "url", "events": [...], "description"? }`. The answer carries `secret` — **the only time it is shown**. A refused URL answers `400` with `error.webhooks.reason` (`webhook-destination-blocked`, with `address`, or `webhook-https-required`) |
+| `POST …/webhooks` | `{ "url", "events": [...], "description"? }`. The answer carries `secret` — **the only time it is shown**. A refused URL answers `400` with `error.webhooks.reason` (`webhook-destination-blocked`, with `address`, or `webhook-https-required`). An API key that lacks the read scope of an event (`tickets:read`, `contacts:read` or `articles:read`, see [the API guide](api.md#scopes)) answers `403` with `webhook-event-scope`; so do `PATCH`, `rotate-secret` and `replay` on an endpoint whose events exceed the key's scopes |
 | `PATCH …/webhooks/{webhookId}` | Change the URL, events or description; `{ "enabled": true }` switches an endpoint back on |
 | `DELETE …/webhooks/{webhookId}` | Removes the endpoint and its delivery log |
 | `POST …/webhooks/{webhookId}/rotate-secret` | A new secret, shown once; deliveries from now on are signed with it |

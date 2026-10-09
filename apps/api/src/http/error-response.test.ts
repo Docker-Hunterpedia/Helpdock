@@ -151,6 +151,16 @@ describe('errorBody', () => {
     expect(http.error.webhooks).toEqual({ reason: 'webhook-https-required' });
   });
 
+  it('answers a key that may not read a webhook endpoint’s events with 403 and its reason', () => {
+    const mapped = mapError(new WebhooksFailure('webhook-event-scope'));
+
+    expect(mapped.status).toBe(403);
+    expect(errorBody(mapped, 'req-14').error).toMatchObject({
+      code: 'forbidden',
+      webhooks: { reason: 'webhook-event-scope' },
+    });
+  });
+
   it('carries the help center refusal, with the status its rule answers', () => {
     const conflict = errorBody(mapError(new HelpCenterFailure('slug-taken')), 'req-11');
     const invalid = mapError(new HelpCenterFailure('schedule-in-past'));

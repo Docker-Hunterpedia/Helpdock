@@ -115,6 +115,33 @@ export const WEBHOOK_TEST_EVENT = 'ping';
 export const webhookDeliveryEventSchema = z.enum([...WEBHOOK_EVENTS, WEBHOOK_TEST_EVENT]);
 export type WebhookDeliveryEvent = z.infer<typeof webhookDeliveryEventSchema>;
 
+const SCOPE_BY_WEBHOOK_EVENT: Readonly<Record<WebhookEvent, ApiScope>> = {
+  'ticket.created': 'tickets:read',
+  'ticket.updated': 'tickets:read',
+  'ticket.replied': 'tickets:read',
+  'ticket.closed': 'tickets:read',
+  'csat.received': 'tickets:read',
+  'contact.created': 'contacts:read',
+  'article.published': 'articles:read',
+};
+
+/**
+ * The read scopes an endpoint's events need: a delivery carries the same data
+ * `GET /api/v1/...` would show a key holding that scope, so a key that could
+ * not read it there may not subscribe to it here (ASVS 4.1.3). The test ping
+ * and anything unknown carry nothing of the brand's and need no scope.
+ */
+export const scopesForEvents = (events: readonly string[]): ApiScope[] => {
+  const scopes = new Set<ApiScope>();
+  for (const event of events) {
+    const known = webhookEventSchema.safeParse(event);
+    if (known.success) {
+      scopes.add(SCOPE_BY_WEBHOOK_EVENT[known.data]);
+    }
+  }
+  return [...scopes];
+};
+
 /**
  * The retry schedule of `webhook.deliver`, as the Developers page explains it:
  * eight attempts, the second 30 s after the first, each wait twice the last.
@@ -257,12 +284,14 @@ export type WebhookOverviewList = z.infer<typeof webhookOverviewListSchema>;
 
 /**
  * Why an endpoint was refused when it was added or changed: plain `http` to an
- * address the operator has not allowed, or a name that resolves to a private,
- * loopback or metadata address (DOMAIN-RULES §13).
+ * address the operator has not allowed, a name that resolves to a private,
+ * loopback or metadata address (DOMAIN-RULES §13), or, for an API key, events
+ * whose data the key's scopes do not let it read (`scopesForEvents`).
  */
 export const webhooksRefusalSchema = z.enum([
   'webhook-https-required',
   'webhook-destination-blocked',
+  'webhook-event-scope',
 ]);
 export type WebhooksRefusal = z.infer<typeof webhooksRefusalSchema>;
 

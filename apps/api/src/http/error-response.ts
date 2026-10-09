@@ -237,7 +237,7 @@ export const mapError = (error: unknown): MappedError => {
   if (error instanceof WebhooksFailure) {
     return {
       status: error.getStatus(),
-      code: 'validation_failed',
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'validation_failed',
       message: error.message,
       webhooks: {
         reason: error.reason,

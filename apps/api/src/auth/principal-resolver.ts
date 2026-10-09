@@ -17,6 +17,8 @@ import type { Principal } from './principal.js';
 
 export interface PrincipalRequest {
   readonly headers: IncomingHttpHeaders;
+  /** The caller's address as Fastify resolved it under `TRUST_PROXY`; not set on a socket handshake. */
+  readonly ip?: string | undefined;
 }
 
 export interface PrincipalResolver {

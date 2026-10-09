@@ -58,6 +58,8 @@ Authorization: Bearer hd_live_...
 | `404` | Nothing with that id in the key's brand |
 | `429` | The key made more requests in the last minute than its `rateLimitPerMinute` (600 unless set, at most 10 000) |
 
+**What a refused key leaves behind.** Every `401` for a key is logged as a warning, `API key refused`, with the key's first 12 characters (`keyPrefix`), the caller's address (`ip`, as Fastify resolves it under `TRUST_PROXY`) and a `reason`: `unknown` for a key Helpdock never issued, `revoked` for one it did. The key itself is never logged. A revoked key that is presented also writes an `api_key.refused` row to its brand's [audit log](audit-log.md#api-keys) (the prefix, the reason and the address), at most once a minute per key, so a script that keeps retrying a revoked key shows once, not a thousand times.
+
 Errors have the shape every Helpdock route answers with: `{ "error": { "code", "message", "requestId", "fields"? } }`.
 
 ## Endpoints

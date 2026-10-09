@@ -21,6 +21,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { Redis } from 'ioredis';
 import { ApiKeyPrincipalResolver } from './api-keys/api-key-principal-resolver.js';
 import { ApiKeysRepository } from './api-keys/api-keys.repository.js';
+import { RefusedApiKeys } from './api-keys/refused-api-key.js';
 import { AppModule, type AppModuleOptions } from './app.module.js';
 import { createPrincipalResolver } from './auth/principal-resolver.js';
 import { RateLimiter } from './auth/rate-limit.js';
@@ -244,6 +245,8 @@ export const createApiApp = async ({
         db: runtime.db,
         keys: new ApiKeysRepository(),
         limiter: new RateLimiter(runtime.redis),
+        refused: new RefusedApiKeys(runtime.db),
+        log: logger,
         fallback: createPrincipalResolver({ env, logger, session: sessionResolver }),
       }),
       ...(brandResolver === undefined ? {} : { brandResolver }),

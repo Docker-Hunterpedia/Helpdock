@@ -338,6 +338,31 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect((await call('GET', '/api/v1/tickets', 'hd_live_never-issued')).status).toBe(401);
     });
 
+    it('leaves a trace of a revoked key being presented, once a minute, and none of the key (ASVS 7.2.1)', async () => {
+      const created = await issueKey(['tickets:read']);
+      await call('DELETE', `/api/brands/${seeded.brandId}/api-keys/${created.id}`, staffToken);
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect((await call('GET', '/api/v1/tickets', created.key)).status).toBe(401);
+      }
+      expect((await call('GET', '/api/v1/tickets', 'hd_live_never-issued')).status).toBe(401);
+
+      const refused = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(auditLog).where(eq(auditLog.action, 'api_key.refused')),
+      );
+      const mine = refused.filter((row) => row.targetId === created.id);
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toMatchObject({
+        actorType: 'apikey',
+        actorId: created.id,
+        targetType: 'api_key',
+        ip: '127.0.0.1',
+        meta: { prefix: created.key.slice(0, 12), reason: 'revoked' },
+      });
+      expect(JSON.stringify(refused)).not.toContain(created.key);
+      expect(refused.some((row) => JSON.stringify(row.meta).includes('never-issued'))).toBe(false);
+    });
+
     it('throttles a key past its per-minute budget with 429', async () => {
       const { key } = await issueKey(['tickets:read'], 2);
 

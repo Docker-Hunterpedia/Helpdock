@@ -1,11 +1,14 @@
 import type { Db } from '@helpdock/db';
+import { API_KEY_DISPLAY_LENGTH } from '@helpdock/schemas';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import type { Principal } from '../auth/principal.js';
 import type { PrincipalRequest, PrincipalResolver } from '../auth/principal-resolver.js';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import { bearerTokenOf } from '../auth/session/access-token.js';
+import type { Logger } from '../logging/logger.js';
 import { hashApiKey, isApiKey } from './api-key-credential.js';
 import type { ApiKeysRepository } from './api-keys.repository.js';
+import type { RefusedApiKeys } from './refused-api-key.js';
 
 /**
  * Step 2 of ARCHITECTURE §6 for an integration: `Authorization: Bearer
@@ -15,6 +18,11 @@ import type { ApiKeysRepository } from './api-keys.repository.js';
  *
  * A key over its per-minute budget is answered 429 here, before any route
  * runs: the throttle is the key's, whatever it is asking for.
+ *
+ * A key that is refused (unknown, or revoked) is answered 401 and recorded
+ * (ASVS 7.2.1): a warning with the key's prefix and the caller's address, never
+ * the key, and for a key Helpdock issued and ended, an `api_key.refused` audit
+ * row in its brand, at most once a minute per key.
  */
 
 export const apiKeyRateRule = (perMinute: number): RateLimitRule => ({
@@ -23,10 +31,19 @@ export const apiKeyRateRule = (perMinute: number): RateLimitRule => ({
   windowSeconds: 60,
 });
 
+/** One audit row a minute per refused key: a script retrying a revoked key must not fill the log. */
+export const apiKeyRefusedRule: RateLimitRule = {
+  bucket: 'api-key-refused',
+  limit: 1,
+  windowSeconds: 60,
+};
+
 export interface ApiKeyPrincipalResolverOptions {
   readonly db: Db;
   readonly keys: Pick<ApiKeysRepository, 'findActiveByHash'>;
   readonly limiter: Pick<RateLimiter, 'consume'>;
+  readonly refused: Pick<RefusedApiKeys, 'find' | 'audit'>;
+  readonly log: Pick<Logger, 'warn' | 'error'>;
   /** Everything that is not an API key: the session resolver, in production. */
   readonly fallback: PrincipalResolver;
 }
@@ -46,6 +63,7 @@ export class ApiKeyPrincipalResolver implements PrincipalResolver {
 
     const key = await this.#options.keys.findActiveByHash(this.#options.db, hashApiKey(token));
     if (key === undefined) {
+      await this.#recordRefusal(token, request.ip);
       return null;
     }
 
@@ -54,5 +72,31 @@ export class ApiKeyPrincipalResolver implements PrincipalResolver {
     }
 
     return { type: 'apikey', id: key.id, brandId: key.brandId, scopes: [...key.scopes] };
+  }
+
+  /**
+   * Best effort: the answer is 401 whether or not the record could be written,
+   * so a failure here is logged and does not turn a refusal into a 500.
+   */
+  async #recordRefusal(token: string, ip: string | undefined): Promise<void> {
+    const { refused, limiter, log } = this.#options;
+    const prefix = token.slice(0, API_KEY_DISPLAY_LENGTH);
+    try {
+      const key = await refused.find(hashApiKey(token));
+      log.warn(
+        {
+          keyPrefix: prefix,
+          ip,
+          reason: key?.reason ?? 'unknown',
+          ...(key === undefined ? {} : { keyId: key.id, brandId: key.brandId }),
+        },
+        'API key refused',
+      );
+      if (key !== undefined && (await limiter.consume(apiKeyRefusedRule, key.id))) {
+        await refused.audit(key, { prefix, ip });
+      }
+    } catch (error) {
+      log.error({ err: error, keyPrefix: prefix }, 'Could not record a refused API key');
+    }
   }
 }

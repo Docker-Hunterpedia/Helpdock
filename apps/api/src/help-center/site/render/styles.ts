@@ -241,7 +241,8 @@ a.hd-card:hover { text-decoration: none; border-color: var(--hd-border-strong); 
 .hd-feedback fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; inline-size: 100%; }
 .hd-feedback legend { float: inline-start; padding: 0; margin-inline-end: auto; }
 .hd-feedback .hd-button-secondary, .hd-feedback .hd-button, .hd-feedback .hd-button-ghost { block-size: 44px; }
-.hd-feedback [aria-pressed="true"] { border-color: var(--hd-text-primary); background: var(--hd-bg-muted); }
+/* 2 px, not 1: forced colours keep a border's width and drop its colour and the tint, so width is what tells the pressed answer apart. */
+.hd-feedback [aria-pressed="true"] { border-width: 2px; border-color: var(--hd-text-primary); background: var(--hd-bg-muted); }
 .hd-feedback-comment { flex-direction: column; align-items: stretch; }
 .hd-feedback-label { font-weight: 500; }
 .hd-feedback textarea {

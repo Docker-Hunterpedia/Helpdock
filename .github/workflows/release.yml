@@ -1,7 +1,8 @@
 name: Release
 
-# ARCHITECTURE §16: a `v*` tag publishes the multi-architecture image to GHCR
-# and opens a GitHub Release carrying the changelog and a CycloneDX SBOM.
+# ARCHITECTURE §16: a `v*` tag publishes and keylessly signs the
+# multi-architecture image in GHCR, then opens a GitHub Release carrying the
+# changelog and a CycloneDX SBOM.
 #
 # The tag is the trigger and the only input: pushed by `changesets.yml` when the
 # version pull request merges (which calls this workflow directly, because a tag
@@ -14,6 +15,16 @@ on:
   push:
     tags:
       - 'v*'
+  # The release job did not sign images before v0.4.0. This mode signs an
+  # already-published tag's immutable digest without rebuilding it or moving
+  # either registry tag. It is also the recovery path if Sigstore alone is
+  # unavailable during a release.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The existing v<version> image tag to sign.
+        type: string
+        required: true
   workflow_call:
     inputs:
       tag:
@@ -34,6 +45,9 @@ jobs:
       # `ghcr.io/docker-hunterpedia/helpdock`. `GITHUB_TOKEN` is enough; no
       # personal access token is stored anywhere.
       packages: write
+      # A short-lived GitHub OIDC token is exchanged for the Fulcio signing
+      # certificate. No signing key or signing secret is stored.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,7 +68,10 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          case "$TAG" in v[0-9]*) ;; *) echo "not a version tag: $TAG" >&2; exit 1 ;; esac
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "not a version tag: $TAG" >&2
+            exit 1
+          fi
           version="${TAG#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -83,6 +100,7 @@ jobs:
       # the Dockerfile downloads no architecture-specific binary, so one recipe
       # produces both images.
       - name: Set up QEMU
+        if: github.event_name != 'workflow_dispatch'
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Set up Buildx
@@ -96,6 +114,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push the image
+        if: github.event_name != 'workflow_dispatch'
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -110,11 +129,59 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Resolve the immutable image reference
+        id: image
+        env:
+          BUILT_DIGEST: ${{ steps.build.outputs.digest }}
+          EVENT_NAME: ${{ github.event_name }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          image='ghcr.io/docker-hunterpedia/helpdock'
+
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            # `--raw` is the exact manifest (or index) stored by the registry;
+            # its content digest is therefore the immutable reference to sign.
+            digest="sha256:$(docker buildx imagetools inspect "$image:$VERSION" --raw | sha256sum | cut -d ' ' -f 1)"
+          else
+            digest="$BUILT_DIGEST"
+          fi
+
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "invalid image digest: $digest" >&2
+            exit 1
+          fi
+
+          echo "ref=$image@$digest" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = 'push' ]; then
+            signer_ref="refs/tags/$TAG"
+          else
+            signer_ref='refs/heads/main'
+          fi
+          echo "signer_identity=https://github.com/Docker-Hunterpedia/Helpdock/.github/workflows/release.yml@$signer_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign and verify the image digest
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+          SIGNER_IDENTITY: ${{ steps.image.outputs.signer_identity }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "$IMAGE_REF"
+          cosign verify \
+            --certificate-identity "$SIGNER_IDENTITY" \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "$IMAGE_REF"
+
       # From the image that was just pushed, not from the working tree: the SBOM
       # has to describe what an operator will run, which includes the base
       # image's Debian packages and ffmpeg, not only this repository's
       # `node_modules`.
       - name: Generate the SBOM
+        if: github.event_name != 'workflow_dispatch'
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ghcr.io/docker-hunterpedia/helpdock:${{ steps.version.outputs.version }}
@@ -124,6 +191,7 @@ jobs:
           upload-release-assets: false
 
       - name: Collect the release notes
+        if: github.event_name != 'workflow_dispatch'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -153,6 +221,7 @@ jobs:
           fi
 
       - name: Create the release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: Helpdock ${{ steps.version.outputs.version }}

@@ -279,6 +279,13 @@ keeps assist on past the budget ("Keep assist after the hard stop", on by
 default), in which case assist calls `complete()` with `allowOverBudget` and
 only auto-reply stops. The call is still logged and counted.
 
+**Which system prompt.** Every item sends the brand's system prompt after its
+own instructions, and chooses it as auto-reply does: the Arabic one when the
+ticket is in Arabic and the brand wrote one, the main one otherwise. The
+ticket's language is that of the customer's last message, or the contact's
+language, or the brand's, while the customer has said nothing. It follows the
+ticket, not the language an agent asks a summary, translation or draft in.
+
 **How a call runs.** The assist routes hold no transaction while the model
 answers ([ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)):
 the ticket is read under the agent's own department policy, then the model is
@@ -809,8 +816,6 @@ real calls.
   nightly evaluation needs the `AI_EVAL_API_KEY` secret, which is an external
   dependency of the milestone.
 - Assist answers arrive whole; streaming them into the card is not built.
-- The Arabic system prompt (`systemPromptAr`) is not yet chosen for assist: every
-  assist call sends the brand's main prompt.
 - A transcription costs 0 in the log: there is no per-minute price setting.
 - A budget alert reaches the audit log and the settings response; an email or
   a bell entry for it waits for a design of its own (notifications are about a

@@ -3,7 +3,6 @@ import {
   type AssistLocale,
   type CompleteResult,
   classifyInstructions,
-  detectLocale,
   draftArticleInstructions,
   formatKnowledge,
   formatThread,
@@ -38,7 +37,7 @@ import type { AssistRepository, AssistTicket } from './assist.repository.js';
 import { AssistFailure, assistFailureOf } from './assist-failure.js';
 import { readAssistModes } from './assist-modes.js';
 import { suggestionView } from './assist-views.js';
-import { retrievalQuery, threadLines } from './thread-lines.js';
+import { conversationLocale, retrievalQuery, threadLines } from './thread-lines.js';
 
 /**
  * Agent assist (M7-05): one model call per request, made between two short
@@ -64,6 +63,8 @@ const MAX_THREAD_CHARS = 24_000;
 interface Prepared {
   readonly ticket: AssistTicket;
   readonly lines: readonly ThreadLine[];
+  /** The ticket's language: it picks the brand's system prompt for every call. */
+  readonly locale: AssistLocale;
   readonly allowOverBudget: boolean;
 }
 
@@ -136,11 +137,10 @@ export class AssistService {
 
   async suggestReply(brandId: string, ticketId: string): Promise<SuggestReplyResult> {
     const prepared = await this.#prepare(brandId, ticketId, { publicOnly: false });
-    const customer = [...prepared.lines].reverse().find((line) => line.role === 'customer');
-    if (customer === undefined) {
+    if (!prepared.lines.some((line) => line.role === 'customer')) {
       throw new AssistFailure('nothing-to-work-from');
     }
-    const locale = detectLocale(customer.text);
+    const { locale } = prepared;
     const { chunks } = await this.#deps.retriever.retrieve({
       brandId,
       query: retrievalQuery(prepared.ticket.subject, prepared.lines),
@@ -310,9 +310,11 @@ export class AssistService {
         throw new AssistFailure('budget-exceeded');
       }
       const messages = await this.#deps.repository.thread(tx, ticketId);
+      const lines = threadLines(messages, { publicOnly });
       return {
         ticket,
-        lines: threadLines(messages, { publicOnly }),
+        lines,
+        locale: conversationLocale(lines, ticket.locale),
         allowOverBudget: modes.keepAssistAfterHardStop,
       };
     });
@@ -350,6 +352,7 @@ export class AssistService {
         brandId: prepared.ticket.brandId,
         ticketId: prepared.ticket.id,
         feature: call.feature,
+        locale: prepared.locale,
         instructions: call.instructions,
         messages: [{ role: 'user', text: call.text }],
         allowOverBudget: prepared.allowOverBudget,

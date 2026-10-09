@@ -16,7 +16,7 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 | M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | planned; vendor, budget and test window required |
 | M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. Re-walk the chapters M6, M7 and M8 touched |
 | M9-03 | Load tests | #154 | in progress: suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); **the §14 host run is outstanding** |
-| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** |
+| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** (zoom, forced colours, screen-reader markup and mixed direction are Playwright specs since 2026-10-09) |
 | M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | #152, #156 | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); #152 patches the open Fastify advisory; the first release-tag ZAP run passed and #156 is closed |
 | M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
 | M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; **the clean-VM run and the three outside testers need people** (#157) and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
@@ -33,6 +33,11 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
   that already run those Playwright projects.
 - **Keyboard.** Tab order and a visible ring on every stop, the skip link,
   Escape, and the widget's focus trap at phone width.
+- **Zoom, forced colours, screen-reader markup, mixed direction** (2026-10-09).
+  `a11y-reflow`, `a11y-forced-colors`, `a11y-semantics` and `a11y-bidi` in
+  `apps/widget/e2e/`, and `help-center-a11y-reflow`, `-forced-colors`,
+  `-semantics` and `-bidi` in `apps/api/e2e/`, in `en` and `ar`; what each
+  proves is in the [audit](../completed/accessibility-audit.md#beyond-axe-zoom-forced-colours-screen-reader-markup-mixed-direction).
 - **Fixed.**
   - The help center has a skip link, and every `<main>` can take focus.
   - Article body links are underlined. Axe found them told apart by colour
@@ -41,6 +46,12 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
     the launcher no longer covers Send.
   - The widget's theme sheet is replaced only when it changes, and the e2e axe
     helper waits for the widget to settle. This addresses the M4 flake.
+  - The help center's search field shrinks at 320 px; its pressed "No" has a 2 px
+    edge that survives forced colours; a search result in the other language
+    carries `dir` as well as `lang`.
+  - The widget's thread is the only live region of a conversation (the thanks,
+    the rated card and its "not sent" line lost their `status` and `alert`
+    roles), and emails and references in Arabic sentences are `<bdi>`.
 - **Closed M5 gaps** with existing artboards:
   - "What was missing?" after a "No" (`HelpCenter/Article-AR` panels 2 and 3).
     The form takes an optional `comment` (`hcFeedbackFormSchema`), and the
@@ -48,8 +59,9 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
   - The CSAT page's "Browse the help center" (`CsatEN`).
     `csatBrandSchema.helpCenterUrl` comes from `publicHelpCenterUrl`
     (`apps/api/src/help-center/site/site-url.ts`).
-- **Outstanding:** the screen-reader, zoom and forced-colours pass listed in
-  the [audit](../completed/accessibility-audit.md#still-to-do-by-a-person).
+- **Outstanding:** only what needs a person, listed in the
+  [audit](../completed/accessibility-audit.md#still-to-do-by-a-person): the
+  screen-reader pass, the embedded video player, and brand custom CSS.
 
 ## Exit criteria
 

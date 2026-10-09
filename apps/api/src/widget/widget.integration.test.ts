@@ -63,7 +63,7 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
-import { WIDGET_VISITOR_WRITE_RULE } from './widget-gate.js';
+import { WIDGET_SOCKET_EVENT_RULE, WIDGET_VISITOR_WRITE_RULE } from './widget-gate.js';
 import { RedisWidgetBroadcast } from './widget-relay.js';
 
 /**
@@ -1006,6 +1006,44 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         );
       }
       expect(statuses.at(-1)).toBe(429);
+    });
+
+    it('throttles every event on a visitor’s socket from one budget, and only that visitor’s (F1, M9-01)', async () => {
+      const visitor = await newVisitor();
+      const bystander = await newVisitor();
+      const opened = await start(visitor);
+      const conversationId = opened.body.conversation.id;
+      const socket = await connect(visitor);
+
+      const spent = await Promise.all(
+        Array.from({ length: WIDGET_SOCKET_EVENT_RULE.limit }, () =>
+          socket.emitWithAck(WIDGET_EVENTS.leave, { conversationId }),
+        ),
+      );
+      expect(spent.every((ack: { ok: boolean }) => ack.ok)).toBe(true);
+
+      const refused = await Promise.all([
+        socket.emitWithAck(WIDGET_EVENTS.join, { conversationId }),
+        socket.emitWithAck(WIDGET_EVENTS.typingSet, { conversationId, typing: true }),
+        socket.emitWithAck(WIDGET_EVENTS.read, { conversationId, seq: 1 }),
+        socket.emitWithAck(WIDGET_EVENTS.send, {
+          conversationId,
+          message: { clientId: uuidv7(), text: 'over budget' },
+        }),
+        socket.emitWithAck(WIDGET_EVENTS.leave, { conversationId }),
+      ]);
+      expect(refused.map((ack: { error?: { code: string } }) => ack.error?.code)).toEqual(
+        Array.from({ length: 5 }, () => 'rate_limited'),
+      );
+
+      const overHttp = await widget<{ id: string }>('GET', `/conversations/${conversationId}`, {
+        visitor,
+      });
+      expect(overHttp.status).toBe(200);
+      const otherSocket = await connect(bystander);
+      expect(await otherSocket.emitWithAck(WIDGET_EVENTS.leave, { conversationId })).toMatchObject({
+        ok: true,
+      });
     });
 
     it('asks for a CAPTCHA before the first message when the brand wants one', async () => {

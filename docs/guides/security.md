@@ -12,7 +12,7 @@ describes: GitHub's private vulnerability reporting, never a public issue.
 
 | Who | Wants | Stopped by |
 |---|---|---|
-| A visitor on a brand's site | Another visitor's conversation, or to flood the desk | A per-visitor secret only the api issues and only its hash stored, the origin allow-list, per-visitor and per-address limits, optional CAPTCHA ([widget protocol](widget-protocol.md)) |
+| A visitor on a brand's site | Another visitor's conversation, or to flood the desk | A per-visitor secret only the api issues and only its hash stored, the origin allow-list, per-visitor limits on every write and every socket event, per-address limits, optional CAPTCHA ([widget protocol](widget-protocol.md)) |
 | A staff member of brand A | Brand B's data, or a department they are not in | Row-level security on every tenant table, below |
 | Someone on the internet | A staff account | Argon2id with a pepper, the breached-password list, a mandatory second factor for Admins, sign-in rate limits ([authentication](authentication.md)) |
 | Someone with a stolen database dump | Credentials stored in it | Secrets encrypted under a key that is not in the database; password hashes they cannot test without it |

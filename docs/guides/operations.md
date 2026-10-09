@@ -126,7 +126,7 @@ misconfigured — it is a backstop, not a reason to skip the exclusion.
 | `db_pool_connections` | gauge | `state` | Sessions the runtime role holds on the server, by the state Postgres reports — `active`, `idle`, `idle_in_transaction`, `idle_in_transaction_(aborted)`, and `unknown` for a session Postgres reports no state for. Install-wide, not per replica. |
 | `db_up`, `redis_up` | gauge | — | `1` when the readiness probe reached it, `0` when it did not. |
 | `socket_connections` | gauge | `namespace` | Open Socket.IO connections on this replica, per namespace (`/staff` and `/widget`). |
-| `rate_limit_refusals_total` | counter | `bucket` | Requests and socket events a rate limit refused, by the limit's name: `signin-email`, `signin-ip`, `email-dispatch`, `step-up`, `invite-lookup`, the widget and web-form budgets, the socket-event budgets, `inbound-parse`, `telegram-webhook`, `domain-check`. Never the address or account it refused. Counted per api replica. |
+| `rate_limit_refusals_total` | counter | `bucket` | Requests and socket events a rate limit refused, by the limit's name: `signin-email`, `signin-ip`, `email-dispatch`, `step-up`, `invite-lookup`, the widget and web-form budgets (`widget-ip`, `widget-session`, `widget-visitor-write`, `widget-socket-event`), the staff socket-event budgets, `inbound-parse`, `telegram-webhook`, `domain-check`. Never the address or account it refused. Counted per api replica. |
 
 `prom-client`'s default Node metrics are on the same registry: event-loop lag,
 heap, handles, GC and process start time.

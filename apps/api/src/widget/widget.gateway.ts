@@ -85,7 +85,9 @@ const factsOf = (data: WidgetSocketData): WidgetRequestFacts => ({
  *   event rather than at the next reconnect.
  *
  * Every handler answers an acknowledgement and never throws: a refusal is
- * `{ ok: false, error: { code } }` with the widget's own error codes.
+ * `{ ok: false, error: { code } }` with the widget's own error codes. Every
+ * event, a leave included, first spends the visitor's `widget-socket-event`
+ * budget, so one credential cannot drive unbounded work from one connection.
  */
 @WebSocketGateway({ namespace: WIDGET_NAMESPACE })
 export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
@@ -249,19 +251,21 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   async #ack<S extends z.ZodType, T>(
-    _socket: WidgetSocket,
+    socket: WidgetSocket,
     schema: S,
     body: unknown,
     fn: (input: z.output<S>) => Promise<T>,
   ): Promise<WidgetAck<T>> {
-    const parsed = schema.safeParse(body);
-    if (!parsed.success) {
-      return {
-        ok: false,
-        error: { code: 'invalid_payload', message: 'That message does not match its schema' },
-      };
-    }
     try {
+      // Before the payload is parsed: a flood of malformed events is still a flood.
+      await this.#gate.socketEvent(socket.data.visitorId);
+      const parsed = schema.safeParse(body);
+      if (!parsed.success) {
+        return {
+          ok: false,
+          error: { code: 'invalid_payload', message: 'That message does not match its schema' },
+        };
+      }
       return { ok: true, data: await fn(parsed.data) };
     } catch (error) {
       if (error instanceof WidgetFailure) {

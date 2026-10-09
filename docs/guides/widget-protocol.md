@@ -590,11 +590,23 @@ to it after three failed connects.
 | any widget request (REST, handshake) | 300 per 5 minutes | brand and client address |
 | new visitors (`session` without a known secret) | 30 per 10 minutes | brand and client address |
 | writes: start, send, upload, transcript | 30 per minute | visitor |
+| every event on the `/widget` socket | 120 per minute | visitor |
 | transcripts | 3 per hour | conversation |
 
 Events on a socket that has already passed the handshake do not count against
-the per-address rule again, but writes still count against the per-visitor
-rule. A throttled request gets `rate_limited` (429). Back off and retry.
+the per-address rule again. Each one spends the per-visitor socket budget
+instead, whichever event it is (`conversation:join`, `conversation:leave`,
+`message:send`, `typing:set`, `message:read`), across every socket the visitor
+has open and every api replica. The budget is spent before the payload is
+parsed, so malformed events count too. An event over it is answered
+`{ ok: false, error: { code: 'rate_limited' } }`, the socket stays open, and
+REST requests are unaffected. A `message:send` also still counts against the
+write rule. A throttled request gets `rate_limited` (429). Back off and retry.
+The bundled widget sends a few events a minute, typing starts and stops
+included.
+
+Every refusal is counted in `rate_limit_refusals_total{bucket="widget-socket-event"}`
+([operations](operations.md#what-is-measured)).
 
 ## Constants
 

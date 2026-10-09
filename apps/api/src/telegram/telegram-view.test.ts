@@ -18,6 +18,7 @@ const row = (fields: Partial<TelegramBotRow> = {}): TelegramBotRow => ({
   webhookSecret: 'v1.sealed-secret',
   welcomeEn: null,
   welcomeAr: 'أهلا',
+  languagePrompt: null,
   languagePick: true,
   webhookUrl: null,
   webhookSetAt: null,
@@ -50,6 +51,18 @@ describe('toTelegramBot', () => {
     });
     expect(JSON.stringify(view)).not.toContain('sealed');
     expect(JSON.stringify(view)).not.toContain('secretPart');
+  });
+
+  it('shows the bot’s own language prompt, and null when the catalog’s is in use', () => {
+    const read = (languagePrompt: string | null) =>
+      toTelegramBot(
+        { bot: row({ languagePrompt }), departmentName: 'Support', tokenUpdatedByName: null },
+        { appUrl: 'https://support.example.com', polling: false },
+        TOKEN,
+      ).languagePrompt;
+
+    expect(read('Pick a language · اختر لغتك')).toBe('Pick a language · اختر لغتك');
+    expect(read(null)).toBeNull();
   });
 
   it('reports polling mode and a failing bot', () => {

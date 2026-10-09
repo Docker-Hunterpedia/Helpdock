@@ -39,6 +39,8 @@ export const telegramNoticeEventSchema = z.object({
   notice: telegramNoticeKindSchema,
   locale: z.enum(['en', 'ar']),
   callbackQueryId: z.string().min(1).max(128).optional(),
+  /** The language prompt a `language_set` press was under, so the job can take its buttons away. */
+  promptMessageId: z.string().min(1).max(32).optional(),
   csat: telegramCsatNoticeSchema.optional(),
 });
 export type TelegramNoticeEvent = z.infer<typeof telegramNoticeEventSchema>;

@@ -748,9 +748,9 @@
       "welcome": {
         "heading": "Welcome and language",
         "caption": "What the bot says when someone sends /start.",
-        "languagePick": "Offer English and العربية buttons with the welcome",
+        "languagePick": "Ask for a language, then send a welcome",
         "prompt": "Language prompt",
-        "promptHint": "Sent under the welcome in the contact’s language, with two buttons: English and العربية. The choice becomes the contact’s language.",
+        "promptHint": "Sent first, with two buttons: English and العربية. The choice becomes the contact’s language. Shown in both languages because the language is not known yet. Leave it empty to send the default.",
         "en": "Welcome · English",
         "ar": "Welcome · Arabic",
         "hint": "Leave one empty to send the default welcome in that language. Plain text, up to {{max}} characters.",

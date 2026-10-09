@@ -13,7 +13,6 @@ import {
   ticketMessages,
   withSystem,
 } from '@helpdock/db';
-import type { Locale } from '@helpdock/i18n';
 import {
   createJobProcessor,
   isLastAttempt,
@@ -31,11 +30,11 @@ import type { ObjectStorage } from '../media/storage.js';
 import { apiForBot, type TelegramApiFactory } from './bot-api-factory.js';
 import type { TelegramRepository } from './telegram.repository.js';
 import { planOutgoingFile, readOutgoingFile, replyAttachments } from './telegram-attachments.js';
-import { telegramText } from './telegram-text.js';
+import { languageChosenText, languagePromptText, welcomeText } from './telegram-text.js';
 
 /**
  * The `telegram.send` consumer (M6-02, M6-04): an agent's reply to its chat,
- * or the `/start` welcome and the language confirmation.
+ * or what `/start` and a language press send: the language prompt, the welcome.
  *
  * **Idempotent** (DOMAIN-RULES §6). The receipt — `telegram.send:<delivery>`
  * or `telegram.notice:<outbox row>` — is claimed in the job's transaction, so
@@ -93,34 +92,41 @@ export const createTelegramSendHandler =
         await deps.csat.send(api, tx, payload, log);
         return;
       }
-      if (payload.notice === 'welcome') {
-        await sendWelcome(api, bot, payload.chatId, payload.locale);
+      if (payload.notice === 'language_prompt') {
+        await api.sendMessage(payload.chatId, languagePromptText(bot), languageKeyboard());
         return;
       }
-      if (payload.callbackQueryId !== undefined) {
-        // A press answered late has stopped spinning anyway; the confirmation still matters.
-        await api.answerCallbackQuery(payload.callbackQueryId).catch(() => undefined);
+      if (payload.notice === 'welcome') {
+        await api.sendMessage(payload.chatId, welcomeText(bot, payload.locale));
+        return;
       }
-      await api.sendMessage(payload.chatId, telegramText(payload.locale)('bot.languageSet'));
+      await answerLanguagePress(api, bot, payload);
     });
     log.info({ brandId, botId: bot.id, notice: payload.notice }, 'telegram notice sent');
   };
 
-/** M6-04: the bot's own welcome in that language, or the catalog's, with the buttons if it offers them. */
-const sendWelcome = async (
+/**
+ * M6-04: a press on the language prompt. The prompt is rewritten to "Language:
+ * English", which takes its buttons away so it cannot be pressed twice, and the
+ * welcome follows in the language chosen.
+ */
+const answerLanguagePress = async (
   api: TelegramBotApi,
   bot: TelegramBotRow,
-  chatId: string,
-  locale: Locale,
+  payload: Extract<TelegramSendPayload, { kind: 'notice' }>,
 ): Promise<void> => {
-  const own = locale === 'ar' ? bot.welcomeAr : bot.welcomeEn;
-  const words = telegramText(locale);
-  const welcome = own === null || own.trim() === '' ? words('bot.welcome') : own;
-  if (!bot.languagePick) {
-    await api.sendMessage(chatId, welcome);
-    return;
+  if (payload.callbackQueryId !== undefined) {
+    // A press answered late has stopped spinning anyway; the welcome still matters.
+    await api.answerCallbackQuery(payload.callbackQueryId).catch(() => undefined);
   }
-  await api.sendMessage(chatId, `${welcome}\n\n${words('bot.languagePrompt')}`, languageKeyboard());
+  if (payload.promptMessageId !== undefined) {
+    // Cosmetic, and repeated by a retry of this job: Telegram refuses an edit
+    // that changes nothing, which must not keep the welcome from being sent.
+    await api
+      .editMessageText(payload.chatId, payload.promptMessageId, languageChosenText(payload.locale))
+      .catch(() => undefined);
+  }
+  await api.sendMessage(payload.chatId, welcomeText(bot, payload.locale));
 };
 
 const sendReply = async (

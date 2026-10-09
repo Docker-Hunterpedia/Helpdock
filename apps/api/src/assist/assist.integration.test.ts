@@ -509,6 +509,89 @@ describe.skipIf(!hasDocker)('agent assist, triage and transcription', () => {
       expect(response.status).toBe(404);
     });
 
+    describe("the brand's system prompt follows the ticket's language", () => {
+      const prompts = {
+        systemPrompt: 'Be brief and kind.',
+        systemPromptAr: 'كن موجزاً ولطيفاً.',
+      };
+      let arabicTicketId: string;
+      let arabicMessageId: string;
+
+      const setPrompts = (values: { systemPrompt: string; systemPromptAr: string }) =>
+        withSystem(db(), brandId, (tx) =>
+          tx.update(aiSettings).set(values).where(eq(aiSettings.brandId, brandId)),
+        );
+      const systemPromptSent = () => fake.sent.at(-1)?.context.systemPrompt ?? '';
+
+      const tasks: readonly {
+        readonly task: string;
+        readonly path: string;
+        readonly payload: (messageId: string) => unknown;
+        readonly answer: string;
+      }[] = [
+        {
+          task: 'suggest reply',
+          path: 'assist/suggest-reply',
+          payload: () => undefined,
+          answer: 'Your refund is on its way.',
+        },
+        {
+          // The reader's language is not the ticket's: the prompt follows the ticket.
+          task: 'summarize',
+          path: 'assist/summarize',
+          payload: () => ({ locale: 'en' }),
+          answer: '{"points": ["Asks about a refund."]}',
+        },
+        {
+          task: 'translate',
+          path: 'assist/translate',
+          payload: (messageId) => ({ messageId, target: 'en' }),
+          answer: 'Where is my refund?',
+        },
+        {
+          task: 'rewrite',
+          path: 'assist/rewrite',
+          payload: () => ({ text: 'it went out', tone: 'formal' }),
+          answer: 'It has been dispatched.',
+        },
+      ];
+
+      beforeAll(async () => {
+        await setPrompts(prompts);
+        ({ id: arabicTicketId, message: arabicMessageId } = await newTicket(
+          'استرداد الطلب',
+          'أين استرداد مبلغي؟',
+        ));
+      });
+
+      afterAll(() => setPrompts({ systemPrompt: '', systemPromptAr: '' }));
+
+      it.each(tasks)('sends the Arabic prompt for an Arabic ticket: $task', async (entry) => {
+        fake.reply(entry.answer);
+
+        const response = await call(
+          'POST',
+          ticketPath(entry.path, arabicTicketId),
+          agentToken,
+          entry.payload(arabicMessageId),
+        );
+
+        expect(response.status).toBe(200);
+        expect(systemPromptSent()).toContain(prompts.systemPromptAr);
+        expect(systemPromptSent()).not.toContain(prompts.systemPrompt);
+      });
+
+      it('sends the main prompt for an English ticket', async () => {
+        fake.reply('Your refund is on its way.');
+
+        const response = await call('POST', ticketPath('assist/suggest-reply'), agentToken);
+
+        expect(response.status).toBe(200);
+        expect(systemPromptSent()).toContain(prompts.systemPrompt);
+        expect(systemPromptSent()).not.toContain(prompts.systemPromptAr);
+      });
+    });
+
     it('refuses while the brand has assist off, and at the hard stop unless it keeps assist on', async () => {
       const setModes = (modes: Record<string, unknown>, monthlyBudgetUsd: number | null = null) =>
         withSystem(db(), brandId, (tx) =>

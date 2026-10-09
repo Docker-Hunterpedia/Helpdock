@@ -279,6 +279,13 @@ keeps assist on past the budget ("Keep assist after the hard stop", on by
 default), in which case assist calls `complete()` with `allowOverBudget` and
 only auto-reply stops. The call is still logged and counted.
 
+**Which system prompt.** Every item sends the brand's system prompt after its
+own instructions, and chooses it as auto-reply does: the Arabic one when the
+ticket is in Arabic and the brand wrote one, the main one otherwise. The
+ticket's language is that of the customer's last message, or the contact's
+language, or the brand's, while the customer has said nothing. It follows the
+ticket, not the language an agent asks a summary, translation or draft in.
+
 **How a call runs.** The assist routes hold no transaction while the model
 answers ([ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)):
 the ticket is read under the agent's own department policy, then the model is
@@ -725,7 +732,10 @@ Public/Internal, and an **AI log** disclosure (model, tokens, cost, redactions,
 confidence against the threshold, sources retrieved and cited); a pause or a
 resume is a System event; while paused, the **Assistant paused** strip above
 the composer offers **Return to assistant**; and the details panel's **AI on
-this ticket** totals its calls, tokens and cost.
+this ticket** totals its calls, tokens and cost. In the ticket list the same
+conversation's row ends its caption line with **AI paused** while it is handed
+off, or **AI answered** once the assistant has taken part and is not paused;
+rows of conversations the assistant never took part in say nothing.
 
 The first-run wizard has an optional **AI provider** step after Outgoing
 email: choose a provider, paste an API key (or subscription credentials),
@@ -823,8 +833,9 @@ real calls.
   nightly evaluation needs the `AI_EVAL_API_KEY` secret, which is an external
   dependency of the milestone.
 - Assist answers arrive whole; streaming them into the card is not built.
-- The Arabic system prompt (`systemPromptAr`) is not yet chosen for assist: every
-  assist call sends the brand's main prompt.
+- The ticket list's **AI answered** means the assistant took part and is not
+  paused. A conversation handed off before the assistant ever answered, then
+  returned to it, reads that way until it answers or is paused again.
 - A transcription costs 0 in the log: there is no per-minute price setting.
 - A budget alert reaches the audit log and the settings response; an email or
   a bell entry for it waits for a design of its own (notifications are about a

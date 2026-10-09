@@ -57,6 +57,20 @@ describe('complete()', () => {
     expect(fake.sent[1]?.context.systemPrompt).toBe('Answer as Acme support.');
   });
 
+  it('keeps the main prompt for an Arabic conversation when the brand wrote no Arabic one', async () => {
+    ports.systemPromptAr = '  ';
+    fake.reply('حسنًا.');
+
+    await ai.complete({
+      brandId,
+      feature: 'assist.suggest_reply',
+      locale: 'ar',
+      messages: [{ role: 'user', text: 'مرحبا' }],
+    });
+
+    expect(fake.sent[0]?.context.systemPrompt).toBe('Answer as Acme support.');
+  });
+
   it('sends the configured model with an explicit key and logs the call with its cost', async () => {
     fake.reply('Refunds take five days.');
 

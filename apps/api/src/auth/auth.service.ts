@@ -644,7 +644,7 @@ export class AuthService {
   // OAuth
   // ------------------------------------------------------------------
 
-  async startOauth(provider: OauthProvider): Promise<string> {
+  async startOauth(provider: OauthProvider): Promise<{ url: string; browserNonce: string }> {
     try {
       return await this.#parts.oauth.start(provider);
     } catch (error) {
@@ -661,16 +661,18 @@ export class AuthService {
     provider,
     code,
     state,
+    browserNonce,
     userAgent,
   }: {
     readonly provider: OauthProvider;
     readonly code: string;
     readonly state: string;
+    readonly browserNonce: string | undefined;
     readonly userAgent: string | undefined;
   }): Promise<SignInOutcome> {
     let identity: Awaited<ReturnType<OauthService['complete']>>;
     try {
-      identity = await this.#parts.oauth.complete({ provider, code, state });
+      identity = await this.#parts.oauth.complete({ provider, code, state, browserNonce });
     } catch (error) {
       this.#parts.logger.warn({ err: error, provider }, 'An OAuth callback could not be completed');
       throw new AuthFailure(error instanceof OauthError ? 'no-account' : 'unavailable');

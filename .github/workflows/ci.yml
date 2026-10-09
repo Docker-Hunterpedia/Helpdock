@@ -32,7 +32,12 @@ permissions:
 #   public registry instead (`docker-compose.yml`, `media.integration.test.ts`).
 #   `secrets` is not a context `if:` can read, but `jobs.<id>.env` can, so
 #   `DOCKERHUB_CONFIGURED` turns "is an account configured?" into an ordinary
-#   value without ever putting the token in an expression.
+#   value without ever putting the token in an expression. Without an
+#   account, every Docker Hub image comes through `mirror.gcr.io`, Google's
+#   pull-through cache of Docker Hub, which has no such limit: Testcontainers
+#   through `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX`, the Dockerfile through its
+#   `NODE_IMAGE` argument, and the smoke stack's Postgres and Redis
+#   pulled ahead and tagged under the names the Compose file uses.
 # - ffmpeg: the media pipeline spawns ffmpeg and ffprobe (ARCHITECTURE §9) and
 #   the suites that exercise them skip themselves when they are absent, so the
 #   jobs that run those suites install it.
@@ -308,6 +313,8 @@ jobs:
         shard: [1, 2]
     env:
       DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      # No account: pull through Google's mirror (see the top of this file).
+      TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: ${{ (secrets.DOCKERHUB_USERNAME == '' || secrets.DOCKERHUB_TOKEN == '') && 'mirror.gcr.io/' || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -400,6 +407,8 @@ jobs:
     timeout-minutes: 20
     env:
       DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      # No account: pull through Google's mirror (see the top of this file).
+      TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: ${{ (secrets.DOCKERHUB_USERNAME == '' || secrets.DOCKERHUB_TOKEN == '') && 'mirror.gcr.io/' || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -546,6 +555,8 @@ jobs:
     timeout-minutes: 25
     env:
       DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      # No account: pull through Google's mirror (see the top of this file).
+      TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: ${{ (secrets.DOCKERHUB_USERNAME == '' || secrets.DOCKERHUB_TOKEN == '') && 'mirror.gcr.io/' || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -655,8 +666,24 @@ jobs:
           build-args: |
             HELPDOCK_VERSION=ci
             HELPDOCK_GIT_SHA=${{ github.sha }}
+            NODE_IMAGE=${{ (secrets.DOCKERHUB_USERNAME == '' || secrets.DOCKERHUB_TOKEN == '') && 'mirror.gcr.io/library/node:24-bookworm-slim' || 'node:24-bookworm-slim' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # No account: the stack's Postgres and Redis come through the mirror
+      # and are tagged under the names the Compose file uses, so `compose up`
+      # finds them in the daemon and pulls nothing from Docker Hub.
+      - name: Pull the stack's images through the mirror
+        if: env.DOCKERHUB_CONFIGURED != 'true'
+        run: |
+          for image in pgvector/pgvector:pg17 redis:7-alpine; do
+            case "$image" in
+              */*) source="mirror.gcr.io/$image" ;;
+              *) source="mirror.gcr.io/library/$image" ;;
+            esac
+            docker pull --quiet "$source"
+            docker tag "$source" "$image"
+          done
 
       # The stack comes up, the api serves the admin build, an unverified domain
       # gets no certificate, and an image goes through the media pipeline.

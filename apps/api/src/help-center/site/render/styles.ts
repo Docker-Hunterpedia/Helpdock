@@ -112,7 +112,7 @@ h1, h2, h3 { text-wrap: pretty; }
 .hd-search { display: flex; gap: 8px; inline-size: 100%; max-inline-size: 720px; }
 .hd-hero .hd-search { margin-block-start: 16px; max-inline-size: 640px; }
 .hd-search-field {
-  flex-grow: 1; display: flex; align-items: center; gap: 12px; block-size: 48px; padding-inline: 16px;
+  flex-grow: 1; min-inline-size: 0; display: flex; align-items: center; gap: 12px; block-size: 48px; padding-inline: 16px;
   border-radius: var(--hd-radius-md); border: 1px solid var(--hd-border-strong); background: var(--hd-bg-surface); color: var(--hd-text-secondary);
 }
 .hd-search-field input { font-size: 16px; }
@@ -241,7 +241,8 @@ a.hd-card:hover { text-decoration: none; border-color: var(--hd-border-strong); 
 .hd-feedback fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; inline-size: 100%; }
 .hd-feedback legend { float: inline-start; padding: 0; margin-inline-end: auto; }
 .hd-feedback .hd-button-secondary, .hd-feedback .hd-button, .hd-feedback .hd-button-ghost { block-size: 44px; }
-.hd-feedback [aria-pressed="true"] { border-color: var(--hd-text-primary); background: var(--hd-bg-muted); }
+/* 2 px, not 1: forced colours keep a border's width and drop its colour and the tint, so width is what tells the pressed answer apart. */
+.hd-feedback [aria-pressed="true"] { border-width: 2px; border-color: var(--hd-text-primary); background: var(--hd-bg-muted); }
 .hd-feedback-comment { flex-direction: column; align-items: stretch; }
 .hd-feedback-label { font-weight: 500; }
 .hd-feedback textarea {

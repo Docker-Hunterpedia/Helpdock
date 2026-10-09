@@ -35,6 +35,9 @@ import { holidayRefusal, hoursUpdateRefusal } from './sla-scope.js';
  * clocks do, and get the same answer.
  */
 
+/** The calendar of a ticket in a department, read ahead for a whole list of tickets. */
+export type DepartmentCalendars = (departmentId: string) => BusinessCalendar;
+
 /** Everything a write here is told about the request it serves. */
 export interface SlaAdminContext {
   readonly tx: DbTransaction;
@@ -74,6 +77,18 @@ export class BusinessHoursService {
     return departmentId === null
       ? brandCalendar(rows)
       : buildCalendars(rows)('business', departmentId);
+  }
+
+  /**
+   * {@link calendarFor} for many departments at the cost of one read: the
+   * rows are fetched once and the function it returns answers for any
+   * department of the brand. The widget judges every conversation of a list
+   * this way.
+   */
+  async calendarsFor(brandId: string, tx: DbTransaction = getTx()): Promise<DepartmentCalendars> {
+    const calendarOf = buildCalendars(await this.#repository.calendarRows(tx, brandId));
+
+    return (departmentId) => calendarOf('business', departmentId);
   }
 
   async overview(tx: DbTransaction, brandId: string): Promise<BusinessHoursOverview> {

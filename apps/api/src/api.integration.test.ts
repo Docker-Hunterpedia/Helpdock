@@ -757,6 +757,77 @@ describe.skipIf(!hasDocker)('the api', () => {
     });
   });
 
+  describe('behind a reverse proxy (F2, M9-01)', () => {
+    /**
+     * The address `audit_log.ip` records for an install admin's request that came
+     * from `peer` carrying `x-forwarded-for: client-written, proxy-appended`,
+     * which is `request.ip` and so the key of every per-address rate limit.
+     */
+    const auditedAddress = async (
+      trustProxy: Env['TRUST_PROXY'],
+      peer: string,
+    ): Promise<string | null> => {
+      const proxiedRuntime = await createRuntime({
+        env: envFor({ TRUST_PROXY: trustProxy }),
+        logger: silentLogger(),
+      });
+      const proxiedApp = await createApiApp({ runtime: proxiedRuntime });
+      try {
+        const response = await proxiedApp.inject({
+          method: 'GET',
+          url: '/api/install/brands',
+          remoteAddress: peer,
+          headers: {
+            ...asPrincipal(staffPrincipal(installAdmin, {}, true)),
+            'x-forwarded-for': '203.0.113.9, 198.51.100.7',
+          },
+        });
+        expect(response.statusCode).toBe(200);
+        const requestId = String(response.headers[REQUEST_ID_HEADER]);
+        const [row] = await withSystemJob(runtime.db, INSTALL_SCOPE_BRAND_ID, 'assert', (tx) =>
+          tx
+            .select({ ip: auditLog.ip })
+            .from(auditLog)
+            .where(sql`${auditLog.meta}->>'requestId' = ${requestId}`),
+        );
+        return row?.ip ?? null;
+      } finally {
+        await proxiedApp.close();
+        await proxiedRuntime.close();
+      }
+    };
+
+    it.each([
+      ['no proxy is believed, so the header is ignored', false, '10.0.0.5', '10.0.0.5'],
+      [
+        'a listed proxy is believed, and the entry the client wrote still is not',
+        ['10.0.0.0/8'],
+        '10.0.0.5',
+        '198.51.100.7',
+      ],
+      [
+        'a peer that is not a listed proxy cannot forward an address',
+        ['192.0.2.0/24'],
+        '10.0.0.5',
+        '10.0.0.5',
+      ],
+      [
+        'uniquelocal, the Compose file’s value, believes the Caddy on the private network',
+        ['uniquelocal'],
+        '172.18.0.2',
+        '198.51.100.7',
+      ],
+      [
+        'uniquelocal does not believe a public peer that reached the api directly',
+        ['uniquelocal'],
+        '198.51.100.1',
+        '198.51.100.1',
+      ],
+    ] as const)('%s', async (_name, trustProxy, peer, expected) => {
+      expect(await auditedAddress(trustProxy as Env['TRUST_PROXY'], peer)).toBe(expected);
+    });
+  });
+
   describe('boot', () => {
     it('refuses to serve as a role that can bypass row-level security', async () => {
       await expect(

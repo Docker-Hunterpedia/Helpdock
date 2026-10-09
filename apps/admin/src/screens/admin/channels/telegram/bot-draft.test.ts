@@ -1,4 +1,8 @@
-import { TELEGRAM_WELCOME_MAX_LENGTH, type TelegramBot } from '@helpdock/schemas';
+import {
+  TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH,
+  TELEGRAM_WELCOME_MAX_LENGTH,
+  type TelegramBot,
+} from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { MOCK_SUPPORT_BOT, MockTelegramApi } from '../../../../telegram/mock-api.js';
 import { draftFromBot, isDraftDirty, looksLikeToken, validateDraft } from './bot-draft.js';
@@ -19,6 +23,7 @@ describe('the Telegram bot draft', () => {
 
     expect(isDraftDirty({ ...saved, languagePick: false }, saved)).toBe(true);
     expect(isDraftDirty({ ...saved, welcomeAr: 'أهلا' }, saved)).toBe(true);
+    expect(isDraftDirty({ ...saved, languagePrompt: 'Pick one' }, saved)).toBe(true);
     expect(isDraftDirty({ ...saved, departmentId: 'other' }, saved)).toBe(true);
     expect(isDraftDirty({ ...saved, token: '' }, saved)).toBe(true);
   });
@@ -38,11 +43,32 @@ describe('the Telegram bot draft', () => {
         displayName: 'Helpdock Support',
         departmentId: saved.departmentId,
         languagePick: true,
+        languagePrompt: null,
         welcomeEn: null,
         welcomeAr: 'أهلا',
         token,
       },
     });
+  });
+
+  it('shows the catalog’s prompt for a bot without one, and the bot’s own when it has one', async () => {
+    const own = { ...(await bot()), languagePrompt: 'Pick a language · اختر لغتك' };
+
+    expect(draftFromBot(await bot()).languagePrompt).toBe('Choose your language · اختر لغتك');
+    expect(draftFromBot(own).languagePrompt).toBe('Pick a language · اختر لغتك');
+  });
+
+  it.each([
+    ['a typed prompt, trimmed', '  Pick a language · اختر لغتك ', 'Pick a language · اختر لغتك'],
+    ['nothing', '   ', null],
+    ['the catalog’s own text', 'Choose your language · اختر لغتك', null],
+  ])('sends %s as the language prompt', async (_case, typed, sent) => {
+    const checked = validateDraft(
+      { ...draftFromBot(await bot()), languagePrompt: typed },
+      'Helpdock Support',
+    );
+
+    expect(checked.ok && checked.request.languagePrompt).toBe(sent);
   });
 
   it('leaves the token out while the saved one is kept', async () => {
@@ -51,15 +77,23 @@ describe('the Telegram bot draft', () => {
     expect(checked.ok && 'token' in checked.request).toBe(false);
   });
 
-  it('refuses a welcome that is too long and a token that is not BotFather’s', async () => {
+  it('refuses a welcome or a language prompt that is too long and a token that is not BotFather’s', async () => {
     const saved = draftFromBot(await bot());
 
     expect(
       validateDraft(
-        { ...saved, welcomeEn: 'a'.repeat(TELEGRAM_WELCOME_MAX_LENGTH + 1), token: 'nope' },
+        {
+          ...saved,
+          languagePrompt: 'a'.repeat(TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH + 1),
+          welcomeEn: 'a'.repeat(TELEGRAM_WELCOME_MAX_LENGTH + 1),
+          token: 'nope',
+        },
         'x',
       ),
-    ).toEqual({ ok: false, errors: { welcomeEn: 'tooLong', token: 'malformed' } });
+    ).toEqual({
+      ok: false,
+      errors: { languagePrompt: 'tooLong', welcomeEn: 'tooLong', token: 'malformed' },
+    });
   });
 
   it('knows a BotFather token when it sees one', () => {

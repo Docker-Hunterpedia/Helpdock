@@ -4,8 +4,9 @@ import { sessionCookiePayloadSchema } from '@helpdock/schemas';
 import { type SessionLifetime, sessionLifetime } from './lifetime.js';
 
 /**
- * The two cookies the auth service sets, and the attributes that make them
- * safe to set at all (ARCHITECTURE §7, REQUIREMENTS §5.1).
+ * The cookies the auth service sets, and the attributes that make them safe to
+ * set at all (ARCHITECTURE §7, REQUIREMENTS §5.1). The third, `hd_oauth`, lives
+ * for one OAuth round trip and is described at {@link oauthNonceCookie}.
  *
  * | | |
  * |---|---|
@@ -31,6 +32,7 @@ import { type SessionLifetime, sessionLifetime } from './lifetime.js';
 /** The bare names; {@link refreshCookie} and {@link trustedDeviceCookie} add the prefix. */
 export const REFRESH_COOKIE = 'hd_refresh';
 export const TRUSTED_DEVICE_COOKIE = 'hd_trust';
+export const OAUTH_NONCE_COOKIE = 'hd_oauth';
 
 const SECURE_PREFIX = '__Secure-';
 
@@ -96,6 +98,20 @@ export const refreshCookieOf = (
 export const trustedDeviceCookie = (appUrl: string): CookieSpec => ({
   name: prefixed(appUrl, TRUSTED_DEVICE_COOKIE),
   attributes: cookieAttributes({ appUrl, maxAgeSeconds: TRUSTED_DEVICE_TTL_SECONDS }),
+});
+
+/**
+ * Ties an OAuth callback to the browser that began the flow: the callback is a
+ * GET the provider redirects to, so a copy of its URL would otherwise finish
+ * someone else's flow in a victim's browser. `Lax` still travels on that
+ * top-level redirect, and the path keeps it off every other route.
+ */
+export const oauthNonceCookie = (appUrl: string, ttlSeconds: number): CookieSpec => ({
+  name: prefixed(appUrl, OAUTH_NONCE_COOKIE),
+  attributes: {
+    ...cookieAttributes({ appUrl, maxAgeSeconds: ttlSeconds }),
+    path: `${AUTH_COOKIE_PATH}/oauth`,
+  },
 });
 
 /**

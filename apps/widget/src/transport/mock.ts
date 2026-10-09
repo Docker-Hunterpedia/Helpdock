@@ -7,6 +7,7 @@ import {
   type AttachmentKind,
   type Availability,
   type ConnectionState,
+  type ConversationHours,
   type ConversationSummary,
   type CsatCard,
   type SignedIdentity,
@@ -28,6 +29,13 @@ import {
 export interface MockOptions {
   readonly config: (locale: WidgetLocale) => WidgetConfig;
   readonly articles?: readonly ArticleDetail[];
+  /**
+   * M7-06: the hours of the team answering a conversation, as the server sends
+   * them with it. By default they follow the config's availability (closed
+   * gives its next opening, anything else is open); `null` leaves them out, as
+   * a server older than M7-06 does.
+   */
+  readonly hours?: ConversationHours | null;
   /** A conversation the visitor already has, to exercise resume and the ended state. */
   readonly resume?: {
     readonly conversation: ConversationSummary;
@@ -53,9 +61,23 @@ export class MockTransport implements WidgetTransport {
 
   constructor(options: MockOptions) {
     this.#options = options;
-    this.#conversation = options.resume?.conversation ?? null;
+    this.#conversation = options.resume
+      ? { ...this.#hours(), ...options.resume.conversation }
+      : null;
     this.#messages = [...(options.resume?.messages ?? [])];
     this.#csat = options.resume?.csat ?? null;
+  }
+
+  #hours(): Pick<ConversationSummary, 'hours'> {
+    const { hours } = this.#options;
+    if (hours === null) {
+      return {};
+    }
+    if (hours !== undefined) {
+      return { hours };
+    }
+    const { state, next_open_at, timezone } = this.#options.config('en').availability;
+    return { hours: { open: state !== 'closed', next_open_at, timezone } };
   }
 
   #record(method: string, ...args: unknown[]): void {
@@ -88,6 +110,7 @@ export class MockTransport implements WidgetTransport {
       department: null,
       visitor_email: input.email ?? null,
       read_seq: 0,
+      ...this.#hours(),
     };
     this.#messages = [];
     return this.#conversation;

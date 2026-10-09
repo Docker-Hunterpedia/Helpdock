@@ -259,8 +259,11 @@ export const createApiApp = async ({
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
     // same promise `TRUST_PROXY` makes about `x-request-id`, so it is the same
-    // switch (REQUIREMENTS §5.1).
-    new FastifyAdapter({ trustProxy: env.TRUST_PROXY }),
+    // switch (REQUIREMENTS §5.1). The address list is copied because Fastify
+    // types it as mutable.
+    new FastifyAdapter({
+      trustProxy: typeof env.TRUST_PROXY === 'object' ? [...env.TRUST_PROXY] : env.TRUST_PROXY,
+    }),
     // `abortOnError: false` so a boot failure is thrown rather than turned into
     // `process.abort()`. Aborting leaves a container with SIGABRT and a core
     // dump where `main.ts` would have written the message that says what to fix.

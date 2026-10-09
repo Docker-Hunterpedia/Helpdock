@@ -650,6 +650,118 @@ describe('the remote transport', () => {
   });
 });
 
+describe('the hours of the team answering a conversation (M7-06)', () => {
+  const CLOSED = { open: false, nextOpenAt: '2026-09-27T05:00:00.000Z', timezone: 'Asia/Dubai' };
+  const OPEN = { open: true, nextOpenAt: null, timezone: 'Asia/Dubai' };
+
+  const started = async (wire: Partial<WireConversation>) => {
+    const live = fakeSocket();
+    const api = fakeApi({
+      'POST /conversations': () => ({ conversation: conversation(wire), message: null }),
+      [`POST /conversations/${CONVERSATION}/handoff`]: () =>
+        conversation({ aiHandedOff: true, hours: OPEN }),
+      [`GET /conversations/${CONVERSATION}/queue`]: () => ({
+        conversationId: CONVERSATION,
+        position: null,
+      }),
+    });
+    const transport = createRemoteTransport({
+      apiOrigin: API,
+      brand: BRAND,
+      storage: memoryStore({ [secretKeyFor(BRAND)]: SECRET }),
+      fetch: api.fetch,
+      openSocket: () => live.socket as unknown as LiveSocket,
+      network: null,
+    });
+    const summary = await transport.startConversation({});
+    const events: WidgetEvent[] = [];
+    transport.subscribe(CONVERSATION, {
+      onEvent: (event) => events.push(event),
+      onConnection: () => {},
+    });
+    live.socket.connected = true;
+    live.fire('connect');
+    const frame = (fields: Record<string, unknown>) =>
+      live.envelope('conversation', {
+        conversationId: CONVERSATION,
+        state: 'open',
+        continuedById: null,
+        ...fields,
+      });
+    return { transport, summary, events, frame };
+  };
+
+  it('maps the hours of the conversation it starts', async () => {
+    const { summary } = await started({ hours: CLOSED });
+
+    expect(summary.hours).toEqual({
+      open: false,
+      next_open_at: '2026-09-27T05:00:00.000Z',
+      timezone: 'Asia/Dubai',
+    });
+  });
+
+  it('emits a conversation event for a frame whose only news is new hours, and only once', async () => {
+    const { events, frame } = await started({ hours: CLOSED });
+
+    frame({ hours: CLOSED });
+    frame({ hours: OPEN });
+    frame({ hours: OPEN });
+
+    expect(events).toEqual([
+      {
+        type: 'conversation',
+        conversation: expect.objectContaining({
+          status: 'active',
+          hours: { open: true, next_open_at: null, timezone: 'Asia/Dubai' },
+        }),
+      },
+    ]);
+  });
+
+  it('says new hours and a handoff in the one event', async () => {
+    const { events, frame } = await started({ hours: CLOSED });
+
+    frame({ aiHandedOff: true, hours: OPEN });
+
+    expect(events).toEqual([
+      {
+        type: 'conversation',
+        conversation: expect.objectContaining({
+          ai_handed_off: true,
+          hours: { open: true, next_open_at: null, timezone: 'Asia/Dubai' },
+        }),
+      },
+    ]);
+  });
+
+  it('keeps the hours it holds when a later frame carries none', async () => {
+    const { events, frame, transport } = await started({ hours: CLOSED });
+
+    frame({ aiHandedOff: true });
+
+    expect(events).toEqual([
+      {
+        type: 'conversation',
+        conversation: expect.objectContaining({
+          ai_handed_off: true,
+          hours: { open: false, next_open_at: '2026-09-27T05:00:00.000Z', timezone: 'Asia/Dubai' },
+        }),
+      },
+    ]);
+    expect((await transport.handOff(CONVERSATION)).hours?.open).toBe(true);
+  });
+
+  it('leaves them absent for a server that sends none, and emits nothing for a frame without them', async () => {
+    const { summary, events, frame } = await started({});
+
+    frame({});
+
+    expect(summary).not.toHaveProperty('hours');
+    expect(events).toEqual([]);
+  });
+});
+
 const ARTICLE = '0192c3f0-1a2b-7c3d-8e4f-0000000000a1';
 const SEARCH = '0192c3f0-1a2b-7c3d-8e4f-0000000000a9';
 

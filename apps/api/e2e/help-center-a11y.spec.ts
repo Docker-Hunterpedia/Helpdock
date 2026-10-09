@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { createI18n } from '@helpdock/i18n';
-import { test as base, expect, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { HELP_CENTER_URL, HELP_CENTER_WALL_URL } from './fixtures.ts';
+import { FALLBACK_ARTICLE, PAGES, path, strings, tabCycle, test } from './help-center-pages.ts';
 
 /**
  * The accessibility audit of the published help center (M9-04,
@@ -13,19 +13,7 @@ import { HELP_CENTER_URL, HELP_CENTER_WALL_URL } from './fixtures.ts';
  * (`HelpCenter/Article-AR` panels 2 and 3).
  */
 
-const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
-
-const test = base.extend<{ pageLocale: 'en' | 'ar' }>({
-  pageLocale: ['en', { option: true }],
-});
-
 test.use({ reducedMotion: 'reduce', baseURL: HELP_CENTER_URL });
-
-const strings = (locale: 'en' | 'ar') => {
-  const t = createI18n({ lng: locale }).getFixedT(locale, 'hcSite');
-  return (key: string, options?: Record<string, unknown>): string =>
-    (t as unknown as (key: string, options?: Record<string, unknown>) => string)(key, options);
-};
 
 async function violations(page: Page): Promise<string[]> {
   await page.evaluate(() => document.fonts.ready);
@@ -42,23 +30,6 @@ async function violations(page: Page): Promise<string[]> {
   );
 }
 
-const path = (rest: string) => `/hc/${BRAND}${rest}`;
-
-/** Every page type a reader can reach, by the path after the locale, and the status it answers. */
-const PAGES = [
-  ['home', '', 200],
-  ['category', '/categories/returns-and-refunds', 200],
-  ['section', '/sections/refunds', 200],
-  ['article', '/articles/refund-timelines', 200],
-  ['article, comment step', '/articles/refund-timelines?feedback=no', 200],
-  ['article, thanks', '/articles/refund-timelines?feedback=1', 200],
-  ['search, nothing asked', '/search', 200],
-  ['search, results', '/search?q=refund', 200],
-  ['search, nothing found', '/search?q=warranty', 200],
-  ['not found', '/articles/approving-large-refunds', 404],
-  ['archived', '/articles/returning-sale-items', 410],
-] as const;
-
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(scheme, () => {
     test.use({ colorScheme: scheme });
@@ -73,7 +44,7 @@ for (const scheme of ['light', 'dark'] as const) {
         }
       }
       if (pageLocale === 'ar') {
-        await page.goto(path('/ar/articles/how-to-start-a-return'));
+        await page.goto(path(FALLBACK_ARTICLE));
         for (const line of await violations(page)) {
           found.push(`article in the default language: ${line}`);
         }
@@ -109,41 +80,26 @@ test('the skip link is the first stop, shows when focused, and moves focus to th
   await expect(page.getByRole('main').getByRole('link').first()).toBeFocused();
 });
 
-test('every stop on an article shows a focus ring and none is hidden', async ({
+test('every stop on an article shows a focus ring, none is hidden, and Tab reaches every control', async ({
   page,
   pageLocale,
 }) => {
+  const t = strings(pageLocale);
   await page.goto(path(`/${pageLocale}/articles/refund-timelines`));
-  const stops: { name: string; ring: boolean; visible: boolean }[] = [];
-  for (let index = 0; index < 30; index += 1) {
-    await page.keyboard.press('Tab');
-    stops.push(
-      await page.evaluate(() => {
-        const active = document.activeElement as HTMLElement | null;
-        if (active === null || active === document.body) {
-          return { name: '(none)', ring: true, visible: true };
-        }
-        const drawn = (element: Element | null) => {
-          if (element === null) {
-            return false;
-          }
-          const style = getComputedStyle(element);
-          return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) >= 2;
-        };
-        const box = active.getBoundingClientRect();
-        return {
-          name: `${active.tagName.toLowerCase()} ${(active.getAttribute('aria-label') ?? active.textContent ?? '').trim().slice(0, 40)}`,
-          ring: drawn(active) || drawn(active.parentElement),
-          visible: box.width > 1 && box.height > 1,
-        };
-      }),
-    );
-  }
+
+  const { stops, unreached } = await tabCycle(page);
 
   // The video's player is a third-party frame: once Tab is inside it, the ring is the player's own.
   const ours = stops.filter((stop) => !stop.name.startsWith('iframe'));
-  expect(ours.length).toBeGreaterThan(20);
+  expect(ours.map((stop) => stop.name)).toEqual(
+    expect.arrayContaining([
+      `a ${t('nav.skip')}`,
+      `button ${t('article.feedback.yes')}`,
+      `button ${t('article.feedback.no')}`,
+    ]),
+  );
   expect(ours.filter((stop) => !stop.ring || !stop.visible)).toEqual([]);
+  expect(unreached).toEqual([]);
 });
 
 test('"No" asks what was missing; Send records the note and thanks the reader', async ({

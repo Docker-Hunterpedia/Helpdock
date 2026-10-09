@@ -50,6 +50,10 @@ export const TELEGRAM_TOKEN_HINT_LENGTH = 4;
 export const TELEGRAM_WELCOME_MAX_LENGTH = 2_000;
 const WELCOME = z.string().trim().max(TELEGRAM_WELCOME_MAX_LENGTH);
 
+/** One line that names both languages and sits above two buttons. */
+export const TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH = 200;
+const LANGUAGE_PROMPT = z.string().trim().max(TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH);
+
 /** How much of Telegram's refusal is kept and shown. */
 export const TELEGRAM_ERROR_MAX_LENGTH = 300;
 
@@ -80,6 +84,11 @@ export const telegramBotSchema = z.object({
   tokenUpdatedByName: z.string().nullable(),
   /** M6-04. Null is the default text in the contact's language. */
   welcome: z.object({ en: z.string().nullable(), ar: z.string().nullable() }),
+  /**
+   * M6-04: what `/start` asks before the contact's language is known, one text
+   * for both languages. Null is the catalog's default.
+   */
+  languagePrompt: z.string().nullable(),
   languagePick: z.boolean(),
   webhook: z.object({
     /** The URL the last "Set webhook" registered, or null. */
@@ -103,6 +112,7 @@ const botBase = z.object({
   departmentId: z.uuid(),
   welcomeEn: WELCOME.nullable().default(null),
   welcomeAr: WELCOME.nullable().default(null),
+  languagePrompt: LANGUAGE_PROMPT.nullable().default(null),
   languagePick: z.boolean().default(true),
 });
 
@@ -264,7 +274,7 @@ export type TelegramTicketContextResponse = z.infer<typeof telegramTicketContext
 // The language pick (M6-04)
 // --------------------------------------------------------------------------
 
-/** `callback_data` of the two buttons under the welcome. */
+/** `callback_data` of the two buttons under the language prompt. */
 export const telegramLanguageCallback = (locale: z.infer<typeof localeSchema>): string =>
   `lang:${locale}`;
 

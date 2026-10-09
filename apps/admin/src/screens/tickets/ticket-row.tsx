@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { TicketAiMark } from './ai/ticket-ai-mark.tsx';
 import { PriorityDot, SlaTimer, StatusBadge } from './badges.tsx';
 import { elapsed, ticketReference } from './format.js';
 
@@ -24,6 +25,9 @@ import { elapsed, ticketReference } from './format.js';
  * The contact's name is the one the list response embeds (M1-15). A row
  * without it — a ticket that names nobody, or a caller the api does not give
  * contact names to — prints the reference alone rather than an id.
+ *
+ * After them the caption says what the assistant did on the conversation:
+ * "AI paused" or "AI answered" (M7-06), from the ticket's `ai` state.
  */
 export function TicketRow({
   ticket,
@@ -90,6 +94,7 @@ export function TicketRow({
                 </Box>
               </>
             )}
+            <TicketAiMark state={ticket.ai} />
           </Typography>
         </Box>
 

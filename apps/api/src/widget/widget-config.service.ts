@@ -1,12 +1,10 @@
 import { brandDomains, customFieldDefs, type DbTransaction } from '@helpdock/db';
-import {
-  isWithinBusinessHours,
-  nextOpening,
-  type WidgetAvailability,
-  type WidgetConfig,
-  type WidgetLocale,
-  type WidgetPrechatFieldView,
-  type WidgetPresence,
+import type {
+  WidgetAvailability,
+  WidgetConfig,
+  WidgetLocale,
+  WidgetPrechatFieldView,
+  WidgetPresence,
 } from '@helpdock/schemas';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { CaptchaKeysReader } from '../captcha/captcha-keys.js';
@@ -17,6 +15,7 @@ import { popularSummaries, WIDGET_POPULAR_ARTICLES } from './article-view.js';
 import type { OnlineAgents } from './online-agents.js';
 import type { ResolvedWidgetSettings } from './resolved-settings.js';
 import type { WidgetGate, WidgetRequestFacts, WidgetScope } from './widget-gate.js';
+import { calendarHours } from './widget-hours.js';
 import { greetingIn, widgetThemeOf } from './widget-theme.js';
 
 /**
@@ -129,12 +128,9 @@ export class WidgetConfigService {
 
   async availabilityIn(scope: WidgetScope, now: Date): Promise<WidgetAvailability> {
     const calendar = await this.#businessHours.calendarFor(scope.brand.id, null, scope.tx);
-    const open = isWithinBusinessHours(calendar, now);
 
     return {
-      open,
-      nextOpenAt: open ? null : (nextOpening(calendar, now)?.toISOString() ?? null),
-      timezone: calendar.timezone,
+      ...calendarHours(calendar, now),
       ...(await this.#online.presenceIn(scope.tx, scope.brand.id, scope.settings)),
     };
   }

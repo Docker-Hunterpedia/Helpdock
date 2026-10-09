@@ -93,7 +93,7 @@ describe('classifyUpdate', () => {
     expect(classifyUpdate(message({ text: '/started the order' })).kind).toBe('message');
   });
 
-  it('reads a language button press', () => {
+  it('reads a language button press with the prompt it sits under', () => {
     const event = classifyUpdate({
       update_id: 8,
       callback_query: {
@@ -109,6 +109,7 @@ describe('classifyUpdate', () => {
       updateId: 8,
       callbackQueryId: 'cq-1',
       locale: 'ar',
+      messageId: '3',
       sender: { chatId: '4242', name: 'Mona Khalil', username: 'mona_k', languageCode: 'ar' },
     });
   });

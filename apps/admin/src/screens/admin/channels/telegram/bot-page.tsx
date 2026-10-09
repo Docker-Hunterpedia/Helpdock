@@ -1,5 +1,8 @@
 import type { TelegramBot, TelegramBotStatus } from '@helpdock/schemas';
-import { TELEGRAM_WELCOME_MAX_LENGTH } from '@helpdock/schemas';
+import {
+  TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH,
+  TELEGRAM_WELCOME_MAX_LENGTH,
+} from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -166,9 +169,7 @@ function BotForm({
   });
 
   const dirty = isDraftDirty(draft, saved);
-  const tooLong = t('channels:telegram.detail.welcome.tooLong', {
-    max: TELEGRAM_WELCOME_MAX_LENGTH,
-  });
+  const tooLong = (max: number): string => t('channels:telegram.detail.welcome.tooLong', { max });
   const departmentName = (id: string): string => {
     const found = departments.find((department) => department.id === id);
     return (locale === 'ar' ? found?.nameAr : null) ?? found?.name ?? '';
@@ -293,8 +294,14 @@ function BotForm({
           <WelcomeSection
             draft={draft}
             errors={{
-              welcomeEn: errors.welcomeEn === undefined ? undefined : tooLong,
-              welcomeAr: errors.welcomeAr === undefined ? undefined : tooLong,
+              languagePrompt:
+                errors.languagePrompt === undefined
+                  ? undefined
+                  : tooLong(TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH),
+              welcomeEn:
+                errors.welcomeEn === undefined ? undefined : tooLong(TELEGRAM_WELCOME_MAX_LENGTH),
+              welcomeAr:
+                errors.welcomeAr === undefined ? undefined : tooLong(TELEGRAM_WELCOME_MAX_LENGTH),
             }}
             onChange={change}
           />

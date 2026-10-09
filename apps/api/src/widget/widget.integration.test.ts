@@ -29,12 +29,15 @@ import {
 import { outboxEvents, silentLogger } from '@helpdock/jobs';
 import {
   canonicalIdentityJson,
+  defaultWeeklyHours,
   SOCKET_IO_PATH,
   type TicketDetail,
+  type WeeklyHours,
   WIDGET_EVENTS,
   WIDGET_NAMESPACE,
   type WidgetAvailability,
   type WidgetConfig,
+  type WidgetConversation,
   type WidgetConversationList,
   type WidgetEnvelope,
   type WidgetJoinAck,
@@ -60,10 +63,14 @@ import { createLogger } from '../logging/logger.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceService } from '../realtime/presence.service.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { BusinessHoursService } from '../sla/business-hours.service.js';
+import { SlaRepository } from '../sla/sla.repository.js';
+import { SlaService } from '../sla/sla.service.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { WidgetConversationsService } from './widget-conversations.service.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
-import { WIDGET_VISITOR_WRITE_RULE } from './widget-gate.js';
+import { WIDGET_SOCKET_EVENT_RULE, WIDGET_VISITOR_WRITE_RULE } from './widget-gate.js';
 import { RedisWidgetBroadcast } from './widget-relay.js';
 
 /**
@@ -367,7 +374,13 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
     // M8-03: every contact the suite makes writes `contact.created`.
     registerContactEventHandlers();
     ignoreAuthEmailInThisSuite();
-    registerWidgetEventHandlers(new RedisWidgetBroadcast(worker));
+    const hours = new BusinessHoursService(
+      new SlaRepository(),
+      new SlaService(new SlaRepository()),
+    );
+    registerWidgetEventHandlers(new RedisWidgetBroadcast(worker), {
+      calendarsFor: (brandId, tx) => hours.calendarsFor(brandId, tx),
+    });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
     ada = { id: seeded.userId, email: seeded.email, token: '' };
@@ -754,6 +767,50 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         );
       });
 
+      it('cuts a verified visitor’s open sockets when the link to the contact is withdrawn (F3, M9-01)', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const laptop = await newVisitor();
+        await identify(laptop, { user_id: 'cust-43', ts: now });
+        const opened = await start(laptop);
+        const conversationId = opened.body.conversation.id;
+        const phone = await newVisitor();
+        await identify(phone, { user_id: 'cust-43', ts: now });
+        const socket = await connect(phone);
+        const joined: WidgetJoinAck = await socket.emitWithAck(WIDGET_EVENTS.join, {
+          conversationId,
+        });
+        expect(joined.ok).toBe(true);
+        const closed = new Promise<string>((resolve) => {
+          socket.once('disconnect', resolve);
+          setTimeout(() => resolve('still connected'), 3_000).unref();
+        });
+
+        // Signing out on the host site: the next load carries no identity.
+        await widget('POST', '/session', { visitor: phone, payload: {} });
+
+        expect(await closed).toBe('io server disconnect');
+        const reconnected = await connect(phone);
+        const again: WidgetJoinAck = await reconnected.emitWithAck(WIDGET_EVENTS.join, {
+          conversationId,
+        });
+        expect(again).toMatchObject({ ok: false, error: { code: 'not_found' } });
+      });
+
+      it('leaves a visitor’s sockets alone when a load changes nothing about who they are', async () => {
+        const visitor = await newVisitor();
+        const socket = await connect(visitor);
+        let disconnected = false;
+        socket.once('disconnect', () => {
+          disconnected = true;
+        });
+
+        await widget('POST', '/session', { visitor, payload: {} });
+        const ack = await socket.emitWithAck(WIDGET_EVENTS.leave, { conversationId: uuidv7() });
+
+        expect(ack).toMatchObject({ ok: true });
+        expect(disconnected).toBe(false);
+      });
+
       it('shows a verified visitor their email tickets only when the brand allows it', async () => {
         const now = Math.floor(Date.now() / 1000);
         const visitor = await newVisitor();
@@ -1008,6 +1065,44 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       expect(statuses.at(-1)).toBe(429);
     });
 
+    it('throttles every event on a visitor’s socket from one budget, and only that visitor’s (F1, M9-01)', async () => {
+      const visitor = await newVisitor();
+      const bystander = await newVisitor();
+      const opened = await start(visitor);
+      const conversationId = opened.body.conversation.id;
+      const socket = await connect(visitor);
+
+      const spent = await Promise.all(
+        Array.from({ length: WIDGET_SOCKET_EVENT_RULE.limit }, () =>
+          socket.emitWithAck(WIDGET_EVENTS.leave, { conversationId }),
+        ),
+      );
+      expect(spent.every((ack: { ok: boolean }) => ack.ok)).toBe(true);
+
+      const refused = await Promise.all([
+        socket.emitWithAck(WIDGET_EVENTS.join, { conversationId }),
+        socket.emitWithAck(WIDGET_EVENTS.typingSet, { conversationId, typing: true }),
+        socket.emitWithAck(WIDGET_EVENTS.read, { conversationId, seq: 1 }),
+        socket.emitWithAck(WIDGET_EVENTS.send, {
+          conversationId,
+          message: { clientId: uuidv7(), text: 'over budget' },
+        }),
+        socket.emitWithAck(WIDGET_EVENTS.leave, { conversationId }),
+      ]);
+      expect(refused.map((ack: { error?: { code: string } }) => ack.error?.code)).toEqual(
+        Array.from({ length: 5 }, () => 'rate_limited'),
+      );
+
+      const overHttp = await widget<{ id: string }>('GET', `/conversations/${conversationId}`, {
+        visitor,
+      });
+      expect(overHttp.status).toBe(200);
+      const otherSocket = await connect(bystander);
+      expect(await otherSocket.emitWithAck(WIDGET_EVENTS.leave, { conversationId })).toMatchObject({
+        ok: true,
+      });
+    });
+
     it('asks for a CAPTCHA before the first message when the brand wants one', async () => {
       await staff('PUT', `/api/brands/${seeded.brandId}/widget/access`, ada, {
         allowedOrigins: [SHOP],
@@ -1086,6 +1181,69 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       );
       expect(availability.status).toBe(200);
       expect(typeof availability.body.open).toBe('boolean');
+    });
+
+    describe('the hours of a conversation (M7-06)', () => {
+      const SATURDAY = new Date('2026-09-26T12:00:00.000Z');
+      const WEEKDAYS = defaultWeeklyHours();
+      const ALL_DAY = Array.from({ length: 7 }, () => [{ start: '00:00', end: '24:00' }]);
+
+      const hoursAt = async (visitor: Visitor, conversationId: string, now: Date) =>
+        (
+          await app
+            .get(WidgetConversationsService)
+            .get(
+              seeded.brandId,
+              { origin: SHOP, authorization: `Visitor ${visitor.secret}`, ip: null },
+              conversationId,
+              now,
+            )
+        ).hours;
+
+      const saveBrandHours = async (weekly: WeeklyHours): Promise<void> => {
+        const saved = await staff('PUT', `/api/brands/${seeded.brandId}/business-hours`, ada, {
+          brand: { timezone: 'UTC', weekly },
+          departments: [],
+        });
+        expect(saved.status).toBe(200);
+      };
+
+      it('is the default Monday-to-Friday week in the brand zone when no hours were saved', async () => {
+        const visitor = await newVisitor();
+        const opened = await start(visitor);
+        const conversationId = opened.body.conversation.id;
+
+        expect(await hoursAt(visitor, conversationId, SATURDAY)).toEqual({
+          open: false,
+          nextOpenAt: '2026-09-28T09:00:00.000Z',
+          timezone: 'UTC',
+        });
+        const overHttp = await widget<WidgetConversation>(
+          'GET',
+          `/conversations/${conversationId}`,
+          {
+            visitor,
+          },
+        );
+        expect(overHttp.body.hours).toMatchObject({ timezone: 'UTC' });
+        expect(opened.body.conversation.hours).toMatchObject({ timezone: 'UTC' });
+      });
+
+      it('is open, with no opening, when the brand saved 24/7 hours', async () => {
+        const visitor = await newVisitor();
+        const conversationId = (await start(visitor)).body.conversation.id;
+
+        await saveBrandHours(ALL_DAY);
+        try {
+          expect(await hoursAt(visitor, conversationId, SATURDAY)).toEqual({
+            open: true,
+            nextOpenAt: null,
+            timezone: 'UTC',
+          });
+        } finally {
+          await saveBrandHours(WEEKDAYS);
+        }
+      });
     });
 
     it('names the agents online by first name, unless the brand hides who they are', async () => {

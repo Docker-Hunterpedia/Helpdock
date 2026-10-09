@@ -40,8 +40,9 @@
 			# Overwritten, never merged: the request id an operator greps for
 			# must be one Caddy chose, not one a client sent (apps/api/README).
 			header_up X-Request-Id {http.request.uuid}
-			# X-Forwarded-For, -Proto and -Host are set by reverse_proxy itself;
-			# the api believes them only when TRUST_PROXY=true.
+			# X-Forwarded-For, -Proto and -Host are set by reverse_proxy itself,
+			# replacing what a client sent unless the peer is a trusted proxy;
+			# the api believes them only under TRUST_PROXY (docker-compose.yml).
 			header_up X-Forwarded-Host {host}
 		}
 	}

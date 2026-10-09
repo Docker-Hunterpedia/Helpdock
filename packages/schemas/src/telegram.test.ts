@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseTelegramLanguageCallback,
+  TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH,
   telegramBotCreateRequestSchema,
   telegramBotHealth,
   telegramBotUpdateRequestSchema,
@@ -43,8 +44,36 @@ describe('the bot form', () => {
       token: TOKEN,
       welcomeEn: null,
       welcomeAr: null,
+      languagePrompt: null,
       languagePick: true,
     });
+  });
+
+  it('keeps a language prompt as typed, trimmed, and null for the catalog’s', () => {
+    const base = { displayName: 'Acme', departmentId: DEPARTMENT };
+
+    expect(
+      telegramBotUpdateRequestSchema.parse({
+        ...base,
+        languagePrompt: '  Pick a language · اختر لغتك ',
+      }).languagePrompt,
+    ).toBe('Pick a language · اختر لغتك');
+    expect(telegramBotUpdateRequestSchema.parse({ ...base }).languagePrompt).toBeNull();
+    expect(
+      telegramBotUpdateRequestSchema.parse({ ...base, languagePrompt: null }).languagePrompt,
+    ).toBeNull();
+  });
+
+  it('refuses a language prompt past the limit, and accepts one at it', () => {
+    const base = { displayName: 'Acme', departmentId: DEPARTMENT, token: TOKEN };
+    const at = 'x'.repeat(TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH);
+
+    expect(telegramBotCreateRequestSchema.safeParse({ ...base, languagePrompt: at }).success).toBe(
+      true,
+    );
+    expect(
+      telegramBotCreateRequestSchema.safeParse({ ...base, languagePrompt: `${at}x` }).success,
+    ).toBe(false);
   });
 
   it('refuses something that is not a token', () => {

@@ -194,7 +194,9 @@ widget: a send gets `read_only` (409).
 An invalid or expired signature does not fail the call. The visitor stays
 anonymous (`verified: false`), and the api logs and audits a security event. A
 `session` call **without** an identity clears any earlier link, so a user who
-signs out of the host site loses the verified history on the next load.
+signs out of the host site loses the verified history on the next load, and
+any [socket](#realtime-the-widget-socket) that visitor still has open is
+closed.
 
 Never sign on the client. A signing secret that has been shipped in an app or
 a page can no longer be trusted.
@@ -245,6 +247,11 @@ brand turned off **Show the agent's name and photo**: `agentsOnline` still says
 whether anybody is there. It never carries a staff id or a surname. Staff have
 no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
 
+`availability` is the brand's own calendar, read once when the widget loads.
+The hours of the team that answers a conversation, which can be its
+department's, come with the conversation as
+[`hours`](#the-teams-hours).
+
 ## Conversations
 
 | Method and path | Body / query | Response |
@@ -263,6 +270,33 @@ no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
 
 The conversation list holds what this visitor may see: the conversations they
 started, plus any their verified contact may see.
+
+### The team's hours
+
+A conversation (`widgetConversationSchema`), and the `conversation` frame,
+carry `hours` (M7-06): whether the team that answers it is open, and when it
+next opens.
+
+```json
+{ "open": false, "nextOpenAt": "2026-09-27T06:00:00.000Z", "timezone": "Asia/Riyadh" }
+```
+
+- It is the calendar of the conversation's department, else the brand's,
+  with the holidays that apply (DOMAIN-RULES §3.1): the one business-hours SLA
+  clocks and the out-of-hours unassign count in. `GET /availability` describes the
+  brand's alone, and a routing rule can file a conversation in a department
+  with other days or another zone.
+- The api judges it when it builds the response, so the answer to
+  `POST …/handoff` is true at the moment the button was pressed, and the
+  frame is true when the worker sent it. The bundled widget compares
+  `nextOpenAt` with its own clock and counts an opening already past as open.
+- `nextOpenAt` is `null` while open, and for a calendar that never opens:
+  every day closed, or no opening within ten years. 24/7 hours (every day
+  `00:00–24:00`) are `open: true`.
+- It says nothing about who is online; that is `agentsOnline`.
+- It is optional for clients built before this field, and a server before it
+  sends none. The bundled widget then falls back to the brand's
+  `availability`, and with neither it words nothing about hours.
 
 ### Starting
 
@@ -395,6 +429,16 @@ messages arrive like any other, as `message` frames and in the catch-up, with
   response is the conversation with `aiHandedOff: true`. Pressing it again
   changes nothing. Typing "talk to a human" (or the Arabic) does the same on
   the server.
+- After a handoff, word the handoff line from [`hours`](#the-teams-hours),
+  which the `POST …/handoff` response and the `conversation` frames carry.
+  While `hours.open` is false and no person has replied since, the bundled
+  widget draws "The team is away until Monday at 09:00 (Arabian Standard
+  Time)" and "Your message is saved. A person will reply here when the team is
+  back." in place of the ordinary "Connecting you with the team…" line. The
+  day is "today", "tomorrow", the weekday within six days or else the date,
+  counted in the team's zone, and a `nextOpenAt` of `null` reads "The team is
+  away right now". At the opening, or once a person has replied, the ordinary
+  line returns.
 - `aiHandedOff` on the conversation, and on `conversation` frames, says the
   assistant has stepped back: by its own handoff, the visitor's request, or a
   person replying or taking the conversation. Offer "Talk to a human" only
@@ -514,6 +558,15 @@ io('https://support.example.com/widget', {
   [error reasons](#errors).
 - **On connect** the socket joins the brand's visitors room and receives one
   `presence` event.
+- **When a visitor stops being who they were**, the server disconnects every
+  socket that visitor has open, on every replica (`disconnect` reason
+  `io server disconnect`). This happens when `POST /session` arrives with no
+  valid [signed identity](#signed-identity) for a visitor that had one, or
+  with another person's. Conversation rooms are judged once, at
+  `conversation:join`, so without this a second tab of someone who signed out
+  would keep receiving the replies. Reconnect and `conversation:join` again;
+  the join is judged afresh. An open [SSE stream](#realtime-fallback-sse) is not cut
+  and ends at its own lifetime.
 - Every client event takes an **acknowledgement**, `{ ok: true, data }` or
   `{ ok: false, error: { code, message } }`. A handler never throws. Every
   event goes through the checks again, so a brand that removes an origin
@@ -543,7 +596,7 @@ on `message` events and `null` on all others.
 | `typing` | `{ conversationId, typing, agentName }` |
 | `presence` | `{ agentsOnline, agents }`, as in [`GET /availability`](#configuration) |
 | `queue` | `{ conversationId, position }` |
-| `conversation` | `{ conversationId, state: "open" \| "closed", continuedById }` |
+| `conversation` | `{ conversationId, state: "open" \| "closed", continuedById, aiHandedOff, hours }`; the schema makes `aiHandedOff` and `hours` optional so a client built before them still parses, and the api always sends both |
 | `csat` | `widgetCsatSchema`: the [satisfaction card](#satisfaction-card) appeared or changed |
 
 On a `message` event:
@@ -590,11 +643,23 @@ to it after three failed connects.
 | any widget request (REST, handshake) | 300 per 5 minutes | brand and client address |
 | new visitors (`session` without a known secret) | 30 per 10 minutes | brand and client address |
 | writes: start, send, upload, transcript | 30 per minute | visitor |
+| every event on the `/widget` socket | 120 per minute | visitor |
 | transcripts | 3 per hour | conversation |
 
 Events on a socket that has already passed the handshake do not count against
-the per-address rule again, but writes still count against the per-visitor
-rule. A throttled request gets `rate_limited` (429). Back off and retry.
+the per-address rule again. Each one spends the per-visitor socket budget
+instead, whichever event it is (`conversation:join`, `conversation:leave`,
+`message:send`, `typing:set`, `message:read`), across every socket the visitor
+has open and every api replica. The budget is spent before the payload is
+parsed, so malformed events count too. An event over it is answered
+`{ ok: false, error: { code: 'rate_limited' } }`, the socket stays open, and
+REST requests are unaffected. A `message:send` also still counts against the
+write rule. A throttled request gets `rate_limited` (429). Back off and retry.
+The bundled widget sends a few events a minute, typing starts and stops
+included.
+
+Every refusal is counted in `rate_limit_refusals_total{bucket="widget-socket-event"}`
+([operations](operations.md#what-is-measured)).
 
 ## Constants
 

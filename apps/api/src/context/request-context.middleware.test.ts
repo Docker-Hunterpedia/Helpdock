@@ -52,7 +52,7 @@ interface RunOptions {
   readonly originalUrl?: string;
   readonly method?: string;
   readonly headers?: Record<string, string>;
-  readonly trustProxy?: boolean;
+  readonly trustProxy?: Env['TRUST_PROXY'];
   readonly brandResolver?: BrandResolver;
   readonly stream?: DestinationStream;
 }
@@ -162,6 +162,15 @@ describe('RequestContextMiddleware', () => {
     });
     const { context } = await run({ headers, trustProxy: false });
     expect(context.requestId).not.toBe('caddy-1');
+  });
+
+  it('takes the proxy request id when the proxy is trusted by address', async () => {
+    const { context } = await run({
+      headers: { [REQUEST_ID_HEADER]: 'caddy-1' },
+      trustProxy: ['172.18.0.0/16'],
+    });
+
+    expect(context.requestId).toBe('caddy-1');
   });
 
   it('resolves the brand from the host, when a resolver knows one', async () => {

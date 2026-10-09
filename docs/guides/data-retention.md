@@ -113,6 +113,9 @@ Restore ([operations](operations.md#the-system-page)).
      route added later is covered too;
    - inbound mail stops: IMAP mailboxes are no longer polled, and the
      inbound-parse endpoint answers 410 once the shared secret checks out;
+   - the brand's API keys answer 410 on `/api/v1`, and its webhook deliveries
+     are marked `skipped` instead of sent, so nothing leaves the brand through
+     an integration. A restore does not replay what was skipped;
    - staff sessions stop naming the brand at their next refresh (at most ten
      minutes), as for any brand that is not active;
    - nothing is deleted yet, which is what makes a restore whole.

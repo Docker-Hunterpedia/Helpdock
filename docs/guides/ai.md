@@ -279,6 +279,13 @@ keeps assist on past the budget ("Keep assist after the hard stop", on by
 default), in which case assist calls `complete()` with `allowOverBudget` and
 only auto-reply stops. The call is still logged and counted.
 
+**Which system prompt.** Every item sends the brand's system prompt after its
+own instructions, and chooses it as auto-reply does: the Arabic one when the
+ticket is in Arabic and the brand wrote one, the main one otherwise. The
+ticket's language is that of the customer's last message, or the contact's
+language, or the brand's, while the customer has said nothing. It follows the
+ticket, not the language an agent asks a summary, translation or draft in.
+
 **How a call runs.** The assist routes hold no transaction while the model
 answers ([ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)):
 the ticket is read under the agent's own department policy, then the model is
@@ -590,6 +597,20 @@ It stops without a message of its own when the customer asks for a person
 to someone", "أريد موظفاً", "أريد التحدث مع موظف"), and when a staff member
 replies in public or assigns the ticket.
 
+**Out of hours, in the widget.** When the team that answers the conversation is
+closed at the moment of the handoff, the handoff line itself changes: it takes
+a moon and says "The team is away until Monday at 09:00 (Arabian Standard
+Time)", then "Your message is saved. A person will reply here and at
+omar.k@example.com when the team is back." (without the address when the
+visitor gave none). The team is the conversation's department, else the brand,
+by the calendar of [Ticketing › Business hours](slas.md#business-hours) (Monday to Friday 09:00–17:00
+in the brand's zone until hours are saved; 24/7 hours are never closed), and
+the time is in that team's zone. The day reads "today", "tomorrow", the
+weekday within six days, or else the date. A calendar that never opens reads
+"The team is away right now". At the opening, or once a person has replied,
+the widget goes back to "Connecting you with the team…". Telegram and email
+visitors get no such message.
+
 Every one of these sets `tickets.ai_paused_at` (with the reason) for the rest
 of the conversation. Every job reads it twice: before it asks the model, and
 again under the ticket's row lock immediately before it sends — the lock a
@@ -711,7 +732,10 @@ Public/Internal, and an **AI log** disclosure (model, tokens, cost, redactions,
 confidence against the threshold, sources retrieved and cited); a pause or a
 resume is a System event; while paused, the **Assistant paused** strip above
 the composer offers **Return to assistant**; and the details panel's **AI on
-this ticket** totals its calls, tokens and cost.
+this ticket** totals its calls, tokens and cost. In the ticket list the same
+conversation's row ends its caption line with **AI paused** while it is handed
+off, or **AI answered** once the assistant has taken part and is not paused;
+rows of conversations the assistant never took part in say nothing.
 
 The first-run wizard has an optional **AI provider** step after Outgoing
 email: choose a provider, paste an API key (or subscription credentials),
@@ -809,8 +833,9 @@ real calls.
   nightly evaluation needs the `AI_EVAL_API_KEY` secret, which is an external
   dependency of the milestone.
 - Assist answers arrive whole; streaming them into the card is not built.
-- The Arabic system prompt (`systemPromptAr`) is not yet chosen for assist: every
-  assist call sends the brand's main prompt.
+- The ticket list's **AI answered** means the assistant took part and is not
+  paused. A conversation handed off before the assistant ever answered, then
+  returned to it, reads that way until it answers or is paused again.
 - A transcription costs 0 in the log: there is no per-minute price setting.
 - A budget alert reaches the audit log and the settings response; an email or
   a bell entry for it waits for a design of its own (notifications are about a

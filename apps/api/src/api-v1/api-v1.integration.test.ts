@@ -3,7 +3,15 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { promisify } from 'node:util';
 import { createKeyring, type Env } from '@helpdock/config';
-import { apiKeys, auditLog, createDb, departments, tickets, withSystem } from '@helpdock/db';
+import {
+  apiKeys,
+  auditLog,
+  brands,
+  createDb,
+  departments,
+  tickets,
+  withSystem,
+} from '@helpdock/db';
 import {
   createJobProcessor,
   createOutboxDispatcher,
@@ -336,6 +344,21 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect(revoked.body.revokedAt).not.toBeNull();
       expect((await call('GET', '/api/v1/tickets', created.key)).status).toBe(401);
       expect((await call('GET', '/api/v1/tickets', 'hd_live_never-issued')).status).toBe(401);
+    });
+
+    it('answers 410 for a key whose brand is in its deletion grace, and 200 again once restored (F5, M9-01)', async () => {
+      const { key } = await issueKey(['tickets:read']);
+      const setStatus = (status: 'active' | 'deleting') =>
+        runtime.db.update(brands).set({ status }).where(eq(brands.id, seeded.brandId));
+
+      await setStatus('deleting');
+      try {
+        expect((await call('GET', '/api/v1/tickets', key)).status).toBe(410);
+      } finally {
+        await setStatus('active');
+      }
+
+      expect((await call('GET', '/api/v1/tickets', key)).status).toBe(200);
     });
 
     it('throttles a key past its per-minute budget with 429', async () => {

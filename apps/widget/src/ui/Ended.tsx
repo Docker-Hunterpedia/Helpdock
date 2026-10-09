@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { useWidget, useWidgetState } from './context.js';
 import { EMAIL_PATTERN } from './Field.js';
 import { Icon } from './icons.js';
+import { Sentence } from './Sentence.js';
 
 /**
  * `WidgetStatesEN` column 6 (M4-08): the conversation has ended. The
@@ -47,7 +48,9 @@ export function Ended() {
         status === 'sent' ? (
           <p class="hd-alert hd-alert-success" role="status">
             <Icon name="circleCheck" size={16} />
-            <span>{t('ended.sent', { email: sentTo })}</span>
+            <span>
+              <Sentence id="ended.sent" vars={{ email: sentTo }} isolate={['email']} />
+            </span>
           </p>
         ) : (
           <form class="hd-field" onSubmit={submit} noValidate>

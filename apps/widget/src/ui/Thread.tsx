@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { dayLabel, formatTime, initials } from '../format.js';
+import { closedUntil, teamHours } from '../state/hours.js';
 import { deliveryOf, type PendingMessage } from '../state/thread.js';
 import type { AgentSummary, WidgetMessage } from '../transport/types.js';
 import { AssistantMessage, HandoffLine, type OpenArticle } from './Assistant.js';
@@ -8,6 +9,7 @@ import { AttachmentView } from './Attachments.js';
 import { CsatCard } from './CsatCard.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
+import { Sentence } from './Sentence.js';
 
 /**
  * The thread (`WidgetStatesEN` columns 2–6): an `<ol>` inside a `role="log"`
@@ -28,9 +30,12 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
     visitorEmail,
     typing,
     csat,
+    availability,
   } = state;
   const scroller = useRef<HTMLDivElement>(null);
   const count = thread.confirmed.length + thread.pending.length;
+  const hours = teamHours(conversation, availability);
+  useWakeAt(hours?.next_open_at ?? null);
 
   useEffect(() => {
     const element = scroller.current;
@@ -68,9 +73,19 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
     noticeShown = true;
     items.push(
       <li key="notice" class="hd-system">
-        {firstMessageNotice === 'closed'
-          ? t('thread.replyAfterOpening', { email: visitorEmail })
-          : t('thread.talkingTo', { team, email: visitorEmail })}
+        {firstMessageNotice === 'closed' ? (
+          <Sentence
+            id="thread.replyAfterOpening"
+            vars={{ email: visitorEmail }}
+            isolate={['email']}
+          />
+        ) : (
+          <Sentence
+            id="thread.talkingTo"
+            vars={{ team, email: visitorEmail }}
+            isolate={['email']}
+          />
+        )}
       </li>,
     );
   };
@@ -87,10 +102,18 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
   }
 
   const handoffBefore = handoffPosition(thread.confirmed, conversation?.ai_handed_off === true);
+  // The line says the team is away only while that is true: not once a person
+  // has answered after the handoff, and not past the opening.
+  const awaitingTeam =
+    handoffBefore >= 0 &&
+    !thread.confirmed.slice(handoffBefore).some((message) => message.author.kind === 'agent');
+  const closure = awaitingTeam ? closedUntil(hours, now) : null;
+  // A new key replaces the <li>, so the log announces the new wording.
+  const handoffLine = <HandoffLine key={closure ? 'handoff-away' : 'handoff'} closure={closure} />;
 
   thread.confirmed.forEach((message, index) => {
     if (index === handoffBefore) {
-      items.push(<HandoffLine key="handoff" />);
+      items.push(handoffLine);
     }
     addDay(message.created_at);
     if (reconnected && reconnected.firstNewSeq === message.seq && reconnected.newCount > 0) {
@@ -118,7 +141,7 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
     }
   });
   if (handoffBefore === thread.confirmed.length) {
-    items.push(<HandoffLine key="handoff" />);
+    items.push(handoffLine);
   }
 
   for (const pending of thread.pending) {
@@ -148,6 +171,26 @@ export function Thread({ onOpenArticle }: { onOpenArticle: OpenArticle }) {
       {typing ? <Typing agent={typing} /> : null}
     </div>
   );
+}
+
+/** The longest delay a browser keeps; a longer one fires at once. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+/**
+ * Renders the caller again a second after `iso`, so a line worded "closed
+ * until" is judged again at the opening. A wait longer than a timer can hold
+ * ends early and arms itself again on the render it causes.
+ */
+function useWakeAt(iso: string | null): void {
+  const [woken, wake] = useState(0);
+  useEffect(() => {
+    const delay = iso === null ? 0 : new Date(iso).getTime() + 1_000 - Date.now();
+    if (delay <= 0) {
+      return;
+    }
+    const timer = setTimeout(() => wake(woken + 1), Math.min(delay, MAX_TIMER_MS));
+    return () => clearTimeout(timer);
+  }, [iso, woken]);
 }
 
 /**

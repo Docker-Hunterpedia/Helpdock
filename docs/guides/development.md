@@ -886,6 +886,16 @@ turns the two secrets into one boolean in its `env:` â€” which *can* read them â
 and the step is conditioned on that. The token itself never appears in an
 expression or in a log.
 
+Without an account the jobs do not stay at Docker Hub's mercy either: every
+image that would come from Docker Hub comes through `mirror.gcr.io`, Google's
+pull-through cache of it, which is not rate limited. Testcontainers reads the
+prefix from `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX` (`ryuk` included; MinIO
+names its own registry and is left alone), the Dockerfile takes the base image
+from its `NODE_IMAGE` argument, and the smoke test's Postgres and Redis are
+pulled through the mirror and tagged under the names `docker-compose.yml` uses
+before `compose up`, which then finds them in the daemon. With the secrets
+present none of this happens and the jobs pull from Docker Hub as themselves.
+
 ### Renovate
 
 Dependencies are updated by Renovate, configured in

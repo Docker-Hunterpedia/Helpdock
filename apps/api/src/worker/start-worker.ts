@@ -505,7 +505,11 @@ export const workerDependencies: WorkerDependencies = {
     const broadcast = new RedisRealtimeBroadcast(redis);
     registerTicketEventHandlers(broadcast);
     // M4-04: the same ticket events as widget frames, on the widget's channel.
-    registerWidgetEventHandlers(new RedisWidgetBroadcast(redis));
+    // M7-06: a `conversation` frame carries the hours of the team answering it.
+    const widgetHours = businessHoursService();
+    registerWidgetEventHandlers(new RedisWidgetBroadcast(redis), {
+      calendarsFor: (brandId, tx) => widgetHours.calendarsFor(brandId, tx),
+    });
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
     registerObjectPurgeHandler(storageFor(env));
     // M7-08: a brand reached 80 % or 100 % of an AI budget window.

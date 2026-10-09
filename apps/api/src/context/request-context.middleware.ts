@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Env } from '@helpdock/config';
+import { type Env, proxyIsTrusted } from '@helpdock/config';
 import { Inject, Injectable, type NestMiddleware } from '@nestjs/common';
 import { isSpanContextValid, trace } from '@opentelemetry/api';
 import { principalIdOf } from '../auth/principal.js';
@@ -48,7 +48,7 @@ export class RequestContextMiddleware implements NestMiddleware {
   use(req: MountedRequest, res: ServerResponse, next: (error?: unknown) => void): void {
     const context = new RequestContext({
       requestId: resolveRequestId(req.headers[REQUEST_ID_HEADER], {
-        trustProxy: this.#env.TRUST_PROXY,
+        trustProxy: proxyIsTrusted(this.#env.TRUST_PROXY),
       }),
       method: req.method ?? 'GET',
       path: pathOf(req.originalUrl ?? req.url),

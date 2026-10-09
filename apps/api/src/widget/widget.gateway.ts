@@ -32,7 +32,12 @@ import { WidgetConversationsService } from './widget-conversations.service.js';
 import { WidgetFailure } from './widget-failure.js';
 import { WidgetGate, type WidgetRequestFacts } from './widget-gate.js';
 import { WidgetHub } from './widget-hub.js';
-import { brandVisitorsRoom, conversationRoom, widgetEnvelope } from './widget-relay.js';
+import {
+  brandVisitorsRoom,
+  conversationRoom,
+  visitorRoom,
+  widgetEnvelope,
+} from './widget-relay.js';
 
 /** What the handshake proved, kept on the socket for its lifetime. */
 export interface WidgetSocketData {
@@ -76,8 +81,10 @@ const factsOf = (data: WidgetSocketData): WidgetRequestFacts => ({
  *   against the brand's allow-list, and the address throttle — the same gate
  *   every REST route passes. No visitor, no connection.
  * - **Rooms**: `conversation:<id>`, joined only through `conversation:join`,
- *   which runs the same ownership check as `GET …/conversations/:id`; and
- *   `visitors:<brandId>`, joined on connect, for presence.
+ *   which runs the same ownership check as `GET …/conversations/:id`;
+ *   `visitors:<brandId>`, joined on connect, for presence; and
+ *   `visitor:<id>`, joined on connect, so the visitor's sockets can be cut
+ *   together when the link that granted their conversations is withdrawn.
  * - **Events**: sending over the socket is the REST send with an
  *   acknowledgement — same `clientId` dedupe, same `seq` — and typing and read
  *   receipts go to the agents. Every event is re-judged through the gate, so
@@ -85,7 +92,9 @@ const factsOf = (data: WidgetSocketData): WidgetRequestFacts => ({
  *   event rather than at the next reconnect.
  *
  * Every handler answers an acknowledgement and never throws: a refusal is
- * `{ ok: false, error: { code } }` with the widget's own error codes.
+ * `{ ok: false, error: { code } }` with the widget's own error codes. Every
+ * event, a leave included, first spends the visitor's `widget-socket-event`
+ * budget, so one credential cannot drive unbounded work from one connection.
  */
 @WebSocketGateway({ namespace: WIDGET_NAMESPACE })
 export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
@@ -126,7 +135,7 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   async handleConnection(socket: WidgetSocket): Promise<void> {
-    await socket.join(brandVisitorsRoom(socket.data.brandId));
+    await socket.join([brandVisitorsRoom(socket.data.brandId), visitorRoom(socket.data.visitorId)]);
     try {
       socket.emit(
         WIDGET_EVENTS.presence,
@@ -249,19 +258,21 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   async #ack<S extends z.ZodType, T>(
-    _socket: WidgetSocket,
+    socket: WidgetSocket,
     schema: S,
     body: unknown,
     fn: (input: z.output<S>) => Promise<T>,
   ): Promise<WidgetAck<T>> {
-    const parsed = schema.safeParse(body);
-    if (!parsed.success) {
-      return {
-        ok: false,
-        error: { code: 'invalid_payload', message: 'That message does not match its schema' },
-      };
-    }
     try {
+      // Before the payload is parsed: a flood of malformed events is still a flood.
+      await this.#gate.socketEvent(socket.data.visitorId);
+      const parsed = schema.safeParse(body);
+      if (!parsed.success) {
+        return {
+          ok: false,
+          error: { code: 'invalid_payload', message: 'That message does not match its schema' },
+        };
+      }
       return { ok: true, data: await fn(parsed.data) };
     } catch (error) {
       if (error instanceof WidgetFailure) {

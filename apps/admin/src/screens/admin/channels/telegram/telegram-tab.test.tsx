@@ -227,7 +227,7 @@ describe('a Telegram bot’s page', () => {
     );
     await user.clear(screen.getByLabelText('Welcome · Arabic'));
     await user.click(
-      screen.getByRole('switch', { name: 'Offer English and العربية buttons with the welcome' }),
+      screen.getByRole('switch', { name: 'Ask for a language, then send a welcome' }),
     );
     await user.click(save);
 
@@ -243,6 +243,100 @@ describe('a Telegram bot’s page', () => {
       );
     });
     expect(await screen.findByLabelText('Saved token ending in 9z9z')).toBeVisible();
+  });
+
+  describe('the language prompt (M6-04)', () => {
+    const CATALOG_PROMPT = 'Choose your language · اختر لغتك';
+    const OWN_PROMPT = 'Acme: pick a language · اختر لغتك';
+
+    const openSupportBot = async () => {
+      const rendered = await renderTelegram(`/admin/channels/telegram/${MOCK_SUPPORT_BOT}`);
+      await screen.findByLabelText('Saved token ending in 4f2a', {}, LOAD);
+      return {
+        ...rendered,
+        prompt: screen.getByLabelText('Language prompt'),
+        save: screen.getByRole('button', { name: 'Save' }),
+        update: vi.spyOn(rendered.telegramApi, 'updateBot'),
+      };
+    };
+
+    it('shows what /start sends and saves an edit of it', async () => {
+      const { user, prompt, save, update } = await openSupportBot();
+
+      expect(prompt).toHaveValue(CATALOG_PROMPT);
+      expect(save).toBeDisabled();
+
+      await user.clear(prompt);
+      await fill(user, prompt, ` ${OWN_PROMPT} `);
+      await user.click(save);
+
+      await waitFor(() => {
+        expect(update).toHaveBeenCalledWith(
+          expect.any(String),
+          MOCK_SUPPORT_BOT,
+          expect.objectContaining({ languagePrompt: OWN_PROMPT }),
+        );
+      });
+      expect(await screen.findByText('@helpdock_support_bot saved')).toBeVisible();
+      expect(screen.getByLabelText('Language prompt')).toHaveValue(OWN_PROMPT);
+    });
+
+    it('goes back to the catalog’s question when it is cleared or left as the catalog has it', async () => {
+      const { user, prompt, save, update } = await openSupportBot();
+      await user.clear(prompt);
+      await fill(user, prompt, OWN_PROMPT);
+      await user.click(save);
+      await screen.findByText('@helpdock_support_bot saved');
+
+      await user.clear(screen.getByLabelText('Language prompt'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(update).toHaveBeenLastCalledWith(
+          expect.any(String),
+          MOCK_SUPPORT_BOT,
+          expect.objectContaining({ languagePrompt: null }),
+        );
+      });
+      await waitFor(() => {
+        expect(screen.getByLabelText('Language prompt')).toHaveValue(CATALOG_PROMPT);
+      });
+    });
+
+    it('refuses a prompt too long for one line above two buttons, without asking the api', async () => {
+      const { user, prompt, save, update } = await openSupportBot();
+
+      await user.clear(prompt);
+      await fill(user, prompt, 'x'.repeat(201));
+      await user.click(save);
+
+      expect(await screen.findByText('Keep it to 200 characters.')).toBeVisible();
+      expect(prompt).toHaveAttribute('aria-invalid', 'true');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('keeps what was typed when the api rejects the save', async () => {
+      const { user, prompt, save, update } = await openSupportBot();
+      update.mockRejectedValueOnce(new Error('503'));
+
+      await user.clear(prompt);
+      await fill(user, prompt, OWN_PROMPT);
+      await user.click(save);
+
+      expect(await screen.findByText('That did not work. Try again.')).toBeVisible();
+      expect(prompt).toHaveValue(OWN_PROMPT);
+      expect(save).toBeEnabled();
+    });
+
+    it('is not asked for while the bot does not ask for a language', async () => {
+      const { user, prompt } = await openSupportBot();
+
+      await user.click(
+        screen.getByRole('switch', { name: 'Ask for a language, then send a welcome' }),
+      );
+
+      expect(prompt).toBeDisabled();
+    });
   });
 
   it('says a token of another bot is refused, in the footer', async () => {

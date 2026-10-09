@@ -753,7 +753,7 @@
         "promptHint": "Sent first, with two buttons: English and العربية. The choice becomes the contact’s language. Shown in both languages because the language is not known yet. Leave it empty to send the default.",
         "en": "Welcome · English",
         "ar": "Welcome · Arabic",
-        "hint": "Leave one empty to send the default welcome in that language. Plain text, up to {{max}} characters.",
+        "hint": "Sent in the contact’s language. Leave one empty to send the default welcome in that language. Plain text, up to {{max}} characters.",
         "tooLong": "Keep it to {{max}} characters."
       },
       "footer": {

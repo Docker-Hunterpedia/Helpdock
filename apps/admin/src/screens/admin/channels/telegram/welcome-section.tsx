@@ -2,19 +2,17 @@ import { TELEGRAM_WELCOME_MAX_LENGTH } from '@helpdock/schemas';
 import { Box, TextField, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useT } from '../../../../app/i18n.js';
-import { useSemanticTokens } from '../../../../app/tokens.js';
 import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { Switch } from '../../../../ui/switch.tsx';
 import type { BotDraft } from './bot-draft.js';
 import { FormSection } from './form-section.tsx';
 
 /**
- * Welcome and language (M6-04): whether `/start` offers the two language
- * buttons, the question that goes with them — the bot's catalog text, shown
- * here in both languages because the contact's is not known yet — and the
- * welcome per language.
+ * Welcome and language (M6-04): whether `/start` asks for a language, the
+ * question it asks with the two buttons — one text for both languages, because
+ * the contact's is not known yet — and the welcome per language, sent once the
+ * language is chosen.
  */
 export function WelcomeSection({
   draft,
@@ -23,19 +21,19 @@ export function WelcomeSection({
 }: {
   readonly draft: BotDraft;
   readonly errors: {
+    readonly languagePrompt?: string | undefined;
     readonly welcomeEn?: string | undefined;
     readonly welcomeAr?: string | undefined;
   };
-  onChange<K extends 'languagePick' | 'welcomeEn' | 'welcomeAr'>(key: K, value: BotDraft[K]): void;
+  onChange<K extends 'languagePick' | 'languagePrompt' | 'welcomeEn' | 'welcomeAr'>(
+    key: K,
+    value: BotDraft[K],
+  ): void;
 }): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const promptId = useId();
-  const { i18n } = useTranslation();
-  const prompt = (['en', 'ar'] as const)
-    .map((lng) => i18n.getFixedT(lng, 'telegram')('bot.languagePrompt'))
-    .join(' · ');
   const hint = t('channels:telegram.detail.welcome.hint', { max: TELEGRAM_WELCOME_MAX_LENGTH });
+  const promptHint = t('channels:telegram.detail.welcome.promptHint');
 
   return (
     <FormSection
@@ -55,30 +53,32 @@ export function WelcomeSection({
         </Typography>
       </Box>
 
-      {draft.languagePick ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <Typography id={promptId} component="h3" sx={{ fontSize: 13, fontWeight: 500 }}>
-            {t('channels:telegram.detail.welcome.prompt')}
-          </Typography>
-          <Box
-            aria-labelledby={promptId}
-            role="note"
-            sx={{
-              paddingBlock: 2,
-              paddingInline: 3,
-              borderRadius: '6px',
-              border: `1px solid ${tokens['border.default']}`,
-              backgroundColor: tokens['bg.canvas'],
-              fontSize: 14,
-            }}
-          >
-            <bdi>{prompt}</bdi>
-          </Box>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {t('channels:telegram.detail.welcome.promptHint')}
-          </Typography>
-        </Box>
-      ) : null}
+      <Field
+        id={promptId}
+        label={t('channels:telegram.detail.welcome.prompt')}
+        hint={promptHint}
+        error={errors.languagePrompt}
+      >
+        <TextField
+          id={promptId}
+          value={draft.languagePrompt}
+          disabled={!draft.languagePick}
+          error={errors.languagePrompt !== undefined}
+          onChange={(event) => {
+            onChange('languagePrompt', event.target.value);
+          }}
+          slotProps={{
+            htmlInput: {
+              dir: 'auto',
+              'aria-describedby': fieldDescribedBy(promptId, {
+                hint: promptHint,
+                error: errors.languagePrompt,
+              }),
+              'aria-invalid': errors.languagePrompt !== undefined,
+            },
+          }}
+        />
+      </Field>
 
       <Box
         sx={{

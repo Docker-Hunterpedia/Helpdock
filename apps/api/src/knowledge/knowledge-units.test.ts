@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { openCredential, readOAuthApps, sealCredential } from './credentials.js';
 import { cronFor, knowledgeEmbedJobId, knowledgeSyncJobId } from './knowledge-events.js';
 import { bytesFitKnowledgeMime, knowledgeFileKey } from './load-source.js';
+import { OAuthNonceStore } from './oauth-nonce.store.js';
 import { OAUTH_STATE_TTL_MS, OAuthStateSigner } from './oauth-state.js';
 import { prepareDocument } from './prepare.js';
 import { decodeBody } from './safe-transports.js';
@@ -98,13 +99,27 @@ describe('connector credentials', () => {
 
 describe('OAuthStateSigner', () => {
   const signer = new OAuthStateSigner(MASTER_KEY);
-  const state = { brandId: BRAND, sourceId: SOURCE, provider: 'notion' as const, actorId: 'u1' };
+  const state = {
+    brandId: BRAND,
+    sourceId: SOURCE,
+    provider: 'notion' as const,
+    actorId: 'u1',
+    nonce: 'AAAAAAAAAAAAAAAAAAAAAA',
+  };
 
   it('verifies its own state until it expires', () => {
     const token = signer.sign(state, 1_000);
 
     expect(signer.verify(token, 2_000)).toMatchObject(state);
     expect(signer.verify(token, 1_000 + OAUTH_STATE_TTL_MS)).toBeNull();
+  });
+
+  it('carries the nonce it was given, and refuses a correctly signed state that has none', () => {
+    expect(signer.verify(signer.sign(state))?.nonce).toBe('AAAAAAAAAAAAAAAAAAAAAA');
+
+    const { nonce: _nonce, ...withoutNonce } = state;
+    // What the signer produced before nonces existed: a valid signature, no nonce.
+    expect(signer.verify(signer.sign(withoutNonce as never))).toBeNull();
   });
 
   it('refuses a state another key signed, or one that was edited', () => {
@@ -116,6 +131,50 @@ describe('OAuthStateSigner', () => {
     expect(signer.verify(edited)).toBeNull();
     expect(signer.verify(`${body}`)).toBeNull();
     expect(signer.verify('not.json')).toBeNull();
+  });
+});
+
+describe('OAuthNonceStore (ASVS 13.1.3)', () => {
+  /** Redis as far as the store uses it: `SET … EX` and `GETDEL`. */
+  const fakeRedis = () => {
+    const values = new Map<string, { value: string; ttl: number }>();
+    return {
+      values,
+      set: async (key: string, value: string, _ex: 'EX', ttl: number) => {
+        values.set(key, { value, ttl });
+        return 'OK' as const;
+      },
+      getdel: async (key: string) => {
+        const found = values.get(key);
+        values.delete(key);
+        return found?.value ?? null;
+      },
+    };
+  };
+
+  it('spends a nonce once: the first callback finds it and the second does not', async () => {
+    const store = new OAuthNonceStore(fakeRedis());
+    const nonce = await store.issue();
+
+    expect(await store.consume(nonce)).toBe(true);
+    expect(await store.consume(nonce)).toBe(false);
+    expect(await store.consume('never-issued')).toBe(false);
+  });
+
+  it('issues a different nonce every time, kept as long as the state lives, under a key that is not the nonce', async () => {
+    const redis = fakeRedis();
+    const store = new OAuthNonceStore(redis);
+
+    const [first, second] = [await store.issue(), await store.issue()];
+
+    expect(first).toMatch(/^[\w-]{22}$/);
+    expect(second).not.toBe(first);
+    const stored = [...redis.values.entries()];
+    expect(stored.map(([, { ttl }]) => ttl)).toEqual([
+      OAUTH_STATE_TTL_MS / 1_000,
+      OAUTH_STATE_TTL_MS / 1_000,
+    ]);
+    expect(stored.some(([key]) => key.includes(first))).toBe(false);
   });
 });
 

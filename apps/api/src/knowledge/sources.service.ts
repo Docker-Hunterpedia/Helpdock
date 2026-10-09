@@ -60,6 +60,7 @@ import {
 } from './knowledge-events.js';
 import { KnowledgeFailure } from './knowledge-failure.js';
 import { type ConnectorEndpoints, knowledgeFileKey } from './load-source.js';
+import type { OAuthNonceStore } from './oauth-nonce.store.js';
 import { type OAuthState, OAuthStateSigner } from './oauth-state.js';
 import { nextRunAt } from './schedule.js';
 
@@ -95,6 +96,8 @@ export interface KnowledgeSourcesOptions {
   readonly crawlRendering: boolean;
   readonly appUrl: string;
   readonly masterKey: string;
+  /** Makes an OAuth `state` single-use. */
+  readonly nonces: Pick<OAuthNonceStore, 'issue' | 'consume'>;
   readonly now?: () => Date;
 }
 
@@ -558,6 +561,7 @@ export class KnowledgeSourcesService {
       sourceId,
       provider,
       actorId: context.actorId,
+      nonce: await this.#options.nonces.issue(),
     });
     const redirectUri = this.#redirectUri();
     return {
@@ -588,7 +592,11 @@ export class KnowledgeSourcesService {
    */
   async oauthCallback(db: Db, query: KnowledgeOAuthCallbackQuery): Promise<string> {
     const state = this.#state.verify(query.state, this.#now().getTime());
-    if (state === null || state.provider !== query.provider) {
+    if (
+      state === null ||
+      state.provider !== query.provider ||
+      !(await this.#options.nonces.consume(state.nonce))
+    ) {
       throw new KnowledgeFailure('oauth-state-invalid');
     }
     if (query.code === undefined || query.error !== undefined) {

@@ -852,6 +852,38 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       expect(view).toMatchObject({ config: { connected: true }, status: { state: 'queued' } });
     });
 
+    it('answers a callback once: replaying the same state is refused, and the token is not exchanged twice (ASVS 13.1.3)', async () => {
+      const created = await ok<KnowledgeSourceView>('POST', base('/knowledge/sources'), {
+        kind: 'notion',
+        name: 'Replayed wiki',
+        config: { pageIds: ['p1'] },
+      });
+      const start = await ok<KnowledgeOAuthStart>(
+        'POST',
+        base(`/knowledge/sources/${created.id}/oauth/notion`),
+      );
+      const state = encodeURIComponent(new URL(start.url).searchParams.get('state') ?? '');
+      const callback = () =>
+        app.inject({
+          method: 'GET',
+          url: `/api/knowledge/oauth/callback?provider=notion&code=code-2&state=${state}`,
+        });
+      const exchanges = () =>
+        notion.requests.filter((request) => request.url.pathname === '/v1/oauth/token').length;
+      const before = exchanges();
+
+      const first = await callback();
+      const exchangedOnce = exchanges();
+      const replay = await callback();
+
+      expect(first.statusCode).toBe(302);
+      expect(exchangedOnce).toBe(before + 1);
+      expect(replay.statusCode).toBe(400);
+      expect(exchanges()).toBe(exchangedOnce);
+      const view = await ok<KnowledgeSourceView>('GET', base(`/knowledge/sources/${created.id}`));
+      expect(view.config).toMatchObject({ connected: true });
+    });
+
     it('refuses rendering that the install has off', async () => {
       const response = await call<ErrorResponse>('POST', base('/knowledge/sources'), adminToken, {
         kind: 'crawl',

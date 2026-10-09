@@ -700,7 +700,7 @@ closed or has been quiet for 24 hours.
 | `POST /api/brands/:brandId/knowledge/files` | `ai:manage` | Presign a file upload; creates the source |
 | `POST …/knowledge/sources/:sourceId/confirm` | `ai:manage` | The upload is done; the sync starts. 409 `upload-missing` |
 | `POST …/knowledge/sources/:sourceId/oauth/:provider` | `ai:manage` | The Notion or Google consent URL. 409 `oauth-not-configured` |
-| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected` |
+| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected`. The `state` is signed, good for ten minutes and **single-use**: a second callback with the same `state` answers 400 `oauth-state-invalid` and exchanges nothing. (No PKCE yet: the provider's `code` is still bound to the client secret only.) |
 
 A refusal carries `error.ai.reason`, as `aiRefusalSchema` in `@helpdock/schemas`
 declares, for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`), and

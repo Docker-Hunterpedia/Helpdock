@@ -8,7 +8,8 @@ import { z } from 'zod';
  * and good for ten minutes. The callback is a public route — the browser
  * arrives from the provider without the admin's bearer token — so the state
  * is the only thing that says the answer belongs to a request this install
- * made, and to which source it may be written.
+ * made, and to which source it may be written. Its `nonce` is what the callback
+ * spends (`oauth-nonce.store.ts`), so the state works once.
  */
 
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1_000;
@@ -18,6 +19,7 @@ const stateSchema = z.object({
   sourceId: z.uuid(),
   provider: z.enum(['notion', 'gdrive']),
   actorId: z.string().max(100),
+  nonce: z.string().min(16).max(64),
   expiresAt: z.int(),
 });
 export type OAuthState = z.infer<typeof stateSchema>;

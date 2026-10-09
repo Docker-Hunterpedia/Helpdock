@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { fakeService, type HttpTransport, minimalPdf } from '@helpdock/ai';
+import { craftedZip, fakeService, type HttpTransport, minimalPdf } from '@helpdock/ai';
 import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   createDb,
@@ -512,6 +512,34 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       );
       expect(view.status).toMatchObject({ state: 'failed', code: null });
       expect(view.status.reason).toMatch(/not the application\/pdf/);
+      expect(view.chunks).toBe(0);
+    });
+
+    it('refuses a DOCX that would unpack to far more than it weighs, and logs file.rejected (ASVS 12.1.2)', async () => {
+      const bomb = craftedZip([{ name: 'word/document.xml', declaredSize: 1024 ** 3 }]);
+      const presigned = await ok<KnowledgeFilePresignResponse>('POST', base('/knowledge/files'), {
+        fileName: 'bomb.docx',
+        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: bomb.length,
+      });
+      await storage.put(knowledgeFileKey(brandId(), presigned.sourceId), bomb);
+      await ok('POST', base(`/knowledge/sources/${presigned.sourceId}/confirm`));
+
+      expect(await runSync(presigned.sourceId)).toBe('failed');
+      const log = await ok<KnowledgeLog>(
+        'GET',
+        base(`/knowledge/sources/${presigned.sourceId}/log?level=warn`),
+      );
+      expect(log.lines).toEqual([
+        expect.objectContaining({
+          code: 'file.rejected',
+          params: expect.objectContaining({ reason: expect.stringContaining('100 MiB') }),
+        }),
+      ]);
+      const view = await ok<KnowledgeSourceView>(
+        'GET',
+        base(`/knowledge/sources/${presigned.sourceId}`),
+      );
       expect(view.chunks).toBe(0);
     });
 

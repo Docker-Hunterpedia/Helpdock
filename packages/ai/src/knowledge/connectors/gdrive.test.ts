@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { minimalPdf } from '../fixtures.js';
+import { craftedZip, minimalPdf } from '../fixtures.js';
 import { fakeService } from './fake-service.js';
 import {
   browseDrive,
@@ -127,6 +127,46 @@ describe('loadDrive', () => {
         ),
       ),
     ).rejects.toBeInstanceOf(ConnectorAuthError);
+  });
+});
+
+describe('loadDrive and a DOCX that unpacks to far more than it weighs', () => {
+  const bomb = craftedZip([{ name: 'word/document.xml', declaredSize: 1024 ** 3 }]);
+  const service = fakeService({
+    ...tokenRoute,
+    'GET /drive/v3/files': listing([
+      {
+        id: 'bomb',
+        name: 'bomb.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: String(bomb.length),
+      },
+    ]),
+    'GET /drive/v3/files/bomb': { status: 200, text: Buffer.from(bomb).toString('latin1') },
+  });
+
+  it('skips it and says why, without stopping the walk (ASVS 12.1.2)', async () => {
+    const events = await collect(
+      loadDrive(
+        { folderIds: ['root-folder'] },
+        {
+          app,
+          refreshToken: '1//refresh',
+          fetch: service.fetch,
+          rootUrl: ROOT,
+          tokenUrl: TOKEN_URL,
+        },
+        { maxFiles: 5 },
+      ),
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'skipped',
+        externalId: 'bomb',
+        detail: expect.stringContaining('100 MiB'),
+      }),
+    ]);
   });
 });
 

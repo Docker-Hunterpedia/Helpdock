@@ -1,4 +1,4 @@
-import { crc32 } from 'node:zlib';
+import { crc32, deflateRawSync } from 'node:zlib';
 
 /**
  * Small, valid PDF and DOCX files built in memory, for the suites that ingest
@@ -126,4 +126,46 @@ export const minimalDocx = (lines: readonly string[]): Uint8Array => {
       data: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W}"><w:body>${paragraphs}</w:body></w:document>`,
     },
   ]);
+};
+
+export interface CraftedEntry {
+  readonly name: string;
+  /** What the central directory says the entry unpacks to. */
+  readonly declaredSize: number;
+  /** The deflated bytes actually stored; none at all for an entry that is only declared. */
+  readonly inflated?: Buffer;
+}
+
+/** A ZIP whose directory says what a test needs it to say, which a real archiver never would. */
+export const craftedZip = (entries: readonly CraftedEntry[]): Uint8Array => {
+  const parts: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const { name, declaredSize, inflated } of entries) {
+    const label = Buffer.from(name);
+    const stored = inflated === undefined ? Buffer.alloc(0) : deflateRawSync(inflated);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(label.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt32LE(inflated === undefined ? 0 : crc32(inflated), 16);
+    central.writeUInt32LE(stored.length, 20);
+    central.writeUInt32LE(declaredSize, 24);
+    central.writeUInt16LE(label.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(central, label);
+    parts.push(local, label, stored);
+    offset += local.length + label.length + stored.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return new Uint8Array(Buffer.concat([...parts, directory, end]));
 };

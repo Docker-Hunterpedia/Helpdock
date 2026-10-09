@@ -11,3 +11,4 @@ export * from './files.js';
 export * from './fusion.js';
 export * from './html.js';
 export * from './locale.js';
+export * from './zip-limits.js';

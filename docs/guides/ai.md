@@ -389,6 +389,18 @@ before any parser sees them — a "PDF" that is not one fails the sync with the
 reason — then reads PDFs page by page (unpdf; a citation names the page), DOCX
 through mammoth (headings kept), and Markdown and text as they are.
 
+A DOCX is a ZIP archive, so the 25 MB cap does not bound what is inside it.
+Before mammoth reads one, the worker checks the archive: it is refused when it
+holds **more than 1,000 entries** or declares **more than 100 MiB uncompressed**
+in total, when it is ZIP64 or its directory is damaged, or when an entry
+unpacks to more than its directory says (each entry is inflated once, up to
+its declared size, to check; a directory that lies is caught there). A refused
+file fails the sync with a `file.rejected` log line that names the limit; in a
+Drive folder it is skipped with the same reason and the walk goes on. Ordinary
+documents are far below both limits. The limits are the constants
+`DOCX_MAX_ENTRIES` and `DOCX_MAX_UNCOMPRESSED_BYTES` in
+`packages/ai/src/knowledge/zip-limits.ts`.
+
 **Notion.** A page is read as Markdown with its headings; a database
 contributes every page of each of its data sources. At most 2,000 pages a
 source.

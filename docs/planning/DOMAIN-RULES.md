@@ -368,6 +368,7 @@ Applies to the crawler, webhook deliveries, remote-image proxy, Notion and Googl
 - Timeouts: 10 s connect, 30 s total. Response cap: 10 MB for crawl pages, 1 MB for webhook responses, 20 MB for proxied images. Crawler respects `robots.txt` and a per-source rate limit.
 - Install-level allow-list `OUTBOUND_ALLOW_CIDRS` lets an operator permit internal destinations explicitly (for a private Notion proxy, for example). Every blocked attempt is logged with the destination.
 - Webhook responses are never followed, rendered, or stored beyond status code and the first 1 KB of body for the delivery log.
+- **Model endpoints.** Chat completions go through the model vendors' own clients, outside this client ([ADR 0018](../decisions/0018-pi-ai-provider-layer.md)), so the AI provider base URL, the embeddings URL and the transcription endpoint are checked when an admin saves them: `https` only and no blocked range, unless the address is inside `OUTBOUND_ALLOW_CIDRS`, which is also what lets a local Ollama use `http`. Embeddings and transcription are checked again by this client on every call.
 
 ---
 

@@ -118,8 +118,6 @@ Copied from the PRD, ticked as they are met.
 - **"AI answered" on the ticket list (M7 gaps).** It also covers a conversation the
   assistant was handed back to before it answered. Telling them apart takes an
   `answeredAt` (`tickets.ai_answered_at`) on `ticketAiStateSchema`.
-- **The AIPausedStrip row in DESIGN.md (§6.3).** The ticket list's caption icon is
-  14 px in the code and 12 px in `Admin/Ticket-AI`; the artboard or the code changes.
 
 ## M9-02 ASVS Level 2
 

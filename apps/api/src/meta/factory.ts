@@ -13,6 +13,7 @@ import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.j
 import { TicketRepository } from '../tickets/tickets.repository.js';
 import { DeferredAttachmentSink } from './deferred-sink.js';
 import type { GraphClientFactory } from './graph-client-factory.js';
+import { MessengerInboundService } from './messenger-inbound.service.js';
 import { MetaRepository } from './meta.repository.js';
 import { accountFailureRecorder, createMetaMediaFetchProcessor } from './meta-media.job.js';
 import { MetaConversationRouter } from './meta-router.js';
@@ -38,6 +39,13 @@ export interface MetaInboundOptions {
   readonly log: JobLogger;
   readonly keyring: Keyring;
   readonly graph: GraphClientFactory;
+  /**
+   * The install's Meta app id (`meta.appId`), which Messenger puts on the echo of
+   * every message the app sent. Settings are read through the module's providers,
+   * so the module hands the accessor in; the worker, which runs no inbound
+   * service, hands none.
+   */
+  readonly appId?: () => Promise<string>;
 }
 
 export interface MetaInbound {
@@ -45,6 +53,8 @@ export interface MetaInbound {
   readonly sink: DeferredAttachmentSink;
   /** WhatsApp's events (M10-03), for `MetaModule`'s handler map. */
   readonly whatsapp: WhatsAppInboundService;
+  /** Messenger's events (M10-04), for `MetaModule`'s handler map. */
+  readonly messenger: MessengerInboundService;
   /** The `meta.media_fetch` consumer, for the worker's `inbound` queue. */
   readonly mediaFetch: (job: Job) => Promise<void>;
 }
@@ -77,6 +87,14 @@ export const createMetaInboundService = (options: MetaInboundOptions): MetaInbou
       sink,
       repository: meta,
       lifecycleReads,
+      log: options.log,
+    }),
+    messenger: new MessengerInboundService({
+      router,
+      sink,
+      repository: meta,
+      lifecycleReads,
+      appId: options.appId ?? (() => Promise.resolve('')),
       log: options.log,
     }),
     mediaFetch: createMetaMediaFetchProcessor({

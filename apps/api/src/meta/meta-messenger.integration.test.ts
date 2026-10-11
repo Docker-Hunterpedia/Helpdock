@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import {
   FakeGraph,
@@ -43,14 +46,28 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
+import {
+  createJobProcessor,
+  type MetaMediaFetchPayload,
+  mediaProcessJob,
+  silentLogger,
+} from '@helpdock/jobs';
 import { metaAccountHealth } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import type { Job } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
+import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
+import { createMediaTools } from '../media/ffmpeg.js';
+import { createMediaProcessor } from '../media/process.job.js';
+import { FakeStorage } from '../testing/media.js';
+import { createMetaInboundService } from './factory.js';
 import { MetaRepository } from './meta.repository.js';
+import { createMetaMediaEventHandler, META_EVENTS } from './meta-events.js';
 
 /**
  * M10-04, Messenger inbound, against real Postgres and Redis through the
@@ -103,6 +120,12 @@ if (!hasDocker) {
   );
 }
 
+const JPEG = await sharp({
+  create: { width: 8, height: 8, channels: 3, background: { r: 20, g: 120, b: 200 } },
+})
+  .jpeg()
+  .toBuffer();
+
 interface Seeded {
   readonly departmentId: string;
   readonly account: MetaAccount;
@@ -118,8 +141,10 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
   let app: ApiApp;
   let owner: DbHandle;
   let driver: MetaWebhookDriver;
+  let storage: FakeStorage;
   const graph = new FakeGraph();
   const repository = new MetaRepository();
+  const handledOutbox = new Set<string>();
   const seeded = new Map<string, Seeded>();
 
   /** A customer of its own for every test, so conversations never meet. */
@@ -202,6 +227,13 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     });
   };
 
+  const graphClient = () =>
+    new GraphClient({
+      root: graph.facebookRoot,
+      instagramRoot: graph.instagramRoot,
+      allowCidrs: ['127.0.0.0/8'],
+    });
+
   beforeAll(async () => {
     [postgres, redisContainer] = await Promise.all([
       new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
@@ -216,17 +248,8 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
         level: 'silent',
       }),
     });
-    app = await createApiApp({
-      runtime,
-      meta: {
-        graph: () =>
-          new GraphClient({
-            root: graph.facebookRoot,
-            instagramRoot: graph.instagramRoot,
-            allowCidrs: ['127.0.0.0/8'],
-          }),
-      },
-    });
+    storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-messenger-')));
+    app = await createApiApp({ runtime, objectStorage: storage, meta: { graph: graphClient } });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
     driver = new MetaWebhookDriver({ target: app, secret: APP_SECRET });
 
@@ -257,9 +280,9 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     expect(await driver.post(body)).toEqual({ status: 200, body: '{"ok":true}' });
   };
 
-  const identityOf = (psid: string, pageId = PAGE_A): string => `${pageId}:${psid}`;
+  const identityOf = (psid: string, pageId: string = PAGE_A): string => `${pageId}:${psid}`;
 
-  const ticketsOf = async (psid: string, pageId = PAGE_A) =>
+  const ticketsOf = async (psid: string, pageId: string = PAGE_A) =>
     (
       await owner.db
         .select({ ticket: tickets })
@@ -274,7 +297,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
         .orderBy(tickets.createdAt)
     ).map((row) => row.ticket);
 
-  const contactsOf = (psid: string, pageId = PAGE_A) =>
+  const contactsOf = (psid: string, pageId: string = PAGE_A) =>
     owner.db
       .select({ contact: contacts, identity: contactIdentities })
       .from(contactIdentities)
@@ -577,6 +600,21 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     });
   });
 
+  describe('a customer id Helpdock cannot hold as an identifier', () => {
+    it('is dropped, answered 200, and costs the rest of the batch nothing', async () => {
+      const good = newPsid();
+
+      const batch = await driver.postBatch([
+        pageText({ psid: 'not an id', mid: newMid(), text: 'Odd one' }),
+        pageText({ psid: good, mid: newMid(), text: 'Normal one' }),
+      ]);
+
+      expect(batch.status).toBe(200);
+      expect(await contactsOf('not an id')).toEqual([]);
+      expect(await ticketsOf(good)).toHaveLength(1);
+    });
+  });
+
   // ------------------------------------------------------------------ files
 
   describe('a file', () => {
@@ -596,8 +634,153 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
         .map((row) => row.payload as { attachmentId: string })
         .filter((payload) => payload.attachmentId === attachmentId);
 
+    /** The worker's half, played by hand as the WhatsApp suite plays it: the relay and BullMQ are covered elsewhere. */
+    interface FetchJob {
+      readonly jobId: string;
+      readonly payload: MetaMediaFetchPayload;
+    }
+
+    const fetchJobsFor = async (ids: ReadonlySet<string>): Promise<FetchJob[]> => {
+      const rows = await owner.db.select().from(outbox).where(eq(outbox.event, META_EVENTS.media));
+      const jobs: FetchJob[] = [];
+      for (const row of rows) {
+        if (handledOutbox.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
+          continue;
+        }
+        handledOutbox.add(row.id);
+        await withSystem(runtime.db, row.brandId, (tx) =>
+          createMetaMediaEventHandler({
+            add: async (job) => void jobs.push({ jobId: job.jobId, payload: job.payload }),
+          })({
+            outboxId: row.id,
+            brandId: row.brandId,
+            event: row.event,
+            payload: row.payload,
+            tx,
+            log: silentLogger,
+          }),
+        );
+      }
+      return jobs;
+    };
+
+    const runFetch = (job: FetchJob): Promise<unknown> =>
+      createMetaInboundService({
+        db: runtime.db,
+        storage,
+        log: silentLogger,
+        keyring: createKeyring(envFor()),
+        graph: graphClient,
+      })
+        .mediaFetch({
+          name: 'meta.media_fetch',
+          id: job.jobId,
+          data: job.payload,
+          attemptsMade: 0,
+          opts: { attempts: 5 },
+        } as unknown as Job)
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+
+    /** `attachment.uploaded` rows of these attachments, run through `media.process`. */
+    const processUploads = async (ids: ReadonlySet<string>): Promise<void> => {
+      const process = createJobProcessor(
+        mediaProcessJob,
+        createMediaProcessor({
+          storage,
+          tools: createMediaTools({ ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' }),
+          scanner: undefined,
+        }),
+        { db: runtime.db, log: silentLogger },
+      );
+      const rows = await owner.db
+        .select()
+        .from(outbox)
+        .where(eq(outbox.event, 'attachment.uploaded'));
+      for (const row of rows) {
+        if (handledOutbox.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
+          continue;
+        }
+        handledOutbox.add(row.id);
+        const added: { jobId: string; payload: { brandId: string; attachmentId: string } }[] = [];
+        await withSystem(runtime.db, row.brandId, (tx) =>
+          createAttachmentUploadedHandler({ add: async (job) => void added.push(job) })({
+            outboxId: row.id,
+            brandId: row.brandId,
+            event: row.event,
+            payload: row.payload,
+            tx,
+            log: silentLogger,
+          }),
+        );
+        for (const job of added) {
+          await process({
+            name: 'media.process',
+            id: job.jobId,
+            data: job.payload,
+            attemptsMade: 0,
+            opts: { attempts: 3 },
+          } as unknown as Job);
+        }
+      }
+    };
+
+    /** Every file of a ticket fetched and processed, as the worker does after the relay. */
+    const pipeline = async (ticketId: string): Promise<unknown[]> => {
+      const ids = new Set((await attachmentsOf(ticketId)).map((row) => row.id));
+      const errors: unknown[] = [];
+      for (const job of await fetchJobsFor(ids)) {
+        const error = await runFetch(job);
+        if (error !== undefined) {
+          errors.push(error);
+        }
+      }
+      await processUploads(ids);
+      return errors;
+    };
+
+    it('files a photo pending, fetches it from the CDN link without a token, and makes it a WebP', async () => {
+      const psid = newPsid();
+      const url = graph.serveCdn(`photo-${psid}.jpg`, JPEG, 'image/jpeg');
+
+      await post(pageAttachment({ psid, mid: newMid(), type: 'image', url, text: 'the box' }));
+
+      const [ticket] = await ticketsOf(psid);
+      const [message] = await messagesOf(ticket?.id ?? '');
+      expect(message?.bodyText).toBe('the box');
+      const [pending] = await attachmentsOf(ticket?.id ?? '');
+      expect(pending).toMatchObject({
+        messageId: message?.id,
+        kind: 'image',
+        status: 'pending',
+        uploaderType: 'contact',
+      });
+      expect(await mediaEvents(pending?.id ?? '')).toEqual([
+        {
+          attachmentId: pending?.id,
+          accountId: accountA().id,
+          ref: { kind: 'cdn_url', url, type: 'image' },
+        },
+      ]);
+      // Meta wants the webhook answered in seconds: the bytes are the job's.
+      expect(graph.mediaRequests).toEqual([]);
+
+      expect(await pipeline(ticket?.id ?? '')).toEqual([]);
+
+      const [ready] = await attachmentsOf(ticket?.id ?? '');
+      expect(ready).toMatchObject({ status: 'ready', kind: 'image', size: JPEG.length });
+      expect(Object.keys(ready?.variants ?? {})).toContain('webp');
+      const webp = await storage.read(`brands/${BRAND_A}/tickets/${ticket?.id}/${ready?.id}/webp`);
+      expect((await sharp(webp).metadata()).format).toBe('webp');
+      // A CDN link is public: the Page's token must not travel to it.
+      expect(graph.mediaRequests).toEqual([
+        expect.objectContaining({ kind: 'cdn', authorization: null }),
+      ]);
+    });
+
     it.each([
-      ['image', 'photo-1.jpg', 'image'],
       ['video', 'clip-1.mp4', 'video'],
       ['audio', 'voice-1.mp4', 'audio'],
       ['file', 'invoice-1.pdf', 'file'],
@@ -667,7 +850,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       await post(pageFallback({ psid, mid, url: null }));
 
       expect(await systemLines(ticket.id)).toEqual([
-        'The customer sent something Helpdock cannot show.',
+        'The customer sent something that cannot be shown here.',
       ]);
       // Redelivered, the line is not written twice.
       await post(pageFallback({ psid, mid, url: null }));
@@ -824,7 +1007,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       expect(lines).toMatchObject([
         {
           authorType: 'system',
-          authorId: `meta:messenger:${accountA().id}`,
+          authorId: `meta:${accountA().id}`,
           channel: 'messenger',
           bodyHtml: '<p>The customer reacted ❤️ to a message.</p>',
         },
@@ -844,7 +1027,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
 
       expect(await systemLines(ticket.id)).toEqual([
         'The customer reacted 👍 to a message.',
-        'The customer removed their reaction from a message.',
+        'The customer removed their reaction to a message.',
       ]);
     });
 
@@ -858,6 +1041,15 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       await post(pageReaction({ psid, mid, emoji: '😮' }));
 
       expect(await systemLines(ticket.id)).toEqual(['تفاعل العميل بـ 😮 مع رسالة.']);
+    });
+
+    it('is nothing for a reaction on a ticket that is closed: the line would be the only thing in a thread nobody opens', async () => {
+      const { psid, mid, ticket } = await customerWhoWrote();
+      await closeTicket(ticket.id, new Date());
+
+      await post(pageReaction({ psid, mid, emoji: '👍' }));
+
+      expect(await systemLines(ticket.id)).toEqual([]);
     });
 
     it('is nothing for a reaction on a message Helpdock never filed or sent', async () => {
@@ -886,7 +1078,8 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
 
     it('is, for a message Messenger will not describe, a line where the conversation has a ticket', async () => {
       const { psid, ticket } = await customerWhoWrote();
-      const body = pageText({ psid, mid: newMid() }) as {
+      const mid = newMid();
+      const body = pageText({ psid, mid, timestamp: META_FIXTURE.time + 30 }) as {
         entry: { messaging: { message: Record<string, unknown> }[] }[];
       };
       const message = body.entry[0]?.messaging[0]?.message;
@@ -899,8 +1092,13 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       await post(body);
 
       expect(await systemLines(ticket.id)).toEqual([
-        'The customer sent something Helpdock cannot show.',
+        'The customer sent something that cannot be shown here.',
       ]);
+      // The customer did write: Meta will take an answer, so the window follows.
+      expect(await conversationOf(psid)).toMatchObject({
+        lastInboundMessageId: mid,
+        lastInboundAt: at(META_FIXTURE.time + 30),
+      });
     });
   });
 

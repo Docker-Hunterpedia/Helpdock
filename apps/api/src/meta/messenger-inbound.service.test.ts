@@ -15,8 +15,15 @@ import {
   pageText,
   routeEnvelope,
 } from '@helpdock/channels';
-import type { DbTransaction, MetaAccount, MetaConversation, MetaDelivery } from '@helpdock/db';
+import type {
+  DbTransaction,
+  MetaAccount,
+  MetaConversation,
+  MetaDelivery,
+  Ticket,
+} from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ContactFailure } from '../contacts/contact-failure.js';
 import {
   MessengerInboundService,
   type MessengerInboundServiceOptions,
@@ -24,43 +31,25 @@ import {
 import type { MetaEventContext } from './meta-inbound.service.js';
 
 /**
- * The service's decisions with the database faked. That a message
- * opens a ticket under the right contact, that a watermark marks the right
- * deliveries and that a redelivery files nothing twice is proved against
- * Postgres in `meta-messenger.integration.test.ts`.
+ * The service's decisions with the database faked. That a message opens a
+ * ticket under the right contact, that a watermark marks the right deliveries
+ * and that a redelivery files nothing twice is proved against Postgres in
+ * `meta-messenger.integration.test.ts`.
  */
 
 const state = vi.hoisted(() => ({
   seen: new Set<string>(),
-  threads: new Map<string, { ticketId: string; departmentId: string }>(),
-  lines: [] as { thread: unknown; line: { text: string; key: string | null } }[],
   profileRequests: [] as { brandId: string; profile: unknown }[],
-}));
-vi.mock('./messenger-profile.js', () => ({
-  enqueueMetaProfile: async (_tx: unknown, brandId: string, profile: unknown) => {
-    state.profileRequests.push({ brandId, profile });
-    return 'outbox-id';
-  },
 }));
 vi.mock('./meta-inbound-gate.js', () => ({
   metaMessageSeen: async (_tx: unknown, _brand: string, _platform: string, messageId: string) =>
     state.seen.has(messageId),
   metaSenderBlocked: async () => false,
 }));
-vi.mock('./meta-thread.js', () => ({
-  ticketOfMessage: async (_tx: unknown, _account: unknown, messageId: string) =>
-    state.threads.get(messageId),
-  writeSystemLine: async (
-    _tickets: unknown,
-    _tx: unknown,
-    _account: unknown,
-    thread: unknown,
-    line: { text: string; key: string | null },
-  ) => {
-    state.lines.push({ thread, line });
-    if (line.key !== null) {
-      state.seen.add(line.key);
-    }
+vi.mock('./messenger-profile.js', () => ({
+  enqueueMetaProfile: async (_tx: unknown, brandId: string, profile: unknown) => {
+    state.profileRequests.push({ brandId, profile });
+    return 'outbox-id';
   },
 }));
 
@@ -70,7 +59,11 @@ const OTHER_ACCOUNT_ID = '01924f00-0000-7000-8000-0000000000b2';
 const CONTACT = '01924f00-0000-7000-8000-0000000000c1';
 const CONVERSATION = '01924f00-0000-7000-8000-0000000000d1';
 const DELIVERY = '01924f00-0000-7000-8000-0000000000e1';
-const THREAD = { ticketId: '01924f00-0000-7000-8000-0000000000f1', departmentId: 'dept-1' };
+const TICKET = {
+  id: '01924f00-0000-7000-8000-0000000000f1',
+  departmentId: 'dept-1',
+  contactId: CONTACT,
+} as Ticket;
 const NOW = new Date('2026-10-11T09:00:00.000Z');
 
 const account = {
@@ -98,52 +91,80 @@ const conversation = (over: Partial<MetaConversation> = {}): MetaConversation =>
     accountId: ACCOUNT_ID,
     customerId: META_FIXTURE.psid,
     contactId: CONTACT,
-    ticketId: THREAD.ticketId,
+    ticketId: TICKET.id,
     profileName: null,
     ...over,
   }) as MetaConversation;
 
-const harness = (over: Partial<MessengerInboundServiceOptions> = {}) => {
-  const route = vi.fn(async () => ({
+/** A line the router was asked to write. */
+interface WrittenLine {
+  readonly ticket: Ticket;
+  readonly accountId: string;
+  readonly text: string;
+  readonly externalMessageId?: string;
+}
+
+const harness = () => {
+  const lines: WrittenLine[] = [];
+  /** Messages by platform id, as `messageByPlatformId` finds them. */
+  const messages = new Map<string, { id: string; ticketId: string; bodyText: string }>();
+  const route = vi.fn(async (..._args: unknown[]) => ({
     kind: 'created' as const,
-    ticketId: THREAD.ticketId,
+    ticketId: TICKET.id,
     messageId: 'm1',
     contactId: CONTACT,
+    conversationId: CONVERSATION,
   }));
+  const openTicket = vi.fn(async (..._args: unknown[]): Promise<Ticket | undefined> => TICKET);
+  const writeSystemLine = vi.fn(async (_tx: unknown, line: WrittenLine) => {
+    lines.push(line);
+    if (line.externalMessageId !== undefined) {
+      state.seen.add(line.externalMessageId);
+    }
+    return 'line-id';
+  });
   const store = vi.fn(async () => undefined);
-  const lookups = {
+  const repository = {
     conversation: vi.fn(async (): Promise<MetaConversation | undefined> => undefined),
     delivery: vi.fn(async (): Promise<MetaDelivery | undefined> => undefined),
     advanceStatus: vi.fn(async () => undefined),
     advanceByWatermark: vi.fn(async () => []),
-    markError: vi.fn(async () => undefined),
+    markError: vi.fn(async (..._args: unknown[]) => undefined),
+    upsertConversation: vi.fn(async () => conversation()),
+    messageByPlatformId: vi.fn(
+      async (_tx: unknown, _brand: string, _platform: string, id: string) => messages.get(id),
+    ),
   };
-  const localeForContact = vi.fn(async () => 'en' as const);
-  const findTicket = vi.fn(async () => ({
-    ticket: { id: THREAD.ticketId, departmentId: THREAD.departmentId },
-  }));
-  const appId = vi.fn(async () => META_FIXTURE.appId);
+  const localeForContact = vi.fn(async () => 'en' as 'en' | 'ar');
+  const appId = vi.fn(async (): Promise<string> => META_FIXTURE.appId);
   const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const service = new MessengerInboundService({
-    repository: lookups,
-    router: { route },
+    router: { route, openTicket, writeSystemLine },
     sink: { store },
-    tickets: { insertMessage: vi.fn(), nextSeq: vi.fn(), findTicket },
+    repository,
     lifecycleReads: { localeForContact },
-    app: { appId },
+    appId,
     log,
-    ...over,
   } as unknown as MessengerInboundServiceOptions);
   const handle = (body: MetaWebhookBody, now = NOW) =>
     service.handle({ tx: {} as DbTransaction, account, now } as MetaEventContext, eventOf(body));
 
-  return { handle, route, store, lookups, localeForContact, findTicket, appId, log };
+  return {
+    handle,
+    lines,
+    messages,
+    route,
+    openTicket,
+    writeSystemLine,
+    repository,
+    localeForContact,
+    appId,
+    log,
+  };
 };
 
 beforeEach(() => {
   state.seen.clear();
-  state.threads.clear();
-  state.lines.length = 0;
   state.profileRequests.length = 0;
 });
 
@@ -156,10 +177,13 @@ describe('a message', () => {
     expect(outcome).toEqual({ outcome: 'handled' });
     expect(route).toHaveBeenCalledOnce();
     const [context, message] = route.mock.calls[0] as unknown as [
-      { brandId: string; account: MetaAccount },
+      { brandId: string; account: { id: string; platform: string; departmentId: string } },
       { externalId: string; from: unknown; bodyText: string; meta: { customerId: string } },
     ];
-    expect(context).toMatchObject({ brandId: BRAND, account: { id: ACCOUNT_ID } });
+    expect(context).toMatchObject({
+      brandId: BRAND,
+      account: { id: ACCOUNT_ID, platform: 'messenger', departmentId: 'dept-1' },
+    });
     expect(message).toMatchObject({
       externalId: 'mid.1',
       bodyText: 'My order has not come',
@@ -173,18 +197,16 @@ describe('a message', () => {
   });
 
   it('is filed under the name already stored for the conversation', async () => {
-    const { handle, route, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation({ profileName: 'Mona Khalil' }));
+    const { handle, route, repository } = harness();
+    repository.conversation.mockResolvedValue(conversation({ profileName: 'Mona Khalil' }));
 
     await handle(pageText({ mid: 'mid.2' }));
 
     expect(route.mock.calls[0]?.[1]).toMatchObject({ from: { name: 'Mona Khalil' } });
   });
 
-  it('asks for the customer’s name, once the message is filed, when the conversation has none', async () => {
-    const { handle, route, lookups } = harness();
-    // Before the router there is no conversation; after it there is, with no name.
-    lookups.conversation.mockResolvedValueOnce(undefined).mockResolvedValue(conversation());
+  it('asks for the customer’s name, once the message is filed, when the conversation is new', async () => {
+    const { handle, route } = harness();
 
     await handle(pageText({ mid: 'mid.1' }));
 
@@ -197,26 +219,43 @@ describe('a message', () => {
     expect(route).toHaveBeenCalledOnce();
   });
 
+  it('asks again when the conversation exists but nobody has looked for a name', async () => {
+    const { handle, repository } = harness();
+    repository.conversation.mockResolvedValue(conversation());
+
+    await handle(pageText({ mid: 'mid.2' }));
+
+    expect(state.profileRequests).toHaveLength(1);
+  });
+
   it.each([
     ['it has a name', { profileName: 'Mona Khalil' }],
     ['the lookup was made and refused', { profileName: null, profileCheckedAt: NOW }],
   ])('does not ask again when %s', async (_why, over) => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation(over as Partial<MetaConversation>));
+    const { handle, repository } = harness();
+    repository.conversation.mockResolvedValue(conversation(over as Partial<MetaConversation>));
 
     await handle(pageText({ mid: 'mid.2' }));
 
     expect(state.profileRequests).toEqual([]);
   });
 
-  it('refuses a customer id the contact layer could not spell, instead of failing the batch', async () => {
-    const { handle, route } = harness();
+  it('drops a customer id the contact layer refuses instead of failing the batch', async () => {
+    const { handle, route, log } = harness();
+    route.mockRejectedValue(new ContactFailure('identity-invalid', 'invalid-meta'));
 
     const outcome = await handle(pageText({ mid: 'mid.1', psid: 'a b' }));
 
     expect(outcome).toEqual({ outcome: 'ignored', reason: 'invalid-customer-id' });
-    expect(route).not.toHaveBeenCalled();
     expect(state.profileRequests).toEqual([]);
+    expect(log.warn).toHaveBeenCalledOnce();
+  });
+
+  it('does not swallow a failure that is not the contact layer’s', async () => {
+    const { handle, route } = harness();
+    route.mockRejectedValue(new TypeError('a bug'));
+
+    await expect(handle(pageText({ mid: 'mid.1' }))).rejects.toThrow('a bug');
   });
 
   it('files a message at the time Meta gave it, and never from the future', async () => {
@@ -247,8 +286,7 @@ describe('a message', () => {
   });
 
   it('files a fallback link as a text line with its URL', async () => {
-    const { handle, route, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
+    const { handle, route, lines } = harness();
 
     await handle(pageFallback({ mid: 'mid.1', url: 'https://maps.example.com/?q=1' }));
 
@@ -256,21 +294,19 @@ describe('a message', () => {
       bodyText: 'Brandenburg Gate\nhttps://maps.example.com/?q=1',
       meta: { fileRefs: [] },
     });
-    expect(state.lines).toEqual([]);
+    expect(lines).toEqual([]);
   });
 
   it('adds no line when everything the message carried can be shown', async () => {
-    const { handle } = harness();
-    state.threads.set('mid.1', THREAD);
+    const { handle, lines } = harness();
 
     await handle(pageAttachment({ mid: 'mid.1', type: 'image', text: 'See this' }));
 
-    expect(state.lines).toEqual([]);
+    expect(lines).toEqual([]);
   });
 
   it('adds a line saying something is missing when a link came without a URL, beside the words that did', async () => {
-    const { handle, route } = harness();
-    state.threads.set('mid.1', THREAD);
+    const { handle, route, lines, openTicket } = harness();
     const body = pageFallback({ mid: 'mid.1', url: null });
     const message = (body as { entry: { messaging: { message: Record<string, unknown> }[] }[] })
       .entry[0]?.messaging[0]?.message;
@@ -282,13 +318,13 @@ describe('a message', () => {
     expect(await handle(body)).toEqual({ outcome: 'handled' });
 
     expect(route.mock.calls[0]?.[1]).toMatchObject({ bodyText: 'What is this place?' });
-    expect(state.lines).toEqual([
+    expect(openTicket).toHaveBeenCalledWith({}, TICKET.id);
+    expect(lines).toEqual([
       {
-        thread: THREAD,
-        line: {
-          text: 'The customer sent something Helpdock cannot show.',
-          key: 'unsupported:mid.1',
-        },
+        ticket: TICKET,
+        accountId: ACCOUNT_ID,
+        text: 'The customer sent something that cannot be shown here.',
+        externalMessageId: 'unsupported:mid.1',
       },
     ]);
   });
@@ -308,8 +344,8 @@ describe('an echo', () => {
   });
 
   it('is dropped silently when its metadata names one of this account’s deliveries', async () => {
-    const { handle, lookups, log } = harness();
-    lookups.delivery.mockResolvedValue({ id: DELIVERY, accountId: ACCOUNT_ID } as MetaDelivery);
+    const { handle, repository, log } = harness();
+    repository.delivery.mockResolvedValue({ id: DELIVERY, accountId: ACCOUNT_ID } as MetaDelivery);
 
     const outcome = await handle(echoOf({ appId: '999', metadata: DELIVERY }));
 
@@ -319,7 +355,7 @@ describe('an echo', () => {
 
   it('is counted when it is another app’s, a delivery of another account, or a metadata that is no id', async () => {
     const other = harness();
-    other.lookups.delivery.mockResolvedValue({
+    other.repository.delivery.mockResolvedValue({
       id: DELIVERY,
       accountId: OTHER_ACCOUNT_ID,
     } as MetaDelivery);
@@ -350,7 +386,7 @@ describe('an echo', () => {
       reason: 'echo-not-ours',
     });
     // Not an id at all: asking the database would be an error, not an answer.
-    expect(typed.lookups.delivery).not.toHaveBeenCalled();
+    expect(typed.repository.delivery).not.toHaveBeenCalled();
   });
 
   it('is never taken for ours by an app id when the install has none set', async () => {
@@ -371,45 +407,45 @@ describe('a delivery or read report', () => {
   ] as const)(
     'marks the conversation’s deliveries up to a %s watermark, at its time',
     async (_kind, report, status) => {
-      const { handle, lookups } = harness();
-      lookups.conversation.mockResolvedValue(conversation());
+      const { handle, repository } = harness();
+      repository.conversation.mockResolvedValue(conversation());
       const watermark = META_FIXTURE.time + 120;
 
       expect(await handle(report({ watermark }))).toEqual({ outcome: 'handled' });
 
-      expect(lookups.advanceByWatermark).toHaveBeenCalledWith(
+      expect(repository.advanceByWatermark).toHaveBeenCalledWith(
         {},
         CONVERSATION,
         status,
         new Date(watermark * 1_000),
       );
-      expect(lookups.advanceStatus).not.toHaveBeenCalled();
+      expect(repository.advanceStatus).not.toHaveBeenCalled();
     },
   );
 
   it('also moves the messages a delivery names, one by one', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
+    const { handle, repository } = harness();
+    repository.conversation.mockResolvedValue(conversation());
     const watermark = META_FIXTURE.time + 120;
 
     await handle(pageDelivery({ watermark, mids: ['mid.a', 'mid.b'] }));
 
-    expect(lookups.advanceStatus.mock.calls).toEqual([
+    expect(repository.advanceStatus.mock.calls).toEqual([
       [{}, 'mid.a', 'delivered', new Date(watermark * 1_000)],
       [{}, 'mid.b', 'delivered', new Date(watermark * 1_000)],
     ]);
   });
 
   it('is dropped for a customer the account has no conversation with', async () => {
-    const { handle, lookups } = harness();
+    const { handle, repository } = harness();
 
     expect(await handle(pageRead())).toEqual({ outcome: 'ignored', reason: 'no-conversation' });
-    expect(lookups.advanceByWatermark).not.toHaveBeenCalled();
+    expect(repository.advanceByWatermark).not.toHaveBeenCalled();
   });
 
   it('is dropped when it names neither a watermark nor a message', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
+    const { handle, repository } = harness();
+    repository.conversation.mockResolvedValue(conversation());
     const body = pageDelivery({ mids: [] }) as {
       entry: { messaging: { delivery: Record<string, unknown> }[] }[];
     };
@@ -420,66 +456,65 @@ describe('a delivery or read report', () => {
     delete delivery.watermark;
 
     expect(await handle(body)).toEqual({ outcome: 'ignored', reason: 'empty-receipt' });
-    expect(lookups.advanceByWatermark).not.toHaveBeenCalled();
+    expect(repository.advanceByWatermark).not.toHaveBeenCalled();
   });
 });
 
 describe('a reaction or an edit', () => {
+  const known = (messages: Map<string, { id: string; ticketId: string; bodyText: string }>) =>
+    messages.set('mid.reply', { id: 'msg-1', ticketId: TICKET.id, bodyText: 'We are on it.' });
+
   it('is a system line on the ticket of the message it is about, once however often it arrives', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
-    state.threads.set('mid.reply', THREAD);
+    const { handle, lines, messages } = harness();
+    known(messages);
     const reaction = pageReaction({ mid: 'mid.reply', emoji: '❤️' });
 
     expect(await handle(reaction)).toEqual({ outcome: 'handled' });
     expect(await handle(reaction)).toEqual({ outcome: 'duplicate' });
 
-    expect(state.lines).toEqual([
+    expect(lines).toEqual([
       {
-        thread: THREAD,
-        line: {
-          text: 'The customer reacted ❤️ to a message.',
-          key: `reaction:mid.reply:${META_FIXTURE.psid}:react:${String(META_FIXTURE.time * 1_000)}`,
-        },
+        ticket: TICKET,
+        accountId: ACCOUNT_ID,
+        text: 'The customer reacted ❤️ to a message.',
+        externalMessageId: `reaction:mid.reply:${META_FIXTURE.psid}:react:${String(META_FIXTURE.time * 1_000)}`,
       },
     ]);
   });
 
   it('tells a reaction that was taken back, and one without an emoji, apart', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
-    state.threads.set('mid.reply', THREAD);
+    const { handle, lines, messages } = harness();
+    known(messages);
 
     await handle(pageReaction({ mid: 'mid.reply', action: 'unreact' }));
     const plain = pageReaction({ mid: 'mid.reply', timestamp: META_FIXTURE.time + 1 });
-    const message = (plain as { entry: { messaging: { reaction: Record<string, unknown> }[] }[] })
+    const reaction = (plain as { entry: { messaging: { reaction: Record<string, unknown> }[] }[] })
       .entry[0]?.messaging[0]?.reaction;
-    if (message === undefined) {
+    if (reaction === undefined) {
       throw new Error('the fixture has no reaction');
     }
-    delete message.emoji;
+    delete reaction.emoji;
     await handle(plain);
 
-    expect(state.lines.map(({ line }) => line.text)).toEqual([
-      'The customer removed their reaction from a message.',
+    expect(lines.map((line) => line.text)).toEqual([
+      'The customer removed their reaction to a message.',
       'The customer reacted to a message.',
     ]);
   });
 
-  it('is written in the contact’s language', async () => {
-    const { handle, lookups, localeForContact } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
-    localeForContact.mockResolvedValue('ar' as never);
-    state.threads.set('mid.reply', THREAD);
+  it('is written in the contact’s language, looked up by the ticket’s contact', async () => {
+    const { handle, lines, messages, localeForContact } = harness();
+    localeForContact.mockResolvedValue('ar');
+    known(messages);
 
     await handle(pageReaction({ mid: 'mid.reply', emoji: '👍' }));
 
-    expect(state.lines[0]?.line.text).toBe('تفاعل العميل بـ 👍 مع رسالة.');
+    expect(lines[0]?.text).toBe('تفاعل العميل بـ 👍 مع رسالة.');
     expect(localeForContact).toHaveBeenCalledWith({}, BRAND, CONTACT);
   });
 
   it('is dropped for a message Helpdock never filed or sent', async () => {
-    const { handle } = harness();
+    const { handle, lines } = harness();
 
     expect(await handle(pageReaction({ mid: 'mid.unknown' }))).toEqual({
       outcome: 'ignored',
@@ -489,34 +524,46 @@ describe('a reaction or an edit', () => {
       outcome: 'ignored',
       reason: 'unknown-message',
     });
-    expect(state.lines).toEqual([]);
+    expect(lines).toEqual([]);
+  });
+
+  it('is dropped when the ticket is closed or spam, as the router says', async () => {
+    const { handle, lines, messages, openTicket } = harness();
+    known(messages);
+    openTicket.mockResolvedValue(undefined);
+
+    expect(await handle(pageReaction({ mid: 'mid.reply' }))).toEqual({
+      outcome: 'ignored',
+      reason: 'no-open-ticket',
+    });
+    expect(lines).toEqual([]);
   });
 
   it('keeps the edited words in the line, keyed by the edit', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
-    state.threads.set('mid.1', THREAD);
+    const { handle, lines, messages } = harness();
+    known(messages);
 
-    expect(await handle(pageEdit({ mid: 'mid.1', text: 'Order 77, not 78', numEdit: 2 }))).toEqual({
+    expect(
+      await handle(pageEdit({ mid: 'mid.reply', text: 'Order 77, not 78', numEdit: 2 })),
+    ).toEqual({
       outcome: 'handled',
     });
 
-    expect(state.lines).toEqual([
+    expect(lines).toEqual([
       {
-        thread: THREAD,
-        line: {
-          text: 'The customer edited a message. It now reads: Order 77, not 78',
-          key: 'edit:mid.1:2',
-        },
+        ticket: TICKET,
+        accountId: ACCOUNT_ID,
+        text: 'The customer edited a message. It now reads: Order 77, not 78',
+        externalMessageId: 'edit:mid.reply:2',
       },
     ]);
   });
 
   it('drops an edit with no words in it', async () => {
-    const { handle } = harness();
-    state.threads.set('mid.1', THREAD);
+    const { handle, messages } = harness();
+    known(messages);
 
-    expect(await handle(pageEdit({ mid: 'mid.1', text: ' ' }))).toEqual({
+    expect(await handle(pageEdit({ mid: 'mid.reply', text: ' ' }))).toEqual({
       outcome: 'ignored',
       reason: 'empty-edit',
     });
@@ -538,39 +585,53 @@ describe('something Helpdock cannot show', () => {
     return body;
   };
 
-  it('is a line on the conversation’s ticket, keyed by the message', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
+  it('is a line on the conversation’s open ticket, keyed by the message, and opens the window', async () => {
+    const { handle, lines, repository } = harness();
+    repository.conversation.mockResolvedValue(conversation());
 
     expect(await handle(unsupported())).toEqual({ outcome: 'handled' });
 
-    expect(state.lines).toEqual([
+    expect(lines).toEqual([
       {
-        thread: { ticketId: THREAD.ticketId, departmentId: THREAD.departmentId },
-        line: {
-          text: 'The customer sent something Helpdock cannot show.',
-          key: 'unsupported:mid.u',
-        },
+        ticket: TICKET,
+        accountId: ACCOUNT_ID,
+        text: 'The customer sent something that cannot be shown here.',
+        externalMessageId: 'unsupported:mid.u',
       },
     ]);
+    expect(repository.upsertConversation).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        customerId: META_FIXTURE.psid,
+        contactId: CONTACT,
+        inbound: { at: new Date(META_FIXTURE.time * 1_000), messageId: 'mid.u' },
+      }),
+    );
   });
 
-  it('is dropped when the customer has no ticket to put it on', async () => {
+  it('is dropped when the customer has no conversation or no open ticket to put it on', async () => {
     const none = harness();
-    expect(await none.handle(unsupported())).toEqual({ outcome: 'ignored', reason: 'no-ticket' });
+    expect(await none.handle(unsupported())).toEqual({
+      outcome: 'ignored',
+      reason: 'no-conversation',
+    });
+    expect(none.repository.upsertConversation).not.toHaveBeenCalled();
 
     const noTicket = harness();
-    noTicket.lookups.conversation.mockResolvedValue(conversation({ ticketId: null }));
+    noTicket.repository.conversation.mockResolvedValue(conversation({ ticketId: null }));
     expect(await noTicket.handle(unsupported())).toEqual({
       outcome: 'ignored',
-      reason: 'no-ticket',
+      reason: 'no-open-ticket',
     });
 
-    const gone = harness();
-    gone.lookups.conversation.mockResolvedValue(conversation());
-    gone.findTicket.mockResolvedValue(undefined as never);
-    expect(await gone.handle(unsupported())).toEqual({ outcome: 'ignored', reason: 'no-ticket' });
-    expect(state.lines).toEqual([]);
+    const closed = harness();
+    closed.repository.conversation.mockResolvedValue(conversation());
+    closed.openTicket.mockResolvedValue(undefined);
+    expect(await closed.handle(unsupported())).toEqual({
+      outcome: 'ignored',
+      reason: 'no-open-ticket',
+    });
+    expect([...noTicket.lines, ...closed.lines]).toEqual([]);
   });
 });
 
@@ -587,14 +648,14 @@ describe('messaging policy enforcement', () => {
   });
 
   it('is counted, dropped, and recorded on the account just after the event that carried it', async () => {
-    const { handle, lookups } = harness();
+    const { handle, repository } = harness();
 
     const outcome = await handle(
       enforcement({ action: 'block', reason: 'Messaging policy violation' }),
     );
 
     expect(outcome).toEqual({ outcome: 'ignored', reason: 'policy-enforcement' });
-    expect(lookups.markError).toHaveBeenCalledWith(
+    expect(repository.markError).toHaveBeenCalledWith(
       {},
       ACCOUNT_ID,
       'messaging_policy_enforcement block: Messaging policy violation',
@@ -603,21 +664,21 @@ describe('messaging policy enforcement', () => {
   });
 
   it('records a notice that names no action or reason', async () => {
-    const { handle, lookups } = harness();
+    const { handle, repository } = harness();
 
     await handle(enforcement({}));
 
-    expect(lookups.markError.mock.calls[0]?.[2]).toBe('messaging_policy_enforcement');
+    expect(repository.markError.mock.calls[0]?.[2]).toBe('messaging_policy_enforcement');
   });
 
   it('does not call an unblock an error', async () => {
-    const { handle, lookups } = harness();
+    const { handle, repository } = harness();
 
     expect(await handle(enforcement({ action: 'unblock', reason: 'Restored' }))).toEqual({
       outcome: 'ignored',
       reason: 'policy-enforcement',
     });
-    expect(lookups.markError).not.toHaveBeenCalled();
+    expect(repository.markError).not.toHaveBeenCalled();
   });
 });
 

@@ -43,11 +43,11 @@ export const META_GRAPH = Symbol('helpdock.meta.graph');
  * worker's.
  *
  * **The inbound services.** The webhook hands each account's events to the
- * {@link MetaInboundHandlers} of its platform. WhatsApp's is installed (M10-03);
- * until M10-04 and -05 land theirs, the default for a platform logs and counts
- * what arrived (`unhandledInbound`), so the route is complete and testable
- * without them. Each of those deliverables replaces its platform's entry in
- * `handlers` below.
+ * {@link MetaInboundHandlers} of its platform. WhatsApp's (M10-03) and
+ * Messenger's (M10-04) are installed; until M10-05 lands Instagram's, the
+ * default for a platform logs and counts what arrived (`unhandledInbound`), so
+ * the route is complete and testable without it. Each deliverable replaces its
+ * platform's entry in `handlers` below.
  */
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
@@ -64,18 +64,7 @@ export class MetaModule {
     const repository = new MetaRepository();
     const storage = options.storage ?? new S3ObjectStorage(createS3Client(env), env.S3_BUCKET);
     const graph = overrides?.graph ?? graphClientFactory(env);
-    const inbound = createMetaInboundService({
-      db,
-      storage,
-      log: logger,
-      keyring: createKeyring(env),
-      graph,
-    });
-    const handlers: MetaInboundHandlers = {
-      ...unhandledInboundHandlers(logger),
-      whatsapp: inbound.whatsapp,
-      ...overrides?.inbound,
-    };
+    const keyring = createKeyring(env);
 
     return {
       module: MetaModule,
@@ -102,14 +91,32 @@ export class MetaModule {
         {
           provide: MetaWebhookService,
           inject: [MetaAppService],
-          useFactory: (app: MetaAppService): MetaWebhookService =>
-            new MetaWebhookService({
+          useFactory: (app: MetaAppService): MetaWebhookService => {
+            // Built here, not in `forRoot`, because Messenger reads the app id
+            // through the settings the App service holds.
+            const inbound = createMetaInboundService({
+              db,
+              storage,
+              log: logger,
+              keyring,
+              graph,
+              appId: () => app.appId(),
+            });
+            const handlers: MetaInboundHandlers = {
+              ...unhandledInboundHandlers(logger),
+              whatsapp: inbound.whatsapp,
+              messenger: inbound.messenger,
+              ...overrides?.inbound,
+            };
+
+            return new MetaWebhookService({
               db,
               repository,
               app,
               log: logger,
               inbound: new MetaInboundService({ db, repository, handlers, log: logger }),
-            }),
+            });
+          },
         },
       ],
     };

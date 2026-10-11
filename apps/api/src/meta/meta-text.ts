@@ -37,6 +37,10 @@ export type MetaSystemLine =
   | { readonly kind: 'unsupported' }
   | { readonly kind: 'unsent' }
   | { readonly kind: 'reaction'; readonly emoji: string | null }
+  /** A reaction whose emoji Meta did not name (Messenger). */
+  | { readonly kind: 'reactionPlain' }
+  /** A message the customer edited (Messenger), with the words it now has. */
+  | { readonly kind: 'edited'; readonly text: string }
   | { readonly kind: 'numberChanged'; readonly from: string; readonly to: string };
 
 /** The words of a system line in a locale, as a `ticket_messages.body_text`. */
@@ -51,6 +55,10 @@ export const metaSystemLine = (locale: Locale, line: MetaSystemLine): string => 
       return line.emoji === null
         ? t('thread.reactionRemoved')
         : t('thread.reaction', { emoji: line.emoji });
+    case 'reactionPlain':
+      return t('thread.reactionPlain');
+    case 'edited':
+      return t('thread.edited', { text: line.text });
     case 'numberChanged':
       return t('thread.numberChanged', { from: line.from, to: line.to });
   }

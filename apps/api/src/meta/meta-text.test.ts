@@ -28,6 +28,8 @@ describe('the Meta thread wording', () => {
       metaSystemLine(locale, { kind: 'unsent' }),
       metaSystemLine(locale, { kind: 'reaction', emoji: '\u{1F44D}' }),
       metaSystemLine(locale, { kind: 'reaction', emoji: null }),
+      metaSystemLine(locale, { kind: 'reactionPlain' }),
+      metaSystemLine(locale, { kind: 'edited', text: 'Order 77' }),
       metaSystemLine(locale, { kind: 'numberChanged', from: '+16505551234', to: '+16505559876' }),
     ];
 
@@ -36,6 +38,12 @@ describe('the Meta thread wording', () => {
       expect(line).not.toMatch(/^thread\./);
       expect(line).not.toContain('{{');
     }
+  });
+
+  it('puts the words of an edit into the line as they were typed', () => {
+    expect(metaSystemLine('en', { kind: 'edited', text: 'Order 77 <b>late</b>' })).toBe(
+      'The customer edited a message. It now reads: Order 77 <b>late</b>',
+    );
   });
 
   it('puts the emoji of a reaction and both numbers of a change into the line, unescaped', () => {

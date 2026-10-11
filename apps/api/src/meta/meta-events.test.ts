@@ -1,5 +1,5 @@
 import type { DbTransaction } from '@helpdock/db';
-import { outboxEvents, silentLogger } from '@helpdock/jobs';
+import { type MetaSendPayload, outboxEvents, silentLogger } from '@helpdock/jobs';
 import { describe, expect, it } from 'vitest';
 import {
   createMetaMediaEventHandler,
@@ -9,7 +9,6 @@ import {
   enqueueMetaReply,
   META_EVENTS,
   type MetaMediaFetchJobPayload,
-  type MetaSendJobPayload,
   metaMediaFetchJobId,
   metaSendJobId,
   registerMetaEventHandlers,
@@ -95,7 +94,7 @@ describe('the Meta outbox events', () => {
   });
 
   it('turns a reply into one meta.send job under the outbox row’s id', async () => {
-    const { added, queue } = capture<MetaSendJobPayload>();
+    const { added, queue } = capture<MetaSendPayload>();
     await createMetaReplyEventHandler(queue)(context(META_EVENTS.reply, { deliveryId }));
 
     expect(added).toEqual([
@@ -120,7 +119,7 @@ describe('the Meta outbox events', () => {
   });
 
   it('refuses a payload it cannot trust, so the event lands in the failed set', async () => {
-    const send = capture<MetaSendJobPayload>();
+    const send = capture<MetaSendPayload>();
     const media = capture<MetaMediaFetchJobPayload>();
 
     await expect(

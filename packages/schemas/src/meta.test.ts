@@ -448,6 +448,8 @@ describe('deliveries and the ticket context', () => {
     ticketMessageId: MESSAGE,
     status: 'delivered',
     partsSent: 2,
+    partsTotal: 3,
+    leftOut: [],
     attempts: 1,
     lastError: null,
     errorCode: null,
@@ -469,6 +471,21 @@ describe('deliveries and the ticket context', () => {
       'refused',
     ]);
     expect(metaDeliverySchema.parse(delivery)).toEqual(delivery);
+  });
+
+  it('names a file the platform would not take, and why, beside the parts that went', () => {
+    const left = {
+      attachmentId: MESSAGE,
+      name: 'warranty-terms.docx',
+      reason: 'unsupported-type',
+    };
+
+    expect(metaDeliverySchema.parse({ ...delivery, leftOut: [left] }).leftOut).toEqual([left]);
+    expect(
+      metaDeliverySchema.safeParse({ ...delivery, leftOut: [{ ...left, reason: 'infected' }] })
+        .success,
+    ).toBe(false);
+    expect(metaDeliverySchema.safeParse({ ...delivery, partsTotal: -1 }).success).toBe(false);
   });
 
   it('describes the three windows with the one date each of them has', () => {
@@ -506,6 +523,24 @@ describe('deliveries and the ticket context', () => {
     expect(context.phoneVerified).toBe(true);
     expect(context).not.toHaveProperty('username');
     expect(context.account).not.toHaveProperty('username');
+    expect(context.account).not.toHaveProperty('displayPhone');
+  });
+
+  it('carries a WhatsApp number’s display form for the channel chip', () => {
+    const context = metaTicketContextSchema.parse({
+      account: {
+        id: ACCOUNT,
+        platform: 'whatsapp',
+        externalId: '106540352242922',
+        displayName: 'Acme Support',
+        displayPhone: '+1 555 0142',
+      },
+      customerId: 'US.13491208655302741918',
+      phoneVerified: false,
+      window: { state: 'closed', closedAt: STAMP },
+    });
+
+    expect(context.account.displayPhone).toBe('+1 555 0142');
   });
 
   it('answers a ticket with no Meta conversation as a null context and no deliveries', () => {

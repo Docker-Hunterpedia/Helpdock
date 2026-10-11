@@ -35,6 +35,7 @@ import {
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
   metaHealthScheduleJob,
+  metaSendJob,
   notifyEmailJob,
   notifyPushJob,
   type OutboxRelay,
@@ -149,6 +150,7 @@ import {
   queueMetaHealthScheduler,
   scheduleAllMetaHealth,
 } from '../meta/meta-health.job.js';
+import { createMetaSendHandler, createMetaSendProcessor } from '../meta/meta-send.job.js';
 import { createNotifyProcessor } from '../notifications/delivery.js';
 import { InstallChannels } from '../notifications/install-channels.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
@@ -238,7 +240,7 @@ export interface WorkerDependencies {
     installSmtp: InstallSmtp;
   }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
-  /** The `outbound` queue: M2-05's `email.send` and M6-02's `telegram.send`. */
+  /** The `outbound` queue: M2-05's `email.send`, M6-02's `telegram.send` and M10-06's `meta.send`. */
   createOutboundWorker(options: {
     redis: Redis;
     db: Db;
@@ -363,6 +365,10 @@ export type WorkerEnv = Pick<
   // M6: whether bots are polled, and where the Bot API is.
   | 'TELEGRAM_POLLING'
   | 'TELEGRAM_API_ROOT'
+  // M10: where Graph is, and which version the sends name.
+  | 'META_GRAPH_VERSION'
+  | 'META_GRAPH_API_ROOT'
+  | 'META_INSTAGRAM_API_ROOT'
   // M7-03: whether a website crawl may render pages in a headless browser.
   | 'KNOWLEDGE_CRAWL_RENDER'
   // M10: where Graph is and which version the Meta jobs call.
@@ -614,13 +620,19 @@ export const workerDependencies: WorkerDependencies = {
     // M10-10. A Meta account connected, re-tokened or disconnected moves its
     // hourly health check on the `maintenance` queue. This is the one call for
     // M10's events: the dispatcher refuses a second handler for an event, so
-    // each M10 deliverable adds its own consumer here.
+    // each M10 deliverable adds its own consumer here (M10-06: the
+    // `meta.send` queue; M10-03: the media queue).
     const maintenanceQueue = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
     registerMetaEventHandlers({
       accountChanged: createMetaAccountChangedHandler(
         new MetaRepository(),
         queueMetaHealthScheduler(maintenanceQueue),
       ),
+      sendQueue: {
+        add: async ({ jobId, payload }) => {
+          await outbound.add(metaSendJob.name, payload, { ...metaSendJob.options, jobId });
+        },
+      },
     });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
@@ -814,9 +826,35 @@ export const workerDependencies: WorkerDependencies = {
         }),
       }),
     });
+    const metaRepository = new MetaRepository();
+    const meta = createMetaSendProcessor({
+      db,
+      log,
+      repository: metaRepository,
+      handler: createMetaSendHandler({
+        db,
+        repository: metaRepository,
+        keyring,
+        graph: graphClientFactory(env)(),
+        storage: storageFor(env),
+        redis,
+        locales: new TicketLifecycleRepository(),
+      }),
+    });
+    // `meta.send` takes BullMQ's lock token: a part held back by WhatsApp's pair
+    // limit moves its own job to delayed with it (`meta-pacing.ts`).
     const worker = new Worker(
       QUEUE_NAMES.outbound,
-      (job) => (job.name === telegramSendJob.name ? telegram(job) : email(job)),
+      (job, token) => {
+        switch (job.name) {
+          case telegramSendJob.name:
+            return telegram(job);
+          case metaSendJob.name:
+            return meta(job, token);
+          default:
+            return email(job);
+        }
+      },
       { connection: redis },
     );
     worker.on('failed', (job, error) =>

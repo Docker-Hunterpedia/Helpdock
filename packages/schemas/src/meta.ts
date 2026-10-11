@@ -482,12 +482,35 @@ export type MetaVerifyTokenReveal = z.infer<typeof metaVerifyTokenRevealSchema>;
 // Deliveries and the ticket view
 // --------------------------------------------------------------------------
 
+/**
+ * Why a platform could not take one of a reply's files (M10-06). The customer
+ * was told in their language; the agent reads which file and why under the
+ * reply. A file the media pipeline itself refused is not here: the composer
+ * showed that when it was added.
+ */
+export const metaLeftOutReasonSchema = z.enum(['unsupported-type', 'too-large']);
+export type MetaLeftOutReason = z.infer<typeof metaLeftOutReasonSchema>;
+
+export const metaLeftOutSchema = z.object({
+  attachmentId: z.uuid(),
+  name: z.string(),
+  reason: metaLeftOutReasonSchema,
+});
+export type MetaLeftOut = z.infer<typeof metaLeftOutSchema>;
+
 /** What the thread draws under an agent's reply to a Meta customer. */
 export const metaDeliverySchema = z.object({
   id: z.uuid(),
   ticketMessageId: z.uuid(),
   status: metaDeliveryStatusSchema,
   partsSent: z.int().nonnegative(),
+  /**
+   * How many messages the reply becomes: its text in the platform's parts, then
+   * one per attachment. "Sending · part 2 of 3" and "· 3 messages" read it.
+   */
+  partsTotal: z.int().nonnegative(),
+  /** The files this platform will not take, which are not among the parts that go. */
+  leftOut: z.array(metaLeftOutSchema),
   attempts: z.int().nonnegative(),
   lastError: z.string().max(META_ERROR_MAX_LENGTH).nullable(),
   /** Graph's error code for a `failed` or `refused` reply. */
@@ -531,7 +554,10 @@ export const metaTicketContextSchema = z.object({
     platform: metaPlatformSchema,
     externalId: z.string(),
     displayName: z.string(),
+    /** Instagram: the `@handle` without the `@`; Messenger: the Page's name. */
     username: z.string().optional(),
+    /** WhatsApp: the number as Meta displays it, for "WhatsApp · +1 555 0142". */
+    displayPhone: z.string().optional(),
   }),
   /** The WhatsApp user id, the Messenger page-scoped id or the Instagram-scoped id. */
   customerId: z.string(),

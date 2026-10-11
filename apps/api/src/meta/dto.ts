@@ -1,4 +1,11 @@
-import { metaAppSchema, metaVerifyTokenRevealSchema } from '@helpdock/schemas';
+import {
+  metaAppSchema,
+  metaDeliveryListSchema,
+  metaDeliveryParamSchema,
+  metaTicketContextResponseSchema,
+  metaTicketParamSchema,
+  metaVerifyTokenRevealSchema,
+} from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 
 /**
@@ -9,3 +16,8 @@ import { createZodDto } from 'nestjs-zod';
 
 export class MetaAppDto extends createZodDto(metaAppSchema) {}
 export class MetaVerifyTokenRevealDto extends createZodDto(metaVerifyTokenRevealSchema) {}
+
+export class MetaTicketParamDto extends createZodDto(metaTicketParamSchema) {}
+export class MetaDeliveryParamDto extends createZodDto(metaDeliveryParamSchema) {}
+export class MetaDeliveryListDto extends createZodDto(metaDeliveryListSchema) {}
+export class MetaTicketContextDto extends createZodDto(metaTicketContextResponseSchema) {}

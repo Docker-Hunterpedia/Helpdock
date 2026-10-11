@@ -1,5 +1,10 @@
 import type { DbTransaction } from '@helpdock/db';
-import { enqueueOutbox, type OutboxEventHandler, registerEventHandler } from '@helpdock/jobs';
+import {
+  enqueueOutbox,
+  type MetaSendPayload,
+  type OutboxEventHandler,
+  registerEventHandler,
+} from '@helpdock/jobs';
 import { type MetaFileRef, metaFileRefSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 
@@ -18,11 +23,10 @@ import { z } from 'zod';
  * customer, and a media file is fetched by a job because Meta wants the
  * webhook answered within seconds (ADR 0025, 6).
  *
- * The job payloads are declared here, in the shape the producer half needs,
- * until the jobs themselves exist in `@helpdock/jobs` (`meta.send` with M10-06,
- * `meta.media_fetch` with M10-03); those deliverables replace
- * {@link MetaSendJobPayload} and {@link MetaMediaFetchJobPayload} with the
- * schemas' inferred types.
+ * `meta.send`'s payload is `@helpdock/jobs`'s (M10-06). `meta.media_fetch`'s is
+ * declared here, in the shape the producer half needs, until the job itself
+ * exists there with M10-03, which replaces {@link MetaMediaFetchJobPayload}
+ * with the schema's inferred type.
  */
 
 export const META_EVENTS = {
@@ -75,14 +79,6 @@ export const enqueueMetaAccountChanged = async (
     payload: metaAccountChangedEventSchema.parse({ accountId }),
   });
 
-/** What `meta.send` is asked to do. M10-09 adds `kind: 'template'`. */
-export interface MetaSendJobPayload {
-  readonly kind: 'reply';
-  readonly brandId: string;
-  /** The `meta_deliveries` row: the whole job is about it, and it is the natural key. */
-  readonly deliveryId: string;
-}
-
 /** What `meta.media_fetch` is asked to do. */
 export interface MetaMediaFetchJobPayload {
   readonly brandId: string;
@@ -93,7 +89,7 @@ export interface MetaMediaFetchJobPayload {
 
 /** The producer half of `meta.send`; the worker hands it a BullMQ queue. */
 export interface MetaSendQueue {
-  add(input: { readonly jobId: string; readonly payload: MetaSendJobPayload }): Promise<void>;
+  add(input: { readonly jobId: string; readonly payload: MetaSendPayload }): Promise<void>;
 }
 
 /** The producer half of `meta.media_fetch`. */

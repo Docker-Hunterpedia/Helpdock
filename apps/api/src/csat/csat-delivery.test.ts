@@ -50,7 +50,9 @@ const setup = ({
       },
     },
   });
-  const deliver = (channel: 'chat' | 'telegram' | 'email' | 'form') =>
+  const deliver = (
+    channel: 'chat' | 'telegram' | 'email' | 'form' | 'whatsapp' | 'messenger' | 'instagram',
+  ) =>
     delivery.deliver(
       recording.tx as DbTransaction,
       CSAT_BRAND,
@@ -117,6 +119,20 @@ describe('CsatDelivery', () => {
     expect(await deliver(channel)).toBe('email');
     expect(emails).toEqual([{ brandId: CSAT_BRAND, ticketId: CSAT_TICKET, surveyId: CSAT_SURVEY }]);
   });
+
+  it.each(['whatsapp', 'messenger', 'instagram'] as const)(
+    'leaves a %s ticket unreached: those contacts have no address and the survey needs a template (M10)',
+    async (channel) => {
+      const { deliver, emails, outbox, sent, frames } = setup({ emailQueued: true });
+
+      expect(await deliver(channel)).toBe('unreachable');
+      // Not emailed to an address they do not have, not marked sent, not broadcast.
+      expect(emails).toEqual([]);
+      expect(outbox).toEqual([]);
+      expect(sent).toEqual([]);
+      expect(frames).toEqual([]);
+    },
+  );
 
   it('says so when there is nobody to email', async () => {
     const { deliver } = setup({ emailQueued: false });

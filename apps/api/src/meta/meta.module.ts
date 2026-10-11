@@ -7,6 +7,7 @@ import { type GraphClientFactory, graphClientFactory } from './graph-client-fact
 import { MetaRepository } from './meta.repository.js';
 import { MetaAppController } from './meta-app.controller.js';
 import { MetaAppService } from './meta-app.service.js';
+import { MetaDeliveriesService } from './meta-deliveries.service.js';
 import {
   type MetaInboundHandlers,
   MetaInboundService,
@@ -14,6 +15,11 @@ import {
 } from './meta-inbound.service.js';
 import { MetaWebhookController } from './meta-webhook.controller.js';
 import { MetaWebhookService } from './meta-webhook.service.js';
+import { OutboundMetaService } from './outbound-meta.service.js';
+import {
+  TicketMetaContextController,
+  TicketMetaDeliveriesController,
+} from './ticket-meta.controller.js';
 
 /**
  * What a suite may replace: the Graph client, with the local stand-in for Meta,
@@ -58,9 +64,20 @@ export class MetaModule {
 
     return {
       module: MetaModule,
-      controllers: [MetaWebhookController, MetaAppController],
+      controllers: [
+        MetaWebhookController,
+        MetaAppController,
+        TicketMetaDeliveriesController,
+        TicketMetaContextController,
+      ],
       providers: [
         { provide: MetaRepository, useValue: repository },
+        // M10-06. The ticket view's half: the window, the deliveries, Retry.
+        {
+          provide: MetaDeliveriesService,
+          useFactory: (): MetaDeliveriesService =>
+            new MetaDeliveriesService(repository, new OutboundMetaService(repository)),
+        },
         { provide: META_GRAPH, useValue: overrides?.graph ?? graphClientFactory(env) },
         {
           provide: MetaAppService,

@@ -1,0 +1,12 @@
+{
+  "reply": {
+    "platform": {
+      "whatsapp": "WhatsApp",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
+    },
+    "fileLeftOut": "One file could not be sent here: {{name}}. {{platform}} only takes PDF files, so we will send it another way.",
+    "fileUnsupported": "One file could not be sent here: {{name}}. {{platform}} does not take this kind of file, so we will send it another way.",
+    "fileTooLarge": "One file could not be sent here: {{name}}. It is larger than {{platform}} allows, so we will send it another way."
+  }
+}

@@ -32,6 +32,9 @@ export interface WebhookTarget {
 /** A {@link WebhookTarget} that sends real HTTP to `baseUrl`, for a server on a port. */
 export const httpWebhookTarget = (baseUrl: string): WebhookTarget => ({
   inject: async ({ method, url, headers, payload }) => {
+    // Test-only driver: the base URL is the server under test on a loopback
+    // port, chosen by the test itself, never a URL a user supplied.
+    // nosemgrep: helpdock-fetch-non-constant-url
     const response = await fetch(new URL(url, baseUrl), {
       method,
       ...(headers === undefined ? {} : { headers }),

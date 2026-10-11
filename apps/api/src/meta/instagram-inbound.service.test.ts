@@ -195,7 +195,27 @@ describe('InstagramInboundService › a message', () => {
     expect(outcome).toEqual({ outcome: 'handled' });
     expect(graph.get).not.toHaveBeenCalled();
     expect(routed).toHaveLength(1);
-    expect(log.warn).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledExactlyOnceWith(
+      { accountId: account.id, reason: 'SecretDecryptionError' },
+      expect.any(String),
+    );
+  });
+
+  it('files the message and names the class of whatever else the read threw', async () => {
+    const { service, context, routed, graph, log } = harness();
+    graph.get.mockImplementation(() => {
+      throw new RangeError('a bug that quotes nothing secret');
+    });
+
+    const outcome = await service.handle(context, eventOf(instagramText()));
+
+    expect(outcome).toEqual({ outcome: 'handled' });
+    expect(routed).toHaveLength(1);
+    expect(log.warn.mock.calls[0]?.[0]).toEqual({
+      accountId: account.id,
+      reason: 'RangeError',
+      code: null,
+    });
   });
 
   it('files a story reply with the story’s line, its media reference and the localised words', async () => {

@@ -76,14 +76,14 @@ describe('readInstagramProfile', () => {
     expect(result).toEqual({ ok: false, reason: 'permanent', code: null });
   });
 
-  it('reports anything else it is thrown as an error without its message', async () => {
+  it('reports anything else it is thrown by its class, without its message', async () => {
     const result = await readInstagramProfile({
       graph: graphFailing(new TypeError(`bad token ${TOKEN}`)),
       token: TOKEN,
       igsid: '1',
     });
 
-    expect(result).toEqual({ ok: false, reason: 'error', code: null });
+    expect(result).toEqual({ ok: false, reason: 'TypeError', code: null });
     expect(JSON.stringify(result)).not.toContain(TOKEN);
   });
 

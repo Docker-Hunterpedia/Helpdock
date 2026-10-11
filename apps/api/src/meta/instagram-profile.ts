@@ -19,8 +19,8 @@ import type { MetaConversation as MetaConversationRow } from '@helpdock/db';
  * hour of slow ones (ADR 0025, 4).
  */
 
-export const INSTAGRAM_PROFILE_FIELDS = 'name,username';
-export const INSTAGRAM_PROFILE_TIMEOUT_MS = 3_000;
+const INSTAGRAM_PROFILE_FIELDS = 'name,username';
+const INSTAGRAM_PROFILE_TIMEOUT_MS = 3_000;
 
 export interface InstagramProfile {
   readonly name: string | null;
@@ -31,7 +31,7 @@ export type InstagramProfileResult =
   | { readonly ok: true; readonly profile: InstagramProfile }
   | {
       readonly ok: false;
-      /** The Graph error class, `timeout`, or `error`; never a message that could quote a token. */
+      /** The Graph error class, `timeout`, or the class name of what else was thrown; never a message, which could quote a token. */
       readonly reason: string;
       readonly code: number | null;
     };
@@ -95,6 +95,6 @@ export const readInstagramProfile = async (input: {
           reason: error.detail === 'timeout' ? 'timeout' : error.kind,
           code: error.code,
         }
-      : { ok: false, reason: 'error', code: null };
+      : { ok: false, reason: error instanceof Error ? error.name : 'error', code: null };
   }
 };

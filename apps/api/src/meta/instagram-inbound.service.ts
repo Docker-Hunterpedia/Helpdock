@@ -1,10 +1,11 @@
 import {
   escapeHtml,
   type MetaEvent,
+  type MetaInboundLabels,
   type MetaMessageEvent,
   toInstagramInboundMessage,
 } from '@helpdock/channels';
-import { decryptSecret, type Keyring } from '@helpdock/config';
+import { decryptSecret, type Keyring, SecretDecryptionError } from '@helpdock/config';
 import {
   type DbTransaction,
   type MetaAccount as MetaAccountRow,
@@ -83,6 +84,13 @@ interface FoundMessage {
   readonly bodyText: string;
 }
 
+/** The words a message is filed with, in the contact's language. */
+const labelsOf = (t: ReturnType<typeof metaText>): MetaInboundLabels => ({
+  location: t('thread.location'),
+  contact: t('thread.contact'),
+  story: { reply: t('thread.story.reply'), mention: t('thread.story.mention') },
+});
+
 /** The three things the thread is told in a line of its own. */
 type SystemLine =
   | { readonly kind: 'unsent' }
@@ -154,11 +162,7 @@ export class InstagramInboundService implements PlatformInboundService {
           text: [quote, event.text].filter((part) => part !== '').join('\n\n'),
         },
         accountExternalId: account.externalId,
-        labels: {
-          location: t('thread.location'),
-          contact: t('thread.contact'),
-          story: { reply: t('thread.story.reply'), mention: t('thread.story.mention') },
-        },
+        labels: labelsOf(t),
       },
       instantOf(event.timestamp, now),
     );
@@ -177,22 +181,23 @@ export class InstagramInboundService implements PlatformInboundService {
    * their name (`instagram-profile.ts`).
    */
   async #profile(account: MetaAccountRow, igsid: string): Promise<InstagramProfile | null> {
-    let result: Awaited<ReturnType<typeof readInstagramProfile>>;
+    let token: string;
     try {
-      result = await readInstagramProfile({
-        graph: this.#options.graph(),
-        token: decryptSecret(account.accessToken, this.#options.keyring),
-        igsid,
-      });
+      token = decryptSecret(account.accessToken, this.#options.keyring);
     } catch (error) {
-      // The token could not be opened (the master key changed). Say which
-      // class of failure, never the value.
+      if (!(error instanceof SecretDecryptionError)) {
+        throw error;
+      }
+      // The master key changed under the stored token. The failure's class is
+      // enough to find it; its message is not logged.
       this.#options.log.warn(
-        { accountId: account.id, reason: error instanceof Error ? error.name : 'error' },
+        { accountId: account.id, reason: error.name },
         'could not read an instagram customer profile',
       );
       return null;
     }
+
+    const result = await readInstagramProfile({ graph: this.#options.graph(), token, igsid });
     if (result.ok) {
       return result.profile;
     }

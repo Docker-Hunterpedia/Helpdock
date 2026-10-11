@@ -19,7 +19,7 @@ retention card. Only an Admin sees the page and only an Admin may change it
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Hard-deletes inactive `widget_visitors` only when no ticket references them; a visitor with a conversation keeps its session |
 | Notification rows | **30 days** | fixed | Hard-deletes rows older than the bell's display window |
-| Webhook and Telegram delivery logs | **30 days** | fixed | Hard-deletes webhook deliveries that `succeeded`, `failed` or were `skipped`, and Telegram replies that were `sent` or `failed`, created more than 30 days ago. A delivery still `pending` or `queued` is kept. The rows hold copies of ticket and contact data (a webhook's frozen body, a Telegram chat id), so they do not stay as long as the audit log |
+| Webhook, Telegram and Meta delivery logs | **30 days** | fixed | Hard-deletes webhook deliveries that `succeeded`, `failed` or were `skipped`, Telegram replies that were `sent` or `failed`, and WhatsApp, Messenger and Instagram replies that were `sent`, `delivered`, `read`, `failed` or `refused` (M10), created more than 30 days ago. A delivery still `pending` or `queued` is kept. The rows hold copies of ticket and contact data (a webhook's frozen body, a Telegram chat id, a Meta customer id), so they do not stay as long as the audit log |
 | Idempotency keys of the public API | 24 hours | fixed | Hard-deletes the stored answers of `Idempotency-Key` requests past their window (they were forgotten only when the same API key sent another POST) |
 | Outbox rows and job receipts | 7 days | fixed | Hard delete, 7 days after publish or completion |
 
@@ -52,8 +52,9 @@ of rows whose bodies would be nulled.
 ```
 03:00 UTC  maintenance.retention.schedule   one job per brand, then job_receipts
            maintenance.retention (brand)    closed, spam, AI call bodies, search log and views,
-                                            audit log, idle visitors, notifications, webhook and
-                                            Telegram delivery logs, idempotency keys, outbox → audit row
+                                            audit log, idle visitors, notifications, webhook,
+                                            Telegram and Meta delivery logs, idempotency keys,
+                                            outbox → audit row
 ```
 
 The worker registers the schedule on every boot, so a Redis that lost it gets
@@ -94,9 +95,11 @@ full. What it removes from tickets:
 - **Channel ids of their messages** (`external_message_id`: an email
   `Message-ID` names the sender's mail host). The message bodies stay, under the
   brand's retention.
-- **Copies in other tables**: their Telegram chats (chat id and username), the
-  redaction maps of AI calls on their tickets, and the webhook deliveries that
-  carry their data.
+- **Copies in other tables**: their Telegram chats (chat id and username), their
+  WhatsApp, Messenger and Instagram conversations (the platform's id for them,
+  their number, profile name and `@username`) with the replies delivered through
+  them, the redaction maps of AI calls on their tickets, and the webhook
+  deliveries that carry their data.
 
 ## Deleting a brand
 

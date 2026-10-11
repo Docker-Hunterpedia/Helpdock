@@ -1,5 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import { fileLeftOutText } from './meta-text.js';
+import { fileLeftOutText, metaInboundLabels, metaSystemLine, metaText } from './meta-text.js';
+
+describe('the Meta thread wording', () => {
+  it('answers in the locale asked for, not with the key', () => {
+    const en = metaText('en')('thread.location');
+    const ar = metaText('ar')('thread.location');
+
+    expect(en).toBe('Location');
+    expect(ar).not.toBe('thread.location');
+    expect(ar).not.toBe(en);
+  });
+
+  it('gives the adapters the words a message is filed with, in the contact’s language', () => {
+    expect(metaInboundLabels('en')).toEqual({
+      location: 'Location',
+      contact: 'Contact',
+      story: { reply: 'Replied to your story', mention: 'Mentioned you in their story' },
+    });
+    const ar = metaInboundLabels('ar');
+    expect(Object.values(ar.story)).not.toContain('thread.story.reply');
+    expect(ar.location).not.toBe('Location');
+  });
+
+  it.each(['en', 'ar'] as const)('words every system line in %s', (locale) => {
+    const lines = [
+      metaSystemLine(locale, { kind: 'unsupported' }),
+      metaSystemLine(locale, { kind: 'unsent' }),
+      metaSystemLine(locale, { kind: 'reaction', emoji: '\u{1F44D}' }),
+      metaSystemLine(locale, { kind: 'reaction', emoji: null }),
+      metaSystemLine(locale, { kind: 'numberChanged', from: '+16505551234', to: '+16505559876' }),
+    ];
+
+    expect(new Set(lines).size).toBe(lines.length);
+    for (const line of lines) {
+      expect(line).not.toMatch(/^thread\./);
+      expect(line).not.toContain('{{');
+    }
+  });
+
+  it('puts the emoji of a reaction and both numbers of a change into the line, unescaped', () => {
+    expect(metaSystemLine('en', { kind: 'reaction', emoji: '\u{1F44D}' })).toContain('\u{1F44D}');
+    const changed = metaSystemLine('en', {
+      kind: 'numberChanged',
+      from: '+16505551234',
+      to: '+16505559876',
+    });
+    expect(changed).toContain('+16505551234');
+    expect(changed).toContain('+16505559876');
+  });
+});
 
 const isolated = (name: string): string => `⁨${name}⁩`;
 

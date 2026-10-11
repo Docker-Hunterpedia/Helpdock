@@ -99,6 +99,8 @@ export interface ContactErasureResult {
   readonly messages: number;
   /** Telegram chats with the contact deleted (chat id and username). */
   readonly telegramChats: number;
+  /** WhatsApp, Messenger and Instagram conversations with the contact deleted, with their deliveries. */
+  readonly metaConversations: number;
   /** Model calls on their tickets whose redaction map was cleared. */
   readonly aiCalls: number;
   /** Webhook deliveries carrying their data, deleted. */
@@ -116,6 +118,7 @@ export class NoContactErasureProvider implements ContactErasureProvider {
       attachments: 0,
       messages: 0,
       telegramChats: 0,
+      metaConversations: 0,
       aiCalls: 0,
       webhookDeliveries: 0,
     });

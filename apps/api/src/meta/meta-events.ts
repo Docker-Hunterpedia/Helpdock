@@ -1,11 +1,12 @@
 import type { DbTransaction } from '@helpdock/db';
 import {
   enqueueOutbox,
+  type MetaMediaFetchPayload,
   type MetaSendPayload,
   type OutboxEventHandler,
   registerEventHandler,
 } from '@helpdock/jobs';
-import { type MetaFileRef, metaFileRefSchema } from '@helpdock/schemas';
+import { metaFileRefSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 
 /**
@@ -23,10 +24,8 @@ import { z } from 'zod';
  * customer, and a media file is fetched by a job because Meta wants the
  * webhook answered within seconds (ADR 0025, 6).
  *
- * `meta.send`'s payload is `@helpdock/jobs`'s (M10-06). `meta.media_fetch`'s is
- * declared here, in the shape the producer half needs, until the job itself
- * exists there with M10-03, which replaces {@link MetaMediaFetchJobPayload}
- * with the schema's inferred type.
+ * Both payloads are the jobs' own schemas in `@helpdock/jobs`: `meta.send`'s
+ * (M10-06) and `meta.media_fetch`'s (M10-03).
  */
 
 export const META_EVENTS = {
@@ -79,13 +78,8 @@ export const enqueueMetaAccountChanged = async (
     payload: metaAccountChangedEventSchema.parse({ accountId }),
   });
 
-/** What `meta.media_fetch` is asked to do. */
-export interface MetaMediaFetchJobPayload {
-  readonly brandId: string;
-  readonly attachmentId: string;
-  readonly accountId: string;
-  readonly ref: MetaFileRef;
-}
+/** What `meta.media_fetch` is asked to do: the job's own schema in `@helpdock/jobs` (M10-03). */
+export type MetaMediaFetchJobPayload = MetaMediaFetchPayload;
 
 /** The producer half of `meta.send`; the worker hands it a BullMQ queue. */
 export interface MetaSendQueue {

@@ -2,7 +2,9 @@ import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Logger } from '../logging/logger.js';
+import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
 import { SETTINGS } from '../runtime/tokens.js';
+import { createMetaInboundService } from './factory.js';
 import { type GraphClientFactory, graphClientFactory } from './graph-client-factory.js';
 import { MetaRepository } from './meta.repository.js';
 import { MetaAccountsController } from './meta-accounts.controller.js';
@@ -43,10 +45,11 @@ export const META_GRAPH = Symbol('helpdock.meta.graph');
  * worker's.
  *
  * **The inbound services.** The webhook hands each account's events to the
- * {@link MetaInboundHandlers} of its platform. Until M10-03, -04 and -05 land
- * theirs, the default for a platform logs and counts what arrived
- * (`unhandledInbound`), so the route is complete and testable without them.
- * Each of those deliverables replaces its platform's entry in `handlers` below.
+ * {@link MetaInboundHandlers} of its platform. WhatsApp's is installed (M10-03);
+ * until M10-04 and -05 land theirs, the default for a platform logs and counts
+ * what arrived (`unhandledInbound`), so the route is complete and testable
+ * without them. Each of those deliverables replaces its platform's entry in
+ * `handlers` below.
  */
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
@@ -55,13 +58,24 @@ export class MetaModule {
     readonly env: Env;
     readonly db: Db;
     readonly logger: Logger;
+    /** The bucket the media fetch writes to; built from the bootstrap keys unless a suite hands one in. */
+    readonly storage?: ObjectStorage;
     readonly overrides?: MetaModuleOverrides;
   }): DynamicModule {
     const { env, db, logger, overrides } = options;
     const repository = new MetaRepository();
+    const storage = options.storage ?? new S3ObjectStorage(createS3Client(env), env.S3_BUCKET);
     const graph = overrides?.graph ?? graphClientFactory(env);
+    const inbound = createMetaInboundService({
+      db,
+      storage,
+      log: logger,
+      keyring: createKeyring(env),
+      graph,
+    });
     const handlers: MetaInboundHandlers = {
       ...unhandledInboundHandlers(logger),
+      whatsapp: inbound.whatsapp,
       ...overrides?.inbound,
     };
 

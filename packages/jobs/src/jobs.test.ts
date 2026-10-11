@@ -31,6 +31,7 @@ import {
   knowledgeSyncSchedulerId,
   META_HEALTH_CRON,
   META_HEALTH_SCHEDULE_CRON,
+  META_MEDIA_FETCH_ATTEMPTS,
   META_SEND_JOB_ATTEMPTS,
   type MetaSendPayload,
   maintenanceRetentionJob,
@@ -40,6 +41,7 @@ import {
   metaHealthReceiptKey,
   metaHealthScheduleJob,
   metaHealthSchedulerId,
+  metaMediaFetchJob,
   metaSendJob,
   metaSendPayloadSchema,
   notifyEmailJob,
@@ -724,5 +726,66 @@ describe('the Meta send job (M10-06)', () => {
     expect(() => parseJobPayload(metaSendJob, { kind: 'reply', brandId })).toThrow(
       PayloadValidationError,
     );
+  });
+});
+
+describe('the Meta media fetch (M10-03)', () => {
+  const attachmentId = '01924f00-0000-7000-8000-0000000000f1';
+  const accountId = '01924f00-0000-7000-8000-0000000000f2';
+  const whatsapp = {
+    kind: 'whatsapp_media',
+    type: 'image',
+    mediaId: '1479537139650973',
+    mimeType: 'image/jpeg',
+    sha256: 'n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDwCgg=',
+  } as const;
+
+  it('keys a fetch by its attachment, so a redelivered event fetches once', () => {
+    expect(
+      idempotencyKeyFor(
+        metaMediaFetchJob,
+        { brandId, attachmentId, accountId, ref: whatsapp },
+        'meta.media_fetch.any',
+      ),
+    ).toBe(`meta.media_fetch:${attachmentId}`);
+  });
+
+  it('runs on the inbound queue, five attempts backing off from 30 seconds', () => {
+    expect(metaMediaFetchJob.queue).toBe('inbound');
+    expect(META_MEDIA_FETCH_ATTEMPTS).toBe(5);
+    expect(metaMediaFetchJob.options).toMatchObject({
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 30_000 },
+    });
+  });
+
+  it('takes a WhatsApp media id or a CDN link, and nothing else as the file', () => {
+    expect(
+      parseJobPayload(metaMediaFetchJob, { brandId, attachmentId, accountId, ref: whatsapp }),
+    ).toMatchObject({ ref: { kind: 'whatsapp_media' } });
+    expect(
+      parseJobPayload(metaMediaFetchJob, {
+        brandId,
+        attachmentId,
+        accountId,
+        ref: { kind: 'cdn_url', url: 'https://scontent.xx.fbcdn.net/v/t1/a.jpg', type: 'image' },
+      }),
+    ).toMatchObject({ ref: { kind: 'cdn_url' } });
+    expect(() =>
+      parseJobPayload(metaMediaFetchJob, {
+        brandId,
+        attachmentId,
+        accountId,
+        ref: { kind: 'path', path: '/etc/passwd' },
+      }),
+    ).toThrow(PayloadValidationError);
+    expect(() =>
+      parseJobPayload(metaMediaFetchJob, {
+        brandId,
+        attachmentId,
+        accountId,
+        ref: { kind: 'cdn_url', url: 'file:///etc/passwd', type: 'image' },
+      }),
+    ).toThrow(PayloadValidationError);
   });
 });

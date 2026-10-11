@@ -124,6 +124,13 @@ export const runBrandRetention = async ({
       ),
     batchSize,
   );
+  counts.metaDeliveries = await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeMetaDeliveriesBatch(tx, brandId, cutoffs.deliveryLogs, batchSize),
+      ),
+    batchSize,
+  );
   counts.idempotencyKeys = await drainInBatches(
     () =>
       inBrand((tx) =>

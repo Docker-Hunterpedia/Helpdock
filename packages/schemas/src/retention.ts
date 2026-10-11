@@ -75,6 +75,7 @@ export const retentionCategorySchema = z.enum([
   'notifications',
   'webhookDeliveries',
   'telegramDeliveries',
+  'metaDeliveries',
   'idempotencyKeys',
   'outbox',
 ]);

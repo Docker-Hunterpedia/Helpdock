@@ -1,3 +1,4 @@
+import { metaExternalId } from '@helpdock/channels';
 import {
   type Db,
   type DbTransaction,
@@ -10,6 +11,7 @@ import {
   metaDeliveries,
   type NewMetaAccount,
   type NewMetaDelivery,
+  ticketMessages,
   ticketStatuses,
   tickets,
   users,
@@ -75,6 +77,13 @@ export interface ConversationUpsert {
    * system line) passes null and leaves the anchor alone.
    */
   readonly inbound: InboundAnchor | null;
+}
+
+/** A ticket message a platform's message id names. */
+export interface PlatformMessage {
+  readonly id: string;
+  readonly ticketId: string;
+  readonly bodyText: string;
 }
 
 /** The two reports a platform makes about a message of ours, in the order they happen. */
@@ -507,6 +516,99 @@ export class MetaRepository {
         ),
       )
       .returning();
+  }
+
+  // ------------------------------------------------- what a report refers to
+
+  /**
+   * The ticket message a platform's message id names: a customer's, by the id
+   * its dedupe key holds, or one of our replies, by the ids its delivery
+   * recorded when Meta accepted its parts. M10-03 reads it for the message a
+   * reply quotes and the message a reaction is on.
+   */
+  async messageByPlatformId(
+    tx: DbTransaction,
+    brandId: string,
+    platform: MetaPlatform,
+    platformMessageId: string,
+  ): Promise<PlatformMessage | undefined> {
+    const received = await tx
+      .select({
+        id: ticketMessages.id,
+        ticketId: ticketMessages.ticketId,
+        bodyText: ticketMessages.bodyText,
+      })
+      .from(ticketMessages)
+      .where(
+        and(
+          eq(ticketMessages.brandId, brandId),
+          eq(ticketMessages.channel, platform),
+          eq(ticketMessages.externalMessageId, metaExternalId(platform, platformMessageId)),
+        ),
+      )
+      .limit(1);
+    if (received[0] !== undefined) {
+      return received[0];
+    }
+
+    const sent = await tx
+      .select({
+        id: ticketMessages.id,
+        ticketId: ticketMessages.ticketId,
+        bodyText: ticketMessages.bodyText,
+      })
+      .from(metaDeliveries)
+      .innerJoin(ticketMessages, eq(ticketMessages.id, metaDeliveries.ticketMessageId))
+      .where(sql`${platformMessageId} = any(${metaDeliveries.platformMessageIds})`)
+      .limit(1);
+    return sent[0];
+  }
+
+  /**
+   * WhatsApp's `failed` report on one message of ours (a number that is not on
+   * WhatsApp, a recipient who blocked the number): the delivery ends here
+   * whether Meta had accepted it or the report beat the send job's last write.
+   * `refused` is for the report that says the reply window had closed. A
+   * delivery that reached `delivered` or `read` is not moved back.
+   */
+  async failByReport(
+    tx: DbTransaction,
+    platformMessageId: string,
+    failure: {
+      readonly status: Extract<MetaDeliveryStatus, 'failed' | 'refused'>;
+      readonly error: string;
+      readonly errorCode: string | null;
+      readonly at: Date;
+    },
+  ): Promise<MetaDeliveryRow | undefined> {
+    const rows = await tx
+      .update(metaDeliveries)
+      .set({
+        status: failure.status,
+        lastError: failure.error.slice(0, META_ERROR_MAX_LENGTH),
+        errorCode: failure.errorCode,
+        failedAt: failure.at,
+      })
+      .where(
+        and(
+          sql`${platformMessageId} = any(${metaDeliveries.platformMessageIds})`,
+          inArray(metaDeliveries.status, ['queued', 'sent']),
+        ),
+      )
+      .returning();
+    return rows[0];
+  }
+
+  /** What Meta billed one message of ours as (`service`, `utility`, …), from its status report. */
+  async recordPricing(
+    tx: DbTransaction,
+    platformMessageId: string,
+    pricingCategory: string,
+  ): Promise<void> {
+    await tx
+      .update(metaDeliveries)
+      .set({ pricingCategory })
+      .where(sql`${platformMessageId} = any(${metaDeliveries.platformMessageIds})`);
   }
 
   /** The Activity card of one account: its last reply, recent failures and open tickets. */

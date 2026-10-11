@@ -774,7 +774,8 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
         appIdSet: false,
         appId: '',
         appSecretSet: true,
-        instagramAppSecretSet: false,
+        // The Instagram-signature test above saved one.
+        instagramAppSecretSet: true,
         graphVersion: 'v25.0',
         callbackUrl: 'https://support.example.com/api/meta/webhook',
         verifyTokenHint: VERIFY_TOKEN.slice(-4),

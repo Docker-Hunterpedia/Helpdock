@@ -299,17 +299,17 @@ for (const locale of LOCALES) {
         `mock.assign(agent, 'Billing'); mock.agentReply(agent, 'The trace is back.'); mock.end(); mock.offerCsat();`,
       );
       const card = page.getByRole('form', { name: t('csat.question') });
-      const pressed = async () =>
+      const pressed = () =>
         card
           .locator('.hd-csat-score')
           .evaluateAll((all) => all.map((button) => button.getAttribute('aria-pressed')));
       await expect(card.locator('.hd-csat-score')).toHaveCount(5);
 
-      expect(await pressed()).toEqual(['false', 'false', 'false', 'false', 'false']);
+      await expect.poll(pressed).toEqual(['false', 'false', 'false', 'false', 'false']);
       await card.getByRole('button', { name: score(4) }).click();
-      expect(await pressed()).toEqual(['false', 'false', 'false', 'true', 'false']);
+      await expect.poll(pressed).toEqual(['false', 'false', 'false', 'true', 'false']);
       await card.getByRole('button', { name: score(1) }).click();
-      expect(await pressed()).toEqual(['true', 'false', 'false', 'false', 'false']);
+      await expect.poll(pressed).toEqual(['true', 'false', 'false', 'false', 'false']);
     });
   });
 }

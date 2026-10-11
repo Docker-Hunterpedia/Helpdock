@@ -154,25 +154,34 @@ for (const locale of LOCALES) {
         expect(await violations(page)).toEqual([]);
       });
 
-      test('a server that sends no hours is worded from the brand’s availability, and a calendar that never opens reads "away right now"', async ({
+      const askForAPerson = async (page: Page) => {
+        const thread = await ask(page);
+        await server(page, answer);
+        await thread.window.getByRole('button', { name: t('ai.talkToHuman') }).focus();
+        await page.keyboard.press('Enter');
+        return thread;
+      };
+
+      test('a server that sends no hours is worded from the brand’s availability', async ({
         page,
       }) => {
         await page.clock.setFixedTime(FRIDAY_EVENING);
         await openWidget(page, locale, 'availability=closed&hours=absent');
-        let thread = await ask(page);
-        await server(page, answer);
-        await thread.window.getByRole('button', { name: t('ai.talkToHuman') }).focus();
-        await page.keyboard.press('Enter');
-        await expect(thread.log.getByText(awayUntilSunday, { exact: true })).toBeVisible();
-        expect(await violations(page)).toEqual([]);
 
+        const { log } = await askForAPerson(page);
+
+        await expect(log.getByText(awayUntilSunday, { exact: true })).toBeVisible();
+        expect(await violations(page)).toEqual([]);
+      });
+
+      test('a calendar that never opens reads "away right now"', async ({ page }) => {
+        await page.clock.setFixedTime(FRIDAY_EVENING);
         await openWidget(page, locale, 'availability=closed&hours=never');
-        thread = await ask(page);
-        await server(page, answer);
-        await thread.window.getByRole('button', { name: t('ai.talkToHuman') }).focus();
-        await page.keyboard.press('Enter');
-        await expect(thread.log.getByText(t('ai.awayNow'), { exact: true })).toBeVisible();
-        await expect(thread.log.getByText(t('ai.awaySaved'))).toBeVisible();
+
+        const { log } = await askForAPerson(page);
+
+        await expect(log.getByText(t('ai.awayNow'), { exact: true })).toBeVisible();
+        await expect(log.getByText(t('ai.awaySaved'))).toBeVisible();
         expect(await violations(page)).toEqual([]);
       });
     });

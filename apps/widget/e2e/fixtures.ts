@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import AxeBuilder from '@axe-core/playwright';
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
 import { type Catalog, createTranslator, type Translate } from '../src/i18n/translator.js';
+import { SEND_WINDOW_MS } from '../src/state/send.js';
 
 export type Locale = 'en' | 'ar';
 export const LOCALES: readonly Locale[] = ['en', 'ar'];
@@ -108,6 +109,16 @@ export async function startClockBeforeOpening(page: Page): Promise<void> {
   await page.clock.install({ time: new Date('2026-09-25T17:40:00Z') });
 }
 
+/**
+ * Lets a send that keeps failing run out its ten seconds of retries on the
+ * page's clock, so a test does not wait them out in real time. The clock must
+ * have been installed (`startClockBeforeOpening`, or `page.clock.install()`)
+ * and the message must already be in flight, with its first retry waiting.
+ */
+export async function runOutTheSendWindow(page: Page): Promise<void> {
+  await page.clock.runFor(SEND_WINDOW_MS + 1_000);
+}
+
 /** Runs a script against the mock transport the harness exposes as `window.helpdock`. */
 export async function server(page: Page, script: string): Promise<void> {
   await page.evaluate(`(() => { const { mock, agent } = window.helpdock; ${script} })()`);
@@ -134,13 +145,13 @@ export async function tabStops(page: Page, count: number, shift = false): Promis
         if (!(active instanceof HTMLElement)) {
           return { name: '(page)', ring: false };
         }
-        const drawn = (element: Element | null) => {
-          if (element === null) {
-            return false;
-          }
+        const drawn = (element: Element) => {
           const style = getComputedStyle(element);
           return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) >= 2;
         };
+        const field = active.parentElement?.matches('.hd-search-field')
+          ? active.parentElement
+          : null;
         const labelled = active.getAttribute('aria-labelledby');
         const name =
           active.getAttribute('aria-label') ??
@@ -153,7 +164,7 @@ export async function tabStops(page: Page, count: number, shift = false): Promis
             : null) ??
           active.textContent ??
           '';
-        return { name: name.trim(), ring: drawn(active) || drawn(active.parentElement) };
+        return { name: name.trim(), ring: drawn(active) || (field !== null && drawn(field)) };
       }),
     );
   }

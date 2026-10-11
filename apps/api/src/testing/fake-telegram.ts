@@ -67,6 +67,8 @@ export class FakeTelegram {
   readonly blockedChats = new Set<string>();
   /** Chats whose `editMessageText` is refused with 400, as for a message that already says that. */
   readonly refusedEdits = new Set<string>();
+  /** Chats whose `editMessageText` is refused with 400 for a reason that is not "not modified". */
+  readonly brokenEdits = new Set<string>();
   #server: Server | undefined;
   #messageId = 100;
   url = '';
@@ -162,6 +164,9 @@ export class FakeTelegram {
           ...(method === 'sendMessage' ? { text: body.text } : {}),
         });
       case 'editMessageText':
+        if (this.brokenEdits.has(String(body.chat_id))) {
+          return refusal(400, 'Bad Request: message to edit not found');
+        }
         return this.refusedEdits.has(String(body.chat_id))
           ? refusal(400, 'Bad Request: message is not modified')
           : ok(true);

@@ -27,7 +27,7 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import { silentLogger, type TelegramSendPayload } from '@helpdock/jobs';
+import { type JobLogger, silentLogger, type TelegramSendPayload } from '@helpdock/jobs';
 import {
   TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH,
   type TelegramBot,
@@ -44,7 +44,7 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import type { Job } from 'bullmq';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import sharp from 'sharp';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { readChannelStatuses } from '../channels/channel-status.js';
@@ -225,7 +225,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
   const repository = new TelegramRepository();
 
   /** The worker's half: every outbox row M6 wrote and nobody handled yet, sent. */
-  const runOutbox = async (attempts = 0): Promise<void> => {
+  const runOutbox = async (attempts = 0, log: JobLogger = silentLogger): Promise<void> => {
     const rows = await owner.db
       .select({ id: outbox.id, event: outbox.event, payload: outbox.payload })
       .from(outbox)
@@ -233,7 +233,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       .orderBy(outbox.id);
     const process = createTelegramSendProcessor({
       db: runtime.db,
-      log: silentLogger,
+      log,
       repository,
       handler: createTelegramSendHandler({
         db: runtime.db,
@@ -1022,14 +1022,31 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       });
     });
 
-    it('still welcomes when Telegram refuses to rewrite the prompt', async () => {
+    it('still welcomes when Telegram refuses to rewrite the prompt, and says nothing when it was already rewritten', async () => {
       const chat = 4_242_013;
       telegram.refusedEdits.add(String(chat));
+      const warn = vi.fn();
 
       await pressLanguage(chat, 'en', 11);
-      await runOutbox();
+      await runOutbox(0, { ...silentLogger, warn });
 
       expect(sentTo(chat).map((entry) => entry.body.text)).toEqual(['Welcome to Acme support.']);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('still welcomes, and logs why, when the prompt cannot be rewritten for any other reason', async () => {
+      const chat = 4_242_016;
+      telegram.brokenEdits.add(String(chat));
+      const warn = vi.fn();
+
+      await pressLanguage(chat, 'en', 12);
+      await runOutbox(0, { ...silentLogger, warn });
+
+      expect(sentTo(chat).map((entry) => entry.body.text)).toEqual(['Welcome to Acme support.']);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ botId: bot.id, detail: expect.stringContaining('not found') }),
+        'telegram language prompt could not be rewritten',
+      );
     });
 
     it('welcomes at once, in the Telegram app’s language, when the bot does not ask', async () => {

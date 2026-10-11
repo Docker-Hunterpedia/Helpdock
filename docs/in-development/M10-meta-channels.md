@@ -429,7 +429,7 @@ page (Test connection, Human Agent, Save, Disconnect by id), a WhatsApp number's
 | `DELETE :accountId` | unsubscribe the app as far as Meta allows, delete the row | `204` |
 | `POST :accountId/test` | "Test connection": the same read with the stored token | the result, a refusal answered rather than thrown |
 | `POST :accountId/subscribe` | "Subscribe now" | `{ ok: true, subscribedFields, subscribedAt }` or `{ ok: false, detail }` |
-| `GET :accountId/status` | the row, `GET /{id}/subscribed_apps` and `debug_token` now, and the Activity card | `metaAccountStatusResponseSchema`; what Graph could not say is `null` with `liveError` |
+| `GET :accountId/status` | the row, `GET /{node}/subscribed_apps` and `debug_token` now, and the Activity card | `metaAccountStatusResponseSchema`; what Graph could not say is `null` with `liveError` |
 | `POST :accountId/refresh` | renew an Instagram token that is due | the account; `400` for another platform |
 
 `GET /api/meta/app` (`install:admin`, M10-02) now also answers `appId`, `appSecretSet`,
@@ -455,7 +455,8 @@ account is `GET /me` on the Instagram host, compared with the id typed, and a Wh
 "Test" answers the first two and the unreachable case as `{ ok: false, kind: 'token' | 'connect' }`
 in Meta's words, and throws the rest, because those are about the id rather than the token. After the
 read the app is subscribed with `POST /{node}/subscribed_apps?subscribed_fields=…`, the lists of
-`META_SUBSCRIBED_FIELDS` (WhatsApp subscribes the whole `messages` field and sends none). A refusal for good aborts the connection with nothing stored; a failure for a
+`META_SUBSCRIBED_FIELDS` (WhatsApp subscribes the whole `messages` field and sends none). A refusal for
+good aborts the connection with nothing stored; a failure for a
 moment (a 5xx, a limit) stores the account as `unsubscribed` with the reason in `last_error`, and the
 hourly health check or Subscribe now makes it good. The row is stored with the token encrypted under
 `APP_MASTER_KEY`, the token's expiry (an Instagram token's is estimated as 60 days from now until the

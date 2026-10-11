@@ -37,7 +37,7 @@ M7-01 needs a provider layer that every AI feature of M7 — agent assist, auto-
 - Refreshed OAuth tokens are written back to the setting, which an environment-pinned list cannot take. Such an install refreshes from its pinned tokens on every call until the refresh token itself expires; the guide says so.
 - Two replicas refreshing the same OAuth credentials at once may each write their own set; the later write wins and both sets were valid when issued.
 - Prices follow the pi-ai version pinned in the lockfile. A provider price change reaches the cost log when Renovate bumps pi-ai, not on the day it happens; the cost log is an estimate, and the guide says so.
-- Chat completions go through pi-ai's own provider SDK clients, not through the SSRF-safe client. Their endpoints are the providers' public APIs, or a base URL an install admin typed; the risk DOMAIN-RULES §13 guards against — a URL a *user* supplied — does not reach them.
+- Chat completions go through pi-ai's own provider SDK clients, not through the SSRF-safe client. Their endpoints are the providers' public APIs, or a base URL an install admin typed; the risk DOMAIN-RULES §13 guards against — a URL a *user* supplied — does not reach them. (M9-02, ASVS 12.6.1: a base URL an admin typed is still checked when it is saved — https, and not a private or metadata address unless `OUTBOUND_ALLOW_CIDRS` allows the range — by the check webhook endpoints pass, because nothing checks it again on each call.)
 
 ## Alternatives considered
 

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  ArchiveRejectedError,
   ConnectorAuthError,
   type ConnectorEvent,
   type CrawlFetch,
@@ -113,6 +114,19 @@ export class SourceLoadError extends Error {
   }
 }
 
+/** An archive that would unpack to too much is a rejected file, not a failed sync. */
+const extractUpload = async (
+  ...args: Parameters<typeof extractFile>
+): Promise<ExtractedDocument> => {
+  try {
+    return await extractFile(...args);
+  } catch (error) {
+    throw error instanceof ArchiveRejectedError
+      ? new SourceLoadError('file.rejected', error.message)
+      : error;
+  }
+};
+
 async function* loadFile(
   source: KnowledgeSource,
   deps: SourceLoaderDeps,
@@ -140,7 +154,7 @@ async function* loadFile(
     type: 'document',
     externalId: 'file',
     url: null,
-    document: await extractFile(bytes, file.mime, file.fileName),
+    document: await extractUpload(bytes, file.mime, file.fileName),
     code: 'document.indexed',
   };
   return { complete: true };

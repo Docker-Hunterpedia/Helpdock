@@ -1,5 +1,6 @@
 import {
   aiCalls,
+  apiIdempotencyKeys,
   attachments,
   auditLog,
   type DbTransaction,
@@ -7,8 +8,10 @@ import {
   notifications,
   type RetentionSettingsRow,
   retentionSettings,
+  telegramDeliveries,
   ticketStatuses,
   tickets,
+  webhookDeliveries,
   widgetVisitors,
 } from '@helpdock/db';
 import type { RetentionCounts } from '@helpdock/schemas';
@@ -201,6 +204,82 @@ export class RetentionRepository {
         ),
       )
       .returning({ id: notifications.id });
+    return deleted.length;
+  }
+
+  /**
+   * Deliveries that finished (or were skipped) before the cutoff. A pending one
+   * is still being retried and is left alone, however old.
+   */
+  async purgeWebhookDeliveriesBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = tx
+      .select({ id: webhookDeliveries.id })
+      .from(webhookDeliveries)
+      .where(
+        and(
+          eq(webhookDeliveries.brandId, brandId),
+          inArray(webhookDeliveries.status, ['succeeded', 'failed', 'skipped']),
+          lt(webhookDeliveries.createdAt, cutoff),
+        ),
+      )
+      .limit(limit);
+    const deleted = await tx
+      .delete(webhookDeliveries)
+      .where(inArray(webhookDeliveries.id, batch))
+      .returning({ id: webhookDeliveries.id });
+    return deleted.length;
+  }
+
+  /** Replies Telegram accepted or refused before the cutoff; a queued one is still to be sent. */
+  async purgeTelegramDeliveriesBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = tx
+      .select({ id: telegramDeliveries.id })
+      .from(telegramDeliveries)
+      .where(
+        and(
+          eq(telegramDeliveries.brandId, brandId),
+          inArray(telegramDeliveries.status, ['sent', 'failed']),
+          lt(telegramDeliveries.createdAt, cutoff),
+        ),
+      )
+      .limit(limit);
+    const deleted = await tx
+      .delete(telegramDeliveries)
+      .where(inArray(telegramDeliveries.id, batch))
+      .returning({ id: telegramDeliveries.id });
+    return deleted.length;
+  }
+
+  /**
+   * The stored answers of `Idempotency-Key` requests past their window. A key is
+   * otherwise forgotten only when the same API key sends a POST again, which
+   * leaves the answer (a ticket, a contact) sitting in the table.
+   */
+  async purgeIdempotencyKeysBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = tx
+      .select({ id: apiIdempotencyKeys.id })
+      .from(apiIdempotencyKeys)
+      .where(and(eq(apiIdempotencyKeys.brandId, brandId), lt(apiIdempotencyKeys.createdAt, cutoff)))
+      .limit(limit);
+    const deleted = await tx
+      .delete(apiIdempotencyKeys)
+      .where(inArray(apiIdempotencyKeys.id, batch))
+      .returning({ id: apiIdempotencyKeys.id });
     return deleted.length;
   }
 

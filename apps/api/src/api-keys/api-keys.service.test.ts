@@ -1,5 +1,5 @@
 import type { ApiKeyRow, DbTransaction } from '@helpdock/db';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { hashApiKey } from './api-key-credential.js';
 import type { ApiKeysRepository } from './api-keys.repository.js';
@@ -21,6 +21,7 @@ const row = (overrides: Partial<ApiKeyRow> = {}): ApiKeyRow => ({
   createdBy: ADMIN,
   createdAt: NOW,
   lastUsedAt: null,
+  expiresAt: null,
   revokedAt: null,
   revokedBy: null,
   ...overrides,
@@ -40,6 +41,13 @@ const auditingTx = () => {
 };
 
 describe('toApiKey', () => {
+  it('shows when a key expires, or null for one that never does', () => {
+    expect(toApiKey(row()).expiresAt).toBeNull();
+    expect(toApiKey(row({ expiresAt: new Date('2027-01-01T00:00:00Z') })).expiresAt).toBe(
+      '2027-01-01T00:00:00.000Z',
+    );
+  });
+
   it('shows the prefix and never the hash, and drops a scope that is no longer known', () => {
     const view = toApiKey(row({ scopes: ['tickets:read', 'retired:scope'] }));
 
@@ -76,6 +84,44 @@ describe('ApiKeysService', () => {
       }),
     ]);
     expect(JSON.stringify(audits)).not.toContain(created.key);
+  });
+
+  it('stores an expiry in the future and audits it, and refuses one that has passed (ASVS 2.10.1)', async () => {
+    const insert = vi.fn(async (_tx: DbTransaction, values: Partial<ApiKeyRow>) =>
+      row({ ...values }),
+    );
+    const service = new ApiKeysService({ insert } as unknown as ApiKeysRepository, () => NOW);
+    const { tx, audits } = auditingTx();
+    const actor = { tx, brandId: BRAND, userId: ADMIN };
+    const request = { name: 'CRM sync', scopes: ['tickets:read' as const] };
+
+    const created = await service.create(actor, { ...request, expiresAt: '2026-12-31T23:59:59Z' });
+    await expect(
+      service.create(actor, { ...request, expiresAt: '2026-10-05T09:59:59Z' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.create(actor, { ...request, expiresAt: NOW.toISOString() }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(insert).toHaveBeenCalledOnce();
+    expect(insert.mock.calls[0]?.[1]?.expiresAt).toEqual(new Date('2026-12-31T23:59:59Z'));
+    expect(created.expiresAt).toBe('2026-12-31T23:59:59.000Z');
+    expect(audits[0]?.meta).toMatchObject({ expiresAt: '2026-12-31T23:59:59.000Z' });
+  });
+
+  it('keeps a key that names no expiry forever, as before', async () => {
+    const insert = vi.fn(async (_tx: DbTransaction, values: Partial<ApiKeyRow>) =>
+      row({ ...values }),
+    );
+    const service = new ApiKeysService({ insert } as unknown as ApiKeysRepository, () => NOW);
+
+    const created = await service.create(
+      { tx: auditingTx().tx, brandId: BRAND, userId: ADMIN },
+      { name: 'CRM sync', scopes: ['tickets:read'] },
+    );
+
+    expect(insert.mock.calls[0]?.[1]?.expiresAt).toBeNull();
+    expect(created.expiresAt).toBeNull();
   });
 
   it('revokes a live key once, and answers an already revoked one without a second audit', async () => {

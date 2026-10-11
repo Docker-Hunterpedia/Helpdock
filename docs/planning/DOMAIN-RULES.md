@@ -332,12 +332,14 @@ Per brand, set by Admin (defaults in bold):
 | Help center search log | **180 days** | Hard delete |
 | Audit log | **2 years**, minimum 90 days | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | Hard delete |
+| Webhook and Telegram delivery logs | 30 days (fixed) | Hard delete of finished deliveries; pending ones are kept |
+| API idempotency keys | 24 hours (fixed) | Hard delete |
 | Outbox, job receipts | 7 days after publish/complete | Hard delete |
 | Knowledge chunks of a removed source | immediate | Hard delete |
 
 - `maintenance.retention` runs nightly per brand and logs counts to the audit log.
 - **Brand deletion**: Admin soft-deletes → 30-day grace with the brand disabled (widget, help center, channels answer 410) → hard purge of every row, S3 prefix, Redis key, and Caddy domain. Ticket numbers of a deleted brand are never reused because the prefix is reserved.
-- **Contact erasure** (privacy request): agent action "Anonymise contact" replaces name, emails, phone, Telegram id and visitor ids with hashes, deletes attachments they sent, rewrites message author fields, and keeps ticket bodies unless the brand's ticket retention says otherwise. Recorded in the audit log without the erased values.
+- **Contact erasure** (privacy request): agent action "Anonymise contact" replaces name, emails, phone, Telegram id and visitor ids with hashes, deletes attachments they sent, rewrites message author fields, deletes their Telegram chat rows, clears the AI redaction maps of calls on their tickets and deletes the webhook deliveries that carry their data, and keeps ticket bodies unless the brand's ticket retention says otherwise. Recorded in the audit log without the erased values.
 - **Staff deletion**: see §12; authored content is kept with the author shown as "Former staff".
 
 ---
@@ -366,6 +368,7 @@ Applies to the crawler, webhook deliveries, remote-image proxy, Notion and Googl
 - Timeouts: 10 s connect, 30 s total. Response cap: 10 MB for crawl pages, 1 MB for webhook responses, 20 MB for proxied images. Crawler respects `robots.txt` and a per-source rate limit.
 - Install-level allow-list `OUTBOUND_ALLOW_CIDRS` lets an operator permit internal destinations explicitly (for a private Notion proxy, for example). Every blocked attempt is logged with the destination.
 - Webhook responses are never followed, rendered, or stored beyond status code and the first 1 KB of body for the delivery log.
+- **Model endpoints.** Chat completions go through the model vendors' own clients, outside this client ([ADR 0018](../decisions/0018-pi-ai-provider-layer.md)), so the AI provider base URL, the embeddings URL and the transcription endpoint are checked when an admin saves them: `https` only and no blocked range, unless the address is inside `OUTBOUND_ALLOW_CIDRS`, which is also what lets a local Ollama use `http`. Embeddings and transcription are checked again by this client on every call.
 
 ---
 

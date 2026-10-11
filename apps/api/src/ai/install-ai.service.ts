@@ -24,6 +24,7 @@ import type {
 import { ne } from 'drizzle-orm';
 import { widenInstallScope } from '../tenant/install-scope.js';
 import { AiRepository } from './ai.repository.js';
+import type { AiDestinationCheck } from './ai-destination.js';
 import { AiFailure } from './ai-failure.js';
 
 /**
@@ -62,10 +63,12 @@ export class InstallAiService {
   readonly #settings: Settings;
   readonly #http: HttpTransport;
   readonly #repository = new AiRepository();
+  readonly #checkDestination: AiDestinationCheck;
 
-  constructor(settings: Settings, http: HttpTransport) {
+  constructor(settings: Settings, http: HttpTransport, checkDestination: AiDestinationCheck) {
     this.#settings = settings;
     this.#http = http;
+    this.#checkDestination = checkDestination;
   }
 
   async overview(): Promise<AiProvidersOverview> {
@@ -104,6 +107,9 @@ export class InstallAiService {
 
     const providers = await this.#settings.get('ai.providers');
     const existing = providers.find((provider) => provider.id === providerId);
+    if (body.baseUrl !== null && body.baseUrl !== existing?.baseUrl) {
+      await this.#checkDestination(body.baseUrl);
+    }
     const next = aiProviderConfigSchema.parse({
       id: providerId,
       kind: body.kind,

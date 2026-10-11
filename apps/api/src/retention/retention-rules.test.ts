@@ -68,6 +68,16 @@ describe('retentionCutoffs', () => {
     expect(cutoffs.notifications.toISOString()).toBe('2026-08-25T03:00:00.000Z');
   });
 
+  it('keeps delivery logs for a fixed thirty days and idempotency keys for their 24 hours', () => {
+    const cutoffs = retentionCutoffs(
+      { ...defaultRetentionSettings(), aiCallDays: 7, auditLogDays: 90 },
+      NOW,
+    );
+
+    expect(cutoffs.deliveryLogs.toISOString()).toBe('2026-08-25T03:00:00.000Z');
+    expect(cutoffs.idempotencyKeys.toISOString()).toBe('2026-09-23T03:00:00.000Z');
+  });
+
   it('keeps the outbox on the fixed seven days, whatever the brand chose', () => {
     expect(retentionCutoffs(defaultRetentionSettings(), NOW).outbox.toISOString()).toBe(
       '2026-09-17T03:00:00.000Z',

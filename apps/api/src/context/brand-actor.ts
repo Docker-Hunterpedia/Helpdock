@@ -10,13 +10,17 @@ import { getTx, requireRequestContext } from './request-context.js';
  * Built from what the guards already proved — the principal and the brand the
  * permission was checked in — never from a parameter.
  */
-export interface BrandActor {
+interface BrandActorBase {
   readonly tx: DbTransaction;
   readonly brandId: string;
-  readonly principalType: 'staff' | 'apikey';
   /** The staff member's user id, or the API key's id. */
   readonly principalId: string;
 }
+
+export type BrandActor =
+  | (BrandActorBase & { readonly principalType: 'staff' })
+  /** A key is held to the scopes it was issued with, wherever a route is shared with staff. */
+  | (BrandActorBase & { readonly principalType: 'apikey'; readonly scopes: readonly string[] });
 
 export const brandActor = (): BrandActor => {
   const request = requireRequestContext();
@@ -30,10 +34,9 @@ export const brandActor = (): BrandActor => {
     throw new Error(`A brand route ran for a ${principal.type} principal`);
   }
 
-  return {
-    tx: getTx(),
-    brandId: targetBrandId,
-    principalType: principal.type,
-    principalId: principal.id,
-  };
+  const base = { tx: getTx(), brandId: targetBrandId, principalId: principal.id };
+
+  return principal.type === 'apikey'
+    ? { ...base, principalType: 'apikey', scopes: principal.scopes }
+    : { ...base, principalType: 'staff' };
 };

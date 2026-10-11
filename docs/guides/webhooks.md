@@ -20,7 +20,7 @@ Both take the same requests, except the two the page alone uses:
 
 | Request | What it does |
 |---|---|
-| `POST …/webhooks` | `{ "url", "events": [...], "description"? }`. The answer carries `secret` — **the only time it is shown**. A refused URL answers `400` with `error.webhooks.reason` (`webhook-destination-blocked`, with `address`, or `webhook-https-required`) |
+| `POST …/webhooks` | `{ "url", "events": [...], "description"? }`. The answer carries `secret` — **the only time it is shown**. A refused URL answers `400` with `error.webhooks.reason` (`webhook-destination-blocked`, with `address`, or `webhook-https-required`). An API key that lacks the read scope of an event (`tickets:read`, `contacts:read` or `articles:read`, see [the API guide](api.md#scopes)) answers `403` with `webhook-event-scope`; so do `PATCH`, `rotate-secret` and `replay` on an endpoint whose events exceed the key's scopes |
 | `PATCH …/webhooks/{webhookId}` | Change the URL, events or description; `{ "enabled": true }` switches an endpoint back on |
 | `DELETE …/webhooks/{webhookId}` | Removes the endpoint and its delivery log |
 | `POST …/webhooks/{webhookId}/rotate-secret` | A new secret, shown once; deliveries from now on are signed with it |
@@ -102,6 +102,8 @@ With Express, read the body raw: `app.post('/hooks/helpdock', express.raw({ type
 ## The delivery log
 
 Each delivery records its status (`pending`, `succeeded`, `failed`, or `skipped` when the endpoint was switched off, or the brand scheduled for deletion, before it was sent), the number of attempts, the last answer's status code, its first 1 KB as text, how long it took, and the error if there was no answer. Nothing else of your response is kept, followed or displayed. **Replay** sends a delivery's body again as a new delivery, with the same event id and `replayOf` naming the original.
+
+The log keeps **30 days**. The nightly retention run deletes deliveries that finished (`succeeded`, `failed` or `skipped`) more than 30 days ago, with their frozen body; a delivery still `pending` is kept ([Data retention](data-retention.md#the-windows)). The window is fixed, not a setting.
 
 ## Network safety
 

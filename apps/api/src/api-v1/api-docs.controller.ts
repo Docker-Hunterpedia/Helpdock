@@ -1,6 +1,5 @@
 import { Controller, Get, Header } from '@nestjs/common';
 import { Public } from '../auth/route-declaration.js';
-import { buildInfo } from '../observability/build-info.js';
 import { API_OPERATIONS, buildOpenApiDocument, type OpenApiDocument } from './openapi.js';
 
 /**
@@ -57,7 +56,7 @@ ${rows}
 
 @Controller('api/docs')
 export class ApiDocsController {
-  readonly #document = buildOpenApiDocument(buildInfo().version);
+  readonly #document = buildOpenApiDocument();
   readonly #page = renderDocsPage(this.#document);
 
   @Get()

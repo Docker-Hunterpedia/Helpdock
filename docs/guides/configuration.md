@@ -253,7 +253,10 @@ the image and want it to serve a local `apps/widget/dist`.
 Optional. Comma-separated CIDRs the SSRF-safe outbound client may reach even
 though they are private, for a self-hosted proxy or connector (DOMAIN-RULES §13).
 Outbound webhooks (M8-03) honour it too: an endpoint on an internal address is
-delivered to only when its range is listed here.
+delivered to only when its range is listed here. So do the AI provider,
+embeddings and transcription URLs, which are checked when they are saved: a
+local Ollama or whisper.cpp on an internal address needs its range here, and
+may then use plain http.
 Example: 10.0.0.0/8,192.168.0.0/16
 
 ### HELPCENTER_CNAME_TARGET

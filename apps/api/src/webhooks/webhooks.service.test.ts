@@ -48,8 +48,16 @@ const tx = {
     },
   }),
 } as unknown as DbTransaction;
-/** The public API acting: its audit rows name the key. */
-const keyActor: BrandActor = { tx, brandId: BRAND, principalType: 'apikey', principalId: KEY };
+/** The public API acting: its audit rows name the key, and it may read what these scopes read. */
+const keyActorWith = (scopes: readonly string[]): BrandActor => ({
+  tx,
+  brandId: BRAND,
+  principalType: 'apikey',
+  principalId: KEY,
+  scopes,
+});
+const keyActor = keyActorWith(['webhooks:manage', 'tickets:read']);
+const staffActor: BrandActor = { tx, brandId: BRAND, principalType: 'staff', principalId: KEY };
 
 const checkDestination = vi.fn(async (_url: string) => {});
 
@@ -134,6 +142,74 @@ describe('WebhooksService', () => {
       url: 'https://hooks.example.com/v2',
     });
     expect(checkDestination).toHaveBeenLastCalledWith('https://hooks.example.com/v2');
+  });
+
+  it('refuses an API key events its scopes cannot read, and lets staff subscribe to any', async () => {
+    const insert = vi.fn(async (_tx: unknown, values: Partial<WebhookRow>) =>
+      webhookRow({ ...values }),
+    );
+    const manageOnly = keyActorWith(['webhooks:manage']);
+
+    await expect(
+      service({ insert }).create(manageOnly, {
+        url: 'https://hooks.example.com/helpdock',
+        events: ['ticket.created', 'contact.created'],
+      }),
+    ).rejects.toMatchObject({
+      reason: 'webhook-event-scope',
+      getStatus: expect.any(Function),
+    });
+    expect(insert).not.toHaveBeenCalled();
+    expect(audits).toEqual([]);
+
+    await service({ insert }).create(keyActorWith(['webhooks:manage', 'tickets:read']), {
+      url: 'https://hooks.example.com/helpdock',
+      events: ['ticket.created', 'csat.received'],
+    });
+    await service({ insert }).create(staffActor, {
+      url: 'https://hooks.example.com/helpdock',
+      events: ['ticket.created', 'contact.created', 'article.published'],
+    });
+    expect(insert).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers a key that lacks the scope with 403, not 400', async () => {
+    const error = await service({ insert: vi.fn() })
+      .create(keyActorWith(['webhooks:manage']), {
+        url: 'https://hooks.example.com/helpdock',
+        events: ['article.published'],
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(WebhooksFailure);
+    expect((error as WebhooksFailure).getStatus()).toBe(403);
+  });
+
+  it('holds an update to the scopes of the events the endpoint would end up with', async () => {
+    const update = vi.fn(async () => webhookRow());
+    const adminMade = webhookRow({ events: ['contact.created'] });
+    const manageOnly = keyActorWith(['webhooks:manage']);
+    const withFind = (row: WebhookRow) => service({ find: vi.fn(async () => row), update });
+
+    // Repointing an Admin's contact endpoint, or widening any endpoint, is refused…
+    await expect(
+      withFind(adminMade).update(manageOnly, WEBHOOK, { url: 'https://attacker.example.com/h' }),
+    ).rejects.toMatchObject({ reason: 'webhook-event-scope' });
+    await expect(
+      withFind(webhookRow({ events: ['article.published'] })).update(
+        keyActorWith(['webhooks:manage', 'articles:read']),
+        WEBHOOK,
+        { events: ['article.published', 'ticket.created'] },
+      ),
+    ).rejects.toMatchObject({ reason: 'webhook-event-scope' });
+    expect(update).not.toHaveBeenCalled();
+
+    // …a key that can read the endpoint's events may change it, and staff always may.
+    await withFind(adminMade).update(keyActorWith(['webhooks:manage', 'contacts:read']), WEBHOOK, {
+      url: 'https://hooks.example.com/v2',
+    });
+    await withFind(adminMade).update(staffActor, WEBHOOK, { url: 'https://hooks.example.com/v3' });
+    expect(update).toHaveBeenCalledTimes(2);
   });
 
   it('lists endpoints with their last day of finished deliveries and the newest one', async () => {
@@ -245,6 +321,32 @@ describe('WebhooksService', () => {
     expect(audits.map((audit) => audit.action)).toEqual(['webhook.secret_rotated']);
   });
 
+  it('rotates or replays only an endpoint whose events the key may read', async () => {
+    const update = vi.fn(async () => webhookRow());
+    const insertDelivery = vi.fn();
+    const contactEndpoint = webhookRow({ events: ['contact.created'] });
+    const repository = {
+      find: vi.fn(async () => contactEndpoint),
+      delivery: vi.fn(async () => deliveryRow({ event: 'contact.created' })),
+      update,
+      insertDelivery,
+    };
+    const manageOnly = keyActorWith(['webhooks:manage', 'tickets:read']);
+
+    await expect(service(repository).rotateSecret(manageOnly, WEBHOOK)).rejects.toMatchObject({
+      reason: 'webhook-event-scope',
+    });
+    await expect(service(repository).replay(manageOnly, WEBHOOK, DELIVERY)).rejects.toMatchObject({
+      reason: 'webhook-event-scope',
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(insertDelivery).not.toHaveBeenCalled();
+    expect(audits).toEqual([]);
+
+    await service(repository).rotateSecret(staffActor, WEBHOOK);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it('replays a delivery as a new one with the same event id, and asks for it to be sent', async () => {
     const original = {
       id: DELIVERY,
@@ -263,6 +365,7 @@ describe('WebhooksService', () => {
     }));
 
     const replay = await service({
+      find: vi.fn(async () => webhookRow()),
       delivery: vi.fn(async () => original),
       insertDelivery,
     }).replay(keyActor, WEBHOOK, DELIVERY);

@@ -58,6 +58,8 @@ export const apiKeySchema = z.object({
   rateLimitPerMinute: z.int().positive(),
   createdAt: z.iso.datetime(),
   lastUsedAt: z.iso.datetime().nullable(),
+  /** When the key stops working; null for one that never expires. Past it, a key is refused like a revoked one. */
+  expiresAt: z.iso.datetime().nullable(),
   revokedAt: z.iso.datetime().nullable(),
   /** Who issued and who revoked the key, for the Developers page; null once they are gone. */
   createdByName: z.string().nullable(),
@@ -82,6 +84,8 @@ export const apiKeyCreateRequestSchema = z.object({
     .max(API_SCOPES.length)
     .refine((scopes) => new Set(scopes).size === scopes.length, 'Name each scope once'),
   rateLimitPerMinute: z.int().min(1).max(API_KEY_RATE_LIMIT_MAX).optional(),
+  /** Left out for a key that never expires. Must be in the future; the service checks. */
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type ApiKeyCreateRequest = z.infer<typeof apiKeyCreateRequestSchema>;
 
@@ -114,6 +118,33 @@ export const WEBHOOK_TEST_EVENT = 'ping';
 /** Every event a delivery can carry: the subscribable ones and the test ping. */
 export const webhookDeliveryEventSchema = z.enum([...WEBHOOK_EVENTS, WEBHOOK_TEST_EVENT]);
 export type WebhookDeliveryEvent = z.infer<typeof webhookDeliveryEventSchema>;
+
+const SCOPE_BY_WEBHOOK_EVENT: Readonly<Record<WebhookEvent, ApiScope>> = {
+  'ticket.created': 'tickets:read',
+  'ticket.updated': 'tickets:read',
+  'ticket.replied': 'tickets:read',
+  'ticket.closed': 'tickets:read',
+  'csat.received': 'tickets:read',
+  'contact.created': 'contacts:read',
+  'article.published': 'articles:read',
+};
+
+/**
+ * The read scopes an endpoint's events need: a delivery carries the same data
+ * `GET /api/v1/...` would show a key holding that scope, so a key that could
+ * not read it there may not subscribe to it here (ASVS 4.1.3). The test ping
+ * and anything unknown carry nothing of the brand's and need no scope.
+ */
+export const scopesForEvents = (events: readonly string[]): ApiScope[] => {
+  const scopes = new Set<ApiScope>();
+  for (const event of events) {
+    const known = webhookEventSchema.safeParse(event);
+    if (known.success) {
+      scopes.add(SCOPE_BY_WEBHOOK_EVENT[known.data]);
+    }
+  }
+  return [...scopes];
+};
 
 /**
  * The retry schedule of `webhook.deliver`, as the Developers page explains it:
@@ -257,12 +288,14 @@ export type WebhookOverviewList = z.infer<typeof webhookOverviewListSchema>;
 
 /**
  * Why an endpoint was refused when it was added or changed: plain `http` to an
- * address the operator has not allowed, or a name that resolves to a private,
- * loopback or metadata address (DOMAIN-RULES §13).
+ * address the operator has not allowed, a name that resolves to a private,
+ * loopback or metadata address (DOMAIN-RULES §13), or, for an API key, events
+ * whose data the key's scopes do not let it read (`scopesForEvents`).
  */
 export const webhooksRefusalSchema = z.enum([
   'webhook-https-required',
   'webhook-destination-blocked',
+  'webhook-event-scope',
 ]);
 export type WebhooksRefusal = z.infer<typeof webhooksRefusalSchema>;
 

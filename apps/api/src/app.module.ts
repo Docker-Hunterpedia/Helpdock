@@ -129,7 +129,7 @@ export interface AppModuleOptions {
   /** M4-09: the siteverify call, which suites replace. */
   readonly webForm?: Pick<WebFormModuleOptions, 'captchaTransport'>;
   /** M7: model discovery's HTTP, which suites replace so nothing reaches a provider. */
-  readonly ai?: Pick<AiModuleOptions, 'http'>;
+  readonly ai?: Pick<AiModuleOptions, 'http' | 'lookup'>;
   /** M7-05: retrieval's HTTP and the model, which suites replace with fakes. */
   readonly assist?: Pick<AssistModuleOptions, 'http' | 'transport'>;
   /** M7-03: the Notion and Google Drive APIs, which suites replace with fakes. */

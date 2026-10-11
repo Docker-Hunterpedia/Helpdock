@@ -14,6 +14,7 @@ import type {
 } from '@helpdock/schemas';
 import { ne, sql } from 'drizzle-orm';
 import { widenInstallScope } from '../tenant/install-scope.js';
+import type { AiDestinationCheck } from './ai-destination.js';
 import { AiFailure } from './ai-failure.js';
 
 /**
@@ -40,9 +41,11 @@ const EMBEDDING_KEYS = [
 
 export class EmbeddingSettingsService {
   readonly #settings: Settings;
+  readonly #checkDestination: AiDestinationCheck;
 
-  constructor(settings: Settings) {
+  constructor(settings: Settings, checkDestination: AiDestinationCheck) {
     this.#settings = settings;
+    this.#checkDestination = checkDestination;
   }
 
   async view(tx: DbTransaction): Promise<EmbeddingSettingsView> {
@@ -98,6 +101,9 @@ export class EmbeddingSettingsService {
     }
     if (changed.some(([key]) => this.#settings.isLockedByEnv(key))) {
       throw new AiFailure('locked-by-environment');
+    }
+    if (changed.some(([key]) => key === 'embedding.baseUrl')) {
+      await this.#checkDestination(body.baseUrl);
     }
     for (const [key, value] of changed) {
       // The registry's schema for each key validates the value again in `set`.

@@ -34,6 +34,10 @@ export const aiRefusalSchema = z.enum([
   'discovery-failed',
   /** The model or dimension changed and `confirmReembed` was not set. */
   'reembed-not-confirmed',
+  /** A model endpoint over plain http, to an address the operator has not allowed. */
+  'https-required',
+  /** A model endpoint that resolves to a private, loopback or metadata address. */
+  'destination-blocked',
 ]);
 export type AiRefusal = z.infer<typeof aiRefusalSchema>;
 

@@ -1,6 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import mammoth from 'mammoth';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { extractFile, isKnowledgeFileMime } from './files.js';
-import { minimalDocx, minimalPdf } from './fixtures.js';
+import { craftedZip, minimalDocx, minimalPdf } from './fixtures.js';
+import {
+  ArchiveRejectedError,
+  assertArchiveWithinLimits,
+  DOCX_MAX_ENTRIES,
+  DOCX_MAX_UNCOMPRESSED_BYTES,
+} from './zip-limits.js';
+
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('extractFile', () => {
   it('reads a PDF page by page, so a chunk can cite its page', async () => {
@@ -28,6 +41,71 @@ describe('extractFile', () => {
     expect(document.parts[0]?.text).toBe(
       '# Refund policy\n\nWithin 30 days.\n\n## Exceptions\n\nGift cards.',
     );
+  });
+
+  describe('a DOCX that unpacks to more than it should (ASVS 12.1.2)', () => {
+    const refuses = async (archive: Uint8Array) => {
+      const convert = vi.spyOn(mammoth, 'convertToHtml');
+      await expect(extractFile(archive, DOCX, 'bomb.docx')).rejects.toBeInstanceOf(
+        ArchiveRejectedError,
+      );
+      expect(convert).not.toHaveBeenCalled();
+    };
+
+    it('refuses an entry whose directory declares more than the cap, before reading it', async () => {
+      await refuses(craftedZip([{ name: 'word/document.xml', declaredSize: 1024 * 1024 * 1024 }]));
+    });
+
+    it('refuses entries that together declare more than the cap', async () => {
+      const share = Math.ceil(DOCX_MAX_UNCOMPRESSED_BYTES / 2) + 1;
+      await refuses(
+        craftedZip([
+          { name: 'word/document.xml', declaredSize: share },
+          { name: 'word/media/image1.png', declaredSize: share },
+        ]),
+      );
+    });
+
+    it('refuses more entries than the cap', async () => {
+      await refuses(
+        craftedZip(
+          Array.from({ length: DOCX_MAX_ENTRIES + 1 }, (_, index) => ({
+            name: `word/media/${index}.png`,
+            declaredSize: 1,
+          })),
+        ),
+      );
+    });
+
+    it('refuses an entry that unpacks to more than its directory says', async () => {
+      const lie = Buffer.alloc(5 * 1024 * 1024, 0x20);
+      await refuses(craftedZip([{ name: 'word/document.xml', declaredSize: 100, inflated: lie }]));
+    });
+
+    it.each([
+      ['not a ZIP at all', new Uint8Array(64)],
+      ['a ZIP that was cut short', craftedZip([{ name: 'a', declaredSize: 0 }]).slice(0, -10)],
+    ])('refuses %s', async (_label, archive) => {
+      await refuses(archive);
+    });
+
+    it('accepts deflated entries that unpack to exactly what they declare', () => {
+      const text = Buffer.alloc(10_000, 0x20);
+
+      expect(() =>
+        assertArchiveWithinLimits(
+          craftedZip([{ name: 'word/document.xml', declaredSize: text.length, inflated: text }]),
+        ),
+      ).not.toThrow();
+    });
+
+    it('still reads an ordinary DOCX of a few entries', async () => {
+      const convert = vi.spyOn(mammoth, 'convertToHtml');
+
+      await extractFile(minimalDocx(['# Refund policy']), DOCX, 'policy.docx');
+
+      expect(convert).toHaveBeenCalledOnce();
+    });
   });
 
   it('takes Markdown as written and titles it by its first heading', async () => {

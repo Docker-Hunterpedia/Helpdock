@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   apiKeyCreateRequestSchema,
+  apiKeySchema,
   idempotencyKeySchema,
+  scopesForEvents,
   v1TicketCreateRequestSchema,
   webhookCreateRequestSchema,
   webhookUpdateRequestSchema,
@@ -22,6 +24,49 @@ describe('apiKeyCreateRequestSchema', () => {
       apiKeyCreateRequestSchema.safeParse({ name: 'CRM', scopes: ['tickets:read', 'tickets:read'] })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('API key expiry (ASVS 2.10.1, 3.5.2)', () => {
+  const request = { name: 'CRM', scopes: ['tickets:read'] };
+
+  it('takes an optional expiry as an ISO date and time, with or without an offset', () => {
+    expect(apiKeyCreateRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      apiKeyCreateRequestSchema.safeParse({ ...request, expiresAt: '2027-01-01T00:00:00Z' })
+        .success,
+    ).toBe(true);
+    expect(
+      apiKeyCreateRequestSchema.safeParse({ ...request, expiresAt: '2027-01-01T09:00:00+02:00' })
+        .success,
+    ).toBe(true);
+    expect(
+      apiKeyCreateRequestSchema.safeParse({ ...request, expiresAt: 'next year' }).success,
+    ).toBe(false);
+    expect(apiKeyCreateRequestSchema.safeParse({ ...request, expiresAt: null }).success).toBe(
+      false,
+    );
+  });
+
+  it('shows the expiry of a key, or null when it has none', () => {
+    const key = {
+      id: ID,
+      name: 'CRM',
+      prefix: 'hd_live_abcd',
+      scopes: ['tickets:read'],
+      rateLimitPerMinute: 600,
+      createdAt: '2026-10-05T10:00:00.000Z',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdByName: null,
+      revokedByName: null,
+    };
+
+    expect(apiKeySchema.parse({ ...key, expiresAt: null }).expiresAt).toBeNull();
+    expect(apiKeySchema.parse({ ...key, expiresAt: '2027-01-01T00:00:00.000Z' }).expiresAt).toBe(
+      '2027-01-01T00:00:00.000Z',
+    );
+    expect(apiKeySchema.safeParse(key).success).toBe(false);
   });
 });
 
@@ -49,6 +94,23 @@ describe('webhookCreateRequestSchema', () => {
 
   it('refuses an update that changes nothing', () => {
     expect(webhookUpdateRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('scopesForEvents', () => {
+  it('names the read scope each event needs, once', () => {
+    expect(scopesForEvents(['ticket.created', 'ticket.closed', 'csat.received'])).toEqual([
+      'tickets:read',
+    ]);
+    expect(scopesForEvents(['contact.created', 'article.published'])).toEqual([
+      'contacts:read',
+      'articles:read',
+    ]);
+  });
+
+  it('needs nothing for a test ping, an unknown event or none at all', () => {
+    expect(scopesForEvents(['ping', 'ticket.deleted'])).toEqual([]);
+    expect(scopesForEvents([])).toEqual([]);
   });
 });
 

@@ -2,6 +2,7 @@ import mammoth from 'mammoth';
 import { extractText } from 'unpdf';
 import type { ExtractedDocument } from './chunker.js';
 import { htmlToText } from './html.js';
+import { assertArchiveWithinLimits } from './zip-limits.js';
 
 /**
  * Uploaded files into documents (M7-03): PDF through unpdf, one part per page
@@ -11,6 +12,8 @@ import { htmlToText } from './html.js';
  * The caller has already checked the bytes against the declared type
  * (`sniffKnowledgeFile`), so a parser here is only ever handed the format it
  * expects. A parser that still fails throws, and the sync records the reason.
+ * A DOCX that would unpack to more than `zip-limits.ts` allows is refused with
+ * an `ArchiveRejectedError` before mammoth reads it.
  */
 
 export const KNOWLEDGE_FILE_TYPES = {
@@ -45,6 +48,7 @@ const extractPdf = async (bytes: Uint8Array, fileName: string): Promise<Extracte
 };
 
 const extractDocx = async (bytes: Uint8Array, fileName: string): Promise<ExtractedDocument> => {
+  assertArchiveWithinLimits(bytes);
   const { value } = await mammoth.convertToHtml(
     { buffer: Buffer.from(bytes) },
     { externalFileAccess: false },

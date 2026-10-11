@@ -8,6 +8,7 @@ import {
   retentionCountsSchema,
   retentionTotal,
 } from '@helpdock/schemas';
+import { IDEMPOTENCY_WINDOW_HOURS } from '../api-v1/idempotency.repository.js';
 
 /**
  * The arithmetic of DOMAIN-RULES §11, as pure functions of values the caller
@@ -72,11 +73,21 @@ export interface RetentionCutoffs {
   readonly auditLog: Date;
   readonly visitorSessions: Date;
   readonly notifications: Date;
+  readonly deliveryLogs: Date;
+  readonly idempotencyKeys: Date;
   readonly outbox: Date;
 }
 
 /** The bell shows thirty days, and notifications are not a per-brand setting. */
 export const NOTIFICATION_RETENTION_DAYS = 30;
+
+/**
+ * How long the webhook and Telegram delivery logs are kept. Both hold copies of
+ * ticket and contact data (a webhook's payload, a Telegram chat id) that outlive
+ * their use as a log, and the Developers page shows the last day. Fixed like the
+ * notifications' window, so the form needs no new row.
+ */
+export const DELIVERY_LOG_RETENTION_DAYS = 30;
 
 export const retentionCutoffs = (settings: RetentionSettings, now: Date): RetentionCutoffs => ({
   closedTickets:
@@ -89,6 +100,8 @@ export const retentionCutoffs = (settings: RetentionSettings, now: Date): Retent
   auditLog: retentionCutoff(settings.auditLogDays, now),
   visitorSessions: retentionCutoff(settings.visitorSessionDays, now),
   notifications: retentionCutoff(NOTIFICATION_RETENTION_DAYS, now),
+  deliveryLogs: retentionCutoff(DELIVERY_LOG_RETENTION_DAYS, now),
+  idempotencyKeys: new Date(now.getTime() - IDEMPOTENCY_WINDOW_HOURS * 3_600_000),
   // Fixed by DOMAIN-RULES §6, not by the brand.
   outbox: retentionCutoff(RETENTION_DAYS, now),
 });

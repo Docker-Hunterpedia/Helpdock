@@ -72,7 +72,7 @@ resolved address, every redirect hop checked again, loopback, private,
 link-local, CGNAT, multicast and cloud metadata ranges refused, and timeouts and
 size caps on every response. `OUTBOUND_ALLOW_CIDRS` is the one way to let it
 reach an internal range, and only the ranges it names
-([configuration](configuration.md#outbound_allow_cidrs)). A Semgrep rule fails
+([configuration](configuration.md#outbound_allow_cidrs)). One call is not made through it: chat completions go through the model vendors' own clients, so a provider's base URL, like the embeddings and transcription URLs, is checked when an admin saves it (https, no private or metadata address unless allowed; [AI guide](ai.md#providers)). A Semgrep rule fails
 CI on a `fetch` of a non-constant URL outside `packages/net`
 ([security scanning](security-scanning.md#semgrep)).
 
@@ -111,11 +111,37 @@ added or confirmed ([asvs-l2](../completed/asvs-l2.md#gaps-and-partials-closed-b
   every rate-limit refusal is counted in `rate_limit_refusals_total`, which the
   [first alert set](operations.md#a-first-alert-set) watches.
 
+## API keys
+
+[API keys](api.md#api-keys) are the one credential that is not a person's, and
+they are held tighter than a session:
+
+- A key is stored as its SHA-256, scoped to one brand and to the scopes it was
+  issued with, throttled per key, and revoked at once. It may be given an
+  `expiresAt` when it is made; past it, it is refused like a revoked key.
+- A key reaches `/api/v1` and nothing else. Every route that acts for a person
+  (`@Authenticated()`, such as `/api/me`) answers it `403`
+  ([ADR 0019](../decisions/0019-api-scopes-and-openapi-from-zod.md)).
+- `webhooks:manage` cannot be used to read data the key could not read itself: an
+  endpoint's events need the matching `tickets:read`, `contacts:read` or
+  `articles:read` ([webhooks](webhooks.md)).
+- A refused key is a warning in the api's log with its prefix and the caller's
+  address, and a revoked or expired one is an `api_key.refused` row in its
+  brand's [audit log](audit-log.md#api-keys). The key itself is never logged.
+
 ## Headers
 
 The api's JSON responses carry a deny-everything Content-Security-Policy,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and HSTS
-when `APP_URL` is https (`apps/api/src/http/security-headers.ts`). The admin,
+when `APP_URL` is https (`apps/api/src/http/security-headers.ts`). Every JSON
+answer, errors included, also carries `Content-Disposition: attachment;
+filename="api.json"` (a browser that navigates to an API URL downloads it
+instead of rendering it) and `Cache-Control: no-store`, so no cache keeps a
+brand's tickets, contacts or settings (`apps/api/src/http/json-disposition.ts`,
+ASVS 8.2.1). A route that caches its JSON on purpose sets its own
+`Cache-Control` and keeps it: the widget's source maps and `config` (`no-cache`
+with an ETag), and the admin's hashed assets. Pages, scripts and fonts are not
+JSON and keep the caching they set. The admin,
 the help center, the web form and the widget each send the policy their own
 content needs. The admin hashes its bootstrap script and gives Emotion a fresh
 style nonce on every response; it does not permit inline script or un-nonced
@@ -144,6 +170,8 @@ replies.
 - Keep Postgres and Redis on the Compose network. The production Compose file
   publishes neither; Redis has no password there, so it must stay unreachable
   from anywhere else.
+- Give API keys an `expiresAt` when you create them, and revoke the ones an
+  integration no longer uses ([API keys](api.md#api-keys)).
 - Pin the image to a release and upgrade when a security release is published
   ([operations › Upgrading](operations.md#upgrading)). Each release has a
   CycloneDX SBOM attached ([security scanning](security-scanning.md#sbom)).

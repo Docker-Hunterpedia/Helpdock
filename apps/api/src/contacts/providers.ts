@@ -97,6 +97,12 @@ export interface ContactErasureResult {
   readonly attachments: number;
   /** Messages the contact wrote whose channel-level author trace was cleared. */
   readonly messages: number;
+  /** Telegram chats with the contact deleted (chat id and username). */
+  readonly telegramChats: number;
+  /** Model calls on their tickets whose redaction map was cleared. */
+  readonly aiCalls: number;
+  /** Webhook deliveries carrying their data, deleted. */
+  readonly webhookDeliveries: number;
 }
 
 export interface ContactErasureProvider {
@@ -106,7 +112,13 @@ export interface ContactErasureProvider {
 /** Nothing outside the contact's own rows: a brand with no tickets has no traces. */
 export class NoContactErasureProvider implements ContactErasureProvider {
   eraseTraces(): Promise<ContactErasureResult> {
-    return Promise.resolve({ attachments: 0, messages: 0 });
+    return Promise.resolve({
+      attachments: 0,
+      messages: 0,
+      telegramChats: 0,
+      aiCalls: 0,
+      webhookDeliveries: 0,
+    });
   }
 }
 

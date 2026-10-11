@@ -57,11 +57,33 @@ other field it wrote) as `auth.credentials`. Helpdock refreshes the tokens
 when they expire and stores the refreshed set. Using a personal subscription
 for a support desk may be against the vendor's terms; check them first.
 
-**Local servers** (`auth: { type: "none" }`) need no key. The api reaches every
-admin-supplied URL through the SSRF-safe client (DOMAIN-RULES §13), which
-refuses private addresses: to reach Ollama inside the Compose network, add its
-range to `OUTBOUND_ALLOW_CIDRS`, for example `172.16.0.0/12`. The URL's own
-port (Ollama's 11434) is allowed.
+**Local servers** (`auth: { type: "none" }`) need no key. Discovery
+(`GET {baseUrl}/models`), embeddings and transcription reach their URL through
+the SSRF-safe client (DOMAIN-RULES §13), which refuses private addresses: to
+reach Ollama inside the Compose network, add its range to
+`OUTBOUND_ALLOW_CIDRS`, for example `172.16.0.0/12`. The URL's own port
+(Ollama's 11434) is allowed. **Chat completions are the exception**: they go
+through pi-ai's own provider clients, not the SSRF-safe client
+([ADR 0018](../decisions/0018-pi-ai-provider-layer.md)), so the address is
+checked once, when it is saved.
+
+**What a saved address must pass.** A provider's `baseUrl`, the embeddings
+`baseUrl` and the transcription endpoint are checked when they are saved
+(`PUT /api/install/ai/providers/:id`, `…/embedding`, `…/transcription`), by the
+same rules a webhook endpoint passes:
+
+- The name is resolved. A private, loopback, link-local or metadata address is
+  refused with `error.ai.reason: "destination-blocked"` unless its range is in
+  `OUTBOUND_ALLOW_CIDRS`.
+- Plain `http://` is refused with `"https-required"` unless the address is in
+  `OUTBOUND_ALLOW_CIDRS`, so an API key never crosses the internet in clear text
+  but a local Ollama in an allowed range still works over http.
+- A name that does not resolve yet is judged by its scheme alone: `https` is
+  accepted, `http` is refused.
+
+Only a value that changed is checked, so a provider can be renamed and the
+embedding price edited without looking up an unchanged address. Settings pinned
+with `HD_*` variables are the operator's and are not checked.
 
 ### Models
 
@@ -115,9 +137,10 @@ ai.transcribe (`ai` queue)            downloads the Opus variant (or the origina
                                       text and the language the endpoint heard; status = done
 ```
 
-- The endpoint is reached through the SSRF-safe client, like every
-  admin-supplied URL; a local whisper.cpp or faster-whisper server needs its
-  range in `OUTBOUND_ALLOW_CIDRS`.
+- The endpoint is reached through the SSRF-safe client, and checked when it is
+  saved (https, not a private address; see
+  [Providers](#providers)); a local whisper.cpp or faster-whisper server needs
+  its range in `OUTBOUND_ALLOW_CIDRS`, and may then use http.
 - A 4xx answer marks the transcript `failed` at once; a 5xx or an unreachable
   endpoint is retried twice and then marked `failed`. Audio over 25 MB, the
   Whisper limit, is not sent.
@@ -331,7 +354,7 @@ One embedding model serves every brand (ADR 0005). It is configured with
 | Setting | Example |
 |---|---|
 | `embedding.provider` | `openai`, a label for the log |
-| `embedding.baseUrl` | `https://api.openai.com/v1`, `http://ollama:11434/v1` |
+| `embedding.baseUrl` | `https://api.openai.com/v1`, or `http://ollama:11434/v1` when its range is in `OUTBOUND_ALLOW_CIDRS`. Checked when saved, like a provider's |
 | `embedding.apiKey` | Write-only, like provider keys |
 | `embedding.model` | `text-embedding-3-small` |
 | `embedding.dims` | `1536`. At most **2000**, the most a pgvector HNSW index covers; a larger model is refused with that reason. Use a model, or a reduced-dimension variant, at or under it |
@@ -395,6 +418,18 @@ first bytes against the declared type ([ADR 0009](../decisions/0009-magic-byte-s
 before any parser sees them — a "PDF" that is not one fails the sync with the
 reason — then reads PDFs page by page (unpdf; a citation names the page), DOCX
 through mammoth (headings kept), and Markdown and text as they are.
+
+A DOCX is a ZIP archive, so the 25 MB cap does not bound what is inside it.
+Before mammoth reads one, the worker checks the archive: it is refused when it
+holds **more than 1,000 entries** or declares **more than 100 MiB uncompressed**
+in total, when it is ZIP64 or its directory is damaged, or when an entry
+unpacks to more than its directory says (each entry is inflated once, up to
+its declared size, to check; a directory that lies is caught there). A refused
+file fails the sync with a `file.rejected` log line that names the limit; in a
+Drive folder it is skipped with the same reason and the walk goes on. Ordinary
+documents are far below both limits. The limits are the constants
+`DOCX_MAX_ENTRIES` and `DOCX_MAX_UNCOMPRESSED_BYTES` in
+`packages/ai/src/knowledge/zip-limits.ts`.
 
 **Notion.** A page is read as Markdown with its headings; a database
 contributes every page of each of its data sources. At most 2,000 pages a
@@ -686,7 +721,7 @@ closed or has been quiet for 24 hours.
 | `POST /api/brands/:brandId/knowledge/files` | `ai:manage` | Presign a file upload; creates the source |
 | `POST …/knowledge/sources/:sourceId/confirm` | `ai:manage` | The upload is done; the sync starts. 409 `upload-missing` |
 | `POST …/knowledge/sources/:sourceId/oauth/:provider` | `ai:manage` | The Notion or Google consent URL. 409 `oauth-not-configured` |
-| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected` |
+| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected`. The `state` is signed, good for ten minutes and **single-use**: a second callback with the same `state` answers 400 `oauth-state-invalid` and exchanges nothing. (No PKCE yet: the provider's `code` is still bound to the client secret only.) |
 
 A refusal carries `error.ai.reason`, as `aiRefusalSchema` in `@helpdock/schemas`
 declares, for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`), and

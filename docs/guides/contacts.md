@@ -205,7 +205,19 @@ A Viewer sees the button disabled, and an erased contact offers neither entry.
   cleared. The messages themselves stay, still attributed to the erased contact,
   and the bodies are kept under the brand's
   [retention](data-retention.md).
-- The audit row also carries `attachmentCount` and `messageCount`.
+- **Copies in other tables** go with them (ASVS 8.3.2):
+  - their **Telegram chats** are deleted (the chat id and the `@username`), so a
+    later message from that chat files a new contact, and the chat id on a
+    Telegram reply already queued for them is replaced by the same digest as
+    their identifier, so that reply fails instead of reaching the person;
+  - the **redaction map** of every AI call on their tickets is cleared (it pairs
+    each placeholder with the email, phone, card or IBAN it replaced);
+  - the **webhook deliveries** that carry their data (their `contact.created`,
+    their tickets' events and the survey on their tickets) are deleted from the
+    delivery log, pending ones included. A receiver that already got them still
+    has them.
+- The audit row also carries `attachmentCount`, `messageCount`,
+  `telegramChatCount`, `aiCallCount` and `webhookDeliveryCount`.
 - An erased contact is immutable afterwards: every write answers
   `anonymised` (409). `contacts.anonymised_at` is the marker: anything that
   matches contacts — duplicate suggestions, the merge of M1-13 — skips a row

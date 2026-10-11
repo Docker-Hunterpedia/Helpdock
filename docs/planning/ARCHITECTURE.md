@@ -142,7 +142,7 @@ sla_policies(conditions jsonb, time_mode, targets jsonb, escalation jsonb, posit
 ticket_sla_clocks(ticket_id, kind, cycle, is_current, target_minutes, elapsed_ms, checkpoint_at, paused_at, due_at, satisfied_at, breached_at, fired_steps)   -- DOMAIN-RULES §3
 workflow_rules(trigger, conditions jsonb, actions jsonb, order, enabled), workflow_runs
 channels(kind, config_encrypted, status, last_error) ; mailbox/telegram/widget/form/api rows
-api_keys(brand_id, hash, scopes[], rate_limit, last_used_at)
+api_keys(brand_id, hash, scopes[], rate_limit, last_used_at, expires_at)
 webhooks, webhook_deliveries
 hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, status, visibility), hc_settings, hc_media
 hc_search_documents(version_id, locale, title, body_text, search tsvector, title_normalized), hc_search_log, hc_article_views, hc_article_feedback

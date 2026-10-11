@@ -23,6 +23,7 @@ const apiKey = {
   rateLimitPerMinute: 600,
   createdAt: AT,
   lastUsedAt: null,
+  expiresAt: null,
   revokedAt: null,
   createdByName: 'Lina',
   revokedByName: null,

@@ -383,7 +383,7 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
         await staff('PUT', '/api/install/ai/providers/local', {
           kind: 'openai-compatible',
           label: 'Local',
-          baseUrl: 'http://llm.example.com/v1',
+          baseUrl: 'https://llm.example.com/v1',
           auth: { type: 'none' },
         })
       ).status,

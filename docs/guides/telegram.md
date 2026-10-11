@@ -114,7 +114,7 @@ A Telegram ticket says who it is with: the header reads "Telegram · @username",
 
 Under each reply: "to the Telegram chat · 14:24 · Sent" once Telegram has it. A reply Telegram refused shows **Not delivered** with Telegram's words and the number of tries, and **Retry**. The composer says "To the Telegram chat @username" and that the bot sends the reply as plain text with no signature.
 
-`GET /api/brands/:brandId/tickets/:ticketId/telegram` (`ticket:read`) is what the ticket view reads: the chat (`bot`, `chatId`, `username`, `name`, `locale`, `languageChosenAt`, or `context: null` for a ticket no chat belongs to) and every reply's delivery. `GET …/telegram/deliveries` lists the deliveries alone: `queued`, `sent` or `failed`, with Telegram's refusal. A reply is retried five times; one Telegram refuses for good (the customer blocked the bot, the chat no longer exists) fails at once. `POST …/deliveries/:deliveryId/retry` (`ticket:write`) puts a failed one back in the queue.
+`GET /api/brands/:brandId/tickets/:ticketId/telegram` (`ticket:read`) is what the ticket view reads: the chat (`bot`, `chatId`, `username`, `name`, `locale`, `languageChosenAt`, or `context: null` for a ticket no chat belongs to) and every reply's delivery. `GET …/telegram/deliveries` lists the deliveries alone: `queued`, `sent` or `failed`, with Telegram's refusal. A reply is retried five times; one Telegram refuses for good (the customer blocked the bot, the chat no longer exists) fails at once. `POST …/deliveries/:deliveryId/retry` (`ticket:write`) puts a failed one back in the queue. Deliveries that were `sent` or `failed` more than 30 days ago are deleted by the nightly [retention run](data-retention.md#the-windows); a `queued` one is kept.
 
 ## The satisfaction survey
 

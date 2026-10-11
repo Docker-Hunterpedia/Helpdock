@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { fakeService, type HttpTransport, minimalPdf } from '@helpdock/ai';
+import { craftedZip, fakeService, type HttpTransport, minimalPdf } from '@helpdock/ai';
 import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   createDb,
@@ -515,6 +515,34 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       expect(view.chunks).toBe(0);
     });
 
+    it('refuses a DOCX that would unpack to far more than it weighs, and logs file.rejected (ASVS 12.1.2)', async () => {
+      const bomb = craftedZip([{ name: 'word/document.xml', declaredSize: 1024 ** 3 }]);
+      const presigned = await ok<KnowledgeFilePresignResponse>('POST', base('/knowledge/files'), {
+        fileName: 'bomb.docx',
+        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: bomb.length,
+      });
+      await storage.put(knowledgeFileKey(brandId(), presigned.sourceId), bomb);
+      await ok('POST', base(`/knowledge/sources/${presigned.sourceId}/confirm`));
+
+      expect(await runSync(presigned.sourceId)).toBe('failed');
+      const log = await ok<KnowledgeLog>(
+        'GET',
+        base(`/knowledge/sources/${presigned.sourceId}/log?level=warn`),
+      );
+      expect(log.lines).toEqual([
+        expect.objectContaining({
+          code: 'file.rejected',
+          params: expect.objectContaining({ reason: expect.stringContaining('100 MiB') }),
+        }),
+      ]);
+      const view = await ok<KnowledgeSourceView>(
+        'GET',
+        base(`/knowledge/sources/${presigned.sourceId}`),
+      );
+      expect(view.chunks).toBe(0);
+    });
+
     it('refuses to confirm an upload that never reached the bucket', async () => {
       const presigned = await ok<KnowledgeFilePresignResponse>('POST', base('/knowledge/files'), {
         fileName: 'missing.md',
@@ -822,6 +850,38 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       );
       const view = await ok<KnowledgeSourceView>('GET', base(`/knowledge/sources/${created.id}`));
       expect(view).toMatchObject({ config: { connected: true }, status: { state: 'queued' } });
+    });
+
+    it('answers a callback once: replaying the same state is refused, and the token is not exchanged twice (ASVS 13.1.3)', async () => {
+      const created = await ok<KnowledgeSourceView>('POST', base('/knowledge/sources'), {
+        kind: 'notion',
+        name: 'Replayed wiki',
+        config: { pageIds: ['p1'] },
+      });
+      const start = await ok<KnowledgeOAuthStart>(
+        'POST',
+        base(`/knowledge/sources/${created.id}/oauth/notion`),
+      );
+      const state = encodeURIComponent(new URL(start.url).searchParams.get('state') ?? '');
+      const callback = () =>
+        app.inject({
+          method: 'GET',
+          url: `/api/knowledge/oauth/callback?provider=notion&code=code-2&state=${state}`,
+        });
+      const exchanges = () =>
+        notion.requests.filter((request) => request.url.pathname === '/v1/oauth/token').length;
+      const before = exchanges();
+
+      const first = await callback();
+      const exchangedOnce = exchanges();
+      const replay = await callback();
+
+      expect(first.statusCode).toBe(302);
+      expect(exchangedOnce).toBe(before + 1);
+      expect(replay.statusCode).toBe(400);
+      expect(exchanges()).toBe(exchangedOnce);
+      const view = await ok<KnowledgeSourceView>('GET', base(`/knowledge/sources/${created.id}`));
+      expect(view.config).toMatchObject({ connected: true });
     });
 
     it('refuses rendering that the install has off', async () => {

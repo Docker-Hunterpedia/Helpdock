@@ -504,8 +504,9 @@ messages missed while unsubscribed, and a System page row for accounts that need
 
 Tests: unit for the decision table (`meta-health.test.ts`, each answer of each step against a Graph
 double), the renewal (`meta-token-refresh.test.ts`), the scheduler, the changed handler, the
-processor and `runMetaHealth` with the receipt and brand state as doubles
-(`meta-health.job.test.ts`), and the job definitions (`packages/jobs`);
+processor, and the two things only a double can stage in `runMetaHealth`: a token replaced while
+Graph was being asked, and a log with no token in it (`meta-health.job.test.ts`), and the job
+definitions (`packages/jobs`);
 `meta-health.integration.test.ts` against real Postgres and Redis with `FakeGraph`: a dropped
 subscription restored on each platform and a present one left alone; an Instagram token eight days
 old renewed once, the expiry moved and the renewed token used a week later; a refused renewal

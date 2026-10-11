@@ -5,7 +5,6 @@ import {
   claimReceipt,
   type JobLogger,
   META_HEALTH_CRON,
-  metaHealthReceiptKey,
   metaHealthSchedulerId,
   silentLogger,
 } from '@helpdock/jobs';
@@ -154,11 +153,14 @@ describe('scheduleAllMetaHealth', () => {
   });
 });
 
+// What a race and a logger can do to one check. The receipt, the brand's state
+// and the writes themselves are proved against a database in
+// `meta-health.integration.test.ts`.
 describe('runMetaHealth', () => {
   const get = vi.fn();
   const post = vi.fn();
   const repository = { account: vi.fn(), update: vi.fn(), markError: vi.fn(), listAll: vi.fn() };
-  const { calls, scheduler } = recorder();
+  const { scheduler } = recorder();
   const logged: unknown[] = [];
   const log: JobLogger = {
     info: (fields, message) => void logged.push({ fields, message }),
@@ -178,7 +180,6 @@ describe('runMetaHealth', () => {
   const payload = { brandId, accountId };
 
   beforeEach(() => {
-    calls.length = 0;
     logged.length = 0;
     get
       .mockReset()
@@ -194,55 +195,6 @@ describe('runMetaHealth', () => {
     vi.mocked(claimReceipt).mockReset().mockResolvedValue(true);
   });
 
-  it('claims the hour’s receipt, asks Graph with the decrypted token and writes what it found', async () => {
-    const run = await runMetaHealth(deps(), payload, 'job-1');
-
-    expect(claimReceipt).toHaveBeenCalledExactlyOnceWith({}, metaHealthReceiptKey(accountId, NOW));
-    expect(get).toHaveBeenCalledWith('/debug_token', {
-      token: TOKEN,
-      query: { input_token: TOKEN },
-    });
-    expect(run).toMatchObject({ ran: true, update: { status: 'connected' } });
-    expect(repository.update).toHaveBeenCalledExactlyOnceWith({}, accountId, {
-      status: 'connected',
-      subscriptionCheckedAt: NOW,
-      subscribedFields: expect.any(Array),
-    });
-  });
-
-  it('stands down when the hour’s receipt is taken, and asks Graph nothing', async () => {
-    vi.mocked(claimReceipt).mockResolvedValue(false);
-
-    expect(await runMetaHealth(deps(), payload, 'job-1')).toEqual({
-      ran: false,
-      reason: 'already-checked',
-    });
-    expect(get).not.toHaveBeenCalled();
-    expect(repository.update).not.toHaveBeenCalled();
-  });
-
-  it('stops scheduling an account that is gone, and checks nothing', async () => {
-    repository.account.mockResolvedValue(undefined);
-
-    expect(await runMetaHealth(deps(), payload, 'job-1')).toEqual({
-      ran: false,
-      reason: 'account-gone',
-    });
-    expect(calls).toEqual([`remove:${accountId}`]);
-    expect(claimReceipt).not.toHaveBeenCalled();
-  });
-
-  it('leaves a brand in its deletion grace alone, and its scheduler in place', async () => {
-    vi.mocked(isBrandGone).mockResolvedValue(true);
-
-    expect(await runMetaHealth(deps(), payload, 'job-1')).toEqual({
-      ran: false,
-      reason: 'brand-gone',
-    });
-    expect(calls).toEqual([]);
-    expect(get).not.toHaveBeenCalled();
-  });
-
   it('does not write what it found about a token an operator replaced meanwhile', async () => {
     repository.account
       .mockResolvedValueOnce(row())
@@ -252,13 +204,6 @@ describe('runMetaHealth', () => {
       ran: false,
       reason: 'token-replaced',
     });
-    expect(repository.update).not.toHaveBeenCalled();
-  });
-
-  it('writes nothing when Graph fails with no answer, so the receipt rolls back with it', async () => {
-    get.mockRejectedValue(new Error('socket hang up'));
-
-    await expect(runMetaHealth(deps(), payload, 'job-1')).rejects.toThrow('socket hang up');
     expect(repository.update).not.toHaveBeenCalled();
   });
 

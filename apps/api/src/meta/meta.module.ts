@@ -7,6 +7,8 @@ import { SETTINGS } from '../runtime/tokens.js';
 import { createMetaInboundService } from './factory.js';
 import { type GraphClientFactory, graphClientFactory } from './graph-client-factory.js';
 import { MetaRepository } from './meta.repository.js';
+import { MetaAccountsController } from './meta-accounts.controller.js';
+import { MetaAccountsService } from './meta-accounts.service.js';
 import { MetaAppController } from './meta-app.controller.js';
 import { MetaAppService } from './meta-app.service.js';
 import { MetaDeliveriesService } from './meta-deliveries.service.js';
@@ -90,6 +92,7 @@ export class MetaModule {
       controllers: [
         MetaWebhookController,
         MetaAppController,
+        MetaAccountsController,
         TicketMetaDeliveriesController,
         TicketMetaContextController,
       ],
@@ -106,6 +109,18 @@ export class MetaModule {
           provide: MetaAppService,
           inject: [SETTINGS],
           useFactory: (settings: Settings): MetaAppService => new MetaAppService(settings, env),
+        },
+        {
+          provide: MetaAccountsService,
+          inject: [MetaAppService],
+          useFactory: (appService: MetaAppService): MetaAccountsService =>
+            new MetaAccountsService({
+              db,
+              repository,
+              keyring: createKeyring(env),
+              graph,
+              app: appService,
+            }),
         },
         {
           provide: MetaWebhookService,

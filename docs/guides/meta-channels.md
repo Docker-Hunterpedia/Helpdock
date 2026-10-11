@@ -16,7 +16,7 @@ The route is public (Meta has no session) and protected by the verify token and 
 
 ## The app's settings
 
-Four install settings describe the app. Each can be set from the environment, which also locks it ([configuration](configuration.md)); the App card of Channels › Meta (M10-07) will show whether each is set:
+Four install settings describe the app. Each can be set from the environment, which also locks it ([configuration](configuration.md)); the App card of Channels › Meta shows whether each is set and which an environment variable has locked:
 
 | Setting | Environment | What it is for |
 |---|---|---|
@@ -26,6 +26,12 @@ Four install settings describe the app. Each can be set from the environment, wh
 | `meta.webhookVerifyToken` | `HD_META_WEBHOOK_VERIFY_TOKEN` | The token Meta sends with its handshake. |
 
 Which of the two secrets signs an Instagram webhook under Instagram Login is not settled by Meta's documentation ([open questions](../in-development/M10-meta-channels.md#open-questions)). Helpdock accepts a webhook signed with either one that is set.
+
+## Connecting a WhatsApp number
+
+Channels › Meta › Connect asks for the **phone number id** and a **system user token**. Meta keeps a number's webhook subscription on the WhatsApp Business Account (WABA) that owns it, not on the number, so Helpdock finds the business account from the token: it reads the business accounts the token was granted on (`debug_token`, `granular_scopes`) and keeps the one that lists the number.
+
+If the dialog says the token belongs to a different account, the token can read the number but no business account it was granted on lists it. In Meta Business Settings, assign the WhatsApp account to the system user with the app's `whatsapp_business_management` and `whatsapp_business_messaging` permissions, generate the token again and paste that one. The business account is stored with the connection; a number connected before this was recorded shows "Disconnect it and connect it again" on Subscribe now.
 
 ## The handshake
 
@@ -39,7 +45,7 @@ Helpdock answers `200` with the challenge as `text/plain` when `hub.mode` is `su
 
 The token is made the first time an install admin reads the App card (`GET /api/meta/app`); a request to the public handshake never writes a setting. `POST /api/meta/app/verify-token` makes a new one and returns it once as `{ verifyToken }`; the old one stops working at once, and the change is recorded in the audit log by key, never by value. Both routes need `install:admin`. A token set by `HD_META_WEBHOOK_VERIFY_TOKEN` cannot be replaced from the screen (`409`).
 
-`GET /api/meta/app` answers `{ appIdSet, callbackUrl, verifyTokenHint, secretsLockedByEnv }`: whether an app id is saved, where Meta posts, the last four characters of the verify token and which of the four settings an environment variable has taken over. No secret is ever returned.
+`GET /api/meta/app` answers `{ appIdSet, appId, appSecretSet, instagramAppSecretSet, graphVersion, callbackUrl, verifyTokenHint, secretsLockedByEnv }`: the app id (it is not a secret), whether each of the two secrets is set, the Graph version every call names (`META_GRAPH_VERSION`), where Meta posts, the last four characters of the verify token and which of the four settings an environment variable has taken over. No secret is ever returned.
 
 ## Deliveries
 

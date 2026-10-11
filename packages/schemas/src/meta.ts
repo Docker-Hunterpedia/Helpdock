@@ -495,10 +495,18 @@ export type MetaAccountParam = z.infer<typeof metaAccountParamSchema>;
 
 /**
  * What Channels › Meta shows about the install's Meta developer app. The
- * secrets are set on Settings or by the environment and never travel here.
+ * secrets are set on Settings or by the environment and never travel here:
+ * only whether each is set. The app id is not a secret (Meta prints it on every
+ * dashboard page), so the card shows it to cross-check with the dashboard.
  */
 export const metaAppSchema = z.object({
   appIdSet: z.boolean(),
+  /** The app's id, empty while none is set. */
+  appId: z.string().max(25),
+  appSecretSet: z.boolean(),
+  instagramAppSecretSet: z.boolean(),
+  /** The Graph version every call names: `META_GRAPH_VERSION`, or the version built in. */
+  graphVersion: z.string().regex(/^v\d+\.\d+$/),
   /** Where Meta posts webhooks: the install's public route. */
   callbackUrl: z.string(),
   /** The verify token's last four characters, or empty when none is set. */

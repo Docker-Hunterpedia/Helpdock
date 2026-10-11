@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { DEFAULT_META_GRAPH_VERSION } from '@helpdock/channels';
 import type { Env, Settings } from '@helpdock/config';
 import { SettingLockedError, settingDefinitions } from '@helpdock/config';
 import { auditLog, INSTALL_SCOPE_BRAND_ID } from '@helpdock/db';
@@ -38,13 +39,15 @@ const newVerifyToken = (): string => randomBytes(24).toString('base64url');
 export class MetaAppService {
   readonly #settings: Pick<Settings, 'get' | 'set' | 'isLockedByEnv'>;
   readonly #appUrl: string;
+  readonly #graphVersion: string;
 
   constructor(
     settings: Pick<Settings, 'get' | 'set' | 'isLockedByEnv'>,
-    env: Pick<Env, 'APP_URL'>,
+    env: Pick<Env, 'APP_URL' | 'META_GRAPH_VERSION'>,
   ) {
     this.#settings = settings;
     this.#appUrl = env.APP_URL;
+    this.#graphVersion = env.META_GRAPH_VERSION ?? DEFAULT_META_GRAPH_VERSION;
   }
 
   /**
@@ -95,15 +98,25 @@ export class MetaAppService {
     return new URL(metaWebhookPath(), this.#appUrl).toString();
   }
 
-  /** The App card (M10-07 draws it): no secret travels, only whether each is set. */
+  /**
+   * The App card (M10-07 draws it): no secret travels, only whether each is
+   * set. The app id is shown as it is, because Meta prints it on every
+   * dashboard page and the card exists to be compared with that page.
+   */
   async card(): Promise<MetaApp> {
-    const [appId, verifyToken] = await Promise.all([
+    const [appId, appSecret, instagramAppSecret, verifyToken] = await Promise.all([
       this.#settings.get('meta.appId'),
+      this.#settings.get('meta.appSecret'),
+      this.#settings.get('meta.instagramAppSecret'),
       this.verifyToken(),
     ]);
 
     return {
       appIdSet: appId !== '',
+      appId,
+      appSecretSet: appSecret !== '',
+      instagramAppSecretSet: instagramAppSecret !== '',
+      graphVersion: this.#graphVersion,
       callbackUrl: this.callbackUrl(),
       verifyTokenHint: verifyToken.slice(-META_TOKEN_HINT_LENGTH),
       secretsLockedByEnv: APP_SETTING_KEYS.filter((key) => this.#settings.isLockedByEnv(key)),

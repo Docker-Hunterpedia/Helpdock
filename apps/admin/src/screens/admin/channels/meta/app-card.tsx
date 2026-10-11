@@ -18,6 +18,7 @@ import { HealthStateDot } from '../health.tsx';
 import { CodeText } from './code-text.tsx';
 
 /** The settings an `HD_META_*` variable can take over, by the name the api reports them in. */
+const APP_ID = 'meta.appId';
 const APP_SECRET = 'meta.appSecret';
 const INSTAGRAM_APP_SECRET = 'meta.instagramAppSecret';
 
@@ -38,7 +39,7 @@ export function useMetaApp(enabled: boolean) {
  * `app-not-configured` is what says a secret is missing.
  */
 export const appIsConfigured = (app: MetaApp): boolean =>
-  app.appIdSet && app.verifyTokenHint !== '';
+  (app.appSecretSet || app.instagramAppSecretSet) && app.verifyTokenHint !== '';
 
 /**
  * DESIGN §6.3 MetaAppCard (M10-07, `Admin/Channels-Meta` panel 1), install
@@ -68,6 +69,7 @@ export function MetaAppCard({
   const verifyId = useId();
   const secretId = useId();
   const instagramId = useId();
+  const versionId = useId();
   const [confirming, setConfirming] = useState(false);
   const [revealed, setRevealed] = useState<string | null>(null);
 
@@ -213,21 +215,15 @@ export function MetaAppCard({
           </Box>
         </Field>
 
-        <Field
+        <SettingField
           id={appIdId}
           label={t('channels:meta.app.appId.label')}
-          hint={<CodeText text={t('channels:meta.app.appId.hint')} />}
-        >
-          <TextField
-            id={appIdId}
-            size="small"
-            value={t(
-              app.appIdSet ? 'channels:meta.app.appId.set' : 'channels:meta.app.appId.notSet',
-            )}
-            fullWidth
-            slotProps={{ htmlInput: { readOnly: true, 'aria-describedby': `${appIdId}-hint` } }}
-          />
-        </Field>
+          hint={t('channels:meta.app.appId.hint')}
+          variable="HD_META_APP_ID"
+          locked={locked(APP_ID)}
+          value={app.appIdSet ? app.appId : t('channels:meta.app.state.notSet')}
+          mono={app.appIdSet}
+        />
 
         <Field id={verifyId} label={t('channels:meta.app.verify.label')} hint={verifyHint}>
           <Box sx={{ display: 'flex', gap: 2 }}>
@@ -280,20 +276,46 @@ export function MetaAppCard({
           </Box>
         </Field>
 
-        <SecretSetting
+        <SettingField
           id={secretId}
           label={t('channels:meta.app.secret.label')}
           hint={t('channels:meta.app.secret.hint')}
           variable="HD_META_APP_SECRET"
           locked={locked(APP_SECRET)}
+          value={t(
+            app.appSecretSet ? 'channels:meta.app.state.set' : 'channels:meta.app.state.notSet',
+          )}
+          lockedValue={MASK}
         />
-        <SecretSetting
+        <SettingField
           id={instagramId}
           label={t('channels:meta.app.instagramSecret.label')}
           hint={t('channels:meta.app.instagramSecret.hint')}
           variable="HD_META_INSTAGRAM_APP_SECRET"
           locked={locked(INSTAGRAM_APP_SECRET)}
+          value={t(
+            app.instagramAppSecretSet
+              ? 'channels:meta.app.state.set'
+              : 'channels:meta.app.state.notSet',
+          )}
+          lockedValue={MASK}
         />
+        <Field
+          id={versionId}
+          label={t('channels:meta.app.graphVersion.label')}
+          hint={<CodeText text={t('channels:meta.app.graphVersion.hint')} />}
+        >
+          <TextField
+            id={versionId}
+            size="small"
+            value={app.graphVersion}
+            fullWidth
+            slotProps={{
+              htmlInput: { readOnly: true, dir: 'ltr', 'aria-describedby': `${versionId}-hint` },
+            }}
+            sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+          />
+        </Field>
       </Box>
 
       <Box
@@ -365,33 +387,43 @@ export function MetaAppCard({
   );
 }
 
+/** What a locked secret is drawn as: the screen never holds it, so there is nothing to show. */
+const MASK = '••••••••••••';
+
 /**
- * An install secret the screen never holds. When the environment has taken it
- * over it is an EnvLockedField with the "Set by environment" chip; otherwise
- * the field says so and the hint names the variable that sets it.
+ * One of the app's install settings, read-only here. When an environment
+ * variable has taken it over it is an EnvLockedField with the "Set by
+ * environment" chip; otherwise the field shows the value (the app id, which is
+ * not a secret) or whether a secret is set, and the hint names the variable that
+ * sets it.
  */
-function SecretSetting({
+function SettingField({
   id,
   label,
   hint,
   variable,
   locked,
+  value,
+  lockedValue = value,
+  mono = false,
 }: {
   readonly id: string;
   readonly label: string;
   readonly hint: string;
   readonly variable: string;
   readonly locked: boolean;
+  readonly value: string;
+  /** Shown instead when locked; a secret's is its mask. */
+  readonly lockedValue?: string;
+  readonly mono?: boolean;
 }): ReactNode {
-  const t = useT();
-
   if (locked) {
     return (
       <Box sx={{ position: 'relative' }}>
         <Box sx={{ position: 'absolute', insetBlockStart: 0, insetInlineEnd: 0 }}>
           <EnvChip />
         </Box>
-        <EnvLockedField id={id} label={label} value="••••••••••••" variable={variable} />
+        <EnvLockedField id={id} label={label} value={lockedValue} variable={variable} />
       </Box>
     );
   }
@@ -401,9 +433,14 @@ function SecretSetting({
       <TextField
         id={id}
         size="small"
-        value={t('channels:meta.app.notLocked')}
+        value={value}
         fullWidth
-        slotProps={{ htmlInput: { readOnly: true, 'aria-describedby': `${id}-hint` } }}
+        slotProps={{
+          htmlInput: { readOnly: true, dir: 'ltr', 'aria-describedby': `${id}-hint` },
+        }}
+        sx={
+          mono ? { '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) } : undefined
+        }
       />
     </Field>
   );

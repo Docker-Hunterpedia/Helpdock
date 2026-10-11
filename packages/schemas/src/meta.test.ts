@@ -427,15 +427,34 @@ describe('metaAccountStatusResponseSchema', () => {
 });
 
 describe('the App card', () => {
-  it('shows whether an app id is set and where Meta posts, and carries no secret', () => {
+  it('shows the app id, whether each secret is set and where Meta posts, and carries no secret', () => {
     const app = {
       appIdSet: true,
+      appId: '1290457718832406',
+      appSecretSet: true,
+      instagramAppSecretSet: false,
+      graphVersion: 'v25.0',
       callbackUrl: 'https://support.example.com/api/meta/webhook',
       verifyTokenHint: 'a1b2',
       secretsLockedByEnv: ['meta.appSecret'],
     };
 
     expect(metaAppSchema.parse({ ...app, appSecret: 's3cret' })).toEqual(app);
+  });
+
+  it('names the Graph version in the shape the client accepts', () => {
+    const app = {
+      appIdSet: false,
+      appId: '',
+      appSecretSet: false,
+      instagramAppSecretSet: false,
+      callbackUrl: 'https://support.example.com/api/meta/webhook',
+      verifyTokenHint: '',
+      secretsLockedByEnv: [],
+    };
+
+    expect(metaAppSchema.safeParse({ ...app, graphVersion: 'v25.0' }).success).toBe(true);
+    expect(metaAppSchema.safeParse({ ...app, graphVersion: '25' }).success).toBe(false);
   });
 
   it('shows a verify token once and never an empty one', () => {

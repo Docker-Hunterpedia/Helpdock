@@ -207,6 +207,22 @@ export class MetaRepository {
     );
   }
 
+  /**
+   * Whether another account is connected on the same WhatsApp business account,
+   * in any brand. Meta subscribes an app per business account, so the app stays
+   * subscribed while any of its numbers is connected (M10-07).
+   */
+  async sharesBusinessAccount(db: Db, wabaId: string, exceptId: string): Promise<boolean> {
+    const rows = await withAllBrands(db, 'meta.waba.shared', (tx) =>
+      tx
+        .select({ id: metaAccounts.id })
+        .from(metaAccounts)
+        .where(and(eq(metaAccounts.wabaId, wabaId), ne(metaAccounts.id, exceptId)))
+        .limit(1),
+    );
+    return rows.length > 0;
+  }
+
   // ---------------------------------------------------------- conversations
 
   async conversation(

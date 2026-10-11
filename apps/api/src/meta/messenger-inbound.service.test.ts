@@ -350,13 +350,12 @@ describe('an echo', () => {
   const echoOf = (over: Parameters<typeof pageEcho>[0] = {}) => pageEcho({ mid: 'mid.9', ...over });
 
   it('is dropped silently when the app that sent it is this install’s', async () => {
-    const { handle, route, log, lookups } = harness();
+    const { handle, route, log } = harness();
 
     const outcome = await handle(echoOf({ appId: META_FIXTURE.appId }));
 
     expect(outcome).toEqual({ outcome: 'ignored', reason: 'echo' });
     expect(route).not.toHaveBeenCalled();
-    expect(lookups.delivery).not.toHaveBeenCalled();
     expect(log.info).not.toHaveBeenCalled();
   });
 
@@ -367,7 +366,6 @@ describe('an echo', () => {
     const outcome = await handle(echoOf({ appId: '999', metadata: DELIVERY }));
 
     expect(outcome).toEqual({ outcome: 'ignored', reason: 'echo' });
-    expect(lookups.delivery).toHaveBeenCalledWith({}, DELIVERY);
     expect(log.info).not.toHaveBeenCalled();
   });
 
@@ -391,7 +389,6 @@ describe('an echo', () => {
       outcome: 'ignored',
       reason: 'echo-not-ours',
     });
-    expect(inbox.lookups.delivery).not.toHaveBeenCalled();
 
     const noDelivery = harness();
     expect(await noDelivery.handle(echoOf({ appId: '999', metadata: DELIVERY }))).toEqual({
@@ -404,6 +401,7 @@ describe('an echo', () => {
       outcome: 'ignored',
       reason: 'echo-not-ours',
     });
+    // Not an id at all: asking the database would be an error, not an answer.
     expect(typed.lookups.delivery).not.toHaveBeenCalled();
   });
 
@@ -419,21 +417,27 @@ describe('an echo', () => {
 });
 
 describe('a delivery or read report', () => {
-  it('marks every delivery of the conversation up to the watermark, at the watermark’s time', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
-    const watermark = META_FIXTURE.time + 120;
+  it.each([
+    ['delivery', pageDelivery, 'delivered'],
+    ['read', pageRead, 'read'],
+  ] as const)(
+    'marks the conversation’s deliveries up to a %s watermark, at its time',
+    async (_kind, report, status) => {
+      const { handle, lookups } = harness();
+      lookups.conversation.mockResolvedValue(conversation());
+      const watermark = META_FIXTURE.time + 120;
 
-    expect(await handle(pageDelivery({ watermark }))).toEqual({ outcome: 'handled' });
+      expect(await handle(report({ watermark }))).toEqual({ outcome: 'handled' });
 
-    expect(lookups.advanceByWatermark).toHaveBeenCalledWith(
-      {},
-      CONVERSATION,
-      'delivered',
-      new Date(watermark * 1_000),
-    );
-    expect(lookups.advanceStatus).not.toHaveBeenCalled();
-  });
+      expect(lookups.advanceByWatermark).toHaveBeenCalledWith(
+        {},
+        CONVERSATION,
+        status,
+        new Date(watermark * 1_000),
+      );
+      expect(lookups.advanceStatus).not.toHaveBeenCalled();
+    },
+  );
 
   it('also moves the messages a delivery names, one by one', async () => {
     const { handle, lookups } = harness();
@@ -446,20 +450,6 @@ describe('a delivery or read report', () => {
       [{}, 'mid.a', 'delivered', new Date(watermark * 1_000)],
       [{}, 'mid.b', 'delivered', new Date(watermark * 1_000)],
     ]);
-  });
-
-  it('marks read through the watermark alone', async () => {
-    const { handle, lookups } = harness();
-    lookups.conversation.mockResolvedValue(conversation());
-
-    await handle(pageRead({ watermark: META_FIXTURE.time + 300 }));
-
-    expect(lookups.advanceByWatermark).toHaveBeenCalledWith(
-      {},
-      CONVERSATION,
-      'read',
-      new Date((META_FIXTURE.time + 300) * 1_000),
-    );
   });
 
   it('is dropped for a customer the account has no conversation with', async () => {

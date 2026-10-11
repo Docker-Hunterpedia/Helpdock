@@ -107,6 +107,15 @@ const fullName = (profile: z.infer<typeof messengerProfileSchema>): string | nul
   return name === '' ? null : name.slice(0, NAME_MAX_LENGTH);
 };
 
+/**
+ * Whether the contact layer can spell this customer's identity. It refuses
+ * anything but letters, digits and `._:-`, which would fail the whole batch and
+ * have Meta redeliver it for ever; Meta's own ids are never such a thing, so this
+ * is the poison-pill guard and not a rule.
+ */
+const isSpellable = (account: Pick<MetaAccountRow, 'externalId'>, customerId: string): boolean =>
+  normaliseIdentity('messenger', metaIdentityValue('messenger', account.externalId, customerId)).ok;
+
 const labelsFor = (locale: Locale): MetaInboundLabels => {
   const t = metaText(locale);
   return {
@@ -179,15 +188,7 @@ export class MessengerInboundService implements PlatformInboundService {
     const { tx, account, now } = context;
     const { repository, router, sink, lifecycleReads } = this.#options;
 
-    // The router refuses an identity the contact layer cannot spell, which would
-    // fail the whole batch for every redelivery; Meta's ids are never such a
-    // thing, so this is the poison-pill guard and not a rule.
-    if (
-      !normaliseIdentity(
-        'messenger',
-        metaIdentityValue('messenger', account.externalId, event.customerId),
-      ).ok
-    ) {
+    if (!isSpellable(account, event.customerId)) {
       return ignored('invalid-customer-id');
     }
 
@@ -219,20 +220,31 @@ export class MessengerInboundService implements PlatformInboundService {
       sink,
     );
 
-    if (event.unsupportedAttachments.length > 0) {
-      // An attachment of a type Helpdock cannot show rides on a message that was
-      // filed for the rest of it; the agent is told something is missing.
-      const thread = await ticketOfMessage(tx, account, event.messageId);
-      /* c8 ignore next 3 -- the router wrote this message a statement ago, in this transaction. */
-      if (thread === undefined) {
-        throw new Error('The routed message is not on a ticket');
-      }
-      await this.#line(context, thread, {
-        text: metaText(locale)('thread.unsupported'),
-        key: `unsupported:${event.messageId}`,
-      });
-    }
+    await this.#noteUnsupportedAttachments(context, event, locale);
     return HANDLED;
+  }
+
+  /**
+   * An attachment of a type Helpdock cannot show rides on a message that was
+   * filed for the rest of it; the agent is told something is missing.
+   */
+  async #noteUnsupportedAttachments(
+    context: MetaEventContext,
+    event: Event<'message'>,
+    locale: Locale,
+  ): Promise<void> {
+    if (event.unsupportedAttachments.length === 0) {
+      return;
+    }
+    const thread = await ticketOfMessage(context.tx, context.account, event.messageId);
+    /* c8 ignore next 3 -- the router wrote this message a statement ago, in this transaction. */
+    if (thread === undefined) {
+      throw new Error('The routed message is not on a ticket');
+    }
+    await this.#writeLine(context, thread, {
+      text: metaText(locale)('thread.unsupported'),
+      key: `unsupported:${event.messageId}`,
+    });
   }
 
   /**
@@ -350,7 +362,7 @@ export class MessengerInboundService implements PlatformInboundService {
           ? t('thread.reactionPlain')
           : t('thread.reaction', { emoji: event.emoji });
 
-    return this.#line(context, thread, {
+    return this.#writeLine(context, thread, {
       text,
       // A reaction has no id of its own: who, to what, which way and when.
       key:
@@ -371,7 +383,7 @@ export class MessengerInboundService implements PlatformInboundService {
     const locale = await this.#localeOf(context, event.customerId);
     const version = event.editNumber ?? event.timestamp?.getTime() ?? null;
 
-    return this.#line(context, thread, {
+    return this.#writeLine(context, thread, {
       text: metaText(locale)('thread.edited', { text: event.text }),
       key: version === null ? null : `edit:${event.messageId}:${String(version)}`,
     });
@@ -404,7 +416,7 @@ export class MessengerInboundService implements PlatformInboundService {
       conversation.contactId,
     );
 
-    return this.#line(
+    return this.#writeLine(
       context,
       { ticketId: found.ticket.id, departmentId: found.ticket.departmentId },
       {
@@ -414,7 +426,7 @@ export class MessengerInboundService implements PlatformInboundService {
     );
   }
 
-  async #line(
+  async #writeLine(
     { tx, account }: MetaEventContext,
     thread: ThreadRef,
     line: SystemLine,

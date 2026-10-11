@@ -48,18 +48,17 @@ Every `POST` is checked in this order:
 1. **Signature.** `X-Hub-Signature-256: sha256=<hex>` must be the HMAC-SHA256 of the **raw bytes** of the body under the app secret or, when set, the Instagram app secret. The check is constant-time and tries every secret. A missing, malformed or wrong signature, and an install with no app secret, are the same `401`, and nothing else is read or filed.
 2. **Envelope.** `{ object, entry[] }` with `object` one of `whatsapp_business_account`, `page`, `instagram`. A signed body that is not one is `400`.
 3. **Account.** Each entry is routed to a connected account across all brands: WhatsApp by `value.metadata.phone_number_id` (one business account can hold several numbers, possibly of different brands), Messenger and Instagram by the entry's `id`. The account is unique on `(platform, external id)` across the install. An unknown account is counted and passed over.
-4. **Brand.** An account whose brand is being deleted (its 30-day grace, [DOMAIN-RULES §11](../planning/DOMAIN-RULES.md#11-data-lifecycle)) is passed over.
+4. **Brand.** An account whose brand is being deleted (its 30-day grace, [DOMAIN-RULES §11](../planning/DOMAIN-RULES.md#11-data-lifecycle)) is passed over and counted. It is still answered `200`: the URL is the install's, not the brand's, so a `410` could only make Meta redeliver that brand's events for days or unsubscribe the app for every brand ([ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md), decision 4).
 5. **Filing.** The remaining accounts' events are filed, in the order Meta sent them, in **one transaction of the account's brand** (system context, `app.principal_id = meta.webhook`), each event in a savepoint. A customer's message is skipped as a duplicate when `ticket_messages.external_message_id` already holds its `wamid.…` or `mid` for that platform, so Meta's redeliveries and two simultaneous deliveries of one batch file one message. A message from a sender on the brand's block list is dropped and counted. An account whose transaction fails is logged and recorded on the account (`last_error`, never a message or a token); the others in the batch are still filed.
 
 The webhook never calls Graph. Whatever an event causes outside the database is an outbox row written in the same transaction ([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)).
 
 ### What the answer means to Meta
 
-Meta treats anything other than `200` as the webhook being down: WhatsApp redelivers for seven days, and Messenger and Instagram unsubscribe the app after an hour of failures. So everything after a valid signature is `200`: filed, duplicate, ignored, an unknown account, an event Helpdock does not file. The exceptions:
+Meta treats anything other than `200` as the webhook being down: WhatsApp redelivers for seven days, and Messenger and Instagram unsubscribe the app after an hour of failures. So everything after a valid signature is `200`: filed, duplicate, ignored, an unknown account, a brand in its deletion grace, an event Helpdock does not file. The exceptions:
 
 | Status | When |
 |---|---|
-| `410` | Every account in the batch belongs to a brand being deleted. A batch that also holds a live brand's events is `200`, so the live brand loses nothing. |
 | `500` | Nothing in the batch was filed and at least one account's transaction failed (the database was down). Meta redelivers and the dedupe key makes that safe. A batch in which something was filed is `200`, so an account that always fails cannot keep the other brands in Meta's retry loop. |
 | `400` | The signed body is not a Meta envelope. |
 | `401` | The signature. |

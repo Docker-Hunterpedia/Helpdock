@@ -2,7 +2,6 @@ import { META_SIGNATURE_HEADER } from '@helpdock/schemas';
 import {
   Controller,
   Get,
-  GoneException,
   HttpCode,
   HttpException,
   HttpStatus,
@@ -74,9 +73,6 @@ export class MetaWebhookController {
       request.body,
     );
 
-    if (verdict === 'gone') {
-      throw new GoneException('This brand is no longer available');
-    }
     if (verdict === 'failed') {
       // So Meta redelivers a batch nothing was filed from; the dedupe key makes
       // the second delivery safe.

@@ -43,8 +43,10 @@ import type {
  * **What the response says.** Everything after a valid signature is 200,
  * because Meta treats anything else as the webhook being down: WhatsApp retries
  * for seven days, Messenger and Instagram unsubscribe the app after an hour.
- * The exceptions are the two a retry can only help or only repeat, and both
- * are decided by {@link metaWebhookVerdict}.
+ * That includes a brand in its deletion grace: the URL is the install's, not
+ * the brand's, so a 410 could only make Meta redeliver the brand's events, or
+ * drop every brand's. The one exception, a batch a retry can only help, is
+ * decided by {@link metaWebhookVerdict}.
  */
 
 /** What became of one account's part of a batch. */
@@ -70,26 +72,22 @@ export type MetaRouteReport =
       readonly brandId: string;
     };
 
-export type MetaWebhookVerdict = 'ok' | 'gone' | 'failed';
+export type MetaWebhookVerdict = 'ok' | 'failed';
 
 /**
  * The status a batch is answered with, from what became of its accounts.
  *
- * - **`gone`** (410, DOMAIN-RULES §11) only when every account in the batch
- *   belongs to a brand being deleted. A batch that also holds a live brand's
- *   events is 200: the answer is for the whole batch, and refusing it would
- *   have Meta redeliver (and Messenger unsubscribe) the live brand's too.
  * - **`failed`** (500, so Meta redelivers) only when nothing in the batch was
  *   filed and an account threw. Redelivery is safe, the dedupe key sees to it;
  *   but a batch in which something was filed is answered 200, because an
  *   account that always throws would otherwise keep a whole batch, and every
  *   brand in it, in Meta's retry loop.
- * - Otherwise **`ok`**: filed, duplicate, unknown and empty batches alike.
+ * - Otherwise **`ok`**: filed, duplicate, unknown and empty batches alike, and
+ *   a brand in its deletion grace (ADR 0025 (4): the answer is for the whole
+ *   batch and the install's one URL, so a 410 for one brand could only have
+ *   Meta redeliver its events, or unsubscribe the app for every brand).
  */
 export const metaWebhookVerdict = (reports: readonly MetaRouteReport[]): MetaWebhookVerdict => {
-  if (reports.length > 0 && reports.every((report) => report.status === 'brand-gone')) {
-    return 'gone';
-  }
   const nothingFiled = !reports.some((report) => report.status === 'filed');
   if (nothingFiled && reports.some((report) => report.status === 'failed')) {
     return 'failed';

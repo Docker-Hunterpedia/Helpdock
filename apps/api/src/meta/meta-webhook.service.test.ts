@@ -121,8 +121,8 @@ describe('metaWebhookVerdict', () => {
   it.each([
     ['an empty batch', [], 'ok'],
     ['one account filed', [filed], 'ok'],
-    ['a batch for a brand being deleted', [away], 'gone'],
-    ['two accounts of brands being deleted', [away, away], 'gone'],
+    ['a batch for a brand being deleted: the URL is the install’s, not the brand’s', [away], 'ok'],
+    ['two accounts of brands being deleted', [away, away], 'ok'],
     [
       'a deleted brand beside a live one: the live brand’s events must not be refused',
       [away, filed],
@@ -368,7 +368,7 @@ describe('MetaWebhookService.receive', () => {
       expect(received).toEqual([]);
     });
 
-    it('files nothing for a brand being deleted, and says gone when that is all there is', async () => {
+    it('files nothing for a brand being deleted, and still answers ok', async () => {
       gone.add(BRAND_A);
       const { service, received } = harness();
       const body = whatsappText({ phoneNumberId: NUMBER_A });
@@ -376,7 +376,7 @@ describe('MetaWebhookService.receive', () => {
 
       const result = await service.receive(raw, signature, body);
 
-      expect(result.verdict).toBe('gone');
+      expect(result.verdict).toBe('ok');
       expect(result.routes.map((route) => route.status)).toEqual(['brand-gone']);
       expect(received).toEqual([]);
     });

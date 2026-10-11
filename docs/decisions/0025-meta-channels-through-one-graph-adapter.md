@@ -253,9 +253,10 @@ stand-in for the vendor in every test (`apps/api/src/testing/fake-telegram.ts`).
 
 ## Amendments
 
-- **2026-10-11, M10-02.** Decision 4 says a brand in its deletion grace is answered 200 like any event
-  after a valid signature. DOMAIN-RULES §11 says a brand's channels answer 410, and the milestone's
-  M10-02 row follows it. The webhook does both: a batch in which **every** account belongs to a brand
-  in its grace is 410, and a batch that also holds a live brand's events, or an account Helpdock does
-  not know, stays 200 with the deleted brand's part passed over, so a deleted brand cannot make Meta
-  redeliver, or Messenger unsubscribe the app for, the others. Awaiting the owner's confirmation.
+- **2026-10-11, M10-02.** Decision 4 stands against the older wording of DOMAIN-RULES §11, which
+  had every channel of a brand in its deletion grace answer 410. The Meta webhook is the install's
+  one URL for every brand, so a non-200 cannot be scoped to a brand: Meta reads it as the webhook
+  being down, redelivers the brand's events for up to seven days, and after an hour of failures
+  unsubscribes the app for every brand. The webhook therefore answers 200, passes the brand's
+  entries over and counts them. §11 now says so; a brand's own endpoints (widget, help center, its
+  Telegram bot's URL) still answer 410.

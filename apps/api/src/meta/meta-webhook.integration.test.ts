@@ -55,7 +55,8 @@ import type { MetaEventOutcome, PlatformInboundService } from './meta-inbound.se
  *    inbound service once per entry, each inside its brand; a redelivered batch
  *    is deduped; a bad or tampered signature is 401 and files nothing; the
  *    Instagram app secret is accepted once one is set; a brand in its deletion
- *    grace gets 410; two concurrent deliveries of one batch end with one record.
+ *    grace is answered 200 and nothing is filed for it; two concurrent
+ *    deliveries of one batch end with one record.
  * 3. **The repository**: the queries the inbound services, the reply job and the
  *    admin routes will share, against the schema they were written for.
  * 4. **The App card**: `install:admin` routes for the verify token.
@@ -642,14 +643,14 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
         .set({ status, deletedAt: status === 'active' ? null : new Date() })
         .where(eq(brands.id, BRAND_B));
 
-    it('gets 410 and nothing is filed for it', async () => {
+    it('is answered 200, so Meta neither redelivers nor unsubscribes, and nothing is filed for it', async () => {
       await setStatus('deleting');
       try {
         const wamid = fixtureWamid(180);
 
         const response = await driver.post(whatsappText({ phoneNumberId: NUMBER_B, wamid }));
 
-        expect(response.status).toBe(410);
+        expect(response.status).toBe(200);
         expect(handlerCalls).toEqual([]);
         expect(await filedMessages(BRAND_B, wamid, 'whatsapp')).toHaveLength(0);
       } finally {

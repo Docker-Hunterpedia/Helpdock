@@ -30,9 +30,11 @@ import {
   knowledgeReembedJob,
   knowledgeSyncJob,
   knowledgeSyncSchedulerId,
+  META_HEALTH_SCHEDULE_CRON,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
+  metaHealthScheduleJob,
   notifyEmailJob,
   notifyPushJob,
   type OutboxRelay,
@@ -138,6 +140,15 @@ import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
+import { graphClientFactory } from '../meta/graph-client-factory.js';
+import { MetaRepository } from '../meta/meta.repository.js';
+import { registerMetaEventHandlers } from '../meta/meta-events.js';
+import {
+  createMetaAccountChangedHandler,
+  createMetaHealthProcessor,
+  queueMetaHealthScheduler,
+  scheduleAllMetaHealth,
+} from '../meta/meta-health.job.js';
 import { createNotifyProcessor } from '../notifications/delivery.js';
 import { InstallChannels } from '../notifications/install-channels.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
@@ -243,12 +254,16 @@ export interface WorkerDependencies {
    * M1-14's `maintenance` consumer and the nightly retention schedule. The
    * schedule is upserted on every boot, so a Redis that lost it gets it back
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
+   * M10-10 adds the hourly health check of each Meta account, whose scheduler
+   * per account is registered on boot the same way and which reads the
+   * install's Meta app id from settings.
    */
   createMaintenanceWorker(options: {
     redis: Redis;
     db: Db;
     log: JobLogger;
     env: WorkerEnv;
+    settings: WorkerSettings;
   }): Closable;
   /**
    * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox, and in
@@ -350,6 +365,10 @@ export type WorkerEnv = Pick<
   | 'TELEGRAM_API_ROOT'
   // M7-03: whether a website crawl may render pages in a headless browser.
   | 'KNOWLEDGE_CRAWL_RENDER'
+  // M10: where Graph is and which version the Meta jobs call.
+  | 'META_GRAPH_VERSION'
+  | 'META_GRAPH_API_ROOT'
+  | 'META_INSTAGRAM_API_ROOT'
   // M9: how many outbox events run at once.
   | 'OUTBOX_CONCURRENCY'
 >;
@@ -592,6 +611,17 @@ export const workerDependencies: WorkerDependencies = {
         env.TELEGRAM_POLLING === true,
       ),
     });
+    // M10-10. A Meta account connected, re-tokened or disconnected moves its
+    // hourly health check on the `maintenance` queue. This is the one call for
+    // M10's events: the dispatcher refuses a second handler for an event, so
+    // each M10 deliverable adds its own consumer here.
+    const maintenanceQueue = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
+    registerMetaEventHandlers({
+      accountChanged: createMetaAccountChangedHandler(
+        new MetaRepository(),
+        queueMetaHealthScheduler(maintenanceQueue),
+      ),
+    });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
     const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
@@ -734,6 +764,7 @@ export const workerDependencies: WorkerDependencies = {
         await domains.close();
         await webhooks.close();
         await ai.close();
+        await maintenanceQueue.close();
       },
     };
   },
@@ -856,14 +887,16 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
-  createMaintenanceWorker: ({ redis, db, log, env }) => {
+  createMaintenanceWorker: ({ redis, db, log, env, settings }) => {
     const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
-    // M1-14's nightly retention, M8-04's hourly rollup and M8-07's nightly
-    // purge tick, each upserted on every boot for the reason above.
+    // M1-14's nightly retention, M8-04's hourly rollup, M8-07's nightly purge
+    // tick and M10-10's daily re-registration of the Meta health checks, each
+    // upserted on every boot for the reason above.
     for (const { job, cron } of [
       { job: maintenanceRetentionScheduleJob, cron: RETENTION_CRON },
       { job: statsRollupScheduleJob, cron: STATS_ROLLUP_CRON },
       { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
+      { job: metaHealthScheduleJob, cron: META_HEALTH_SCHEDULE_CRON },
     ]) {
       maintenance
         .upsertJobScheduler(
@@ -925,10 +958,28 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
 
+    // M10-10. Every connected Meta account is checked hourly by a scheduler of
+    // its own, registered again here on every boot.
+    const metaRepository = new MetaRepository();
+    const metaScheduler = queueMetaHealthScheduler(maintenance);
+    scheduleAllMetaHealth(db, metaRepository, metaScheduler).catch((error: unknown) =>
+      log.error({ err: error }, 'could not register the Meta health checks'),
+    );
+    const metaHealth = createMetaHealthProcessor({
+      db,
+      log,
+      keyring: createKeyring(env),
+      repository: metaRepository,
+      graph: graphClientFactory(env)(),
+      scheduler: metaScheduler,
+      appId: () => settings.get('meta.appId'),
+    });
+
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
       async (job) => {
-        await (stats(job) ?? purge(job) ?? retention(job));
+        // Retention fails a job it does not know, so it stays last.
+        await (stats(job) ?? purge(job) ?? metaHealth(job) ?? retention(job));
       },
       // One brand at a time: retention is background housekeeping, and two
       // brands purging at once would only compete for the same disk.
@@ -1390,7 +1441,13 @@ export const startWorker = ({
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
-  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log, env });
+  const maintenance = deps.createMaintenanceWorker({
+    redis: connection,
+    db,
+    log,
+    env,
+    settings,
+  });
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });

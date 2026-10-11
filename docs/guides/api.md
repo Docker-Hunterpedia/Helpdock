@@ -58,7 +58,7 @@ Authorization: Bearer hd_live_...
 | `401` | No key, an unknown key, a revoked key, or one past its `expiresAt` |
 | `403` | The key does not hold the route's scope, or the route is one a person uses, such as `/api/me`: a key reaches `/api/v1` and nothing else |
 | `404` | Nothing with that id in the key's brand |
-| `410` | The key's brand is scheduled for deletion, after the key has spent a request from its minute's budget (so past the budget it is `429`, as for any key). The key works again if the brand is restored |
+| `410` (`error.code` is `gone`) | The key's brand is scheduled for deletion, after the key has spent a request from its minute's budget (so past the budget it is `429`, as for any key). The key works again if the brand is restored |
 | `429` | The key made more requests in the last minute than its `rateLimitPerMinute` (600 unless set, at most 10 000) |
 
 **What a refused key leaves behind.** Every `401` for a key is logged as a warning, `API key refused`, with the key's first 12 characters (`keyPrefix`), the caller's address (`ip`, as Fastify resolves it under `TRUST_PROXY`) and a `reason`: `unknown` for a key Helpdock never issued, `revoked` or `expired` for one it did. The key itself is never logged. A revoked or expired key that is presented also writes an `api_key.refused` row to its brand's [audit log](audit-log.md#api-keys) (the prefix, the reason and the address), at most once a minute per key, so a script that keeps retrying a revoked key shows once, not a thousand times.

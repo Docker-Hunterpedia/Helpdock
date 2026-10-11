@@ -390,7 +390,8 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       await setStatus('deleting');
       try {
         letTheAnswerExpire();
-        expect(await statusOf(key)).toBe(410);
+        const gone = await call<ErrorResponse>('GET', '/api/v1/tickets', key);
+        expect([gone.status, gone.body.error.code]).toEqual([410, 'gone']);
         expect([
           await statusOf(throttled.key),
           await statusOf(throttled.key),

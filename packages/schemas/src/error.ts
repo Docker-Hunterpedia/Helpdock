@@ -30,6 +30,7 @@ export const errorCodeSchema = z.enum([
   'forbidden',
   'not_found',
   'conflict',
+  'gone',
   'rate_limited',
   'internal_error',
 ]);

@@ -1,5 +1,6 @@
 import { useEffect } from 'preact/hooks';
 import { initials, listNames, nextOpening, ordinal } from '../format.js';
+import { closedUntil, teamHours } from '../state/hours.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
 
@@ -58,12 +59,9 @@ export function Banners() {
     );
   }
 
-  if (
-    availability?.state === 'closed' &&
-    availability.next_open_at &&
-    conversation?.status !== 'ended'
-  ) {
-    const opening = nextOpening(availability.next_open_at, availability.timezone, locale);
+  const closure = closedUntil(teamHours(conversation, availability), new Date());
+  if (closure?.next_open_at && conversation?.status !== 'ended') {
+    const opening = nextOpening(closure.next_open_at, closure.timezone, locale);
     return (
       <div class="hd-banner hd-banner-muted" role="status">
         <Icon name="moon" size={16} />

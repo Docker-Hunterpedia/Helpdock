@@ -13,16 +13,44 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | planned; vendor, budget and test window required |
-| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. Re-walk the chapters M6, M7 and M8 touched |
+| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | in progress: the internal pre-pentest review is done and F1 to F5 are fixed (F3 for sockets only); F6 and N1 are open ([record](../completed/internal-security-review.md), [notes](#m9-01-internal-pre-pentest-review)); **the external pentest still needs a vendor, budget and test window** |
+| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. The re-walk of M6, M7 and M8 (2026-10-09) found more; its gaps were closed in #167 on 2026-10-11 ([record](../completed/asvs-l2.md), [notes](#m9-02-re-walk-of-m6-m7-and-m8)): 198 Met, 35 Partial, 0 Gap, 24 N/A, 1 Operator. 7.2.1, 2.10.1 and 3.5.2 stay Partial |
 | M9-03 | Load tests | #154 | in progress: suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); **the §14 host run is outstanding** |
-| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** |
+| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | the automated checks landed: axe (#147), and since 2026-10-09 zoom, forced colours, screen-reader markup and mixed direction as Playwright specs ([notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md)); **the screen-reader pass still needs a person** |
 | M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | #152, #156 | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); #152 patches the open Fastify advisory; the first release-tag ZAP run passed and #156 is closed |
 | M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
 | M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; **the clean-VM run and the three outside testers need people** (#157) and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
-| M9-08 | Release pipeline | #158 | public multi-architecture image and SBOM verified on `v0.4.0`; keyless Cosign signing implemented ([notes](#m9-08-release-pipeline)); close after the live signature is verified |
+| M9-08 | Release pipeline | #158 | public multi-architecture image and SBOM verified on `v0.4.0`; keyless Cosign signing implemented, and `v0.4.0` signed under it on 2026-10-09 by the Release workflow's manual mode (run 37928180052); #158 closed that day ([notes](#m9-08-release-pipeline)) |
 | M9-09 | Tag `1.0.0` | #159 | planned after every release gate passes |
 | M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
+
+## M9-01 Internal pre-pentest review
+
+An internal review of the widget and API surface found no High finding, two
+Medium and four Low. This is what became of them; the
+[record](../completed/internal-security-review.md) keeps the traces. The
+external test is still to be booked and run; its findings are fixed under this
+deliverable too.
+
+| Id | Finding | Outcome |
+|---|---|---|
+| F1 (Medium) | `/widget` socket events bypassed every throttle | Fixed. Every event spends a 120-a-minute per-visitor budget in Redis before it is parsed or reaches Postgres ([widget protocol](../guides/widget-protocol.md#throttles)). No per-address socket budget: see the note below. |
+| F2 (Medium) | `TRUST_PROXY=true` with `Caddyfile.cloudflare` keyed every per-address limit on Cloudflare's edge | Fixed. `TRUST_PROXY` takes an address list; Compose sets `uniquelocal`; the Cloudflare Caddyfile trusts Cloudflare's ranges and forwards `CF-Connecting-IP` ([install](../guides/install.md#behind-cloudflare)). The review proposed a hop count, which Fastify 5 answers by trusting nothing, so none is offered. |
+| F3 (Low) | A widget socket outlived the identity link that granted its rooms | Fixed: sockets are disconnected and SSE streams are ended, on every replica, when the link is withdrawn or changed. A removed origin or rotated signing secret does not disconnect sockets either. |
+| F4 (Low) | OAuth callback not bound to the browser that started it | Fixed with the `hd_oauth` cookie ([authentication](../guides/authentication.md#oauth)). |
+| F5 (Low) | API keys and webhook deliveries ignored a brand's deletion grace | Fixed: `410` for the key, `skipped` for the delivery. |
+| F6 (Low) | The magic link is spent by a `GET` | **Not fixed: needs an artboard.** The admin never sees the token (the api spends it and redirects), so the fix is a new admin screen that asks for a click and a `POST /api/auth/magic-link/consume`. |
+
+**Outstanding from this review**
+
+- **The widget socket's address is the proxy's.** `socket.handshake.address` is
+  the TCP peer, which behind Caddy is Caddy, so the handshake's `widget-ip`
+  budget (300 per 5 minutes per brand) is shared by every visitor of a brand.
+  A per-address socket-event budget would share the same key, which is why F1
+  has none. Resolving the handshake address under `TRUST_PROXY` is the fix.
+- **Live checks for the vendor** (the proxy half of F2 was checked against
+  Caddy 2.10 here, not on a Cloudflare zone): the real `request.ip` through
+  Cloudflare, and the cluster-wide disconnect of F3 across two replicas.
 
 ## M9-04 Accessibility audit
 
@@ -33,6 +61,11 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
   that already run those Playwright projects.
 - **Keyboard.** Tab order and a visible ring on every stop, the skip link,
   Escape, and the widget's focus trap at phone width.
+- **Zoom, forced colours, screen-reader markup, mixed direction** (2026-10-09).
+  `a11y-reflow`, `a11y-forced-colors`, `a11y-semantics` and `a11y-bidi` in
+  `apps/widget/e2e/`, and `help-center-a11y-reflow`, `-forced-colors`,
+  `-semantics` and `-bidi` in `apps/api/e2e/`, in `en` and `ar`; what each
+  proves is in the [audit](../completed/accessibility-audit.md#beyond-axe-zoom-forced-colours-screen-reader-markup-mixed-direction).
 - **Fixed.**
   - The help center has a skip link, and every `<main>` can take focus.
   - Article body links are underlined. Axe found them told apart by colour
@@ -41,6 +74,12 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
     the launcher no longer covers Send.
   - The widget's theme sheet is replaced only when it changes, and the e2e axe
     helper waits for the widget to settle. This addresses the M4 flake.
+  - The help center's search field shrinks at 320 px; its pressed "No" has a 2 px
+    edge that survives forced colours; a search result in the other language
+    carries `dir` as well as `lang`.
+  - The widget's thread is the only live region of a conversation (the thanks,
+    the rated card and its "not sent" line lost their `status` and `alert`
+    roles), and emails and references in Arabic sentences are `<bdi>`.
 - **Closed M5 gaps** with existing artboards:
   - "What was missing?" after a "No" (`HelpCenter/Article-AR` panels 2 and 3).
     The form takes an optional `comment` (`hcFeedbackFormSchema`), and the
@@ -48,8 +87,9 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
   - The CSAT page's "Browse the help center" (`CsatEN`).
     `csatBrandSchema.helpCenterUrl` comes from `publicHelpCenterUrl`
     (`apps/api/src/help-center/site/site-url.ts`).
-- **Outstanding:** the screen-reader, zoom and forced-colours pass listed in
-  the [audit](../completed/accessibility-audit.md#still-to-do-by-a-person).
+- **Outstanding:** only what needs a person, listed in the
+  [audit](../completed/accessibility-audit.md#still-to-do-by-a-person): the
+  screen-reader pass, the embedded video player, and brand custom CSS.
 
 ## Exit criteria
 
@@ -66,6 +106,18 @@ Copied from the PRD, ticked as they are met.
 - ~~**ZAP's first release run.**~~ Settled on `v0.4.0`: the release-tag run
   passed 62 checks across 16 URLs with 0 failures and 0 warnings. No new
   `.zap/rules.tsv` exception was needed.
+- **Magic link spent by a `GET` (M9-01 F6).** The confirm screen needs an artboard
+  first: an admin page at `/sign-in/magic` and `POST /api/auth/magic-link/consume`
+  ([internal review](../completed/internal-security-review.md)).
+- **Handshake address budget (M9-01 N1).** Open, and the fix is not written: resolve
+  the `/widget` handshake's address under `TRUST_PROXY`, with a test through the
+  proxy ([outstanding](#m9-01-internal-pre-pentest-review)).
+- **Telegram empty welcome (M6 gaps).** `Admin/Channels-Telegram` says an empty
+  welcome skips the welcome in that language; the code and the guide send the
+  catalog's. A decision picks which one changes.
+- **"AI answered" on the ticket list (M7 gaps).** It also covers a conversation the
+  assistant was handed back to before it answered. Telling them apart takes an
+  `answeredAt` (`tickets.ai_answered_at`) on `ticketAiStateSchema`.
 
 ## M9-02 ASVS Level 2
 
@@ -84,8 +136,8 @@ M7 and M8 each re-walk the chapters they touch.
 ## M9-02 Closing the gaps
 
 Every gap and partial the walk-through listed is closed, each with tests and
-its row in [asvs-l2](../completed/asvs-l2.md) updated (198 Met, 33 Partial,
-0 Gap).
+its row in [asvs-l2](../completed/asvs-l2.md) updated (the summary now
+reads 198 Met, 35 Partial, 0 Gap, 24 N/A, 1 Operator).
 
 - **Credential-change email (2.2.3, 2.5.5).** A `securityChange` auth email —
   password changed or reset, second factor on or off, recovery codes redrawn —
@@ -136,6 +188,45 @@ minutes and waited for the clock before each code. The Compose smoke test
 (`scripts/compose-smoke.sh`) walks the wizard's administrator through the
 enrolment the first sign-in now demands, computing the code from the secret
 the api hands back.
+
+## M9-02 Re-walk of M6, M7 and M8
+
+The re-walk of 2026-10-09 found a second set of gaps in the chapters M6, M7 and
+M8 touched. The ones fixable in code are closed, each with tests and its guide
+updated; the rows of [asvs-l2](../completed/asvs-l2.md) changed on 2026-10-11 in
+#167:
+
+- **Webhook events and scopes (4.1.3).** `webhooks:manage` alone cannot
+  subscribe to events whose data needs `tickets:read`, `contacts:read` or
+  `articles:read`: create, update, rotate and replay answer 403
+  `webhook-event-scope`.
+- **DOCX unpacking (12.1.2).** At most 1,000 entries and 100 MiB declared, and
+  each entry is inflated once up to its declared size, before mammoth runs.
+- **Erasure (8.3.2).** "Anonymise contact" also deletes the contact's Telegram
+  chats, clears the redaction maps of AI calls on their tickets and deletes the
+  webhook deliveries that carry their data.
+- **Delivery logs (8.3.8).** The nightly run deletes webhook and Telegram
+  deliveries after 30 days and idempotency keys after 24 hours.
+- **Model endpoints (12.6.1, 9.2.2).** A provider, embeddings or transcription
+  URL is checked when saved, by the check webhook endpoints pass.
+- **Refused keys (7.2.1).** A warning with the key prefix and address, and an
+  `api_key.refused` audit row for a revoked or expired key. The Telegram secret
+  refusal is not logged yet, so 7.2.1 stays Partial.
+- **Cache-Control (8.2.1).** `no-store` on every JSON answer that did not choose
+  its own.
+- **OpenAPI version (14.3.3).** The public document shows the API version, `1`.
+- **Key expiry (2.10.1, 3.5.2).** Optional `expiresAt` on a key (migration
+  0049). API only: the Create dialog draws no field, so the screen waits for an
+  artboard.
+- **Also fixed:** the connector OAuth `state` is single-use; an API key gets 403
+  on `@Authenticated` staff routes instead of a 500.
+
+Not done, and why: re-authentication before creating a key (3.7.1) and a field
+and column for the key's expiry need the Create dialog changed, so an artboard
+first; PKCE for Google Drive; running the DOCX read in a worker with a memory
+limit; checking a provider's base URL again before each chat completion (chat
+completions go through the vendors' clients, so the save-time check is the only
+one, [ADR 0018](../decisions/0018-pi-ai-provider-layer.md)).
 
 ## M9-03 Outbox concurrency
 
@@ -231,9 +322,10 @@ attached to the GitHub Release.
 The workflow now keylessly signs that immutable index digest with Cosign and a
 short-lived GitHub OIDC/Fulcio certificate, then verifies the exact workflow
 identity and issuer. No signing key or secret is stored. A manual mode signs an
-existing tag without rebuilding or moving it, so `v0.4.0` can be brought under
-the same policy after this change merges. #158 closes only after that live
-signature is verified from the public registry.
+existing tag without rebuilding or moving it. It signed `v0.4.0` on 2026-10-09
+(run 37928180052, success), and #158 was closed that day. Signing and the check
+against the workflow identity run in the same job; checking the signature from
+outside is the procedure in the [release guide](../guides/release.md#verify-the-image-signature).
 
 ## M9-06 User docs
 
@@ -311,7 +403,7 @@ the one-hour target.
 
 ## Gaps carried from earlier milestones
 
-Closed in #147, each with unit and integration tests and its guide updated:
+Closed, each with unit and integration tests and its guide updated (the last row after #147):
 
 | Gap | From | Now |
 |---|---|---|
@@ -320,7 +412,12 @@ Closed in #147, each with unit and integration tests and its guide updated:
 | `agents_online` was always empty against a real api | M4 | Availability and the `presence` frame carry `agents` (first names, up to five, empty when the brand hides agents); `apps/widget/src/transport/map.ts` maps them |
 | Socket events were not rate-limited | M0 | `room:join` 120, `presence:set` 30, `presence:heartbeat` 60 per person per minute in Redis; over budget answers `rate_limited` |
 | Revocation was per person, not per browser | M0 | `principal.revoked` carries `familyIds`; only those browsers' sockets close |
+| The widget's out-of-hours handoff line was the ordinary one | M7 | A conversation and its `conversation` frame carry `hours` (its department's calendar, else the brand's); after a handoff the line takes the `moon` and says when the team opens in its zone and that the message is saved (`Widget/AI-EN`, `-AR` panel 6). The header and strip read the same hours; `widget.js` is 30.27 KB gzipped |
+| The Telegram language prompt was the catalog's, not the bot's | M6 | Each bot has its own `language_prompt` (migration `0048`), edited on the bot's page under Channels › Telegram; `/start` asks with it first ([M6-04](../completed/M6-telegram.md#m6-04-start-and-the-language-pick)) |
+| The ticket list drew no AI state, and "AI paused" was not drawn | M7 | A row's caption line ends with "AI paused" while the conversation is handed off, or "AI answered" once the assistant has taken part and is not paused (`Admin/Ticket-AI`, `apps/admin/src/screens/tickets/ai/ticket-ai-mark.tsx`). Telling a handed-back conversation apart is open, see Open questions |
+| Agent assist sent the brand's main system prompt for an Arabic ticket | M7 | Every assist call passes the ticket's language to `complete()`, which sends `systemPromptAr` for an Arabic ticket, as auto-reply does ([M7 gaps](../completed/M7-ai.md#gaps-and-follow-ups)) |
 
 ## Pull requests
 
 - #147 feat: M6 Telegram, M7 AI, M8 API/webhooks/reports and M9 hardening towards 1.0 (M9-02, M9-04, M9-05, M9-06; the M9-03 suites and the M9-07 and M9-10 tooling; the carried gaps above)
+- #167 feat: M9 hardening towards 1.0: the pre-pentest fixes (M9-01 F1 to F5), the ASVS re-walk's gaps (M9-02), the automated zoom, forced-colours, semantics and bidi specs (M9-04), the signing of `v0.4.0` (M9-08) and the M6 and M7 gaps carried above. Open when this record was written.

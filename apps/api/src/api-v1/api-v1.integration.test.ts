@@ -3,7 +3,15 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { promisify } from 'node:util';
 import { createKeyring, type Env } from '@helpdock/config';
-import { apiKeys, auditLog, createDb, departments, tickets, withSystem } from '@helpdock/db';
+import {
+  apiKeys,
+  auditLog,
+  brands,
+  createDb,
+  departments,
+  tickets,
+  withSystem,
+} from '@helpdock/db';
 import {
   createJobProcessor,
   createOutboxDispatcher,
@@ -18,6 +26,7 @@ import {
 import type {
   ApiKey,
   ApiKeyCreated,
+  ErrorResponse,
   TicketList,
   V1ContactUpsert,
   V1TicketDetail,
@@ -32,7 +41,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
 import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
@@ -311,8 +320,36 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect((await call('POST', '/api/v1/tickets', key, newTicket('Nope'))).status).toBe(403);
       expect((await call('GET', '/api/v1/contacts', key)).status).toBe(403);
       expect((await call('GET', `/api/brands/${seeded.brandId}/tickets`, key)).status).toBe(403);
+      // Nor the routes that only declare "signed in": they act for a person, so a key gets 403, not a 500.
+      for (const path of [
+        '/api/me',
+        '/api/me/profile',
+        '/api/me/sessions',
+        '/api/me/notification-preferences',
+        '/api/brands',
+      ]) {
+        expect((await call('GET', path, key)).status, path).toBe(403);
+      }
       // And a staff session does not reach the public API.
       expect((await call('GET', '/api/v1/tickets', staffToken)).status).toBe(403);
+    });
+
+    it('tells caches to keep none of it: an answer, a refusal, an admin route and the OpenAPI document (ASVS 8.2.1)', async () => {
+      const { key } = await issueKey(['tickets:read']);
+
+      const answers = [
+        await call('GET', '/api/v1/tickets', key),
+        await call('GET', '/api/v1/tickets', 'hd_live_never-issued'),
+        await call('GET', `/api/brands/${seeded.brandId}/api-keys`, staffToken),
+        await app.inject({ method: 'GET', url: '/api/docs/openapi.json' }),
+      ];
+
+      expect(answers.map((answer) => answer.headers['cache-control'])).toEqual([
+        'no-store',
+        'no-store',
+        'no-store',
+        'no-store',
+      ]);
     });
 
     it('records when a key was last used', async () => {
@@ -336,6 +373,109 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect(revoked.body.revokedAt).not.toBeNull();
       expect((await call('GET', '/api/v1/tickets', created.key)).status).toBe(401);
       expect((await call('GET', '/api/v1/tickets', 'hd_live_never-issued')).status).toBe(401);
+    });
+
+    it('answers 410 for a key whose brand is in its deletion grace, after its budget, and 200 again once restored (F5, M9-01)', async () => {
+      const { key } = await issueKey(['tickets:read']);
+      const throttled = await issueKey(['tickets:read'], 2);
+      const setStatus = (status: 'active' | 'deleting') =>
+        runtime.db.update(brands).set({ status }).where(eq(brands.id, seeded.brandId));
+      // The resolver reads the answer `BrandGoneGuard` keeps for a few seconds,
+      // so each look at the brand is taken from past it.
+      const letTheAnswerExpire = () =>
+        vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10_000 });
+      const statusOf = async (token: string) =>
+        (await call('GET', '/api/v1/tickets', token)).status;
+
+      await setStatus('deleting');
+      try {
+        letTheAnswerExpire();
+        const gone = await call<ErrorResponse>('GET', '/api/v1/tickets', key);
+        expect([gone.status, gone.body.error.code]).toEqual([410, 'gone']);
+        expect([
+          await statusOf(throttled.key),
+          await statusOf(throttled.key),
+          await statusOf(throttled.key),
+        ]).toEqual([410, 410, 429]);
+
+        await setStatus('active');
+        letTheAnswerExpire();
+        expect(await statusOf(key)).toBe(200);
+      } finally {
+        vi.useRealTimers();
+        await setStatus('active');
+      }
+    });
+
+    it('leaves a trace of a revoked key being presented, once a minute, and none of the key (ASVS 7.2.1)', async () => {
+      const created = await issueKey(['tickets:read']);
+      await call('DELETE', `/api/brands/${seeded.brandId}/api-keys/${created.id}`, staffToken);
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect((await call('GET', '/api/v1/tickets', created.key)).status).toBe(401);
+      }
+      expect((await call('GET', '/api/v1/tickets', 'hd_live_never-issued')).status).toBe(401);
+
+      const refused = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(auditLog).where(eq(auditLog.action, 'api_key.refused')),
+      );
+      const mine = refused.filter((row) => row.targetId === created.id);
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toMatchObject({
+        actorType: 'apikey',
+        actorId: created.id,
+        targetType: 'api_key',
+        ip: '127.0.0.1',
+        requestId: expect.any(String),
+        meta: { prefix: created.key.slice(0, 12), reason: 'revoked' },
+      });
+      expect(JSON.stringify(refused)).not.toContain(created.key);
+      expect(refused.some((row) => JSON.stringify(row.meta).includes('never-issued'))).toBe(false);
+    });
+
+    it('takes an optional expiry, shows it, and answers 401 once it has passed (ASVS 2.10.1, 3.5.2)', async () => {
+      const base = `/api/brands/${seeded.brandId}/api-keys`;
+      const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+      const withExpiry = await call<ApiKeyCreated>('POST', base, staffToken, {
+        name: 'short lived',
+        scopes: ['tickets:read'],
+        expiresAt,
+      });
+      const forever = await issueKey(['tickets:read']);
+      const past = await call<ErrorResponse>('POST', base, staffToken, {
+        name: 'already over',
+        scopes: ['tickets:read'],
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      });
+
+      expect(withExpiry.status).toBe(201);
+      expect(withExpiry.body.expiresAt).toBe(expiresAt);
+      expect(forever.expiresAt).toBeNull();
+      expect(past.status).toBe(400);
+      const listed = await call<{ keys: ApiKey[] }>('GET', base, staffToken);
+      expect(listed.body.keys.find((key) => key.id === withExpiry.body.id)?.expiresAt).toBe(
+        expiresAt,
+      );
+      expect((await call('GET', '/api/v1/tickets', withExpiry.body.key)).status).toBe(200);
+
+      // The hour passes.
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .update(apiKeys)
+          .set({ expiresAt: new Date(Date.now() - 1_000) })
+          .where(eq(apiKeys.id, withExpiry.body.id)),
+      );
+      expect((await call('GET', '/api/v1/tickets', withExpiry.body.key)).status).toBe(401);
+      expect((await call('GET', '/api/v1/tickets', forever.key)).status).toBe(200);
+      const refused = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(auditLog).where(eq(auditLog.targetId, withExpiry.body.id)),
+      );
+      expect(
+        refused.filter((row) => row.action === 'api_key.refused').map((row) => row.meta),
+      ).toEqual([{ prefix: withExpiry.body.key.slice(0, 12), reason: 'expired' }]);
+      expect(refused.find((row) => row.action === 'api_key.created')?.meta).toMatchObject({
+        expiresAt,
+      });
     });
 
     it('throttles a key past its per-minute budget with 429', async () => {
@@ -479,7 +619,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
 
   describe('outbound webhooks (M8-03)', () => {
     it('a ticket created through the API is delivered as a signed ticket.created webhook', async () => {
-      const { key } = await issueKey(['tickets:write', 'webhooks:manage']);
+      const { key } = await issueKey(['tickets:read', 'tickets:write', 'webhooks:manage']);
       await runWorker(); // Earlier tests' events, before anybody subscribed.
       received.length = 0;
 
@@ -548,7 +688,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     });
 
     it('refuses a private address or plain http when the endpoint is added', async () => {
-      const { key } = await issueKey(['webhooks:manage']);
+      const { key } = await issueKey(['tickets:read', 'webhooks:manage']);
 
       const blocked = await call<{ error: { webhooks?: unknown } }>(
         'POST',
@@ -573,7 +713,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     });
 
     it('never reaches an endpoint the outbound policy blocks at delivery time, and logs why', async () => {
-      const { key } = await issueKey(['tickets:write', 'webhooks:manage']);
+      const { key } = await issueKey(['tickets:read', 'tickets:write', 'webhooks:manage']);
       await runWorker();
       received.length = 0;
 
@@ -607,7 +747,13 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
     });
 
     it('sends contact.created and a public ticket.replied, and never a note', async () => {
-      const { key } = await issueKey(['tickets:write', 'contacts:write', 'webhooks:manage']);
+      const { key } = await issueKey([
+        'tickets:read',
+        'tickets:write',
+        'contacts:read',
+        'contacts:write',
+        'webhooks:manage',
+      ]);
       const ticket = await call<V1TicketDetail>(
         'POST',
         '/api/v1/tickets',
@@ -688,6 +834,62 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
         lastDelivery: { id: ping.body.id, status: 'succeeded' },
       });
       expect(JSON.stringify(overview.body)).not.toContain(webhook.body.secret);
+    });
+
+    it('holds webhooks:manage to the scopes of the events it subscribes to (ASVS 4.1.3)', async () => {
+      const manageOnly = await issueKey(['webhooks:manage']);
+      const withTickets = await issueKey(['tickets:read', 'webhooks:manage']);
+      const adminMade = await call<WebhookWithSecret>(
+        'POST',
+        `/api/brands/${seeded.brandId}/webhooks`,
+        staffToken,
+        { url: receiverUrl, events: ['contact.created'] },
+      );
+      const refused = await call<{ error: { code: string; webhooks?: unknown } }>(
+        'POST',
+        '/api/v1/webhooks',
+        manageOnly.key,
+        { url: receiverUrl, events: ['ticket.created'] },
+      );
+
+      expect(refused.status).toBe(403);
+      expect(refused.body.error).toMatchObject({
+        code: 'forbidden',
+        webhooks: { reason: 'webhook-event-scope' },
+      });
+      const allowed = await call('POST', '/api/v1/webhooks', withTickets.key, {
+        url: receiverUrl,
+        events: ['ticket.created'],
+      });
+      expect(allowed.status).toBe(201);
+
+      // Nor can it take over an endpoint the Admin made for contacts: repoint it,
+      // rotate its secret, or replay what it sent.
+      const target = `/api/v1/webhooks/${adminMade.body.id}`;
+      const ping = await call<WebhookDelivery>(
+        'POST',
+        `/api/brands/${seeded.brandId}/webhooks/${adminMade.body.id}/test`,
+        staffToken,
+      );
+      expect(
+        (await call('PATCH', target, manageOnly.key, { url: 'https://attacker.example.com/h' }))
+          .status,
+      ).toBe(403);
+      expect((await call('POST', `${target}/rotate-secret`, manageOnly.key)).status).toBe(403);
+      expect(
+        (await call('POST', `${target}/deliveries/${ping.body.id}/replay`, withTickets.key)).status,
+      ).toBe(403);
+      const unchanged = await call<{ url: string }>('GET', target, manageOnly.key);
+      expect(unchanged.body.url).toBe(receiverUrl);
+
+      // The Developers page, a staff session, is not held to scopes.
+      const staffEdit = await call(
+        'PATCH',
+        `/api/brands/${seeded.brandId}/webhooks/${adminMade.body.id}`,
+        staffToken,
+        { events: ['contact.created', 'ticket.created'] },
+      );
+      expect(staffEdit.status).toBe(200);
     });
   });
 });

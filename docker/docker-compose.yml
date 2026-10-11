@@ -48,8 +48,12 @@ services:
     environment:
       APP_ROLE: api
       # Caddy is the only thing that reaches this port, and it sets
-      # `x-forwarded-*` and `x-request-id` itself.
-      TRUST_PROXY: 'true'
+      # `x-forwarded-*` and `x-request-id` itself. `uniquelocal` is the private
+      # address ranges Docker networks are carved from, so the api believes the
+      # hop from Caddy and not a client-written `x-forwarded-for` entry, which
+      # `true` would. Behind another proxy as well, list its address too
+      # (docs/guides/install.md#behind-a-proxy-of-your-own).
+      TRUST_PROXY: 'uniquelocal'
     deploy:
       # Compose v2 honours this and starts two containers; Swarm does too. The
       # replicas serialise on the migration advisory lock at boot, so starting

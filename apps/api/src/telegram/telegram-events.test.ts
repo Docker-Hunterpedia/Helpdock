@@ -62,6 +62,36 @@ describe('the Telegram outbox handlers', () => {
     });
   });
 
+  it('hands the prompt a language press is under to the job, so its buttons can go', async () => {
+    const { added, queue } = capture();
+    await createTelegramNoticeEventHandler(queue)(
+      context(TELEGRAM_EVENTS.notice, {
+        botId,
+        chatId: '42',
+        notice: 'language_set',
+        locale: 'en',
+        callbackQueryId: 'cq',
+        promptMessageId: '77',
+      }),
+    );
+
+    expect(added[0]?.payload).toMatchObject({ notice: 'language_set', promptMessageId: '77' });
+  });
+
+  it('knows the prompt as a notice of its own, apart from the welcome', async () => {
+    const { added, queue } = capture();
+    await createTelegramNoticeEventHandler(queue)(
+      context(TELEGRAM_EVENTS.notice, {
+        botId,
+        chatId: '42',
+        notice: 'language_prompt',
+        locale: 'en',
+      }),
+    );
+
+    expect(added[0]?.payload).toMatchObject({ notice: 'language_prompt' });
+  });
+
   it('refuses a payload it cannot trust, so the event lands in the failed set', async () => {
     const { queue } = capture();
     await expect(

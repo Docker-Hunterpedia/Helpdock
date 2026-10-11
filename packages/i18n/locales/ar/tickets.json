@@ -28,6 +28,8 @@
     "loading": "يجري تحميل التذاكر…",
     "unassigned": "غير مسندة",
     "rowLabel": "{{reference}}: {{subject}}",
+    "aiPaused": "المساعد متوقف",
+    "aiAnswered": "أجاب المساعد",
     "open": "إظهار قائمة التذاكر"
   },
   "empty": {

@@ -50,11 +50,13 @@ import {
   TotpEnrolmentDto,
   TotpRequestDto,
 } from './dto.js';
+import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
 import { Authenticated, Public } from './route-declaration.js';
 import {
   type CookieSpec,
   decodeRefreshCookie,
   encodeRefreshCookie,
+  oauthNonceCookie,
   refreshCookieOf,
   trustedDeviceCookie,
 } from './session/cookies.js';
@@ -288,7 +290,10 @@ export class AuthController {
     @Param(new ZodValidationPipe(OauthProviderParamDto)) { provider }: OauthProviderParamDto,
     @Res() reply: FastifyReply,
   ): Promise<void> {
-    const url = await this.#auth.startOauth(this.#provider(provider));
+    const known = this.#provider(provider);
+    const { url, browserNonce } = await this.#auth.startOauth(known);
+    const nonceCookie = this.#oauthNonceCookie(known);
+    reply.setCookie(nonceCookie.name, browserNonce, nonceCookie.attributes);
     await reply.redirect(url, HttpStatus.FOUND);
   }
 
@@ -300,6 +305,15 @@ export class AuthController {
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
+    const known = oauthProviderSchema.safeParse(provider);
+    if (!known.success) {
+      await this.#redirect(reply, '/oauth/callback', { error: 'no-account', provider });
+      return;
+    }
+    const nonceCookie = this.#oauthNonceCookie(known.data);
+    const browserNonce = request.cookies[nonceCookie.name];
+    // Spent whatever happens next: one round trip, one cookie.
+    reply.clearCookie(nonceCookie.name, nonceCookie.attributes);
     if (code === undefined || state === undefined) {
       // The provider refused, or the person declined on its consent screen.
       await this.#redirect(reply, '/oauth/callback', { error: 'unavailable', provider });
@@ -309,9 +323,10 @@ export class AuthController {
     let outcome: SignInOutcome;
     try {
       outcome = await this.#auth.completeOauth({
-        provider: this.#provider(provider),
+        provider: known.data,
         code,
         state,
+        browserNonce,
         userAgent: request.headers['user-agent'],
       });
     } catch (error) {
@@ -493,6 +508,10 @@ export class AuthController {
       encodeRefreshCookie(issued.refreshCookieValue),
       this.#refreshCookie.attributes,
     );
+  }
+
+  #oauthNonceCookie(provider: OauthProvider): CookieSpec {
+    return oauthNonceCookie(this.#env.APP_URL, OAUTH_STATE_TTL_SECONDS, provider);
   }
 
   #clearSessionCookies(reply: FastifyReply): void {

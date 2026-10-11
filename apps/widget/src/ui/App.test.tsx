@@ -1,12 +1,13 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWidget } from '../test/render.js';
+import { renderWidget, withIsolates } from '../test/render.js';
 import { LINA, sampleConfig, samplePolicy } from '../transport/fixtures.js';
 import { TransportError } from '../transport/types.js';
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const open = async () => {
@@ -156,6 +157,8 @@ describe('header, queue and hours', () => {
   });
 
   it('shows the closed notice with the next opening (WidgetStatesEN column 4)', async () => {
+    // The fixture opens on Sunday 27 September; an opening already past counts as open (M7-06).
+    vi.useFakeTimers({ now: new Date('2026-09-25T17:40:00Z'), toFake: ['Date'] });
     await renderWidget({ availability: 'closed' });
     await open();
 
@@ -201,7 +204,9 @@ describe('pre-chat form (M4-08)', () => {
       fields: {},
     });
     await screen.findByText(
-      'You are talking to Helpdock support. We will reply here and at omar.k@example.com.',
+      withIsolates(
+        'You are talking to Helpdock support. We will reply here and at omar.k@example.com.',
+      ),
     );
   });
 

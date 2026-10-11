@@ -280,7 +280,9 @@
     "oauth-unsupported": "This provider does not offer subscription sign-in. Use an API key.",
     "provider-in-use": "The install default or a brand still uses this provider. Choose another model first.",
     "discovery-failed": "The provider could not be asked for its models. Check the key and the address.",
-    "reembed-not-confirmed": "Changing the embedding model re-embeds every chunk. Confirm it to go ahead."
+    "reembed-not-confirmed": "Changing the embedding model re-embeds every chunk. Confirm it to go ahead.",
+    "https-required": "Use https:// for this address. Plain HTTP is only accepted for a private address the install allows.",
+    "destination-blocked": "That address is private, so the install does not reach it. Ask the operator to allow its range in OUTBOUND_ALLOW_CIDRS."
   },
   "env": {
     "chip": "Set by environment",

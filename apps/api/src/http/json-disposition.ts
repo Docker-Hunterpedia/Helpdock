@@ -12,17 +12,30 @@ import type { FastifyInstance } from 'fastify';
  *
  * A route that already chose its own disposition (an export with a real file
  * name) keeps it.
+ *
+ * ASVS 8.2.1: and no JSON answer is stored by a cache. What the api answers is
+ * a brand's tickets, contacts and settings, so `Cache-Control: no-store` is the
+ * default for all of it, errors included. A route that caches its JSON on
+ * purpose says so itself and keeps its value: the widget's source maps, the
+ * widget config (`no-cache` with an ETag), the admin's hashed assets. Pages
+ * and scripts are not JSON and are not touched.
  */
 
 export const API_JSON_DISPOSITION = 'attachment; filename="api.json"';
+export const API_JSON_CACHE_CONTROL = 'no-store';
 
 const isJson = (contentType: unknown): boolean =>
   typeof contentType === 'string' && /^application\/([\w.+-]+\+)?json\b/i.test(contentType);
 
 export const registerJsonDisposition = (fastify: FastifyInstance): void => {
   fastify.addHook('onSend', async (_request, reply, payload) => {
-    if (isJson(reply.getHeader('content-type')) && !reply.hasHeader('content-disposition')) {
-      reply.header('content-disposition', API_JSON_DISPOSITION);
+    if (isJson(reply.getHeader('content-type'))) {
+      if (!reply.hasHeader('content-disposition')) {
+        reply.header('content-disposition', API_JSON_DISPOSITION);
+      }
+      if (!reply.hasHeader('cache-control')) {
+        reply.header('cache-control', API_JSON_CACHE_CONTROL);
+      }
     }
 
     return payload;

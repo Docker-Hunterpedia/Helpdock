@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { AssistMessage } from './assist.repository.js';
 import { AssistFailure, assistFailureOf } from './assist-failure.js';
 import { resetsAt } from './assist-state.service.js';
-import { retrievalQuery, threadLines } from './thread-lines.js';
+import { conversationLocale, retrievalQuery, threadLines } from './thread-lines.js';
 
 const message = (overrides: Partial<AssistMessage>): AssistMessage => ({
   id: 'm',
@@ -46,6 +46,43 @@ describe('threadLines', () => {
     expect(retrievalQuery('Refund', threadLines(messages, { publicOnly: false }))).toBe(
       'Refund\nWhere is my refund?',
     );
+  });
+});
+
+describe('conversationLocale', () => {
+  it('follows the customer’s last message, not the agent’s or the contact’s profile', () => {
+    const lines = threadLines(
+      [
+        message({ bodyText: 'Where is my refund?' }),
+        message({ authorType: 'staff', bodyText: 'سنراجع طلبك.' }),
+        message({ bodyText: 'أين استرداد مبلغي؟' }),
+        message({ authorType: 'staff', bodyText: 'We are checking.' }),
+      ],
+      { publicOnly: false },
+    );
+
+    expect(conversationLocale(lines, 'en')).toBe('ar');
+  });
+
+  it('turns back to English when the customer does', () => {
+    const lines = threadLines(
+      [message({ bodyText: 'أين استرداد مبلغي؟' }), message({ bodyText: 'Never mind, it came.' })],
+      { publicOnly: false },
+    );
+
+    expect(conversationLocale(lines, 'ar')).toBe('en');
+  });
+
+  it('falls back to the contact’s language while the customer has said nothing', () => {
+    const lines = threadLines(
+      [message({ authorType: 'staff', bodyText: 'Hello, how can we help?' })],
+      {
+        publicOnly: false,
+      },
+    );
+
+    expect(conversationLocale(lines, 'ar')).toBe('ar');
+    expect(conversationLocale([], 'en')).toBe('en');
   });
 });
 

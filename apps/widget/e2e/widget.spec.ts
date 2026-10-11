@@ -1,4 +1,13 @@
-import { expect, LOCALES, openWidget, server, strings, test, violations } from './fixtures.js';
+import {
+  expect,
+  LOCALES,
+  openWidget,
+  server,
+  startClockBeforeOpening,
+  strings,
+  test,
+  violations,
+} from './fixtures.js';
 
 /**
  * The widget on an empty host page with the mock transport (`harness/`),
@@ -141,6 +150,7 @@ for (const locale of LOCALES) {
     });
 
     test('chat: out of hours with the next opening, and a refused attachment', async ({ page }) => {
+      await startClockBeforeOpening(page);
       await openWidget(page, locale, 'availability=closed');
       await expect(page.getByText(t('hours.closedTitle'))).toBeVisible();
       expect(await violations(page)).toEqual([]);

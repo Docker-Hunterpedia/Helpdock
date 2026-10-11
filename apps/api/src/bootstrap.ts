@@ -21,12 +21,14 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { Redis } from 'ioredis';
 import { ApiKeyPrincipalResolver } from './api-keys/api-key-principal-resolver.js';
 import { ApiKeysRepository } from './api-keys/api-keys.repository.js';
+import { RefusedApiKeys } from './api-keys/refused-api-key.js';
 import { AppModule, type AppModuleOptions } from './app.module.js';
 import { createPrincipalResolver } from './auth/principal-resolver.js';
 import { RateLimiter } from './auth/rate-limit.js';
 import { RefreshStore } from './auth/session/refresh-store.js';
 import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
+import { BrandAvailability } from './brands/brand-availability.js';
 import { INBOUND_PARSE_ROUTE, registerFormBodies } from './channels/inbound/inbound-parse-body.js';
 import { registerClientFacts } from './context/client-facts.js';
 import { registerJsonDisposition } from './http/json-disposition.js';
@@ -229,10 +231,15 @@ export const createApiApp = async ({
     logger,
   });
 
+  // The 410 guard on the public routes and the API key resolver read one cache,
+  // so a brand put into deletion is seen by both within the same few seconds.
+  const brandAvailability = new BrandAvailability(runtime.db);
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
       env,
       db: runtime.db,
+      brandAvailability,
       settings: runtime.settings,
       redis: runtime.redis,
       logger,
@@ -244,6 +251,9 @@ export const createApiApp = async ({
         db: runtime.db,
         keys: new ApiKeysRepository(),
         limiter: new RateLimiter(runtime.redis),
+        refused: new RefusedApiKeys(runtime.db),
+        availability: brandAvailability,
+        log: logger,
         fallback: createPrincipalResolver({ env, logger, session: sessionResolver }),
       }),
       ...(brandResolver === undefined ? {} : { brandResolver }),
@@ -259,8 +269,11 @@ export const createApiApp = async ({
     }),
     // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
     // same promise `TRUST_PROXY` makes about `x-request-id`, so it is the same
-    // switch (REQUIREMENTS §5.1).
-    new FastifyAdapter({ trustProxy: env.TRUST_PROXY }),
+    // switch (REQUIREMENTS §5.1). The address list is copied because Fastify
+    // types it as mutable.
+    new FastifyAdapter({
+      trustProxy: typeof env.TRUST_PROXY === 'object' ? [...env.TRUST_PROXY] : env.TRUST_PROXY,
+    }),
     // `abortOnError: false` so a boot failure is thrown rather than turned into
     // `process.abort()`. Aborting leaves a container with SIGABRT and a core
     // dump where `main.ts` would have written the message that says what to fix.

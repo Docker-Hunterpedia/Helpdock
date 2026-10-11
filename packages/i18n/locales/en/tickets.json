@@ -28,6 +28,8 @@
     "loading": "Loading tickets…",
     "unassigned": "Unassigned",
     "rowLabel": "{{reference}}: {{subject}}",
+    "aiPaused": "AI paused",
+    "aiAnswered": "AI answered",
     "open": "Show the ticket list"
   },
   "empty": {

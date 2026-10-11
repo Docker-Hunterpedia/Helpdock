@@ -28,11 +28,18 @@ export const translator = (locale: HcLocale): Translate => {
 
 export const esc = escapeHtml;
 
+/**
+ * The `lang` and `dir` attributes of text that is in another language than its
+ * page, or none when it is the page's own. `lang` makes a screen reader switch
+ * voice; `dir` gives the text its own base direction, so the punctuation at its
+ * end stays at its end.
+ */
+export const otherLanguage = (lang: HcLocale, page: HcLocale): string =>
+  lang === page ? '' : ` lang="${lang}" dir="${lang === 'ar' ? 'rtl' : 'ltr'}"`;
+
 /** Text in the other language, marked so a screen reader and the bidi algorithm get it right. */
 export const inLanguage = (text: string, lang: HcLocale, page: HcLocale): string =>
-  lang === page
-    ? esc(text)
-    : `<span lang="${lang}" dir="${lang === 'ar' ? 'rtl' : 'ltr'}">${esc(text)}</span>`;
+  lang === page ? esc(text) : `<span${otherLanguage(lang, page)}>${esc(text)}</span>`;
 
 /** A zone `Intl` accepts: the brand's, or UTC for one it does not know. */
 const zoneOr = (timeZone: string): string => {

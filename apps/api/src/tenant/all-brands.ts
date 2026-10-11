@@ -8,9 +8,9 @@ import { liveBrandIds } from './live-brands.js';
  * what the install's System page lists. `brands` is a global table, so reading
  * its ids needs no context; the context is then set to exactly those ids, the
  * way ARCHITECTURE §6 asks an all-brands path to. A purged brand is left out
- * (`live-brands.ts`); one in its deletion grace is still found, because the
- * route that found it answers 410 for it, and the pollers check
- * `isBrandGone` before they fetch.
+ * (`live-brands.ts`); one in its deletion grace is still found, and the caller
+ * refuses it afterwards with `isBrandGone`: the pollers before they fetch, the
+ * Telegram and inbound-parse routes and the API key resolver with a 410.
  *
  * `principalId` names the path, so the database's own logging says who asked.
  */

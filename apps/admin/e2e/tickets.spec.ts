@@ -1,3 +1,5 @@
+import AxeBuilder from '@axe-core/playwright';
+import type { Page } from '@playwright/test';
 import { MOCK_TICKET_REFUND, MOCK_TICKET_SIGN_IN } from '../src/tickets/mock-api.js';
 import { expectFieldPartsStacked } from './field-layout.js';
 import { expect, test } from './fixtures.js';
@@ -13,6 +15,17 @@ import { strings } from './strings.js';
  * DESIGN §6.5, and an Arabic layout that is a different layout rather than the
  * same one mirrored by hand (DESIGN §7).
  */
+
+async function violations(page: Page): Promise<string[]> {
+  const result = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+
+  return result.violations.map(
+    (violation) =>
+      `${violation.id}: ${violation.help} — ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
+  );
+}
 
 test.describe('the ticket list', () => {
   test('opens on a view, and the views carry live counts', async ({ page, appLocale: locale }) => {
@@ -76,6 +89,26 @@ test.describe('the ticket list', () => {
     await expect(row).toBeVisible();
     // No separator and no stand-in: the caption is the reference alone.
     await expect(row.locator('p').last()).toHaveText('HD-1043');
+  });
+
+  test('says which conversations the assistant paused and which it answered (M7-06)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+
+    const paused = page.getByRole('link', { name: /HD-1039/ });
+    const answered = page.getByRole('link', { name: /HD-1041/ });
+    const untouched = page.getByRole('link', { name: /HD-1042/ });
+    await expect(paused).toContainText(t('tickets:list.aiPaused'));
+    await expect(paused).not.toContainText(t('tickets:list.aiAnswered'));
+    await expect(answered).toContainText(t('tickets:list.aiAnswered'));
+    await expect(answered).not.toContainText(t('tickets:list.aiPaused'));
+    await expect(untouched).not.toContainText(t('tickets:list.aiPaused'));
+    await expect(untouched).not.toContainText(t('tickets:list.aiAnswered'));
+    expect(await violations(page)).toEqual([]);
   });
 
   test('stacks new-ticket labels above their fields', async ({ page, appLocale: locale }) => {

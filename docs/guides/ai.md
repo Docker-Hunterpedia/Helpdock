@@ -57,11 +57,33 @@ other field it wrote) as `auth.credentials`. Helpdock refreshes the tokens
 when they expire and stores the refreshed set. Using a personal subscription
 for a support desk may be against the vendor's terms; check them first.
 
-**Local servers** (`auth: { type: "none" }`) need no key. The api reaches every
-admin-supplied URL through the SSRF-safe client (DOMAIN-RULES §13), which
-refuses private addresses: to reach Ollama inside the Compose network, add its
-range to `OUTBOUND_ALLOW_CIDRS`, for example `172.16.0.0/12`. The URL's own
-port (Ollama's 11434) is allowed.
+**Local servers** (`auth: { type: "none" }`) need no key. Discovery
+(`GET {baseUrl}/models`), embeddings and transcription reach their URL through
+the SSRF-safe client (DOMAIN-RULES §13), which refuses private addresses: to
+reach Ollama inside the Compose network, add its range to
+`OUTBOUND_ALLOW_CIDRS`, for example `172.16.0.0/12`. The URL's own port
+(Ollama's 11434) is allowed. **Chat completions are the exception**: they go
+through pi-ai's own provider clients, not the SSRF-safe client
+([ADR 0018](../decisions/0018-pi-ai-provider-layer.md)), so the address is
+checked once, when it is saved.
+
+**What a saved address must pass.** A provider's `baseUrl`, the embeddings
+`baseUrl` and the transcription endpoint are checked when they are saved
+(`PUT /api/install/ai/providers/:id`, `…/embedding`, `…/transcription`), by the
+same rules a webhook endpoint passes:
+
+- The name is resolved. A private, loopback, link-local or metadata address is
+  refused with `error.ai.reason: "destination-blocked"` unless its range is in
+  `OUTBOUND_ALLOW_CIDRS`.
+- Plain `http://` is refused with `"https-required"` unless the address is in
+  `OUTBOUND_ALLOW_CIDRS`, so an API key never crosses the internet in clear text
+  but a local Ollama in an allowed range still works over http.
+- A name that does not resolve yet is judged by its scheme alone: `https` is
+  accepted, `http` is refused.
+
+Only a value that changed is checked, so a provider can be renamed and the
+embedding price edited without looking up an unchanged address. Settings pinned
+with `HD_*` variables are the operator's and are not checked.
 
 ### Models
 
@@ -115,9 +137,10 @@ ai.transcribe (`ai` queue)            downloads the Opus variant (or the origina
                                       text and the language the endpoint heard; status = done
 ```
 
-- The endpoint is reached through the SSRF-safe client, like every
-  admin-supplied URL; a local whisper.cpp or faster-whisper server needs its
-  range in `OUTBOUND_ALLOW_CIDRS`.
+- The endpoint is reached through the SSRF-safe client, and checked when it is
+  saved (https, not a private address; see
+  [Providers](#providers)); a local whisper.cpp or faster-whisper server needs
+  its range in `OUTBOUND_ALLOW_CIDRS`, and may then use http.
 - A 4xx answer marks the transcript `failed` at once; a 5xx or an unreachable
   endpoint is retried twice and then marked `failed`. Audio over 25 MB, the
   Whisper limit, is not sent.
@@ -279,6 +302,13 @@ keeps assist on past the budget ("Keep assist after the hard stop", on by
 default), in which case assist calls `complete()` with `allowOverBudget` and
 only auto-reply stops. The call is still logged and counted.
 
+**Which system prompt.** Every item sends the brand's system prompt, and chooses
+it as auto-reply does: the Arabic one when the
+ticket is in Arabic and the brand wrote one, the main one otherwise. The
+ticket's language is that of the customer's last message, or the contact's
+language, or the brand's, while the customer has said nothing. It follows the
+ticket, not the language an agent asks a summary, translation or draft in.
+
 **How a call runs.** The assist routes hold no transaction while the model
 answers ([ADR 0024](../decisions/0024-step-transactions-for-model-calls.md)):
 the ticket is read under the agent's own department policy, then the model is
@@ -324,7 +354,7 @@ One embedding model serves every brand (ADR 0005). It is configured with
 | Setting | Example |
 |---|---|
 | `embedding.provider` | `openai`, a label for the log |
-| `embedding.baseUrl` | `https://api.openai.com/v1`, `http://ollama:11434/v1` |
+| `embedding.baseUrl` | `https://api.openai.com/v1`, or `http://ollama:11434/v1` when its range is in `OUTBOUND_ALLOW_CIDRS`. Checked when saved, like a provider's |
 | `embedding.apiKey` | Write-only, like provider keys |
 | `embedding.model` | `text-embedding-3-small` |
 | `embedding.dims` | `1536`. At most **2000**, the most a pgvector HNSW index covers; a larger model is refused with that reason. Use a model, or a reduced-dimension variant, at or under it |
@@ -388,6 +418,22 @@ first bytes against the declared type ([ADR 0009](../decisions/0009-magic-byte-s
 before any parser sees them — a "PDF" that is not one fails the sync with the
 reason — then reads PDFs page by page (unpdf; a citation names the page), DOCX
 through mammoth (headings kept), and Markdown and text as they are.
+
+A DOCX is a ZIP archive, so the 25 MB cap does not bound what is inside it.
+Before mammoth reads one, the worker checks the archive: it is refused when it
+holds **more than 1,000 entries** or declares **more than 100 MiB uncompressed**
+in total, when it is ZIP64 (any of the end record's fields JSZip reads as a
+ZIP64 marker, or a ZIP64 locator anywhere in the file, so a second directory
+cannot hide where the check does not read) or its directory is damaged, or when
+an entry unpacks to more than its directory says (each entry is inflated once,
+up to its declared size, to check; a directory that lies is caught there; an
+entry that is not valid deflate data is reported as corrupt). A refused
+upload is logged as `file.rejected` with the limit it broke and is rejected as a
+file, not a failed sync; in a Drive folder it is skipped, logged as
+`document.skipped` with the same reason, and the walk goes on. Ordinary
+documents are far below both limits. The limits are the constants
+`DOCX_MAX_ENTRIES` and `DOCX_MAX_UNCOMPRESSED_BYTES` in
+`packages/ai/src/knowledge/zip-limits.ts`.
 
 **Notion.** A page is read as Markdown with its headings; a database
 contributes every page of each of its data sources. At most 2,000 pages a
@@ -590,6 +636,20 @@ It stops without a message of its own when the customer asks for a person
 to someone", "أريد موظفاً", "أريد التحدث مع موظف"), and when a staff member
 replies in public or assigns the ticket.
 
+**Out of hours, in the widget.** When the team that answers the conversation is
+closed at the moment of the handoff, the handoff line itself changes: it takes
+a moon and says "The team is away until Monday at 09:00 (Arabian Standard
+Time)", then "Your message is saved. A person will reply here and at
+omar.k@example.com when the team is back." (without the address when the
+visitor gave none). The team is the conversation's department, else the brand,
+by the calendar of [Ticketing › Business hours](slas.md#business-hours) (Monday to Friday 09:00–17:00
+in the brand's zone until hours are saved; 24/7 hours are never closed), and
+the time is in that team's zone. The day reads "today", "tomorrow", the
+weekday within six days, or else the date. A calendar that never opens reads
+"The team is away right now". At the opening, or once a person has replied,
+the widget goes back to "Connecting you with the team…". Telegram and email
+visitors get no such message.
+
 Every one of these sets `tickets.ai_paused_at` (with the reason) for the rest
 of the conversation. Every job reads it twice: before it asks the model, and
 again under the ticket's row lock immediately before it sends — the lock a
@@ -665,7 +725,7 @@ closed or has been quiet for 24 hours.
 | `POST /api/brands/:brandId/knowledge/files` | `ai:manage` | Presign a file upload; creates the source |
 | `POST …/knowledge/sources/:sourceId/confirm` | `ai:manage` | The upload is done; the sync starts. 409 `upload-missing` |
 | `POST …/knowledge/sources/:sourceId/oauth/:provider` | `ai:manage` | The Notion or Google consent URL. 409 `oauth-not-configured` |
-| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected` |
+| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected`. The `state` is signed, good for ten minutes and **single-use**: a second callback with the same `state` answers 400 `oauth-state-invalid` and exchanges nothing. (No PKCE yet: the token request carries no code verifier.) |
 
 A refusal carries `error.ai.reason`, as `aiRefusalSchema` in `@helpdock/schemas`
 declares, for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`), and
@@ -711,7 +771,10 @@ Public/Internal, and an **AI log** disclosure (model, tokens, cost, redactions,
 confidence against the threshold, sources retrieved and cited); a pause or a
 resume is a System event; while paused, the **Assistant paused** strip above
 the composer offers **Return to assistant**; and the details panel's **AI on
-this ticket** totals its calls, tokens and cost.
+this ticket** totals its calls, tokens and cost. In the ticket list the same
+conversation's row ends its caption line with **AI paused** while it is handed
+off, or **AI answered** once the assistant has taken part and is not paused;
+rows of conversations the assistant never took part in say nothing.
 
 The first-run wizard has an optional **AI provider** step after Outgoing
 email: choose a provider, paste an API key (or subscription credentials),
@@ -809,8 +872,9 @@ real calls.
   nightly evaluation needs the `AI_EVAL_API_KEY` secret, which is an external
   dependency of the milestone.
 - Assist answers arrive whole; streaming them into the card is not built.
-- The Arabic system prompt (`systemPromptAr`) is not yet chosen for assist: every
-  assist call sends the brand's main prompt.
+- The ticket list's **AI answered** means the assistant took part and is not
+  paused. A conversation handed off before the assistant ever answered, then
+  returned to it, reads that way until it answers or is paused again.
 - A transcription costs 0 in the log: there is no per-minute price setting.
 - A budget alert reaches the audit log and the settings response; an email or
   a bell entry for it waits for a design of its own (notifications are about a

@@ -62,6 +62,11 @@ export const telegramBots = pgTable(
     /** M6-04: the `/start` reply, per language. Null is the catalog's default. */
     welcomeEn: text('welcome_en'),
     welcomeAr: text('welcome_ar'),
+    /**
+     * M6-04: the question `/start` asks before the contact's language is known,
+     * one text that names both languages. Null is the catalog's default.
+     */
+    languagePrompt: text('language_prompt'),
     /** M6-04: whether `/start` offers English / العربية. */
     languagePick: boolean('language_pick').notNull().default(true),
     /** The URL the last "Set webhook" registered, and when. */

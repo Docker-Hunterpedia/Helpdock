@@ -19,6 +19,8 @@ retention card. Only an Admin sees the page and only an Admin may change it
 | Audit log | **730 days** | **90** to 3650 | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | 1 to 3650 | Hard-deletes inactive `widget_visitors` only when no ticket references them; a visitor with a conversation keeps its session |
 | Notification rows | **30 days** | fixed | Hard-deletes rows older than the bell's display window |
+| Webhook and Telegram delivery logs | **30 days** | fixed | Hard-deletes webhook deliveries that `succeeded`, `failed` or were `skipped`, and Telegram replies that were `sent` or `failed`, created more than 30 days ago. A delivery still `pending` or `queued` is kept. The rows hold copies of ticket and contact data (a webhook's frozen body, a Telegram chat id), so they do not stay as long as the audit log |
+| Idempotency keys of the public API | 24 hours | fixed | Hard-deletes the stored answers of `Idempotency-Key` requests past their window (they were forgotten only when the same API key sent another POST) |
 | Outbox rows and job receipts | 7 days | fixed | Hard delete, 7 days after publish or completion |
 
 A brand that never saves the form is kept under the defaults. The form sends
@@ -50,7 +52,8 @@ of rows whose bodies would be nulled.
 ```
 03:00 UTC  maintenance.retention.schedule   one job per brand, then job_receipts
            maintenance.retention (brand)    closed, spam, AI call bodies, search log and views,
-                                            audit log, idle visitors, notifications, outbox → audit row
+                                            audit log, idle visitors, notifications, webhook and
+                                            Telegram delivery logs, idempotency keys, outbox → audit row
 ```
 
 The worker registers the schedule on every boot, so a Redis that lost it gets
@@ -91,6 +94,9 @@ full. What it removes from tickets:
 - **Channel ids of their messages** (`external_message_id`: an email
   `Message-ID` names the sender's mail host). The message bodies stay, under the
   brand's retention.
+- **Copies in other tables**: their Telegram chats (chat id and username), the
+  redaction maps of AI calls on their tickets, and the webhook deliveries that
+  carry their data.
 
 ## Deleting a brand
 
@@ -113,6 +119,9 @@ Restore ([operations](operations.md#the-system-page)).
      route added later is covered too;
    - inbound mail stops: IMAP mailboxes are no longer polled, and the
      inbound-parse endpoint answers 410 once the shared secret checks out;
+   - the brand's API keys answer 410 on `/api/v1`, and its webhook deliveries
+     are marked `skipped` instead of sent, so nothing leaves the brand through
+     an integration. A restore does not replay what was skipped;
    - staff sessions stop naming the brand at their next refresh (at most ten
      minutes), as for any brand that is not active;
    - nothing is deleted yet, which is what makes a restore whole.

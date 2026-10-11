@@ -64,6 +64,50 @@ export function nextOpening(
   };
 }
 
+/** The calendar date of an instant in a zone, as a UTC midnight, so two of them subtract to whole days. */
+const dateInZone = (date: Date, timeZone: string): number => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(date);
+  const part = (type: string) => Number(parts.find((entry) => entry.type === type)?.value);
+  return Date.UTC(part('year'), part('month') - 1, part('day'));
+};
+
+/**
+ * M7-06: how to word "The team is away until …". `key` is how far away the
+ * opening is, counted in whole calendar days of the team's zone, because the
+ * time shown is in that zone and not the visitor's: today, tomorrow, a
+ * weekday within six days, otherwise the date.
+ */
+export function awayWhen(
+  iso: string,
+  timeZone: string,
+  now: Date,
+  locale: WidgetLocale,
+): {
+  key: 'today' | 'tomorrow' | 'weekday' | 'date';
+  day: string;
+  date: string;
+  time: string;
+  zone: string;
+} {
+  const opening = new Date(iso);
+  const days = Math.round((dateInZone(opening, timeZone) - dateInZone(now, timeZone)) / 86_400_000);
+
+  return {
+    key: days <= 0 ? 'today' : days === 1 ? 'tomorrow' : days < 7 ? 'weekday' : 'date',
+    ...nextOpening(iso, timeZone, locale),
+    date: new Intl.DateTimeFormat(intlLocale(locale), {
+      day: 'numeric',
+      month: 'long',
+      timeZone,
+    }).format(opening),
+  };
+}
+
 /** 0:07, 2:00 — a timer, so Latin digits and no locale formatting. */
 export function formatDuration(totalSeconds: number): string {
   const seconds = Math.max(0, Math.round(totalSeconds));

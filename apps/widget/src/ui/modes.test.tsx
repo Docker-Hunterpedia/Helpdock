@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWidget } from '../test/render.js';
+import { renderWidget, withIsolates } from '../test/render.js';
 import { TransportError } from '../transport/types.js';
 
 afterEach(() => {
@@ -33,7 +33,9 @@ describe('contact form mode (WidgetModesEN column 3)', () => {
 
     expect(await screen.findByRole('heading', { name: 'Message sent' })).toBeTruthy();
     expect(
-      screen.getByText('Your reference is HD-1043. We will reply to omar.k@example.com.'),
+      screen.getByText(
+        withIsolates('Your reference is HD-1043. We will reply to omar.k@example.com.'),
+      ),
     ).toBeTruthy();
     expect(mock.calls.find((call) => call.method === 'submitContactForm')?.args[0]).toEqual({
       name: 'Omar Khalil',

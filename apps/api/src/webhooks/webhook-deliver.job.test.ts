@@ -92,11 +92,13 @@ const setup = ({
   delivery = deliveryRow(),
   fetch = vi.fn<WebhookFetch>(async () => response(200)),
   failures = 1,
+  brandGone = false,
 }: {
   webhook?: WebhookRow;
   delivery?: WebhookDeliveryRow;
   fetch?: Mock<WebhookFetch>;
   failures?: number;
+  brandGone?: boolean;
 } = {}) => {
   const attempts: AttemptRecord[] = [];
   const repository = {
@@ -114,6 +116,7 @@ const setup = ({
     repository: repository as unknown as WebhooksRepository,
     keyring,
     fetch,
+    brandIsGone: async () => brandGone,
     now: () => NOW,
   });
   return { process, repository, attempts, fetch };
@@ -220,6 +223,15 @@ describe('webhook.deliver', () => {
 
   it('skips a delivery whose endpoint was switched off meanwhile', async () => {
     const { process, fetch, repository } = setup({ webhook: webhookRow({ enabled: false }) });
+
+    await process(job());
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(repository.markSkipped).toHaveBeenCalledOnce();
+  });
+
+  it('sends nothing for a brand in its deletion grace, and marks the delivery skipped (F5, M9-01)', async () => {
+    const { process, fetch, repository } = setup({ brandGone: true });
 
     await process(job());
 

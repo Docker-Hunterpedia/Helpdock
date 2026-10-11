@@ -2,6 +2,7 @@ import { TenantContextError } from '@helpdock/db';
 import {
   BadRequestException,
   ForbiddenException,
+  GoneException,
   NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
@@ -55,6 +56,7 @@ describe('mapError', () => {
     [new ForbiddenException('no'), 403, 'forbidden'],
     [new NotFoundException('no'), 404, 'not_found'],
     [new BadRequestException('no'), 400, 'validation_failed'],
+    [new GoneException('no'), 410, 'gone'],
   ] as const)('keeps the status of %s', (error, status, code) => {
     const mapped = mapError(error);
 
@@ -149,6 +151,16 @@ describe('errorBody', () => {
       webhooks: { reason: 'webhook-destination-blocked', address: '10.0.4.12' },
     });
     expect(http.error.webhooks).toEqual({ reason: 'webhook-https-required' });
+  });
+
+  it('answers a key that may not read a webhook endpoint’s events with 403 and its reason', () => {
+    const mapped = mapError(new WebhooksFailure('webhook-event-scope'));
+
+    expect(mapped.status).toBe(403);
+    expect(errorBody(mapped, 'req-14').error).toMatchObject({
+      code: 'forbidden',
+      webhooks: { reason: 'webhook-event-scope' },
+    });
   });
 
   it('carries the help center refusal, with the status its rule answers', () => {

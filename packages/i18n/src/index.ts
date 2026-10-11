@@ -62,6 +62,17 @@ export function createI18n({
   return instance;
 }
 
+/**
+ * The Telegram bot's language prompt when its bot has none of its own: the
+ * question in each language, English first. It is sent before the contact's
+ * language is known, so it has to be read in both. The bot and the admin
+ * screen's placeholder both call this, so what the screen shows is what
+ * Telegram gets.
+ */
+export function defaultLanguagePrompt(): string {
+  return SUPPORTED_LNGS.map((lng) => resources[lng].telegram.bot.languagePrompt).join(' · ');
+}
+
 export type { CatalogShape, Locale, Namespace, Resources } from './resources.js';
 export {
   DEFAULT_NS,

@@ -158,6 +158,18 @@ export interface SignedIdentity {
 
 export type ConversationStatus = 'queued' | 'active' | 'ended';
 
+/**
+ * M7-06: the hours of the team answering a conversation (its department's,
+ * else the brand's, DOMAIN-RULES §3.1) as the server judged them. Unlike
+ * {@link Availability} it says nothing about who is online.
+ */
+export interface ConversationHours {
+  readonly open: boolean;
+  /** ISO 8601; null while open, and for a calendar that never opens. */
+  readonly next_open_at: string | null;
+  readonly timezone: string;
+}
+
 export interface ConversationSummary {
   readonly id: string;
   readonly status: ConversationStatus;
@@ -172,6 +184,11 @@ export interface ConversationSummary {
    * not answer in it again (DOMAIN-RULES §9). Absent from a server before M7.
    */
   readonly ai_handed_off?: boolean;
+  /**
+   * M7-06: the hours of the team answering this conversation, as the server
+   * judged them; absent from a server before this change.
+   */
+  readonly hours?: ConversationHours;
 }
 
 export interface VisitorSession {

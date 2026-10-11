@@ -983,11 +983,14 @@ export const webhookDeliverJob = defineJob({
 });
 
 /**
- * What a bot sends that is not an agent's reply: M6-04's welcome and language
- * confirmation, and M8-06's survey on close, the thanks after a tap and "This
- * survey has closed." for a tap that came too late.
+ * What a bot sends that is not an agent's reply: M6-04's language prompt, the
+ * welcome, and what a language press is answered with (the prompt rewritten to
+ * the choice, then the welcome in that language), and M8-06's survey on close,
+ * the thanks after a tap and "This survey has closed." for a tap that came too
+ * late.
  */
 export const telegramNoticeKindSchema = z.enum([
+  'language_prompt',
   'welcome',
   'language_set',
   'csat_survey',
@@ -1024,6 +1027,8 @@ export const telegramSendPayloadSchema = z.discriminatedUnion('kind', [
     locale: z.enum(['en', 'ar']),
     /** The button press a `language_set` or `csat_*` notice answers, so the spinner on it stops. */
     callbackQueryId: z.string().min(1).max(128).optional(),
+    /** The language prompt a `language_set` press was under, whose buttons the notice takes away. */
+    promptMessageId: z.string().min(1).max(32).optional(),
     csat: telegramCsatNoticeSchema.optional(),
   }),
 ]);
@@ -1035,8 +1040,8 @@ export const TELEGRAM_SEND_JOB_ATTEMPTS = 5;
 
 /**
  * M6-02 and M6-04's outbound Telegram (ARCHITECTURE §13, `outbound` queue): an
- * agent's reply to a chat, or the `/start` welcome and the language
- * confirmation. Asked for through the outbox — `telegram.reply` beside the
+ * agent's reply to a chat, or the `/start` language prompt and welcome and
+ * the answer to a language press. Asked for through the outbox — `telegram.reply` beside the
  * `telegram_deliveries` row, `telegram.notice` beside the inbound update that
  * called for it — and added by those events' handlers with the outbox row's id.
  *

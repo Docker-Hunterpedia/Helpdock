@@ -29,6 +29,7 @@ import { recordHandoff } from '../help-center/feedback/handoff.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
+import type { BusinessHoursService } from '../sla/business-hours.service.js';
 import { parseCustomValues } from '../ticketing/custom-values.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import type {
@@ -44,6 +45,7 @@ import { plainTextToHtml, subjectFrom } from './plain-text.js';
 import type { TicketWithStatus, WidgetRepository } from './widget.repository.js';
 import { WidgetFailure } from './widget-failure.js';
 import type { VisitorScope, WidgetGate, WidgetRequestFacts } from './widget-gate.js';
+import { calendarHours } from './widget-hours.js';
 import { toWidgetConversation, toWidgetMessage } from './widget-view.js';
 
 /**
@@ -74,6 +76,8 @@ export interface WidgetConversationsDependencies {
   readonly assignment: AssignmentRepository;
   readonly media: MediaRepository;
   readonly captcha: CaptchaVerifier;
+  /** M7-06: whose hours a conversation's `hours` are judged by. */
+  readonly businessHours: Pick<BusinessHoursService, 'calendarsFor'>;
 }
 
 type StartInput = z.input<typeof widgetStartRequestSchema>;
@@ -91,7 +95,11 @@ export class WidgetConversationsService {
     this.#deps = deps;
   }
 
-  list(brandId: string, facts: WidgetRequestFacts): Promise<WidgetConversationList> {
+  list(
+    brandId: string,
+    facts: WidgetRequestFacts,
+    now: Date = new Date(),
+  ): Promise<WidgetConversationList> {
     return this.#deps.gate.visitor(brandId, facts, { write: false }, async (scope) => {
       const entries = (
         await this.#deps.widget.conversationsOf(
@@ -101,7 +109,7 @@ export class WidgetConversationsService {
         )
       ).filter((entry) => this.#access(scope, entry) !== 'none');
 
-      return { conversations: await this.#views(scope.tx, entries) };
+      return { conversations: await this.#views(scope, entries, now) };
     });
   }
 
@@ -109,10 +117,11 @@ export class WidgetConversationsService {
     brandId: string,
     facts: WidgetRequestFacts,
     conversationId: string,
+    now: Date = new Date(),
   ): Promise<WidgetConversation> {
     return this.#deps.gate.visitor(brandId, facts, { write: false }, async (scope) => {
       const entry = await this.#require(scope, conversationId);
-      const [view] = await this.#views(scope.tx, [entry]);
+      const [view] = await this.#views(scope, [entry], now);
       /* c8 ignore next 3 -- one entry in, one view out. */
       if (view === undefined) {
         throw new WidgetFailure('not_found');
@@ -156,9 +165,11 @@ export class WidgetConversationsService {
           departmentId: paused.departmentId,
         });
       }
-      const [view] = await this.#views(scope.tx, [
-        paused === undefined ? entry : { ...entry, ticket: paused },
-      ]);
+      const [view] = await this.#views(
+        scope,
+        [paused === undefined ? entry : { ...entry, ticket: paused }],
+        now,
+      );
       /* c8 ignore next 3 -- one entry in, one view out. */
       if (view === undefined) {
         throw new WidgetFailure('not_found');
@@ -248,7 +259,7 @@ export class WidgetConversationsService {
     // Once outside the write transaction, so a retry of a start that already
     // committed is answered without spending the CAPTCHA token again.
     const existing = await this.#deps.gate.visitor(brandId, facts, { write: false }, (scope) =>
-      this.#startReplayed(scope, body.clientId),
+      this.#startReplayed(scope, body.clientId, now),
     );
     if (existing !== undefined) {
       return existing;
@@ -257,7 +268,7 @@ export class WidgetConversationsService {
     return this.#deps.gate.visitor(brandId, facts, { write: true }, async (scope) => {
       const { tx, visitor, settings } = scope;
       await this.#deps.widget.lockClientId(tx, visitor.id, body.clientId);
-      const replay = await this.#startReplayed(scope, body.clientId);
+      const replay = await this.#startReplayed(scope, body.clientId, now);
       if (replay !== undefined) {
         return replay;
       }
@@ -351,7 +362,7 @@ export class WidgetConversationsService {
         await requestAutoAssign(tx, brandId, { ticketId: ticket.id, trigger: 'routed' });
       }
 
-      return this.#startResponse(scope, { ticket, status }, message);
+      return this.#startResponse(scope, { ticket, status }, message, now);
     });
   }
 
@@ -382,7 +393,7 @@ export class WidgetConversationsService {
         if (landed === undefined) {
           throw new WidgetFailure('not_found');
         }
-        return this.#response(scope, landed, existing);
+        return this.#response(scope, landed, existing, now);
       }
 
       if (this.#access(scope, entry) !== 'write') {
@@ -450,7 +461,7 @@ export class WidgetConversationsService {
       if (landed === undefined) {
         throw new WidgetFailure('not_found');
       }
-      return this.#response(scope, landed, message);
+      return this.#response(scope, landed, message, now);
     });
   }
 
@@ -498,6 +509,7 @@ export class WidgetConversationsService {
   async #startReplayed(
     scope: VisitorScope,
     clientId: string,
+    now: Date,
   ): Promise<WidgetStartResponse | undefined> {
     const entry = await this.#deps.widget.conversationStartedWith(
       scope.tx,
@@ -512,7 +524,7 @@ export class WidgetConversationsService {
       entry.ticket.id,
       clientId,
     );
-    return this.#startResponse(scope, entry, message ?? null);
+    return this.#startResponse(scope, entry, message ?? null, now);
   }
 
   /**
@@ -544,11 +556,12 @@ export class WidgetConversationsService {
     scope: VisitorScope,
     entry: TicketWithStatus,
     message: TicketMessageRow | null,
+    now: Date,
   ): Promise<WidgetStartResponse> {
     if (message !== null) {
-      return this.#response(scope, entry, message);
+      return this.#response(scope, entry, message, now);
     }
-    const [conversation] = await this.#views(scope.tx, [entry]);
+    const [conversation] = await this.#views(scope, [entry], now);
     /* c8 ignore next 3 -- one in, one out. */
     if (conversation === undefined) {
       throw new WidgetFailure('not_found');
@@ -704,8 +717,9 @@ export class WidgetConversationsService {
     scope: VisitorScope,
     entry: TicketWithStatus,
     message: TicketMessageRow,
+    now: Date,
   ): Promise<WidgetSendResponse> {
-    const [conversation] = await this.#views(scope.tx, [entry]);
+    const [conversation] = await this.#views(scope, [entry], now);
     const [view] = await this.#messageViews(scope, [message]);
     /* c8 ignore next 3 -- one in, one out. */
     if (conversation === undefined || view === undefined) {
@@ -714,19 +728,27 @@ export class WidgetConversationsService {
     return { conversation, message: view };
   }
 
+  /**
+   * Each conversation with the hours of the team that answers it: its
+   * department's calendar, else the brand's (DOMAIN-RULES §3.1), judged at
+   * `now`. One read of the calendar rows serves the whole list.
+   */
   async #views(
-    tx: DbTransaction,
+    scope: Pick<VisitorScope, 'tx' | 'brand'>,
     entries: readonly TicketWithStatus[],
+    now: Date,
   ): Promise<WidgetConversation[]> {
     const ids = entries.map((entry) => entry.ticket.id);
-    const seqs = await this.#deps.widget.lastSeqs(tx, ids);
-    const continued = await this.#deps.widget.continuations(tx, ids);
+    const seqs = await this.#deps.widget.lastSeqs(scope.tx, ids);
+    const continued = await this.#deps.widget.continuations(scope.tx, ids);
+    const calendarOf = await this.#deps.businessHours.calendarsFor(scope.brand.id, scope.tx);
 
     return entries.map((entry) =>
       toWidgetConversation(
         entry,
         seqs.get(entry.ticket.id) ?? 0,
         continued.get(entry.ticket.id) ?? null,
+        calendarHours(calendarOf(entry.ticket.departmentId), now),
       ),
     );
   }

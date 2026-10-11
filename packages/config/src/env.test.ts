@@ -8,6 +8,8 @@ import {
   EnvValidationError,
   envSchema,
   loadEnv,
+  proxyIsTrusted,
+  trustedPeerCheck,
 } from './env.js';
 
 const MASTER_KEY = Buffer.alloc(32, 7).toString('base64');
@@ -97,8 +99,59 @@ describe('loadEnv', () => {
     }
   });
 
+  // F2 (M9-01): `true` believes every hop, so a client's own x-forwarded-for
+  // entry becomes `request.ip`. A list says which hops are the install's proxies.
+  it('reads a list of proxy addresses, ranges and Fastify range names', () => {
+    expect(
+      loadEnv(envWith({ TRUST_PROXY: '10.0.0.0/8, 203.0.113.7 ,2606:4700::/32,uniquelocal' }))
+        .TRUST_PROXY,
+    ).toEqual(['10.0.0.0/8', '203.0.113.7', '2606:4700::/32', 'uniquelocal']);
+  });
+
+  it('freezes the proxy list with the rest of the configuration', () => {
+    expect(Object.isFrozen(loadEnv(envWith({ TRUST_PROXY: 'loopback' })).TRUST_PROXY)).toBe(true);
+  });
+
   it('refuses a TRUST_PROXY it would have to guess at, rather than defaulting to trust', () => {
-    expectInvalidKeys(envWith({ TRUST_PROXY: 'maybe' }), ['TRUST_PROXY']);
+    for (const value of [
+      'maybe',
+      // Fastify 5 trusts nothing for a count, so accepting one would key every
+      // per-address limit on the proxy's own address without a word.
+      '2',
+      '10.0.0.0/33',
+      '10.0.0.0/8,,not-an-address',
+      'true,10.0.0.1',
+    ]) {
+      expectInvalidKeys(envWith({ TRUST_PROXY: value }), ['TRUST_PROXY']);
+    }
+  });
+
+  it('says whether any proxy is believed, whichever form the setting takes', () => {
+    expect([false, true, ['10.0.0.0/8']].map((setting) => proxyIsTrusted(setting))).toEqual([
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it.each([
+    ['believes any peer for true and none for false', true, '203.0.113.9', true],
+    ['believes no peer for false', false, '172.18.0.2', false],
+    ['believes an address inside a listed range', ['172.18.0.0/16'], '172.18.0.2', true],
+    [
+      'believes an IPv4-mapped IPv6 peer of a listed range',
+      ['172.18.0.0/16'],
+      '::ffff:172.18.0.2',
+      true,
+    ],
+    ['does not believe a peer outside the list', ['172.18.0.0/16'], '203.0.113.9', false],
+    ['believes a listed single address', ['10.1.2.3', '::1'], '::1', true],
+    ['reads uniquelocal as Fastify does', ['uniquelocal'], '192.168.4.4', true],
+    ['does not read uniquelocal as the public internet', ['uniquelocal'], '203.0.113.9', false],
+    ['reads loopback as Fastify does', ['loopback'], '127.0.0.1', true],
+    ['believes no peer it cannot read', ['loopback'], undefined, false],
+  ] as const)('says whether a peer is a trusted proxy: %s', (_label, setting, peer, expected) => {
+    expect(trustedPeerCheck(setting)(peer)).toBe(expected);
   });
 
   it('defaults the log level to info and takes any level pino knows', () => {

@@ -115,6 +115,7 @@ export function AddBotDialog({
         token: token.trim(),
         welcomeEn: null,
         welcomeAr: null,
+        languagePrompt: null,
         languagePick: true,
       });
       if (bot.mode === 'webhook') {

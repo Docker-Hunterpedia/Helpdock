@@ -1,14 +1,17 @@
 import 'reflect-metadata';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ROUTE_DECLARATION, type RouteDeclaration } from '../auth/route-declaration.js';
-import { renderDocsPage } from './api-docs.controller.js';
-import { API_OPERATIONS, buildOpenApiDocument } from './openapi.js';
+import { ApiDocsController, renderDocsPage } from './api-docs.controller.js';
+import { API_OPERATIONS, API_V1_VERSION, buildOpenApiDocument } from './openapi.js';
 import { V1ArticlesController } from './v1-articles.controller.js';
 import { V1ContactsController } from './v1-contacts.controller.js';
 import { V1TicketsController } from './v1-tickets.controller.js';
 import { V1WebhooksController } from './v1-webhooks.controller.js';
+
+// A release number nothing else in the page could spell, to find where it leaks.
+vi.mock('../observability/build-info.js', () => ({ buildInfo: () => ({ version: '9.8.7' }) }));
 
 const CONTROLLERS = [
   V1TicketsController,
@@ -44,7 +47,7 @@ const declaredRoutes = (): Map<string, string> => {
 };
 
 describe('the OpenAPI document', () => {
-  const document = buildOpenApiDocument('1.2.3');
+  const document = buildOpenApiDocument();
 
   it('describes every /api/v1 route, with the scope the route requires, and nothing else', () => {
     const documented = new Map(
@@ -80,7 +83,7 @@ describe('the OpenAPI document', () => {
       expect.objectContaining({ name: 'Idempotency-Key', in: 'header' }),
     );
     expect(Object.keys(create.responses)).toEqual(
-      expect.arrayContaining(['201', '401', '403', '429']),
+      expect.arrayContaining(['201', '401', '403', '410', '429']),
     );
 
     const read = document.paths['/api/v1/tickets/{ticketId}']?.get as {
@@ -94,11 +97,22 @@ describe('the OpenAPI document', () => {
 
 describe('renderDocsPage', () => {
   it('lists every operation, escaped, with a link to the JSON', () => {
-    const page = renderDocsPage(buildOpenApiDocument('1.2.3'));
+    const page = renderDocsPage(buildOpenApiDocument());
 
     expect(page).toContain('href="/api/docs/openapi.json"');
     expect(page).toContain('/api/v1/tickets/{ticketId}');
     expect(page).not.toContain('<script');
     expect(page.match(/<tr><td>/g)).toHaveLength(API_OPERATIONS.length);
+  });
+});
+
+describe('the public API docs and the release (ASVS 14.3.3)', () => {
+  it('show the version of the API contract, not the release of this install', () => {
+    const docs = new ApiDocsController();
+    const published = JSON.stringify(docs.document()) + docs.page();
+
+    expect(docs.document().info.version).toBe(API_V1_VERSION);
+    expect(docs.page()).toContain(`<small>${API_V1_VERSION}</small>`);
+    expect(published).not.toContain('9.8.7');
   });
 });

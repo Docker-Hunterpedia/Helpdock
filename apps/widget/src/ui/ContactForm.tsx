@@ -5,6 +5,7 @@ import { useLazy, useWidget, useWidgetState } from './context.js';
 import { EMAIL_PATTERN, Field } from './Field.js';
 import { Icon } from './icons.js';
 import { loadCaptcha } from './lazy.js';
+import { Sentence } from './Sentence.js';
 
 /**
  * `WidgetModesEN` column 3 (M4-05): the contact form mode. It creates a
@@ -41,7 +42,13 @@ export function ContactForm() {
             <Icon name="circleCheck" />
             {t('form.sentTitle')}
           </h3>
-          <p>{t('form.sentBody', { ref: sent.ref, email: sent.email })}</p>
+          <p>
+            <Sentence
+              id="form.sentBody"
+              vars={{ ref: sent.ref, email: sent.email }}
+              isolate={['ref', 'email']}
+            />
+          </p>
         </div>
         <button
           ref={another}

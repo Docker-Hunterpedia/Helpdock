@@ -62,7 +62,8 @@ export type RetentionUpdateRequest = z.infer<typeof retentionUpdateRequestSchema
 
 /**
  * The categories the job purges and the form lists, in the form's order. The
- * outbox is last and not on the form: its window is fixed by §6.
+ * ones after `visitorSessions` are not on the form: their windows are fixed
+ * (§6 for the outbox, §11 for the rest).
  */
 export const retentionCategorySchema = z.enum([
   'closedTickets',
@@ -72,6 +73,9 @@ export const retentionCategorySchema = z.enum([
   'auditLog',
   'visitorSessions',
   'notifications',
+  'webhookDeliveries',
+  'telegramDeliveries',
+  'idempotencyKeys',
   'outbox',
 ]);
 export type RetentionCategory = z.infer<typeof retentionCategorySchema>;

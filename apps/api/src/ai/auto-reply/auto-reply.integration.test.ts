@@ -17,16 +17,19 @@ import {
   withSystem,
 } from '@helpdock/db';
 import { type AiAutoReplyPayload, createOutboxDispatcher } from '@helpdock/jobs';
-import type {
-  BrandAiSettings,
-  KnowledgeFilePresignResponse,
-  TicketAiState,
-  TicketDetail,
-  WidgetConversation,
-  WidgetMessage,
-  WidgetMessagePage,
-  WidgetSendResponse,
-  WidgetSession,
+import {
+  type BrandAiSettings,
+  type BusinessHours,
+  defaultWeeklyHours,
+  type KnowledgeFilePresignResponse,
+  type TicketAiState,
+  type TicketDetail,
+  WIDGET_EVENTS,
+  type WidgetConversation,
+  type WidgetMessage,
+  type WidgetMessagePage,
+  type WidgetSendResponse,
+  type WidgetSession,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -42,9 +45,15 @@ import { safeCrawlFetch } from '../../knowledge/safe-transports.js';
 import { runSourceSync } from '../../knowledge/sync.job.js';
 import { createLogger } from '../../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../../seed/dev-seed.js';
+import { BusinessHoursService } from '../../sla/business-hours.service.js';
+import { SlaRepository } from '../../sla/sla.repository.js';
+import { SlaService } from '../../sla/sla.service.js';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { FakeStorage, silentJobLogger } from '../../testing/media.js';
 import { signInForTest } from '../../testing/staff-sign-in.js';
+import { TICKET_EVENTS } from '../../tickets/ticket-events.js';
+import { WidgetConversationsService } from '../../widget/widget-conversations.service.js';
+import { createWidgetConversationHandler } from '../../widget/widget-events.js';
 import { createAiRuntime } from '../db-ai-ports.js';
 import { DbAiUsage } from '../db-ai-usage.js';
 import { type AutoReplyDeps, runAutoReply } from './auto-reply.job.js';
@@ -77,6 +86,16 @@ const DIMS = 16;
 const SHOP = 'https://shop.example.com';
 const QUESTION = 'How long does a card refund take?';
 const PDF_LINE = 'Card refunds show up 3 to 5 business days after we issue them.';
+/** Friday evening in Riyadh and in UTC: both the brand's week and the Gulf week are closed. */
+const FRIDAY_EVENING = new Date('2026-09-25T17:40:00.000Z');
+/** Sunday 09:00 in Riyadh, where the brand's own Monday-to-Friday week opens on Monday. */
+const GULF_OPENING = '2026-09-27T06:00:00.000Z';
+const GULF_WEEK: BusinessHours = {
+  timezone: 'Asia/Riyadh',
+  weekly: Array.from({ length: 7 }, (_, day) =>
+    day <= 4 ? [{ start: '09:00', end: '17:00' }] : [],
+  ),
+};
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
   timeout: 10_000,
@@ -280,6 +299,58 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
   const run = (job: AiAutoReplyPayload, with_: Partial<AutoReplyDeps> = {}) =>
     runAutoReply({ ...deps, ...with_ }, job, `ai.auto_reply.${job.messageId}`);
 
+  /** The conversation's department's own hours (the Business hours tab), or none again. */
+  const saveDepartmentHours = async (
+    departmentId: string,
+    override: BusinessHours | null,
+  ): Promise<void> => {
+    const saved = await staff('PUT', `/api/brands/${brandId()}/business-hours`, {
+      brand: { timezone: 'UTC', weekly: defaultWeeklyHours() },
+      departments: [{ departmentId, override }],
+    });
+    expect(saved.status).toBe(200);
+  };
+
+  /** The worker's `conversation` handler, run by hand on the ticket's `ticket.updated` rows. */
+  const conversationFrames = async (ticketId: string): Promise<unknown[]> => {
+    const frames: unknown[] = [];
+    const hours = new BusinessHoursService(
+      new SlaRepository(),
+      new SlaService(new SlaRepository()),
+    );
+    const handler = createWidgetConversationHandler(
+      {
+        emit: async ({ event, data }) => {
+          if (event === WIDGET_EVENTS.conversation) {
+            frames.push(data);
+          }
+        },
+      },
+      { calendarsFor: (id, tx) => hours.calendarsFor(id, tx), now: () => FRIDAY_EVENING },
+    );
+    const rows = await owner.db
+      .select()
+      .from(outbox)
+      .where(eq(outbox.event, TICKET_EVENTS.updated))
+      .orderBy(outbox.id);
+    for (const row of rows) {
+      const payload = row.payload as Record<string, unknown>;
+      if (payload.ticketId === ticketId) {
+        await withSystemJob(runtime.db, row.brandId, row.id, (tx) =>
+          handler({
+            outboxId: row.id,
+            brandId: row.brandId,
+            event: row.event,
+            payload,
+            tx,
+            log: silentJobLogger,
+          }),
+        );
+      }
+    }
+    return frames;
+  };
+
   const ticketRow = async (ticketId: string) => {
     const [row] = await owner.db.select().from(tickets).where(eq(tickets.id, ticketId));
     return row;
@@ -312,7 +383,7 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
         await staff('PUT', '/api/install/ai/providers/local', {
           kind: 'openai-compatible',
           label: 'Local',
-          baseUrl: 'http://llm.example.com/v1',
+          baseUrl: 'https://llm.example.com/v1',
           auth: { type: 'none' },
         })
       ).status,
@@ -526,6 +597,61 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
     expect(await takeJobs()).toEqual([]);
   });
 
+  it("judges the handoff by the hours of the conversation's department, not the brand's (M7-06)", async () => {
+    const visitor = await newVisitor();
+    const conversationId = await start(visitor);
+    const departmentId = (await ticketRow(conversationId))?.departmentId ?? '';
+    await saveDepartmentHours(departmentId, GULF_WEEK);
+    try {
+      const pressed = await app
+        .get(WidgetConversationsService)
+        .handoff(
+          brandId(),
+          { origin: SHOP, authorization: `Visitor ${visitor.secret}`, ip: null },
+          conversationId,
+          FRIDAY_EVENING,
+        );
+      expect(pressed.hours).toEqual({
+        open: false,
+        nextOpenAt: GULF_OPENING,
+        timezone: 'Asia/Riyadh',
+      });
+
+      // The route sends it too; its instant is the test machine's, its calendar is the department's.
+      const overHttp = await widget<WidgetConversation>(
+        'POST',
+        `/conversations/${conversationId}/handoff`,
+        visitor,
+      );
+      expect(overHttp.body.hours?.timezone).toBe('Asia/Riyadh');
+    } finally {
+      await saveDepartmentHours(departmentId, null);
+    }
+  });
+
+  it("sends the same hours in the conversation frame that follows the assistant's own handoff (M7-06)", async () => {
+    await setModes(0.8);
+    const visitor = await newVisitor();
+    const conversationId = await start(visitor);
+    const departmentId = (await ticketRow(conversationId))?.departmentId ?? '';
+    await saveDepartmentHours(departmentId, GULF_WEEK);
+    try {
+      const [job] = await takeJobs();
+      fake.reply('Possibly a few days [1].\nCONFIDENCE: 0.5');
+      await run(job as AiAutoReplyPayload);
+
+      expect((await conversationFrames(conversationId)).at(-1)).toEqual({
+        conversationId,
+        state: 'open',
+        continuedById: null,
+        aiHandedOff: true,
+        hours: { open: false, nextOpenAt: GULF_OPENING, timezone: 'Asia/Riyadh' },
+      });
+    } finally {
+      await saveDepartmentHours(departmentId, null);
+    }
+  });
+
   it('sends nothing from a job queued before "Talk to a human"', async () => {
     const visitor = await newVisitor();
     const conversationId = await start(visitor);
@@ -651,18 +777,33 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
   });
 
   it('counts the answered, never handed-off conversations as deflected once quiet for a day', async () => {
+    // Read a day on, so what this test leaves is quiet; and as a difference, so
+    // what the other tests of this file left behind is not counted.
     const usage = new DbAiUsage(runtime.settings, () => new Date(Date.now() + 25 * 3_600_000));
     const today = new Date().toISOString().slice(0, 10);
-    const report = await withSystem(runtime.db, brandId(), (tx) =>
-      usage.report(tx, { brandId: brandId(), from: today, to: today, timezone: 'UTC' }),
-    );
+    const deflection = async () => {
+      const report = await withSystem(runtime.db, brandId(), (tx) =>
+        usage.report(tx, { brandId: brandId(), from: today, to: today, timezone: 'UTC' }),
+      );
+      if (!report.available) {
+        throw new Error('the usage report is unavailable');
+      }
+      return report.deflection;
+    };
+    const before = await deflection();
 
-    // Answered and left alone: the first two. Handed off: the low-confidence
-    // one and the two the visitor took to a person. A job that never sent —
-    // superseded by a person, or over budget — made nothing eligible.
-    expect(report).toMatchObject({
-      available: true,
-      deflection: { eligible: 5, deflected: 2, rate: 0.4 },
-    });
+    for (const reply of [
+      'Card refunds show up 3 to 5 business days [1].\nCONFIDENCE: 0.92',
+      'Possibly a few days [1].\nCONFIDENCE: 0.5',
+    ]) {
+      await start(await newVisitor());
+      const [job] = await takeJobs();
+      fake.reply(reply);
+      await run(job as AiAutoReplyPayload);
+    }
+    const after = await deflection();
+
+    // One answered and left alone; one handed off for low confidence.
+    expect([after.eligible - before.eligible, after.deflected - before.deflected]).toEqual([2, 1]);
   });
 });

@@ -19,6 +19,7 @@ const request = {
   departmentId: '0192c3f0-1a2b-7c3d-8e4f-0000000000d1',
   welcomeEn: null,
   welcomeAr: null,
+  languagePrompt: null,
   languagePick: true,
 };
 
@@ -44,6 +45,22 @@ describe('MockTelegramApi', () => {
     await expect(
       api.updateBot('brand', MOCK_SUPPORT_BOT, { ...request, token: MOCK_REFUSED_TOKEN }),
     ).rejects.toMatchObject({ reason: 'token-invalid' });
+  });
+
+  it('keeps a bot’s own language prompt, and null for a blank one', async () => {
+    const api = new MockTelegramApi();
+
+    const own = await api.updateBot('brand', MOCK_SUPPORT_BOT, {
+      ...request,
+      languagePrompt: 'Pick a language · اختر لغتك',
+    });
+    const blanked = await api.updateBot('brand', MOCK_SUPPORT_BOT, {
+      ...request,
+      languagePrompt: '  ',
+    });
+
+    expect(own.languagePrompt).toBe('Pick a language · اختر لغتك');
+    expect(blanked.languagePrompt).toBeNull();
   });
 
   it('sets a failing bot’s webhook and calls it healthy again', async () => {

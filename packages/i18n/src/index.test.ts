@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createI18n, dir, NAMESPACES, resources, SUPPORTED_LNGS } from './index.js';
+import {
+  createI18n,
+  defaultLanguagePrompt,
+  dir,
+  NAMESPACES,
+  resources,
+  SUPPORTED_LNGS,
+} from './index.js';
 
 describe('dir', () => {
   it.each([
@@ -85,6 +92,12 @@ describe('English plural selection', () => {
     [2, '2 attempts left'],
   ])('counts down %i remaining TOTP attempts', (count, expected) => {
     expect(i18n.t('auth:totp.mismatch', { count })).toContain(expected);
+  });
+});
+
+describe('defaultLanguagePrompt', () => {
+  it('asks in both languages at once, English first, because nobody has chosen yet', () => {
+    expect(defaultLanguagePrompt()).toBe('Choose your language · اختر لغتك');
   });
 });
 

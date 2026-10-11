@@ -537,6 +537,9 @@ export class ContactsService {
         }),
         attachmentCount: traces.attachments,
         messageCount: traces.messages,
+        telegramChatCount: traces.telegramChats,
+        aiCallCount: traces.aiCalls,
+        webhookDeliveryCount: traces.webhookDeliveries,
       },
     });
 

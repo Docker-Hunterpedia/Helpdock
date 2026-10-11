@@ -53,6 +53,9 @@ const minutesAgo = (now: number, minutes: number): string =>
 
 const sleep = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
+const blank = (value: string | null): string | null =>
+  value === null || value.trim() === '' ? null : value;
+
 const identify = (token: string): { id: number; username: string } | undefined => {
   const [id = '', secret = ''] = token.split(':');
   if (!secret.startsWith('AAE')) {
@@ -177,6 +180,7 @@ export class MockTelegramApi implements TelegramApi {
       departmentId: request.departmentId,
       tokenHint: request.token.slice(-TELEGRAM_TOKEN_HINT_LENGTH),
       welcome: { en: request.welcomeEn, ar: request.welcomeAr },
+      languagePrompt: blank(request.languagePrompt),
       languagePick: request.languagePick,
     });
     this.#bots.set(id, { bot, telegramId: identity.id });
@@ -199,14 +203,13 @@ export class MockTelegramApi implements TelegramApi {
         throw new TelegramError('token-other-bot');
       }
     }
-    const blank = (value: string | null): string | null =>
-      value === null || value.trim() === '' ? null : value;
     stored.bot = {
       ...stored.bot,
       displayName: request.displayName,
       departmentId: request.departmentId,
       departmentName: departmentName(request.departmentId),
       welcome: { en: blank(request.welcomeEn), ar: blank(request.welcomeAr) },
+      languagePrompt: blank(request.languagePrompt),
       languagePick: request.languagePick,
       ...(request.token === undefined
         ? {}
@@ -335,6 +338,7 @@ export class MockTelegramApi implements TelegramApi {
       tokenUpdatedAt: created,
       tokenUpdatedByName: ADMIN_NAME,
       welcome: { en: null, ar: null },
+      languagePrompt: null,
       languagePick: true,
       webhook: { url: null, setAt: null, expectedUrl: `${APP_URL}${telegramWebhookPath(id)}` },
       mode: 'webhook',

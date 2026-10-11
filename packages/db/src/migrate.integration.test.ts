@@ -60,6 +60,8 @@ const MIGRATION_TAGS = [
   '0045_auto_reply_handoff',
   '0046_ai_assist_and_transcripts',
   '0047_drop_ai_pii_redaction_toggle',
+  '0048_telegram_language_prompt',
+  '0049_api_key_expiry',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

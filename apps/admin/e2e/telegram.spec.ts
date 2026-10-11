@@ -121,6 +121,110 @@ test.describe('Channels › Telegram', () => {
   });
 });
 
+/**
+ * M6-04's language prompt on a bot's page: the first thing `/start` sends, one
+ * text for both languages, shown as the contact will see it.
+ */
+test.describe('Channels › Telegram › the language prompt', () => {
+  const CATALOG_PROMPT = 'Choose your language · اختر لغتك';
+  const OWN_PROMPT = 'Acme support: pick a language · اختر لغتك';
+
+  const openBot = async (page: Page, locale: 'en' | 'ar', username: string) => {
+    await signIn(page, locale);
+    await openTelegram(page, locale);
+    await page.getByRole('link', { name: `@${username}`, exact: true }).click();
+    const form = page.getByRole('form', { name: `@${username}` });
+    await form.waitFor();
+    return form;
+  };
+
+  test('shows the question /start sends, saves a new one and keeps it', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const form = await openBot(page, locale, 'helpdock_support_bot');
+    const prompt = form.getByLabel(t('channels:telegram.detail.welcome.prompt'), { exact: true });
+    const save = form.getByRole('button', { name: t('channels:telegram.detail.footer.save') });
+
+    await expect(prompt).toHaveValue(CATALOG_PROMPT);
+    await expect(prompt).toHaveAccessibleDescription(
+      t('channels:telegram.detail.welcome.promptHint'),
+    );
+    await expect(save).toBeDisabled();
+    expect(await violations(page)).toEqual([]);
+
+    await prompt.fill(OWN_PROMPT);
+    await expect(save).toBeEnabled();
+    await save.click();
+
+    await expect(
+      page.getByText(t('channels:telegram.toast.saved', { username: 'helpdock_support_bot' })),
+    ).toBeVisible();
+    await expect(prompt).toHaveValue(OWN_PROMPT);
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('link', { name: t('channels:telegram.detail.back') }).click();
+    await page.getByRole('link', { name: '@helpdock_support_bot', exact: true }).click();
+    await expect(
+      page
+        .getByRole('form', { name: '@helpdock_support_bot' })
+        .getByLabel(t('channels:telegram.detail.welcome.prompt'), { exact: true }),
+    ).toHaveValue(OWN_PROMPT);
+  });
+
+  test('keeps what was typed, and saves nothing, when the api rejects the save', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const form = await openBot(page, locale, 'helpdock_billing_bot');
+    const prompt = form.getByLabel(t('channels:telegram.detail.welcome.prompt'), { exact: true });
+
+    await prompt.fill(OWN_PROMPT);
+    await form
+      .getByRole('button', { name: t('channels:telegram.detail.connection.replace') })
+      .click();
+    await form.getByLabel(t('channels:telegram.detail.connection.token')).fill(MOCK_GOOD_TOKEN);
+    await form.getByRole('button', { name: t('channels:telegram.detail.footer.save') }).click();
+
+    await expect(form.getByRole('alert')).toHaveText(
+      t('channels:telegram.refusal.token-other-bot'),
+    );
+    await expect(prompt).toHaveValue(OWN_PROMPT);
+    await expect(
+      form.getByRole('button', { name: t('channels:telegram.detail.footer.save') }),
+    ).toBeEnabled();
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('link', { name: t('channels:telegram.detail.back') }).click();
+    await page.getByRole('link', { name: '@helpdock_billing_bot', exact: true }).click();
+    await expect(
+      page
+        .getByRole('form', { name: '@helpdock_billing_bot' })
+        .getByLabel(t('channels:telegram.detail.welcome.prompt'), { exact: true }),
+    ).toHaveValue(CATALOG_PROMPT);
+  });
+
+  test('refuses a question too long for one line above two buttons', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const form = await openBot(page, locale, 'helpdock_support_bot');
+    const prompt = form.getByLabel(t('channels:telegram.detail.welcome.prompt'), { exact: true });
+
+    await prompt.fill('x'.repeat(201));
+    await form.getByRole('button', { name: t('channels:telegram.detail.footer.save') }).click();
+
+    await expect(
+      form.getByText(t('channels:telegram.detail.welcome.tooLong', { max: 200 })),
+    ).toBeVisible();
+    await expect(prompt).toHaveAttribute('aria-invalid', 'true');
+    expect(await violations(page)).toEqual([]);
+  });
+});
+
 test.describe('a Telegram ticket', () => {
   test('names the chat, plays nothing until asked, and retries a reply Telegram refused', async ({
     page,

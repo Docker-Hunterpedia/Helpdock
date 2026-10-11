@@ -18,6 +18,8 @@ const STATUS_BY_REASON: Readonly<Record<AiRefusal, number>> = {
   'provider-in-use': HttpStatus.CONFLICT,
   'discovery-failed': HttpStatus.CONFLICT,
   'reembed-not-confirmed': HttpStatus.CONFLICT,
+  'https-required': HttpStatus.BAD_REQUEST,
+  'destination-blocked': HttpStatus.BAD_REQUEST,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<AiRefusal, string>> = {
@@ -31,6 +33,9 @@ const MESSAGE_BY_REASON: Readonly<Record<AiRefusal, string>> = {
   'discovery-failed': 'The provider could not be asked for its models',
   'reembed-not-confirmed':
     'Changing the embedding model re-embeds every knowledge chunk; confirm it to go ahead',
+  'https-required': 'Use https://; model endpoints are not reached over plain HTTP',
+  'destination-blocked':
+    'That address is private, loopback or link-local; allow its range in OUTBOUND_ALLOW_CIDRS to use it',
 };
 
 export class AiFailure extends HttpException {

@@ -8,6 +8,7 @@ import type {
   WidgetConversation as WireConversation,
   WidgetCsat as WireCsat,
   WidgetPrechatFieldView as WireField,
+  WidgetConversationHours as WireHours,
   WidgetMessage as WireMessage,
 } from '@helpdock/schemas';
 import type {
@@ -17,6 +18,7 @@ import type {
   AttachmentKind,
   Availability,
   ContentPolicy,
+  ConversationHours,
   ConversationStatus,
   ConversationSummary,
   CsatCard,
@@ -199,6 +201,13 @@ export const statusOf = (
 ): ConversationStatus =>
   wire.state === 'closed' ? 'ended' : position === null ? 'active' : 'queued';
 
+/** M7-06: the hours of the team answering a conversation. */
+export const toHours = (wire: WireHours): ConversationHours => ({
+  open: wire.open,
+  next_open_at: wire.nextOpenAt,
+  timezone: wire.timezone,
+});
+
 export const toConversation = (
   wire: WireConversation,
   position: number | null,
@@ -211,6 +220,7 @@ export const toConversation = (
   visitor_email: visitorEmail,
   read_seq: 0,
   ai_handed_off: wire.aiHandedOff ?? false,
+  ...(wire.hours === undefined ? {} : { hours: toHours(wire.hours) }),
 });
 
 /** M8-06: the satisfaction card, as the UI draws it. */

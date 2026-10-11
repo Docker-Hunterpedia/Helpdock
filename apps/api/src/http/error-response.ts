@@ -95,6 +95,8 @@ const CODE_BY_STATUS: Readonly<Record<number, ErrorCode>> = {
   [HttpStatus.FORBIDDEN]: 'forbidden',
   [HttpStatus.NOT_FOUND]: 'not_found',
   [HttpStatus.CONFLICT]: 'conflict',
+  // A brand in its deletion grace (M8-07): `BrandGoneGuard`, and the API key resolver.
+  [HttpStatus.GONE]: 'gone',
   // M8-02: an Idempotency-Key reused with a different request.
   [HttpStatus.UNPROCESSABLE_ENTITY]: 'conflict',
   [HttpStatus.TOO_MANY_REQUESTS]: 'rate_limited',
@@ -237,7 +239,7 @@ export const mapError = (error: unknown): MappedError => {
   if (error instanceof WebhooksFailure) {
     return {
       status: error.getStatus(),
-      code: 'validation_failed',
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'validation_failed',
       message: error.message,
       webhooks: {
         reason: error.reason,

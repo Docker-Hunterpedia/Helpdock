@@ -11,6 +11,7 @@ import {
   toAvailability,
   toConfig,
   toConversation,
+  toHours,
   toMessage,
   toWireKind,
   VOICE_MAX_SECONDS,
@@ -327,6 +328,21 @@ describe('toConversation', () => {
     expect(toConversation(wire, null, null).status).toBe('active');
     expect(toConversation({ ...wire, aiHandedOff: true }, null, null).ai_handed_off).toBe(true);
     expect(toConversation({ ...wire, state: 'closed' }, 2, null).status).toBe('ended');
+  });
+
+  it('carries the hours of the team answering it, in the UI’s names (M7-06)', () => {
+    const hours = { open: false, nextOpenAt: '2026-09-27T05:00:00.000Z', timezone: 'Asia/Dubai' };
+
+    expect(toConversation({ ...wire, hours }, null, null).hours).toEqual({
+      open: false,
+      next_open_at: '2026-09-27T05:00:00.000Z',
+      timezone: 'Asia/Dubai',
+    });
+    expect(toHours({ ...hours, nextOpenAt: null }).next_open_at).toBeNull();
+  });
+
+  it('has no hours from a server that sends none, rather than a guess', () => {
+    expect(toConversation(wire, null, null)).not.toHaveProperty('hours');
   });
 });
 

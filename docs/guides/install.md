@@ -330,6 +330,45 @@ Brand › Domains too. Set Cloudflare's SSL mode to **Full (strict)** with an
 origin certificate, or the hop between Cloudflare and your server is
 unauthenticated.
 
+**Visitor addresses.** Every connection Caddy sees comes from a Cloudflare edge
+address. Left alone, the api would take that for the visitor and share each
+per-address limit (sign-in, the widget, the web form, the rating page) between
+everyone behind the same edge, so one visitor could lock the others out, and
+the [audit log](audit-log.md) would record Cloudflare's addresses. The
+Cloudflare Caddyfile therefore lists Cloudflare's published ranges in
+`trusted_proxies` and forwards the `CF-Connecting-IP` header as
+`X-Forwarded-For`, but only for a connection that comes from one of those
+ranges. A request that reaches your server around Cloudflare is seen as itself,
+whatever headers it carries. Compare the ranges in the file with
+<https://www.cloudflare.com/ips/> now and then, and run
+`docker compose restart caddy` after editing. A range that is missing fails
+safe: visitors arriving through that edge are seen as the edge.
+
+To check it, sign in and open the [audit log](audit-log.md): the address on
+your own entry should be yours, not Cloudflare's.
+
+## Behind a proxy of your own
+
+The Compose file sets `TRUST_PROXY: uniquelocal` on the api, so it believes the
+`X-Forwarded-For` that Caddy sends and nothing a client wrote into the header:
+Caddy replaces what a client sends with the address the connection came from.
+`uniquelocal` is the private address ranges Docker's networks are carved from.
+The api's port is not published, so only Caddy reaches it.
+
+If another proxy or load balancer sits in front of Caddy and is not Cloudflare,
+two things have to change, or every visitor is seen as that proxy:
+
+1. In the Caddyfile's global block, add
+   `servers { trusted_proxies static <the proxy's address or CIDR> }`, so Caddy
+   believes the `X-Forwarded-For` it sends and appends to it.
+2. In `docker-compose.yml`, extend `TRUST_PROXY` with the proxy's address, for
+   example `uniquelocal,203.0.113.0/24`, so the api believes that hop too.
+
+`TRUST_PROXY=true` believes every hop, which lets a client choose its own
+address by sending its own `X-Forwarded-For`; do not use it behind a proxy that
+appends to the header. [Configuration](configuration.md#trust_proxy) lists the
+forms the setting takes.
+
 ## Upgrading
 
 Take a dump, check out the new release's Compose file, set `HELPDOCK_VERSION`

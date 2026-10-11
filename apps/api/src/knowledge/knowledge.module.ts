@@ -1,10 +1,12 @@
 import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import { type DynamicModule, Module } from '@nestjs/common';
+import type { Redis } from 'ioredis';
 import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
-import { SETTINGS } from '../runtime/tokens.js';
+import { REDIS, SETTINGS } from '../runtime/tokens.js';
 import { readOAuthApps } from './credentials.js';
 import { KnowledgeController, KnowledgeOAuthController } from './knowledge.controller.js';
 import type { ConnectorEndpoints } from './load-source.js';
+import { OAuthNonceStore } from './oauth-nonce.store.js';
 import { safeFetchFunction } from './safe-transports.js';
 import { KnowledgeSourcesService } from './sources.service.js';
 
@@ -37,8 +39,8 @@ export class KnowledgeModule {
       providers: [
         {
           provide: KnowledgeSourcesService,
-          inject: [SETTINGS],
-          useFactory: (settings: Settings): KnowledgeSourcesService =>
+          inject: [SETTINGS, REDIS],
+          useFactory: (settings: Settings, redis: Redis): KnowledgeSourcesService =>
             new KnowledgeSourcesService({
               storage: bucket,
               keyring: createKeyring(env),
@@ -49,6 +51,7 @@ export class KnowledgeModule {
               crawlRendering: env.KNOWLEDGE_CRAWL_RENDER === true,
               appUrl: env.APP_URL,
               masterKey: env.APP_MASTER_KEY,
+              nonces: new OAuthNonceStore(redis),
             }),
         },
       ],

@@ -58,6 +58,7 @@ describe('HttpTelegramApi', () => {
       departmentId: bot.departmentId,
       welcomeEn: null,
       welcomeAr: null,
+      languagePrompt: null,
       languagePick: true,
     };
     fetchMock.mockResolvedValueOnce(json(bot, 201));
@@ -139,6 +140,7 @@ describe('HttpTelegramApi', () => {
         token: TOKEN,
         welcomeEn: null,
         welcomeAr: null,
+        languagePrompt: null,
         languagePick: true,
       })
       .catch((caught: unknown) => caught);

@@ -167,7 +167,8 @@
     "refusals": {
       "webhook-https-required": "استخدم https://. لا تُرسل الـ webhooks أبدًا عبر HTTP العادي.",
       "webhook-destination-blocked": "يشير العنوان إلى شبكة خاصة ({{address}}) — مرفوض. لا يسلّم Helpdock إلا إلى عناوين عامة.",
-      "webhook-destination-blocked-unknown": "هذا العنوان خاص — مرفوض. لا يسلّم Helpdock إلا إلى عناوين عامة."
+      "webhook-destination-blocked-unknown": "هذا العنوان خاص — مرفوض. لا يسلّم Helpdock إلا إلى عناوين عامة.",
+      "webhook-event-scope": "لا يستطيع مفتاح API هذا قراءة هذه الأحداث، لذا لا يمكنه الاشتراك فيها."
     },
     "eventHints": {
       "ticket.created": "تُفتح تذكرة من أي قناة أو من الواجهة البرمجية",

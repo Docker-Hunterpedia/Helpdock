@@ -1,8 +1,10 @@
 import type { HttpTransport } from '@helpdock/ai';
 import type { Env, Settings } from '@helpdock/config';
+import type { LookupFunction } from '@helpdock/net';
 import { type DynamicModule, Module } from '@nestjs/common';
 import { SETTINGS } from '../runtime/tokens.js';
 import { AiRepository } from './ai.repository.js';
+import { createAiDestinationCheck } from './ai-destination.js';
 import { safeAiTransport } from './ai-http.js';
 import { AutoReplyStaffController, AutoReplyStaffService } from './auto-reply/auto-reply-staff.js';
 import { BrandAiController } from './brand-ai.controller.js';
@@ -17,6 +19,8 @@ export interface AiModuleOptions {
   readonly env: Pick<Env, 'OUTBOUND_ALLOW_CIDRS'>;
   /** The HTTP model discovery goes through. The SSRF-safe client unless a suite passes a fake. */
   readonly http?: HttpTransport;
+  /** How a saved URL's host is resolved. The system resolver unless a suite passes a fake. */
+  readonly lookup?: LookupFunction;
 }
 
 /**
@@ -28,8 +32,12 @@ export interface AiModuleOptions {
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class AiModule {
-  static forRoot({ env, http }: AiModuleOptions): DynamicModule {
+  static forRoot({ env, http, lookup }: AiModuleOptions): DynamicModule {
     const transport = http ?? safeAiTransport(env.OUTBOUND_ALLOW_CIDRS);
+    const checkDestination = createAiDestinationCheck({
+      allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+      ...(lookup === undefined ? {} : { lookup }),
+    });
     return {
       module: AiModule,
       controllers: [InstallAiController, BrandAiController, AutoReplyStaffController],
@@ -40,19 +48,19 @@ export class AiModule {
           provide: InstallAiService,
           inject: [SETTINGS],
           useFactory: (settings: Settings): InstallAiService =>
-            new InstallAiService(settings, transport),
+            new InstallAiService(settings, transport, checkDestination),
         },
         {
           provide: EmbeddingSettingsService,
           inject: [SETTINGS],
           useFactory: (settings: Settings): EmbeddingSettingsService =>
-            new EmbeddingSettingsService(settings),
+            new EmbeddingSettingsService(settings, checkDestination),
         },
         {
           provide: TranscriptionSettingsService,
           inject: [SETTINGS],
           useFactory: (settings: Settings): TranscriptionSettingsService =>
-            new TranscriptionSettingsService(settings),
+            new TranscriptionSettingsService(settings, checkDestination),
         },
         {
           provide: BrandAiService,

@@ -1,5 +1,10 @@
 import type { Attachment as AttachmentRow, TicketMessage as TicketMessageRow } from '@helpdock/db';
-import type { WidgetAttachment, WidgetConversation, WidgetMessage } from '@helpdock/schemas';
+import type {
+  WidgetAttachment,
+  WidgetConversation,
+  WidgetConversationHours,
+  WidgetMessage,
+} from '@helpdock/schemas';
 import { readAiMeta, toWidgetMessageAi } from '../ai/auto-reply/ai-meta.js';
 import { firstNameOf } from '../csat/csat.service.js';
 import type { TicketWithStatus } from './widget.repository.js';
@@ -72,6 +77,7 @@ export const toWidgetConversation = (
   { ticket, status }: TicketWithStatus,
   lastSeq: number,
   continuedById: string | null,
+  hours: WidgetConversationHours,
 ): WidgetConversation => ({
   id: ticket.id,
   reference: `${ticket.prefix}-${String(ticket.number)}`,
@@ -81,6 +87,7 @@ export const toWidgetConversation = (
   lastSeq,
   continuedById,
   aiHandedOff: ticket.aiEligibleAt !== null && ticket.aiPausedAt !== null,
+  hours,
   createdAt: ticket.createdAt.toISOString(),
   updatedAt: ticket.updatedAt.toISOString(),
 });

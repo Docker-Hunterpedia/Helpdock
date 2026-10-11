@@ -7,13 +7,15 @@ import { Icon } from './icons.js';
 /**
  * The satisfaction card after "ended the conversation" (M8-06, `Widget/CSAT-EN`,
  * `Widget/CSAT-AR`; DESIGN §6.6). It is a list item of the log, so a screen
- * reader meets it in order.
+ * reader meets it in order. Nothing in it is a live region of its own, the
+ * "not sent" line included: the log announces what is added to it, and a
+ * status or alert inside a log is read twice.
  *
  * - **Open**: five 44 px toggle buttons in a fieldset with a hidden legend,
  *   the number in mono over an `aria-hidden` caption pair, an optional
  *   comment, Skip and "Send rating" (enabled once a number is pressed). Esc
  *   does not dismiss it; Skip does.
- * - **Rated**: a `role="status"` success box echoing the score and comment.
+ * - **Rated**: a success box echoing the score and comment.
  * - **Skipped**: a system line with the time. Nothing was recorded.
  * - **Expired**: a `role="note"` box; ratings stay open thirty days.
  */
@@ -39,7 +41,7 @@ export function CsatCard({ card }: { card: Card }) {
     const rating = card.rating ?? 0;
     return (
       <li class="hd-csat">
-        <div class="hd-alert hd-alert-success hd-csat-box" role="status">
+        <div class="hd-alert hd-alert-success hd-csat-box">
           <Icon name="circleCheck" size={16} />
           <div class="hd-stack">
             <strong>{t('csat.thanks')}</strong>
@@ -137,7 +139,7 @@ function CsatForm() {
           />
         </div>
         {status === 'failed' ? (
-          <p class="hd-field-error" role="alert">
+          <p class="hd-field-error">
             <Icon name="alert" size={14} />
             {t('csat.failed')}
           </p>

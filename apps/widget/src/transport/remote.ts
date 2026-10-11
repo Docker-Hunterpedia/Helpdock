@@ -19,6 +19,7 @@ import type {
   WidgetAvailability as WireAvailability,
   WidgetConfig as WireConfig,
   WidgetConversation as WireConversation,
+  WidgetConversationHours as WireHours,
   WidgetMessage as WireMessage,
 } from '@helpdock/schemas';
 import { io, type Socket } from 'socket.io-client';
@@ -32,6 +33,7 @@ import {
   toConfig,
   toConversation,
   toCsat,
+  toHours,
   toMessage,
   toWireKind,
 } from './map.js';
@@ -41,6 +43,7 @@ import type {
   Attachment,
   AttachmentKind,
   ConnectionState,
+  ConversationHours,
   ConversationStatus,
   ConversationSummary,
   StartConversationInput,
@@ -142,6 +145,8 @@ interface Current {
   status: ConversationStatus;
   readonly visitorEmail: string | null;
   aiHandedOff: boolean;
+  /** M7-06: the team's hours as the server last judged them; undefined from an older server. */
+  hours: ConversationHours | undefined;
 }
 
 export function createRemoteTransport(options: RemoteTransportOptions): WidgetTransport {
@@ -199,29 +204,51 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
           visitor_email: current.visitorEmail,
           read_seq: 0,
           ai_handed_off: current.aiHandedOff,
+          ...(current.hours === undefined ? {} : { hours: current.hours }),
         };
 
-  const moveTo = (status: ConversationStatus): void => {
-    if (current === null || current.status === status) {
-      return;
-    }
-    current.status = status;
+  const announce = (): void => {
     const conversation = summary();
     if (conversation !== null) {
       emit({ type: 'conversation', conversation });
     }
   };
 
+  const moveTo = (status: ConversationStatus): boolean => {
+    if (current === null || current.status === status) {
+      return false;
+    }
+    current.status = status;
+    announce();
+    return true;
+  };
+
   /** M7-06: the assistant stepped back, once and for good; the UI hides "Talk to a human". */
-  const handOver = (handedOff: boolean): void => {
+  const handOver = (handedOff: boolean): boolean => {
     if (current === null || !handedOff || current.aiHandedOff) {
-      return;
+      return false;
     }
     current.aiHandedOff = true;
-    const conversation = summary();
-    if (conversation !== null) {
-      emit({ type: 'conversation', conversation });
+    announce();
+    return true;
+  };
+
+  /** M7-06: keeps the hours a frame carries; true when they differ from the ones held. */
+  const keepHours = (wire: WireHours | undefined): boolean => {
+    if (current === null || wire === undefined) {
+      return false;
     }
+    const next = toHours(wire);
+    const held = current.hours;
+    if (
+      held?.open === next.open &&
+      held.next_open_at === next.next_open_at &&
+      held.timezone === next.timezone
+    ) {
+      return false;
+    }
+    current.hours = next;
+    return true;
   };
 
   /** One handler for a socket frame and an SSE frame alike: they are the same envelope. */
@@ -269,8 +296,13 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       case EVENTS.conversation: {
         const moved = envelope.data as WidgetConversationEvent;
         if (mine(moved.conversationId)) {
-          handOver(moved.aiHandedOff === true);
-          moveTo(statusOf(moved, null));
+          // Hours first, so a frame that also hands off or closes says them once, in that event.
+          const hoursMoved = keepHours(moved.hours);
+          const handedOver = handOver(moved.aiHandedOff === true);
+          const statusMoved = moveTo(statusOf(moved, null));
+          if (hoursMoved && !handedOver && !statusMoved) {
+            announce();
+          }
         }
         return;
       }
@@ -408,6 +440,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       status: statusOf(conversation, position),
       visitorEmail,
       aiHandedOff: conversation.aiHandedOff ?? false,
+      hours: conversation.hours === undefined ? undefined : toHours(conversation.hours),
     };
     return toConversation(conversation, position, visitorEmail);
   };
@@ -640,6 +673,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       );
       if (current?.id === conversationId) {
         current.aiHandedOff = conversation.aiHandedOff ?? true;
+        keepHours(conversation.hours);
       }
       return toConversation(
         conversation,

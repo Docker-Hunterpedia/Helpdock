@@ -9,7 +9,7 @@ Tickets, contacts, help center articles and webhook endpoints of one brand, for 
 | `<APP_URL>/api/docs` | Every operation, its scope and what it does, as a page |
 | `<APP_URL>/api/docs/openapi.json` | The OpenAPI 3.1 document, for a client generator or a viewer of your choice |
 
-Both are public: they describe the routes, nothing of any brand's data. The document is generated from the same Zod schemas the routes validate with, so it is always the running version's.
+Both are public: they describe the routes, nothing of any brand's data. The document is generated from the same Zod schemas the routes validate with, so it always describes the running code. Its `info.version` (and the page's title) is the version of the API contract, `1`, not the release of the install: both are public, and a release number would tell a stranger which known flaws to try.
 
 ## API keys
 
@@ -24,9 +24,11 @@ The page calls these endpoints, which an Admin's own scripts may call too:
 
 | Request | What it does |
 |---|---|
-| `GET /api/brands/{brandId}/api-keys` | The brand's keys: name, the first 12 characters, scopes, rate limit, created and by whom (`createdByName`), last used, revoked and by whom (`revokedByName`) |
-| `POST /api/brands/{brandId}/api-keys` | `{ "name", "scopes": [...], "rateLimitPerMinute"? }`. The answer carries `key` — **the only time it is ever shown** |
+| `GET /api/brands/{brandId}/api-keys` | The brand's keys: name, the first 12 characters, scopes, rate limit, created and by whom (`createdByName`), last used, `expiresAt`, revoked and by whom (`revokedByName`) |
+| `POST /api/brands/{brandId}/api-keys` | `{ "name", "scopes": [...], "rateLimitPerMinute"?, "expiresAt"? }`. The answer carries `key` — **the only time it is ever shown** |
 | `DELETE /api/brands/{brandId}/api-keys/{keyId}` | Revokes the key. Final: a key that should work again is a new key |
+
+**Expiry (API only for now).** `expiresAt` is an ISO 8601 date and time (`2027-01-01T00:00:00Z`, or with an offset). It must be in the future (`400` otherwise), and leaving it out makes a key that never expires, as before. From that moment the key is refused with `401`, the same answer as a revoked one, and the refusal is logged and audited with `reason: "expired"` ([what a refused key leaves](#authentication-and-limits)). The date cannot be changed afterwards: a longer life is a new key. The expiry is stored and returned by the API, but the **Create API key** dialog (artboard `Admin/Developers-ApiKeys`) draws no field for it and the table shows no column: adding them needs the artboard updated first. Until then, set it by calling the create endpoint yourself.
 
 A key is `hd_live_` followed by 43 characters. Helpdock stores its SHA-256 and its first 12 characters, never the key. Creating and revoking a key are written to the audit log with the prefix and the scopes. `lastUsedAt` is updated at most once a minute.
 
@@ -39,7 +41,9 @@ A key is `hd_live_` followed by 43 characters. Helpdock stores its SHA-256 and i
 | `contacts:read` | Search and read contacts; a ticket read also names its contact |
 | `contacts:write` | Create and update contacts (upsert) |
 | `articles:read` | Search and read **published, public** help center articles |
-| `webhooks:manage` | Manage webhook endpoints, read their delivery log, replay deliveries |
+| `webhooks:manage` | Manage webhook endpoints, read their delivery log, replay deliveries — only for events the key could read itself (below) |
+
+**Webhook events follow read scopes.** A delivery carries the same data a read would, so `webhooks:manage` alone cannot subscribe to it: `ticket.*` and `csat.received` need `tickets:read`, `contact.created` needs `contacts:read`, `article.published` needs `articles:read`. A key that lacks one gets `403` with `error.webhooks.reason: "webhook-event-scope"` when it creates an endpoint, when it changes one (checked against the events the endpoint would have afterwards, so a key cannot repoint an endpoint it could not have made), and when it rotates the secret of, or replays a delivery of, an endpoint whose events exceed its scopes. The Admin's Developers page is not held to scopes: it acts as a staff member with `brand:manage`.
 
 A key reaches every department of its brand and no other brand. Its scopes are the only permissions it holds: a key cannot call the admin's routes, and a signed-in staff member cannot call `/api/v1`.
 
@@ -51,10 +55,13 @@ Authorization: Bearer hd_live_...
 
 | Answer | When |
 |---|---|
-| `401` | No key, an unknown key, or a revoked key |
-| `403` | The key does not hold the route's scope |
+| `401` | No key, an unknown key, a revoked key, or one past its `expiresAt` |
+| `403` | The key does not hold the route's scope, or the route is one a person uses, such as `/api/me`: a key reaches `/api/v1` and nothing else |
 | `404` | Nothing with that id in the key's brand |
+| `410` (`error.code` is `gone`) | The key's brand is scheduled for deletion, after the key has spent a request from its minute's budget (so past the budget it is `429`, as for any key). The key works again if the brand is restored |
 | `429` | The key made more requests in the last minute than its `rateLimitPerMinute` (600 unless set, at most 10 000) |
+
+**What a refused key leaves behind.** Every `401` for a key is logged as a warning, `API key refused`, with the key's first 12 characters (`keyPrefix`), the caller's address (`ip`, as Fastify resolves it under `TRUST_PROXY`) and a `reason`: `unknown` for a key Helpdock never issued, `revoked` or `expired` for one it did. The key itself is never logged. A revoked or expired key that is presented also writes an `api_key.refused` row to its brand's [audit log](audit-log.md#api-keys) (the prefix, the reason and the address), at most once a minute per key, so a script that keeps retrying a revoked key shows once, not a thousand times.
 
 Errors have the shape every Helpdock route answers with: `{ "error": { "code", "message", "requestId", "fields"? } }`.
 

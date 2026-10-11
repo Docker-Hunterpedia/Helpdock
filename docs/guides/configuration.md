@@ -131,10 +131,14 @@ Optional. HTTP port the api listens on. Defaults to 3000.
 |---|---|---|---|
 | `TRUST_PROXY` | no | `false` | `false` |
 
-Optional. `true` only when a reverse proxy Helpdock controls sits in front of
-the api and sets `x-forwarded-*` and `x-request-id`. It decides whether the
-api believes those headers, so leaving it `false` behind an untrusted network
-is the safe default. Defaults to false.
+Optional. Which reverse proxies the api believes `x-forwarded-*` and
+`x-request-id` from, and so what `request.ip` and every per-address rate limit
+see. `false` believes none, the safe default. A comma-separated list of
+addresses, CIDRs or the names `loopback`, `linklocal` and `uniquelocal` (the
+private ranges) believes a hop only when its address is listed: the shipped
+Compose stack sets `uniquelocal`, for its Caddy. `true` believes every hop, so
+a client can write its own address into `x-forwarded-for`: use it only when
+nothing but your own proxy can reach the api. Defaults to false.
 
 ### DATABASE_URL
 
@@ -249,7 +253,10 @@ the image and want it to serve a local `apps/widget/dist`.
 Optional. Comma-separated CIDRs the SSRF-safe outbound client may reach even
 though they are private, for a self-hosted proxy or connector (DOMAIN-RULES §13).
 Outbound webhooks (M8-03) honour it too: an endpoint on an internal address is
-delivered to only when its range is listed here.
+delivered to only when its range is listed here. So do the AI provider,
+embeddings and transcription URLs, which are checked when they are saved: a
+local Ollama or whisper.cpp on an internal address needs its range here, and
+may then use plain http.
 Example: 10.0.0.0/8,192.168.0.0/16
 
 ### HELPCENTER_CNAME_TARGET

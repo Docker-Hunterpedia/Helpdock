@@ -25,7 +25,7 @@ import { retentionCutoffs, runDateOf, settingsFromRow } from './retention-rules.
  *
  * ```
  * 03:00 UTC  maintenance.retention.schedule   lists brands, adds one job each, purges job_receipts
- *            maintenance.retention (brand A)  closed tickets, spam, AI call bodies, audit log, outbox → audit row
+ *            maintenance.retention (brand A)  closed tickets, spam, AI call bodies, audit log, delivery logs, outbox → audit row
  *            maintenance.retention (brand B)  …
  * ```
  *
@@ -107,6 +107,27 @@ export const runBrandRetention = async ({
     () =>
       inBrand((tx) =>
         repository.purgeNotificationsBatch(tx, brandId, cutoffs.notifications, batchSize),
+      ),
+    batchSize,
+  );
+  counts.webhookDeliveries = await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeWebhookDeliveriesBatch(tx, brandId, cutoffs.deliveryLogs, batchSize),
+      ),
+    batchSize,
+  );
+  counts.telegramDeliveries = await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeTelegramDeliveriesBatch(tx, brandId, cutoffs.deliveryLogs, batchSize),
+      ),
+    batchSize,
+  );
+  counts.idempotencyKeys = await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeIdempotencyKeysBatch(tx, brandId, cutoffs.idempotencyKeys, batchSize),
       ),
     batchSize,
   );

@@ -781,7 +781,7 @@ else. A response that fails its *output* schema is a bug in the api, so it is a
 500 with no field detail.
 
 The request id is on every response in the `x-request-id` header. It is taken
-from the client only when `TRUST_PROXY=true`, and even then only if it is at
+from the client only when `TRUST_PROXY` is set, and even then only if it is at
 most 128 characters of `A-Za-z0-9._:-` — otherwise a caller could choose the id
 an operator greps for, or write newlines into the log stream.
 

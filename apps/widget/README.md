@@ -103,8 +103,8 @@ after the visitor stops typing. An article with no help center address
 
 DOMAIN-RULES §14: `widget.js` ≤ 40 KB gzipped; each lazy chunk ≤ 20 KB and all
 of them ≤ 100 KB. The transport must be a lazy chunk of its own
-(`chunks/remote-*.js`, ADR 0012's amendment); today the entry is about 25 KB
-and the transport about 17 KB.
+(`chunks/remote-*.js`, ADR 0012's amendment); today the entry is about 30 KB
+and the transport about 17.5 KB.
 
 ```bash
 pnpm --filter @helpdock/widget size    # build, then print every file's gzipped size
@@ -133,8 +133,10 @@ mid-send) and `widget` (a non-allowed origin) beside it
 The harness (`harness/`) is an empty host page with the widget on the mock
 transport, configured from the query string: `?locale=ar`,
 `mode=chat|chat_articles|helpcenter|form`,
-`availability=online|open_offline|closed`, `prechat=1`, `transcript=0`,
-`scheme=light|dark|auto`. `window.helpdock.mock` plays the server:
+`availability=online|open_offline|closed`, `hours=never|absent` (the hours a
+conversation carries: a calendar that never opens, or none, as an older server
+sends), `prechat=1`, `transcript=0`, `scheme=light|dark|auto`.
+`window.helpdock.mock` plays the server:
 
 ```js
 const { mock, agent } = window.helpdock;

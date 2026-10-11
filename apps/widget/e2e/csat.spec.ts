@@ -65,7 +65,7 @@ for (const locale of LOCALES) {
         await send.focus();
         await page.keyboard.press('Enter');
 
-        const thanks = window.getByRole('status').filter({ hasText: t('csat.thanks') });
+        const thanks = window.getByRole('listitem').filter({ hasText: t('csat.thanks') });
         await expect(thanks).toBeVisible();
         await expect(thanks).toContainText(
           t('csat.rated', { rating: 4, label: t('csat.ratings.4') }),
@@ -108,7 +108,7 @@ for (const locale of LOCALES) {
         await card.getByRole('button', { name: score(2) }).click();
         await card.getByRole('button', { name: t('csat.send') }).click();
 
-        await expect(card.getByRole('alert')).toHaveText(t('csat.failed'));
+        await expect(card.getByText(t('csat.failed'))).toBeVisible();
         await expect(card.getByRole('button', { name: score(2) })).toHaveAttribute(
           'aria-pressed',
           'true',

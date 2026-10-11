@@ -177,11 +177,14 @@ class FakeOauthService {
     return Promise.resolve(this.enabled);
   }
 
-  start(): Promise<string> {
+  start(): Promise<{ url: string; browserNonce: string }> {
     if (!this.enabled) {
       throw new OauthError('not configured');
     }
-    return Promise.resolve('https://accounts.google.com/o/oauth2/v2/auth?x=1');
+    return Promise.resolve({
+      url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+      browserNonce: 'nonce-1',
+    });
   }
 
   complete(): Promise<{ email: string; name: string | undefined }> {
@@ -821,7 +824,10 @@ describe('OAuth', () => {
   it('hands back the provider URL when it is configured', async () => {
     oauth.enabled = true;
 
-    await expect(service.startOauth('google')).resolves.toContain('accounts.google.com');
+    await expect(service.startOauth('google')).resolves.toEqual({
+      url: expect.stringContaining('accounts.google.com'),
+      browserNonce: 'nonce-1',
+    });
   });
 
   it('signs in an address this install already knows', async () => {
@@ -829,7 +835,13 @@ describe('OAuth', () => {
     oauth.identity = { email: 'lina@helpdock.com', name: 'Lina' };
 
     await expect(
-      service.completeOauth({ provider: 'google', code: 'c', state: 's', userAgent: 'Firefox' }),
+      service.completeOauth({
+        provider: 'google',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      }),
     ).resolves.toMatchObject({ kind: 'session' });
   });
 
@@ -837,7 +849,13 @@ describe('OAuth', () => {
     oauth.identity = { email: 'stranger@example.com', name: 'Stranger' };
 
     await expect(
-      service.completeOauth({ provider: 'google', code: 'c', state: 's', userAgent: 'Firefox' }),
+      service.completeOauth({
+        provider: 'google',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      }),
     ).rejects.toMatchObject({ auth: { code: 'no-account' } });
     expect(staff.users.size).toBe(0);
   });
@@ -846,7 +864,13 @@ describe('OAuth', () => {
     oauth.identity = new OauthError('the state does not belong to this provider');
 
     await expect(
-      service.completeOauth({ provider: 'github', code: 'c', state: 's', userAgent: 'Firefox' }),
+      service.completeOauth({
+        provider: 'github',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      }),
     ).rejects.toMatchObject({ auth: { code: 'no-account' } });
   });
 
@@ -854,7 +878,13 @@ describe('OAuth', () => {
     oauth.identity = new TypeError('the network went away');
 
     await expect(
-      service.completeOauth({ provider: 'github', code: 'c', state: 's', userAgent: 'Firefox' }),
+      service.completeOauth({
+        provider: 'github',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      }),
     ).rejects.toMatchObject({ auth: { code: 'unavailable' } });
   });
 });

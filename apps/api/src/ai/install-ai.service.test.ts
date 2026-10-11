@@ -7,7 +7,9 @@ import {
   type Settings,
 } from '@helpdock/config';
 import type { DbTransaction } from '@helpdock/db';
+import type { LookupFunction } from '@helpdock/net';
 import { describe, expect, it } from 'vitest';
+import { createAiDestinationCheck } from './ai-destination.js';
 import { InstallAiService, toProviderView } from './install-ai.service.js';
 
 const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 3).toString('base64') });
@@ -27,6 +29,9 @@ const tx = {
 } as unknown as DbTransaction;
 const context = { tx, actorId: '0192f4d2-0000-7000-8000-0000000000ad' };
 
+/** The address rules have their own tests below; these cases are about the settings. */
+const allowAnyAddress = async () => {};
+
 const openai = {
   kind: 'openai',
   label: 'OpenAI',
@@ -37,7 +42,7 @@ const openai = {
 describe('InstallAiService.upsert', () => {
   it('stores the credential and answers without it', async () => {
     const settings = settingsWith();
-    const service = new InstallAiService(settings, fakeEmbeddingsServer(4).http);
+    const service = new InstallAiService(settings, fakeEmbeddingsServer(4).http, allowAnyAddress);
 
     const view = await service.upsert(context, 'openai', openai);
 
@@ -55,7 +60,7 @@ describe('InstallAiService.upsert', () => {
 
   it('keeps the stored key when an edit sends none, and refuses a new provider without one', async () => {
     const settings = settingsWith();
-    const service = new InstallAiService(settings, fakeEmbeddingsServer(4).http);
+    const service = new InstallAiService(settings, fakeEmbeddingsServer(4).http, allowAnyAddress);
     await service.upsert(context, 'openai', openai);
 
     await service.upsert(context, 'openai', {
@@ -77,6 +82,7 @@ describe('InstallAiService.upsert', () => {
     const service = new InstallAiService(
       settingsWith({ HD_AI_PROVIDERS: '[]' }),
       fakeEmbeddingsServer(4).http,
+      allowAnyAddress,
     );
 
     await expect(service.upsert(context, 'openai', openai)).rejects.toMatchObject({
@@ -88,11 +94,89 @@ describe('InstallAiService.upsert', () => {
   });
 
   it('refuses a kind pi-ai does not have', async () => {
-    const service = new InstallAiService(settingsWith(), fakeEmbeddingsServer(4).http);
+    const service = new InstallAiService(
+      settingsWith(),
+      fakeEmbeddingsServer(4).http,
+      allowAnyAddress,
+    );
 
     await expect(
       service.upsert(context, 'x', { ...openai, kind: 'not-a-provider' }),
     ).rejects.toMatchObject({ reason: 'unknown-kind' });
+  });
+});
+
+describe('InstallAiService.upsert and the address it is given (ASVS 12.6.1, 9.2.2)', () => {
+  const resolvingTo =
+    (address: string): LookupFunction =>
+    async () => [{ address, family: 4 }];
+  const local = (baseUrl: string) => ({
+    kind: 'openai-compatible',
+    label: 'Local',
+    baseUrl,
+    auth: { type: 'none' as const },
+  });
+  const serviceFor = (lookup: LookupFunction, allowCidrs: string[] = []) =>
+    new InstallAiService(
+      settingsWith(),
+      fakeEmbeddingsServer(4).http,
+      createAiDestinationCheck({ lookup, allowCidrs }),
+    );
+
+  it('refuses plain http to a public host, and says to use https', async () => {
+    await expect(
+      serviceFor(resolvingTo('93.184.216.34')).upsert(
+        context,
+        'llm',
+        local('http://llm.example.com/v1'),
+      ),
+    ).rejects.toMatchObject({ reason: 'https-required' });
+  });
+
+  it('refuses a private or metadata address unless the operator allowed the range', async () => {
+    await expect(
+      serviceFor(resolvingTo('169.254.169.254')).upsert(
+        context,
+        'llm',
+        local('https://llm.example.com/v1'),
+      ),
+    ).rejects.toMatchObject({ reason: 'destination-blocked' });
+  });
+
+  it('takes a local server whose address the operator allowed, over http', async () => {
+    const settings = settingsWith();
+    const service = new InstallAiService(
+      settings,
+      fakeEmbeddingsServer(4).http,
+      createAiDestinationCheck({
+        lookup: resolvingTo('172.18.0.5'),
+        allowCidrs: ['172.16.0.0/12'],
+      }),
+    );
+
+    await service.upsert(context, 'ollama', local('http://ollama:11434/v1'));
+
+    expect((await settings.get('ai.providers'))[0]).toMatchObject({
+      baseUrl: 'http://ollama:11434/v1',
+    });
+  });
+
+  it('does not look at a provider that has no base URL, or an edit that leaves it alone', async () => {
+    const lookups: string[] = [];
+    const service = serviceFor(async (hostname) => {
+      lookups.push(hostname);
+      return [{ address: '93.184.216.34', family: 4 }];
+    });
+    await service.upsert(context, 'openai', openai);
+    await service.upsert(context, 'llm', local('https://llm.example.com/v1'));
+    lookups.length = 0;
+
+    await service.upsert(context, 'llm', {
+      ...local('https://llm.example.com/v1'),
+      label: 'Renamed',
+    });
+
+    expect(lookups).toEqual([]);
   });
 });
 

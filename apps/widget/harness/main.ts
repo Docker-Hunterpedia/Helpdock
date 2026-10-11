@@ -29,7 +29,17 @@ const options: SampleOptions = {
   scheme: (params.get('scheme') as SampleOptions['scheme']) ?? 'light',
 };
 
-const mock = new MockTransport(sampleMockOptions(locale, options));
+// `hours=never`: the team is away and its calendar never opens. `hours=absent`:
+// a server older than M7-06, which sends no hours with a conversation.
+const hoursParam = params.get('hours');
+const mock = new MockTransport({
+  ...sampleMockOptions(locale, options),
+  ...(hoursParam === 'never'
+    ? { hours: { open: false, next_open_at: null, timezone: 'Asia/Dubai' } }
+    : hoursParam === 'absent'
+      ? { hours: null }
+      : {}),
+});
 Object.assign(window, {
   helpdock: {
     mock,

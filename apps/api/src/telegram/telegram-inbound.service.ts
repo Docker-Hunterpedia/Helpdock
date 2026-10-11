@@ -42,12 +42,12 @@ import { telegramText } from './telegram-text.js';
  * | The update is | What happens |
  * |---|---|
  * | a message | its files are fetched with `getFile` (outside any transaction), then in one system transaction: dedupe, the sender gate, the router |
- * | `/start` | the contact and chat are recorded and a welcome is asked for through the outbox (M6-04) |
- * | a language button | the contact's locale is set and a confirmation is asked for |
+ * | `/start` | the contact and chat are recorded and the language prompt (the welcome, if the bot does not ask) is asked for through the outbox (M6-04) |
+ * | a language button | the contact's locale is set and the welcome in that language is asked for |
  * | a survey button | the score is recorded and the thanks, or "closed", is asked for (M8-06) |
  * | anything else | counted as received and dropped |
  *
- * Every reply to the customer — the welcome, the confirmation, an agent's
+ * Every reply to the customer — the prompt, the welcome, an agent's
  * answer — is an outbox row, never a call made here (DOMAIN-RULES §6). A
  * dropped or duplicate update still counts as delivered: Telegram's retry would
  * only be dropped again.
@@ -221,7 +221,11 @@ export class TelegramInboundService {
 
   // ------------------------------------------------- /start and the language
 
-  /** M6-04: the welcome, in the contact's language, and the language buttons if the bot offers them. */
+  /**
+   * M6-04: the language prompt with its two buttons when the bot asks for a
+   * language, the welcome waiting for the press; otherwise the welcome at once,
+   * in the contact's language.
+   */
   async #greet(
     bot: TelegramBotRow,
     event: Extract<TelegramEvent, { kind: 'start' }>,
@@ -235,7 +239,7 @@ export class TelegramInboundService {
       await enqueueTelegramNotice(tx, bot.brandId, {
         botId: bot.id,
         chatId: event.sender.chatId,
-        notice: 'welcome',
+        notice: bot.languagePick ? 'language_prompt' : 'welcome',
         locale:
           contact.locale ??
           guessLocale(event.sender.languageCode) ??
@@ -266,6 +270,7 @@ export class TelegramInboundService {
         notice: 'language_set',
         locale: event.locale,
         callbackQueryId: event.callbackQueryId,
+        promptMessageId: event.messageId,
       });
       return { outcome: 'language-set' };
     });

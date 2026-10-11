@@ -196,6 +196,14 @@ describe('TelegramBotApi', () => {
     });
   });
 
+  it('rewrites a message’s text, which also takes its buttons away', async () => {
+    await api().editMessageText('42', '77', 'Language: English');
+    expect(calls.at(-1)).toEqual({
+      method: 'editMessageText',
+      body: { chat_id: '42', message_id: 77, text: 'Language: English' },
+    });
+  });
+
   it('polls from an offset without waiting', async () => {
     expect(await api().getUpdates(5)).toEqual([{ update_id: 5 }]);
     expect(calls.at(-1)?.body).toMatchObject({ offset: 5, timeout: 0 });

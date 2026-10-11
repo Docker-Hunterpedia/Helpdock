@@ -170,7 +170,14 @@
     "talkToHuman": "Talk to a human",
     "connecting": "Connecting you with the team…",
     "steppedBack": "The assistant has stepped back. A person will reply here.",
-    "steppedBackEmail": "The assistant has stepped back. A person will reply here and at {{email}}."
+    "steppedBackEmail": "The assistant has stepped back. A person will reply here and at {{email}}.",
+    "awayToday": "The team is away until {{time}} today ({{zone}})",
+    "awayTomorrow": "The team is away until tomorrow at {{time}} ({{zone}})",
+    "awayWeekday": "The team is away until {{day}} at {{time}} ({{zone}})",
+    "awayDate": "The team is away until {{date}} at {{time}} ({{zone}})",
+    "awayNow": "The team is away right now",
+    "awaySaved": "Your message is saved. A person will reply here when the team is back.",
+    "awaySavedEmail": "Your message is saved. A person will reply here and at {{email}} when the team is back."
   },
   "csat": {
     "question": "How was this conversation?",

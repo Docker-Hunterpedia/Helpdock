@@ -1,7 +1,10 @@
 import type { ComponentChildren } from 'preact';
+import { awayWhen } from '../format.js';
+import type { Closure } from '../state/hours.js';
 import type { AiCitation, AiPart, ArticleSummary, WidgetMessage } from '../transport/types.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
+import { Sentence } from './Sentence.js';
 
 /**
  * The assistant in the thread (M7-06, `Widget/AI-EN`, `Widget/AI-AR`, DESIGN
@@ -115,7 +118,8 @@ function Feedback({ message, ai }: { message: WidgetMessage; ai: AiPart }) {
   const { controller, t } = useWidget();
   if (ai.feedback !== null) {
     return (
-      <div class="hd-ai-thanks" role="status">
+      // No role of its own: the thread's log announces what is added to it, and a status inside a log is read twice.
+      <div class="hd-ai-thanks">
         <Icon name="circleCheck" size={16} />
         {t('ai.thanks')}
       </div>
@@ -185,17 +189,69 @@ export function AssistantMessage({
   );
 }
 
-/** The handoff line (DESIGN §6.6): who answers now, and where. A log entry, so it is read once. */
-export function HandoffLine() {
-  const { t } = useWidget();
+const AWAY_TITLE = {
+  today: 'ai.awayToday',
+  tomorrow: 'ai.awayTomorrow',
+  weekday: 'ai.awayWeekday',
+  date: 'ai.awayDate',
+} as const;
+
+/**
+ * The handoff line (DESIGN §6.6): who answers now, and where. A log entry, so
+ * it is read once. With a `closure` (M7-06) the team that answers is away: the
+ * moon, when it opens in its own zone, and that the message is saved.
+ */
+export function HandoffLine({ closure }: { closure: Closure | null }) {
+  const { t, locale } = useWidget();
   const { visitorEmail } = useWidgetState();
+
+  if (closure === null) {
+    return (
+      <li class="hd-system hd-handoff">
+        <Icon name="headset" size={16} />
+        <span>
+          <strong class="hd-handoff-title">{t('ai.connecting')}</strong>
+          <br />
+          {visitorEmail ? (
+            <Sentence id="ai.steppedBackEmail" vars={{ email: visitorEmail }} isolate={['email']} />
+          ) : (
+            t('ai.steppedBack')
+          )}
+        </span>
+      </li>
+    );
+  }
+
+  const opening =
+    closure.next_open_at === null
+      ? null
+      : awayWhen(closure.next_open_at, closure.timezone, new Date(), locale);
   return (
     <li class="hd-system hd-handoff">
-      <Icon name="headset" size={16} />
+      <Icon name="moon" size={16} />
       <span>
-        <strong class="hd-handoff-title">{t('ai.connecting')}</strong>
+        <strong class="hd-handoff-title">
+          {opening === null ? (
+            t('ai.awayNow')
+          ) : (
+            <Sentence
+              id={AWAY_TITLE[opening.key]}
+              vars={{
+                day: opening.day,
+                date: opening.date,
+                time: opening.time,
+                zone: opening.zone,
+              }}
+              isolate={['day', 'date', 'time', 'zone']}
+            />
+          )}
+        </strong>
         <br />
-        {visitorEmail ? t('ai.steppedBackEmail', { email: visitorEmail }) : t('ai.steppedBack')}
+        {visitorEmail ? (
+          <Sentence id="ai.awaySavedEmail" vars={{ email: visitorEmail }} isolate={['email']} />
+        ) : (
+          t('ai.awaySaved')
+        )}
       </span>
     </li>
   );

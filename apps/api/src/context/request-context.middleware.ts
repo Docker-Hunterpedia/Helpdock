@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Env } from '@helpdock/config';
+import { type Env, trustedPeerCheck } from '@helpdock/config';
 import { Inject, Injectable, type NestMiddleware } from '@nestjs/common';
 import { isSpanContextValid, trace } from '@opentelemetry/api';
 import { principalIdOf } from '../auth/principal.js';
@@ -31,24 +31,24 @@ interface MountedRequest extends IncomingMessage {
 }
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
-  readonly #env: Env;
   readonly #logger: Logger;
   readonly #brandResolver: BrandResolver;
+  readonly #peerIsTrustedProxy: (peer: string | undefined) => boolean;
 
   constructor(
     @Inject(ENV) env: Env,
     @Inject(LOGGER) logger: Logger,
     @Inject(BRAND_RESOLVER) brandResolver: BrandResolver,
   ) {
-    this.#env = env;
     this.#logger = logger;
     this.#brandResolver = brandResolver;
+    this.#peerIsTrustedProxy = trustedPeerCheck(env.TRUST_PROXY);
   }
 
   use(req: MountedRequest, res: ServerResponse, next: (error?: unknown) => void): void {
     const context = new RequestContext({
       requestId: resolveRequestId(req.headers[REQUEST_ID_HEADER], {
-        trustProxy: this.#env.TRUST_PROXY,
+        trustProxy: this.#peerIsTrustedProxy(req.socket.remoteAddress),
       }),
       method: req.method ?? 'GET',
       path: pathOf(req.originalUrl ?? req.url),

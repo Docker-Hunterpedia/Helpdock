@@ -21,6 +21,10 @@ import type { WidgetBrand, WidgetSettingsRepository } from './widget-settings.re
  *    not found here.
  * 5. **Per-visitor throttle** on writes.
  *
+ * An event on an open `/widget` socket skips step 1, which its handshake paid,
+ * and is held to `socketEvent`'s per-visitor budget instead, before any of the
+ * steps that read Postgres.
+ *
  * **This is an explicit system path** (AGENTS.md). A visitor has no staff
  * session and no department, so the work runs in a transaction scoped to
  * exactly the one brand the path names, as the system principal
@@ -51,6 +55,19 @@ export const WIDGET_VISITOR_WRITE_RULE: RateLimitRule = {
   windowSeconds: 60,
 };
 
+/**
+ * Every event a visitor emits on an open socket, whatever it does. The
+ * handshake pays the per-address rule once, so without this a single
+ * credential could drive unbounded transactions and fan-out to agents from one
+ * connection. A well-behaved widget emits a handful a minute: typing starts
+ * and stops, one read receipt per message, one join per conversation.
+ */
+export const WIDGET_SOCKET_EVENT_RULE: RateLimitRule = {
+  bucket: 'widget-socket-event',
+  limit: 120,
+  windowSeconds: 60,
+};
+
 export interface WidgetRequestFacts {
   readonly origin: string | string[] | undefined;
   readonly authorization?: string | string[] | undefined;
@@ -73,7 +90,7 @@ export interface WidgetGateDependencies {
   readonly db: Db;
   readonly settings: WidgetSettingsRepository;
   readonly widget: WidgetRepository;
-  readonly limiter: RateLimiter;
+  readonly limiter: Pick<RateLimiter, 'consume'>;
 }
 
 export class WidgetGate {
@@ -134,6 +151,15 @@ export class WidgetGate {
 
       return fn({ ...scope, visitor });
     });
+  }
+
+  /**
+   * The budget for one event on a `/widget` socket, checked before the event
+   * is parsed or touches Postgres. Keyed by visitor, across every socket and
+   * replica, the way the `/staff` events are (`realtime/socket-rate-limit.ts`).
+   */
+  socketEvent(visitorId: string): Promise<void> {
+    return this.#throttle(WIDGET_SOCKET_EVENT_RULE, visitorId);
   }
 
   /**

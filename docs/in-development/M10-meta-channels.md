@@ -49,7 +49,7 @@ Definition of done asks for.
 |---|---|---|---|---|---|---|
 | M10-01 | Schema, config and the shared Graph adapter: migration `0050_meta_channels` (`meta_accounts`, `meta_conversations`, `meta_deliveries`, the three channel and identity enum values), the `meta.*` settings and `META_*` keys, `packages/channels/src/meta/` (Graph client over `safeFetch` with the host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter), and the stand-in for Graph with the signed-webhook driver | A §5, §8, §13; D §13; ADR 0025 (1, 2, 5) | Integration: the three tables in the RLS negative suite (D §1.6), the migration round-trip; the stand-in's own suite | 3 d | | built, awaiting review: [notes](#m10-01-schema-config-and-the-shared-adapter) |
 | M10-02 | The webhook: `GET\|POST /api/meta/webhook`, the handshake, the raw body kept for the signature, constant-time checks against both app secrets, routing by `object` and `entry[].id` to the account across brands, a transaction per entry, dedupe on `wamid`/`mid`, 200 for everything after a valid signature, a brand in its deletion grace passed over and counted | ADR 0025 (4, 6); D §6 | Integration: a signed batch with entries of two brands files two tickets, each in its brand; a redelivered batch files nothing twice; a wrong signature is 401 and files nothing; the race of two deliveries ends with one message | 2 d | | built, awaiting review: [notes](#m10-02-the-webhook-routing-dedupe-and-the-module-skeleton) |
-| M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | planned |
+| M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | built, awaiting review: [notes](#m10-03-whatsapp-inbound-and-the-shared-conversation-router) |
 | M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | planned |
 | M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | planned |
 | M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | built, awaiting review: [notes](#m10-06-replies-the-window-metasend-deliveries-and-pacing) |
@@ -418,6 +418,115 @@ The api side of the deliverable: `meta-accounts.service.ts`, `meta-accounts.cont
 `graph-factory.ts`, the `channel-status` rows, the integration suite, and
 `apps/admin/e2e/api/meta.api.spec.ts` with its own stand-in. They wait for `MetaModule`,
 `meta.repository.ts` and `meta-app.service.ts` of M10-02.
+
+## M10-03 WhatsApp inbound and the shared conversation router
+
+A WhatsApp message becomes a ticket, or a reply on the conversation's open one, through the same lifecycle
+calls email, the widget and Telegram make. This deliverable also writes what Messenger (M10-04) and
+Instagram (M10-05) import: the router, the attachment sink that defers the bytes, the `meta.media_fetch`
+job, the thread's wording, the factory, the erasure and the retention purge. The guides are
+[Meta channels](../guides/meta-channels.md), [Contacts](../guides/contacts.md) and
+[Data retention](../guides/data-retention.md).
+
+| File | What it holds |
+|---|---|
+| `apps/api/src/meta/meta-router.ts` | `MetaConversationRouter`: `route(context, message, sink, options?)` (the contact, `upsertConversation`, follow merges, `onCustomerReply` or a new ticket with `channel: platform` in the account's department, the same activity, outbox and auto-assign calls as Telegram's), `contactFor`, `followMerge`, `openTicket`, `writeSystemLine` |
+| `apps/api/src/meta/deferred-sink.ts` | `DeferredAttachmentSink.store`: each file `pending` with no object and a `meta.media` outbox row; `declaredFile`, `metaFileName` |
+| `apps/api/src/meta/meta-media.job.ts` | the `meta.media_fetch` consumer: `createMetaMediaFetchHandler`, `createMetaMediaFetchProcessor`, `accountFailureRecorder`, `matchesDigest`, `sizeCap` |
+| `apps/api/src/meta/meta-text.ts`, `packages/i18n/locales/*/meta.json` | the `meta` namespace: `metaText`, `metaInboundLabels`, `metaSystemLine` |
+| `apps/api/src/meta/factory.ts` | `createMetaInboundService({ db, storage, log, keyring, graph })` → `{ router, sink, mediaFetch }` (the WhatsApp service is built on it in `meta.module.ts`) |
+| `apps/api/src/meta/whatsapp-inbound.service.ts` | `WhatsAppInboundService`, the `PlatformInboundService` for `whatsapp`, registered by `MetaModule` |
+| `apps/api/src/contacts/identity.ts` | `attachVerifiedIdentity`, `planVerifiedAttach`, `removeIdentity` |
+| `apps/api/src/meta/meta.repository.ts` | `messageByPlatformId`, `failByReport`, `recordPricing` |
+| `packages/jobs/src/jobs.ts` | `metaMediaFetchJob`, `metaMediaFetchPayloadSchema`, `META_MEDIA_FETCH_ATTEMPTS` |
+| `apps/api/src/retention/*` | `eraseMetaConversations`, `purgeMetaDeliveriesBatch`, `counts.metaDeliveries` |
+
+### What each WhatsApp event becomes
+
+The webhook has already answered `duplicate` for a `wamid` that `ticket_messages.external_message_id` holds
+and `ignored: blocked-sender` for a sender on the block list; the service repeats neither.
+
+| `MetaEvent` | What is filed | Outcome |
+|---|---|---|
+| `message`, text | a public message from the contact; the ticket's subject is its first line | `handled` |
+| `message`, image, video, document, audio, voice note, sticker | the caption as the body (empty allowed) and each file as an attachment, `pending`, with a `meta.media` outbox row; a sticker is an image, a photo sent as a document is an image | `handled` |
+| `message`, location | `Location: lat, long`, the venue and a map link, the label in the contact's language (`meta:thread.location`) | `handled` |
+| `message`, shared contacts | `Contact: <name>`, then the company, numbers and addresses | `handled` |
+| `message` with `context` | a leading quote of the quoted message's words when that message is on the ticket the message lands on, whether the customer or an agent wrote it (agent replies are found by the ids on their delivery) | `handled` |
+| `message` with `errors[]` and files | the files `rejected: unreadable`, nothing fetched; the message is filed | `handled` |
+| `message` with `errors[]` and no files | filed; the error is logged | `handled` |
+| `message` from a number on the block list by hand | dropped, counted on the block row, no contact | `ignored: blocked-sender` |
+| `message` whose customer id is not a valid identifier | dropped and logged | `ignored: invalid-customer-id` |
+| `status` `delivered` or `read` | the reply's delivery moves forward, `delivered_at` and `read_at` coalesced; never back | `handled`, or `ignored: no-delivery-to-advance` |
+| `status` `sent` | nothing: the send job recorded the acceptance | `ignored: status-sent` |
+| `status` `failed` | the delivery `failed` with Meta's code and words; `refused` when the code says the window had closed (`131047`) | `handled`, or `ignored: no-delivery-to-fail` |
+| any `status` with `pricing.category` | `meta_deliveries.pricing_category` | |
+| `system` `user_changed_number` | the new `wa_id` is the contact's verified phone, the old phone identity is removed, `meta_conversations.wa_id` follows, and a system line names both numbers on the open ticket | `handled`, or `ignored: unknown-conversation` |
+| `unsupported` | a system line on the open ticket (none when there is no ticket), deduped on the `wamid`; the message still opens the reply window | `handled`, `duplicate`, or `ignored: no-conversation` / `no-open-ticket` |
+| `reaction` | a system line on the ticket of the message reacted to (a customer's message, or an agent's reply by its delivery's ids); none when the ticket is closed; never a message, never a window | `handled`, or `ignored: unknown-message` / `no-open-ticket` |
+| `error` (about the account) | logged and written to `meta_accounts.last_error` | `handled` |
+| `ignored` and the Messenger and Instagram kinds | counted and dropped | `ignored` |
+
+### What the media job does
+
+```
+pending attachment + meta.media outbox row                      (the webhook's transaction)
+meta.media_fetch  whatsapp_media: GET /{media-id}, then the URL it names with the token
+                  cdn_url:        the link, no token, host checked against Meta's
+                  size against the brand's cap (Graph's file_size first), sha256 against the bytes
+                  the type against the content policy, the object put at the attachment's key
+                  status = processing, outbox(attachment.uploaded)
+media.process     sniff, re-encode, scan, ffmpeg  →  ready | rejected
+```
+
+| What happened | Attachment | Account |
+|---|---|---|
+| the digest differs | `rejected: unreadable` | |
+| over the cap | `rejected: too_large` | |
+| the policy refuses the type or the kind | `rejected: mime_not_allowed` / `kind_disabled` | |
+| 404 (or `100/33`) on the id or the link | retried; the last attempt `rejected: object_missing` | |
+| `190` | retried; the last attempt `rejected: processing_failed` | `token_expired`, `last_error` |
+| a permission or a restriction | `rejected: processing_failed` | `last_error` |
+| Graph, the network or the bucket failing | retried; the last attempt `rejected: processing_failed` | |
+| a host that is not Meta's | `rejected: processing_failed` | |
+
+### Decisions taken inside the plan
+
+- **No early transaction.** The brief had the service check `seen` and `blocked` in a transaction of its own
+  before one that files. M10-02's seam does both before `handle`, and nothing is downloaded in the request,
+  so there is one transaction and the service asks neither.
+- **The job moves the row to `processing` itself.** `media.process` takes a row only when it is `processing`
+  (`process.job.ts`), which the confirm endpoint sets for an agent's upload. A Meta file is never confirmed, so
+  the fetch sets it, with the size, the type and the name the bytes turned out to have, in the same write.
+  (By reading `StorageAttachmentSink`, the files of an inbound email or Telegram message are left `pending` and
+  skipped by `media.process` in the same way; that is M2's and M6's to confirm and is not changed here.)
+- **The last attempt settles instead of throwing.** The job's transaction rolls back when it throws, so a file
+  that cannot be had would stay `pending` for good. The account's `token_expired` is written outside that
+  transaction for the same reason, so the operator sees it at the first attempt.
+- **A story's kind is the server's to say.** A link declares no type; a story is filed as an image and takes
+  the kind of the type the CDN answers with, under the larger of the image and video caps.
+- **Deleting a conversation takes its deliveries.** `meta_deliveries.conversation_id` cascades, so erasing a
+  contact deletes the replies delivered through their conversation instead of rewriting `customer_id` as
+  `eraseTelegramChats` does for `telegram_deliveries`, which has no such foreign key. A reply still queued
+  finds no delivery and sends nothing. The thread keeps the reply.
+- **`failed` can follow `sent`.** `recordFailure` only moves `queued` and `failed` deliveries, and Meta reports
+  a failure after it accepted the message, so `failByReport` ends a `queued` or `sent` delivery by the id Meta
+  gave the part. `delivered` and `read` are not moved back.
+- **An unsupported message opens the window.** The customer wrote, and Meta will accept an answer; refusing it
+  at compose time would be stricter than Meta. A reaction does not, as DOMAIN-RULES §2.6 says.
+- **A phone on the block list stops WhatsApp too.** The webhook asks about the user id; an admin who blocked a
+  number by hand meant the person.
+- **A number that is not a phone number never costs the message.** `attachVerifiedIdentity` refusing it, or
+  two contacts proving the same one, is logged and the message is filed: Meta redelivers a failed batch for
+  seven days.
+- **`@helpdock/jobs` depends on `@helpdock/schemas`** so `metaMediaFetchPayloadSchema` uses
+  `metaFileRefSchema` instead of copying it.
+- **What a reaction carries is escaped.** Its emoji is the customer's text and the system line is HTML.
+
+Tests: unit for the sink, the media job (every row of the table above), the wording, `planVerifiedAttach`
+and the job definition; `apps/api/src/meta/meta.integration.test.ts` › "WhatsApp (M10-03)" against real
+Postgres and Redis with `FakeGraph` and `MetaWebhookDriver`, and the erasure and purge cases of
+`apps/api/src/retention/retention.integration.test.ts`.
 
 ## M10-06 Replies, the window, `meta.send`, deliveries and pacing
 

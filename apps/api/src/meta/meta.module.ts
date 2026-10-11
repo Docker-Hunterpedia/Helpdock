@@ -36,9 +36,6 @@ export interface MetaModuleOverrides {
 /** The Graph client the Meta services share, for the providers of M10-04, -05, -07 and -10. */
 export const META_GRAPH = Symbol('helpdock.meta.graph');
 
-/** The router and the attachment sink the three inbound services share (M10-03). */
-export const META_INBOUND = Symbol('helpdock.meta.inbound');
-
 /**
  * M10 in the api: the App card (M10-02), the webhook (M10-02) and, as the
  * deliverables land, the accounts' routes (M10-07) and the ticket's delivery
@@ -46,10 +43,11 @@ export const META_INBOUND = Symbol('helpdock.meta.inbound');
  * worker's.
  *
  * **The inbound services.** The webhook hands each account's events to the
- * {@link MetaInboundHandlers} of its platform. Until M10-03, -04 and -05 land
- * theirs, the default for a platform logs and counts what arrived
- * (`unhandledInbound`), so the route is complete and testable without them.
- * Each of those deliverables replaces its platform's entry in `handlers` below.
+ * {@link MetaInboundHandlers} of its platform. WhatsApp's is installed (M10-03);
+ * until M10-04 and -05 land theirs, the default for a platform logs and counts
+ * what arrived (`unhandledInbound`), so the route is complete and testable
+ * without them. Each of those deliverables replaces its platform's entry in
+ * `handlers` below.
  */
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
@@ -75,6 +73,7 @@ export class MetaModule {
     });
     const handlers: MetaInboundHandlers = {
       ...unhandledInboundHandlers(logger),
+      whatsapp: inbound.whatsapp,
       ...overrides?.inbound,
     };
 
@@ -95,7 +94,6 @@ export class MetaModule {
             new MetaDeliveriesService(repository, new OutboundMetaService(repository)),
         },
         { provide: META_GRAPH, useValue: graph },
-        { provide: META_INBOUND, useValue: inbound },
         {
           provide: MetaAppService,
           inject: [SETTINGS],

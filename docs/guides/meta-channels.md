@@ -1,6 +1,6 @@
 # Meta channels
 
-How an install receives WhatsApp, Messenger and Instagram messages (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)). This page is a stub: it describes the parts that exist, the webhook Meta calls (M10-02) and replying (M10-06). The dashboard walk-through per platform, connecting an account, App Review and the rest of the pricing are written with the deliverables that build them and gathered here by M10-11.
+How an install receives WhatsApp, Messenger and Instagram messages (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)). This page is a stub: it describes the parts that exist, the webhook Meta calls (M10-02), what a WhatsApp message becomes (M10-03) and replying (M10-06). The dashboard walk-through per platform, connecting an account, App Review and the rest of the pricing are written with the deliverables that build them and gathered here by M10-11.
 
 An install has **one Meta developer app**. A Meta app has one callback URL and one signing secret, so every connected WhatsApp number, Facebook Page and Instagram account of every brand posts to the same route, and Helpdock finds the brand from the account the message names.
 
@@ -67,7 +67,30 @@ Meta treats anything other than `200` as the webhook being down: WhatsApp redeli
 
 ## Inbound services
 
-Each platform's events go to its inbound service: WhatsApp (M10-03), Messenger (M10-04), Instagram (M10-05). Until a platform's is installed, the webhook logs that an event arrived (platform and kind only, never the customer or the words) and files nothing.
+Each platform's events go to its inbound service: WhatsApp (M10-03, below), Messenger (M10-04), Instagram (M10-05). Until a platform's is installed, the webhook logs that an event arrived (platform and kind only, never the customer or the words) and files nothing.
+
+## WhatsApp: what a customer's message becomes
+
+A message to a connected number opens a ticket in the number's department, or, when the customer already has a conversation with that number, continues its ticket: the same rules as email, the widget and Telegram, including [the reopen policy](tickets.md) for a closed one.
+
+| The customer sends | The ticket gets |
+|---|---|
+| Text | A message. The ticket's subject is its first line |
+| An image, video, document, voice note, audio file or sticker | A message with the caption as its words (it may be empty) and the file as an attachment. A sticker is an image, and a photo sent as a document is an image |
+| A location | `Location: 52.52, 13.405`, the place's name and a map link, with "Location" in the customer's language |
+| Shared contacts | `Contact: <name>`, then their company, numbers and addresses |
+| A reply to an earlier message | The reply, with the earlier message's words quoted above it when that message is on the same ticket, whether the customer or an agent wrote it |
+| A reaction | A line in the thread, "The customer reacted <the emoji> to a message.", on the ticket of the message reacted to; taking the reaction back is a line too. Never a message, and it does not open the reply window |
+| Something Helpdock cannot show (a poll, an order) | A line, "The customer sent something that cannot be shown here.". It does open the reply window, because the customer did write |
+| A new number (WhatsApp reports the change) | The new number becomes the contact's verified phone, the old one is taken off, and a line names both |
+
+**The customer is the business-scoped user id Meta sends**, and the number it sends beside it (`wa_id`) is recorded as the contact's phone, **verified**: WhatsApp checked the SIM and Meta signed the webhook. A customer who has adopted a WhatsApp username may withhold the number; the contact then has no phone. A phone an agent typed earlier moves to the contact WhatsApp proved it for, and the two are suggested as duplicates ([Contacts](contacts.md)).
+
+**Files are fetched after the webhook answers.** The message is filed at once with each file `pending`; a job asks Graph for the file with the account's token, checks it against the SHA-256 Meta sent, applies the brand's content policy and hands it to the same pipeline as any upload (re-encoded images, Opus voice notes). A file that cannot be had ends `rejected` and the message stays: `unreadable` (the bytes are not the ones Meta described, or Meta reported an error for the file), `too_large`, `mime_not_allowed` or `kind_disabled` (the brand's content policy), `object_missing` (Meta no longer has it: its ids live seven days and the job tries five times over about eight minutes), `processing_failed` (anything else, such as a token Meta no longer accepts, which also marks the account `token_expired`).
+
+**Reports on replies** (`delivered`, `read`, `failed`) move the reply's delivery forward and never back; a `failed` report carries Meta's code and words, and one that says the 24-hour window had closed (`131047`) ends the delivery `refused`, which no retry fixes. Meta's billing category for the message is kept with the delivery.
+
+**A sender on the block list is dropped** before any contact exists, whether the entry is the user id, or the phone number typed by hand; the block row counts the drops.
 
 ## Replying
 

@@ -132,6 +132,7 @@ const run = async (scenario: Scenario = {}) => {
     error: (fields, message) => record({ fields, message }),
   };
 
+  const rows = fakeRepository(state);
   const handler = createMetaMediaFetchHandler({
     storage: scenario.storageFails === true ? failingStorage : storage,
     graph: () => graph,
@@ -140,8 +141,9 @@ const run = async (scenario: Scenario = {}) => {
       account: async () => (scenario.account === 'gone' ? undefined : account),
     },
     media: {
-      ...fakeRepository(state),
       find: async () => (scenario.attachment === 'gone' ? undefined : state.row),
+      contentPolicy: (tx, brandId) => rows.contentPolicy(tx, brandId),
+      setStatus: (tx, id, values) => rows.setStatus(tx, id, values),
     },
     recordAccountFailure: async (_brand, _account, failure) => {
       recorded.push(failure);

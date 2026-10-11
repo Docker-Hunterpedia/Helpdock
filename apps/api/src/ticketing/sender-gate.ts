@@ -1,5 +1,5 @@
 import type { DbTransaction } from '@helpdock/db';
-import { type NormaliseOptions, normaliseIdentity } from '@helpdock/schemas';
+import { type MetaPlatform, type NormaliseOptions, normaliseIdentity } from '@helpdock/schemas';
 import { BlockListRepository } from './block-list.repository.js';
 import { matchKeysFor, mostSpecific, type SenderKey } from './block-rules.js';
 
@@ -10,10 +10,11 @@ import { matchKeysFor, mostSpecific, type SenderKey } from './block-rules.js';
  *
  * **Who calls it.** Every channel that turns a customer's message into a
  * ticket, *before* it creates the contact or the ticket: M2's email poller and
- * inbound-parse endpoint, M4's widget and web form, M6's Telegram bot. A staff
- * member filing a ticket by hand is never gated — the block list is about who
- * may reach the desk, not about whom the desk may write down — so
- * `POST /tickets` does not call it, and M1 has no customer path that does.
+ * inbound-parse endpoint, M4's widget and web form, M6's Telegram bot, M10's
+ * Meta webhook. A staff member filing a ticket by hand is never gated — the
+ * block list is about who may reach the desk, not about whom the desk may
+ * write down — so `POST /tickets` does not call it, and M1 has no customer
+ * path that does.
  *
  * **What it takes** is the identifier the channel is about to hand
  * `findOrCreateContactByIdentity`, in the same vocabulary and normalised by the
@@ -31,9 +32,9 @@ import { matchKeysFor, mostSpecific, type SenderKey } from './block-rules.js';
  * about one.
  */
 
-/** The three identifier kinds a sender arrives with. */
+/** The identifier kinds a sender arrives with: an address, a phone, a chat, or a Meta customer id (M10). */
 export interface InboundSender {
-  readonly kind: 'email' | 'phone' | 'telegram';
+  readonly kind: 'email' | 'phone' | 'telegram' | MetaPlatform;
   /** As the channel received it. Normalised here. */
   readonly value: string;
 }

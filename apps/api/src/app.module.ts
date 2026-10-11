@@ -42,6 +42,7 @@ import type { Logger } from './logging/logger.js';
 import { MacrosModule } from './macros/macros.module.js';
 import { MediaModule } from './media/media.module.js';
 import type { ObjectStorage } from './media/storage.js';
+import { MetaModule, type MetaModuleOverrides } from './meta/meta.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
@@ -126,6 +127,8 @@ export interface AppModuleOptions {
   readonly channels?: ChannelsModuleOverrides;
   /** M6: the Bot API, which suites replace with a local stand-in for Telegram. */
   readonly telegram?: TelegramModuleOverrides;
+  /** M10: the Graph client and the inbound services, which suites replace. */
+  readonly meta?: MetaModuleOverrides;
   /** M4: the siteverify call and the SSE timings, which suites replace. */
   readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
   /** M4-09: the siteverify call, which suites replace. */
@@ -270,6 +273,14 @@ export class AppModule implements NestModule {
           logger: options.logger,
           ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...(options.telegram === undefined ? {} : { overrides: options.telegram }),
+        }),
+        // M10: the App card and the Meta webhook for WhatsApp, Messenger and
+        // Instagram. Sends, media fetches and health checks run in the worker.
+        MetaModule.forRoot({
+          env: options.env,
+          db: options.db,
+          logger: options.logger,
+          ...(options.meta === undefined ? {} : { overrides: options.meta }),
         }),
         // M3-03 to M3-05: workflow rules, their log and the test run. The
         // engine runs in the worker.

@@ -439,30 +439,59 @@ page (Test connection, Human Agent, Save, Disconnect by id), a WhatsApp number's
 (`app-not-configured`); the department must be the brand's (`department-not-found`); the
 `(platform, id)` must not be connected anywhere, which is looked up across brands before Graph is asked
 anything (`account-taken`, also what "Test" answers). Then one read says what the account is: a
-WhatsApp number or a Page is `GET /{id}?fields=…` on Graph with `debug_token` beside it for the
-token's expiry, an Instagram account is `GET /me` on the Instagram host, compared with the id typed.
-What Graph says maps to a refusal:
+Page is `GET /{id}?fields=…` on Graph with `debug_token` beside it for the token's expiry, an Instagram
+account is `GET /me` on the Instagram host, compared with the id typed, and a WhatsApp number is
+`identifyWhatsApp` (below). What Graph says maps to a refusal:
 
 | Graph said | Refusal |
 |---|---|
 | the token is dead (`190` and kin) and is alive on the other host | `platform-mismatch` |
 | the token is dead | `token-invalid` |
 | the token is good but cannot read this id, or `/me` is another account | `token-other-account` |
+| a WhatsApp token reads the number, but no business account it was granted on lists the number | `token-other-account` |
 | `5xx`, a rate limit, a timeout, a blocked destination, an answer in a shape Helpdock does not know | `graph-unreachable` |
 | the app cannot be subscribed to the account, for good | `subscribe-failed` |
 
 "Test" answers the first two and the unreachable case as `{ ok: false, kind: 'token' | 'connect' }`
 in Meta's words, and throws the rest, because those are about the id rather than the token. After the
-read the app is subscribed with `POST /{id}/subscribed_apps?subscribed_fields=…`, the lists of
-`META_SUBSCRIBED_FIELDS`. A refusal for good aborts the connection with nothing stored; a failure for a
+read the app is subscribed with `POST /{node}/subscribed_apps?subscribed_fields=…`, the lists of
+`META_SUBSCRIBED_FIELDS` (WhatsApp subscribes the whole `messages` field and sends none). A refusal for good aborts the connection with nothing stored; a failure for a
 moment (a 5xx, a limit) stores the account as `unsubscribed` with the reason in `last_error`, and the
 hourly health check or Subscribe now makes it good. The row is stored with the token encrypted under
 `APP_MASTER_KEY`, the token's expiry (an Instagram token's is estimated as 60 days from now until the
 first renewal says a real one), `token_updated_by`, and the account's name, handle or number.
 
+**WhatsApp's business account.** Meta keeps a WhatsApp webhook subscription on the business account
+(WABA), not on the phone number: `GET|POST|DELETE /{waba_id}/subscribed_apps` is the edge, and the
+number's own node answers an unsupported-edge error. The Connect dialog asks only for the phone
+number id, so `identifyWhatsApp(graph, phoneNumberId)` (`whatsapp-identity.ts`, the one place the
+order of these calls is written) finds the business account from the token:
+
+1. `GET /{phone_number_id}?fields=id,display_phone_number,verified_name` names the number and proves the
+   token opens it.
+2. `GET /debug_token` says the token is valid, until when, and what it was granted on
+   (`data.granular_scopes`). The candidates are the `target_ids` of `whatsapp_business_management`,
+   else of `whatsapp_business_messaging`.
+3. `GET /{waba_id}/phone_numbers` for each candidate (at most 25, in order); the first whose
+   `data[].id` includes the number is stored in `meta_accounts.waba_id`. A candidate the token may not
+   list (a Graph permission refusal with a code) is skipped; a rate limit, a 5xx or an answer in an
+   unknown shape is not a statement about the account and fails the whole read as `graph-unreachable`.
+
+No candidate that lists the number, or a token with no granted ids at all, is `token-other-account`:
+the token can read the number but could not subscribe the app. The operator's fix is to assign the
+business account to the system user and generate the token again (M10-11's guide says so; the refusal
+text in the dialog does too). A token check that went unanswered is Graph failing, not that refusal.
+`subscribe`, `remove` (the unsubscribe) and `status` (the live `subscribed_apps` read) use `waba_id` for
+WhatsApp and `external_id` for Messenger and Instagram (`subscriptionNodeOf`). A WhatsApp row whose
+`waba_id` is null (made before this, or by hand) cannot be subscribed or read: "Subscribe now" answers
+`{ ok: false, detail }` with "Disconnect it and connect it again", records it in `last_error`, the status
+panel's `liveError` says the same, and a disconnect skips the unsubscribe. Replacing the token fills
+`waba_id` again.
+
 **Saving** keeps `human_agent_enabled` false on WhatsApp whatever is sent. A new token must open the
 same account (`token-other-account` otherwise), brings the account back to `connected`, clears the last
-error and subscribes the app again. **Disconnecting** sends `DELETE /{id}/subscribed_apps` and ignores
+error and subscribes the app again (and, for WhatsApp, finds the business account again).
+**Disconnecting** sends `DELETE /{node}/subscribed_apps` and ignores
 its failure, so a revoked token does not keep an account the Admin is removing; conversations and
 deliveries go with the row, tickets and contacts stay.
 
@@ -472,17 +501,16 @@ deliveries go with the row, tickets and contacts stay.
 update and delete also write `meta_account.changed` on the outbox for the health job (M10-10) to follow.
 
 **The token stays where nothing logs it**: `graph-factory.ts`'s `AccountGraph` holds it in a private
-field and serialises to its platform; the only calls that carry it as a parameter are
-`debug_token` and the Instagram renewal, which are its methods rather than a query a caller builds, and
+field and serialises to its platform; the only call that carries it as a parameter is
+`debug_token`, which is its method rather than a query a caller builds, and
 `redactToken` has been over every `detail` that reaches `last_error` or a response.
 
-`refreshInstagramToken({ db, repository, keyring, graph }, account)` in `meta-token-refresh.ts` returns
-`{ outcome: 'refreshed' | 'refused' | 'not-due', expiresAt? }`: a token is due a week after it was
-saved or last renewed; renewal stores the answered token encrypted with its expiry and
-`token_refreshed_at`; a refusal puts Graph's words on the row and, for a dead token or one past its
-expiry, marks the account `token_expired`; a Graph failure for a moment is thrown for a job to retry.
-It runs in a transaction of its own for the account's brand, so the route and the worker call it alike.
-The route answers `400 token-invalid` for a refusal and `409 graph-unreachable` for the thrown case.
+`POST :accountId/refresh` calls M10-10's `refreshInstagramToken(deps, account)` in
+`meta-token-refresh.ts` (the same function the hourly job runs; the copy first written here was dropped
+at the merge) with the shared Graph client. `not-due` (a token renewed within a week, or replaced
+while Meta was asked) answers the account as it is, `refused` is `400 token-invalid` with Meta's words
+on the row, and a Graph failure for a moment is `409 graph-unreachable`; a renewal is audited as
+`meta_account.refreshed`.
 
 `channel-status.ts` lists the accounts of every brand on the System page, named by number, Page name or
 `@handle`, with their health word (or `token expired` / `unsubscribed`) and no token.
@@ -501,24 +529,33 @@ The route answers `400 token-invalid` for a refusal and `409 graph-unreachable` 
 - **`subscribe-failed` refuses the connection** when Meta refuses for good, instead of storing an
   account that can never receive anything; the brief's "best effort" stays for failures that are not
   for good.
-- **The business account id is not resolved.** `meta_accounts.waba_id` stays null: the number's node
-  does not carry it and the create request has no field for it, so M10-09 resolves it when it first
-  syncs templates.
+- **The business account is resolved when connecting**, from the token's own grants, because the
+  dialog asks for the number only and Meta subscribes per business account. It is stored in
+  `waba_id`, which M10-09 can read for templates instead of looking it up again.
+- **A WhatsApp subscription sends no field names.** The business account's edge subscribes the app to
+  the fields the app's webhook configuration names; `META_SUBSCRIBED_FIELDS.whatsapp` is what the row
+  records as subscribed, and the card shows it.
 
-**Unconfirmed against Meta**, for the staging run (open questions above): WhatsApp subscribes an app per
-business account on Meta (`POST /{waba-id}/subscribed_apps`); the brief and the stand-in subscribe on the
-number's id, and that is what is built. If Meta refuses it, Connect will say `subscribe-failed` for a WhatsApp number and
-the fix is the business account id above.
+**Unconfirmed against Meta**, for the staging run (open questions above): that `data.granular_scopes`
+of a system-user token carries the business accounts as `target_ids` under
+`whatsapp_business_management`; that `GET /{waba_id}/phone_numbers?limit=100` lists every number of an
+account (a business account with more than a page of numbers is not followed to the next page); and
+that `POST /{waba_id}/subscribed_apps` accepts a request with no query. `meta-health.ts` (M10-10)
+still reads and subscribes at `externalId`; for WhatsApp it must use `waba_id` as
+`subscriptionNodeOf` in `meta-accounts.service.ts` does.
 
 **Tests.** Unit: the Graph reads and every refusal they can cause, the status panel, the account view,
-the bound Graph calls, the refresh rule (`meta-accounts.service.test.ts` and its neighbours).
+the bound Graph calls (`meta-accounts.service.test.ts` and its neighbours), and the business-account
+lookup against a scripted Graph: the order of the calls, the scope fallback, the skipped and the thrown
+candidate (`whatsapp-identity.test.ts`, `token-facts.test.ts`).
 Integration against Postgres, Redis and the stand-in (`meta-accounts.integration.test.ts`): who may,
 every refusal over HTTP, the token stored encrypted and read back as its last four characters, the audit
 trail and the outbox event of each change, saving, testing, subscribing, renewing, disconnecting,
 isolation between brands and the System card. Playwright against the real api
 (`apps/admin/e2e/api/meta.api.spec.ts`, with `fake-graph.ts` started beside the install): the app card
-and a verify token shown once, a refused token and each platform connected, an account that is taken,
-a Page tested, saved, subscribed again and disconnected by its id.
+and a verify token shown once, a refused token, a WhatsApp token never assigned its business account
+and each platform connected (the subscription read back from the business account for WhatsApp), an
+account that is taken, a Page tested, saved, subscribed again and disconnected by its id.
 
 ## M10-10 Health jobs
 

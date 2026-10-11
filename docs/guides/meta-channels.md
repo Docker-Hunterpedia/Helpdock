@@ -27,6 +27,12 @@ Four install settings describe the app. Each can be set from the environment, wh
 
 Which of the two secrets signs an Instagram webhook under Instagram Login is not settled by Meta's documentation ([open questions](../in-development/M10-meta-channels.md#open-questions)). Helpdock accepts a webhook signed with either one that is set.
 
+## Connecting a WhatsApp number
+
+Channels › Meta › Connect asks for the **phone number id** and a **system user token**. Meta keeps a number's webhook subscription on the WhatsApp Business Account (WABA) that owns it, not on the number, so Helpdock finds the business account from the token: it reads the business accounts the token was granted on (`debug_token`, `granular_scopes`) and keeps the one that lists the number.
+
+If the dialog says the token belongs to a different account, the token can read the number but no business account it was granted on lists it. In Meta Business Settings, assign the WhatsApp account to the system user with the app's `whatsapp_business_management` and `whatsapp_business_messaging` permissions, generate the token again and paste that one. The business account is stored with the connection; a number connected before this was recorded shows "Disconnect it and connect it again" on Subscribe now.
+
 ## The handshake
 
 When you save the callback URL, Meta sends

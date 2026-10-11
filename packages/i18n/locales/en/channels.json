@@ -985,7 +985,7 @@
       "token-invalid": "Meta refused this token. Generate a new one for this account in the dashboard.",
       "graph-unreachable": "Meta could not be reached. Try again in a moment.",
       "account-taken": "This account is already connected on this install. An account answers for one brand only; disconnect it there first.",
-      "token-other-account": "That token belongs to a different account. Connect that account on its own instead.",
+      "token-other-account": "That token belongs to a different account, or does not reach this one. Connect that account on its own, or for WhatsApp check that its business account is assigned to the system user.",
       "department-not-found": "That department no longer exists. Pick another.",
       "app-not-configured": "This install has no Meta app set up yet. An install admin sets the app id and secrets first.",
       "platform-mismatch": "That token is for a different Meta product than the platform you chose. Pick the matching platform or paste the matching token.",

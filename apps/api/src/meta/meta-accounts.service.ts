@@ -1,7 +1,6 @@
 import {
   GRAPH_IDENTITY_FIELDS,
   GraphApiFailure,
-  graphDebugTokenSchema,
   graphIdentityName,
   graphIdentitySchema,
   graphSubscribedAppsSchema,
@@ -47,6 +46,8 @@ import { toMetaAccount } from './meta-account-view.js';
 import { enqueueMetaAccountChanged } from './meta-events.js';
 import { MetaFailure } from './meta-failure.js';
 import { refreshInstagramToken } from './meta-token-refresh.js';
+import { readTokenFacts } from './token-facts.js';
+import { identifyWhatsApp } from './whatsapp-identity.js';
 
 /**
  * Channels › Meta (M10-07): connecting, editing, testing and disconnecting the
@@ -100,6 +101,14 @@ const instagramMeSchema = graphIdentitySchema.extend({
     .optional(),
 });
 
+/**
+ * What an operator is told when a WhatsApp number has no business account on
+ * record, which a connection made by this version cannot produce: Meta keeps the
+ * subscription on the business account, so there is nowhere to ask.
+ */
+const RECONNECT_DETAIL =
+  'This number has no WhatsApp business account on record. Disconnect it and connect it again so Helpdock can find it.';
+
 /** What Graph said an account is, in the shape the account row and the Test box share. */
 interface Identified {
   readonly name: string;
@@ -108,6 +117,8 @@ interface Identified {
   readonly displayPhone: string | null;
   /** Null for a token that does not expire. */
   readonly expiresAt: Date | null;
+  /** WhatsApp: the business account that owns the number, which Meta subscribes the app on. */
+  readonly wabaId: string | null;
 }
 
 /** How a refused identification reads, to a screen and to a log. */
@@ -171,7 +182,11 @@ export class MetaAccountsService {
 
     const graph = graphForToken(platform, request.accessToken, this.#graph);
     const identified = this.#unwrap(await this.#identify(graph, externalId));
-    const subscription = await this.#subscribe(graph, platform, externalId);
+    const subscription = await this.#subscribe(
+      graph,
+      platform,
+      subscriptionNodeOf(platform, externalId, identified.wabaId),
+    );
     if (!subscription.ok && subscription.failure.permanent) {
       throw new MetaFailure('subscribe-failed');
     }
@@ -182,8 +197,7 @@ export class MetaAccountsService {
       platform,
       departmentId: request.departmentId,
       externalId,
-      // The business account is not on the number's node; templates (M10-09) resolve it.
-      wabaId: null,
+      wabaId: identified.wabaId,
       displayPhone: identified.displayPhone,
       username: identified.username,
       displayName: request.displayName ?? identified.name,
@@ -240,12 +254,18 @@ export class MetaAccountsService {
     if (request.accessToken !== undefined) {
       const graph = graphForToken(current.platform, request.accessToken, this.#graph);
       const identified = this.#unwrap(await this.#identify(graph, current.externalId));
-      const subscription = await this.#subscribe(graph, current.platform, current.externalId);
+      const subscription = await this.#subscribe(
+        graph,
+        current.platform,
+        subscriptionNodeOf(current.platform, current.externalId, identified.wabaId),
+      );
       if (!subscription.ok && subscription.failure.permanent) {
         throw new MetaFailure('subscribe-failed');
       }
       const now = this.#now();
       Object.assign(values, {
+        // A new token finds the business account again, which also repairs a row made without one.
+        wabaId: identified.wabaId ?? current.wabaId,
         username: identified.username ?? current.username,
         displayPhone: identified.displayPhone ?? current.displayPhone,
         accessToken: encryptSecret(request.accessToken, this.#keyring),
@@ -288,9 +308,12 @@ export class MetaAccountsService {
    */
   async remove(context: TicketingContext, id: string): Promise<void> {
     const { account } = await this.#require(context.tx, id);
-    await graphForAccount(account, this.#keyring, this.#graph)
-      .delete(`/${account.externalId}/subscribed_apps`)
-      .catch(() => undefined);
+    const node = subscriptionNodeOf(account.platform, account.externalId, account.wabaId);
+    if (node !== null) {
+      await graphForAccount(account, this.#keyring, this.#graph)
+        .delete(`/${node}/subscribed_apps`)
+        .catch(() => undefined);
+    }
     const removed = await this.#repository.delete(context.tx, id);
     if (removed === undefined) {
       throw new NotFoundException('No such Meta account');
@@ -347,8 +370,13 @@ export class MetaAccountsService {
     const { tx } = context;
     const { account } = await this.#require(tx, id);
     const graph = graphForAccount(account, this.#keyring, this.#graph);
-    const outcome = await this.#subscribe(graph, account.platform, account.externalId);
+    const node = subscriptionNodeOf(account.platform, account.externalId, account.wabaId);
     const now = this.#now();
+    if (node === null) {
+      await this.#repository.markError(tx, id, RECONNECT_DETAIL, now);
+      return { ok: false, detail: RECONNECT_DETAIL };
+    }
+    const outcome = await this.#subscribe(graph, account.platform, node);
 
     if (!outcome.ok) {
       await this.#repository.markError(tx, id, redactToken(outcome.failure.detail), now);
@@ -479,6 +507,26 @@ export class MetaAccountsService {
           username: me.username ?? null,
           displayPhone: null,
           expiresAt: new Date(this.#now().getTime() + INSTAGRAM_TOKEN_LIFETIME_MS),
+          wabaId: null,
+        };
+      }
+
+      if (platform === 'whatsapp') {
+        const number = await identifyWhatsApp(graph, externalId);
+        if (!number.ok) {
+          return refused(
+            number.refusal,
+            number.refusal === 'token-invalid' ? 'token' : 'refused',
+            number.detail,
+          );
+        }
+        return {
+          ok: true,
+          name: number.name,
+          username: null,
+          displayPhone: number.displayPhone,
+          expiresAt: number.expiresAt,
+          wabaId: number.wabaId,
         };
       }
 
@@ -490,7 +538,7 @@ export class MetaAccountsService {
       if (identity.id !== externalId) {
         return refused('token-other-account', 'refused', null);
       }
-      const debug = await this.#debugToken(graph);
+      const debug = await readTokenFacts(graph);
       if (debug.valid === false) {
         return refused('token-invalid', 'token', debug.detail);
       }
@@ -498,45 +546,14 @@ export class MetaAccountsService {
       return {
         ok: true,
         name: graphIdentityName(identity),
-        // A Page's name goes where an Instagram handle does; a number has neither.
-        username: platform === 'messenger' ? (identity.name ?? null) : null,
-        displayPhone: identity.display_phone_number ?? null,
+        // A Page's name goes where an Instagram handle does.
+        username: identity.name ?? null,
+        displayPhone: null,
         expiresAt: debug.expiresAt,
+        wabaId: null,
       };
     } catch (error) {
       return this.#refusalOf(error, graph);
-    }
-  }
-
-  /**
-   * `debug_token`, best effort: a token that works but cannot be asked about is
-   * not refused for it. A token Graph calls dead is thrown, because that is what
-   * the question was.
-   */
-  async #debugToken(
-    graph: AccountGraph,
-  ): Promise<{ valid: boolean | null; expiresAt: Date | null; detail: string | null }> {
-    try {
-      const { data } = parseGraph(
-        graphDebugTokenSchema,
-        await graph.debugToken(),
-        'to the token check',
-      );
-      return {
-        valid: data.is_valid ?? null,
-        // Zero is Graph's word for a token that does not expire.
-        expiresAt:
-          data.expires_at === undefined || data.expires_at === 0
-            ? null
-            : new Date(data.expires_at * 1_000),
-        detail: data.error?.message === undefined ? null : clip(redactToken(data.error.message)),
-      };
-    } catch (error) {
-      // A dead token is the answer; any other failure only means this was not asked.
-      if (error instanceof GraphApiFailure && error.kind === 'token_dead') {
-        throw error;
-      }
-      return { valid: null, expiresAt: null, detail: null };
     }
   }
 
@@ -616,20 +633,28 @@ export class MetaAccountsService {
     };
   }
 
-  /** `POST /{id}/subscribed_apps` for the platform's fields; Graph's refusal is returned, not thrown. */
+  /**
+   * `POST /{node}/subscribed_apps` for the platform's fields; Graph's refusal is
+   * returned, not thrown. WhatsApp subscribes the whole `messages` field and takes
+   * none by name.
+   */
   async #subscribe(
     graph: AccountGraph,
     platform: MetaPlatform,
-    externalId: string,
+    node: string | null,
   ): Promise<
     | { readonly ok: true; readonly fields: readonly string[] }
     | { readonly ok: false; readonly failure: GraphApiFailure }
   > {
     const fields = META_SUBSCRIBED_FIELDS[platform];
+    if (node === null) {
+      return { ok: false, failure: new GraphApiFailure('permanent', RECONNECT_DETAIL) };
+    }
     try {
-      const answer = await graph.post(`/${externalId}/subscribed_apps`, {
-        query: { subscribed_fields: fields.join(',') },
-      });
+      const answer = await graph.post(
+        `/${node}/subscribed_apps`,
+        platform === 'whatsapp' ? {} : { query: { subscribed_fields: fields.join(',') } },
+      );
       if ((answer as { readonly success?: unknown } | null)?.success === false) {
         throw new GraphApiFailure('permanent', 'Graph did not accept the subscription');
       }
@@ -655,16 +680,20 @@ export class MetaAccountsService {
         await graph.get('/me', { fields: 'id' });
         tokenValid = true;
       } else {
-        const debug = await this.#debugToken(graph);
+        const debug = await readTokenFacts(graph);
         if (debug.valid === false) {
           return { tokenValid: false, subscribedApps: null, liveError: debug.detail };
         }
         tokenValid = debug.valid;
       }
+      const node = subscriptionNodeOf(account.platform, account.externalId, account.wabaId);
+      if (node === null) {
+        return { tokenValid, subscribedApps: null, liveError: RECONNECT_DETAIL };
+      }
       const apps = subscribedAppsOf(
         parseGraph(
           graphSubscribedAppsSchema,
-          await graph.get(`/${account.externalId}/subscribed_apps`),
+          await graph.get(`/${node}/subscribed_apps`),
           'to the subscribed apps',
         ),
       );
@@ -760,3 +789,15 @@ const refused = (refusal: MetaRefusal, kind: Refused['kind'], detail: string | n
   kind,
   detail,
 });
+
+/**
+ * Where Meta keeps the app's webhook subscription: on the business account for a
+ * WhatsApp number, whose own node has no such edge, and on the account itself for
+ * a Page or an Instagram account. Null for a number whose business account was
+ * never recorded.
+ */
+const subscriptionNodeOf = (
+  platform: MetaPlatform,
+  externalId: string,
+  wabaId: string | null,
+): string | null => (platform === 'whatsapp' ? wabaId : externalId);

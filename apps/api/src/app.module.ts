@@ -94,6 +94,8 @@ import { RedisWidgetBroadcast } from './widget/widget-relay.js';
 export interface AppModuleOptions {
   readonly env: Env;
   readonly db: Db;
+  /** Whether a brand is in its deletion grace; read by `BrandGoneGuard`, and by whatever else answers 410. */
+  readonly brandAvailability: BrandAvailability;
   readonly settings: Settings;
   readonly redis: Redis;
   readonly logger: Logger;
@@ -338,7 +340,7 @@ export class AppModule implements NestModule {
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionGuard },
         // M8-07: a brand being deleted answers 410 on every public route.
-        { provide: BrandAvailability, useValue: new BrandAvailability(options.db) },
+        { provide: BrandAvailability, useValue: options.brandAvailability },
         { provide: APP_GUARD, useClass: BrandGoneGuard },
         { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
         { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },

@@ -53,6 +53,8 @@ interface RunOptions {
   readonly method?: string;
   readonly headers?: Record<string, string>;
   readonly trustProxy?: Env['TRUST_PROXY'];
+  /** The address the connection came from, as the socket reports it. */
+  readonly peer?: string;
   readonly brandResolver?: BrandResolver;
   readonly stream?: DestinationStream;
 }
@@ -63,6 +65,7 @@ const run = async ({
   method = 'GET',
   headers = {},
   trustProxy = false,
+  peer = '203.0.113.9',
   brandResolver = new NoopBrandResolver(),
   stream = collector().stream,
 }: RunOptions = {}): Promise<{ context: RequestContext; response: FakeResponse }> => {
@@ -77,7 +80,13 @@ const run = async ({
   );
 
   const response = new FakeResponse();
-  const request = { url, originalUrl, method, headers } as unknown as IncomingMessage;
+  const request = {
+    url,
+    originalUrl,
+    method,
+    headers,
+    socket: { remoteAddress: peer },
+  } as unknown as IncomingMessage;
 
   return new Promise((resolve, reject) => {
     middleware.use(request, response as unknown as ServerResponse, (error?: unknown) => {
@@ -164,13 +173,15 @@ describe('RequestContextMiddleware', () => {
     expect(context.requestId).not.toBe('caddy-1');
   });
 
-  it('takes the proxy request id when the proxy is trusted by address', async () => {
-    const { context } = await run({
-      headers: { [REQUEST_ID_HEADER]: 'caddy-1' },
-      trustProxy: ['172.18.0.0/16'],
-    });
+  it('takes the proxy request id from a peer on the trusted list, and no one else’s', async () => {
+    const headers = { [REQUEST_ID_HEADER]: 'caddy-1' };
+    const trustProxy = ['172.18.0.0/16'];
 
-    expect(context.requestId).toBe('caddy-1');
+    const proxied = await run({ headers, trustProxy, peer: '172.18.0.2' });
+    const direct = await run({ headers, trustProxy, peer: '203.0.113.9' });
+
+    expect(proxied.context.requestId).toBe('caddy-1');
+    expect(direct.context.requestId).not.toBe('caddy-1');
   });
 
   it('resolves the brand from the host, when a resolver knows one', async () => {

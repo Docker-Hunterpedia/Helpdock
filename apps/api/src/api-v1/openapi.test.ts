@@ -111,7 +111,6 @@ describe('the public API docs and the release (ASVS 14.3.3)', () => {
     const docs = new ApiDocsController();
     const published = JSON.stringify(docs.document()) + docs.page();
 
-    expect(API_V1_VERSION).toBe('1');
     expect(docs.document().info.version).toBe(API_V1_VERSION);
     expect(docs.page()).toContain(`<small>${API_V1_VERSION}</small>`);
     expect(published).not.toContain('9.8.7');

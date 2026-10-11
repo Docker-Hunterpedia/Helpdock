@@ -100,10 +100,13 @@ export const createTelegramSendHandler =
         await api.sendMessage(payload.chatId, welcomeText(bot, payload.locale));
         return;
       }
-      await answerLanguagePress(api, bot, payload);
+      await answerLanguagePress(api, bot, payload, log);
     });
     log.info({ brandId, botId: bot.id, notice: payload.notice }, 'telegram notice sent');
   };
+
+/** Telegram's description of an edit that would change nothing. */
+const MESSAGE_NOT_MODIFIED = 'message is not modified';
 
 /**
  * M6-04: a press on the language prompt. The prompt is rewritten to "Language:
@@ -114,6 +117,7 @@ const answerLanguagePress = async (
   api: TelegramBotApi,
   bot: TelegramBotRow,
   payload: Extract<TelegramSendPayload, { kind: 'notice' }>,
+  log: JobLogger,
 ): Promise<void> => {
   if (payload.callbackQueryId !== undefined) {
     // A press answered late has stopped spinning anyway; the welcome still matters.
@@ -121,10 +125,19 @@ const answerLanguagePress = async (
   }
   if (payload.promptMessageId !== undefined) {
     // Cosmetic, and repeated by a retry of this job: Telegram refuses an edit
-    // that changes nothing, which must not keep the welcome from being sent.
+    // that changes nothing, which must not keep the welcome from being sent,
+    // nor be logged. Any other refusal is logged and does not keep it either.
     await api
       .editMessageText(payload.chatId, payload.promptMessageId, languageChosenText(payload.locale))
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        const failure = toTelegramFailure(error);
+        if (!failure.detail.includes(MESSAGE_NOT_MODIFIED)) {
+          log.warn(
+            { botId: bot.id, kind: failure.kind, detail: failure.detail },
+            'telegram language prompt could not be rewritten',
+          );
+        }
+      });
   }
   await api.sendMessage(payload.chatId, welcomeText(bot, payload.locale));
 };

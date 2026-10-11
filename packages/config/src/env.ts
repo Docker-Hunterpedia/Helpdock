@@ -1,4 +1,4 @@
-import { isIP, isIPv4, isIPv6 } from 'node:net';
+import { BlockList, isIP, isIPv4, isIPv6 } from 'node:net';
 import { z } from 'zod';
 
 // AES-256 needs a 32-byte key. `APP_MASTER_KEY` carries it as standard base64.
@@ -131,15 +131,51 @@ const cidrListSchema = () =>
  */
 export type TrustProxy = boolean | readonly string[];
 
-/** Whether any proxy is believed at all, which is what `x-request-id` follows. */
+/** Whether any proxy is believed at all. */
 export const proxyIsTrusted = (setting: TrustProxy): boolean => setting !== false;
 
-/** Fastify's names for the address ranges an install most often sits behind. */
-const TRUST_PROXY_RANGE_NAMES: readonly string[] = ['loopback', 'linklocal', 'uniquelocal'];
+/** Fastify's names for the address ranges an install most often sits behind, as `proxy-addr` defines them. */
+const TRUST_PROXY_RANGES: Readonly<Record<string, readonly string[]>> = {
+  loopback: ['127.0.0.0/8', '::1/128'],
+  linklocal: ['169.254.0.0/16', 'fe80::/10'],
+  uniquelocal: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7'],
+};
+const TRUST_PROXY_RANGE_NAMES = Object.keys(TRUST_PROXY_RANGES);
 const BOOLEAN_FLAG = z.stringbool();
 
 const isTrustedProxyEntry = (entry: string): boolean =>
   isIP(entry) !== 0 || isCidr(entry) || TRUST_PROXY_RANGE_NAMES.includes(entry);
+
+const familyOf = (address: string): 'ipv4' | 'ipv6' => (isIPv6(address) ? 'ipv6' : 'ipv4');
+
+const blockListOf = (entries: readonly string[]): BlockList => {
+  const list = new BlockList();
+  for (const entry of entries.flatMap((name) => TRUST_PROXY_RANGES[name] ?? [name])) {
+    const separator = entry.lastIndexOf('/');
+    if (separator === -1) {
+      list.addAddress(entry, familyOf(entry));
+    } else {
+      const address = entry.slice(0, separator);
+      list.addSubnet(address, Number(entry.slice(separator + 1)), familyOf(address));
+    }
+  }
+  return list;
+};
+
+/**
+ * Whether the peer a request arrived from is a hop the setting believes, which
+ * is what `x-request-id` follows: `true` believes any peer, `false` none, and a
+ * list only the addresses it names, so a client that dialled the api itself
+ * cannot pick the id an operator greps for. Built once per setting.
+ */
+export const trustedPeerCheck = (setting: TrustProxy): ((peer: string | undefined) => boolean) => {
+  if (typeof setting === 'boolean') {
+    return () => setting;
+  }
+
+  const trusted = blockListOf(setting);
+  return (peer) => peer !== undefined && isIP(peer) !== 0 && trusted.check(peer, familyOf(peer));
+};
 
 /** `undefined` for anything that is neither a flag nor a list, rather than a guess. */
 const parseTrustProxy = (raw: string): TrustProxy | undefined => {

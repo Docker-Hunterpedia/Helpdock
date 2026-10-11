@@ -9,6 +9,7 @@ import {
   envSchema,
   loadEnv,
   proxyIsTrusted,
+  trustedPeerCheck,
 } from './env.js';
 
 const MASTER_KEY = Buffer.alloc(32, 7).toString('base64');
@@ -131,6 +132,26 @@ describe('loadEnv', () => {
       true,
       true,
     ]);
+  });
+
+  it.each([
+    ['believes any peer for true and none for false', true, '203.0.113.9', true],
+    ['believes no peer for false', false, '172.18.0.2', false],
+    ['believes an address inside a listed range', ['172.18.0.0/16'], '172.18.0.2', true],
+    [
+      'believes an IPv4-mapped IPv6 peer of a listed range',
+      ['172.18.0.0/16'],
+      '::ffff:172.18.0.2',
+      true,
+    ],
+    ['does not believe a peer outside the list', ['172.18.0.0/16'], '203.0.113.9', false],
+    ['believes a listed single address', ['10.1.2.3', '::1'], '::1', true],
+    ['reads uniquelocal as Fastify does', ['uniquelocal'], '192.168.4.4', true],
+    ['does not read uniquelocal as the public internet', ['uniquelocal'], '203.0.113.9', false],
+    ['reads loopback as Fastify does', ['loopback'], '127.0.0.1', true],
+    ['believes no peer it cannot read', ['loopback'], undefined, false],
+  ] as const)('says whether a peer is a trusted proxy: %s', (_label, setting, peer, expected) => {
+    expect(trustedPeerCheck(setting)(peer)).toBe(expected);
   });
 
   it('defaults the log level to info and takes any level pino knows', () => {

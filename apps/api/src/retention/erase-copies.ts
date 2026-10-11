@@ -48,11 +48,9 @@ export const eraseTelegramChats = async (
   return chats.length;
 };
 
-const ticketsOf = (tx: DbTransaction, brandId: string, contactId: string) =>
-  tx
-    .select({ id: tickets.id })
-    .from(tickets)
-    .where(and(eq(tickets.brandId, brandId), eq(tickets.contactId, contactId)));
+/** Which tickets are the contact's, in one place; each caller picks the column it compares. */
+const theirTickets = (brandId: string, contactId: string) =>
+  and(eq(tickets.brandId, brandId), eq(tickets.contactId, contactId));
 
 /**
  * The redaction maps of the model calls on their tickets: each pairs a
@@ -71,7 +69,10 @@ export const eraseAiRedactions = async (
       and(
         eq(aiCalls.brandId, brandId),
         isNotNull(aiCalls.redactions),
-        inArray(aiCalls.ticketId, ticketsOf(tx, brandId, contactId)),
+        inArray(
+          aiCalls.ticketId,
+          tx.select({ id: tickets.id }).from(tickets).where(theirTickets(brandId, contactId)),
+        ),
       ),
     )
     .returning({ id: aiCalls.id });
@@ -105,7 +106,7 @@ export const eraseWebhookPayloads = async (
             tx
               .select({ id: sql<string>`${tickets.id}::text` })
               .from(tickets)
-              .where(and(eq(tickets.brandId, brandId), eq(tickets.contactId, contactId))),
+              .where(theirTickets(brandId, contactId)),
           ),
         ),
       ),

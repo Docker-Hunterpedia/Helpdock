@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { hashToken } from '../auth/redis-keys.js';
 import { OAUTH_STATE_TTL_MS } from './oauth-state.js';
 
 /**
@@ -10,8 +11,7 @@ import { OAUTH_STATE_TTL_MS } from './oauth-state.js';
  * it cannot both win.
  */
 
-const nonceKey = (nonce: string): string =>
-  `knowledge:oauth:${createHash('sha256').update(nonce).digest('hex')}`;
+const nonceKey = (nonce: string): string => `knowledge:oauth:${hashToken(nonce)}`;
 
 /** The two Redis commands the store uses, so a test can stand in for it. */
 export interface NonceRedis {

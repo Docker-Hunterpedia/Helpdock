@@ -45,7 +45,7 @@ const APP_URL = 'https://support.example.com';
 /** Over https the cookies carry the `__Secure-` prefix (ASVS 3.4.4). */
 const REFRESH_COOKIE = refreshCookieOf({ APP_URL }).name;
 const TRUSTED_DEVICE_COOKIE = trustedDeviceCookie(APP_URL).name;
-const OAUTH_NONCE_COOKIE = oauthNonceCookie(APP_URL, OAUTH_STATE_TTL_SECONDS).name;
+const OAUTH_NONCE_COOKIE = oauthNonceCookie(APP_URL, OAUTH_STATE_TTL_SECONDS, 'google').name;
 
 /**
  * The origin a redirect lands on. Compared as a parsed origin, not a prefix:
@@ -599,6 +599,15 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(originOf(response.headers.location)).toBe(new URL(APP_URL).origin);
     });
 
+    it('sends a callback for a provider it does not have to a screen', async () => {
+      const response = await get('/api/auth/oauth/facebook/callback?code=c&state=s');
+
+      expect(response.statusCode).toBe(302);
+      expect(new URL(String(response.headers.location)).searchParams.get('error')).toBe(
+        'no-account',
+      );
+    });
+
     it('refuses a provider it does not have', async () => {
       expect((await get('/api/auth/oauth/facebook/start')).statusCode).toBe(403);
     });
@@ -645,26 +654,35 @@ describe.skipIf(!hasDocker)('the auth service', () => {
           httpOnly: true,
           secure: true,
           sameSite: 'Lax',
-          path: '/api/auth/oauth',
+          path: '/api/auth/oauth/google',
           maxAge: OAUTH_STATE_TTL_SECONDS,
         });
         expect(nonce).not.toBe('');
       });
 
-      it('refuses a callback from a browser without that cookie and signs nobody in', async () => {
-        const fetchMock = vi.fn();
-        vi.stubGlobal('fetch', fetchMock);
-        const { state } = await begin();
+      it.each([
+        ['without that cookie', undefined],
+        ['with the cookie of another flow', 'a-nonce-this-flow-never-issued'],
+      ])(
+        'refuses a callback from a browser %s, signs nobody in and clears the cookie',
+        async (_case, nonce) => {
+          const fetchMock = vi.fn();
+          vi.stubGlobal('fetch', fetchMock);
+          const { state } = await begin();
 
-        const response = await callbackWith(state);
+          const response = await callbackWith(state, nonce);
 
-        expect(response.statusCode).toBe(302);
-        expect(new URL(String(response.headers.location)).searchParams.get('error')).toBe(
-          'no-account',
-        );
-        expect(response.cookies.some((cookie) => cookie.name === REFRESH_COOKIE)).toBe(false);
-        expect(fetchMock).not.toHaveBeenCalled();
-      });
+          expect(response.statusCode).toBe(302);
+          expect(new URL(String(response.headers.location)).searchParams.get('error')).toBe(
+            'no-account',
+          );
+          expect(response.cookies.some((cookie) => cookie.name === REFRESH_COOKIE)).toBe(false);
+          expect(
+            response.cookies.find((cookie) => cookie.name === OAUTH_NONCE_COOKIE),
+          ).toMatchObject({ value: '', path: '/api/auth/oauth/google' });
+          expect(fetchMock).not.toHaveBeenCalled();
+        },
+      );
 
       it('takes the browser that started the flow on to the provider, and clears the cookie either way', async () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 500 }));
@@ -675,7 +693,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
 
         expect(fetchMock).toHaveBeenCalledOnce();
         expect(response.cookies.find((cookie) => cookie.name === OAUTH_NONCE_COOKIE)).toMatchObject(
-          { value: '', path: '/api/auth/oauth' },
+          { value: '', path: '/api/auth/oauth/google' },
         );
       });
     });

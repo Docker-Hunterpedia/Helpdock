@@ -46,6 +46,9 @@ const frame = (event: WidgetServerEvent, envelope: WidgetEnvelope<unknown>): str
  *   after `after` is read second, so a message committed in between is in one
  *   or the other — and one already sent from the catch-up is not repeated.
  * - **Closed after five minutes**; the client reconnects with its cursor.
+ * - **Closed when the visitor's signed identity is withdrawn** (see
+ *   {@link WidgetHub.disconnectVisitor}), so a conversation the visitor held
+ *   only through the contact stops arriving at once, not at the five minutes.
  *
  * `EventSource` cannot set headers, so the widget reads the stream with
  * `fetch` and the `Authorization: Visitor` header like every other route.
@@ -84,6 +87,14 @@ export class WidgetStreamController {
     const pending: string[] = [];
     let sentSeq = query.after;
     let write: ((chunk: string) => void) | null = null;
+    // Set once the response is hijacked. A visitor whose link to their contact
+    // is withdrawn while the stream is still opening is ended as soon as it can be.
+    let endStream: (() => void) | null = null;
+    let withdrawn = false;
+    const endWhenWithdrawn = (): void => {
+      withdrawn = true;
+      endStream?.();
+    };
     const deliver: StreamListener = (event, envelope) => {
       if (envelope.seq !== null && envelope.seq <= sentSeq) {
         return;
@@ -106,6 +117,7 @@ export class WidgetStreamController {
       const unsubscribe = [
         this.#hub.listen(conversationRoom(entry.ticket.id), deliver),
         this.#hub.listen(brandVisitorsRoom(brandId), deliver),
+        this.#hub.watchVisitor(scope.visitor.id, endWhenWithdrawn),
       ];
       const page = await this.#conversations.page(scope, entry.ticket.id, {
         after: query.after,
@@ -155,5 +167,9 @@ export class WidgetStreamController {
     heartbeat.unref();
     expiry.unref();
     request.raw.on('close', close);
+    endStream = close;
+    if (withdrawn) {
+      close();
+    }
   }
 }

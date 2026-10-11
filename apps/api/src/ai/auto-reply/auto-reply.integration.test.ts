@@ -777,19 +777,33 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
   });
 
   it('counts the answered, never handed-off conversations as deflected once quiet for a day', async () => {
+    // Read a day on, so what this test leaves is quiet; and as a difference, so
+    // what the other tests of this file left behind is not counted.
     const usage = new DbAiUsage(runtime.settings, () => new Date(Date.now() + 25 * 3_600_000));
     const today = new Date().toISOString().slice(0, 10);
-    const report = await withSystem(runtime.db, brandId(), (tx) =>
-      usage.report(tx, { brandId: brandId(), from: today, to: today, timezone: 'UTC' }),
-    );
+    const deflection = async () => {
+      const report = await withSystem(runtime.db, brandId(), (tx) =>
+        usage.report(tx, { brandId: brandId(), from: today, to: today, timezone: 'UTC' }),
+      );
+      if (!report.available) {
+        throw new Error('the usage report is unavailable');
+      }
+      return report.deflection;
+    };
+    const before = await deflection();
 
-    // Answered and left alone: the first two. Handed off: the two low-confidence
-    // ones and the two the visitor took to a person. A job that never sent —
-    // superseded by a person, or over budget — made nothing eligible. The
-    // button pressed at a fixed Friday in the hours test falls on another day.
-    expect(report).toMatchObject({
-      available: true,
-      deflection: { eligible: 6, deflected: 2, rate: 2 / 6 },
-    });
+    for (const reply of [
+      'Card refunds show up 3 to 5 business days [1].\nCONFIDENCE: 0.92',
+      'Possibly a few days [1].\nCONFIDENCE: 0.5',
+    ]) {
+      await start(await newVisitor());
+      const [job] = await takeJobs();
+      fake.reply(reply);
+      await run(job as AiAutoReplyPayload);
+    }
+    const after = await deflection();
+
+    // One answered and left alone; one handed off for low confidence.
+    expect([after.eligible - before.eligible, after.deflected - before.deflected]).toEqual([2, 1]);
   });
 });

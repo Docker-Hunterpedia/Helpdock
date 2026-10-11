@@ -3,6 +3,7 @@ import {
   LOCALES,
   type Locale,
   openWidget,
+  runOutTheSendWindow,
   server,
   startClockBeforeOpening,
   strings,
@@ -167,6 +168,7 @@ for (const locale of LOCALES) {
           })
           .click();
 
+        await expect(card.locator('.hd-csat-score').nth(3)).toHaveAttribute('aria-pressed', 'true');
         const ratings = await edges(page, '.hd-csat-score');
         expect(ratings.map((rating) => rating.pressed)).toEqual([
           'false',
@@ -238,13 +240,14 @@ for (const locale of LOCALES) {
       test('the icons beside a message that was not sent, and its Retry, are drawn in the text colour', async ({
         page,
       }) => {
+        await page.clock.install();
         await openWidget(page, locale, query());
         await server(page, 'mock.failNextSends(1000);');
         await page.keyboard.type('Can someone check the bank reference?');
         await page.keyboard.press('Enter');
-        await expect(page.getByRole('button', { name: t('message.retry') })).toBeVisible({
-          timeout: 15_000,
-        });
+        await expect(page.getByText(t('message.sending'))).toBeVisible();
+        await runOutTheSendWindow(page);
+        await expect(page.getByRole('button', { name: t('message.retry') })).toBeVisible();
 
         const { count, problems } = await iconProblems(page, '.hd-meta');
         expect(count, 'the alert and the retry icons').toBe(2);

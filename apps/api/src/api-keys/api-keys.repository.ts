@@ -1,10 +1,10 @@
 import { type ApiKeyRow, apiKeys, type Db, type DbTransaction, users } from '@helpdock/db';
-import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { withAllBrands } from '../tenant/all-brands.js';
 
 /**
- * The `api_keys` table (M8-01). Every method but {@link findActiveByHash}
+ * The `api_keys` table (M8-01). Every method but {@link findByHash}
  * takes the caller's transaction, so row-level security decides what it sees.
  * That one answers the question a request asks before any brand is known —
  * "whose key is this?" — and reads this table alone, by its unique hash.
@@ -13,12 +13,22 @@ import { withAllBrands } from '../tenant/all-brands.js';
 /** How stale `last_used_at` may be before a request writes it again. */
 export const LAST_USED_DEBOUNCE_SECONDS = 60;
 
-export interface ActiveApiKey {
+/** Whether a key may be used, as the database judged it when it was read. */
+export type ApiKeyState = 'active' | 'revoked' | 'expired';
+
+/** A key Helpdock issued, with what the resolver needs to accept it or to say why it did not. */
+export interface KnownApiKey {
   readonly id: string;
   readonly brandId: string;
   readonly scopes: readonly string[];
   readonly rateLimitPerMinute: number;
+  readonly state: ApiKeyState;
 }
+
+/** A key that exists and may not be used. */
+export type EndedApiKey = KnownApiKey & { readonly state: Exclude<ApiKeyState, 'active'> };
+
+export const isEnded = (key: KnownApiKey): key is EndedApiKey => key.state !== 'active';
 
 /** A key with the names of the staff who issued and revoked it, for the Developers page. */
 export interface ApiKeyWithNames {
@@ -78,11 +88,13 @@ export class ApiKeysRepository {
   }
 
   /**
-   * The live key with this hash, in any brand — not revoked and not past its
-   * `expires_at` — and its `last_used_at` moved forward when it is more than a
-   * minute old, so a busy key costs one write a minute rather than one a request.
+   * The key with this hash, in any brand, and whether it may be used: the one
+   * place that says a key is `revoked` or `expired` (by the database's clock)
+   * rather than `active`. For an active key, `last_used_at` is moved forward
+   * when it is more than a minute old, so a busy key costs one write a minute
+   * rather than one a request.
    */
-  async findActiveByHash(db: Db, keyHash: string): Promise<ActiveApiKey | undefined> {
+  async findByHash(db: Db, keyHash: string): Promise<KnownApiKey | undefined> {
     const [key] = await withAllBrands(db, 'api-key.resolve', async (tx) => {
       const rows = await tx
         .select({
@@ -90,18 +102,17 @@ export class ApiKeysRepository {
           brandId: apiKeys.brandId,
           scopes: apiKeys.scopes,
           rateLimitPerMinute: apiKeys.rateLimitPerMinute,
+          state: sql<ApiKeyState>`case
+            when ${apiKeys.revokedAt} is not null then 'revoked'
+            when ${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} <= now() then 'expired'
+            else 'active'
+          end`,
         })
         .from(apiKeys)
-        .where(
-          and(
-            eq(apiKeys.keyHash, keyHash),
-            isNull(apiKeys.revokedAt),
-            or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, sql`now()`)),
-          ),
-        )
+        .where(eq(apiKeys.keyHash, keyHash))
         .limit(1);
       const [row] = rows;
-      if (row !== undefined) {
+      if (row?.state === 'active') {
         await tx
           .update(apiKeys)
           .set({ lastUsedAt: sql`now()` })

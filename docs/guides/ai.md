@@ -422,9 +422,12 @@ through mammoth (headings kept), and Markdown and text as they are.
 A DOCX is a ZIP archive, so the 25 MB cap does not bound what is inside it.
 Before mammoth reads one, the worker checks the archive: it is refused when it
 holds **more than 1,000 entries** or declares **more than 100 MiB uncompressed**
-in total, when it is ZIP64 or its directory is damaged, or when an entry
-unpacks to more than its directory says (each entry is inflated once, up to
-its declared size, to check; a directory that lies is caught there). A refused
+in total, when it is ZIP64 (any of the end record's fields JSZip reads as a
+ZIP64 marker, or a ZIP64 locator anywhere in the file, so a second directory
+cannot hide where the check does not read) or its directory is damaged, or when
+an entry unpacks to more than its directory says (each entry is inflated once,
+up to its declared size, to check; a directory that lies is caught there; an
+entry that is not valid deflate data is reported as corrupt). A refused
 upload is logged as `file.rejected` with the limit it broke and is rejected as a
 file, not a failed sync; in a Drive folder it is skipped, logged as
 `document.skipped` with the same reason, and the walk goes on. Ordinary

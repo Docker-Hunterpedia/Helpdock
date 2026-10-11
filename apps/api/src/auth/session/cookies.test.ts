@@ -4,6 +4,7 @@ import {
   decodeRefreshCookie,
   encodeRefreshCookie,
   isSecureAppUrl,
+  oauthNonceCookie,
   refreshCookie,
   refreshCookieOf,
   trustedDeviceCookie,
@@ -66,6 +67,36 @@ describe('trustedDeviceCookie', () => {
 
     expect(cookie.attributes.maxAge).toBe(30 * 24 * 60 * 60);
     expect(cookie.name).toBe('__Secure-hd_trust');
+  });
+});
+
+describe('oauthNonceCookie', () => {
+  // A browser sends a cookie to a URL only when its Path is a prefix of the URL's
+  // path at a segment boundary (RFC 6265 5.1.4), so these are the routes it reaches.
+  const reaches = (provider: 'google' | 'github', route: string): boolean => {
+    const { path } = oauthNonceCookie('https://support.example.com', 600, provider).attributes;
+    return `/api/auth/oauth/${route}`.startsWith(`${path}/`);
+  };
+
+  it('is sent to its own provider’s routes only, so two sign-ins begun together keep a nonce each', () => {
+    expect([
+      reaches('google', 'google/callback'),
+      reaches('google', 'github/callback'),
+      reaches('github', 'github/callback'),
+      reaches('github', 'google/callback'),
+    ]).toEqual([true, false, true, false]);
+  });
+
+  it('keeps the hardened attributes and the name every provider shares', () => {
+    const cookie = oauthNonceCookie('https://support.example.com', 600, 'google');
+
+    expect(cookie.name).toBe('__Secure-hd_oauth');
+    expect(cookie.attributes).toMatchObject({
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 600,
+    });
   });
 });
 

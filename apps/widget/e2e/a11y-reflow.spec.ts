@@ -4,6 +4,7 @@ import {
   LOCALES,
   type Locale,
   openWidget,
+  runOutTheSendWindow,
   server,
   startClockBeforeOpening,
   strings,
@@ -132,6 +133,7 @@ for (const locale of LOCALES) {
       await server(page, `mock.emit({ type: 'receipt', kind: 'read', seq: 1 });`);
       await expect(page.getByText(t('message.seen'))).toBeVisible();
       await server(page, `mock.assign(agent, 'Billing'); mock.agentReply(agent, 'Checking now.');`);
+      await expect(page.getByText('Checking now.')).toBeVisible();
       await check('chat, sent then seen, agent replied');
 
       await server(page, 'mock.dropConnection();');
@@ -142,6 +144,7 @@ for (const locale of LOCALES) {
         `mock.storeSilently(agent, 'It is on its way.'); mock.restoreConnection();`,
       );
       await expect(page.getByText(t('connection.back'))).toBeVisible();
+      await expect(page.getByText(t('connection.newMessages', { count: 1 }))).toBeVisible();
       await check('back online strip with the new-messages divider');
 
       expect(found).toEqual([]);
@@ -159,9 +162,9 @@ for (const locale of LOCALES) {
       await server(page, 'mock.failNextSends(1000);');
       await page.keyboard.type('Can someone check the bank reference?');
       await page.keyboard.press('Enter');
-      await expect(page.getByRole('button', { name: t('message.retry') })).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(page.getByText(t('message.sending'))).toBeVisible();
+      await runOutTheSendWindow(page);
+      await expect(page.getByRole('button', { name: t('message.retry') })).toBeVisible();
       await check('a send that failed, with Retry');
 
       expect(found).toEqual([]);

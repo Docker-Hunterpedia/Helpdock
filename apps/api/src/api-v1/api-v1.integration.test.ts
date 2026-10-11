@@ -41,7 +41,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
 import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
@@ -375,19 +375,36 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect((await call('GET', '/api/v1/tickets', 'hd_live_never-issued')).status).toBe(401);
     });
 
-    it('answers 410 for a key whose brand is in its deletion grace, and 200 again once restored (F5, M9-01)', async () => {
+    it('answers 410 for a key whose brand is in its deletion grace, after its budget, and 200 again once restored (F5, M9-01)', async () => {
       const { key } = await issueKey(['tickets:read']);
+      const throttled = await issueKey(['tickets:read'], 2);
       const setStatus = (status: 'active' | 'deleting') =>
         runtime.db.update(brands).set({ status }).where(eq(brands.id, seeded.brandId));
+      // The resolver reads the answer `BrandGoneGuard` keeps for a few seconds,
+      // so each look at the brand is taken from past it.
+      const letTheAnswerExpire = () =>
+        vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10_000 });
+      const statusOf = async (token: string) =>
+        (await call('GET', '/api/v1/tickets', token)).status;
 
       await setStatus('deleting');
       try {
-        expect((await call('GET', '/api/v1/tickets', key)).status).toBe(410);
+        letTheAnswerExpire();
+        const gone = await call<ErrorResponse>('GET', '/api/v1/tickets', key);
+        expect([gone.status, gone.body.error.code]).toEqual([410, 'gone']);
+        expect([
+          await statusOf(throttled.key),
+          await statusOf(throttled.key),
+          await statusOf(throttled.key),
+        ]).toEqual([410, 410, 429]);
+
+        await setStatus('active');
+        letTheAnswerExpire();
+        expect(await statusOf(key)).toBe(200);
       } finally {
+        vi.useRealTimers();
         await setStatus('active');
       }
-
-      expect((await call('GET', '/api/v1/tickets', key)).status).toBe(200);
     });
 
     it('leaves a trace of a revoked key being presented, once a minute, and none of the key (ASVS 7.2.1)', async () => {
@@ -409,6 +426,7 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
         actorId: created.id,
         targetType: 'api_key',
         ip: '127.0.0.1',
+        requestId: expect.any(String),
         meta: { prefix: created.key.slice(0, 12), reason: 'revoked' },
       });
       expect(JSON.stringify(refused)).not.toContain(created.key);

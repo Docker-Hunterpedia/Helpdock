@@ -52,6 +52,10 @@ describe('BusinessHoursService.calendarsFor', () => {
     const calendar = (await service.calendarsFor(BRAND, tx))(SUPPORT);
 
     expect(calendar).toMatchObject({ timezone: 'Asia/Riyadh', weekly: gulfWeek });
+    // Another department's holiday is not this one's.
+    expect(calendar.holidays).toEqual([
+      { startsOn: '2026-12-25', endsOn: '2026-12-25', departmentId: null },
+    ]);
   });
 
   it('falls back to the brand’s zone, the default week and the holidays that apply', async () => {

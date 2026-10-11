@@ -32,6 +32,16 @@ const LOCAL_LENGTH = 30;
 /** The end record may be followed by a comment of at most this many bytes. */
 const MAX_COMMENT_LENGTH = 0xffff;
 const ZIP64_MARKER = 0xffffffff;
+const ZIP64_MARKER_16 = 0xffff;
+/**
+ * Where JSZip (lib/zipEntries.js, readEndOfCentral) looks in the end record to
+ * decide an archive is ZIP64: any one of these fields at its maximum. It then
+ * takes the directory from a ZIP64 record found by the locator signature
+ * anywhere in the file, which this reader never follows.
+ */
+const ZIP64_FIELDS_16 = [4, 6, 8, 10] as const;
+const ZIP64_FIELDS_32 = [12, 16] as const;
+const ZIP64_LOCATOR = Buffer.from([0x50, 0x4b, 0x06, 0x07]);
 const STORED = 0;
 const DEFLATED = 8;
 
@@ -56,13 +66,17 @@ const findEnd = (view: DataView): number => {
   throw unreadable();
 };
 
+const declaresZip64 = (view: DataView, end: number): boolean =>
+  ZIP64_FIELDS_16.some((field) => view.getUint16(end + field, true) === ZIP64_MARKER_16) ||
+  ZIP64_FIELDS_32.some((field) => view.getUint32(end + field, true) === ZIP64_MARKER);
+
 const readCentralDirectory = (view: DataView): readonly CentralRecord[] => {
   const end = findEnd(view);
-  const directorySize = view.getUint32(end + 12, true);
-  const directoryOffset = view.getUint32(end + 16, true);
-  if (view.getUint16(end + 10, true) === 0xffff || directorySize === ZIP64_MARKER) {
+  if (declaresZip64(view, end)) {
     throw zip64();
   }
+  const directorySize = view.getUint32(end + 12, true);
+  const directoryOffset = view.getUint32(end + 16, true);
   // A directory that does not end where the end record starts has bytes in
   // front of it or after it, which JSZip tolerates and this check could not
   // vouch for.
@@ -124,8 +138,13 @@ const verifyEntry = (bytes: Uint8Array, view: DataView, record: CentralRecord): 
   if (method === DEFLATED) {
     try {
       actual = inflateRawSync(stored, { maxOutputLength: Math.max(1, uncompressedSize) }).length;
-    } catch {
-      throw new ArchiveRejectedError('holds an entry that unpacks to more than its directory says');
+    } catch (error) {
+      // maxOutputLength is the only RangeError inflate raises; any other error is bad data.
+      throw new ArchiveRejectedError(
+        error instanceof RangeError
+          ? 'holds an entry that unpacks to more than its directory says'
+          : 'holds a corrupt entry',
+      );
     }
   }
   if (actual !== uncompressedSize) {
@@ -136,6 +155,11 @@ const verifyEntry = (bytes: Uint8Array, view: DataView, record: CentralRecord): 
 /** Throws `ArchiveRejectedError` unless the archive is small enough to unpack. */
 export const assertArchiveWithinLimits = (bytes: Uint8Array): void => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // JSZip finds the locator by scanning the whole file, so one anywhere in it
+  // can steer JSZip to a directory this check never reads.
+  if (Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).includes(ZIP64_LOCATOR)) {
+    throw zip64();
+  }
   const records = readCentralDirectory(view);
 
   const declared = records.reduce((sum, record) => sum + record.uncompressedSize, 0);

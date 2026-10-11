@@ -796,6 +796,38 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         expect(again).toMatchObject({ ok: false, error: { code: 'not_found' } });
       });
 
+      it('ends a verified visitor’s open SSE stream when the link to the contact is withdrawn (F3, M9-01)', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const laptop = await newVisitor();
+        await identify(laptop, { user_id: 'cust-44', ts: now });
+        const conversationId = (await start(laptop)).body.conversation.id;
+        const phone = await newVisitor();
+        await identify(phone, { user_id: 'cust-44', ts: now });
+        const streamUrl = `${url}/api/widget/${seeded.brandId}/stream?conversationId=${conversationId}&after=0`;
+        const headers = { origin: SHOP, authorization: `Visitor ${phone.secret}` };
+        const stream = await fetch(streamUrl, { headers });
+        expect(stream.status).toBe(200);
+        const reader = stream.body?.getReader();
+        await reader?.read();
+
+        // Signing out on the host site: the next load carries no identity.
+        await widget('POST', '/session', { visitor: phone, payload: {} });
+
+        // The streams in this suite last 1.5 s; this one has to end well inside that.
+        const ended = (async () => {
+          while (!(await reader?.read())?.done) {
+            // Frames still arriving are drained until the stream ends.
+          }
+          return 'ended';
+        })();
+        const outcome = await Promise.race([
+          ended,
+          new Promise((resolve) => setTimeout(resolve, 700, 'still open')),
+        ]);
+        expect(outcome).toBe('ended');
+        expect((await fetch(streamUrl, { headers })).status).toBe(404);
+      });
+
       it('leaves a visitor’s sockets alone when a load changes nothing about who they are', async () => {
         const visitor = await newVisitor();
         const socket = await connect(visitor);

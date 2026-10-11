@@ -27,8 +27,9 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import { silentLogger, type TelegramSendPayload } from '@helpdock/jobs';
+import { type JobLogger, silentLogger, type TelegramSendPayload } from '@helpdock/jobs';
 import {
+  type ErrorResponse,
   TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH,
   type TelegramBot,
   type TelegramBotList,
@@ -44,7 +45,7 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import type { Job } from 'bullmq';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import sharp from 'sharp';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { readChannelStatuses } from '../channels/channel-status.js';
@@ -225,7 +226,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
   const repository = new TelegramRepository();
 
   /** The worker's half: every outbox row M6 wrote and nobody handled yet, sent. */
-  const runOutbox = async (attempts = 0): Promise<void> => {
+  const runOutbox = async (attempts = 0, log: JobLogger = silentLogger): Promise<void> => {
     const rows = await owner.db
       .select({ id: outbox.id, event: outbox.event, payload: outbox.payload })
       .from(outbox)
@@ -233,7 +234,7 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       .orderBy(outbox.id);
     const process = createTelegramSendProcessor({
       db: runtime.db,
-      log: silentLogger,
+      log,
       repository,
       handler: createTelegramSendHandler({
         db: runtime.db,
@@ -458,13 +459,15 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     });
 
     it('refuses a language prompt too long for one line above two buttons', async () => {
-      const tooLong = await call('PUT', `${botsPath()}/${bot.id}`, ada, {
+      const tooLong = await call<ErrorResponse>('PUT', `${botsPath()}/${bot.id}`, ada, {
         displayName: 'Acme Help',
         departmentId: support,
         languagePrompt: 'x'.repeat(TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH + 1),
       });
 
       expect(tooLong.status).toBe(400);
+      expect(tooLong.body.error.code).toBe('validation_failed');
+      expect(tooLong.body.error.fields?.map((field) => field.path)).toEqual(['languagePrompt']);
     });
 
     it('tests a typed token before the bot exists, and refuses one Telegram does not know', async () => {
@@ -977,29 +980,29 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     });
 
     it('records the language from the button, rewrites the prompt to it and welcomes in it, in that order', async () => {
+      const chat = 4_242_017;
+      await deliver(textUpdate(nextUpdate(), chat, '/start'));
+      await runOutbox();
       const before = telegram.calls.length;
 
-      await pressLanguage(catalogChat, 'ar', 7, 'cq-ar');
+      await pressLanguage(chat, 'ar', 7, 'cq-ar');
       await runOutbox();
 
-      expect(await contactLocale(catalogChat)).toBe('ar');
+      expect(await contactLocale(chat)).toBe('ar');
       const [chatRow] = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx
           .select()
           .from(telegramChats)
-          .where(eq(telegramChats.chatId, String(catalogChat))),
+          .where(eq(telegramChats.chatId, String(chat))),
       );
       expect(chatRow?.languageChosenAt).toBeInstanceOf(Date);
       expect(telegram.calls.slice(before).map((entry) => [entry.method, entry.body])).toEqual([
         ['answerCallbackQuery', { callback_query_id: 'cq-ar' }],
-        [
-          'editMessageText',
-          { chat_id: String(catalogChat), message_id: 7, text: 'اللغة: العربية' },
-        ],
+        ['editMessageText', { chat_id: String(chat), message_id: 7, text: 'اللغة: العربية' }],
         [
           'sendMessage',
           {
-            chat_id: String(catalogChat),
+            chat_id: String(chat),
             text: 'مرحبًا! أرسل لنا سؤالك وسيرد عليك الفريق هنا.',
           },
         ],
@@ -1007,42 +1010,67 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     });
 
     it('welcomes with the bot’s own text for the language chosen', async () => {
-      await pressLanguage(ownChat, 'en', 9);
+      const chat = 4_242_018;
+      await saveBot({ welcomeEn: 'Welcome to Acme support.' });
+      await deliver(textUpdate(nextUpdate(), chat, '/start'));
       await runOutbox();
 
-      expect(await contactLocale(ownChat)).toBe('en');
+      await pressLanguage(chat, 'en', 9);
+      await runOutbox();
+
+      expect(await contactLocale(chat)).toBe('en');
       expect(telegram.callsOf('editMessageText').at(-1)?.body).toEqual({
-        chat_id: String(ownChat),
+        chat_id: String(chat),
         message_id: 9,
         text: 'Language: English',
       });
-      expect(sentTo(ownChat).at(-1)?.body).toEqual({
-        chat_id: String(ownChat),
+      expect(sentTo(chat).at(-1)?.body).toEqual({
+        chat_id: String(chat),
         text: 'Welcome to Acme support.',
       });
     });
 
-    it('still welcomes when Telegram refuses to rewrite the prompt', async () => {
+    it('still welcomes when Telegram refuses to rewrite the prompt, and says nothing when it was already rewritten', async () => {
       const chat = 4_242_013;
       telegram.refusedEdits.add(String(chat));
+      const warn = vi.fn();
 
       await pressLanguage(chat, 'en', 11);
-      await runOutbox();
+      await runOutbox(0, { ...silentLogger, warn });
 
       expect(sentTo(chat).map((entry) => entry.body.text)).toEqual(['Welcome to Acme support.']);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('still welcomes, and logs why, when the prompt cannot be rewritten for any other reason', async () => {
+      const chat = 4_242_016;
+      telegram.brokenEdits.add(String(chat));
+      const warn = vi.fn();
+
+      await pressLanguage(chat, 'en', 12);
+      await runOutbox(0, { ...silentLogger, warn });
+
+      expect(sentTo(chat).map((entry) => entry.body.text)).toEqual(['Welcome to Acme support.']);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ botId: bot.id, detail: expect.stringContaining('not found') }),
+        'telegram language prompt could not be rewritten',
+      );
     });
 
     it('welcomes at once, in the Telegram app’s language, when the bot does not ask', async () => {
       const chat = 4_242_014;
       await saveBot({ languagePick: false });
 
-      await deliver(
-        textUpdate(nextUpdate(), chat, '/start', {
-          from: { id: chat, is_bot: false, first_name: 'Mona', language_code: 'ar' },
-        }),
-      );
-      await runOutbox();
-      await saveBot({ languagePick: true });
+      try {
+        await deliver(
+          textUpdate(nextUpdate(), chat, '/start', {
+            from: { id: chat, is_bot: false, first_name: 'Mona', language_code: 'ar' },
+          }),
+        );
+        await runOutbox();
+      } finally {
+        await saveBot({ languagePick: true });
+      }
 
       expect(sentTo(chat).map((entry) => entry.body)).toEqual([
         { chat_id: String(chat), text: 'مرحبًا! أرسل لنا سؤالك وسيرد عليك الفريق هنا.' },

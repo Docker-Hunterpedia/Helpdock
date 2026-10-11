@@ -22,7 +22,7 @@ endpoint with no rate limit, or weak crypto in practice.
 |---|---|---|---|---|
 | F1 | Medium | Widget socket events bypass every throttle | `api/widget/widget-gate.ts`, `api/widget/widget.gateway.ts` | Fixed in `606405f` |
 | F2 | Medium | `TRUST_PROXY=true` with the Cloudflare Caddyfile keys every per-address limit on Cloudflare's edge | `docker/docker-compose.yml`, `docker/caddy/Caddyfile.cloudflare`, `api/bootstrap.ts`, `packages/config/src/env.ts` | Fixed in `cfb64b4` |
-| F3 | Low | A widget socket keeps its conversation rooms after the signed-identity link is withdrawn | `api/widget/widget.gateway.ts`, `api/widget/widget-session.service.ts` | Fixed for sockets in `82683dc`; open for SSE, origin removal and secret rotation |
+| F3 | Low | A widget socket keeps its conversation rooms after the signed-identity link is withdrawn | `api/widget/widget.gateway.ts`, `api/widget/widget-session.service.ts` | Fixed for sockets in `82683dc` and for SSE streams after; open for origin removal and secret rotation |
 | F4 | Low | OAuth callback not bound to the browser that started it (login CSRF) | `api/auth/oauth/oauth.service.ts`, `api/auth/auth.controller.ts` | Fixed in `10ac844` |
 | F5 | Low | API keys and webhook deliveries ignore a brand's deletion grace | `api/api-keys/api-key-principal-resolver.ts`, `api/tenant/all-brands.ts`, `api/webhooks/webhook-deliver.job.ts` | Fixed in `275a3f2` |
 | F6 | Low | The magic link is spent by a plain `GET` | `api/auth/auth.controller.ts`, `api/auth/auth.service.ts` | Open: the confirm screen needs an artboard first |
@@ -64,19 +64,21 @@ Cloudflare"). Not proven live: the Caddy half was run locally, not on a
 Cloudflare zone.
 
 **F3, Low: sockets outlived the link that granted their rooms.** Fixed for
-sockets in `82683dc`. A `/widget` socket joins `visitor:<id>` on connect
+sockets in `82683dc`, and for SSE streams after review. A `/widget` socket joins `visitor:<id>` on connect
 (`api/widget/widget.gateway.ts`, `api/widget/widget-relay.ts`). When
 `WidgetSessionService.session` (`api/widget/widget-session.service.ts`) clears or
 changes the verified contact, `WidgetHub.disconnectVisitor` (`api/widget/widget-hub.ts`)
-disconnects that visitor's sockets, and the client reconnects and re-joins. Still
-open: an SSE stream (`api/widget/widget-stream.controller.ts`) is not cut and ends
-at `WIDGET_SSE_MAX_AGE_MS`, and removing an origin or rotating the signing secret
-(`api/widget/widget-settings.service.ts`) does not disconnect sockets.
+disconnects that visitor's sockets, and the client reconnects and re-joins. It
+also publishes an instruction on the widget channel, and each replica's hub ends
+the visitor's SSE streams (`api/widget/widget-stream.controller.ts`), which the
+client opens again and the gate judges afresh. Still open: removing an origin or
+rotating the signing secret (`api/widget/widget-settings.service.ts`) does not
+disconnect sockets.
 
 **F4, Low: OAuth callback not bound to its browser.** The state lived only on the
 server, so a copied callback URL could finish an attacker's sign-in in a victim's
 browser. Fixed in `10ac844`: starting a flow sets a ten-minute `hd_oauth` cookie
-(`__Secure-` prefixed over https, `Path=/api/auth/oauth`; `api/auth/session/cookies.ts`).
+(`__Secure-` prefixed over https, `Path=/api/auth/oauth/<provider>`; `api/auth/session/cookies.ts`).
 The state keeps only the hash of the nonce, and `OauthService.complete`
 (`api/auth/oauth/oauth.service.ts`) refuses a callback without the matching nonce,
 before any token request. `api/auth/auth.controller.ts` clears the cookie on every
@@ -85,8 +87,9 @@ callback. A sign-in begun before the upgrade has to be started again.
 **F5, Low: a brand in deletion grace kept its API keys and webhooks.** `/api/v1`
 routes are not `@Public()`, so `BrandGoneGuard` never ran, and `withAllBrands`
 (`api/tenant/all-brands.ts`) includes brands in `deleting`. Fixed in `275a3f2`:
-`ApiKeyPrincipalResolver` answers 410 through `isBrandGone` before the key's
-budget is spent (`api/api-keys/api-key-principal-resolver.ts`), and
+`ApiKeyPrincipalResolver` answers 410 from the shared `BrandAvailability`
+cache, after the key's per-minute budget is spent so that a gone brand's key is
+throttled like any other (`api/api-keys/api-key-principal-resolver.ts`), and
 `webhook-deliver.job.ts` marks the delivery `skipped`. A restore brings the keys
 back; skipped deliveries are not replayed.
 

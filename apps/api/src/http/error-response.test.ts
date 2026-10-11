@@ -2,6 +2,7 @@ import { TenantContextError } from '@helpdock/db';
 import {
   BadRequestException,
   ForbiddenException,
+  GoneException,
   NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
@@ -55,6 +56,7 @@ describe('mapError', () => {
     [new ForbiddenException('no'), 403, 'forbidden'],
     [new NotFoundException('no'), 404, 'not_found'],
     [new BadRequestException('no'), 400, 'validation_failed'],
+    [new GoneException('no'), 410, 'gone'],
   ] as const)('keeps the status of %s', (error, status, code) => {
     const mapped = mapError(error);
 

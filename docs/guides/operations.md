@@ -355,6 +355,93 @@ than one at a time.
 
 ---
 
+## Meta account health
+
+Meta changes things behind an install's back: it drops a Page's webhook
+subscription after an hour of failed deliveries, a token can stop working when
+the person who made it changes a password or loses a role, and an Instagram
+token lives 60 days. So once an hour the worker checks every WhatsApp number,
+Facebook Page and Instagram account that is connected, in every brand
+([ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md), 10).
+It costs two Graph calls per account per hour, three in the hour an Instagram
+token is renewed.
+
+| Step | What it asks Meta | If the answer is no |
+|---|---|---|
+| 1. The token | WhatsApp and Messenger: `GET /debug_token` about the account's own token. Instagram: `GET /me` | The token is dead: `status` becomes `token_expired` and `last_error` holds Meta's words. The run stops there. |
+| 2. The subscription | `GET /{id}/subscribed_apps`: is Helpdock's app (the `meta.appId` setting; while it is unset, any app) listed? If not, subscribe it again and read it back | Meta refuses, or the app is still not listed: `status` becomes `unsubscribed`. |
+| 3. The renewal | Instagram only, once the token was last renewed (or pasted) more than a week ago: `GET /refresh_access_token`. The new token replaces the old, encrypted, with its new expiry | The refusal goes to `last_error`. If the token's own expiry has passed, or Meta calls it dead, `status` becomes `token_expired`. |
+| 4. All well | | `status` is `connected` and `subscription_checked_at` is now. The error a `token_expired` or `unsubscribed` account was showing is cleared. |
+
+The states, as Channels › Meta shows them:
+
+- **`connected`** is the usual one. Messages are arriving, or can. An Instagram
+  token that Meta would not renew keeps this state while it still works; the
+  reason is on the account as its last error, and the health word turns red
+  until a message is filed after it. An Instagram token with under a week left
+  is marked Expiring on the list, which means the weekly renewal has not
+  succeeded.
+- **`token_expired`**: Meta no longer accepts the account's token. Nothing can
+  be sent or fetched for it. Paste a new token with **Reconnect** on the
+  account's page; the next hourly check confirms it.
+- **`unsubscribed`**: Meta no longer sends this account's messages to
+  Helpdock, and the check could not make it. Meta's refusal is on the account
+  as its last error. Fix what it names in the Meta dashboard, then press
+  **Subscribe now** on the account's page, or wait for the next check.
+
+Two things the check cannot undo. **Messenger and Instagram do not replay
+messages.** Meta drops the subscription after an hour of failures and sends
+nothing it missed once it is back, so what customers wrote in the gap is not
+filed ([ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md),
+consequences); WhatsApp redelivers for seven days. And **the check is hourly**:
+a subscription Meta drops at 10:05 is restored at 11:00.
+
+A problem Graph cannot be blamed for is not a finding. If Graph is down or
+rate-limits the check, the job is retried (three attempts, a minute and two
+minutes apart) and the account is left as it was; a `meta.health` job in the
+`maintenance` queue's failed set on [Bull Board](#the-queue-dashboard) means the
+check failed three times, Graph not answering being the usual reason. A refusal that gives no verdict, such as a permission the
+token lacks for the question itself, is recorded as `last_error` and leaves
+`status` alone.
+
+### How it runs
+
+- **One scheduler per account**, `meta.health.<account id>` on the
+  `maintenance` queue, fires at minute 0 of every hour, UTC. A new account is
+  first checked at the next hour. Saving or disconnecting an account moves its
+  scheduler (`meta_account.changed`).
+- **The worker registers every scheduler again on boot**, and a daily job,
+  `meta.health.schedule` at 05:30 UTC, does it once more, so a scheduler lost
+  while the worker kept running is back within a day. Losing Redis loses the
+  schedulers like any repeating job ([Losing Redis](#losing-redis)).
+- **Once an hour per account.** A check claims the receipt
+  `meta.health:<account id>:<UTC hour>` in `job_receipts` before it asks Meta
+  anything and holds it until it has written its findings, so two worker
+  replicas, or a retry that arrives after the first attempt finished, check
+  once and renew an Instagram token once.
+- **A brand in its deletion grace is not checked**, and its schedulers stay, so
+  a restore picks up where checking stopped. A scheduler whose account no longer
+  exists removes itself on its next run.
+- **A new token wins.** If an admin pastes a new token while a check is asking
+  Meta about the old one, what the check found is discarded; the next hour
+  checks the new one.
+- **The token is never logged**, and never appears in `last_error`: Meta's
+  words are stored with any quotation of it taken out and cut to 300
+  characters.
+
+### The Graph version expires
+
+Every call names a Graph version in its path, `v25.0` unless
+`META_GRAPH_VERSION` says otherwise ([configuration](configuration.md)), and
+Meta retires each version on a published date; `v25.0` is retired on
+2028-07-29. Treat the version like a dependency: well before the date, set
+`META_GRAPH_VERSION` to a newer one, restart the `api` and `worker`, press
+**Test connection** on one account of each platform, and read the next hourly
+check. An account that the new version refuses shows the reason as its last
+error.
+
+---
+
 ## The master key
 
 `APP_MASTER_KEY` in `.env` is 32 bytes of base64 that every secret Helpdock
@@ -556,7 +643,7 @@ durable lives only there:
 | Sessions and refresh tokens | Every agent and admin is signed out | At their next sign-in |
 | Trusted browsers, used TOTP steps | Each browser asks for a code again | — |
 | Rate-limit counters | Limits start from zero | As traffic arrives |
-| Queued jobs | Jobs waiting in BullMQ are gone | The relay publishes outbox rows not yet published; `sla.rebuild` recreates SLA timers at worker boot; repeating jobs (mail polling, sweeps) are registered again at worker boot |
+| Queued jobs | Jobs waiting in BullMQ are gone | The relay publishes outbox rows not yet published; `sla.rebuild` recreates SLA timers at worker boot; repeating jobs (mail polling, sweeps, the [Meta account checks](#meta-account-health)) are registered again at worker boot |
 | The help center page cache | Pages render cold once | On the next view |
 
 Restart the api and the worker once Redis is back, empty

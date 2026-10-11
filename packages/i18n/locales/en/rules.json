@@ -116,7 +116,10 @@
     "telegram": "Telegram",
     "form": "Web form",
     "api": "API",
-    "manual": "Manual"
+    "manual": "Manual",
+    "whatsapp": "WhatsApp",
+    "messenger": "Messenger",
+    "instagram": "Instagram"
   },
   "priorities": {
     "low": "Low",

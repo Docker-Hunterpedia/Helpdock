@@ -469,7 +469,10 @@
       "email": "Address",
       "domain": "Domain",
       "phone": "Phone",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "whatsapp": "WhatsApp",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "form": {
       "heading": "Block a sender",
@@ -479,13 +482,19 @@
         "email": "Email address",
         "domain": "Email domain",
         "phone": "Phone",
-        "telegram": "Telegram"
+        "telegram": "Telegram",
+        "whatsapp": "WhatsApp",
+        "messenger": "Messenger",
+        "instagram": "Instagram"
       },
       "hints": {
         "email": "The whole address, such as spam@promo-deals.biz.",
         "domain": "Blocks every address at this domain and below it.",
         "phone": "In international form, such as +963 931 234 567.",
-        "telegram": "The chat id the bot reports, digits only."
+        "telegram": "The chat id the bot reports, digits only.",
+        "whatsapp": "The WhatsApp user id Meta reports, such as US.13491208655302741918.",
+        "messenger": "The Page id, a colon and the page-scoped id Meta reports.",
+        "instagram": "The Instagram account id, a colon and the Instagram-scoped id Meta reports."
       },
       "submit": "Block"
     },

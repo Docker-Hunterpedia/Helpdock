@@ -28,7 +28,7 @@ export interface SenderKey {
  * |---|---|
  * | `email` | it is an own address, or its domain is an own domain or below one |
  * | `domain` | it is an own domain, a parent of one, or below one |
- * | `phone`, `telegram` | never: no brand sends from either in v1 |
+ * | `phone`, `telegram`, `whatsapp`, `messenger`, `instagram` | never: a brand's own number or account is not a customer's identifier |
  *
  * A domain *below* an own domain is refused as well as a parent: blocking
  * `mail.acme.com` when the brand sends from `acme.com` blocks the brand's own
@@ -46,6 +46,9 @@ export const isOwnSender = ({ kind, value }: SenderKey, own: OwnSenders): boolea
       return own.domains.some((mine) => domainCovers(value, mine) || domainCovers(mine, value));
     case 'phone':
     case 'telegram':
+    case 'whatsapp':
+    case 'messenger':
+    case 'instagram':
       return false;
   }
 };

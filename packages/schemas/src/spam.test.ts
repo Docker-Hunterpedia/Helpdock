@@ -82,6 +82,17 @@ describe('normaliseBlockedSender', () => {
     });
   });
 
+  it.each(['whatsapp', 'messenger', 'instagram'] as const)(
+    'takes a %s id as the opaque id Meta issued, trimmed and not case-folded',
+    (kind) => {
+      expect(normaliseBlockedSender(kind, ' US.AbC123 ')).toEqual({ ok: true, value: 'US.AbC123' });
+      expect(normaliseBlockedSender(kind, 'two words')).toEqual({
+        ok: false,
+        problem: 'invalid-meta',
+      });
+    },
+  );
+
   it('routes a domain to the domain rule', () => {
     expect(normaliseBlockedSender('domain', 'PROMO.biz')).toEqual({ ok: true, value: 'promo.biz' });
   });

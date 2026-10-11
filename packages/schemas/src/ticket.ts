@@ -30,7 +30,17 @@ export type TicketSystemState = z.infer<typeof ticketSystemStateSchema>;
 export const ticketPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
 export type TicketPriority = z.infer<typeof ticketPrioritySchema>;
 
-export const ticketChannelSchema = z.enum(['email', 'chat', 'telegram', 'form', 'api', 'manual']);
+export const ticketChannelSchema = z.enum([
+  'email',
+  'chat',
+  'telegram',
+  'form',
+  'api',
+  'manual',
+  'whatsapp',
+  'messenger',
+  'instagram',
+]);
 export type TicketChannel = z.infer<typeof ticketChannelSchema>;
 
 /** The five status hues of DESIGN §2.1. A brand may recolour a status within them. */

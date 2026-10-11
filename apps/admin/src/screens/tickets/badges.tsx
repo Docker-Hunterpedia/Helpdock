@@ -7,11 +7,14 @@ import type {
 } from '@helpdock/schemas';
 import { Box, Typography } from '@mui/material';
 import {
+  Camera,
   Check,
   Clock,
   FileText,
   Mail,
   MessageCircle,
+  MessageSquareText,
+  MessagesSquare,
   PauseCircle,
   Plug,
   Send,
@@ -211,6 +214,7 @@ export function SlaTimer({
   );
 }
 
+// The three Meta icons are stand-ins until the M10 artboards pick theirs.
 const CHANNEL_ICONS = {
   email: Mail,
   chat: MessageCircle,
@@ -218,6 +222,9 @@ const CHANNEL_ICONS = {
   form: FileText,
   api: Plug,
   manual: SquarePen,
+  whatsapp: MessageSquareText,
+  messenger: MessagesSquare,
+  instagram: Camera,
 } as const;
 
 /** DESIGN §6.2 ChannelIcon: a 14 px icon and the channel's name beside it. */

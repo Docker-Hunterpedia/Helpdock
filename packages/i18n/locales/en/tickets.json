@@ -83,7 +83,10 @@
     "telegram": "Telegram",
     "form": "Form",
     "api": "API",
-    "manual": "Manual"
+    "manual": "Manual",
+    "whatsapp": "WhatsApp",
+    "messenger": "Messenger",
+    "instagram": "Instagram"
   },
   "status": {
     "label": "Status"

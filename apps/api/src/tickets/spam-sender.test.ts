@@ -34,6 +34,35 @@ describe('senderOf', () => {
     });
   });
 
+  it('blocks the customer’s id on the platform of a Meta ticket, not their phone or address', () => {
+    const meta: IdentityRow[] = [
+      { kind: 'email', value: 'mona@example.com', createdAt: at(0) },
+      { kind: 'phone', value: '+15550100123', createdAt: at(1) },
+      { kind: 'whatsapp', value: 'US.13491208655302741918', createdAt: at(2) },
+      { kind: 'messenger', value: '106540352242922:7654321098765432', createdAt: at(3) },
+      { kind: 'instagram', value: '17841400000000000:17841499999999999', createdAt: at(4) },
+    ];
+
+    expect(senderOf('whatsapp', meta)).toEqual({
+      kind: 'whatsapp',
+      value: 'US.13491208655302741918',
+    });
+    expect(senderOf('messenger', meta)).toEqual({
+      kind: 'messenger',
+      value: '106540352242922:7654321098765432',
+    });
+    expect(senderOf('instagram', meta)).toEqual({
+      kind: 'instagram',
+      value: '17841400000000000:17841499999999999',
+    });
+  });
+
+  it('falls back to the phone of a WhatsApp ticket whose user id is not on the contact', () => {
+    expect(
+      senderOf('whatsapp', [{ kind: 'phone', value: '+15550100123', createdAt: at(0) }]),
+    ).toEqual({ kind: 'phone', value: '+15550100123' });
+  });
+
   it('prefers the address the contact was created with over one added later', () => {
     const two: IdentityRow[] = [
       { kind: 'email', value: 'later@example.com', createdAt: at(9) },

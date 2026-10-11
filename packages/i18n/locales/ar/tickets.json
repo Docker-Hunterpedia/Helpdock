@@ -83,7 +83,10 @@
     "telegram": "تيليغرام",
     "form": "نموذج",
     "api": "واجهة برمجية",
-    "manual": "يدوي"
+    "manual": "يدوي",
+    "whatsapp": "واتساب",
+    "messenger": "ماسنجر",
+    "instagram": "إنستغرام"
   },
   "status": {
     "label": "الحالة"

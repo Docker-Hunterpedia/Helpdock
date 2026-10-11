@@ -1,7 +1,7 @@
 import type { MetaPlatform } from '@helpdock/schemas';
 import { Box, Typography } from '@mui/material';
 import { Ban, Clock, UserCheck } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Trans } from 'react-i18next';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
@@ -60,7 +60,7 @@ export function ReplyWindowStrip({
   const mono = <Typography variant="mono" component="span" sx={{ fontSize: 13 }} />;
   const components = { b: strong, mono, count: <span aria-hidden="true" />, bdi: <bdi /> };
 
-  const timeOf = (iso: string): ReactNode => (
+  const timeOf = (iso: string): ReactElement => (
     <Typography variant="mono" component="time" dateTime={iso} sx={{ fontSize: 13 }} />
   );
 
@@ -99,13 +99,14 @@ export function ReplyWindowStrip({
         {state.kind === 'closed' ? (
           <>
             <Box component="p" sx={{ margin: 0 }}>
-              <Trans i18nKey="tickets:meta.window.closed" components={components} />
+              <Trans ns="tickets" i18nKey="meta.window.closed" components={components} />
               {' · '}
               {state.closedAt === null ? (
                 t('tickets:meta.window.neverWrote', { name: customerName })
               ) : (
                 <Trans
-                  i18nKey="tickets:meta.window.closedAt"
+                  ns="tickets"
+                  i18nKey="meta.window.closedAt"
                   values={{
                     ago: agoLabel(state.closedAt, locale, now),
                     when: closesWhen(state.closedAt, locale, now, t),
@@ -119,7 +120,8 @@ export function ReplyWindowStrip({
             {state.refused ? (
               <Box component="p" sx={{ margin: 0, marginBlockStart: 1 }}>
                 <Trans
-                  i18nKey="tickets:meta.window.refusedAtSend"
+                  ns="tickets"
+                  i18nKey="meta.window.refusedAtSend"
                   values={{
                     name: customerName,
                     when: state.closedAt === null ? '' : closesWhen(state.closedAt, locale, now, t),
@@ -131,7 +133,8 @@ export function ReplyWindowStrip({
           </>
         ) : (
           <Trans
-            i18nKey={`tickets:meta.window.${state.kind}`}
+            ns="tickets"
+            i18nKey={`meta.window.${state.kind}`}
             values={{
               left: windowLeft(state.closesAt, now, t),
               when: closesWhen(state.closesAt, locale, now, t),

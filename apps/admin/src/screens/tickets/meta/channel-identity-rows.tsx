@@ -85,7 +85,8 @@ export function ChannelIdentityRows({
       case 'instagram':
         return (
           <Trans
-            i18nKey="tickets:meta.identity.footerInstagram"
+            ns="tickets"
+            i18nKey="meta.identity.footerInstagram"
             values={{ account: accountLabel(account) }}
             components={{ bdi: <bdi /> }}
           />
@@ -152,7 +153,11 @@ export function ChannelIdentityRows({
       >
         <dt>{t(`tickets:meta.identity.${rows.idLabel}`)}</dt>
         <dd>
-          <Typography variant="mono" component="bdi" sx={{ fontSize: 12, overflowWrap: 'anywhere' }}>
+          <Typography
+            variant="mono"
+            component="bdi"
+            sx={{ fontSize: 12, overflowWrap: 'anywhere' }}
+          >
             {context.customerId}
           </Typography>
           <IconButton
@@ -183,7 +188,13 @@ export function ChannelIdentityRows({
               )}
             </dd>
             <dt>{t('tickets:meta.identity.profileName')}</dt>
-            <dd>{context.profileName === undefined ? '—' : <bdi dir="auto">{context.profileName}</bdi>}</dd>
+            <dd>
+              {context.profileName === undefined ? (
+                '—'
+              ) : (
+                <bdi dir="auto">{context.profileName}</bdi>
+              )}
+            </dd>
             <dt>{t('tickets:meta.identity.number')}</dt>
             <dd style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 0 }}>
               <bdi style={{ fontSize: 12 }}>{accountLabel(account)}</bdi>
@@ -198,7 +209,11 @@ export function ChannelIdentityRows({
           <>
             <dt>{t('tickets:meta.identity.name')}</dt>
             <dd>
-              {context.profileName === undefined ? none : <bdi dir="auto">{context.profileName}</bdi>}
+              {context.profileName === undefined ? (
+                none
+              ) : (
+                <bdi dir="auto">{context.profileName}</bdi>
+              )}
             </dd>
             <dt>{t('tickets:meta.identity.page')}</dt>
             <dd>
@@ -210,11 +225,15 @@ export function ChannelIdentityRows({
         {platform === 'instagram' ? (
           <>
             <dt>{t('tickets:meta.identity.username')}</dt>
-            <dd>
-              {context.username === undefined ? '—' : <bdi>@{context.username}</bdi>}
-            </dd>
+            <dd>{context.username === undefined ? '—' : <bdi>@{context.username}</bdi>}</dd>
             <dt>{t('tickets:meta.identity.name')}</dt>
-            <dd>{context.profileName === undefined ? '—' : <bdi dir="auto">{context.profileName}</bdi>}</dd>
+            <dd>
+              {context.profileName === undefined ? (
+                '—'
+              ) : (
+                <bdi dir="auto">{context.profileName}</bdi>
+              )}
+            </dd>
             <dt>{t('tickets:meta.identity.account')}</dt>
             <dd style={{ fontSize: 12 }}>
               <bdi>{accountLabel(account)}</bdi>

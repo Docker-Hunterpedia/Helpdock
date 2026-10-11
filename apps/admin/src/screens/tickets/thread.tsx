@@ -5,6 +5,7 @@ import type {
   TicketMessage,
 } from '@helpdock/schemas';
 import { Box, Link as MuiLink } from '@mui/material';
+import type { LucideIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -27,6 +28,7 @@ import {
   PendingFooter,
   SystemEvent,
 } from './message-bubble.tsx';
+import type { ThreadMeta } from './meta/use-ticket-meta.tsx';
 import { LocationLine, splitLocation } from './telegram/location-line.tsx';
 import type { ThreadTelegram } from './telegram/use-ticket-telegram.tsx';
 import { VoiceNote } from './telegram/voice-note.tsx';
@@ -94,6 +96,7 @@ export function Thread({
   merges,
   deliveryFooter,
   telegram,
+  meta,
   assist,
   ai,
   onRetry,
@@ -107,6 +110,8 @@ export function Thread({
   readonly deliveryFooter?: ((message: TicketMessage) => ReactNode) | undefined;
   /** M6: the "via @bot" and "Sent" lines, voice notes and locations of a Telegram thread. */
   readonly telegram?: ThreadTelegram | undefined;
+  /** M10-08: the "via" and "to" lines, delivery states, quotes, stickers and stories of a WhatsApp, Messenger or Instagram thread. */
+  readonly meta?: ThreadMeta | undefined;
   /** M7-05, M7-08: translations and "Show redacted" under a customer's messages. */
   readonly assist?: ThreadAssist | undefined;
   /** M7-06: the AI log behind auto-replies, for their disclosures. */
@@ -133,6 +138,9 @@ export function Thread({
         component="ol"
         aria-label={t('tickets:thread.label')}
         aria-live="polite"
+        // A message, a reaction line or a failure that arrives is read; Sent,
+        // Delivered and Read changing in place are not (`Admin/Ticket-Meta`, notes).
+        aria-relevant="additions"
         sx={{
           listStyle: 'none',
           margin: '0 auto',
@@ -185,12 +193,14 @@ export function Thread({
                 />
               ) : item.message.kind === 'system' ? (
                 <SystemEvent>
-                  <SystemText
-                    message={item.message}
-                    links={merges?.links ?? []}
-                    names={names}
-                    now={now}
-                  />
+                  <SystemLine icon={meta?.lineIcon(item.message)}>
+                    <SystemText
+                      message={item.message}
+                      links={merges?.links ?? []}
+                      names={names}
+                      now={now}
+                    />
+                  </SystemLine>
                 </SystemEvent>
               ) : item.message.email !== undefined && item.message.authorType === 'contact' ? (
                 <EmailMessageCard
@@ -211,6 +221,7 @@ export function Thread({
                   names={names}
                   now={now}
                   telegram={telegram}
+                  meta={meta}
                   assist={assist}
                   footer={deliveryFooter?.(item.message) ?? null}
                 />
@@ -240,6 +251,26 @@ export function Thread({
       {/* Outside the list: an `<ol>` may contain only `<li>` (WCAG 1.3.1). */}
       <div ref={end} />
     </>
+  );
+}
+
+/** A line nobody wrote with its icon in front, when the platform's reaction or an unsent message has one (M10-08). */
+function SystemLine({
+  icon: Icon,
+  children,
+}: {
+  readonly icon: LucideIcon | undefined;
+  readonly children: ReactNode;
+}): ReactNode {
+  if (Icon === undefined) {
+    return children;
+  }
+
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+      <Icon size={14} aria-hidden="true" />
+      <span>{children}</span>
+    </Box>
   );
 }
 
@@ -316,12 +347,14 @@ const metaOf = (
   locale: 'en' | 'ar',
   now: number,
   telegram?: ThreadTelegram,
+  meta?: ThreadMeta,
 ): ReactNode => {
-  const address = telegram?.leadFor(message) ?? names.addressFor(message.authorId);
+  const address =
+    telegram?.leadFor(message) ?? meta?.leadFor(message) ?? names.addressFor(message.authorId);
 
   return (
     <>
-      {address === null ? null : (
+      {address === null || address === undefined ? null : (
         <>
           <bdi>{address}</bdi>
           <span aria-hidden="true"> · </span>
@@ -329,6 +362,7 @@ const metaOf = (
       )}
       <bdi>{messageTime(message.createdAt, locale, now)}</bdi>
       {telegram?.trailFor(message)}
+      {meta?.trailFor(message)}
     </>
   );
 };
@@ -343,6 +377,7 @@ function SentMessage({
   names,
   now,
   telegram,
+  meta,
   assist,
   footer,
 }: {
@@ -350,53 +385,61 @@ function SentMessage({
   readonly names: ThreadNames;
   readonly now: number;
   readonly telegram: ThreadTelegram | undefined;
+  readonly meta: ThreadMeta | undefined;
   readonly assist: ThreadAssist | undefined;
   readonly footer: ReactNode;
 }): ReactNode {
   const t = useT();
   const { locale } = usePreferences();
-  const located = telegram === undefined ? undefined : splitLocation(message.bodyHtml);
+  // M10-08: a quote and a story caption open a Meta customer's message, and
+  // are drawn above what is left of its text.
+  const content = meta?.contentFor(message);
+  const html = content?.html ?? message.bodyHtml;
+  const located = telegram === undefined && meta === undefined ? undefined : splitLocation(html);
   const time = messageTime(message.createdAt, locale, now);
+  const author =
+    names.nameFor(message.authorType, message.authorId) ??
+    t(`tickets:thread.${message.authorType === 'ai' ? 'system' : 'contact'}`);
+  const drawFile = (attachment: TicketMessage['attachments'][number]): ReactNode => {
+    const fromTelegram = telegram?.attachmentFor(attachment, time);
+    if (fromTelegram !== undefined) {
+      return fromTelegram;
+    }
+    // `null` from the Meta thread is a file drawn somewhere else: a story's
+    // media is the figure above the text, so it is not a chip under it too.
+    const fromMeta = meta?.attachmentFor(attachment, message);
+    if (fromMeta !== undefined) {
+      return fromMeta;
+    }
+
+    return attachment.kind === 'audio' && attachment.status === 'ready' && assist !== undefined ? (
+      // M7-09: a voice note from any channel plays, with its transcript under it.
+      <VoiceNote key={attachment.id} brandId={assist.brandId} attachment={attachment} time={time} />
+    ) : (
+      <AttachmentChip
+        key={attachment.id}
+        name={attachment.originalName}
+        size={attachment.size}
+        state={chipState(attachment)}
+      />
+    );
+  };
+  const files = message.attachments.map(drawFile).filter((node) => node !== null);
+  const label = meta?.labelFor(message, author);
 
   return (
     <MessageBubble
       kind={bubbleKindOf(message)}
-      author={
-        names.nameFor(message.authorType, message.authorId) ??
-        t(`tickets:thread.${message.authorType === 'ai' ? 'system' : 'contact'}`)
-      }
-      meta={metaOf(message, names, locale, now, telegram)}
-      bodyHtml={located?.html ?? message.bodyHtml}
+      author={author}
+      meta={metaOf(message, names, locale, now, telegram, meta)}
+      {...(label === undefined ? {} : { label })}
+      {...(content === undefined ? {} : { before: content.before })}
+      bodyHtml={located?.html ?? html}
       body={assist?.bodyFor(message)}
       facts={assist?.factsFor(message)}
       footer={footer}
       {...(located === undefined ? {} : { extra: <LocationLine location={located.location} /> })}
-      {...(message.attachments.length === 0
-        ? {}
-        : {
-            attachments: message.attachments.map(
-              (attachment) =>
-                telegram?.attachmentFor(attachment, time) ??
-                (attachment.kind === 'audio' &&
-                attachment.status === 'ready' &&
-                assist !== undefined ? (
-                  // M7-09: a voice note from any channel plays, with its transcript under it.
-                  <VoiceNote
-                    key={attachment.id}
-                    brandId={assist.brandId}
-                    attachment={attachment}
-                    time={time}
-                  />
-                ) : (
-                  <AttachmentChip
-                    key={attachment.id}
-                    name={attachment.originalName}
-                    size={attachment.size}
-                    state={chipState(attachment)}
-                  />
-                )),
-            ),
-          })}
+      {...(files.length === 0 ? {} : { attachments: files })}
     />
   );
 }

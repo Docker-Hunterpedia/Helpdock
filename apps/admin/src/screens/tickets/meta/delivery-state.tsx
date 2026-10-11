@@ -130,7 +130,10 @@ const saidBy = (
   if (delivery.lastError === null) {
     return null;
   }
-  const said = t('tickets:meta.platformSaid', { platform: platformName, error: delivery.lastError });
+  const said = t('tickets:meta.platformSaid', {
+    platform: platformName,
+    error: delivery.lastError,
+  });
 
   return delivery.errorCode === null
     ? said
@@ -146,7 +149,8 @@ const leftOutReason = (
   if (item.reason === 'too-large') {
     return 'too-large';
   }
-  const isFile = attachments.find((attachment) => attachment.id === item.attachmentId)?.kind === 'file';
+  const isFile =
+    attachments.find((attachment) => attachment.id === item.attachmentId)?.kind === 'file';
 
   return isFile && META_ATTACHMENT_LIMITS[platform].fileTypes !== null
     ? 'pdfOnly'
@@ -267,12 +271,16 @@ export function DeliveryNotice({
           </Box>
           <span>
             <Trans
-              i18nKey="tickets:meta.leftOut"
+              ns="tickets"
+              i18nKey="meta.leftOut"
               values={{
                 name: item.name,
-                reason: t(`tickets:meta.leftOutReason.${leftOutReason(item, platform, attachments)}`, {
-                  platform: platformName,
-                }),
+                reason: t(
+                  `tickets:meta.leftOutReason.${leftOutReason(item, platform, attachments)}`,
+                  {
+                    platform: platformName,
+                  },
+                ),
               }}
               components={{ bdi: <bdi /> }}
             />

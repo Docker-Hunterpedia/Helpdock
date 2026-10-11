@@ -50,8 +50,8 @@ const REPLY_AGO = {
   waRead: 27 * HOUR - 10 * MINUTE,
   waDelivered: 26 * HOUR,
   waRefused: 100 * MINUTE,
-  waSent: 40 * MINUTE,
-  waSending: 10 * MINUTE,
+  waSent: 64 * MINUTE,
+  waSending: 55 * MINUTE,
   msRead: msAnchor - 5 * MINUTE,
   msFailed: msAnchor - 30 * MINUTE,
   igRead: igAnchor + 60 * MINUTE,
@@ -168,7 +168,7 @@ export const metaSeed = ({
       status: open,
       resolutionDueAt: at(20 * HOUR),
       createdAt: at(-27 * HOUR),
-      updatedAt: at(-10 * MINUTE),
+      updatedAt: at(-55 * MINUTE),
     }),
     ticket({
       id: MOCK_TICKET_MESSENGER,
@@ -197,8 +197,12 @@ export const metaSeed = ({
     }),
   ];
 
-  const daniel = (id: number, seq: number, ago: number, overrides: Partial<TicketMessage> & { bodyText: string }) =>
-    from(MOCK_TICKET_WHATSAPP, 'whatsapp', MOCK_CONTACT_DANIEL, id, seq, ago, overrides);
+  const daniel = (
+    id: number,
+    seq: number,
+    ago: number,
+    overrides: Partial<TicketMessage> & { bodyText: string },
+  ) => from(MOCK_TICKET_WHATSAPP, 'whatsapp', MOCK_CONTACT_DANIEL, id, seq, ago, overrides);
 
   const messages: TicketMessage[] = [
     // WhatsApp: a photo, a quote, a sticker, a reply that was refused because
@@ -226,7 +230,7 @@ export const metaSeed = ({
     daniel(0x12, 3, 26 * HOUR + 30 * MINUTE, {
       bodyText: 'Here it is.',
       bodyHtml:
-        '<blockquote><p>Could you send a photo of the label on the box too?</p></blockquote><p>Here it is.</p>',
+        '<blockquote><p>Sorry about that, Daniel. Could you send a photo of the label on the box too?</p></blockquote><p>Here it is.</p>',
       attachments: [
         file(
           2,

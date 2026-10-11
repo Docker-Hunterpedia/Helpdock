@@ -1,10 +1,12 @@
-import type {
-  Attachment,
-  MetaDeliveryView,
-  MetaPlatform,
-  MetaTicketContext,
-  MetaTicketContextResponse,
-  TicketMessage,
+import {
+  type Attachment,
+  firstWordOf,
+  type MetaDeliveryView,
+  type MetaPlatform,
+  type MetaTicketContext,
+  type MetaTicketContextResponse,
+  metaOpeningLine,
+  type TicketMessage,
 } from '@helpdock/schemas';
 import { Box } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,8 +17,8 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { isMetaError, metaKeys } from '../../../meta/api.js';
 import { useMetaApi } from '../../../meta/context.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
-import { numbering } from '../format.js';
 import { PLATFORM_ICONS } from '../../admin/channels/meta/platforms.js';
+import { numbering } from '../format.js';
 import { ChannelIdentityRows } from './channel-identity-rows.tsx';
 import { DeliveryNotice, DeliveryTrail } from './delivery-state.tsx';
 import {
@@ -29,8 +31,9 @@ import {
 } from './meta-content.js';
 import { QuoteLine, StickerFigure, StoryCaption, StoryFigure } from './meta-figures.tsx';
 import { accountLabel, customerHandle } from './meta-format.js';
-import { ReplyWindowStrip } from './reply-window-strip.tsx';
 import { stripState, type WindowRefusal } from './reply-window.js';
+import { ReplyWindowStrip } from './reply-window-strip.tsx';
+import { useMinuteClock } from './use-minute-clock.js';
 
 /**
  * What the ticket view needs for its Meta half (M10-08, `Admin/Ticket-Meta`),
@@ -49,7 +52,6 @@ const META_CHANNELS: ReadonlySet<string> = new Set(['whatsapp', 'messenger', 'in
 const isReply = (message: TicketMessage): boolean =>
   message.kind === 'public' && message.authorType === 'staff';
 
-const MINUTE_MS = 60_000;
 /** While a reply is still being sent the thread asks again, so Sending moves on to Sent unprompted. */
 const SENDING_POLL_MS = 5_000;
 
@@ -68,6 +70,8 @@ export interface ComposerMeta {
   readonly handle: string | undefined;
   /** The brand's number, Page or `@handle` the reply comes from. */
   readonly account: string;
+  /** "Lina · Helpdock", which the api puts first in the reply: counted with the text. '' until the brand is read. */
+  readonly openingLine: string;
   /** The reply window is closed: Send holds its place, `aria-disabled`, and the strip says why. */
   readonly closed: boolean;
   /** The strip's id, which Send is described by. */
@@ -122,32 +126,13 @@ export interface TicketMeta {
 const hasQueued = (data: MetaTicketContextResponse | undefined): boolean =>
   data?.deliveries.some((delivery) => delivery.status === 'queued') ?? false;
 
-/** A clock that moves once a minute, which is as fine as a countdown in hours needs. */
-function useMinuteClock(enabled: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-    setNow(Date.now());
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, MINUTE_MS);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, [enabled]);
-
-  return now;
-}
-
 export function useTicketMeta({
   brandId,
   ticketId,
   channel,
   customerName,
+  viewerName,
+  brandName,
   messages,
   authorOf,
 }: {
@@ -156,6 +141,10 @@ export function useTicketMeta({
   readonly channel: string;
   /** The contact's name, or null while it is not known; blank is "the customer". */
   readonly customerName: string | null;
+  /** Who is writing, whose first name opens the reply. */
+  readonly viewerName: string;
+  /** The brand's name, which opens it too; null until the brand has been read. */
+  readonly brandName: string | null;
   /** The thread, for the quote's author and to read the context again when it grows. */
   readonly messages: readonly TicketMessage[];
   /** Who wrote a message, as the thread names them. */
@@ -223,7 +212,11 @@ export function useTicketMeta({
   // says the customer wrote: that is the window opening.
   const activeRefusal =
     refusal !== null &&
-    !(read.dataUpdatedAt > refusal.readAt && context !== undefined && context.window.state !== 'closed')
+    !(
+      read.dataUpdatedAt > refusal.readAt &&
+      context !== undefined &&
+      context.window.state !== 'closed'
+    )
       ? refusal
       : null;
   const state = context === undefined ? undefined : stripState(context.window, now, activeRefusal);
@@ -366,6 +359,10 @@ export function useTicketMeta({
       customerName: recipient,
       handle,
       account,
+      openingLine:
+        brandName === null
+          ? ''
+          : metaOpeningLine({ firstName: firstWordOf(viewerName), brand: brandName }),
       closed: state.kind === 'closed',
       stripId,
     },

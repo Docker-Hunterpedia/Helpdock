@@ -24,6 +24,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { PRIORITY_TONE, slaState, statusName } from './format.js';
 
 /**
@@ -231,18 +232,28 @@ export function ChannelLabel({
   channel,
   departmentName,
   handle,
+  account,
 }: {
   readonly channel: TicketChannel;
   readonly departmentName?: string | undefined;
   /** Who on the channel, when it is not an address: Telegram's "@mona_k" (M6-02). */
   readonly handle?: string | undefined;
+  /**
+   * The brand's own number, Page or `@handle` a WhatsApp, Messenger or Instagram
+   * ticket is with: "WhatsApp · +1 555 0142 · Support" (M10-08). The customer is
+   * named in the details panel, not here.
+   */
+  readonly account?: string | undefined;
 }): ReactNode {
   const t = useT();
   const Icon = CHANNEL_ICONS[channel];
+  const channelName = t(`tickets:channel.${channel}`);
   const name =
-    handle === undefined
-      ? t(`tickets:channel.${channel}`)
-      : t('tickets:telegram.chip', { channel: t(`tickets:channel.${channel}`), username: handle });
+    account !== undefined
+      ? t('tickets:meta.chip', { channel: channelName, account })
+      : handle === undefined
+        ? channelName
+        : t('tickets:telegram.chip', { channel: channelName, username: handle });
 
   return (
     <Typography
@@ -252,5 +263,24 @@ export function ChannelLabel({
       <Icon size={14} aria-hidden="true" />
       <bdi>{departmentName === undefined ? name : `${name} · ${departmentName}`}</bdi>
     </Typography>
+  );
+}
+
+/**
+ * The platform icon alone, for a row that has no room for its name (the ticket
+ * list, M10-08): DESIGN §6.2 ChannelIcon, with a visually hidden platform name
+ * after it so the icon is not the only thing that says which platform.
+ */
+export function ChannelMark({ channel }: { readonly channel: TicketChannel }): ReactNode {
+  const t = useT();
+  const Icon = CHANNEL_ICONS[channel];
+
+  return (
+    <>
+      <Icon size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+      <Box component="span" sx={visuallyHidden}>
+        {t(`tickets:channel.${channel}`)}
+      </Box>
+    </>
   );
 }

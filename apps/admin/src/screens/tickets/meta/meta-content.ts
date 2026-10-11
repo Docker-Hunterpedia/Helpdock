@@ -57,7 +57,9 @@ export interface StorySplit {
 }
 
 /** A story reply or mention opens with the catalog's label; the rest is what the customer wrote. */
-export const splitStory = (message: Pick<TicketMessage, 'bodyText' | 'bodyHtml'>): StorySplit | undefined => {
+export const splitStory = (
+  message: Pick<TicketMessage, 'bodyText' | 'bodyHtml'>,
+): StorySplit | undefined => {
   const label = STORY_LABELS.find((candidate) => message.bodyText.startsWith(candidate));
   if (label === undefined) {
     return undefined;

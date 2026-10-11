@@ -78,6 +78,9 @@ if (!hasDocker) {
   );
 }
 
+/** A WhatsApp number belongs to a business account, whose id the stand-in subscribes. */
+const WABA_PREFIX = '10229';
+
 const ID_PREFIX: Readonly<Record<MetaPlatform, string>> = {
   whatsapp: '10654',
   messenger: '11223',
@@ -161,6 +164,9 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
     now: () => clock,
   });
 
+  /** The id a subscription is read and written on: the business account for WhatsApp. */
+  const nodeOf = (account: MetaAccount): string => account.wabaId ?? account.externalId;
+
   const check = (account: MetaAccount, scheduler?: MetaHealthScheduler) =>
     runMetaHealth(
       dependencies(scheduler),
@@ -176,6 +182,8 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
   ): Promise<{ account: MetaAccount; token: string }> => {
     counter += 1;
     const externalId = `${ID_PREFIX[platform]}${String(counter).padStart(8, '0')}`;
+    const wabaId =
+      platform === 'whatsapp' ? `${WABA_PREFIX}${String(counter).padStart(8, '0')}` : undefined;
     const token = `EAAGhealth${platform}${String(counter)}token0123456789abcdef`;
     graph.connect({
       platform,
@@ -184,9 +192,10 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
       token,
       ...(platform === 'instagram' ? { username: 'acme' } : {}),
       ...(platform === 'whatsapp' ? { displayPhone: '+1 555 010 0100' } : {}),
+      ...(wabaId === undefined ? {} : { wabaId }),
     });
     if (subscribed) {
-      graph.subscribe(externalId);
+      graph.subscribe(wabaId ?? externalId);
     }
     const [account] = await inBrand(BRAND_A, (tx) =>
       tx
@@ -196,6 +205,7 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
           platform,
           departmentId: departmentA,
           externalId,
+          wabaId: wabaId ?? null,
           displayName: `${platform} ${String(counter)}`,
           accessToken: encryptSecret(token, keyring),
           tokenKind: META_TOKEN_KIND[platform],
@@ -270,15 +280,13 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
         { status: 'unsubscribed', lastError: 'Meta dropped the subscription', lastErrorAt: START },
         { subscribed: true },
       );
-      graph.dropSubscription(account.externalId);
-      expect(graph.subscriptionOf(account.externalId)).toEqual([]);
+      graph.dropSubscription(nodeOf(account));
+      expect(graph.subscriptionOf(nodeOf(account))).toEqual([]);
 
       const run = await check(account);
 
       expect(run.ran).toBe(true);
-      expect(graph.subscriptionOf(account.externalId)).toEqual([
-        ...META_SUBSCRIBED_FIELDS.messenger,
-      ]);
+      expect(graph.subscriptionOf(nodeOf(account))).toEqual([...META_SUBSCRIBED_FIELDS.messenger]);
       expect(graph.callsTo('/subscribed_apps', 'POST')).toHaveLength(1);
       const row = await reload(account.id);
       expect(row).toMatchObject({
@@ -294,18 +302,44 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
     it('subscribes Instagram and WhatsApp again on their own roots', async () => {
       const instagram = await connect('instagram');
       const whatsapp = await connect('whatsapp');
-      graph.dropSubscription(instagram.account.externalId);
-      graph.dropSubscription(whatsapp.account.externalId);
+      graph.dropSubscription(nodeOf(instagram.account));
+      graph.dropSubscription(nodeOf(whatsapp.account));
 
       await check(instagram.account);
       await check(whatsapp.account);
 
-      expect(graph.subscriptionOf(instagram.account.externalId)).toEqual([
+      expect(graph.subscriptionOf(nodeOf(instagram.account))).toEqual([
         ...META_SUBSCRIBED_FIELDS.instagram,
       ]);
-      expect(graph.subscriptionOf(whatsapp.account.externalId)).not.toEqual([]);
+      expect(graph.subscriptionOf(nodeOf(whatsapp.account))).not.toEqual([]);
       expect((await reload(instagram.account.id)).status).toBe('connected');
       expect((await reload(whatsapp.account.id)).status).toBe('connected');
+    });
+
+    it('reads and subscribes a WhatsApp number on its business account, never on the number', async () => {
+      const { account } = await connect('whatsapp');
+      graph.dropSubscription(nodeOf(account));
+
+      await check(account);
+
+      const paths = graph.callsTo('/subscribed_apps').map((call) => call.path);
+      expect(paths).toEqual(Array(3).fill(`/${account.wabaId}/subscribed_apps`));
+      expect(account.wabaId).not.toBe(account.externalId);
+      expect(graph.subscriptionOf(nodeOf(account))).not.toEqual([]);
+    });
+
+    it('cannot check a WhatsApp number whose business account is not on record, and asks Meta nothing', async () => {
+      const { account } = await connect('whatsapp', { wabaId: null });
+
+      expect(await check(account)).toMatchObject({ ran: true });
+
+      expect(graph.calls).toHaveLength(0);
+      expect(await reload(account.id)).toMatchObject({
+        status: 'connected',
+        lastError: 'The business account id is not known; reconnect the number',
+        lastErrorAt: clock,
+        subscriptionCheckedAt: null,
+      });
     });
 
     it('leaves a subscription that is there alone, and records that it looked', async () => {
@@ -512,7 +546,7 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
 
     it('runs once when the job comes twice in one hour, and again in the next', async () => {
       const { account } = await connect('messenger');
-      graph.dropSubscription(account.externalId);
+      graph.dropSubscription(nodeOf(account));
 
       expect((await check(account)).ran).toBe(true);
       const asked = graph.calls.length;
@@ -591,6 +625,7 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
             platform: 'whatsapp',
             departmentId: departmentB,
             externalId: `${ID_PREFIX.whatsapp}${String(counter).padStart(8, '0')}`,
+            wabaId: `${WABA_PREFIX}${String(counter).padStart(8, '0')}`,
             displayName: 'Globex number',
             accessToken: encryptSecret('EAAGglobextoken0123456789abcdef', keyring),
             tokenKind: 'system_user',

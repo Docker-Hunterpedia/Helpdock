@@ -553,7 +553,8 @@ in `meta-health.test.ts`.
    itself; Instagram, which has no `debug_token`: `GET /me` on the Instagram root. A 190-class
    refusal, or a 200 with `is_valid: false`, sets `status = token_expired` and `last_error`, and
    ends the run.
-2. *The subscription.* `GET /{external_id}/subscribed_apps`; the install's app (`meta.appId`, any
+2. *The subscription.* `GET /{id}/subscribed_apps` (`id` is the business account's `waba_id` for
+   WhatsApp, the `external_id` for the others); the install's app (`meta.appId`, any
    app while it is unset) missing → `POST` it with the platform's fields (`META_SUBSCRIBED_FIELDS`;
    none for WhatsApp) and read it back. Still missing, or the `POST` refused → `unsubscribed`.
 3. *The renewal.* Instagram only, via `refreshInstagramToken`. Refused → `last_error`; and
@@ -603,11 +604,20 @@ Decisions taken inside the plan, each with its reason where it is made:
   here sends it (M10-01); Meta's page writes it as the `access_token` query parameter. The stand-in
   takes both. If the staging run shows the bearer form refused, the line to change is in
   `meta-token-refresh.ts`.
-- **WhatsApp's subscription is read at `GET /{phone number id}/subscribed_apps`**, as the stand-in
-  answers it and the brief writes it. Meta documents `subscribed_apps` on the WhatsApp Business
-  Account (`waba_id`, which the row may hold). Whichever M10-07's "Subscribe now" settles on, this job
-  must use the same id: the one helper to change is `subscribe`/`listSubscribedApps` in
-  `meta-health.ts`.
+- **WhatsApp's subscription is on the business account.** Meta keeps it at
+  `GET|POST|DELETE /{waba_id}/subscribed_apps`, shared by every number under the business
+  account; the same path on a phone number's id answers an unsupported-edge error. The check
+  reads and re-subscribes on `meta_accounts.waba_id` for WhatsApp and on `external_id` for a
+  Page and an Instagram account (`subscriptionNode` in `meta-health.ts`). A WhatsApp row whose
+  `waba_id` is null cannot be checked: the run records "The business account id is not known;
+  reconnect the number" as `last_error`, leaves `status` as it is and asks Meta nothing. M10-07's
+  connect and Subscribe now must use the same id. `FakeGraph` (M10-01) changed to match: `connect`
+  requires a WhatsApp number's `wabaId` and opens the business account with the number's token;
+  `subscribed_apps` is served on the business account and answers Graph's unsupported-edge error
+  on a number's id; `subscribe`, `dropSubscription` and `subscriptionOf` take the `wabaId` for
+  WhatsApp; `debug_token` names the business accounts a WhatsApp token opens in `granular_scopes`
+  and `GET /{waba}/phone_numbers` lists the numbers under one, so a connect flow can trace a
+  number to its business account ([development guide](../guides/development.md#standing-in-for-a-vendor)).
 
 Not in this deliverable: the Reconnect form and the captions on the account page (M10-07, already
 drawn: it reads `status`, `last_error`, `token_expires_at` and `subscription_checked_at`), the

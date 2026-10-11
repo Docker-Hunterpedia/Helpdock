@@ -67,6 +67,7 @@ const whatsapp = (overrides: Partial<MetaAccount> = {}): MetaAccount =>
   account({
     platform: 'whatsapp',
     externalId: META_FIXTURE.phoneNumberId,
+    wabaId: META_FIXTURE.wabaId,
     tokenKind: 'system_user',
     ...overrides,
   });
@@ -309,6 +310,41 @@ describe('step 2, the subscription', () => {
     await check(graph, whatsapp());
 
     expect(calls.find((call) => call.method === 'POST')?.query).toBeUndefined();
+  });
+
+  it('reads and subscribes WhatsApp on the business account, never on the number', async () => {
+    let subscribed = false;
+    const { graph, calls } = graphDouble(({ method, path }) => {
+      if (path === '/debug_token') {
+        return VALID;
+      }
+      if (method === 'POST') {
+        subscribed = true;
+        return { success: true };
+      }
+      return subscribed ? graphSubscribedApps('whatsapp') : nobody;
+    });
+
+    await check(graph, whatsapp());
+
+    const subscriptionCalls = calls.filter((call) => call.path.endsWith('/subscribed_apps'));
+    expect(subscriptionCalls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      `GET /${META_FIXTURE.wabaId}/subscribed_apps`,
+      `POST /${META_FIXTURE.wabaId}/subscribed_apps`,
+      `GET /${META_FIXTURE.wabaId}/subscribed_apps`,
+    ]);
+  });
+
+  it('records that a number without a known business account cannot be checked, and asks Meta nothing', async () => {
+    const { graph, calls } = graphDouble(() => VALID);
+
+    const update = await check(graph, whatsapp({ wabaId: null, status: 'unsubscribed' }));
+
+    expect(update).toEqual({
+      lastError: 'The business account id is not known; reconnect the number',
+      lastErrorAt: NOW,
+    });
+    expect(calls).toHaveLength(0);
   });
 
   it('subscribes Instagram on the Instagram root', async () => {

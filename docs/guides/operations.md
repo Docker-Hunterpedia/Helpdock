@@ -369,7 +369,7 @@ token is renewed.
 | Step | What it asks Meta | If the answer is no |
 |---|---|---|
 | 1. The token | WhatsApp and Messenger: `GET /debug_token` about the account's own token. Instagram: `GET /me` | The token is dead: `status` becomes `token_expired` and `last_error` holds Meta's words. The run stops there. |
-| 2. The subscription | `GET /{id}/subscribed_apps`: is Helpdock's app (the `meta.appId` setting; while it is unset, any app) listed? If not, subscribe it again and read it back | Meta refuses, or the app is still not listed: `status` becomes `unsubscribed`. |
+| 2. The subscription | `GET /{id}/subscribed_apps`: is Helpdock's app (the `meta.appId` setting; while it is unset, any app) listed? If not, subscribe it again and read it back. For WhatsApp this is the number's business account, where Meta keeps the subscription for every number under it; a number whose business account Helpdock does not know is not checked, and its last error says to reconnect it | Meta refuses, or the app is still not listed: `status` becomes `unsubscribed`. |
 | 3. The renewal | Instagram only, once the token was last renewed (or pasted) more than a week ago: `GET /refresh_access_token`. The new token replaces the old, encrypted, with its new expiry | The refusal goes to `last_error`. If the token's own expiry has passed, or Meta calls it dead, `status` becomes `token_expired`. |
 | 4. All well | | `status` is `connected` and `subscription_checked_at` is now. The error a `token_expired` or `unsubscribed` account was showing is cleared. |
 

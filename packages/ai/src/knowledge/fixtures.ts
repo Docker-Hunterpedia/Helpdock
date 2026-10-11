@@ -136,36 +136,90 @@ export interface CraftedEntry {
   readonly inflated?: Buffer;
 }
 
+/** One entry's local header and data, and its directory record, which may carry a file comment. */
+const craftedEntry = (
+  { name, declaredSize, inflated }: CraftedEntry,
+  offset: number,
+  comment = Buffer.alloc(0),
+): { readonly local: Buffer; readonly central: Buffer } => {
+  const label = Buffer.from(name);
+  const stored = inflated === undefined ? Buffer.alloc(0) : deflateRawSync(inflated);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt16LE(label.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(inflated === undefined ? 0 : crc32(inflated), 16);
+  central.writeUInt32LE(stored.length, 20);
+  central.writeUInt32LE(declaredSize, 24);
+  central.writeUInt16LE(label.length, 28);
+  central.writeUInt16LE(comment.length, 32);
+  central.writeUInt32LE(offset, 42);
+  return {
+    local: Buffer.concat([local, label, stored]),
+    central: Buffer.concat([central, label, comment]),
+  };
+};
+
+/** The classic end record; `diskNumber` is the field a ZIP64 marker can sit in without the count. */
+const endRecord = (count: number, directory: Buffer, offset: number, diskNumber = 0): Buffer => {
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(diskNumber, 4);
+  end.writeUInt16LE(count, 8);
+  end.writeUInt16LE(count, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return end;
+};
+
 /** A ZIP whose directory says what a test needs it to say, which a real archiver never would. */
 export const craftedZip = (entries: readonly CraftedEntry[]): Uint8Array => {
   const parts: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
-  for (const { name, declaredSize, inflated } of entries) {
-    const label = Buffer.from(name);
-    const stored = inflated === undefined ? Buffer.alloc(0) : deflateRawSync(inflated);
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(8, 8);
-    local.writeUInt16LE(label.length, 26);
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(8, 10);
-    central.writeUInt32LE(inflated === undefined ? 0 : crc32(inflated), 16);
-    central.writeUInt32LE(stored.length, 20);
-    central.writeUInt32LE(declaredSize, 24);
-    central.writeUInt16LE(label.length, 28);
-    central.writeUInt32LE(offset, 42);
-    centrals.push(central, label);
-    parts.push(local, label, stored);
-    offset += local.length + label.length + stored.length;
+  for (const entry of entries) {
+    const { local, central } = craftedEntry(entry, offset);
+    parts.push(local);
+    centrals.push(central);
+    offset += local.length;
   }
   const directory = Buffer.concat(centrals);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(directory.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return new Uint8Array(Buffer.concat([...parts, directory, end]));
+  return new Uint8Array(
+    Buffer.concat([...parts, directory, endRecord(entries.length, directory, offset)]),
+  );
+};
+
+/**
+ * A ZIP whose classic directory is one harmless entry, while the ZIP64 directory
+ * of `hidden` sits in that entry's file comment, behind a classic end record that
+ * flags ZIP64 only in its disk number. A reader that judges ZIP64 by the entry
+ * count alone verifies the harmless directory; JSZip follows the flag to the
+ * hidden one.
+ */
+export const zip64SmuggledZip = (hidden: readonly CraftedEntry[]): Uint8Array => {
+  const visible = { name: 'word/document.xml', declaredSize: 1, inflated: Buffer.from('x') };
+  const { local, central: bare } = craftedEntry(visible, 0);
+  const hiddenAt = local.length + bare.length;
+  const hiddenDirectory = Buffer.concat(hidden.map((entry) => craftedEntry(entry, 0).central));
+
+  const zip64End = Buffer.alloc(56);
+  zip64End.writeUInt32LE(0x06064b50, 0);
+  zip64End.writeUInt32LE(44, 4);
+  zip64End.writeUInt32LE(hidden.length, 24);
+  zip64End.writeUInt32LE(hidden.length, 32);
+  zip64End.writeUInt32LE(hiddenDirectory.length, 40);
+  zip64End.writeUInt32LE(hiddenAt, 48);
+  const locator = Buffer.alloc(20);
+  locator.writeUInt32LE(0x07064b50, 0);
+  locator.writeUInt32LE(hiddenAt + hiddenDirectory.length, 8);
+  locator.writeUInt32LE(1, 16);
+
+  const comment = Buffer.concat([hiddenDirectory, zip64End, locator]);
+  const directory = craftedEntry(visible, 0, comment).central;
+  return new Uint8Array(
+    Buffer.concat([local, directory, endRecord(1, directory, local.length, 0xffff)]),
+  );
 };

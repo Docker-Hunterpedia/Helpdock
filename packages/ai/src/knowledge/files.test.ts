@@ -1,7 +1,7 @@
 import mammoth from 'mammoth';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { extractFile, isKnowledgeFileMime } from './files.js';
-import { craftedZip, minimalDocx, minimalPdf } from './fixtures.js';
+import { craftedZip, minimalDocx, minimalPdf, zip64SmuggledZip } from './fixtures.js';
 import {
   ArchiveRejectedError,
   assertArchiveWithinLimits,
@@ -80,6 +80,46 @@ describe('extractFile', () => {
     it('refuses an entry that unpacks to more than its directory says', async () => {
       const lie = Buffer.alloc(5 * 1024 * 1024, 0x20);
       await refuses(craftedZip([{ name: 'word/document.xml', declaredSize: 100, inflated: lie }]));
+    });
+
+    it('refuses a directory smuggled behind a ZIP64 flag that is not the entry count', async () => {
+      await refuses(
+        zip64SmuggledZip([{ name: 'word/document.xml', declaredSize: 1024 * 1024 * 1024 }]),
+      );
+    });
+
+    // The six fields JSZip reads from the end record to decide an archive is ZIP64.
+    it.each([
+      ['disk number', 4, 2],
+      ['disk of the directory', 6, 2],
+      ['entries on this disk', 8, 2],
+      ['entries', 10, 2],
+      ['directory size', 12, 4],
+      ['directory offset', 16, 4],
+    ])('refuses an end record whose %s is the ZIP64 marker', (_label, field, width) => {
+      const archive = craftedZip([{ name: 'word/document.xml', declaredSize: 1 }]);
+      const end = archive.length - 22;
+      archive.fill(0xff, end + field, end + field + width);
+
+      expect(() => assertArchiveWithinLimits(archive)).toThrow(/ZIP64/);
+    });
+
+    it('refuses a file that holds a ZIP64 locator anywhere, even behind a classic end record', () => {
+      const archive = craftedZip([{ name: 'word/document.xml', declaredSize: 1 }]);
+      const comment = Buffer.from([0x50, 0x4b, 0x06, 0x07]);
+      const marked = Buffer.concat([archive, comment]);
+      marked.writeUInt16LE(comment.length, archive.length - 2);
+
+      expect(() => assertArchiveWithinLimits(marked)).toThrow(/ZIP64/);
+    });
+
+    it('says an entry is corrupt when it is, not that it unpacks to too much', () => {
+      const archive = craftedZip([
+        { name: 'word/document.xml', declaredSize: 5, inflated: Buffer.from('hello') },
+      ]);
+      archive[30 + 'word/document.xml'.length] = 0x07;
+
+      expect(() => assertArchiveWithinLimits(archive)).toThrow(/corrupt/);
     });
 
     it.each([

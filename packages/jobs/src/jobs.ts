@@ -1345,6 +1345,51 @@ export const metaHealthScheduleJob = defineJob({
   schedule: { cron: META_HEALTH_SCHEDULE_CRON },
 });
 
+/**
+ * What `meta.send` is asked to do (M10-06). `reply` is an agent's reply to a
+ * WhatsApp, Messenger or Instagram customer; M10-09 adds `template`, which
+ * reaches a WhatsApp customer after the window. Both are about one
+ * `meta_deliveries` row.
+ */
+export const metaSendPayloadSchema = z.object({
+  kind: z.enum(['reply', 'template']),
+  brandId: z.uuid(),
+  /** The `meta_deliveries` row: the whole job is about it, and it is the natural key. */
+  deliveryId: z.uuid(),
+});
+export type MetaSendPayload = z.infer<typeof metaSendPayloadSchema>;
+
+/** Attempts before a reply to a Meta customer is `failed` (M10-06). */
+export const META_SEND_JOB_ATTEMPTS = 5;
+
+/**
+ * M10-06's outbound Meta (ADR 0025, 7; `outbound` queue): an agent's reply to a
+ * WhatsApp number, a Messenger user or an Instagram user. Asked for through the
+ * outbox (`meta.reply` beside the `meta_deliveries` row) and added by that
+ * event's handler with the outbox row's id.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "Telegram and Meta sends keyed by
+ * `ticket_message_id`"): keyed by the delivery, which is one per ticket
+ * message. A part already accepted is recorded as it lands, so a retry resumes
+ * after it.
+ *
+ * The job may also move itself to delayed and end with BullMQ's `DelayedError`
+ * (WhatsApp refuses a second message to one user inside six seconds): that
+ * spends no attempt, which is why the attempts below count failures only.
+ */
+export const metaSendJob = defineJob({
+  name: 'meta.send',
+  queue: QUEUE_NAMES.outbound,
+  schema: metaSendPayloadSchema,
+  options: {
+    attempts: META_SEND_JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `meta.send:${payload.deliveryId}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -1387,6 +1432,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   // M10-10
   [metaHealthJob.name]: metaHealthJob,
   [metaHealthScheduleJob.name]: metaHealthScheduleJob,
+  [metaSendJob.name]: metaSendJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

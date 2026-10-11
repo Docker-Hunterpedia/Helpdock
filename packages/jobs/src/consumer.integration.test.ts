@@ -15,7 +15,7 @@ import {
 } from '@helpdock/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import { type Job, Queue, type Worker } from 'bullmq';
+import { DelayedError, type Job, Queue, type Worker } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -190,6 +190,43 @@ describe.skipIf(!hasDocker)('idempotent consumers', () => {
     expect(await db.select({ key: jobReceipts.key }).from(jobReceipts)).toEqual([
       { key: `outbox.event:${id}` },
     ]);
+  });
+
+  it('lets a handler move its own job to delayed, spending no attempt and leaving no trace', async () => {
+    const tokens: (string | undefined)[] = [];
+    const log = recordingLogger();
+
+    start(async ({ tx, brandId: brand, job, token }) => {
+      tokens.push(token);
+      await tx.insert(auditLog).values({
+        brandId: brand,
+        actorType: 'system',
+        actorId: 'worker',
+        action: 'test.effect',
+        targetType: 'test',
+      });
+      if (tokens.length === 1) {
+        await job.moveToDelayed(Date.now() + 300, token);
+        throw new DelayedError();
+      }
+    }, log);
+
+    const id = await publish('ticket.replied');
+    const job = await settledJob(id, 'completed');
+
+    // The token BullMQ hands the processor reached the handler, and was good
+    // enough for `moveToDelayed`, which checks the lock against it.
+    expect(tokens).toHaveLength(2);
+    expect(tokens[0]).toEqual(expect.any(String));
+    // Started twice, spent once: the delay was not a failure.
+    expect(job.attemptsStarted).toBe(2);
+    expect(job.attemptsMade).toBe(1);
+    // The first run's write and receipt rolled back with its transaction.
+    expect(await auditRows()).toEqual([{ action: 'test.effect' }]);
+    expect(await db.select({ key: jobReceipts.key }).from(jobReceipts)).toEqual([
+      { key: `outbox.event:${id}` },
+    ]);
+    expect(log.lines.map((line) => line.message)).not.toContain('job failed');
   });
 
   it('runs the handler once when the same outbox row is delivered twice', async () => {

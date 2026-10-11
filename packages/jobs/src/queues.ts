@@ -6,7 +6,7 @@
 export const QUEUE_NAMES = {
   /** `email.poll`, `telegram.poll` (development), `form.submit`. Deduped by external id. */
   inbound: 'inbound',
-  /** `email.send`, `telegram.send`, `widget.deliver`. */
+  /** `email.send`, `telegram.send`, `meta.send` (M10-06), `widget.deliver`. */
   outbound: 'outbound',
   /** `sla.timer` (one per clock and step, delayed) and `sla.rebuild` (M3-02). */
   sla: 'sla',

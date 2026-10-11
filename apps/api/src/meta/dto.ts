@@ -7,6 +7,10 @@ import {
   metaAccountStatusResponseSchema,
   metaAccountUpdateRequestSchema,
   metaAppSchema,
+  metaDeliveryListSchema,
+  metaDeliveryParamSchema,
+  metaTicketContextResponseSchema,
+  metaTicketParamSchema,
   metaTokenTestRequestSchema,
   metaVerifyTokenRevealSchema,
 } from '@helpdock/schemas';
@@ -34,3 +38,9 @@ export class MetaAccountCreateDto extends createZodDto(metaAccountCreateRequestS
 export class MetaAccountUpdateDto extends createZodDto(metaAccountUpdateRequestSchema) {}
 export class MetaAccountStatusDto extends createZodDto(metaAccountStatusResponseSchema) {}
 export class MetaTokenTestDto extends createZodDto(metaTokenTestRequestSchema) {}
+
+/** The ticket view's half (M10-06). */
+export class MetaTicketParamDto extends createZodDto(metaTicketParamSchema) {}
+export class MetaDeliveryParamDto extends createZodDto(metaDeliveryParamSchema) {}
+export class MetaDeliveryListDto extends createZodDto(metaDeliveryListSchema) {}
+export class MetaTicketContextDto extends createZodDto(metaTicketContextResponseSchema) {}

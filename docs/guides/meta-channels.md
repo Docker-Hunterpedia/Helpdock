@@ -1,6 +1,6 @@
 # Meta channels
 
-How an install receives WhatsApp, Messenger and Instagram messages (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)). This page is a stub: it describes the part that exists, the webhook Meta calls (M10-02). The dashboard walk-through per platform, connecting an account, replying, the reply window, App Review and pricing are written with the deliverables that build them and gathered here by M10-11.
+How an install receives WhatsApp, Messenger and Instagram messages (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)). This page is a stub: it describes the parts that exist, the webhook Meta calls (M10-02) and replying (M10-06). The dashboard walk-through per platform, connecting an account, App Review and the rest of the pricing are written with the deliverables that build them and gathered here by M10-11.
 
 An install has **one Meta developer app**. A Meta app has one callback URL and one signing secret, so every connected WhatsApp number, Facebook Page and Instagram account of every brand posts to the same route, and Helpdock finds the brand from the account the message names.
 
@@ -74,6 +74,66 @@ Meta treats anything other than `200` as the webhook being down: WhatsApp redeli
 ## Inbound services
 
 Each platform's events go to its inbound service: WhatsApp (M10-03), Messenger (M10-04), Instagram (M10-05). Until a platform's is installed, the webhook logs that an event arrived (platform and kind only, never the customer or the words) and files nothing.
+
+## Replying
+
+An agent's public reply on a WhatsApp, Messenger or Instagram ticket is delivered to the customer on the same platform (M10-06, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md), 7 and 8). It goes through the outbox like every message to a customer ([DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transactional-outbox)): the reply, its `meta_deliveries` row and a `meta.reply` outbox row commit together, and the worker's `meta.send` job sends it. The request never calls Graph.
+
+**The reply window comes first.** Meta lets a business write only for a time after the customer's last message, and Helpdock refuses a reply outside it when it is composed and again when the job runs. The rules, the `409 reply-window-closed` answer and the routes the ticket view reads are in the [tickets guide](tickets.md#reply-windows).
+
+### What is sent
+
+A reply is **parts**: its text cut at the platform's limit, then each attachment as a message of its own. Every accepted part is recorded at once, so a retry starts after the last one that landed and the customer never reads a part twice.
+
+| | WhatsApp | Messenger | Instagram |
+|---|---|---|---|
+| Text per message | 4096 characters | 2000 characters | 1000 **bytes** (about 500 Arabic letters) |
+| Sent to | the customer's number when Meta sent one, else their business-scoped user id (`recipient`) | the page-scoped id | the Instagram-scoped id |
+| Endpoint | `POST /{phone-number-id}/messages` | `POST /{page-id}/messages` | `POST /{instagram-id}/messages` on `graph.instagram.com` |
+| A file | uploaded to `/{phone-number-id}/media`, then sent by its id; the file name is the caption of an image or a video and the `filename` of a document | a five-minute presigned link, `is_reusable: false` | a five-minute presigned link |
+| Pacing | one message per six seconds to one customer | none | none |
+
+Text is plain: nothing an agent typed can be read as markup. The message of a Messenger or Instagram reply carries the delivery's id as `metadata`, so the echo of Helpdock's own send can be told from a message typed in the Page inbox.
+
+**Files.** What is sent is what the media pipeline made of the upload: an image's kept original or its WebP, a voice note's Opus, a file's original. The limits are Meta's, and the types are the worse case its pages allow:
+
+| | WhatsApp | Messenger | Instagram |
+|---|---|---|---|
+| Image | JPEG, PNG, 5 MiB | any, 25 MiB | JPEG, PNG, 8 MiB |
+| Audio | AAC, AMR, MP3, M4A, Ogg Opus, 16 MiB | any, 25 MiB | AAC, M4A, WAV, 25 MiB |
+| Video | MP4, 3GP, 16 MiB | any, 25 MiB | MP4, Ogg, AVI, MOV, WebM, 25 MiB |
+| Any other file | a document, 100 MiB | 25 MiB | **PDF only**, 25 MiB |
+
+A file that is not a native type of its kind, or is over its limit, goes as a document where the platform takes documents: the WebP of an image on WhatsApp, a 6 MiB JPEG, an MP4 over 16 MiB. Where it cannot go at all, it is **left out and the customer is told** in their language, in its place: "One file could not be sent here: warranty-terms.docx. Instagram only takes PDF files, so we will send it another way." The agent reads which file and why under the reply (`leftOut` in the delivery). A file the media pipeline refused is left out without a word, because the composer showed that when it was added.
+
+An image is the pipeline's WebP unless the brand keeps originals (`keepOriginals` in the [content policy](attachments.md#the-content-policy), off by default), and Instagram takes no WebP: on a brand that does not keep originals, an image sent on Instagram is left out. Turn `keepOriginals` on for a brand that answers on Instagram.
+
+**Messenger and Instagram fetch a file from a link.** The presigned link points at the bucket (`S3_ENDPOINT`), and Meta's servers must be able to reach that host. A bucket reachable only inside your network (MinIO at `http://minio:9000`) works for everything but files on these two platforms: use a public endpoint, or a reverse proxy in front of the bucket. WhatsApp is not affected: Helpdock uploads the bytes itself.
+
+### Pacing
+
+WhatsApp refuses more than one message every six seconds to one user (`131056`). A reply of three parts to one customer therefore takes about twelve seconds, and two replies to the same customer are spaced the same way. The job holds a Redis key per account and customer (`meta.pace:<account>:<customer>`, six seconds from the end of the last send); a part that finds it held moves its own job to **delayed** for the remainder and ends with BullMQ's `DelayedError`, which spends no attempt and frees the worker. Messenger and Instagram are not paced.
+
+### WhatsApp replies cost money
+
+Meta charges per delivered service message since 2026-10-01 ([open questions](../in-development/M10-meta-channels.md#open-questions)). A reply cut into parts, and every attachment, is one delivered message each. The delivery's `partsTotal` is that count, and the composer will say it before Send (M10-08).
+
+### What a refusal does
+
+What Graph answers decides what the job does (`meta.send`: five attempts, exponential from ten seconds):
+
+| Graph said | The delivery | The account |
+|---|---|---|
+| A fault of Graph or the network (`1`, `2`, `131000`, `131016`, HTTP 5xx) | tried again; **failed** after the fifth | `last_error` |
+| A rate limit (`4`, `17`, `32`, `613`, `130429`, `131056`, `80007`, `131057`) | tried again, and for `131056` the customer's slot is held first | `last_error` |
+| The window is closed (`131047`, or `10` with sub-code `2018278`) | **refused**, never retried | nothing |
+| A refusal that retrying cannot change (`551`, `100`, `131026`, `131049` to `131053`, `132000` to `132016`) | **failed** at once | `last_error` |
+| A dead token (`190`, `102`, `463`, `467`, `0`) | **failed** at once | `status = token_expired`, `last_error`: an Admin pastes a new token |
+| A missing permission (`3`, `10`, `200` to `299`) or a restricted account (`368`, `131031`, `133010`, `131042`, `130497`) | **failed** at once | `last_error` |
+
+Retry puts a **failed** delivery back and sends only the parts that are left. The token never appears in `last_error`, in a log or in a response.
+
+Until M10-09, a person's reply in the extended Human Agent days goes out as an ordinary response, which Meta refuses with the closed-window error; the delivery ends `refused` with Meta's words.
 
 ## Developing without Meta
 

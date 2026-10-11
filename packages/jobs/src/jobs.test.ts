@@ -31,6 +31,8 @@ import {
   knowledgeSyncSchedulerId,
   META_HEALTH_CRON,
   META_HEALTH_SCHEDULE_CRON,
+  META_SEND_JOB_ATTEMPTS,
+  type MetaSendPayload,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -38,6 +40,8 @@ import {
   metaHealthReceiptKey,
   metaHealthScheduleJob,
   metaHealthSchedulerId,
+  metaSendJob,
+  metaSendPayloadSchema,
   notifyEmailJob,
   notifyPushJob,
   OUTBOX_RELAY_INTERVAL_MS,
@@ -688,5 +692,37 @@ describe('the Meta account health check (M10-10)', () => {
     expect(metaHealthScheduleJob.schedule).toEqual({ cron: META_HEALTH_SCHEDULE_CRON });
     expect(META_HEALTH_SCHEDULE_CRON).not.toBe(META_HEALTH_CRON);
     expect(parseJobPayload(metaHealthScheduleJob, {})).toEqual({});
+  });
+});
+
+describe('the Meta send job (M10-06)', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000ee';
+
+  it('keys a send by its delivery, whatever the job id', () => {
+    const payload: MetaSendPayload = { kind: 'reply', brandId, deliveryId };
+
+    expect(idempotencyKeyFor(metaSendJob, payload, 'any')).toBe(`meta.send:${deliveryId}`);
+  });
+
+  it('sends on the outbound queue, five attempts from ten seconds', () => {
+    expect(metaSendJob.queue).toBe('outbound');
+    expect(metaSendJob.options.attempts).toBe(META_SEND_JOB_ATTEMPTS);
+    expect(META_SEND_JOB_ATTEMPTS).toBe(5);
+    expect(metaSendJob.options.backoff).toEqual({ type: 'exponential', delay: 10_000 });
+  });
+
+  it('knows a reply and a template, and nothing else', () => {
+    expect(metaSendPayloadSchema.safeParse({ kind: 'reply', brandId, deliveryId }).success).toBe(
+      true,
+    );
+    expect(metaSendPayloadSchema.safeParse({ kind: 'template', brandId, deliveryId }).success).toBe(
+      true,
+    );
+    expect(() => parseJobPayload(metaSendJob, { kind: 'notice', brandId, deliveryId })).toThrow(
+      PayloadValidationError,
+    );
+    expect(() => parseJobPayload(metaSendJob, { kind: 'reply', brandId })).toThrow(
+      PayloadValidationError,
+    );
   });
 });

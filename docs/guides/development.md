@@ -837,7 +837,13 @@ await graph.start();
 //   META_GRAPH_API_ROOT=<graph.facebookRoot>
 //   META_INSTAGRAM_API_ROOT=<graph.instagramRoot>
 //   OUTBOUND_ALLOW_CIDRS=127.0.0.0/8
-graph.connect({ platform: 'whatsapp', id: '106540352242922', name: 'Acme', token: 'EAAG…' });
+graph.connect({
+  platform: 'whatsapp',
+  id: '106540352242922',     // the phone number id
+  wabaId: '102290129340398', // required: the business account the number belongs to
+  name: 'Acme',
+  token: 'EAAG…',
+});
 
 // Meta posts: signed with the test app's secret, through the Nest app's `inject`.
 const meta = new MetaWebhookDriver({ target: app, secret: 'the-test-app-secret' });
@@ -858,6 +864,23 @@ characters, 1000 bytes), so a splitter that cuts wrongly fails a test and not a
 customer. The driver's `post(body, { secret, header, tamper })` sends a wrong
 signature, none, or a body changed after it was signed, and `handshake` makes
 the callback-URL request.
+
+WhatsApp is shaped as Meta shapes it: a number belongs to a business account.
+`connect` throws for a WhatsApp number without its `wabaId`, and the token opens
+the business account as well as the number. The webhook subscription lives on
+the business account, `GET|POST|DELETE /{waba}/subscribed_apps`, shared by every
+number under it; the same path on a number's own id answers Graph's
+"Unsupported get request" (HTTP 400, code 100). In a test,
+`graph.subscribe(wabaId)`, `graph.dropSubscription(wabaId)` and
+`graph.subscriptionOf(wabaId)` take the business account's id for WhatsApp and
+the Page's or Instagram account's own id for the others, and say which id to use
+when given a number's. Two reads help a connect flow find the business account
+from a number: `GET /debug_token?input_token=…` answers a WhatsApp token's
+`data.granular_scopes` (`whatsapp_business_management` and
+`whatsapp_business_messaging`, each with the business account ids in
+`target_ids`), and `GET /{waba}/phone_numbers` lists the numbers under one with
+their `display_phone_number`, `verified_name` and, when the test sets
+`qualityRating`, `quality_rating`.
 
 ## CI
 

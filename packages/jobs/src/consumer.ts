@@ -39,6 +39,13 @@ export interface JobContext<TPayload> {
   /** The brand's transaction. Everything the handler writes commits with the receipt. */
   readonly tx: DbTransaction;
   readonly job: Job;
+  /**
+   * The lock token BullMQ handed the processor with this job. A handler that
+   * moves its own job to delayed (`job.moveToDelayed(at, token)`, then throws
+   * `DelayedError`) needs it to prove it still holds the lock; absent when the
+   * processor was called without one, as the unit suites do.
+   */
+  readonly token?: string | undefined;
   readonly log: JobLogger;
 }
 
@@ -77,6 +84,12 @@ const rethrowAsUnrecoverable = (error: unknown): never => {
  * so a queue that carries several consumed job names needs a processor that
  * dispatches on `job.name`; a job of the wrong name here fails unrecoverably
  * rather than being handled by the wrong code.
+ *
+ * `token` is the second argument BullMQ's worker passes its processor. It is
+ * only forwarded to the handler: a handler that throws `DelayedError` after
+ * `job.moveToDelayed(…, token)` rolls the transaction back, receipt included,
+ * and BullMQ runs the job again at the new time without spending an attempt
+ * (`meta.send` waits out WhatsApp's six-second pair limit this way).
  */
 export const createJobProcessor =
   <TName extends string, TPayload extends BrandScopedPayload>(
@@ -84,7 +97,7 @@ export const createJobProcessor =
     handler: JobHandler<TPayload>,
     { db, log = silentLogger }: { readonly db: Db; readonly log?: JobLogger | undefined },
   ) =>
-  async (job: Job): Promise<void> => {
+  async (job: Job, token?: string): Promise<void> => {
     if (job.name !== definition.name) {
       throw new UnrecoverableError(
         `Queue ${definition.queue} received job ${job.name}, but this worker only handles ${definition.name}.`,
@@ -117,7 +130,7 @@ export const createJobProcessor =
         return;
       }
 
-      await handler({ payload, brandId: payload.brandId, tx, job, log });
+      await handler({ payload, brandId: payload.brandId, tx, job, token, log });
     });
   };
 
@@ -136,7 +149,8 @@ export const createWorker = <TName extends string, TPayload extends BrandScopedP
     definition.queue,
     serialize === undefined
       ? processJob
-      : (job: Job) => serializer.run(serialize(job.data), () => processJob(job)),
+      : (job: Job, token?: string) =>
+          serializer.run(serialize(job.data), () => processJob(job, token)),
     {
       connection: redis,
       ...(concurrency === undefined ? {} : { concurrency }),

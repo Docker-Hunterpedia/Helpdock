@@ -52,7 +52,7 @@ Definition of done asks for.
 | M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | planned |
 | M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | planned |
 | M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | planned |
-| M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | planned |
+| M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | built, awaiting review: [notes](#m10-06-replies-the-window-metasend-deliveries-and-pacing) |
 | M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | admin side built, API next: [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
 | M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | planned |
 | M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; `HUMAN_AGENT` on a person's reply at day 3 and never on an AI or rule reply; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10** | 4 d | | later |
@@ -418,6 +418,118 @@ The api side of the deliverable: `meta-accounts.service.ts`, `meta-accounts.cont
 `graph-factory.ts`, the `channel-status` rows, the integration suite, and
 `apps/admin/e2e/api/meta.api.spec.ts` with its own stand-in. They wait for `MetaModule`,
 `meta.repository.ts` and `meta-app.service.ts` of M10-02.
+
+## M10-06 Replies, the window, `meta.send`, deliveries and pacing
+
+Artboards: `Admin/Ticket-Meta` (the reads behind it; the screens are M10-08's) and `Meta/Chat-EN`,
+`Meta/Chat-AR` (what the customer receives). The guide is [Replying](../guides/meta-channels.md#replying)
+and [Reply windows](../guides/tickets.md#reply-windows).
+
+| File | What it holds |
+|---|---|
+| `tickets/reply-delivery.hook.ts` | `assertCanDeliver(tx, { brandId, ticket, personAuthored })` on `ReplyDeliveryHook` (default: allow) and on `ChannelReplyDeliveryHooks` (each hook in turn); `personAuthored` on `StaffPublicReplyEvent` |
+| `tickets/tickets.service.ts` | `addMessage` asks `assertCanDeliver` for a staff public reply **before** `nextSeq`, so a refusal takes no lock and writes nothing; its `onStaffPublicReply` says `personAuthored: true` |
+| `meta/meta-window.ts` | a re-export of `replyWindow` and `replyWindowView` from `@helpdock/channels`, and `conversationWindow` (a conversation row and an account row to the function's input), `windowClosedCode`, `closedWindowDetails`. There is no second window function |
+| `meta/meta-reply.hook.ts`, `meta/outbound-meta.service.ts` | `MetaReplyHook` (wired in `tickets.module.ts` and `ai/auto-reply/auto-reply-deps.ts`); `OutboundMetaService` (`targetFor`, `queueReply`, `retry`) |
+| `meta/meta-attachments.ts` | `planOutgoingFile(row, platform)`: `wait`, `skip` with a reason, or `send { method, variant, size, mime }`; `readOutgoingBytes` |
+| `meta/meta-pacing.ts` | `withRecipientPace`, `RecipientPaceHeld`, `holdRecipientPace`, `paceKey` |
+| `meta/meta-send.job.ts` | `createMetaSendHandler`, `createMetaSendProcessor`, `recordSendFailure`, the errors the handler throws |
+| `meta/meta-text.ts` | `fileLeftOutText`: the line a customer gets in place of a file the platform will not take (`meta` catalog, `en` and `ar`) |
+| `meta/meta-deliveries.service.ts`, `meta/meta-view.ts`, `meta/ticket-meta.controller.ts`, `meta/dto.ts` | `list`, `ticketContext`, `retry`; the delivery and context views; the three ticket-half routes |
+| `packages/jobs` | `metaSendJob`, `metaSendPayloadSchema` (`kind: 'reply' \| 'template'`); `JobContext.token` |
+| `worker/start-worker.ts` | the `meta.send` processor on the `outbound` worker; the one `registerMetaEventHandlers` call, with the send queue only |
+| `csat/csat-delivery.ts` | `whatsapp`, `messenger` and `instagram` are `unreachable` |
+
+**Routes** (`ticket-meta.controller.ts`): `GET /api/brands/:brandId/tickets/:ticketId/meta` and
+`GET …/meta/deliveries` (`ticket:read`), `POST …/meta/deliveries/:deliveryId/retry` (`ticket:write`, `204`;
+`409 reply-window-closed` for a `refused` delivery). **For M10-08**: `MetaTicketContextResponse`
+(`{ context: MetaTicketContext | null, deliveries: MetaDeliveryView[] }`), `MetaDeliveryView` (now with
+`partsTotal` and `leftOut`), `ReplyWindowView`, `MetaLeftOut` and `MetaRefusalDetails` from `@helpdock/schemas`;
+the refusal is `error.meta` of the 409 body.
+
+Decisions taken inside the plan, each with its reason where it is made:
+
+- **Pacing goes through `moveToDelayed`, not an in-process wait.** `JobContext` carries the lock token BullMQ
+  gives its processor (`createJobProcessor` and `createWorker` forward it; optional, so no existing handler
+  changes), a held slot calls `job.moveToDelayed(Date.now() + remaining, token)` and throws `DelayedError`.
+  `packages/jobs/src/consumer.integration.test.ts` proves it against a real BullMQ: started twice, one attempt
+  spent, the first run's write and receipt rolled back. The preferred route of the brief therefore stands, no
+  ADR amendment is needed for it, and `meta-replies.integration.test.ts` runs a real worker through six real
+  seconds. The key is claimed with `SET NX PX 6000` before a part and set again for a whole pace after it, because
+  Meta counts the gap between messages it received; a part that fails leaves the claim as made, and `131056` sets it.
+- **The window is read again only before the first part** (`parts_sent = 0`). A window that closes between two parts
+  of a reply is Meta's to refuse (the job maps it to `refused` all the same); a clock is not allowed to turn a
+  half-sent reply into a refused one. `personAuthored` there is the message's author being staff.
+- **`StaffPublicReplyEvent.personAuthored`** (optional, additive) is how `onStaffPublicReply` knows which window to
+  ask about: `addMessage` says `true`, the assistant's `auto-reply.job.ts` says nothing and gets the 24 hours. A
+  message that arrives there with the window closed is written `refused` with the platform's code and **no outbox
+  row**: the message stands, the thread shows why. The same happens to a person's reply the clock moved past the
+  window between `assertCanDeliver` and the write.
+- **`assertCanDeliver` runs before the `clientId` lookup**, as the brief orders it. A retried send of a reply that
+  was stored just before the window closed therefore gets the `409` rather than the stored message. The composer
+  already disables Send first, so this is the race of a race, and moving the check inside the lock would give up
+  the "takes no lock" property.
+- **WhatsApp is written to by number when Meta sent one** (`to: wa_id`), else by the business-scoped user id
+  (`recipient`, July 2026). Meta says the phone takes precedence when both are given, so sending both would
+  only hide which one the account relies on.
+- **File types are the worse case Meta's pages allow** (`meta-attachments.ts`). WhatsApp takes JPEG and PNG as an
+  image, MP4 and 3GP as a video and five audio types; Instagram JPEG and PNG, its video and audio lists and PDF as the
+  only file; Messenger names no list. A file that is not a native type of its kind, or is over its limit, goes as a
+  **document** where the platform takes documents. This matters because the pipeline's output for an image is a WebP
+  and for a voice note an Opus unless the brand keeps originals (off by default): without the fallback every image
+  would fail on WhatsApp. Instagram has no document fallback (PDF only) and takes no WebP, so on a brand that keeps no
+  originals an image sent on Instagram is left out. That is a gap accepted here, not a decision: it is the worse case
+  of an unconfirmed fact (Meta lists JPEG and PNG for Instagram images and says nothing of WebP), and a run against the
+  staging accounts settles it.
+- **A file left out is not silent.** `DESIGN.md` MetaMessages says the customer gets "One file could not be sent
+  here: warranty-terms.docx. Instagram only takes PDF files, so we will send it another way." in its place, and the
+  thread tells the agent. The brief named one key, `meta:reply.fileLeftOut`; three exist, because that sentence is
+  only true of a file on Instagram: `fileLeftOut` (a file on a platform that takes PDF only), `fileUnsupported` (a
+  type the platform does not list) and `fileTooLarge`. The name is wrapped in Unicode isolates, which is what `<bdi>`
+  stands for in plain text. The language is the contact's, else the brand's. A file the **pipeline** refused is left
+  out without a notice: the composer showed that when it was added.
+- **`leftOut` and `partsTotal` on the delivery view**, and `displayPhone` on the context's account, are additive to
+  the M10-01 schemas. M10-08 draws "warranty-terms.docx left out", "Sending · part 2 of 3" and "WhatsApp · +1 555 0142"
+  from them, and none can be derived on the client: `leftOut` is the planner's answer, which the client must not
+  re-implement.
+- **No "First name · Brand" line.** `MetaMessages` says a reply's first message starts with it; the composer's caption
+  on the same artboards says "Plain text, no signature", and Telegram's identical note was never built. The reply is
+  the agent's text, as Telegram's is. If the line is wanted, it is one prefix in `meta-send.job.ts`, counted against
+  the first part's limit. To be settled with the owner.
+- **The Human Agent tag is M10-09's.** A person's reply in the extended days is composed and queued, goes out as
+  `RESPONSE`, and Meta refuses it with the closed-window error, so the delivery ends `refused` with Meta's code.
+  `MESSAGE_TAG` with `HUMAN_AGENT` is two lines in `messagingCourier`, with the delivery's `tag`, the day-3 case and
+  the proof it is never sent for an AI or rule reply.
+- **Failure is recorded outside the job's transaction**, as `telegram.send` does (`createMetaSendProcessor`): a throw
+  rolls the transaction back, and the failure has to survive it. `refused` is recorded the same way. `token_dead` also
+  sets the account `token_expired` (no `meta_account.changed` event: the health job needs none for a flip it caused).
+  A delay is not a failure and records nothing.
+- **The ticket context is null for a ticket whose channel is not a Meta platform**, even when its contact has a Meta
+  conversation: `conversationForTicket` falls back to the contact's latest conversation for a ticket filed by hand, and
+  a reply on such a ticket goes by the ticket's own channel (email), so the view must not draw a WhatsApp strip on it.
+- **The `meta` i18n namespace is created here** with `reply.*`; M10-03 adds `thread.*` (the location label and the
+  rest) to the same files.
+- **The presigned link comes from `ObjectStorage.presignDownload`** (`media/storage.ts`, five minutes): the brief
+  named `media/link.ts`, which links attachments to messages and signs nothing.
+- **`meta-events.ts`** drops its local `MetaSendJobPayload` for `@helpdock/jobs`'s `MetaSendPayload`;
+  `WorkerEnv` gains the three `META_*` keys the Graph client reads.
+
+Tests. Unit: the window adapter, `OutboundMetaService`, `MetaReplyHook`, `ChannelReplyDeliveryHooks`, the attachment
+planner for every platform and type, the pacing against a fake Redis and clock, the failure table of `recordSendFailure`,
+the customer's notice in both languages, the views, the `meta.send` job definition, the jobs schema additions, the CSAT
+`unreachable` answers. Integration (`meta-replies.integration.test.ts`, Testcontainers, `FakeGraph`, `MetaWebhookDriver`):
+the exit criterion on each platform (the stand-in receives `/messages` once when the job runs twice; the reports move the
+delivery to `delivered` and `read`), two files on WhatsApp as three messages with `parts_sent` resuming after a failure on
+the third, a 1000-byte Arabic reply on Instagram split at a letter, a reply at 24 h 01 m refused at compose time with no
+row, one queued at 23 h 59 m and refused by the job at 24 h 01 m, the assistant's message past the window refused with no
+job, two replies to one customer six seconds apart through a real BullMQ worker, `551` failing at once, `190` marking
+`token_expired`, `131056` retrying, Retry refused for a `refused` delivery, a file Instagram will not take, the ticket
+routes' shapes and scope. `tickets.integration.test.ts` gains the compose-time refusal on a real Meta ticket. The reports
+in the replies suite are applied by a double standing in for M10-03 to M10-05's inbound services.
+
+Not in this deliverable, by design: the thread's screens (M10-08), templates and the Human Agent tag (M10-09), the
+inbound `statuses[]`, watermarks and `messaging_seen` handling (M10-03 to M10-05; the repository's `advanceStatus` and
+`advanceByWatermark` they call are M10-02's), and the guide's walk-through of the Meta dashboard (M10-11).
 
 ## M10-10 Health jobs
 

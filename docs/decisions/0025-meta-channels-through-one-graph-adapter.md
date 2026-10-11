@@ -260,3 +260,8 @@ stand-in for the vendor in every test (`apps/api/src/testing/fake-telegram.ts`).
   unsubscribes the app for every brand. The webhook therefore answers 200, passes the brand's
   entries over and counts them. §11 now says so; a brand's own endpoints (widget, help center, its
   Telegram bot's URL) still answer 410.
+- **2026-10-11, M10-06.** Decision 8's `assertCanDeliver(tx, { ticket })` is `assertCanDeliver(tx, { brandId,
+  ticket, personAuthored })`, because the window a reply gets depends on who wrote it. A message that reaches the
+  hook only after it is written (the assistant's) and finds the window closed is recorded as a `refused`
+  delivery with no outbox row, so it stands in the thread without a job. Decision 7's pacing is built as written:
+  `moveToDelayed` and `DelayedError`, with no in-process wait to amend.

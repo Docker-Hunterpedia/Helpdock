@@ -995,6 +995,100 @@ its denormalised `department_id`: the first is a channel's threading handle, the
 second is cost accounting, and the ticket already says which department it is
 in. M8 decides separately what the public API exposes.
 
+### Reply windows
+
+WhatsApp, Messenger and Instagram let a business write to a customer only for a
+time after the customer's last message (M10-06,
+[DOMAIN-RULES §2.6](../planning/DOMAIN-RULES.md#26-reply-windows-on-the-meta-channels),
+[ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)). Helpdock
+enforces the window itself, so a reply that cannot leave is never written as if
+it could.
+
+| Platform | The window | For a person's reply |
+|---|---|---|
+| WhatsApp | 24 hours from the customer's last message | The same: free text cannot extend it |
+| Messenger | 24 hours | 7 days, when the account's **Human Agent** switch is on |
+| Instagram | 24 hours | 7 days, as Messenger |
+
+The anchor is the time of the customer's last message on that conversation
+(`meta_conversations.last_inbound_at`). A delivery or read report, a reaction or
+an echo does not move it. It closes at its instant: a reply at 23 h 59 m goes out,
+one at 24 h 00 m does not. The 7 days belong to a person: the assistant's message,
+a rule's canned reply and the survey get the 24 hours whatever the switch says.
+(Until M10-09, a reply written in the extended days is sent without Meta's
+`HUMAN_AGENT` tag and Meta refuses it; the delivery ends `refused` with Meta's
+words.)
+
+**At compose time.** A public reply on a Meta ticket whose window is closed is
+refused with `409` and writes nothing: no message, no delivery, no outbox row, no
+sequence number. An internal note is never refused.
+
+```json
+{
+  "error": {
+    "code": "conflict",
+    "message": "The customer's reply window is closed",
+    "meta": {
+      "reason": "reply-window-closed",
+      "details": {
+        "platform": "whatsapp",
+        "anchorAt": "2026-10-10T08:00:00.000Z",
+        "closedAt": "2026-10-11T08:00:00.000Z"
+      }
+    }
+  }
+}
+```
+
+`anchorAt` and `closedAt` are null for a customer who never wrote. The ticket view
+reads the window first (below) and disables Send, so this refusal is for the race.
+
+**When the job runs.** `meta.send` asks again before its first part, because the
+window can close while the job waits. A reply that is past it is recorded
+**`refused`** with the platform's code (`131047` on WhatsApp, `10/2018278` on
+Messenger and Instagram) and is never retried. The same happens when Meta itself
+says the window is closed. A message that nothing asked first, as the assistant's
+never is, and that finds the window closed is written `refused` with no job at all:
+the message stays in the thread, and the delivery says why it did not go.
+
+**Reading it.**
+
+```http
+GET  /api/brands/:brandId/tickets/:ticketId/meta                          ticket:read
+GET  /api/brands/:brandId/tickets/:ticketId/meta/deliveries               ticket:read
+POST /api/brands/:brandId/tickets/:ticketId/meta/deliveries/:id/retry     ticket:write
+```
+
+The first answers `{ context, deliveries }`. `context` is null for a ticket that is
+not on a Meta channel or has no conversation. Otherwise it names the account
+(`id`, `platform`, `externalId`, `displayName`, and `username` or `displayPhone`
+when there is one), the customer (`customerId`, `phone` and `phoneVerified` for a
+WhatsApp number Meta sent, `profileName`, `username`) and the **window for a
+person writing now**: `{ state: "open", closesAt }`, `{ state: "human_agent",
+closesAt }` or `{ state: "closed", closedAt }`. Each delivery carries `status`
+(`queued`, `sent`, `delivered`, `read`, `failed`, `refused`), `partsSent` of
+`partsTotal` (the text in the platform's parts, then one message per attachment),
+`attempts`, Meta's `lastError` and `errorCode`, the four times, and `leftOut`: the
+files the platform would not take, each with its name and `unsupported-type` or
+`too-large`. The customer was told in their language; the agent reads it under the
+reply. A delivery moves forward only, and the platform's own reports (`delivered`,
+`read`) arrive by webhook.
+
+**Retry** puts a `failed` delivery back, keeping the parts already sent as sent. A
+`refused` one answers `409` with the same `reply-window-closed`, and its details
+when the window is closed still: the customer has to write first, and the agent
+writes a new reply. A delivery that is queued or sent is left alone.
+
+**How a reply leaves.** The text is cut at 4096 characters (WhatsApp), 2000
+(Messenger) or 1000 bytes (Instagram, about 500 Arabic letters), at a paragraph, a
+line or a space, never inside a letter. Each attachment follows as a message of its
+own. WhatsApp takes one message per six seconds to one user, so the parts of a
+reply, and two replies to one customer, go six seconds apart: a part that finds the
+customer's slot taken moves its job to delayed for the remainder, which spends no
+attempt. Messenger and Instagram are not paced. The [Meta channels
+guide](meta-channels.md#replying) has the file limits, the pricing note and what
+Meta must be able to reach.
+
 ### Catching up
 
 ```http
@@ -1521,6 +1615,7 @@ the same transaction, on the ticket's channel (`apps/api/src/csat/csat-delivery.
 |---|---|---|
 | The widget (`chat`) | A card in the conversation (`Widget/CSAT-EN`): five scores, an optional comment of up to 1000 characters, **Skip** and **Send rating**. It replaces the composer until answered or skipped, and is pushed as a `csat` socket event and read over REST (see the [widget protocol](widget-protocol.md#satisfaction-card)) | when the card is offered |
 | Telegram | The question with five buttons, 1 to 5, and **Add a comment**, which opens the rating page (`Telegram/Chat-EN`, panel 5). A tap records the score at once | when Telegram accepts the message |
+| WhatsApp, Messenger, Instagram | Nothing (M10): those contacts have no address, and the survey after a close is usually outside the reply window. It needs a WhatsApp template or Messenger's `customer_feedback` template (M10-09 or later). The survey stays `pending` and the agent can still share the link | never |
 | Email, the web form, the api or a ticket filed by hand | A survey email (`Email/CSAT-EN-AR`) to the contact alone, no CCs, from the department's sender, in the contact's language or the brand's | when the relay accepts the email |
 
 Email and Telegram go through the outbox like every message to a customer: an
@@ -1638,6 +1733,7 @@ halves joined by a dot.
 | M1-11 | Shipped in branch. `is_spam` on the Spam status, `POST`/`DELETE …/spam`, `ticket.spam`, the sender block list and its inbound gate ([Spam](#spam)) |
 | M1-12 | Shipped. Time tracking and satisfaction surveys ([above](#time-tracking)) |
 | M8-06 | Built in branch. The survey sent on close by email, in the widget and on Telegram, and `csat.received` on every answer ([above](#satisfaction-surveys)) |
+| M10-06 | Built in branch. Replies to WhatsApp, Messenger and Instagram, the reply window refused at compose time and again by the job, and the ticket's `…/meta` routes ([above](#reply-windows)) |
 | M1-15 | The rest of the admin UI, as each deliverable above lands — including the tag picker and the custom field editors in the details panel |
 | M2 | Inbound and outbound email on the same `ticket_messages`, keyed by `external_message_id` |
 | M3 | Macros, which set a status, a priority, an assignee **and tags** in one action, and rules whose conditions read custom field keys |

@@ -491,7 +491,9 @@ panel's `liveError` says the same, and a disconnect skips the unsubscribe. Repla
 **Saving** keeps `human_agent_enabled` false on WhatsApp whatever is sent. A new token must open the
 same account (`token-other-account` otherwise), brings the account back to `connected`, clears the last
 error and subscribes the app again (and, for WhatsApp, finds the business account again).
-**Disconnecting** sends `DELETE /{node}/subscribed_apps` and ignores
+**Disconnecting** sends `DELETE /{node}/subscribed_apps` (for a WhatsApp number only when no other
+number is connected on the same business account, in any brand, because Meta subscribes the app to the
+business account as a whole) and ignores
 its failure, so a revoked token does not keep an account the Admin is removing; conversations and
 deliveries go with the row, tickets and contacts stay.
 

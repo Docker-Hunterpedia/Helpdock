@@ -309,7 +309,7 @@ export class MetaAccountsService {
   async remove(context: TicketingContext, id: string): Promise<void> {
     const { account } = await this.#require(context.tx, id);
     const node = subscriptionNodeOf(account.platform, account.externalId, account.wabaId);
-    if (node !== null) {
+    if (node !== null && !(await this.#othersUseSubscription(account))) {
       await graphForAccount(account, this.#keyring, this.#graph)
         .delete(`/${node}/subscribed_apps`)
         .catch(() => undefined);
@@ -322,6 +322,19 @@ export class MetaAccountsService {
       platform: removed.platform,
       externalId: removed.externalId,
     });
+  }
+
+  /**
+   * Meta subscribes an app to a WhatsApp business account as a whole, so
+   * unsubscribing it would silence every other number on that account, in this
+   * brand or another. The app stays subscribed while one of them is connected.
+   */
+  async #othersUseSubscription(account: MetaAccountRow): Promise<boolean> {
+    return (
+      account.platform === 'whatsapp' &&
+      account.wabaId !== null &&
+      this.#repository.sharesBusinessAccount(this.#db, account.wabaId, account.id)
+    );
   }
 
   /** "Test connection": reads the account with the stored token. Writes nothing. */

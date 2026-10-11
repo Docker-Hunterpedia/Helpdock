@@ -70,6 +70,19 @@ describe('MetaAppService.secrets', () => {
   });
 });
 
+describe('MetaAppService.appId', () => {
+  it('is empty on a fresh install and follows what is saved or set by the environment', async () => {
+    expect(await serviceWith().service.appId()).toBe('');
+    expect(await serviceWith({ HD_META_APP_ID: '1234567890123456' }).service.appId()).toBe(
+      '1234567890123456',
+    );
+
+    const { settings, service } = serviceWith();
+    await settings.set('meta.appId', '6543210987654321', { updatedBy: ACTOR_ID });
+    expect(await service.appId()).toBe('6543210987654321');
+  });
+});
+
 describe('MetaAppService verify token', () => {
   it('is empty until someone makes one, and reading it for the handshake never writes it', async () => {
     const { settings, service } = serviceWith();

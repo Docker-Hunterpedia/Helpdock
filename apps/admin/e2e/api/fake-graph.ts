@@ -7,17 +7,23 @@ import { createServer, type Server } from 'node:http';
  * roots, `/facebook` and `/instagram`, as the api's own suites' stand-in does.
  *
  * It answers only what the screens ask: who a token and an id are (Test and
- * Connect), whether the token is valid (`debug_token`), and the app's
- * subscription to an account (`subscribed_apps`). A token it does not know is
- * refused with Meta's 190, a token is good on the root of its own product only,
- * and the subscriptions are remembered so a spec can read them back.
+ * Connect), whether the token is valid and what it was granted on
+ * (`debug_token`), a business account's numbers (`/{waba}/phone_numbers`), and
+ * the app's subscription to an account (`subscribed_apps`). A token it does not
+ * know is refused with Meta's 190, a token is good on the root of its own
+ * product only, and the subscriptions are remembered so a spec can read them back.
+ *
+ * As on Meta, a WhatsApp number is subscribed on its business account: the
+ * number's own `subscribed_apps` is an unsupported edge, so a spec that passes
+ * proves the api went to the business account.
  *
  * A spec runs in another process, so what the stand-in remembers is read back
- * over HTTP: `GET /__subscriptions/<account id>` answers the fields the app is
- * subscribed to for it (`[]` when it is not).
+ * over HTTP: `GET /__subscriptions/<node id>` answers the fields the app is
+ * subscribed to on it (`[]` when it is not), the node being the business account
+ * for a number and the account itself for a Page or an Instagram account.
  *
  * Its own copy rather than `packages/channels`' `FakeGraph`: apps never import
- * each other (ARCHITECTURE §2), and this one answers six calls, not forty.
+ * each other (ARCHITECTURE §2), and this one answers a handful of calls, not forty.
  */
 
 /** Not 3096 (Telegram's) or 3097 (`widget-restart`'s api replica). */
@@ -32,6 +38,8 @@ export interface E2eAccount {
   readonly name: string;
   readonly username?: string;
   readonly displayPhone?: string;
+  /** WhatsApp: the business account that owns the number and holds its subscription. */
+  readonly wabaId?: string;
   readonly token: string;
 }
 
@@ -43,6 +51,7 @@ export const E2E_WHATSAPP: E2eAccount = {
   id: '109384715588204',
   name: 'E2E Support',
   displayPhone: E2E_WHATSAPP_PHONE,
+  wabaId: '103402219873345',
   token: 'EAAGe2eWhatsappSystemUserToken001',
 };
 export const E2E_MESSENGER: E2eAccount = {
@@ -63,7 +72,26 @@ export const E2E_REFUSED_META_TOKEN = 'EAAGe2eRevokedTokenForTheBrowserSuite';
 /** What the stand-in says to it, which the screen quotes. */
 export const E2E_REFUSED_META_DETAIL = 'Invalid OAuth access token - Cannot parse access token';
 
-const ACCOUNTS: readonly E2eAccount[] = [E2E_WHATSAPP, E2E_MESSENGER, E2E_INSTAGRAM];
+/**
+ * A system-user token that reads the number but was never assigned its business
+ * account, so `debug_token` names none: Meta would let the number be read and
+ * refuse to subscribe the app to it.
+ */
+export const E2E_UNASSIGNED_WHATSAPP_TOKEN = 'EAAGe2eUnassignedSystemUserToken01';
+const UNASSIGNED_WHATSAPP: E2eAccount = {
+  platform: 'whatsapp',
+  id: E2E_WHATSAPP.id,
+  name: E2E_WHATSAPP.name,
+  displayPhone: E2E_WHATSAPP_PHONE,
+  token: E2E_UNASSIGNED_WHATSAPP_TOKEN,
+};
+
+const ACCOUNTS: readonly E2eAccount[] = [
+  E2E_WHATSAPP,
+  UNASSIGNED_WHATSAPP,
+  E2E_MESSENGER,
+  E2E_INSTAGRAM,
+];
 
 const rootOf = (platform: E2eAccount['platform']): 'facebook' | 'instagram' =>
   platform === 'instagram' ? 'instagram' : 'facebook';
@@ -73,9 +101,12 @@ const failure = (status: number, code: number, message: string) => ({
   body: { error: { message, type: 'OAuthException', code, fbtrace_id: 'E2E' } },
 });
 
-/** Where a spec reads the app's subscription to an account back from. */
-export const subscriptionsUrl = (accountId: string): string =>
-  `${E2E_GRAPH_URL}/__subscriptions/${accountId}`;
+/**
+ * Where a spec reads the app's subscription back from: by the node Meta keeps it
+ * on, which is a WhatsApp number's business account and otherwise the account.
+ */
+export const subscriptionsUrl = (account: Pick<E2eAccount, 'id' | 'wabaId'>): string =>
+  `${E2E_GRAPH_URL}/__subscriptions/${account.wabaId ?? account.id}`;
 
 export interface FakeGraphServer {
   stop(): Promise<void>;
@@ -116,7 +147,20 @@ export const startFakeGraph = async (): Promise<FakeGraphServer> => {
     }
 
     if (second === undefined && first === 'debug_token') {
-      answer(200, { data: { is_valid: true, expires_at: 0, type: 'PAGE' } });
+      answer(200, {
+        data: {
+          is_valid: true,
+          expires_at: 0,
+          type: own.platform === 'whatsapp' ? 'SYSTEM_USER' : 'PAGE',
+          granular_scopes:
+            own.wabaId === undefined
+              ? []
+              : [
+                  { scope: 'whatsapp_business_management', target_ids: [own.wabaId] },
+                  { scope: 'whatsapp_business_messaging', target_ids: [own.wabaId] },
+                ],
+        },
+      });
       return;
     }
     if (second === undefined) {
@@ -136,21 +180,31 @@ export const startFakeGraph = async (): Promise<FakeGraphServer> => {
       });
       return;
     }
-    if (second === 'subscribed_apps' && first === own.id) {
+    if (second === 'phone_numbers' && first === own.wabaId && request.method === 'GET') {
+      answer(200, { data: [{ id: own.id, display_phone_number: own.displayPhone }], paging: {} });
+      return;
+    }
+    if (second === 'subscribed_apps' && first === (own.wabaId ?? own.id)) {
       if (request.method === 'POST') {
-        const fields = (url.searchParams.get('subscribed_fields') ?? '').split(',');
-        subscriptions.set(first, fields);
+        // WhatsApp subscribes the whole `messages` field and takes none by name.
+        const named = url.searchParams.get('subscribed_fields');
+        subscriptions.set(first, named === null ? ['messages'] : named.split(','));
         answer(200, { success: true });
       } else if (request.method === 'DELETE') {
         subscriptions.delete(first);
         answer(200, { success: true });
       } else {
         const fields = subscriptions.get(first);
+        const app = { id: '1290457718832406', name: 'Helpdock' };
         answer(200, {
           data:
             fields === undefined
               ? []
-              : [{ id: '1290457718832406', name: 'Helpdock', subscribed_fields: fields }],
+              : [
+                  own.platform === 'whatsapp'
+                    ? { whatsapp_business_api_data: app }
+                    : { ...app, subscribed_fields: fields },
+                ],
         });
       }
       return;

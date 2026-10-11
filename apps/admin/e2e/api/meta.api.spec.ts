@@ -6,8 +6,10 @@ import {
   E2E_MESSENGER,
   E2E_REFUSED_META_DETAIL,
   E2E_REFUSED_META_TOKEN,
+  E2E_UNASSIGNED_WHATSAPP_TOKEN,
   E2E_WHATSAPP,
   E2E_WHATSAPP_PHONE,
+  type E2eAccount,
   subscriptionsUrl,
 } from './fake-graph.js';
 import { E2E_WEB_ORIGIN, SKIP_ENV } from './install.js';
@@ -43,8 +45,8 @@ const openMeta = async (page: Page): Promise<void> => {
 
 const accountsTable = (page: Page) => page.getByRole('table', { name: t('channels:meta.heading') });
 
-const subscribedFields = async (accountId: string): Promise<string[]> => {
-  const response = await fetch(subscriptionsUrl(accountId));
+const subscribedFields = async (account: E2eAccount): Promise<string[]> => {
+  const response = await fetch(subscriptionsUrl(account));
   return ((await response.json()) as { fields: string[] }).fields;
 };
 
@@ -111,6 +113,12 @@ test.describe('Channels › Meta against the real api', () => {
     ).toBeVisible();
     await expect(connect).toBeDisabled();
 
+    // The token reads the number, but no business account it was granted on owns it.
+    await dialog.getByLabel(t('channels:meta.connect.token')).fill(E2E_UNASSIGNED_WHATSAPP_TOKEN);
+    await test.click();
+    await expect(dialog.getByText(t('channels:meta.refusal.token-other-account'))).toBeVisible();
+    await expect(connect).toBeDisabled();
+
     await dialog.getByLabel(t('channels:meta.connect.token')).fill(E2E_WHATSAPP.token);
     await test.click();
     await expect(dialog.getByRole('status')).toContainText(E2E_WHATSAPP.name);
@@ -120,7 +128,9 @@ test.describe('Channels › Meta against the real api', () => {
     const whatsapp = accountsTable(page).getByRole('row').filter({ hasText: E2E_WHATSAPP_PHONE });
     await expect(whatsapp).toContainText(t('channels:meta.subscription.subscribed'));
     await expect(whatsapp).toContainText(t('channels:meta.health.waiting'));
-    expect(await subscribedFields(E2E_WHATSAPP.id)).toEqual(['messages']);
+    // Meta keeps a number's subscription on its business account; the stand-in
+    // refuses the number's own edge, so this proves the api went there.
+    expect(await subscribedFields(E2E_WHATSAPP)).toEqual(['messages']);
 
     // ------------------------------------------------- taken, then Messenger
     await page.getByRole('button', { name: t('channels:meta.addAccount') }).click();
@@ -142,7 +152,7 @@ test.describe('Channels › Meta against the real api', () => {
     await expect(
       accountsTable(page).getByRole('link', { name: E2E_MESSENGER.name, exact: true }),
     ).toBeVisible();
-    expect(await subscribedFields(E2E_MESSENGER.id)).toContain('message_echoes');
+    expect(await subscribedFields(E2E_MESSENGER)).toContain('message_echoes');
 
     // ----------------------------------------------- Instagram, wrong token
     await page.getByRole('button', { name: t('channels:meta.addAccount') }).click();
@@ -162,7 +172,7 @@ test.describe('Channels › Meta against the real api', () => {
     await expect(
       accountsTable(page).getByRole('link', { name: `@${E2E_INSTAGRAM.username}` }),
     ).toBeVisible();
-    expect(await subscribedFields(E2E_INSTAGRAM.id)).toContain('messaging_seen');
+    expect(await subscribedFields(E2E_INSTAGRAM)).toContain('messaging_seen');
   });
 
   test('tests a Page, saves its Human Agent switch, subscribes it again and disconnects it by its id', async ({
@@ -215,8 +225,8 @@ test.describe('Channels › Meta against the real api', () => {
       accountsTable(page).getByRole('link', { name: E2E_MESSENGER.name, exact: true }),
     ).toHaveCount(0);
     // Meta no longer posts for it, and the others are untouched.
-    expect(await subscribedFields(E2E_MESSENGER.id)).toEqual([]);
-    expect(await subscribedFields(E2E_WHATSAPP.id)).toEqual(['messages']);
+    expect(await subscribedFields(E2E_MESSENGER)).toEqual([]);
+    expect(await subscribedFields(E2E_WHATSAPP)).toEqual(['messages']);
   });
 
   test('disconnects the last two accounts and shows the empty state again', async ({ page }) => {
@@ -232,6 +242,7 @@ test.describe('Channels › Meta against the real api', () => {
         .getByRole('button', { name: t('channels:meta.disconnectConfirm.action') })
         .click();
       await expect(page.getByText(t('channels:meta.toast.disconnected', { name }))).toBeVisible();
+      expect(await subscribedFields(account)).toEqual([]);
     }
 
     await expect(

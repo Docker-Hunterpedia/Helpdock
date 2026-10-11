@@ -86,7 +86,7 @@ out; that is the whole of key rotation in v1.
 |---|---|---|
 | `__Secure-hd_refresh` | The refresh token and its family | `HttpOnly`, `SameSite=Lax`, `Path=/api/auth`, `Max-Age` of `AUTH_SESSION_MAX_HOURS`, `Secure` |
 | `__Secure-hd_trust` | A browser the person chose to trust | the same, 30 days |
-| `__Secure-hd_oauth` | The browser that began an OAuth sign-in, until the provider sends it back | `HttpOnly`, `SameSite=Lax`, `Path=/api/auth/oauth`, `Secure`, 10 minutes, cleared by the callback |
+| `__Secure-hd_oauth` | The browser that began an OAuth sign-in, until the provider sends it back | `HttpOnly`, `SameSite=Lax`, `Path=/api/auth/oauth/<provider>`, `Secure`, 10 minutes, cleared by the callback |
 
 `SameSite=Lax` means a cross-site POST carries neither, which is what makes
 `/api/auth/refresh` safe without a CSRF token of its own. `Path=/api/auth` means
@@ -349,9 +349,10 @@ Four things make the flow safe:
   let anyone who captured the callback URL finish their own sign-in in someone
   else's browser. Starting a flow therefore also sets the short-lived
   `hd_oauth` cookie, a random value the server keeps only the hash of, and the
-  callback is refused unless the browser sends it back. A person who opens a
-  sign-in on one device and finishes it on another is refused too; they start
-  again.
+  callback is refused unless the browser sends it back. The cookie's path
+  names the provider, so a Google sign-in and a GitHub one begun in the same
+  browser each keep their own. A person who opens a sign-in on one device and
+  finishes it on another is refused too; they start again.
 - **PKCE.** S256. The verifier never leaves the server. GitHub OAuth Apps ignore
   it; it is sent anyway, and state is the defence there.
 - **A fixed redirect.** Built from `APP_URL` and never echoed from the request,

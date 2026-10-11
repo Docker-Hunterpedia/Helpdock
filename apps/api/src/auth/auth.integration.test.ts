@@ -45,7 +45,7 @@ const APP_URL = 'https://support.example.com';
 /** Over https the cookies carry the `__Secure-` prefix (ASVS 3.4.4). */
 const REFRESH_COOKIE = refreshCookieOf({ APP_URL }).name;
 const TRUSTED_DEVICE_COOKIE = trustedDeviceCookie(APP_URL).name;
-const OAUTH_NONCE_COOKIE = oauthNonceCookie(APP_URL, OAUTH_STATE_TTL_SECONDS).name;
+const OAUTH_NONCE_COOKIE = oauthNonceCookie(APP_URL, OAUTH_STATE_TTL_SECONDS, 'google').name;
 
 /**
  * The origin a redirect lands on. Compared as a parsed origin, not a prefix:
@@ -599,6 +599,15 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(originOf(response.headers.location)).toBe(new URL(APP_URL).origin);
     });
 
+    it('sends a callback for a provider it does not have to a screen', async () => {
+      const response = await get('/api/auth/oauth/facebook/callback?code=c&state=s');
+
+      expect(response.statusCode).toBe(302);
+      expect(new URL(String(response.headers.location)).searchParams.get('error')).toBe(
+        'no-account',
+      );
+    });
+
     it('refuses a provider it does not have', async () => {
       expect((await get('/api/auth/oauth/facebook/start')).statusCode).toBe(403);
     });
@@ -645,7 +654,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
           httpOnly: true,
           secure: true,
           sameSite: 'Lax',
-          path: '/api/auth/oauth',
+          path: '/api/auth/oauth/google',
           maxAge: OAUTH_STATE_TTL_SECONDS,
         });
         expect(nonce).not.toBe('');
@@ -675,7 +684,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
 
         expect(fetchMock).toHaveBeenCalledOnce();
         expect(response.cookies.find((cookie) => cookie.name === OAUTH_NONCE_COOKIE)).toMatchObject(
-          { value: '', path: '/api/auth/oauth' },
+          { value: '', path: '/api/auth/oauth/google' },
         );
       });
     });

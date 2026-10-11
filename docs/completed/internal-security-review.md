@@ -78,7 +78,7 @@ disconnect sockets.
 **F4, Low: OAuth callback not bound to its browser.** The state lived only on the
 server, so a copied callback URL could finish an attacker's sign-in in a victim's
 browser. Fixed in `10ac844`: starting a flow sets a ten-minute `hd_oauth` cookie
-(`__Secure-` prefixed over https, `Path=/api/auth/oauth`; `api/auth/session/cookies.ts`).
+(`__Secure-` prefixed over https, `Path=/api/auth/oauth/<provider>`; `api/auth/session/cookies.ts`).
 The state keeps only the hash of the nonce, and `OauthService.complete`
 (`api/auth/oauth/oauth.service.ts`) refuses a callback without the matching nonce,
 before any token request. `api/auth/auth.controller.ts` clears the cookie on every

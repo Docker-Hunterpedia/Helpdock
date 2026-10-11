@@ -1,5 +1,5 @@
 import type { Env } from '@helpdock/config';
-import type { SessionCookiePayload } from '@helpdock/schemas';
+import type { OauthProvider, SessionCookiePayload } from '@helpdock/schemas';
 import { sessionCookiePayloadSchema } from '@helpdock/schemas';
 import { type SessionLifetime, sessionLifetime } from './lifetime.js';
 
@@ -104,13 +104,19 @@ export const trustedDeviceCookie = (appUrl: string): CookieSpec => ({
  * Ties an OAuth callback to the browser that began the flow: the callback is a
  * GET the provider redirects to, so a copy of its URL would otherwise finish
  * someone else's flow in a victim's browser. `Lax` still travels on that
- * top-level redirect, and the path keeps it off every other route.
+ * top-level redirect, and the path keeps it off every other route. The path
+ * names the provider, so a Google sign-in and a GitHub one begun in the same
+ * browser each keep their own nonce instead of the second replacing the first.
  */
-export const oauthNonceCookie = (appUrl: string, ttlSeconds: number): CookieSpec => ({
+export const oauthNonceCookie = (
+  appUrl: string,
+  ttlSeconds: number,
+  provider: OauthProvider,
+): CookieSpec => ({
   name: prefixed(appUrl, OAUTH_NONCE_COOKIE),
   attributes: {
     ...cookieAttributes({ appUrl, maxAgeSeconds: ttlSeconds }),
-    path: `${AUTH_COOKIE_PATH}/oauth`,
+    path: `${AUTH_COOKIE_PATH}/oauth/${provider}`,
   },
 });
 

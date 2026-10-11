@@ -23,6 +23,9 @@ const DEPARTMENT = '01924f00-0000-7000-8000-000000000002';
 
 const NUMBER = '106540352242922';
 const OTHER_NUMBER = '106540352242999';
+// The business accounts that own them: Meta keeps a number's webhook subscription there.
+const WABA = '102290129340398';
+const OTHER_WABA = '102290129340111';
 const PAGE = '112233445566778';
 const INSTAGRAM = '17841400000000000';
 const OTHER_INSTAGRAM = '17841400000000999';
@@ -38,8 +41,16 @@ describe('MetaAccountsService (Graph reads)', () => {
   let configured = true;
   let taken = false;
   let stored: AccountWithNames | undefined;
+  const marked: { id: string; detail: string }[] = [];
+  const updated: { id: string; values: Record<string, unknown> }[] = [];
 
   const repository = {
+    markError: async (_tx: unknown, id: string, detail: string) => {
+      marked.push({ id, detail });
+    },
+    update: async (_tx: unknown, id: string, values: Record<string, unknown>) => {
+      updated.push({ id, values });
+    },
     locate: async () =>
       taken ? { id: 'x', brandId: BRAND, platform: 'whatsapp', externalId: NUMBER } : undefined,
     find: async () => stored,
@@ -79,7 +90,7 @@ describe('MetaAccountsService (Graph reads)', () => {
       platform,
       departmentId: DEPARTMENT,
       externalId,
-      wabaId: null,
+      wabaId: platform === 'whatsapp' ? WABA : null,
       displayPhone: null,
       username: null,
       displayName: 'Helpdock',
@@ -116,6 +127,7 @@ describe('MetaAccountsService (Graph reads)', () => {
       name: 'Helpdock Support',
       displayPhone: '+1 555 0142',
       token: WHATSAPP_TOKEN,
+      wabaId: WABA,
     });
     graph.connect({
       platform: 'whatsapp',
@@ -123,6 +135,7 @@ describe('MetaAccountsService (Graph reads)', () => {
       name: 'Other number',
       displayPhone: '+1 555 0100',
       token: OTHER_WHATSAPP_TOKEN,
+      wabaId: OTHER_WABA,
     });
     graph.connect({ platform: 'messenger', id: PAGE, name: 'Helpdock', token: PAGE_TOKEN });
     graph.connect({
@@ -150,6 +163,8 @@ describe('MetaAccountsService (Graph reads)', () => {
     configured = true;
     taken = false;
     stored = undefined;
+    marked.length = 0;
+    updated.length = 0;
   });
 
   describe('testToken', () => {
@@ -171,6 +186,34 @@ describe('MetaAccountsService (Graph reads)', () => {
         query: { fields: 'id,display_phone_number,verified_name' },
         token: WHATSAPP_TOKEN,
       });
+    });
+
+    it('finds the number’s business account through the token, which is what it subscribes on', async () => {
+      await service.testToken({
+        platform: 'whatsapp',
+        externalId: NUMBER,
+        accessToken: WHATSAPP_TOKEN,
+      });
+
+      expect(graph.callsTo('/phone_numbers').map((call) => call.path)).toContain(
+        `/${WABA}/phone_numbers`,
+      );
+    });
+
+    it('refuses a token that reads the number but cannot list the business account that owns it', async () => {
+      graph.failures.push({
+        status: 403,
+        body: { error: { code: 200, message: '(#200) Requires whatsapp_business_management' } },
+        match: /phone_numbers/,
+      });
+
+      await expect(
+        service.testToken({
+          platform: 'whatsapp',
+          externalId: NUMBER,
+          accessToken: WHATSAPP_TOKEN,
+        }),
+      ).rejects.toMatchObject({ reason: 'token-other-account' });
     });
 
     it('reports the end of a Page token that Meta says ends', async () => {
@@ -423,6 +466,29 @@ describe('MetaAccountsService (Graph reads)', () => {
       expect(status.subscribedApps?.[0]?.subscribedFields).toContain('message_deliveries');
     });
 
+    it('reads a WhatsApp number’s subscription on its business account, not on the number', async () => {
+      stored = row('whatsapp', NUMBER, WHATSAPP_TOKEN);
+      graph.subscribe(WABA);
+
+      const status = await service.status({} as DbTransaction, stored.account.id);
+
+      expect(status).toMatchObject({ tokenValid: true, liveError: null });
+      expect(status.subscribedApps).toHaveLength(1);
+      expect(graph.callsTo('/subscribed_apps').map((call) => call.path)).toEqual([
+        `/${WABA}/subscribed_apps`,
+      ]);
+    });
+
+    it('says to connect a WhatsApp number again when it has no business account on record', async () => {
+      stored = row('whatsapp', NUMBER, WHATSAPP_TOKEN, { wabaId: null });
+
+      const status = await service.status({} as DbTransaction, stored.account.id);
+
+      expect(status).toMatchObject({ tokenValid: true, subscribedApps: null });
+      expect(status.liveError).toMatch(/disconnect it and connect it again/i);
+      expect(graph.callsTo('/subscribed_apps')).toHaveLength(0);
+    });
+
     it('checks an Instagram token by reading the account, which has no debug_token', async () => {
       stored = row('instagram', INSTAGRAM, INSTAGRAM_TOKEN);
       graph.subscribe(INSTAGRAM);
@@ -478,6 +544,46 @@ describe('MetaAccountsService (Graph reads)', () => {
       expect(status.subscribedApps).toBeNull();
       expect(status.liveError).toMatch(/unavailable/i);
       expect(status.activity.openTickets).toBe(3);
+    });
+  });
+
+  describe('subscribe', () => {
+    const context = {
+      tx: { insert: () => ({ values: async () => undefined }) } as unknown as DbTransaction,
+      brandId: BRAND,
+      actor: { userId: '01924f00-0000-7000-8000-0000000000bb' },
+    } as unknown as Parameters<MetaAccountsService['subscribe']>[0];
+
+    it('subscribes a WhatsApp number on its business account and names no fields', async () => {
+      stored = row('whatsapp', NUMBER, WHATSAPP_TOKEN);
+
+      const result = await service.subscribe(context, stored.account.id);
+
+      expect(result).toMatchObject({ ok: true, subscribedFields: ['messages'] });
+      const [post] = graph.callsTo('/subscribed_apps');
+      expect(post).toMatchObject({ method: 'POST', path: `/${WABA}/subscribed_apps` });
+      expect(post?.query.subscribed_fields).toBeUndefined();
+    });
+
+    it('subscribes a Page on the Page, naming the fields', async () => {
+      stored = row('messenger', PAGE, PAGE_TOKEN);
+
+      await service.subscribe(context, stored.account.id);
+
+      const [post] = graph.callsTo('/subscribed_apps');
+      expect(post).toMatchObject({ method: 'POST', path: `/${PAGE}/subscribed_apps` });
+      expect(post?.query.subscribed_fields).toContain('messages');
+    });
+
+    it('answers a WhatsApp number with no business account on record without asking Meta', async () => {
+      stored = row('whatsapp', NUMBER, WHATSAPP_TOKEN, { wabaId: null });
+
+      const result = await service.subscribe(context, stored.account.id);
+
+      expect(result).toMatchObject({ ok: false });
+      expect(result.ok === false && result.detail).toMatch(/disconnect it and connect it again/i);
+      expect(graph.callsTo('/subscribed_apps')).toHaveLength(0);
+      expect(marked).toHaveLength(1);
     });
   });
 });

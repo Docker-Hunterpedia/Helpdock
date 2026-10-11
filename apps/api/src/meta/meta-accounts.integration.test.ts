@@ -93,6 +93,8 @@ if (!hasDocker) {
 interface Registered {
   readonly id: string;
   readonly token: string;
+  /** A WhatsApp number's business account, where Meta keeps its subscription. */
+  readonly wabaId?: string;
 }
 
 interface ErrorBody {
@@ -137,13 +139,22 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
     }) as Env;
 
   /** An account and a token the stand-in knows, never used before. */
-  const fresh = (platform: MetaPlatform, name = 'Helpdock'): Registered => {
+  const fresh = (
+    platform: MetaPlatform,
+    name = 'Helpdock',
+    /** WhatsApp: another number's business account, to share it. */
+    sharedWabaId?: string,
+  ): Registered => {
     sequence += 1;
     const id =
       platform === 'instagram'
         ? `17841400000${String(sequence).padStart(6, '0')}`
         : `10654035${String(sequence).padStart(7, '0')}`;
     const token = `${platform === 'instagram' ? 'IGAA' : 'EAAG'}${platform}Token${String(sequence).padStart(12, '0')}`;
+    const wabaId =
+      platform === 'whatsapp'
+        ? (sharedWabaId ?? `10229${String(sequence).padStart(10, '0')}`)
+        : undefined;
     graph.connect({
       platform,
       id,
@@ -152,9 +163,10 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
       ...(platform === 'whatsapp'
         ? { displayPhone: `+1 555 ${String(sequence).padStart(4, '0')}` }
         : {}),
+      ...(wabaId === undefined ? {} : { wabaId }),
       ...(platform === 'instagram' ? { username: `helpdock_${String(sequence)}` } : {}),
     });
-    return { id, token };
+    return wabaId === undefined ? { id, token } : { id, token, wabaId };
   };
 
   const accounts = (brandId: string): string => `/api/brands/${brandId}/meta/accounts`;
@@ -319,8 +331,8 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
       });
     });
 
-    it('connects a WhatsApp number: read against Graph, subscribed, stored encrypted', async () => {
-      const { id, token } = fresh('whatsapp', 'Helpdock Support');
+    it('connects a WhatsApp number: read against Graph, its business account found, subscribed there, stored encrypted', async () => {
+      const { id, token, wabaId } = fresh('whatsapp', 'Helpdock Support');
       graph.calls.length = 0;
 
       const created = await connect('whatsapp', { id, token });
@@ -351,11 +363,42 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
         token,
         query: { fields: 'id,display_phone_number,verified_name' },
       });
-      expect(graph.callsTo(`/${id}/subscribed_apps`, 'POST')[0]).toMatchObject({
-        token,
-        query: { subscribed_fields: 'messages' },
+      // The business account comes from the token's own grants, not from anything typed.
+      expect(graph.callsTo('/debug_token', 'GET')[0]).toMatchObject({
+        query: { input_token: token },
       });
-      expect(graph.subscriptionOf(id)).toEqual(['messages']);
+      expect(graph.callsTo(`/${wabaId}/phone_numbers`, 'GET')).toHaveLength(1);
+      expect((await row(created.id)).wabaId).toBe(wabaId);
+      // Meta keeps the subscription on the business account and takes no field names for it.
+      const [subscribe] = graph.callsTo(`/${wabaId}/subscribed_apps`, 'POST');
+      expect(subscribe).toMatchObject({ token });
+      expect(subscribe?.query.subscribed_fields).toBeUndefined();
+      expect(graph.callsTo(`/${id}/subscribed_apps`)).toHaveLength(0);
+      expect(graph.subscriptionOf(wabaId ?? '')).toEqual(['messages']);
+    });
+
+    it('refuses a WhatsApp token that cannot list the business account that owns the number, and stores nothing', async () => {
+      const { id, token } = fresh('whatsapp');
+      graph.calls.length = 0;
+      graph.failures.push({
+        status: 403,
+        body: { error: { code: 200, message: '(#200) Requires whatsapp_business_management' } },
+        match: /phone_numbers/,
+      });
+
+      const response = await call('POST', accounts(BRAND_A), adminA, {
+        platform: 'whatsapp',
+        externalId: id,
+        accessToken: token,
+        departmentId: SUPPORT_A,
+      });
+
+      expect([response.statusCode, reasonOf(response)]).toEqual([400, 'token-other-account']);
+      expect(response.body).not.toContain(token);
+      expect(
+        await owner.db.select().from(metaAccounts).where(eq(metaAccounts.externalId, id)),
+      ).toHaveLength(0);
+      expect(graph.calls.filter((made) => made.method === 'POST')).toHaveLength(0);
     });
 
     it('connects a Messenger Page with the fields the inbound service reads', async () => {
@@ -688,6 +731,36 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
       expect(JSON.stringify(await audits(created.id))).not.toContain(replacement);
     });
 
+    it('finds the business account again with a replacement WhatsApp token, which repairs a row made without one', async () => {
+      const first = fresh('whatsapp');
+      const created = await connect('whatsapp', first);
+      await owner.db
+        .update(metaAccounts)
+        .set({ wabaId: null })
+        .where(eq(metaAccounts.id, created.id));
+      const replacement = `EAAGreplacementToken${String(++sequence).padStart(12, '0')}`;
+      graph.connect({
+        platform: 'whatsapp',
+        id: first.id,
+        name: 'Helpdock',
+        displayPhone: '+1 555 0100',
+        token: replacement,
+        ...(first.wabaId === undefined ? {} : { wabaId: first.wabaId }),
+      });
+      graph.calls.length = 0;
+
+      const saved = await call('PUT', `${accounts(BRAND_A)}/${created.id}`, adminA, {
+        displayName: 'Helpdock',
+        departmentId: SUPPORT_A,
+        humanAgentEnabled: false,
+        accessToken: replacement,
+      });
+
+      expect(saved.statusCode).toBe(200);
+      expect((await row(created.id)).wabaId).toBe(first.wabaId);
+      expect(graph.callsTo(`/${first.wabaId}/subscribed_apps`, 'POST')).toHaveLength(1);
+    });
+
     it('refuses a replacement token of another account or that Meta does not know, and changes nothing', async () => {
       const first = fresh('whatsapp');
       const other = fresh('whatsapp');
@@ -804,6 +877,52 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
       expect(dropped.json<{ subscribedApps: unknown[] }>().subscribedApps).toEqual([]);
       expect(subscribed.json()).toMatchObject({ ok: true });
       expect(restored.json<{ subscribedApps: unknown[] }>().subscribedApps).toHaveLength(1);
+    });
+
+    it('reads and restores a WhatsApp number’s subscription on its business account', async () => {
+      const registered = fresh('whatsapp');
+      const created = await connect('whatsapp', registered);
+      const wabaId = registered.wabaId ?? '';
+      graph.dropSubscription(wabaId);
+      graph.calls.length = 0;
+
+      const dropped = await call('GET', `${accounts(BRAND_A)}/${created.id}/status`, adminA);
+      const subscribed = await call('POST', `${accounts(BRAND_A)}/${created.id}/subscribe`, adminA);
+      const restored = await call('GET', `${accounts(BRAND_A)}/${created.id}/status`, adminA);
+
+      expect(dropped.json<{ subscribedApps: unknown[] }>().subscribedApps).toEqual([]);
+      expect(subscribed.json()).toMatchObject({ ok: true, subscribedFields: ['messages'] });
+      expect(restored.json<{ subscribedApps: unknown[] }>().subscribedApps).toHaveLength(1);
+      // Never the number's own node, which has no such edge on Meta.
+      expect(graph.callsTo(`/${registered.id}/subscribed_apps`)).toHaveLength(0);
+      expect(graph.callsTo(`/${wabaId}/subscribed_apps`).length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('answers a WhatsApp number that has no business account on record with what to do, and asks Meta nothing', async () => {
+      const registered = fresh('whatsapp');
+      const created = await connect('whatsapp', registered);
+      await owner.db
+        .update(metaAccounts)
+        .set({ wabaId: null })
+        .where(eq(metaAccounts.id, created.id));
+      graph.calls.length = 0;
+
+      const subscribed = await call('POST', `${accounts(BRAND_A)}/${created.id}/subscribe`, adminA);
+      const status = await call('GET', `${accounts(BRAND_A)}/${created.id}/status`, adminA);
+
+      expect(subscribed.statusCode).toBe(200);
+      expect(subscribed.json()).toMatchObject({
+        ok: false,
+        detail: expect.stringMatching(/disconnect it and connect it again/i),
+      });
+      expect(status.json()).toMatchObject({
+        subscribedApps: null,
+        liveError: expect.stringMatching(/disconnect it and connect it again/i),
+      });
+      expect(graph.callsTo('/subscribed_apps')).toHaveLength(0);
+      expect(await row(created.id)).toMatchObject({
+        lastError: expect.stringMatching(/disconnect it and connect it again/i),
+      });
     });
 
     it('marks the account when Subscribe now finds the token dead, and answers Meta’s words', async () => {
@@ -934,6 +1053,61 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
       expect((await call('GET', `${accounts(BRAND_A)}/${created.id}`, adminA)).statusCode).toBe(
         404,
       );
+    });
+
+    it('unsubscribes a WhatsApp number on its business account, and without one skips the call', async () => {
+      const subscribed = fresh('whatsapp');
+      const legacy = fresh('whatsapp');
+      const first = await connect('whatsapp', subscribed);
+      const second = await connect('whatsapp', legacy);
+      await owner.db
+        .update(metaAccounts)
+        .set({ wabaId: null })
+        .where(eq(metaAccounts.id, second.id));
+      graph.calls.length = 0;
+
+      const removed = await call('DELETE', `${accounts(BRAND_A)}/${first.id}`, adminA);
+      const removedLegacy = await call('DELETE', `${accounts(BRAND_A)}/${second.id}`, adminA);
+
+      expect([removed.statusCode, removedLegacy.statusCode]).toEqual([204, 204]);
+      expect(graph.subscriptionOf(subscribed.wabaId ?? '')).toEqual([]);
+      expect(graph.callsTo('/subscribed_apps', 'DELETE').map((made) => made.path)).toEqual([
+        `/${subscribed.wabaId}/subscribed_apps`,
+      ]);
+    });
+
+    it('keeps the app subscribed to a business account while another of its numbers is connected, in any brand', async () => {
+      const first = fresh('whatsapp', 'First number');
+      const second = fresh('whatsapp', 'Second number', first.wabaId);
+      const inBrandA = await connect('whatsapp', first);
+      const inBrandB = await call('POST', accounts(BRAND_B), adminB, {
+        platform: 'whatsapp',
+        externalId: second.id,
+        accessToken: second.token,
+        departmentId: SUPPORT_B,
+      });
+      expect(inBrandB.statusCode).toBe(201);
+      const wabaId = first.wabaId ?? '';
+      graph.calls.length = 0;
+
+      const removedFirst = await call('DELETE', `${accounts(BRAND_A)}/${inBrandA.id}`, adminA);
+
+      // The second number still posts through the same subscription.
+      expect(removedFirst.statusCode).toBe(204);
+      expect(graph.callsTo('/subscribed_apps', 'DELETE')).toHaveLength(0);
+      expect(graph.subscriptionOf(wabaId)).toEqual(['messages']);
+
+      const removedSecond = await call(
+        'DELETE',
+        `${accounts(BRAND_B)}/${inBrandB.json<{ id: string }>().id}`,
+        adminB,
+      );
+
+      expect(removedSecond.statusCode).toBe(204);
+      expect(graph.callsTo('/subscribed_apps', 'DELETE').map((made) => made.path)).toEqual([
+        `/${wabaId}/subscribed_apps`,
+      ]);
+      expect(graph.subscriptionOf(wabaId)).toEqual([]);
     });
 
     it('disconnects an account whose token Meta has revoked, and frees its id', async () => {

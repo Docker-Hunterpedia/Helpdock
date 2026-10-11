@@ -1,7 +1,6 @@
 import {
   classifyMessagingEvent,
   fixtureMid,
-  GraphApiFailure,
   instagramDeleted,
   instagramEcho,
   instagramReaction,
@@ -11,9 +10,8 @@ import {
   type MetaEvent,
   type MetaInboundMessage,
 } from '@helpdock/channels';
-import { createKeyring, encryptSecret } from '@helpdock/config';
 import type { DbTransaction, MetaAccount, MetaConversation } from '@helpdock/db';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
 import type { DeferredAttachmentSink } from './deferred-sink.js';
@@ -22,22 +20,26 @@ import {
   type InstagramInboundServiceOptions,
 } from './instagram-inbound.service.js';
 import type { MetaRepository } from './meta.repository.js';
+import { enqueueMetaProfile } from './meta-events.js';
 import type { MetaEventContext } from './meta-inbound.service.js';
 import type { MetaConversationRouter } from './meta-router.js';
 
-const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 9).toString('base64') });
-const TOKEN = 'IGQWRPbGl0ZXN0dG9rZW4xMjM0NTY3ODkw';
 const IG_ACCOUNT = '17841400000000000';
 const IGSID = '17841499999999999';
 const NOW = new Date('2026-10-11T08:00:00Z');
+
+// The outbox row is the integration suite's to prove; here only that it is asked for.
+vi.mock('./meta-events.js', () => ({
+  enqueueMetaProfile: vi.fn(() => Promise.resolve('outbox-id')),
+}));
 
 const account = {
   id: '0196a1b2-0000-7000-8000-000000000001',
   brandId: '0196a1b2-0000-7000-8000-000000000002',
   departmentId: '0196a1b2-0000-7000-8000-000000000003',
   platform: 'instagram',
+  status: 'connected',
   externalId: IG_ACCOUNT,
-  accessToken: encryptSecret(TOKEN, keyring),
 } as MetaAccount;
 
 const conversation = (overrides: Partial<MetaConversation> = {}): MetaConversation =>
@@ -47,6 +49,7 @@ const conversation = (overrides: Partial<MetaConversation> = {}): MetaConversati
     ticketId: null,
     profileName: null,
     username: null,
+    profileCheckedAt: null,
     ...overrides,
   }) as MetaConversation;
 
@@ -59,7 +62,6 @@ interface Harness {
   readonly service: InstagramInboundService;
   readonly context: MetaEventContext;
   readonly routed: MetaInboundMessage[];
-  readonly graph: { get: ReturnType<typeof vi.fn> };
   readonly log: {
     info: ReturnType<typeof vi.fn>;
     warn: ReturnType<typeof vi.fn>;
@@ -74,27 +76,23 @@ interface Harness {
 
 const harness = (
   setup: {
+    /** The conversation before the message, and (if it differs) as the router leaves it. */
     readonly existing?: MetaConversation;
-    readonly profile?: unknown;
-    readonly profileFails?: unknown;
+    readonly afterRouting?: MetaConversation;
+    readonly account?: MetaAccount;
     readonly appId?: string;
     readonly delivery?: { accountId: string };
     readonly advanced?: unknown;
   } = {},
 ): Harness => {
   const routed: MetaInboundMessage[] = [];
-  const graph = {
-    get: vi.fn(() =>
-      setup.profileFails === undefined
-        ? Promise.resolve(
-            setup.profile ?? { id: IGSID, name: 'Sheena Nelson', username: 'sheena.n' },
-          )
-        : Promise.reject(setup.profileFails),
-    ),
-  };
   const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const repository = {
-    conversation: vi.fn(() => Promise.resolve(setup.existing)),
+    // The service looks twice: before it routes, and again for the row the router wrote.
+    conversation: vi
+      .fn()
+      .mockResolvedValueOnce(setup.existing)
+      .mockResolvedValue(setup.afterRouting ?? setup.existing ?? conversation()),
     delivery: vi.fn(() => Promise.resolve(setup.delivery)),
     advanceStatus: vi.fn(() => Promise.resolve(setup.advanced)),
   };
@@ -111,112 +109,78 @@ const harness = (
     lifecycleReads: {
       localeForContact: () => Promise.resolve('en'),
     } as unknown as TicketLifecycleRepository,
-    graph: () => graph as never,
-    keyring,
     appId: () => Promise.resolve(setup.appId ?? '1234567890123456'),
     log,
   };
 
   return {
     service: new InstagramInboundService(options),
-    context: { tx: {} as DbTransaction, account, now: NOW },
+    context: { tx: {} as DbTransaction, account: setup.account ?? account, now: NOW },
     routed,
-    graph,
     log,
     repository,
   };
 };
 
+beforeEach(() => {
+  vi.mocked(enqueueMetaProfile).mockClear();
+});
+
 describe('InstagramInboundService › a message', () => {
-  it('reads the profile once for a new conversation and files the message under it', async () => {
-    const { service, context, routed, graph } = harness();
+  it('files the message and asks for the customer’s name with an event beside it', async () => {
+    const { service, context, routed } = harness({ afterRouting: conversation() });
 
     const outcome = await service.handle(context, eventOf(instagramText({ text: 'Hi there' })));
 
     expect(outcome).toEqual({ outcome: 'handled' });
-    expect(graph.get).toHaveBeenCalledExactlyOnceWith(`/${IGSID}`, {
-      token: TOKEN,
-      api: 'instagram',
-      query: { fields: 'name,username' },
-    });
     expect(routed).toHaveLength(1);
     expect(routed[0]).toMatchObject({
       channel: 'instagram',
       externalId: fixtureMid(1),
       bodyText: 'Hi there',
-      from: { kind: 'instagram', value: `${IG_ACCOUNT}:${IGSID}`, name: 'Sheena Nelson' },
-      meta: { profileName: 'Sheena Nelson', username: 'sheena.n', customerId: IGSID },
+      // Meta's message carries no name: the profile job fills it in afterwards.
+      from: { kind: 'instagram', value: `${IG_ACCOUNT}:${IGSID}`, name: null },
+      meta: { profileName: null, username: null, customerId: IGSID },
+    });
+    expect(enqueueMetaProfile).toHaveBeenCalledExactlyOnceWith(context.tx, account.brandId, {
+      conversationId: conversation().id,
+      accountId: account.id,
+      platform: 'instagram',
     });
   });
 
-  it('does not read it again for a conversation that has a handle', async () => {
-    const { service, context, routed, graph } = harness({
-      existing: conversation({ username: 'sheena.n' }),
-    });
+  it.each([
+    ['a name', { profileName: 'Sheena Nelson' }],
+    ['a handle', { username: 'sheena.n' }],
+    ['an answer from Graph, however it came out', { profileCheckedAt: NOW }],
+  ])('asks for nothing about a customer who already has %s', async (_what, facts) => {
+    const known = conversation(facts);
+    const { service, context } = harness({ existing: known, afterRouting: known });
 
     await service.handle(context, eventOf(instagramText()));
 
-    expect(graph.get).not.toHaveBeenCalled();
-    expect(routed[0]?.meta.username).toBeNull();
+    expect(enqueueMetaProfile).not.toHaveBeenCalled();
   });
 
-  it('reads it again for a conversation whose earlier read failed', async () => {
-    const { service, context, graph } = harness({ existing: conversation() });
+  it('asks again for a customer whose earlier lookup could not be answered', async () => {
+    // Nothing was recorded: Meta was down, or the token had stopped working.
+    const { service, context } = harness({ existing: conversation() });
 
     await service.handle(context, eventOf(instagramText()));
 
-    expect(graph.get).toHaveBeenCalledOnce();
+    expect(enqueueMetaProfile).toHaveBeenCalledOnce();
   });
 
-  it('files the message without a name when the profile read fails, and logs no token', async () => {
-    const { service, context, routed, log } = harness({
-      profileFails: new GraphApiFailure('permission', `denied ${TOKEN}`, { code: 10 }),
-    });
+  it.each(['token_expired', 'unsubscribed'] as const)(
+    'asks for nothing on an account that is %s: it could not answer',
+    async (status) => {
+      const { service, context } = harness({ account: { ...account, status } });
 
-    const outcome = await service.handle(context, eventOf(instagramText()));
+      await service.handle(context, eventOf(instagramText()));
 
-    expect(outcome).toEqual({ outcome: 'handled' });
-    expect(routed[0]?.from.name).toBeNull();
-    expect(log.warn).toHaveBeenCalledOnce();
-    expect(JSON.stringify(log.warn.mock.calls)).not.toContain(TOKEN);
-    expect(log.warn.mock.calls[0]?.[0]).toEqual({
-      accountId: account.id,
-      reason: 'permission',
-      code: 10,
-    });
-  });
-
-  it('files the message when the stored token cannot be opened', async () => {
-    const { service, context, routed, graph, log } = harness();
-    const broken = { ...context, account: { ...account, accessToken: 'not-an-envelope' } };
-
-    const outcome = await service.handle(broken, eventOf(instagramText()));
-
-    expect(outcome).toEqual({ outcome: 'handled' });
-    expect(graph.get).not.toHaveBeenCalled();
-    expect(routed).toHaveLength(1);
-    expect(log.warn).toHaveBeenCalledExactlyOnceWith(
-      { accountId: account.id, reason: 'SecretDecryptionError' },
-      expect.any(String),
-    );
-  });
-
-  it('files the message and names the class of whatever else the read threw', async () => {
-    const { service, context, routed, graph, log } = harness();
-    graph.get.mockImplementation(() => {
-      throw new RangeError('a bug that quotes nothing secret');
-    });
-
-    const outcome = await service.handle(context, eventOf(instagramText()));
-
-    expect(outcome).toEqual({ outcome: 'handled' });
-    expect(routed).toHaveLength(1);
-    expect(log.warn.mock.calls[0]?.[0]).toEqual({
-      accountId: account.id,
-      reason: 'RangeError',
-      code: null,
-    });
-  });
+      expect(enqueueMetaProfile).not.toHaveBeenCalled();
+    },
+  );
 
   it('files a story reply with the story’s line, its media reference and the localised words', async () => {
     const { service, context, routed } = harness({ existing: conversation({ username: 'x' }) });

@@ -1,15 +1,23 @@
 import type { DbTransaction } from '@helpdock/db';
-import { type MetaSendPayload, outboxEvents, silentLogger } from '@helpdock/jobs';
+import {
+  type MetaProfileFetchPayload,
+  type MetaSendPayload,
+  outboxEvents,
+  silentLogger,
+} from '@helpdock/jobs';
 import { describe, expect, it } from 'vitest';
 import {
   createMetaMediaEventHandler,
+  createMetaProfileEventHandler,
   createMetaReplyEventHandler,
   enqueueMetaAccountChanged,
   enqueueMetaMedia,
+  enqueueMetaProfile,
   enqueueMetaReply,
   META_EVENTS,
   type MetaMediaFetchJobPayload,
   metaMediaFetchJobId,
+  metaProfileFetchJobId,
   metaSendJobId,
   registerMetaEventHandlers,
 } from './meta-events.js';
@@ -19,6 +27,7 @@ const outboxId = '01924f00-0000-7000-8000-0000000000bb';
 const deliveryId = '01924f00-0000-7000-8000-0000000000cc';
 const accountId = '01924f00-0000-7000-8000-0000000000dd';
 const attachmentId = '01924f00-0000-7000-8000-0000000000ee';
+const conversationId = '01924f00-0000-7000-8000-0000000000ef';
 
 const ref = {
   kind: 'whatsapp_media',
@@ -57,10 +66,11 @@ const recordingTx = () => {
 };
 
 describe('the Meta outbox events', () => {
-  it('names the three events of the contract', () => {
+  it('names the events of the contract', () => {
     expect(META_EVENTS).toEqual({
       reply: 'meta.reply',
       media: 'meta.media',
+      profile: 'meta.profile',
       accountChanged: 'meta_account.changed',
     });
   });
@@ -79,6 +89,20 @@ describe('the Meta outbox events', () => {
     ]);
   });
 
+  it('writes a profile lookup with the conversation and no brand, which the row has', async () => {
+    const { rows, tx } = recordingTx();
+
+    await enqueueMetaProfile(tx, brandId, { conversationId, accountId, platform: 'instagram' });
+
+    expect(rows).toEqual([
+      {
+        brandId,
+        event: 'meta.profile',
+        payload: { conversationId, accountId, platform: 'instagram' },
+      },
+    ]);
+  });
+
   it('refuses to write an event whose payload is not what its consumer reads', async () => {
     const { rows, tx } = recordingTx();
 
@@ -89,6 +113,9 @@ describe('the Meta outbox events', () => {
         accountId,
         ref: { kind: 'cdn_url', url: 'ftp://example.com/x', type: 'image' },
       }),
+    ).rejects.toThrow();
+    await expect(
+      enqueueMetaProfile(tx, brandId, { conversationId, accountId, platform: 'whatsapp' } as never),
     ).rejects.toThrow();
     expect(rows).toEqual([]);
   });
@@ -113,14 +140,30 @@ describe('the Meta outbox events', () => {
     ]);
   });
 
+  it('turns a profile event into one meta.profile_fetch job under the outbox row’s id', async () => {
+    const { added, queue } = capture<MetaProfileFetchPayload>();
+    await createMetaProfileEventHandler(queue)(
+      context(META_EVENTS.profile, { conversationId, accountId, platform: 'messenger' }),
+    );
+
+    expect(added).toEqual([
+      {
+        jobId: `meta.profile_fetch.${outboxId}`,
+        payload: { brandId, conversationId, accountId, platform: 'messenger' },
+      },
+    ]);
+  });
+
   it('keeps colons out of job ids, which BullMQ refuses', () => {
     expect(metaSendJobId(outboxId)).not.toContain(':');
     expect(metaMediaFetchJobId(outboxId)).not.toContain(':');
+    expect(metaProfileFetchJobId(outboxId)).not.toContain(':');
   });
 
   it('refuses a payload it cannot trust, so the event lands in the failed set', async () => {
     const send = capture<MetaSendPayload>();
     const media = capture<MetaMediaFetchJobPayload>();
+    const profile = capture<MetaProfileFetchPayload>();
 
     await expect(
       createMetaReplyEventHandler(send.queue)(context(META_EVENTS.reply, { deliveryId: 'x' })),
@@ -130,8 +173,14 @@ describe('the Meta outbox events', () => {
         context(META_EVENTS.media, { attachmentId, accountId, ref: { kind: 'unknown' } }),
       ),
     ).rejects.toThrow();
+    await expect(
+      createMetaProfileEventHandler(profile.queue)(
+        context(META_EVENTS.profile, { conversationId, accountId, platform: 'whatsapp' }),
+      ),
+    ).rejects.toThrow();
     expect(send.added).toEqual([]);
     expect(media.added).toEqual([]);
+    expect(profile.added).toEqual([]);
   });
 
   it('registers only the consumers it is given', () => {
@@ -142,9 +191,16 @@ describe('the Meta outbox events', () => {
     expect(outboxEvents.events).not.toContain('meta.media');
     expect(outboxEvents.events).not.toContain('meta_account.changed');
 
-    registerMetaEventHandlers({ mediaQueue: { add: noop }, accountChanged: noop });
+    expect(outboxEvents.events).not.toContain('meta.profile');
+
+    registerMetaEventHandlers({
+      mediaQueue: { add: noop },
+      profileQueue: { add: noop },
+      accountChanged: noop,
+    });
 
     expect(outboxEvents.events).toContain('meta.media');
+    expect(outboxEvents.events).toContain('meta.profile');
     expect(outboxEvents.events).toContain('meta_account.changed');
   });
 });

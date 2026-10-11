@@ -101,6 +101,7 @@ stand-in for Graph and the signed-webhook driver, on real Postgres and Redis
   case. `meta_accounts.access_token` is in `ENVELOPE_COLUMNS`, so a master key
   rotation re-encrypts it. Nothing in the migration uses one of the new enum values,
   so it runs inside the migration's transaction.
+- `0051_meta_profile_checked` (M10-05): `meta_conversations.profile_checked_at`, nullable with no default, set by `meta.profile_fetch` whatever Graph answers about a Messenger or Instagram customer's name, so a refused read is made once per conversation. An existing conversation reads as never checked and is asked about on its next message.
 
 ## Open questions
 
@@ -627,7 +628,7 @@ handler, so a signed `object: instagram` webhook files tickets. By the time `han
 
 | Instagram sends | `MetaEvent` | Helpdock files |
 |---|---|---|
-| A text | `message` | A public message under the ticket of the conversation, or a new one in the account's department. The contact is the identity `<ig account id>:<igsid>` (`instagram.account`, verified), named by the profile (`name`, else `@username`). The reply window anchors on the message (`last_inbound_at`, at Meta's time, never later than now). |
+| A text | `message` | A public message under the ticket of the conversation, or a new one in the account's department. The contact is the identity `<ig account id>:<igsid>` (`instagram.account`, verified), named by its identity until the profile job (below) has the customer's `name`, else `@username`. A customer nobody has named and Graph has not been asked about gets one `meta.profile` outbox row in the same transaction. The reply window anchors on the message (`last_inbound_at`, at Meta's time, never later than now). |
 | `reply_to.mid` | `message` | When the quoted message is on the conversation's ticket (the customer's, or a reply of ours found by its delivery), a leading `> …` line with its text, one line, cut at 160 characters. |
 | Image, video, audio, file, sticker | `message` | The caption (or nothing) as the body and each file as an attachment `pending` with a `cdn_url` reference, and a `meta.media` outbox row for `meta.media_fetch` (M10-03). A kind the brand's content policy switches off is `rejected: kind_disabled` at once, with no outbox row. |
 | `reply_to.story` | `message` | The reply's text, a line "Replied to your story" with the story's URL, and the story's media as a `cdn_url` reference of type `story`. |
@@ -642,15 +643,27 @@ handler, so a signed `object: instagram` webhook files tickets. By the time `han
 
 Decisions taken inside the plan, each with its reason where it is made:
 
-- **The profile is read in the webhook request, once per conversation.** `GET /{igsid}?fields=name,username` on
-  the **Instagram root** with the account's token (Instagram allows it once the customer has written), stored
-  on the conversation (`profile_name`, `username`) and used for the contact's name. This is the one call
-  to Meta the webhook makes, so it is bounded: three seconds, and every failure (Meta, the network, a token that
-  cannot be opened, an answer in a shape Helpdock does not know) ends in "no profile" and a log line with the
-  failure's class and code, never its words, never the token. The message is filed either way. A conversation
-  that still has neither a name nor a handle is read again on the customer's next message (at most one short call
-  per message), because no column says "tried": a successful read happens once. `needsProfile` and
-  `readInstagramProfile` are in `instagram-profile.ts`.
+- **The name is read by a job, never by the webhook.** Meta's message carries no name, and Instagram allows one
+  `GET /{igsid}?fields=name,username` (Instagram root, the account's token) once the customer has written. The
+  webhook only raises `meta.profile` (`{ conversationId, accountId, platform }`) beside the message, when
+  `meta_conversations.profile_checked_at` is null and the conversation has neither `profile_name` nor `username`
+  and the account is `connected`. The outbox handler adds `meta.profile_fetch` on the `inbound` queue under
+  `meta.profile_fetch.<outbox id>`; M10-04 raises the same event for a Messenger customer (`GET /{psid}?fields=first_name,last_name`
+  on the Facebook root) and reuses the job.
+- **What the job does with Graph's answer** (`meta-profile.job.ts`, decisions in `meta-profile.ts`): a name or a
+  handle is written on the conversation (`profile_name`, `username`) and, when the contact still has the name it was
+  created with (its identity value), on the contact; an answer with nothing in it is recorded; a refusal (400 or
+  403: the Page lacks the reviewed feature, the customer blocked the account, an answer in a shape Helpdock does not
+  know) is recorded and **never stored as a name**; Meta or the network failing, or a rate limit, throws so BullMQ
+  asks again (three attempts from 30 seconds) and records nothing; a token that no longer works marks the account
+  `token_expired` in a transaction of its own (the job's rolls back with the throw) and throws. "Recorded" is
+  `profile_checked_at` (migration `0051_meta_profile_checked`, nullable, no default), which is what makes a refused
+  read happen once per conversation: the retry rule is "raise while `profile_checked_at` is null". A lookup that
+  could not be answered is therefore raised again by the customer's next message, but not for an account that is not
+  `connected`, which could not answer it.
+- **Idempotency.** The receipt is `meta.profile_fetch:<conversationId>`, claimed in the job's transaction: two lookups
+  raised by messages that arrive before the first runs read once, and a lookup that finds the conversation already
+  answered (or its row, account or platform gone or changed) does nothing.
 - **A ticket message has no column for "unsent" or "quoted".** The mark is the system line above; the quote is
   the leading line of the body. Both conventions are in `instagram-rules.ts` for M10-08 to read.
 - **A system line goes to the primary of a merge**, in the contact's language, with no outbox event: like the
@@ -659,9 +672,9 @@ Decisions taken inside the plan, each with its reason where it is made:
 - **`unsupported` moves the window; a reaction, a postback and an unsent message do not** (DOMAIN-RULES §4.8).
 - **Timestamps** are Meta's, clamped to Helpdock's clock, so a skewed or forged value cannot hold a window open
   into the future.
-- **A contact keeps the name it was created with.** A profile read that failed on the first message leaves the
-  contact named by its identity; the conversation's `username` is filled when a later read succeeds, and the ticket's
-  identity card reads it from there (M10-08).
+- **A contact a person renamed keeps the name.** Until the job has run, and for ever when Meta refuses it, a contact
+  is called by its identity value; the job replaces only that, so an agent's rename is never overwritten. The
+  conversation's `username` is where the ticket's identity card reads the `@handle` (M10-08).
 
 **Stand-ins for M10-03's shared code.** The branch for M10-03 had not landed when this was built, so three of the
 files the brief (§4.1) assigns to it exist here in their smallest working form, each marked
@@ -672,21 +685,34 @@ files the brief (§4.1) assigns to it exist here in their smallest working form,
 `thread.reaction`, `thread.reactionPlain`). `meta-media.job.ts`, `factory.ts` and the `storage` option of
 `MetaModule.forRoot` were not needed: nothing here stores an object.
 
-Tests: unit for the profile read and its timeout, the quote, the clock and the marker, and for the service's
-dispatch over stubs (the profile once, a failed profile, an unopenable token, every echo origin, receipts, counted
-events). `meta-instagram.integration.test.ts` › "Instagram (M10-05)" against real Postgres and Redis through the
-signed-webhook driver and the stand-in for Graph: text opens a ticket with the contact on `<account>:<igsid>`
-verified and the `@username`; the profile is one call on the Instagram root with the account's token and a second
-message makes no other; a redelivery files nothing twice; a refused or failing profile keeps the message and is
-tried again; the reopen policy (reopens inside the window, continues in a new ticket past it); a blocked sender is
-dropped before any contact exists and before any call to Meta; two accounts of two brands in one batch file two
-tickets, each in its brand; an image is a `pending` attachment with its `meta.media` row, and rejected at once when
-the policy switches images off; a story reply files the story's media and the line naming it; a story mention in
-Arabic; a shared reel is a line with its URL; a reply to an earlier message is quoted, and not from another
-conversation's ticket; echoes by app id, by delivery id and typed elsewhere file nothing; an unsent message keeps its
-row and gains one line, once, in the contact's language, on the primary of a merge; an unsupported message adds one
-line and moves the window; `messaging_seen` marks the delivery read once and never back; a reaction adds a line on the
-customer's message or on our reply.
+Tests: unit for the profile job's decisions (`meta-profile.test.ts`: who wants a name, when a queued lookup has nothing
+to do, what each platform is asked, Graph's answer read as a name, an empty answer, a refusal, a retry or a dead token,
+the contact's name and when it may be replaced), the quote, the clock and the marker, the service's dispatch over stubs
+(the event raised once, and not for a named, checked or unreachable customer; every echo origin; receipts; counted
+events), the `meta.profile` event and its handler, and the job's definition. `meta-instagram.integration.test.ts` ›
+"Instagram (M10-05)" against real Postgres and Redis through the signed-webhook driver and the stand-in for Graph:
+text opens a ticket with the contact on `<account>:<igsid>` verified, the webhook calls Graph for nothing and raises
+one `meta.profile` event; the job fills the name and the `@username` on the conversation and the contact with one read
+on the Instagram root and the account's token; the next message raises nothing; two messages before the job runs raise
+two events and read once; an agent's rename of the contact is kept; a 400 is recorded once, never stored as a name and
+not raised again; a 500 leaves the customer unnamed and the next message asks again; a dead token marks the account
+`token_expired` and nothing more is asked of it; a redelivery files nothing twice; the reopen policy (reopens inside the
+window, continues in a new ticket past it); a blocked sender is dropped before any contact exists and before any lookup;
+two accounts of two brands in one batch file two tickets and raise two lookups, each in its brand and read with its own
+token; an image is a `pending` attachment with its `meta.media` row, and rejected at once when the policy switches
+images off; a story reply files the story's media and the line naming it; a story mention in Arabic; a shared reel is a
+line with its URL; a reply to an earlier message is quoted, and not from another conversation's ticket; echoes by app id,
+by delivery id and typed elsewhere file nothing; an unsent message keeps its row and gains one line, once, in the
+contact's language, on the primary of a merge; an unsupported message adds one line and moves the window;
+`messaging_seen` marks the delivery read once and never back; a reaction adds a line on the customer's message or on our
+reply.
+
+**Names other deliverables use.** Event `meta.profile` (`META_EVENTS.profile`), `enqueueMetaProfile(tx, brandId, { conversationId, accountId, platform })`
+and `createMetaProfileEventHandler(queue)` in `meta-events.ts`; the job `metaProfileFetchJob` (`meta.profile_fetch`,
+`inbound`, receipt `meta.profile_fetch:<conversationId>`) and `metaProfileFetchPayloadSchema { brandId, conversationId, accountId, platform: 'messenger' | 'instagram' }`
+in `packages/jobs/src/jobs.ts`; `wantsProfile`, `readProfile` and `PROFILE_READS` in `meta-profile.ts`;
+`createMetaProfileProcessor` in `meta-profile.job.ts`, registered by `start-worker.ts` on the `inbound` worker, and the
+`profileQueue` consumer of `registerMetaEventHandlers`.
 
 ### M10-05 What is left
 

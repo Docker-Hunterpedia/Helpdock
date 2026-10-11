@@ -39,14 +39,18 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
+import { type JobLogger, metaProfileFetchJob, silentLogger } from '@helpdock/jobs';
 import { contentPolicySchema } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import type { Job } from 'bullmq';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { MetaRepository } from './meta.repository.js';
+import { createMetaProfileEventHandler } from './meta-events.js';
+import { createMetaProfileProcessor } from './meta-profile.job.js';
 
 /**
  * M10-05 against real Postgres and Redis, with the stand-in for Graph and the
@@ -208,6 +212,76 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
 
   const profileCalls = (igsid: string) => graph.callsTo(`/${igsid}`, 'GET');
 
+  /** The `meta.profile` events raised for one conversation, oldest first. */
+  const profileEvents = async (conversationId: string) =>
+    (
+      await owner.db
+        .select()
+        .from(outbox)
+        .where(eq(outbox.event, 'meta.profile'))
+        .orderBy(asc(outbox.id))
+    ).filter(
+      (row) => (row.payload as { conversationId: string }).conversationId === conversationId,
+    );
+
+  const handledProfileEvents = new Set<string>();
+
+  /**
+   * The worker's half, played by hand as Telegram's suite plays it: every
+   * `meta.profile` row nobody has handled is turned into its job by the event
+   * handler and the job is run by the processor. Answers the errors the jobs
+   * threw, which BullMQ would have retried.
+   */
+  const runProfileJobs = async (attemptsMade = 0, log: JobLogger = silentLogger) => {
+    const process = createMetaProfileProcessor({
+      db: runtime.db,
+      log,
+      repository,
+      keyring: createKeyring(envFor()),
+      graph: () =>
+        new GraphClient({
+          root: graph.facebookRoot,
+          instagramRoot: graph.instagramRoot,
+          allowCidrs: ['127.0.0.0/8'],
+        }),
+    });
+    const rows = await owner.db
+      .select()
+      .from(outbox)
+      .where(eq(outbox.event, 'meta.profile'))
+      .orderBy(asc(outbox.id));
+    const thrown: unknown[] = [];
+    for (const row of rows.filter((candidate) => !handledProfileEvents.has(candidate.id))) {
+      handledProfileEvents.add(row.id);
+      const added: { jobId: string; payload: unknown }[] = [];
+      await withSystem(runtime.db, row.brandId, (tx) =>
+        createMetaProfileEventHandler({ add: async (input) => void added.push(input) })({
+          outboxId: row.id,
+          brandId: row.brandId,
+          event: row.event,
+          payload: row.payload,
+          tx,
+          log: silentLogger,
+        }),
+      );
+      for (const job of added) {
+        await process({
+          name: metaProfileFetchJob.name,
+          id: job.jobId,
+          data: job.payload,
+          attemptsMade,
+          opts: { attempts: 3 },
+        } as unknown as Job).catch((error: unknown) => void thrown.push(error));
+      }
+    }
+    return thrown;
+  };
+
+  const contactNameOf = async (contactId: string) => {
+    const [row] = await owner.db.select().from(contacts).where(eq(contacts.id, contactId));
+    return row?.name;
+  };
+
   const mediaEvents = () =>
     owner.db.select().from(outbox).where(eq(outbox.event, 'meta.media')).orderBy(asc(outbox.id));
 
@@ -352,14 +426,6 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
     await runtime.settings.set('meta.appSecret', APP_SECRET, { updatedBy: 'suite' });
     await runtime.settings.set('meta.instagramAppSecret', INSTAGRAM_SECRET, { updatedBy: 'suite' });
     await runtime.settings.set('meta.appId', META_FIXTURE.appId, { updatedBy: 'suite' });
-
-    // The first request pays for loading every module the pipeline lazily
-    // imports, which is longer than the three seconds a profile read is given.
-    // Nothing a test asserts is about that first request, so it is made here.
-    const warmUp = nextIgsid();
-    graph.profiles.set(warmUp, { name: 'Warm Up', username: 'warm.up' });
-    await post(instagramText({ igAccountId: IG_A, igsid: warmUp, mid: nextMid() }));
-    graph.reset();
   }, 300_000);
 
   afterAll(async () => {
@@ -370,18 +436,25 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     graph.reset();
+    // A lookup an earlier test raised and left unrun is not this test's to run.
+    const raised = await owner.db
+      .select({ id: outbox.id })
+      .from(outbox)
+      .where(eq(outbox.event, 'meta.profile'));
+    for (const row of raised) {
+      handledProfileEvents.add(row.id);
+    }
   });
 
   // --------------------------------------------------------------- messages
 
   describe('a message', () => {
-    it('opens a ticket keyed on the account and the Instagram-scoped id, with the @username', async () => {
+    it('opens a ticket keyed on the account and the Instagram-scoped id, and calls Meta for nothing', async () => {
       const igsid = nextIgsid();
       const mid = nextMid();
       const sent = ago(30);
-      graph.profiles.set(igsid, { name: 'Sheena Nelson', username: 'sheena.n' });
 
       const response = await post(
         instagramText({
@@ -405,8 +478,9 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       });
       expect(conversation).toMatchObject({
         brandId: BRAND_A,
-        profileName: 'Sheena Nelson',
-        username: 'sheena.n',
+        profileName: null,
+        username: null,
+        profileCheckedAt: null,
         lastInboundMessageId: mid,
       });
       // The reply window opens at Meta's time for the message.
@@ -421,11 +495,8 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
         verified: true,
         source: 'instagram.account',
       });
-      const [contact] = await owner.db
-        .select()
-        .from(contacts)
-        .where(eq(contacts.id, conversation.contactId));
-      expect(contact?.name).toBe('Sheena Nelson');
+      // Meta's message carries no name; the contact waits for the profile job under its identity.
+      expect(await contactNameOf(conversation.contactId)).toBe(`${IG_A}:${igsid}`);
       expect(await messagesOf(ticket.id)).toMatchObject([
         {
           kind: 'public',
@@ -435,15 +506,35 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
           bodyText: 'Do you ship to Dubai?',
         },
       ]);
+      // The webhook never calls Graph: it wrote one outbox row for the name instead.
+      expect(graph.calls).toEqual([]);
+      expect(await profileEvents(conversation.id)).toMatchObject([
+        {
+          brandId: BRAND_A,
+          payload: {
+            conversationId: conversation.id,
+            accountId: account.id,
+            platform: 'instagram',
+          },
+        },
+      ]);
     });
 
-    it('reads the profile once on the Instagram root with the account’s token, and not again', async () => {
+    it('fills the name and the @username on the conversation and the contact once the job has run', async () => {
       const igsid = nextIgsid();
       graph.profiles.set(igsid, { name: 'Omar Khalil', username: 'omar.k' });
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid() }));
+      const account = accountOf(BRAND_A);
+      const before = await conversationOf(account.id, igsid);
 
-      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), timestamp: ago(60) }));
-      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), timestamp: ago(30) }));
+      const thrown = await runProfileJobs();
 
+      expect(thrown).toEqual([]);
+      const after = await conversationOf(account.id, igsid);
+      expect(after).toMatchObject({ profileName: 'Omar Khalil', username: 'omar.k' });
+      expect(after?.profileCheckedAt).not.toBeNull();
+      expect(await contactNameOf(before?.contactId ?? '')).toBe('Omar Khalil');
+      // One read, on the Instagram root, with the account's token and nothing else asked.
       const calls = profileCalls(igsid);
       expect(calls).toHaveLength(1);
       expect(calls[0]).toMatchObject({
@@ -451,8 +542,61 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
         token: TOKEN_A,
         query: { fields: 'name,username' },
       });
-      // Nothing was asked of the Facebook root: Instagram Login has its own host.
-      expect(graph.calls.filter((call) => call.root === 'facebook')).toEqual([]);
+      expect(graph.calls).toHaveLength(1);
+    });
+
+    it('raises nothing for the next message once the customer is named', async () => {
+      const igsid = nextIgsid();
+      graph.profiles.set(igsid, { name: 'Lina H', username: 'lina.h' });
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), timestamp: ago(60) }));
+      await runProfileJobs();
+      const conversation = await conversationOf(accountOf(BRAND_A).id, igsid);
+
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), timestamp: ago(30) }));
+
+      expect(await profileEvents(conversation?.id ?? '')).toHaveLength(1);
+      expect(await runProfileJobs()).toEqual([]);
+      expect(profileCalls(igsid)).toHaveLength(1);
+    });
+
+    it('reads once when a second message arrives before the first lookup has run', async () => {
+      const igsid = nextIgsid();
+      graph.profiles.set(igsid, { name: 'Twice', username: 'twice' });
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), timestamp: ago(60) }));
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), timestamp: ago(30) }));
+      const conversation = await conversationOf(accountOf(BRAND_A).id, igsid);
+      // The conversation is still nameless when the second message is filed, so it asks too.
+      expect(await profileEvents(conversation?.id ?? '')).toHaveLength(2);
+
+      expect(await runProfileJobs()).toEqual([]);
+
+      // The job is keyed by the conversation: the second finds the first's receipt.
+      expect(profileCalls(igsid)).toHaveLength(1);
+      expect(await conversationOf(accountOf(BRAND_A).id, igsid)).toMatchObject({
+        profileName: 'Twice',
+      });
+    });
+
+    it('leaves a contact an agent renamed alone, and still records the name on the conversation', async () => {
+      const igsid = nextIgsid();
+      graph.profiles.set(igsid, { name: 'Real Name', username: 'real.name' });
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid() }));
+      const account = accountOf(BRAND_A);
+      const conversation = await conversationOf(account.id, igsid);
+      await owner.db
+        .update(contacts)
+        .set({ name: 'Customer from the newsletter' })
+        .where(eq(contacts.id, conversation?.contactId ?? ''));
+
+      await runProfileJobs();
+
+      expect(await contactNameOf(conversation?.contactId ?? '')).toBe(
+        'Customer from the newsletter',
+      );
+      expect(await conversationOf(account.id, igsid)).toMatchObject({
+        profileName: 'Real Name',
+        username: 'real.name',
+      });
     });
 
     it('continues the conversation’s ticket with the next message and moves the window forward', async () => {
@@ -498,47 +642,94 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       expect((await messagesOf(ticket.id)).map((message) => message.bodyText)).toEqual([
         'Once only',
       ]);
-      expect(profileCalls(igsid)).toHaveLength(1);
+      // The redelivery was dropped before it could raise a second lookup.
+      const conversation = await conversationOf(accountOf(BRAND_A).id, igsid);
+      expect(await profileEvents(conversation?.id ?? '')).toHaveLength(1);
     });
 
-    it('keeps the message when Meta refuses the profile, and asks again with the next one', async () => {
+    it('records a refusal once, never stores it as a name, and raises nothing for the next message', async () => {
       const igsid = nextIgsid();
       graph.profileDenied.add(igsid);
-
       await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), text: 'Hello?' }));
-
       const account = accountOf(BRAND_A);
-      const first = await ticketFor(account, igsid);
-      expect(first.conversation).toMatchObject({ profileName: null, username: null });
-      // No name to give the contact: it is called by its identity.
-      const [contact] = await owner.db
-        .select()
-        .from(contacts)
-        .where(eq(contacts.id, first.conversation.contactId));
-      expect(contact?.name).toBe(`${IG_A}:${igsid}`);
+
+      const thrown = await runProfileJobs();
+
+      // A 400 is an answer, not a failure to retry.
+      expect(thrown).toEqual([]);
+      const refused = await conversationOf(account.id, igsid);
+      expect(refused).toMatchObject({ profileName: null, username: null });
+      expect(refused?.profileCheckedAt).not.toBeNull();
+      expect(await contactNameOf(refused?.contactId ?? '')).toBe(`${IG_A}:${igsid}`);
       expect(profileCalls(igsid)).toHaveLength(1);
 
-      graph.profileDenied.delete(igsid);
-      graph.profiles.set(igsid, { name: 'Noor', username: 'noor.a' });
       await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), text: 'Still there?' }));
 
-      expect(profileCalls(igsid)).toHaveLength(2);
-      const second = await ticketFor(account, igsid);
-      expect(second.conversation).toMatchObject({ profileName: 'Noor', username: 'noor.a' });
-      expect(second.ticket.id).toBe(first.ticket.id);
+      expect(await profileEvents(refused?.id ?? '')).toHaveLength(1);
+      expect(await runProfileJobs()).toEqual([]);
+      expect(profileCalls(igsid)).toHaveLength(1);
     });
 
-    it('files the message when the profile call fails outright', async () => {
+    it('leaves the customer unnamed when Meta fails, and the next message asks again', async () => {
       const igsid = nextIgsid();
       graph.failures.push({ status: 500, match: new RegExp(`GET /${igsid}`) });
-
+      graph.profiles.set(igsid, { name: 'Noor', username: 'noor.a' });
       const response = await post(
         instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), text: 'Hi' }),
       );
-
       expect(response.status).toBe(200);
-      const { ticket } = await ticketFor(accountOf(BRAND_A), igsid);
-      expect(await messagesOf(ticket.id)).toHaveLength(1);
+      const account = accountOf(BRAND_A);
+
+      const thrown = await runProfileJobs();
+
+      // BullMQ would retry; nothing is recorded, not even the receipt.
+      expect(thrown).toHaveLength(1);
+      const failed = await conversationOf(account.id, igsid);
+      expect(failed).toMatchObject({ profileName: null, username: null, profileCheckedAt: null });
+
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid(), text: 'Anyone?' }));
+
+      expect(await profileEvents(failed?.id ?? '')).toHaveLength(2);
+      expect(await runProfileJobs()).toEqual([]);
+      expect(await conversationOf(account.id, igsid)).toMatchObject({
+        profileName: 'Noor',
+        username: 'noor.a',
+      });
+      const { ticket } = await ticketFor(account, igsid);
+      expect(await messagesOf(ticket.id)).toHaveLength(2);
+    });
+
+    it('marks the account token_expired when Meta says the token is dead, and asks nothing more of it', async () => {
+      const igsid = nextIgsid();
+      await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid() }));
+      const account = accountOf(BRAND_A);
+      const waiting = await conversationOf(account.id, igsid);
+      graph.expiredTokens.add(TOKEN_A);
+
+      try {
+        const thrown = await runProfileJobs();
+
+        expect(thrown).toHaveLength(1);
+        const [row] = await owner.db
+          .select()
+          .from(metaAccounts)
+          .where(eq(metaAccounts.id, account.id));
+        expect(row).toMatchObject({ status: 'token_expired' });
+        expect(row?.lastError).not.toContain(TOKEN_A);
+        expect(row?.lastErrorAt).not.toBeNull();
+        // The row is left for the next attempt.
+        expect(await conversationOf(account.id, igsid)).toMatchObject({ profileCheckedAt: null });
+
+        await post(instagramText({ igAccountId: IG_A, igsid, mid: nextMid() }));
+
+        // An account that cannot answer is not asked to.
+        expect(await profileEvents(waiting?.id ?? '')).toHaveLength(1);
+      } finally {
+        await owner.db
+          .update(metaAccounts)
+          .set({ status: 'connected', lastError: null, lastErrorAt: null })
+          .where(eq(metaAccounts.id, account.id));
+      }
     });
 
     it('reopens a ticket closed a day ago, and continues in a new one when it closed a month ago', async () => {
@@ -584,8 +775,10 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
           .from(contactIdentities)
           .where(eq(contactIdentities.value, `${IG_A}:${igsid}`)),
       ).toEqual([]);
-      // Not even the profile: nothing is asked of Meta about someone who is dropped.
-      expect(profileCalls(igsid)).toEqual([]);
+      // Not even a lookup: nothing is asked of Meta about someone who is dropped.
+      expect(graph.calls).toEqual([]);
+      const raised = await owner.db.select().from(outbox).where(eq(outbox.event, 'meta.profile'));
+      expect(raised.filter((row) => JSON.stringify(row.payload).includes(igsid))).toEqual([]);
       const [row] = await owner.db
         .select({ droppedCount: blockedSenders.droppedCount })
         .from(blockedSenders)
@@ -610,9 +803,14 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       expect(b.ticket.brandId).toBe(BRAND_B);
       expect(a.ticket.departmentId).toBe(seeded.get(BRAND_A)?.departmentId);
       expect(b.ticket.departmentId).toBe(seeded.get(BRAND_B)?.departmentId);
-      // Each profile was read with its own account's token.
+      // Each lookup is raised in its own brand and reads with its own account's token.
+      expect(await profileEvents(a.conversation.id)).toMatchObject([{ brandId: BRAND_A }]);
+      expect(await profileEvents(b.conversation.id)).toMatchObject([{ brandId: BRAND_B }]);
+      expect(await runProfileJobs()).toEqual([]);
       expect(profileCalls(igsidA)[0]?.token).toBe(TOKEN_A);
       expect(profileCalls(igsidB)[0]?.token).toBe(TOKEN_B);
+      expect(await contactNameOf(a.conversation.contactId)).toBe('Ana');
+      expect(await contactNameOf(b.conversation.contactId)).toBe('Ben');
     });
   });
 

@@ -1,4 +1,3 @@
-import type { Keyring } from '@helpdock/config';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { MediaRepository } from '../media/media.repository.js';
 import { SlaRepository } from '../sla/sla.repository.js';
@@ -8,7 +7,6 @@ import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.reposi
 import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
 import { TicketRepository } from '../tickets/tickets.repository.js';
 import { DeferredAttachmentSink } from './deferred-sink.js';
-import type { GraphClientFactory } from './graph-client-factory.js';
 import { InstagramInboundService } from './instagram-inbound.service.js';
 import type { MetaRepository } from './meta.repository.js';
 import type { MetaInboundLog } from './meta-inbound.service.js';
@@ -22,8 +20,6 @@ import { MetaConversationRouter } from './meta-router.js';
  */
 export const createInstagramInboundService = (options: {
   readonly repository: MetaRepository;
-  readonly graph: GraphClientFactory;
-  readonly keyring: Keyring;
   readonly appId: () => Promise<string>;
   readonly log: MetaInboundLog;
 }): InstagramInboundService => {
@@ -47,8 +43,6 @@ export const createInstagramInboundService = (options: {
     sink: new DeferredAttachmentSink(new MediaRepository()),
     tickets,
     lifecycleReads,
-    graph: options.graph,
-    keyring: options.keyring,
     appId: options.appId,
     log: options.log,
   });

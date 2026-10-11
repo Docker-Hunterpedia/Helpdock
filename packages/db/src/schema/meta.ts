@@ -136,6 +136,14 @@ export const metaConversations = pgTable(
     profileName: text('profile_name'),
     /** Instagram: the customer's `@username` without the `@`. */
     username: text('username'),
+    /**
+     * Messenger and Instagram: when `meta.profile_fetch` last got an answer from
+     * Graph about this customer's name, whatever the answer was. Null until it has,
+     * which is what raises the lookup; a refusal (the Page lacks the feature, the
+     * customer blocked the account) sets it too, so a refused read is made once
+     * per conversation and not on every message.
+     */
+    profileCheckedAt: timestamp('profile_checked_at', { withTimezone: true }),
     /** The anchor of the reply window. Null until the customer writes. */
     lastInboundAt: timestamp('last_inbound_at', { withTimezone: true }),
     lastInboundMessageId: text('last_inbound_message_id'),

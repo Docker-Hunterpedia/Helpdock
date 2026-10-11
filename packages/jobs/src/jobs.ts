@@ -1435,6 +1435,45 @@ export const metaMediaFetchJob = defineJob({
   idempotencyKey: ({ attachmentId }) => `meta.media_fetch:${attachmentId}`,
 });
 
+// --------------------------------------------------------------------------
+// M10-05: a Messenger or Instagram customer's name
+// --------------------------------------------------------------------------
+
+export const metaProfileFetchPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `meta_conversations` row whose customer's name is wanted. */
+  conversationId: z.uuid(),
+  accountId: z.uuid(),
+  /** WhatsApp sends the name with every message and is never looked up. */
+  platform: z.enum(['messenger', 'instagram']),
+});
+export type MetaProfileFetchPayload = z.infer<typeof metaProfileFetchPayloadSchema>;
+
+/**
+ * M10-05 (shared with M10-04): reads a Messenger or Instagram customer's name
+ * from Graph, after the first message from them has been filed, so the webhook
+ * never calls Meta (ADR 0025, 6). Asked for through the outbox (`meta.profile`,
+ * written beside the message) and added by that event's handler with the outbox
+ * row's id (`meta.profile_fetch.<outbox id>`), on the `inbound` queue.
+ *
+ * **Idempotent** (DOMAIN-RULES §6): keyed by the conversation, so a second
+ * lookup for the same customer, raised by a message that arrived before the
+ * first ran, does nothing. Three attempts from 30 seconds: a name is not worth
+ * more, and a refusal from Meta is an answer, recorded, not a failure.
+ */
+export const metaProfileFetchJob = defineJob({
+  name: 'meta.profile_fetch',
+  queue: QUEUE_NAMES.inbound,
+  schema: metaProfileFetchPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: ({ conversationId }) => `meta.profile_fetch:${conversationId}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -1479,6 +1518,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [metaHealthScheduleJob.name]: metaHealthScheduleJob,
   [metaSendJob.name]: metaSendJob,
   [metaMediaFetchJob.name]: metaMediaFetchJob,
+  [metaProfileFetchJob.name]: metaProfileFetchJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

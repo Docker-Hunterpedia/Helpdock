@@ -5,7 +5,6 @@ import {
   type MetaMessageEvent,
   toInstagramInboundMessage,
 } from '@helpdock/channels';
-import { decryptSecret, type Keyring, SecretDecryptionError } from '@helpdock/config';
 import {
   type DbTransaction,
   type MetaAccount as MetaAccountRow,
@@ -19,8 +18,6 @@ import { z } from 'zod';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
 import type { DeferredAttachmentSink } from './deferred-sink.js';
-import type { GraphClientFactory } from './graph-client-factory.js';
-import { type InstagramProfile, needsProfile, readInstagramProfile } from './instagram-profile.js';
 import {
   instantOf,
   quoteLine,
@@ -28,6 +25,7 @@ import {
   unsentExternalId,
 } from './instagram-rules.js';
 import type { MetaRepository } from './meta.repository.js';
+import { enqueueMetaProfile } from './meta-events.js';
 import type {
   MetaEventContext,
   MetaEventOutcome,
@@ -35,6 +33,7 @@ import type {
   PlatformInboundService,
 } from './meta-inbound.service.js';
 import { metaMessageSeen } from './meta-inbound-gate.js';
+import { wantsProfile } from './meta-profile.js';
 import type { MetaConversationRouter } from './meta-router.js';
 import { metaText } from './meta-text.js';
 
@@ -46,7 +45,7 @@ import { metaText } from './meta-text.js';
  *
  * | The event is | What happens |
  * |---|---|
- * | `message` | the customer's profile is read once, then the router files it: a text, a story reply or mention, a shared post or reel as a line with its URL, files as `pending` attachments for `meta.media_fetch` |
+ * | `message` | the router files it: a text, a story reply or mention, a shared post or reel as a line with its URL, files as `pending` attachments for `meta.media_fetch`; a new customer's name is asked for with a `meta.profile` event beside it |
  * | `echo` | dropped: Helpdock's own (by `app_id` or the delivery id in `metadata`) silently, any other counted |
  * | `deleted` | the message and its body stay; a system line "Unsent by the customer" marks it |
  * | `unsupported` | a system line on the conversation's ticket, counted; the customer did write, so the reply window moves |
@@ -54,9 +53,9 @@ import { metaText } from './meta-text.js';
  * | `reaction` | a system line on the ticket the message is on |
  * | `postback`, `referral` and anything else | counted and dropped; never a message, never a window anchor |
  *
- * Nothing here is sent to the customer. The one call to Meta is the profile
- * read in {@link InstagramInboundService.handle}'s `message` path, which is
- * short, optional and never fails the message (`instagram-profile.ts`).
+ * Nothing here calls Meta or sends anything to the customer: what an event
+ * needs from outside the database is an outbox row, written in the same
+ * transaction (DOMAIN-RULES §6).
  */
 
 export interface InstagramInboundServiceOptions {
@@ -65,8 +64,6 @@ export interface InstagramInboundServiceOptions {
   readonly sink: DeferredAttachmentSink;
   readonly tickets: TicketRepository;
   readonly lifecycleReads: TicketLifecycleRepository;
-  readonly graph: GraphClientFactory;
-  readonly keyring: Keyring;
   /** The install's `meta.appId`, to recognise Helpdock's own echoes; empty when none is set. */
   readonly appId: () => Promise<string>;
   readonly log: MetaInboundLog;
@@ -146,9 +143,6 @@ export class InstagramInboundService implements PlatformInboundService {
     const { tx, account, now } = context;
     const { repository, lifecycleReads } = this.#options;
     const conversation = await repository.conversation(tx, account.id, event.customerId);
-    const profile = needsProfile(conversation)
-      ? await this.#profile(account, event.customerId)
-      : null;
     const t = metaText(
       await lifecycleReads.localeForContact(tx, account.brandId, conversation?.contactId ?? null),
     );
@@ -156,11 +150,7 @@ export class InstagramInboundService implements PlatformInboundService {
 
     const message = toInstagramInboundMessage(
       {
-        event: {
-          ...event,
-          ...(profile === null ? {} : { profileName: profile.name, username: profile.username }),
-          text: [quote, event.text].filter((part) => part !== '').join('\n\n'),
-        },
+        event: { ...event, text: [quote, event.text].filter((part) => part !== '').join('\n\n') },
         accountExternalId: account.externalId,
         labels: labelsOf(t),
       },
@@ -171,41 +161,30 @@ export class InstagramInboundService implements PlatformInboundService {
       message,
       this.#options.sink,
     );
+    await this.#askForProfile(context, event.customerId);
 
     return handled;
   }
 
   /**
-   * `GET /{igsid}?fields=name,username` on the Instagram root, with the
-   * account's token. Never throws: a customer's message is worth more than
-   * their name (`instagram-profile.ts`).
+   * A customer Graph has not been asked about and nobody has named gets one
+   * `meta.profile` event, in the transaction that filed their message. The
+   * lookup records that it asked whatever the answer, so a refused one is not
+   * raised again; one that could not be answered (Meta down) is, by the next
+   * message. An account whose token is dead cannot answer, so none is raised.
    */
-  async #profile(account: MetaAccountRow, igsid: string): Promise<InstagramProfile | null> {
-    let token: string;
-    try {
-      token = decryptSecret(account.accessToken, this.#options.keyring);
-    } catch (error) {
-      if (!(error instanceof SecretDecryptionError)) {
-        throw error;
-      }
-      // The master key changed under the stored token. The failure's class is
-      // enough to find it; its message is not logged.
-      this.#options.log.warn(
-        { accountId: account.id, reason: error.name },
-        'could not read an instagram customer profile',
-      );
-      return null;
+  async #askForProfile({ tx, account }: MetaEventContext, customerId: string): Promise<void> {
+    if (account.status !== 'connected') {
+      return;
     }
-
-    const result = await readInstagramProfile({ graph: this.#options.graph(), token, igsid });
-    if (result.ok) {
-      return result.profile;
+    const conversation = await this.#options.repository.conversation(tx, account.id, customerId);
+    if (conversation !== undefined && wantsProfile(conversation)) {
+      await enqueueMetaProfile(tx, account.brandId, {
+        conversationId: conversation.id,
+        accountId: account.id,
+        platform: 'instagram',
+      });
     }
-    this.#options.log.warn(
-      { accountId: account.id, reason: result.reason, code: result.code },
-      'could not read an instagram customer profile',
-    );
-    return null;
   }
 
   /**

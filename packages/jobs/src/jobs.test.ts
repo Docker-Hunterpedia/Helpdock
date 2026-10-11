@@ -42,6 +42,7 @@ import {
   metaHealthScheduleJob,
   metaHealthSchedulerId,
   metaMediaFetchJob,
+  metaProfileFetchJob,
   metaSendJob,
   metaSendPayloadSchema,
   notifyEmailJob,
@@ -787,5 +788,44 @@ describe('the Meta media fetch (M10-03)', () => {
         ref: { kind: 'cdn_url', url: 'file:///etc/passwd', type: 'image' },
       }),
     ).toThrow(PayloadValidationError);
+  });
+});
+
+describe('the Meta profile lookup (M10-05)', () => {
+  const conversationId = '01924f00-0000-7000-8000-0000000000e1';
+  const accountId = '01924f00-0000-7000-8000-0000000000e2';
+
+  it('runs on the inbound queue with three attempts from thirty seconds', () => {
+    expect(metaProfileFetchJob.queue).toBe('inbound');
+    expect(metaProfileFetchJob.options).toMatchObject({
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 30_000 },
+    });
+  });
+
+  it('is keyed by the conversation, whichever outbox row asked', () => {
+    const payload = parseJobPayload(metaProfileFetchJob, {
+      brandId,
+      conversationId,
+      accountId,
+      platform: 'instagram',
+    });
+
+    expect(idempotencyKeyFor(metaProfileFetchJob, payload, 'meta.profile_fetch.a')).toBe(
+      `meta.profile_fetch:${conversationId}`,
+    );
+    expect(idempotencyKeyFor(metaProfileFetchJob, payload, 'meta.profile_fetch.b')).toBe(
+      `meta.profile_fetch:${conversationId}`,
+    );
+  });
+
+  it('is asked for Messenger and Instagram only: WhatsApp sends the name itself', () => {
+    const ask = (platform: string) =>
+      metaProfileFetchJob.schema.safeParse({ brandId, conversationId, accountId, platform })
+        .success;
+
+    expect(ask('messenger')).toBe(true);
+    expect(ask('instagram')).toBe(true);
+    expect(ask('whatsapp')).toBe(false);
   });
 });

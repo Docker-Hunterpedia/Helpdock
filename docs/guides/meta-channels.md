@@ -152,6 +152,23 @@ Retry puts a **failed** delivery back and sends only the parts that are left. Th
 
 Until M10-09, a person's reply in the extended Human Agent days goes out as an ordinary response, which Meta refuses with the closed-window error; the delivery ends `refused` with Meta's words.
 
+### Messenger
+
+A message to a connected Page opens a ticket in the Page's department, or continues the customer's open ticket, as email, the widget and Telegram do. The customer is a **page-scoped id**, stored as `<Page id>:<id>` and always verified, so the same person writing to two Pages is two contacts until an agent merges them.
+
+| Messenger sends | Helpdock does |
+|---|---|
+| Text, an image, a video, an audio file or a file | Files the message. Each file becomes an attachment that is *pending* until a job has fetched it from Meta's CDN; the webhook never downloads anything. A sticker is filed as an image. |
+| A shared link Messenger could not render | The title and the URL as text. Without a URL, a line in the customer's ticket says they sent something Helpdock cannot show (nothing is filed when they have no ticket yet). |
+| The customer's name | Read from Meta once, when the conversation begins. When Meta refuses the read, as it can for an app without its profile-access feature, or does not answer within three seconds, the contact is named by its id and the message is filed as usual. |
+| A reaction, or an edit of a message | A line in the thread of the message's ticket ("The customer reacted ❤️ to a message", "The customer edited a message. It now reads: …"). The message keeps what it said. |
+| An echo of a message the Page sent | Dropped. Helpdock recognises its own sends by the app id (`meta.appId`, set by `HD_META_APP_ID`) and by the delivery id a reply is sent with; a reply typed in Meta Business Suite is dropped too, not imported. |
+| A delivery or read report | Moves every reply of that conversation sent before it to delivered or read, and never back. |
+| A postback, a referral, an event of another app that holds the thread | Counted and dropped. |
+| A messaging policy notice (Meta warned or blocked the Page) | Recorded as the account's last error, which reads as failing until the next event arrives. |
+
+Set the app id so Helpdock can tell its own replies from the ones typed in the Page inbox.
+
 ## Developing without Meta
 
 No suite reaches Meta. The stand-in for Graph and the driver that posts signed webhooks are described under [Standing in for a vendor](development.md#standing-in-for-a-vendor).

@@ -50,7 +50,7 @@ Definition of done asks for.
 | M10-01 | Schema, config and the shared Graph adapter: migration `0050_meta_channels` (`meta_accounts`, `meta_conversations`, `meta_deliveries`, the three channel and identity enum values), the `meta.*` settings and `META_*` keys, `packages/channels/src/meta/` (Graph client over `safeFetch` with the host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter), and the stand-in for Graph with the signed-webhook driver | A §5, §8, §13; D §13; ADR 0025 (1, 2, 5) | Integration: the three tables in the RLS negative suite (D §1.6), the migration round-trip; the stand-in's own suite | 3 d | | built, awaiting review: [notes](#m10-01-schema-config-and-the-shared-adapter) |
 | M10-02 | The webhook: `GET\|POST /api/meta/webhook`, the handshake, the raw body kept for the signature, constant-time checks against both app secrets, routing by `object` and `entry[].id` to the account across brands, a transaction per entry, dedupe on `wamid`/`mid`, 200 for everything after a valid signature, a brand in its deletion grace passed over and counted | ADR 0025 (4, 6); D §6 | Integration: a signed batch with entries of two brands files two tickets, each in its brand; a redelivered batch files nothing twice; a wrong signature is 401 and files nothing; the race of two deliveries ends with one message | 2 d | | built, awaiting review: [notes](#m10-02-the-webhook-routing-dedupe-and-the-module-skeleton) |
 | M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | built, awaiting review: [notes](#m10-03-whatsapp-inbound-and-the-shared-conversation-router) |
-| M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | planned |
+| M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | built, awaiting review: [notes](#m10-04-messenger-inbound) |
 | M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | planned |
 | M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | built, awaiting review: [notes](#m10-06-replies-the-window-metasend-deliveries-and-pacing) |
 | M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | admin side built, API next: [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
@@ -532,6 +532,85 @@ Tests: unit for the sink, the media job (every row of the table above), the word
 and the job definition; `apps/api/src/meta/meta.integration.test.ts` › "WhatsApp (M10-03)" against real
 Postgres and Redis with `FakeGraph` and `MetaWebhookDriver`, and the erasure and purge cases of
 `apps/api/src/retention/retention.integration.test.ts`.
+
+## M10-04 Messenger inbound
+
+`MessengerInboundService` (`apps/api/src/meta/messenger-inbound.service.ts`) is the Messenger entry of the
+seam M10-02 built: `PlatformInboundService.handle({ tx, account, now }, event)`, called once per event of a
+Page, inside the route's brand transaction, after the seam has already answered `duplicate` for a `mid` that
+`ticket_messages.external_message_id` holds and `ignored: blocked-sender` for a sender on the block list.
+It calls Graph for one thing only, the customer's name (below), and writes every other side effect as an outbox row.
+
+| File | What it holds |
+|---|---|
+| `messenger-inbound.service.ts` | the service; `PROFILE_TIMEOUT_MS` |
+| `meta-thread.ts` | `ticketOfMessage` (the ticket a platform message is on: a customer's message by `external_message_id`, one of Helpdock's replies by `meta_deliveries.platform_message_ids`) and `writeSystemLine`; M10-03 and M10-05 write the same lines and use the same two |
+| `meta-app.service.ts` | `MetaAppService.appId()`: the install's `meta.appId`, for the echo rule |
+| `packages/i18n/locales/{en,ar}/meta.json` | the `meta` namespace: `thread.reaction`, `reactionPlain`, `reactionRemoved`, `edited`, `unsupported` (and the words a location, a contact and a story are filed under) |
+| `meta-router.ts`, `deferred-sink.ts`, `meta-text.ts`, `factory.ts` | **stand-ins for M10-03's files** of the same names (brief §4.1), marked as such in a leading comment, so this branch runs before M10-03 lands. `meta.module.ts` builds the inbound pipeline through `createMetaInboundService` in `factory.ts`, which is where M10-03 and M10-05 register their platform's service |
+
+**What each event becomes**
+
+| Event | What happens | Outcome the route reports |
+|---|---|---|
+| `message` (text, `image`, `video`, `audio`, `file`, `sticker`, `fallback`) | `router.route` under the identity `<page id>:<psid>` (`messenger.page`, verified); the name is `null` unless the profile read below succeeds; each `image`, `video`, `audio`, `file` attachment is a `cdn_url` ref with the declared `type`, a `sticker` the same ref filed as an image, written `pending` with a `meta.media` outbox row (nothing is fetched in the request); a `fallback` with a URL is a text line (`title`, then the URL); one without, and any attachment of a type Helpdock cannot show, adds a system line "The customer sent something Helpdock cannot show." beside the rest of the message | `handled` |
+| `unsupported` (`is_unsupported`, or a message with nothing to file) | the same system line on the conversation's ticket; none when the customer has no conversation or ticket | `handled`, or `ignored: no-ticket` / `no-customer` |
+| `echo` | `app_id` equal to `meta.appId`, or `metadata` naming a `meta_deliveries` row of this account: Helpdock's own send, dropped silently. Any other echo (typed in the Page inbox, another app): dropped, logged at `info` without a word of it | `ignored: echo`, `ignored: echo-not-ours` |
+| `delivery` | `advanceByWatermark(conversation, 'delivered', watermark)`: every delivery of the conversation sent at or before the watermark; and `advanceStatus(mid, 'delivered', …)` for each `mid` the report names, which a watermark earlier than the message does not reach. Both only move a delivery forward | `handled`; `ignored: no-conversation` / `empty-receipt` |
+| `read` | `advanceByWatermark(conversation, 'read', watermark)` | the same |
+| `reaction` | a system line on the ticket of the message reacted to, a customer's or one of Helpdock's replies: "The customer reacted ❤️ to a message.", or "…removed their reaction…". Never a window anchor | `handled`; `duplicate`; `ignored: unknown-message` |
+| `edit` | a system line with the new words, on the message's ticket; the message keeps what it said | the same, and `ignored: empty-edit` |
+| `postback`, `referral`, `standby` (and any other `ignored` event) | counted, dropped | `ignored: postback` / `referral` / `standby` / the classifier's reason |
+| `policy_enforcement` | counted, dropped, and recorded as the account's `last_error` (`messaging_policy_enforcement block: <Meta's reason>`) | `ignored: policy-enforcement` |
+| an event of another platform (`status`, `seen`, `deleted`, `user_changed_number`, `error`) | dropped with a warning; a Page's webhook never carries them | `ignored: unexpected-<kind>` |
+
+Decisions taken inside the plan, each with its reason where it is made:
+
+- **The customer's name is read in the request, once, with a deadline.** Brief §4.3 asks for `GET /{psid}?fields=first_name,last_name`
+  once per conversation and the checklist says the webhook never calls Graph; the brief is the more specific, so the
+  read is made, but only when the conversation row does not exist yet, with the Page's token, and the wait is cut at
+  `PROFILE_TIMEOUT_MS` (3 s). A refusal (a Page without the reviewed feature answers 400 or 403), a Graph that is down,
+  a slow one and a reply in a shape Helpdock does not know all leave the name `null` and file the message. A name that
+  is not read is **never stored**: the contact is named by its identity value, `meta_conversations.profile_name` stays
+  null, and the thread draws "Messenger user" (M10-08). Accepted gap: a *transient* failure on the first message
+  costs the conversation its name for good, because asking again on every message would cost every Page without the
+  feature a failing call per message. A failure that is not Graph's (a decryption error) fails the route.
+- **Two tests recognise Helpdock's own echo, and only two.** `app_id` equal to `meta.appId` (set it, or this test never
+  matches) and `metadata` naming a delivery of *this* account (a delivery id of another account is not ours). The echo of
+  a part sent with neither is counted as foreign, `echo-not-ours`, and dropped all the same.
+- **A watermark is compared with `sent_at`**, when Helpdock recorded Meta's acceptance, which trails the message's own
+  time by the length of the call; `delivered_at` and `read_at` take the watermark. A report that names its `mid`s is
+  exact and goes through `advanceStatus`. A `read` that arrives before the `delivery` it implies leaves the delivery
+  `read`: the later report matches nothing.
+- **Lines are idempotent.** A reaction, an edit or an unsupported message has no `mid` of its own, so the system line's
+  `external_message_id` is `reaction:<mid>:<psid>:<react|unreact>:<ms>`, `edit:<mid>:<n>` or `unsupported:<mid>`; the
+  unique index on `(brand, channel, external_message_id)` then keeps a redelivery to one line. The prefix keeps the keys
+  from ever being a platform `mid`. A line is written in the contact's language, its HTML escaped, its text as typed.
+- **`unblock` is not an error.** Only a notice that warns or blocks goes on `last_error`; `lastErrorAt` is set one
+  millisecond after the event because the route stamps `last_event_at` with the same instant once the handlers have run,
+  and health reads an error as current only when it is later. The next event of any kind makes the account healthy again.
+- **The customer's time, never later than ours.** A message is filed at the time Meta gave it (the anchor of the reply
+  window) unless that is in the future.
+- **A customer id the contact layer cannot spell** (anything but letters, digits and `._:-`) is dropped as
+  `ignored: invalid-customer-id` instead of failing the batch, which Meta would redeliver for ever. Meta's ids are never such a thing.
+
+Not in this deliverable, by design: the `meta.media_fetch` job and the end-to-end "photo reaches `ready`" test (M10-03 owns
+the job; this branch proves the `pending` attachment and the `meta.media` row), the thread's rendering of the lines
+(M10-08), the reply path (M10-06), the Instagram twin (M10-05).
+
+Tests: `messenger-inbound.service.test.ts` (each event kind with the database and Graph faked),
+`meta-thread.test.ts`, `deferred-sink.test.ts`, the `appId` cases of `meta-app.service.test.ts`, and
+`meta-messenger.integration.test.ts` against real Postgres and Redis through the signed-webhook driver and the stand-in for
+Graph: a message opens a ticket under the contact keyed on `<page id>:<psid>`, named by the profile; a second continues
+it without a second read; a redelivery files nothing; a Page without profile access still gets the message; a blocked
+sender is dropped before a contact exists and counted; the reopen policy (inside the window the ticket comes back, past
+it a new one continues it); an image, a video, an audio file and a file become `pending` attachments with a `meta.media`
+row and nothing is fetched; a sticker is an image; a `fallback` is a text line; two Pages of two brands in one batch file
+into their brands; the echo of a Helpdock send (by delivery id and by app id) files nothing, nor does any other; a
+watermark marks the two earlier deliveries and not the later one, a late `delivery` leaves `read` alone, a named `mid`
+moves past an earlier watermark; a reaction on a reply is a system line, once however often it arrives, in the contact's
+language; an edit; unsupported content; postbacks, referrals and standby are dropped; policy enforcement is on the
+account and reads `failing` until the next event.
 
 ## M10-06 Replies, the window, `meta.send`, deliveries and pacing
 

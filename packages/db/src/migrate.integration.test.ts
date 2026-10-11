@@ -62,6 +62,7 @@ const MIGRATION_TAGS = [
   '0047_drop_ai_pii_redaction_toggle',
   '0048_telegram_language_prompt',
   '0049_api_key_expiry',
+  '0050_meta_channels',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

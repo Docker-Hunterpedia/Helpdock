@@ -195,6 +195,13 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'telegram_bots', departmentScoped: false },
   { name: 'telegram_chats', departmentScoped: false },
   { name: 'telegram_deliveries', departmentScoped: true },
+  // M10-01. The same three shapes for the Meta channels: an account is
+  // configuration like a bot, a conversation names its ticket but holds none of
+  // it, and a reply's delivery is a child of its ticket and follows the
+  // ticket's department.
+  { name: 'meta_accounts', departmentScoped: false },
+  { name: 'meta_conversations', departmentScoped: false },
+  { name: 'meta_deliveries', departmentScoped: true },
   // M8-04. The ticket rollups carry the department they describe, so a Team
   // Leader's report is narrowed by the same policy as their ticket list. The
   // help center rollups are the brand's, like the search log they summarise.

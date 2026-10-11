@@ -52,6 +52,9 @@ import {
   knowledgeSources,
   knowledgeSyncLog,
   mailboxes,
+  metaAccounts,
+  metaConversations,
+  metaDeliveries,
   notifications,
   outbox,
   reportAgentDaily,
@@ -141,6 +144,8 @@ const statusId = perBrand();
 const ticketId = perBrand();
 const messageId = perBrand();
 const telegramBotId = perBrand();
+const metaAccountId = perBrand();
+const metaConversationId = perBrand();
 const tagId = perBrand();
 const ruleId = perBrand();
 const hcCategoryId = perBrand();
@@ -966,6 +971,50 @@ const fixtures = [
         chatId: '42',
       }),
   },
+  // M10-01.
+  {
+    name: 'meta_accounts',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(metaAccounts).values({
+        id: metaAccountId[brandId] ?? '',
+        brandId,
+        platform: 'whatsapp',
+        departmentId: departmentId[brandId] ?? '',
+        // Unique across the install with the platform, so each brand needs its own.
+        externalId: String(nextNumber()),
+        displayName: 'Acme Support',
+        accessToken: 'v1.sealed.token',
+        tokenKind: 'system_user',
+        tokenUpdatedAt: new Date(),
+      }),
+  },
+  {
+    name: 'meta_conversations',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(metaConversations).values({
+        id: metaConversationId[brandId] ?? '',
+        brandId,
+        accountId: metaAccountId[brandId] ?? '',
+        customerId: `US.${String(nextNumber())}`,
+        contactId: contactId(brandId),
+        ticketId: ticketId[brandId] ?? '',
+      }),
+  },
+  {
+    name: 'meta_deliveries',
+    // A child of a ticket, refused by the same trigger as `telegram_deliveries`.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(metaDeliveries).values({
+        brandId,
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        ticketMessageId: messageId[brandId] ?? '',
+        accountId: metaAccountId[brandId] ?? '',
+        conversationId: metaConversationId[brandId] ?? '',
+        customerId: 'US.1',
+      }),
+  },
   {
     name: 'report_daily',
     insert: (tx: DbTransaction, brandId: string) =>
@@ -1496,6 +1545,123 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       );
 
     expect(rejection?.cause?.message).toMatch(/row-level security/i);
+  });
+
+  /**
+   * M10-01. `meta_deliveries` is the one Meta table scoped to a department
+   * (DOMAIN-RULES §1.3), so it gets the half of §1.6 the loop above cannot
+   * show: same brand, other department.
+   */
+  describe('a Meta delivery and its ticket’s department (M10-01)', () => {
+    const billing = uuidv7();
+    const secondMessage = uuidv7();
+    const secondDelivery = uuidv7();
+    const asStaffIn = (departmentIds: string[]) =>
+      ({
+        brandIds: [brandA],
+        departmentIds,
+        principalType: 'staff',
+        principalId: userId,
+      }) as const;
+    const deliveries = async (tx: DbTransaction): Promise<Record<string, string>> => {
+      const rows = await tx
+        .select({ id: metaDeliveries.id, departmentId: metaDeliveries.departmentId })
+        .from(metaDeliveries);
+      return Object.fromEntries(rows.map((row) => [row.id, row.departmentId]));
+    };
+
+    beforeAll(async () => {
+      await withSystem(db, brandA, async (tx) => {
+        await tx.insert(departments).values({ id: billing, brandId: brandA, name: 'Billing' });
+        // A WhatsApp message and its delivery, naming the wrong department on
+        // purpose: the trigger must overwrite it with the ticket's own.
+        await tx.insert(ticketMessages).values({
+          id: secondMessage,
+          brandId: brandA,
+          ticketId: ticketId[brandA] ?? '',
+          departmentId: billing,
+          seq: nextNumber(),
+          kind: 'public',
+          authorType: 'staff',
+          bodyHtml: '<p>hello</p>',
+          bodyText: 'hello',
+          channel: 'whatsapp',
+        });
+        await tx.insert(metaDeliveries).values({
+          id: secondDelivery,
+          brandId: brandA,
+          ticketId: ticketId[brandA] ?? '',
+          departmentId: billing,
+          ticketMessageId: secondMessage,
+          accountId: metaAccountId[brandA] ?? '',
+          conversationId: metaConversationId[brandA] ?? '',
+          customerId: 'US.1',
+        });
+      });
+    });
+
+    it('is filed under the ticket’s department, whatever the insert said', async () => {
+      const rows = await withSystem(db, brandA, deliveries);
+
+      expect(rows[secondDelivery]).toBe(departmentId[brandA]);
+    });
+
+    it('is hidden from a principal who is in another department of the brand', async () => {
+      const rows = await withTenant(db, asStaffIn([billing]), deliveries);
+
+      expect(Object.keys(rows)).toEqual([]);
+    });
+
+    it('is shown to a principal in the ticket’s department, and to one in all of them', async () => {
+      const inTheDepartment = await withTenant(
+        db,
+        asStaffIn([departmentId[brandA] ?? '']),
+        deliveries,
+      );
+      const inAll = await withTenant(
+        db,
+        { brandIds: [brandA], departmentIds: 'all', principalType: 'staff', principalId: userId },
+        deliveries,
+      );
+
+      expect(Object.keys(inTheDepartment)).toContain(secondDelivery);
+      expect(Object.keys(inAll)).toContain(secondDelivery);
+    });
+
+    it('cannot be updated by a principal in another department', async () => {
+      const updated = await withTenant(db, asStaffIn([billing]), async (tx) => {
+        const result = await tx.execute(
+          sql`UPDATE meta_deliveries SET attempts = attempts + 1 WHERE id = ${secondDelivery}::uuid`,
+        );
+        return result.count;
+      });
+
+      expect(updated).toBe(0);
+    });
+
+    it('follows its ticket when the ticket moves to another department', async () => {
+      const move = (to: string) =>
+        withSystem(db, brandA, (tx) =>
+          tx
+            .update(tickets)
+            .set({ departmentId: to })
+            .where(eq(tickets.id, ticketId[brandA] ?? '')),
+        );
+
+      await move(billing);
+      const moved = await withSystem(db, brandA, deliveries);
+      const hiddenFromTheOld = await withTenant(
+        db,
+        asStaffIn([departmentId[brandA] ?? '']),
+        deliveries,
+      );
+      await move(departmentId[brandA] ?? '');
+      const back = await withSystem(db, brandA, deliveries);
+
+      expect(moved[secondDelivery]).toBe(billing);
+      expect(Object.keys(hiddenFromTheOld)).not.toContain(secondDelivery);
+      expect(back[secondDelivery]).toBe(departmentId[brandA]);
+    });
   });
 
   /**

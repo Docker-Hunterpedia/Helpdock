@@ -14,6 +14,8 @@ import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { AutoRepliesCard } from './auto-replies-card.tsx';
 import { FailedSendsCard } from './failed-sends-card.tsx';
 import { MailboxesTab } from './mailboxes-tab.tsx';
+import { MetaAccountPage } from './meta/account-page.tsx';
+import { MetaTab } from './meta/meta-tab.tsx';
 import { SendersCard } from './senders-card.tsx';
 import { SmtpCard } from './smtp-card.tsx';
 import { type ChannelsTab, channelsTabForSegment, channelsTabsFor } from './tabs.js';
@@ -26,22 +28,28 @@ import { WidgetTab } from './widget/widget-tab.tsx';
  * `Admin/Channels` (M2-08; artboards `Admin · email channel` for Mailboxes,
  * `AdminEmailOutgoing` for Outgoing email, `AdminWidget` for Widget, M4, and
  * `AdminWebForm` for Web form, M4-09, `Admin/Channels-Telegram` for Telegram,
- * M6-05):
+ * M6-05, `Admin/Channels-Meta` and `Admin/Channels-Meta-Account` for Meta,
+ * M10-07):
  * the page header, the tab row of the tabs the viewer's role may open, and
  * the tab the url names. The tabs are links, as on Ticketing, so a tab is a
  * url and back works. "Add mailbox" belongs to the Mailboxes tab alone, and
- * "Add bot" to the Telegram list; a bot's page is the Telegram tab too.
+ * "Add bot" to the Telegram list; "Connect account" to the Meta tab; a bot's or a Meta account's page is its tab too.
  */
 export function ChannelsPage(): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
-  const { tab: segment, botId } = useParams();
+  const { tab: segment, botId, accountId } = useParams();
   const tabs = channelsTabsFor(session.user.role);
   const [addingBot, setAddingBot] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
-  const tab = channelsTabForSegment(botId === undefined ? segment : 'telegram', session.user.role);
+  // The two account pages are routes of their own, so the tab comes from which
+  // param the url has rather than from `:tab`.
+  const pageSegment =
+    botId === undefined ? (accountId === undefined ? segment : 'meta') : 'telegram';
+  const tab = channelsTabForSegment(pageSegment, session.user.role);
   const landing = tabs[0];
   if (tab === undefined) {
     return landing === undefined ? null : <Navigate to={channelsRoute(landing.segment)} replace />;
@@ -73,6 +81,17 @@ export function ChannelsPage(): ReactNode {
             >
               {t('channels:addBot')}
             </Button>
+          ) : tab.key === 'meta' && accountId === undefined ? (
+            <Button
+              variant="contained"
+              aria-haspopup="dialog"
+              startIcon={<Plus size={16} aria-hidden="true" />}
+              onClick={() => {
+                setConnecting(true);
+              }}
+            >
+              {t('channels:meta.addAccount')}
+            </Button>
           ) : undefined
         }
       />
@@ -98,8 +117,11 @@ export function ChannelsPage(): ReactNode {
         tab={tab}
         brandId={brand.id}
         botId={botId}
+        accountId={accountId}
         addingBot={addingBot}
         onAddingBotChange={setAddingBot}
+        connecting={connecting}
+        onConnectingChange={setConnecting}
       />
     </>
   );
@@ -109,15 +131,22 @@ function TabBody({
   tab,
   brandId,
   botId,
+  accountId,
   addingBot,
   onAddingBotChange,
+  connecting,
+  onConnectingChange,
 }: {
   readonly tab: ChannelsTab;
   readonly brandId: string;
   /** A bot's page, under the Telegram tab. */
   readonly botId: string | undefined;
+  /** A Meta account's page, under the Meta tab. */
+  readonly accountId: string | undefined;
   readonly addingBot: boolean;
   onAddingBotChange(open: boolean): void;
+  readonly connecting: boolean;
+  onConnectingChange(open: boolean): void;
 }): ReactNode {
   switch (tab.key) {
     case 'mailboxes':
@@ -133,6 +162,12 @@ function TabBody({
         <TelegramTab adding={addingBot} onAddingChange={onAddingBotChange} />
       ) : (
         <TelegramBotPage botId={botId} />
+      );
+    case 'meta':
+      return accountId === undefined ? (
+        <MetaTab connecting={connecting} onConnectingChange={onConnectingChange} />
+      ) : (
+        <MetaAccountPage accountId={accountId} />
       );
   }
 }

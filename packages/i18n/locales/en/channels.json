@@ -7,7 +7,8 @@
     "outgoing": "Outgoing email",
     "widget": "Widget",
     "webForm": "Web form",
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "meta": "Meta"
   },
   "mailboxes": {
     "heading": "Mailboxes",
@@ -783,6 +784,377 @@
       "deleted": "@{{username}} deleted",
       "webhookSet": "Webhook set for @{{username}}",
       "copied": "Copied"
+    }
+  },
+  "meta": {
+    "addAccount": "Connect account",
+    "heading": "Connected accounts",
+    "caption_one": "{{count}} account · each customer who writes is one contact; a new message opens a ticket in the account’s department",
+    "caption_other": "{{count}} accounts · each customer who writes is one contact; a new message opens a ticket in the account’s department",
+    "platforms": {
+      "whatsapp": "WhatsApp",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
+    },
+    "kinds": {
+      "whatsapp": "WhatsApp number",
+      "messenger": "Facebook Page",
+      "instagram": "Professional account"
+    },
+    "columns": {
+      "platform": "Platform",
+      "account": "Number, Page or account",
+      "routesTo": "Routes to",
+      "subscription": "Subscription",
+      "lastEvent": "Last event",
+      "health": "Health",
+      "actions": "Actions"
+    },
+    "subscription": {
+      "subscribed": "Subscribed",
+      "notSubscribed": "Not subscribed",
+      "notChecked": "Not checked since {{time}}",
+      "notCheckedYet": "Not checked"
+    },
+    "lastEvent": "{{time}} · {{ago}}",
+    "noEvent": "No message yet",
+    "health": {
+      "healthy": "Healthy",
+      "expiring": "Expiring",
+      "failing": "Failing",
+      "waiting": "Waiting",
+      "tokenExpired": "Token expired",
+      "unsubscribed": "Not subscribed",
+      "connectedAt": "connected {{time}}",
+      "metaSaid": "Meta: “{{error}}”",
+      "expiresOn": "stops {{date}}",
+      "fix": "Fix",
+      "fixFor": "Fix {{name}}"
+    },
+    "actionsFor": "Actions for {{name}}",
+    "open": "Open",
+    "disconnect": "Disconnect",
+    "empty": {
+      "heading": "No Meta accounts yet",
+      "body": "Connect a WhatsApp number, a Facebook Page or an Instagram account, and everyone who writes to it becomes a contact, with their messages as tickets.",
+      "blocked": "An install admin has to set the Meta app id and secrets first, and make the verify token on the Meta app card."
+    },
+    "arrive": {
+      "heading": "How messages arrive",
+      "body": "Meta posts every message for every account to this install’s one callback URL and signs it with the app secret; a request without a valid signature is refused. Helpdock files the text at once and fetches photos, voice notes and files in the background. An account answers for one brand only. Messenger and Instagram stop posting to an app whose address fails for an hour: Helpdock checks each subscription every hour and renews it, but the messages of the gap are not fetched again."
+    },
+    "legend": {
+      "heading": "Health",
+      "healthy": "Healthy: the token works and Meta sends this account’s messages to Helpdock.",
+      "expiring": "Expiring: an Instagram token Helpdock could not renew; it stops on the date shown.",
+      "failing": "Failing: the token expired or was revoked, or the subscription could not be renewed.",
+      "waiting": "Waiting: connected, no message received yet.",
+      "note": "Checked every hour by the health job; “Fix” opens the account’s page."
+    },
+    "guide": {
+      "heading": "What each platform asks for",
+      "columns": {
+        "platform": "Platform",
+        "id": "Id field",
+        "token": "Token",
+        "lasts": "Lasts"
+      },
+      "id": {
+        "whatsapp": "Phone number id",
+        "messenger": "Page id",
+        "instagram": "Instagram account id"
+      },
+      "token": {
+        "whatsapp": "System-user token",
+        "messenger": "Page access token",
+        "instagram": "Instagram user token"
+      },
+      "lasts": {
+        "whatsapp": "Never expires",
+        "messenger": "Never expires",
+        "instagram": "60 days, renewed"
+      }
+    },
+    "app": {
+      "heading": "Meta app",
+      "caption": "One developer app for the whole install. Every number, Page and account below uses its callback URL and its secrets.",
+      "installAdmins": "Install admins",
+      "signed": "Last signed event {{time}}",
+      "notSigned": "No signed event yet",
+      "notLocked": "Not set by the environment",
+      "callback": {
+        "label": "Callback URL",
+        "hint": "Paste it under Webhooks for each product in the Meta dashboard. One address serves every brand on this install.",
+        "copy": "Copy",
+        "copyLabel": "Copy the callback URL"
+      },
+      "appId": {
+        "label": "App id",
+        "hint": "From App settings › Basic in the Meta dashboard. An install setting: `HD_META_APP_ID`.",
+        "set": "Set",
+        "notSet": "Not set"
+      },
+      "verify": {
+        "label": "Verify token",
+        "masked": "Verify token ending in {{hint}}",
+        "none": "No verify token yet",
+        "hint": "Meta sends it back once, when you save the callback URL. Replace makes a new one and shows it once.",
+        "hintNone": "Make one, paste it in the Meta dashboard beside the callback URL, and Meta checks it when you save.",
+        "replace": "Replace…",
+        "generate": "Make one",
+        "confirm": {
+          "title": "Replace the verify token?",
+          "body": "Helpdock makes a new token and shows it once. Messages keep arriving: Meta only uses the token when the callback URL is saved, so paste the new one there next time you save it.",
+          "action": "Replace token"
+        },
+        "reveal": {
+          "title": "Copy the verify token",
+          "strong": "Shown only this once.",
+          "warning": "Helpdock stores it encrypted and cannot show it again. Paste it in the dashboard now.",
+          "label": "Verify token",
+          "whereLabel": "Where",
+          "where": "Meta dashboard › Webhooks for WhatsApp, Messenger and Instagram, beside the callback URL.",
+          "thenLabel": "Then",
+          "then": "Press Verify and save there. Meta calls the callback URL once with this token.",
+          "meanwhileLabel": "Meanwhile",
+          "meanwhile": "Messages keep arriving: Meta only uses the token when the callback URL is saved."
+        }
+      },
+      "secret": {
+        "label": "App secret",
+        "hint": "An install setting, never shown here: `HD_META_APP_SECRET`. Meta signs every webhook with it."
+      },
+      "instagramSecret": {
+        "label": "Instagram app secret",
+        "hint": "Instagram may sign its webhooks with this one; Helpdock checks both secrets. An install setting, never shown here: `HD_META_INSTAGRAM_APP_SECRET`. Leave it out when Instagram uses the app secret."
+      },
+      "footer": "The app id and both secrets are install settings, set with `HD_META_APP_ID`, `HD_META_APP_SECRET` and `HD_META_INSTAGRAM_APP_SECRET` in the environment, which locks them here. Which webhook fields to subscribe for each product is in the Meta channels guide.",
+      "loadFailed": "The Meta app could not be loaded. Reload the page to try again."
+    },
+    "connect": {
+      "title": "Connect a Meta account",
+      "intro": "Paste an id and a token from your Meta app’s dashboard. Helpdock checks them with Meta before it saves anything.",
+      "platform": "Platform",
+      "platformHint": {
+        "whatsapp": "A business number on the Cloud API. Meta may charge for each reply it delivers.",
+        "messenger": "A Facebook Page. The public can write once App Review approves your app.",
+        "instagram": "A professional account, through Instagram Login. Also needs App Review."
+      },
+      "id": {
+        "whatsapp": "Phone number id",
+        "messenger": "Page id",
+        "instagram": "Instagram account id"
+      },
+      "idHint": {
+        "whatsapp": "Under WhatsApp › API Setup in your app. Not the phone number itself.",
+        "messenger": "Under Messenger › Messenger API settings, beside the Page’s name.",
+        "instagram": "Under Instagram › API setup with Instagram login, beside the account’s username."
+      },
+      "department": "Department",
+      "departmentHint": "New conversations open tickets here; a customer’s next message continues their open ticket.",
+      "token": "Access token",
+      "tokenHint": {
+        "whatsapp": "A system-user token with `whatsapp_business_messaging` and `whatsapp_business_management`; it does not expire. Encrypted on save and never shown again.",
+        "messenger": "A Page access token with `pages_messaging` and `pages_manage_metadata`; it does not expire. Encrypted on save and never shown again.",
+        "instagram": "An Instagram user token. It lasts 60 days; Helpdock renews it once it is a week old. Encrypted on save and never shown again."
+      },
+      "required": "required",
+      "test": "Test",
+      "works": "Token works",
+      "worksExpires": "expires {{date}}",
+      "refused": "Meta refused this token: “{{detail}}”. Generate a new token for this account in the dashboard and paste it again.",
+      "refusedBare": "Meta refused this token. Generate a new token for this account in the dashboard and paste it again.",
+      "unreachable": "Meta could not be reached. Try again in a moment.",
+      "malformedId": "That is not an id from Meta. It is digits only.",
+      "malformedToken": "That does not look like a token from Meta. It has no spaces and is at least {{min}} characters.",
+      "appReview": {
+        "lead": "App Review.",
+        "messenger": "Until Meta approves your app for `pages_messaging`, only people with a role on the app can message this Page; for them everything works as it will for customers. The Meta channels guide walks through the review.",
+        "instagram": "Until Meta approves your app for `instagram_business_manage_messages`, only people with a role on the app can message this account; for them everything works as it will for customers. Messenger needs `pages_messaging` the same way. The Meta channels guide walks through the review."
+      },
+      "submit": "Connect",
+      "testFirst": "Connect stays off until Test succeeds. Changing the platform clears the id and the token.",
+      "footnote": "Connect saves the account and subscribes the Meta app to its messages, so they start arriving at once. Recorded in the audit log."
+    },
+    "refusal": {
+      "token-invalid": "Meta refused this token. Generate a new one for this account in the dashboard.",
+      "graph-unreachable": "Meta could not be reached. Try again in a moment.",
+      "account-taken": "This account is already connected on this install. An account answers for one brand only; disconnect it there first.",
+      "token-other-account": "That token belongs to a different account. Connect that account on its own instead.",
+      "department-not-found": "That department no longer exists. Pick another.",
+      "app-not-configured": "This install has no Meta app set up yet. An install admin sets the app id and secrets first.",
+      "platform-mismatch": "That token is for a different Meta product than the platform you chose. Pick the matching platform or paste the matching token.",
+      "reply-window-closed": "The reply window has closed. A reply can be written once the customer writes again.",
+      "subscribe-failed": "Meta refused to subscribe the app to this account. Check the app’s webhook settings, then try Subscribe now."
+    },
+    "detail": {
+      "back": "Back to Meta accounts",
+      "caption": {
+        "whatsapp": "WhatsApp · {{name}} · phone number id {{id}} · connected {{date}}",
+        "messenger": "Messenger · Facebook Page · id {{id}} · connected {{date}}",
+        "instagram": "Instagram · professional account · id {{id}} · connected {{date}}"
+      },
+      "checked": "checked {{time}}",
+      "notFound": {
+        "heading": "This account is gone",
+        "body": "It was disconnected, or it belongs to another brand."
+      },
+      "connection": {
+        "heading": "Connection",
+        "caption": {
+          "whatsapp": "The system-user token from your Meta business settings. Helpdock encrypts it and never shows it again.",
+          "messenger": "The Page access token from Messenger › Messenger API settings. Helpdock encrypts it and never shows it again.",
+          "instagram": "The Instagram user token from Instagram › API setup with Instagram login. Helpdock encrypts it and never shows it again."
+        },
+        "token": "Access token",
+        "masked": "Saved token ending in {{hint}}",
+        "replace": "Replace",
+        "saved": "Saved {{date}} by {{name}}. Only the last four characters are kept in the clear, so you can tell tokens apart. Replace opens an empty field.",
+        "savedBySomeone": "Saved {{date}}. Only the last four characters are kept in the clear, so you can tell tokens apart. Replace opens an empty field.",
+        "kind": "Token kind",
+        "kinds": {
+          "system_user": "System-user token",
+          "page": "Page access token",
+          "instagram_user": "Instagram user token, 60 days"
+        },
+        "expires": "Expires",
+        "never": "Never",
+        "invalidated": "Invalidated {{date}}",
+        "lastChecked": "Last checked",
+        "notChecked": "Not checked",
+        "test": "Test connection",
+        "testHint": {
+          "whatsapp": "Reads the number from Meta with the saved token. Nothing is sent.",
+          "messenger": "Asks Meta who the token belongs to. Nothing is sent to anyone.",
+          "instagram": "Asks Meta who the token belongs to. Nothing is sent to anyone."
+        },
+        "connected": "Connected · {{time}}",
+        "connectedBody": "the token belongs to “{{name}}” · id {{id}}",
+        "refused": "Meta refused the saved token · {{time}}",
+        "unreachable": "Meta could not be reached · {{time}}",
+        "expiredLead": "Messages from {{name}} have stopped",
+        "expiredBody": "and replies cannot be sent until you reconnect.",
+        "reconnect": "Reconnect",
+        "reconnectHint": "Reconnect asks for a new token and keeps the account’s tickets, contacts and settings."
+      },
+      "subscription": {
+        "heading": "Subscription",
+        "caption": "Whether Meta posts this account’s messages to Helpdock. Checked every hour and renewed when Meta drops it.",
+        "state": "State",
+        "subscribed": "Subscribed",
+        "notSubscribed": "Not subscribed",
+        "notChecked": "Not checked",
+        "fields": "Fields",
+        "noFields": "None",
+        "lastChecked": "Last checked",
+        "lastProblem": "Meta’s last problem",
+        "none": "None reported",
+        "problem": "{{time}} · {{error}}",
+        "button": "Subscribe now",
+        "hint": "Subscribes the Meta app to this account again. Helpdock does the same on its own every hour.",
+        "refused": "Meta refused the subscription: {{detail}}",
+        "unknown": "Meta could not be asked: {{detail}}"
+      },
+      "number": {
+        "heading": "Number",
+        "caption": "What Meta reports about this WhatsApp number. WhatsApp only.",
+        "displayName": "Display name",
+        "phone": "Phone number",
+        "waba": "Business account id",
+        "chargeLead": "Meta may charge for replies.",
+        "charge": "Each message it delivers is billed to the WhatsApp Business account: a reply cut into parts is one message per part, and every attachment is one more. The composer shows the count before you send.",
+        "noHumanLead": "No Human Agent on WhatsApp.",
+        "noHuman": "A reply is accepted for 24 hours after the customer’s last message. After that only an approved message template reaches them."
+      },
+      "routing": {
+        "heading": "Routing",
+        "caption": {
+          "whatsapp": "Messages to this number open tickets here.",
+          "messenger": "Messages to this Page open tickets here.",
+          "instagram": "Messages to this account open tickets here."
+        },
+        "department": "Department",
+        "hint": "Agents reply from the ticket; replies go back to the same conversation. The department applies from the next new conversation."
+      },
+      "humanAgent": {
+        "heading": "Human Agent",
+        "caption": "How long a person may answer after the customer’s last message.",
+        "label": "Messenger and Instagram only",
+        "switch": "Allow a person to reply for 7 days instead of 24 hours",
+        "body": "Turn this on only once Meta has approved the Human Agent feature for your app. Helpdock cannot check it: turning it on says that Meta did. Replies after 24 hours carry Meta’s `HUMAN_AGENT` tag.",
+        "personOnly": "Only a person’s reply gets the 7 days. AI replies, rule replies and surveys keep the 24-hour window.",
+        "restricted": "Meta may restrict a Page that uses the tag without approval. Changes are recorded in the audit log."
+      },
+      "footer": {
+        "note": "Routing and Human Agent apply from the next message and the next reply.",
+        "noteWhatsapp": "The department applies from the next new conversation.",
+        "unsaved": "Unsaved changes",
+        "discard": "Discard",
+        "save": "Save"
+      },
+      "activity": {
+        "heading": "Activity",
+        "lastEvent": "Last message received",
+        "lastReply": "Last reply delivered",
+        "failed": "Failed sends, 24 h",
+        "refused": "Refused, window closed, 24 h",
+        "open": {
+          "whatsapp": "Open tickets from this number",
+          "messenger": "Open tickets from this Page",
+          "instagram": "Open tickets from this account"
+        },
+        "none": "—",
+        "failedJobs": "View failed jobs in System"
+      },
+      "danger": {
+        "heading": "Disconnect",
+        "body": {
+          "whatsapp": "Erases the token and stops replies. Tickets and contacts stay. Remove the app from the number in Meta to stop its messages; until then Helpdock drops them.",
+          "messenger": "Erases the token and stops replies. Tickets and contacts stay. Remove the app from the Page in Meta to stop its messages; until then Helpdock drops them.",
+          "instagram": "Erases the token and stops replies. Tickets and contacts stay. Remove the app from the account in Meta to stop its messages; until then Helpdock drops them."
+        },
+        "action": "Disconnect…"
+      }
+    },
+    "disconnectConfirm": {
+      "title": "Disconnect {{name}} from {{platform}}?",
+      "body": {
+        "whatsapp": "Helpdock erases the token and stops sending replies. The open tickets from this number stay in {{department}}, but replies to them can no longer reach WhatsApp. Remove the app from the number in Meta; until then its messages are dropped.",
+        "messenger": "Helpdock erases the token and stops sending replies. The open tickets from this Page stay in {{department}}, but replies to them can no longer reach Messenger. Remove the app from the Page in Meta; until then its messages are dropped.",
+        "instagram": "Helpdock erases the token and stops sending replies. The open tickets from this account stay in {{department}}, but replies to them can no longer reach Instagram. Remove the app from the account in Meta; until then its messages are dropped."
+      },
+      "typeLabel": {
+        "whatsapp": "Type the phone number id {{id}} to confirm",
+        "messenger": "Type the Page id {{id}} to confirm",
+        "instagram": "Type the Instagram account id {{id}} to confirm"
+      },
+      "action": "Disconnect",
+      "footnote": "The button turns solid red once the id matches exactly. Recorded in the audit log."
+    },
+    "reconnect": {
+      "title": "Reconnect {{name}}",
+      "intro": {
+        "whatsapp": "Paste a new token for this number. Its tickets, contacts and settings stay as they are.",
+        "messenger": "Paste a new token for this Page. Its tickets, contacts and settings stay as they are.",
+        "instagram": "Paste a new token for this Instagram account. Its tickets, contacts and settings stay as they are."
+      },
+      "tokenHint": {
+        "whatsapp": "Generate it in your Meta business settings. Encrypted on save and never shown again.",
+        "messenger": "Generate it under Messenger › Messenger API settings. Encrypted on save and never shown again.",
+        "instagram": "Generate it under Instagram › API setup with Instagram login. Encrypted on save and never shown again."
+      },
+      "submit": "Reconnect",
+      "footnote": "Reconnect stays off until Test succeeds.",
+      "footnoteInstagram": "Reconnect stays off until Test succeeds. Helpdock renews the token once it is a week old."
+    },
+    "toast": {
+      "connected": "{{name}} connected",
+      "saved": "{{name}} saved",
+      "disconnected": "{{name}} disconnected",
+      "subscribed": "Meta app subscribed to {{name}}",
+      "reconnected": "{{name}} reconnected",
+      "copied": "Copied",
+      "verifyTokenMade": "New verify token made"
     }
   }
 }

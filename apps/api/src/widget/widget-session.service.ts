@@ -92,7 +92,7 @@ export class WidgetSessionService {
       };
     });
     if (linkWithdrawn) {
-      this.#hub.disconnectVisitor(response.visitorId);
+      await this.#hub.disconnectVisitor(response.visitorId);
     }
 
     return response;

@@ -7,7 +7,8 @@ import { WidgetHub } from './widget-hub.js';
 import {
   brandVisitorsRoom,
   conversationRoom,
-  parseWidgetEmit,
+  disconnectVisitorMessage,
+  parseWidgetMessage,
   RedisWidgetBroadcast,
   WIDGET_EMIT_CHANNEL,
   widgetEnvelope,
@@ -15,6 +16,8 @@ import {
 
 const CONVERSATION = '0192c3f0-1a2b-7c3d-8e4f-000000000001';
 const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+const VISITOR = '0192c3f0-1a2b-7c3d-8e4f-0000000000c1';
+const OTHER_VISITOR = '0192c3f0-1a2b-7c3d-8e4f-0000000000c2';
 
 const typing = { conversationId: CONVERSATION, typing: true, agentName: null };
 
@@ -72,16 +75,16 @@ describe('RedisWidgetBroadcast', () => {
   });
 });
 
-describe('parseWidgetEmit', () => {
+describe('parseWidgetMessage', () => {
   it('drops anything malformed, unknown or mismatched', () => {
-    expect(parseWidgetEmit('not json')).toBeNull();
+    expect(parseWidgetMessage('not json')).toBeNull();
     expect(
-      parseWidgetEmit(
+      parseWidgetMessage(
         JSON.stringify({ room: brandVisitorsRoom(BRAND), event: 'nope', data: {}, seq: null }),
       ),
     ).toBeNull();
     expect(
-      parseWidgetEmit(
+      parseWidgetMessage(
         JSON.stringify({
           room: brandVisitorsRoom(BRAND),
           event: 'presence',
@@ -91,7 +94,7 @@ describe('parseWidgetEmit', () => {
       ),
     ).toBeNull();
     expect(
-      parseWidgetEmit(
+      parseWidgetMessage(
         JSON.stringify({
           room: brandVisitorsRoom(BRAND),
           event: 'presence',
@@ -100,6 +103,7 @@ describe('parseWidgetEmit', () => {
         }),
       ),
     ).toMatchObject({
+      kind: 'emit',
       room: `visitors:${BRAND}`,
       event: 'presence',
       envelope: {
@@ -107,6 +111,14 @@ describe('parseWidgetEmit', () => {
         data: { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] },
       },
     });
+  });
+
+  it('reads the instruction to end a visitor’s streams, for a visitor id and nothing else', () => {
+    expect(parseWidgetMessage(disconnectVisitorMessage(VISITOR))).toEqual({
+      kind: 'disconnect-visitor',
+      visitorId: VISITOR,
+    });
+    expect(parseWidgetMessage(JSON.stringify({ disconnectVisitor: 'everyone' }))).toBeNull();
   });
 });
 
@@ -137,6 +149,55 @@ describe('WidgetHub', () => {
     );
     expect(listener).toHaveBeenCalledOnce();
     expect(hub.streamCount()).toBe(0);
+  });
+
+  it('ends the streams of the visitor an instruction names, and no one else’s', () => {
+    const hub = new WidgetHub({} as Redis, silentLogger());
+    const theirs = vi.fn();
+    const others = vi.fn();
+    hub.watchVisitor(VISITOR, theirs);
+    hub.watchVisitor(OTHER_VISITOR, others);
+
+    hub.deliver(disconnectVisitorMessage(VISITOR));
+
+    expect(theirs).toHaveBeenCalledOnce();
+    expect(others).not.toHaveBeenCalled();
+  });
+
+  it('stops watching a visitor whose stream has ended', () => {
+    const hub = new WidgetHub({} as Redis, silentLogger());
+    const close = vi.fn();
+    hub.watchVisitor(VISITOR, close)();
+
+    hub.deliver(disconnectVisitorMessage(VISITOR));
+
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('cuts the visitor’s sockets and tells every replica to end their streams', async () => {
+    const { redis, published } = publishing();
+    const disconnectSockets = vi.fn();
+    const inRoom = vi.fn(() => ({ disconnectSockets }));
+    const hub = new WidgetHub(redis, silentLogger());
+    hub.bind({ in: inRoom } as never);
+
+    await hub.disconnectVisitor(VISITOR);
+
+    expect(inRoom).toHaveBeenCalledWith(`visitor:${VISITOR}`);
+    expect(disconnectSockets).toHaveBeenCalledWith(true);
+    expect(published).toEqual([
+      { channel: WIDGET_EMIT_CHANNEL, message: disconnectVisitorMessage(VISITOR) },
+    ]);
+  });
+
+  it('logs, and does not throw, when the instruction cannot be published', async () => {
+    const logger = silentLogger();
+    const error = vi.spyOn(logger, 'error');
+    const redis = { publish: vi.fn().mockRejectedValue(new Error('redis is down')) } as never;
+
+    await expect(new WidgetHub(redis, logger).disconnectVisitor(VISITOR)).resolves.toBeUndefined();
+
+    expect(error).toHaveBeenCalledOnce();
   });
 
   it('logs and drops a frame it cannot read', () => {

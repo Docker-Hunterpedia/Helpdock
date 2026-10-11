@@ -559,14 +559,14 @@ io('https://support.example.com/widget', {
 - **On connect** the socket joins the brand's visitors room and receives one
   `presence` event.
 - **When a visitor stops being who they were**, the server disconnects every
-  socket that visitor has open, on every replica (`disconnect` reason
-  `io server disconnect`). This happens when `POST /session` arrives with no
+  socket that visitor has open, and ends every [SSE stream](#realtime-fallback-sse)
+  they have, on every replica (`disconnect` reason `io server disconnect`; a
+  stream just ends). This happens when `POST /session` arrives with no
   valid [signed identity](#signed-identity) for a visitor that had one, or
   with another person's. Conversation rooms are judged once, at
   `conversation:join`, so without this a second tab of someone who signed out
-  would keep receiving the replies. Reconnect and `conversation:join` again;
-  the join is judged afresh. An open [SSE stream](#realtime-fallback-sse) is not cut
-  and ends at its own lifetime.
+  would keep receiving the replies. Reconnect and `conversation:join` again, or
+  open the stream again; the access is judged afresh.
 - Every client event takes an **acknowledgement**, `{ ok: true, data }` or
   `{ ok: false, error: { code, message } }`. A handler never throws. Every
   event goes through the checks again, so a brand that removes an origin
@@ -632,8 +632,10 @@ to it after three failed connects.
   heartbeats.
 - The stream carries notifications only. Send messages, typing and read
   receipts over REST.
-- The server closes the stream after `WIDGET_SSE_MAX_AGE_MS` (5 minutes).
-  Reconnect with your current cursor. If the initial burst reached 200
+- The server closes the stream after `WIDGET_SSE_MAX_AGE_MS` (5 minutes), or at
+  once when the visitor [stops being who they were](#realtime-fallback-sse)
+  (a `POST /session` that drops or changes the signed identity). Reconnect with
+  your current cursor. If the initial burst reached 200
   messages, catch up over REST, because the stream does not page.
 
 ## Throttles

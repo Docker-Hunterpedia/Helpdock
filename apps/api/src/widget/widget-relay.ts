@@ -23,6 +23,10 @@ import { z } from 'zod';
  * the same envelope by the same subscriber. It is the staff bridge's shape
  * (`realtime/broadcast.ts`) on a channel of its own, because the staff
  * publisher is bound to `/staff` and a visitor must never be in a staff room.
+ *
+ * The channel also carries one instruction that is not an event: end this
+ * visitor's SSE streams, on whichever replica holds them
+ * ({@link disconnectVisitorMessage}).
  */
 
 export const WIDGET_EMIT_CHANNEL = 'helpdock:realtime:widget';
@@ -50,6 +54,14 @@ export const widgetEmitSchema = z.object({
   data: z.unknown(),
   seq: z.int().positive().nullable(),
 });
+
+const widgetDisconnectSchema = z.object({
+  disconnectVisitor: z.string().regex(UUID),
+});
+
+/** The frame that ends every SSE stream a visitor has open, on every replica. */
+export const disconnectVisitorMessage = (visitorId: string): string =>
+  JSON.stringify(widgetDisconnectSchema.parse({ disconnectVisitor: visitorId }));
 
 export interface WidgetEmitInput<E extends WidgetServerEvent> {
   readonly room: string;
@@ -101,19 +113,28 @@ export const widgetEnvelope = <E extends WidgetServerEvent>(
   data: WIDGET_EVENT_PAYLOADS[event].parse(data) as WidgetServerEventPayload<E>,
 });
 
-/** A parsed message off the channel, or null for anything malformed or unknown. */
-export const parseWidgetEmit = (
-  message: string,
-): {
-  readonly room: string;
-  readonly event: WidgetServerEvent;
-  readonly envelope: WidgetEnvelope<unknown>;
-} | null => {
+/** A message off the channel: an event for a room, or the instruction to end a visitor's streams. */
+export type WidgetMessage =
+  | {
+      readonly kind: 'emit';
+      readonly room: string;
+      readonly event: WidgetServerEvent;
+      readonly envelope: WidgetEnvelope<unknown>;
+    }
+  | { readonly kind: 'disconnect-visitor'; readonly visitorId: string };
+
+/** The parsed message, or null for anything malformed or unknown. */
+export const parseWidgetMessage = (message: string): WidgetMessage | null => {
   let json: unknown;
   try {
     json = JSON.parse(message);
   } catch {
     return null;
+  }
+
+  const disconnect = widgetDisconnectSchema.safeParse(json);
+  if (disconnect.success) {
+    return { kind: 'disconnect-visitor', visitorId: disconnect.data.disconnectVisitor };
   }
 
   const parsed = widgetEmitSchema.safeParse(json);
@@ -127,5 +148,10 @@ export const parseWidgetEmit = (
     return null;
   }
 
-  return { room, event, envelope: { seq, at: new Date().toISOString(), data: payload.data } };
+  return {
+    kind: 'emit',
+    room,
+    event,
+    envelope: { seq, at: new Date().toISOString(), data: payload.data },
+  };
 };

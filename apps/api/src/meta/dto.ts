@@ -1,4 +1,15 @@
-import { metaAppSchema, metaVerifyTokenRevealSchema } from '@helpdock/schemas';
+import {
+  brandIdParamSchema,
+  metaAccountCreateRequestSchema,
+  metaAccountListSchema,
+  metaAccountParamSchema,
+  metaAccountSchema,
+  metaAccountStatusResponseSchema,
+  metaAccountUpdateRequestSchema,
+  metaAppSchema,
+  metaTokenTestRequestSchema,
+  metaVerifyTokenRevealSchema,
+} from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 
 /**
@@ -9,3 +20,17 @@ import { createZodDto } from 'nestjs-zod';
 
 export class MetaAppDto extends createZodDto(metaAppSchema) {}
 export class MetaVerifyTokenRevealDto extends createZodDto(metaVerifyTokenRevealSchema) {}
+
+/**
+ * The accounts' routes (M10-07). The test and subscribe answers are
+ * discriminated unions, which `createZodDto` cannot wrap, so the controller
+ * parses those by hand, as `TelegramBotsController` does.
+ */
+export class MetaBrandParamDto extends createZodDto(brandIdParamSchema) {}
+export class MetaAccountParamDto extends createZodDto(metaAccountParamSchema) {}
+export class MetaAccountDto extends createZodDto(metaAccountSchema) {}
+export class MetaAccountListDto extends createZodDto(metaAccountListSchema) {}
+export class MetaAccountCreateDto extends createZodDto(metaAccountCreateRequestSchema) {}
+export class MetaAccountUpdateDto extends createZodDto(metaAccountUpdateRequestSchema) {}
+export class MetaAccountStatusDto extends createZodDto(metaAccountStatusResponseSchema) {}
+export class MetaTokenTestDto extends createZodDto(metaTokenTestRequestSchema) {}

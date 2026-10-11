@@ -1,10 +1,12 @@
-import type { Env, Settings } from '@helpdock/config';
+import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Logger } from '../logging/logger.js';
 import { SETTINGS } from '../runtime/tokens.js';
 import { type GraphClientFactory, graphClientFactory } from './graph-client-factory.js';
 import { MetaRepository } from './meta.repository.js';
+import { MetaAccountsController } from './meta-accounts.controller.js';
+import { MetaAccountsService } from './meta-accounts.service.js';
 import { MetaAppController } from './meta-app.controller.js';
 import { MetaAppService } from './meta-app.service.js';
 import {
@@ -51,6 +53,7 @@ export class MetaModule {
   }): DynamicModule {
     const { env, db, logger, overrides } = options;
     const repository = new MetaRepository();
+    const graph = overrides?.graph ?? graphClientFactory(env);
     const handlers: MetaInboundHandlers = {
       ...unhandledInboundHandlers(logger),
       ...overrides?.inbound,
@@ -58,14 +61,26 @@ export class MetaModule {
 
     return {
       module: MetaModule,
-      controllers: [MetaWebhookController, MetaAppController],
+      controllers: [MetaWebhookController, MetaAppController, MetaAccountsController],
       providers: [
         { provide: MetaRepository, useValue: repository },
-        { provide: META_GRAPH, useValue: overrides?.graph ?? graphClientFactory(env) },
+        { provide: META_GRAPH, useValue: graph },
         {
           provide: MetaAppService,
           inject: [SETTINGS],
           useFactory: (settings: Settings): MetaAppService => new MetaAppService(settings, env),
+        },
+        {
+          provide: MetaAccountsService,
+          inject: [MetaAppService],
+          useFactory: (appService: MetaAppService): MetaAccountsService =>
+            new MetaAccountsService({
+              db,
+              repository,
+              keyring: createKeyring(env),
+              graph,
+              app: appService,
+            }),
         },
         {
           provide: MetaWebhookService,

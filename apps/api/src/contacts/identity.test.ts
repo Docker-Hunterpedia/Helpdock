@@ -1,3 +1,4 @@
+import { isVerifiedIdentity } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { ContactFailure } from './contact-failure.js';
 import { assertVerifiable, requireNormalised } from './identity.js';
@@ -40,22 +41,30 @@ describe('requireNormalised', () => {
 });
 
 describe('assertVerifiable', () => {
-  it.each(['email', 'telegram', 'external', 'visitor'] as const)(
-    'lets a caller prove a %s identifier',
-    (kind) => {
-      expect(() => {
-        assertVerifiable(kind, true);
-      }).not.toThrow();
-    },
-  );
-
-  it('refuses a verified phone number, which nothing in v1 can prove', () => {
+  it.each([
+    'email',
+    'telegram',
+    'external',
+    'visitor',
+    'phone',
+    'whatsapp',
+    'messenger',
+    'instagram',
+  ] as const)('lets a caller prove a %s identifier', (kind) => {
     expect(() => {
-      assertVerifiable('phone', true);
-    }).toThrow(TypeError);
+      assertVerifiable(kind, true);
+    }).not.toThrow();
   });
 
-  it('allows an unverified phone number, which is the only kind there is', () => {
+  it('allows a phone number to be proven by kind, since WhatsApp can (M10); the source decides', () => {
+    expect(() => {
+      assertVerifiable('phone', true);
+    }).not.toThrow();
+    expect(isVerifiedIdentity('phone', 'agent')).toBe(false);
+    expect(isVerifiedIdentity('phone', 'whatsapp.cloud')).toBe(true);
+  });
+
+  it('allows an unverified phone number, which is what an agent typing one makes', () => {
     expect(() => {
       assertVerifiable('phone', false);
     }).not.toThrow();

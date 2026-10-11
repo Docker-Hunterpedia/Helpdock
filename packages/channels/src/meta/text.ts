@@ -17,7 +17,9 @@ const encoder = new TextEncoder();
  * code points, which keeps a part under the limit either way. Instagram counts
  * UTF-8 **bytes**, which is two per Arabic letter.
  */
-const measureOf = (platform: MetaPlatform): ((text: string) => number) =>
+type Measure = (text: string) => number;
+
+const measureOf = (platform: MetaPlatform): Measure =>
   META_TEXT_LIMITS[platform].unit === 'bytes'
     ? (text) => encoder.encode(text).byteLength
     : (text) => text.length;
@@ -52,26 +54,11 @@ export const splitMetaText = (text: string, platform: MetaPlatform): string[] =>
   let rest = [...text.trim()];
 
   while (measure(rest.join('')) > limit) {
-    // The longest run of code points that fits.
-    let fitted = 0;
-    let used = 0;
-    for (const point of rest) {
-      const size = measure(point);
-      if (used + size > limit) {
-        break;
-      }
-      used += size;
-      fitted += 1;
-    }
-    if (fitted === 0) {
+    const head = rest.slice(0, fittingPrefix(rest, limit, measure));
+    if (head.length === 0) {
       throw new RangeError(`A single character does not fit in ${String(limit)} ${platform} units`);
     }
-
-    const head = rest.slice(0, fitted);
-    const cut = SEPARATORS.map((separator) => lastIndexOf(head, separator)).find(
-      (index) => index > 0 && measure(head.slice(0, index).join('')) > limit / 2,
-    );
-    const at = cut ?? fitted;
+    const at = cutPoint(head, limit, measure);
     parts.push(rest.slice(0, at).join('').trimEnd());
     rest = [...rest.slice(at).join('').trimStart()];
   }
@@ -83,6 +70,31 @@ export const splitMetaText = (text: string, platform: MetaPlatform): string[] =>
 
   return parts;
 };
+
+/** How many leading code points fit in `limit`. */
+const fittingPrefix = (points: readonly string[], limit: number, measure: Measure): number => {
+  let used = 0;
+  let fitted = 0;
+  for (const point of points) {
+    used += measure(point);
+    if (used > limit) {
+      break;
+    }
+    fitted += 1;
+  }
+
+  return fitted;
+};
+
+/**
+ * Where to cut a run that just fits: after the last paragraph, line or space
+ * that leaves more than half a part behind it, so a cut never strands a stub,
+ * and at the end of the run (mid-word) when there is none.
+ */
+const cutPoint = (head: readonly string[], limit: number, measure: Measure): number =>
+  SEPARATORS.map((separator) => lastIndexOf(head, separator)).find(
+    (index) => index > 0 && measure(head.slice(0, index).join('')) > limit / 2,
+  ) ?? head.length;
 
 /**
  * "Location: 52.52, 13.405", the venue, and a map link: the line Telegram

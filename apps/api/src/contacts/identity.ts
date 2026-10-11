@@ -93,13 +93,16 @@ export const requireNormalised = (
 };
 
 /**
- * Whether a caller may claim this identifier is verified. A `false` here is a
- * mistake at the call site rather than a user-facing refusal — no request body
- * reaches it — so it throws a `TypeError`.
+ * Whether a caller may claim this identifier is verified, by its kind. Since
+ * M10 every kind can be proven somewhere, a phone only by the `whatsapp.cloud`
+ * source, which `isVerifiedIdentity` enforces; this guards a kind the table
+ * says nothing can prove. A `false` here is a mistake at the call site rather
+ * than a user-facing refusal — no request body reaches it — so it throws a
+ * `TypeError`.
  */
 export const assertVerifiable = (kind: ContactIdentityKind, verified: boolean): void => {
   if (verified && !VERIFIABLE_IDENTITY_KINDS[kind]) {
-    throw new TypeError(`A ${kind} identifier cannot be verified in v1 (DOMAIN-RULES §4.4)`);
+    throw new TypeError(`A ${kind} identifier cannot be verified (DOMAIN-RULES §4.4)`);
   }
 };
 

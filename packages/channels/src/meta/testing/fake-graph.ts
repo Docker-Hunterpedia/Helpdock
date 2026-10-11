@@ -11,7 +11,13 @@ import {
   graphWindowClosed,
   sha256Hex,
 } from '../fixtures.js';
-import { messagingSendPayloadSchema, whatsappSendPayloadSchema } from '../send-payloads.js';
+import {
+  type MessagingSendPayload,
+  messagingSendPayloadSchema,
+  sendPayloadText,
+  type WhatsAppSendPayload,
+  whatsappSendPayloadSchema,
+} from '../send-payloads.js';
 
 /**
  * A local HTTP server standing in for the Graph API (M10-01), as
@@ -150,6 +156,61 @@ const toRoot = (platform: MetaPlatform): FakeGraphRoot =>
 
 /** A number without its `+`, so `+1 650…` and `1650…` are one customer. */
 const customerKey = (recipient: string): string => recipient.replace(/^\+/, '');
+
+interface ParsedSend {
+  readonly payload: WhatsAppSendPayload | MessagingSendPayload;
+  readonly recipient: string;
+  /** The body as sent, for the record. */
+  readonly json: unknown;
+}
+
+/** The body of a send against the contract in `send-payloads.ts`, or Graph's refusal of it. */
+const parseSend = (platform: MetaPlatform, raw: Buffer): ParsedSend | Answer => {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw.toString('utf8'));
+  } catch {
+    return graphFailure(400, 100, 'The request body is not JSON');
+  }
+  const parsed =
+    platform === 'whatsapp'
+      ? whatsappSendPayloadSchema.safeParse(json)
+      : messagingSendPayloadSchema.safeParse(json);
+  if (!parsed.success) {
+    return graphFailure(400, 100, 'Invalid parameter', {
+      error_data: {
+        details: parsed.error.issues
+          .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+          .join('; '),
+      },
+    });
+  }
+  const payload = parsed.data;
+
+  return {
+    payload,
+    json,
+    recipient:
+      'message' in payload ? payload.recipient.id : (payload.to ?? payload.recipient ?? ''),
+  };
+};
+
+/** Graph's refusal of a text over the platform's limit, or null when it fits. */
+const textOverLimit = (platform: MetaPlatform, text: string | null): Answer | null => {
+  const limit = META_TEXT_LIMITS[platform];
+  if (text === null) {
+    return null;
+  }
+  const size = limit.unit === 'bytes' ? Buffer.byteLength(text, 'utf8') : text.length;
+
+  return size <= limit.max
+    ? null
+    : graphFailure(400, 100, 'Invalid parameter', {
+        error_data: {
+          details: `Message text is ${String(size)} ${limit.unit}, over the limit of ${String(limit.max)}`,
+        },
+      });
+};
 
 export interface FakeGraphOptions {
   /** The app the stand-in reports as subscribed. */
@@ -606,58 +667,18 @@ export class FakeGraph {
     if (account === undefined || !this.#owns(facts, id)) {
       return unknownObject(id);
     }
-    let json: unknown;
-    try {
-      json = JSON.parse(raw.toString('utf8'));
-    } catch {
-      return graphFailure(400, 100, 'The request body is not JSON');
+    const { platform } = account;
+    const send = parseSend(platform, raw);
+    if ('status' in send) {
+      return send;
     }
-
-    const platform = account.platform;
-    const parsed =
-      platform === 'whatsapp'
-        ? whatsappSendPayloadSchema.safeParse(json)
-        : messagingSendPayloadSchema.safeParse(json);
-    if (!parsed.success) {
-      return graphFailure(400, 100, 'Invalid parameter', {
-        error_data: {
-          details: parsed.error.issues
-            .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-            .join('; '),
-        },
-      });
+    const tooLong = textOverLimit(platform, sendPayloadText(send.payload));
+    if (tooLong !== null) {
+      return tooLong;
     }
-    const payload = parsed.data;
-    const recipient =
-      'message' in payload ? payload.recipient.id : (payload.to ?? payload.recipient ?? '');
-    const text =
-      'message' in payload
-        ? payload.message.text
-        : payload.type === 'text'
-          ? payload.text.body
-          : undefined;
-
-    const limit = META_TEXT_LIMITS[platform];
-    if (text !== undefined) {
-      const size = limit.unit === 'bytes' ? Buffer.byteLength(text, 'utf8') : text.length;
-      if (size > limit.max) {
-        return graphFailure(400, 100, 'Invalid parameter', {
-          error_data: {
-            details: `Message text is ${String(size)} ${limit.unit}, over the limit of ${String(limit.max)}`,
-          },
-        });
-      }
-    }
-
-    const key = customerKey(recipient);
-    if (this.blocked.has(key) || this.blocked.has(recipient)) {
-      return reply(400, graphUserUnavailable());
-    }
-    if (this.windowClosed.has(key) || this.windowClosed.has(recipient)) {
-      return reply(400, graphWindowClosed(platform));
-    }
-    if (this.pairLimited.has(key) || this.pairLimited.has(recipient)) {
-      return reply(400, graphPairRateLimited());
+    const refused = this.#refusal(platform, send.recipient);
+    if (refused !== null) {
+      return refused;
     }
 
     this.#counter += 1;
@@ -665,18 +686,43 @@ export class FakeGraph {
       platform === 'whatsapp'
         ? fixtureWamid(1_000 + this.#counter)
         : fixtureMid(1_000 + this.#counter);
-    this.sent.push({ accountId: id, platform, id: messageId, to: recipient, payload: json });
+    this.sent.push({
+      accountId: id,
+      platform,
+      id: messageId,
+      to: send.recipient,
+      payload: send.json,
+    });
 
     return reply(
       200,
       platform === 'whatsapp'
         ? {
             messaging_product: 'whatsapp',
-            contacts: [{ input: recipient, wa_id: key }],
+            contacts: [{ input: send.recipient, wa_id: customerKey(send.recipient) }],
             messages: [{ id: messageId }],
           }
-        : { recipient_id: recipient, message_id: messageId },
+        : { recipient_id: send.recipient, message_id: messageId },
     );
+  }
+
+  /** The refusal a test programmed for this customer, if any: blocked, then window, then pair limit. */
+  #refusal(platform: MetaPlatform, recipient: string): Answer | null {
+    const key = customerKey(recipient);
+    const programmed = (customers: ReadonlySet<string>): boolean =>
+      customers.has(key) || customers.has(recipient);
+
+    if (programmed(this.blocked)) {
+      return reply(400, graphUserUnavailable());
+    }
+    if (programmed(this.windowClosed)) {
+      return reply(400, graphWindowClosed(platform));
+    }
+    if (programmed(this.pairLimited)) {
+      return reply(400, graphPairRateLimited());
+    }
+
+    return null;
   }
 
   #upload(id: string, facts: TokenFacts, recorded: unknown): Answer {

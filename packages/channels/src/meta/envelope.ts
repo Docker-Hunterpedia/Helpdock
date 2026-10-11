@@ -276,8 +276,6 @@ export type MetaEvent =
       readonly detail: string | null;
     });
 
-export type MetaEventKind = MetaEvent['kind'];
-
 /** One `message` event, as the three adapters take it. */
 export type MetaMessageEvent = Extract<MetaEvent, { kind: 'message' }>;
 
@@ -489,6 +487,58 @@ const sharedContactsOf = (message: WhatsAppMessage): MetaSharedContact[] =>
     return { name, org: contact.org?.company ?? null, phones, emails };
   });
 
+const whatsappSystemEvent = (
+  message: WhatsAppMessage,
+  customerId: string | null,
+  timestamp: Date | null,
+): MetaEvent => {
+  const system = message.system;
+  if (system?.type === 'user_changed_number' || system?.type === 'customer_changed_number') {
+    return {
+      kind: 'user_changed_number',
+      platform: 'whatsapp',
+      timestamp,
+      customerId,
+      oldWaId: digitsOnly(system.customer),
+      newWaId: digitsOnly(system.wa_id ?? system.new_wa_id),
+    };
+  }
+
+  return ignored('whatsapp', 'system', system?.type ?? null, timestamp);
+};
+
+const whatsappReactionEvent = (
+  message: WhatsAppMessage,
+  customerId: string,
+  timestamp: Date | null,
+): MetaEvent => {
+  if (message.reaction === undefined) {
+    return ignored('whatsapp', 'malformed', 'reaction', timestamp);
+  }
+  const emoji = message.reaction.emoji ?? '';
+
+  return {
+    kind: 'reaction',
+    platform: 'whatsapp',
+    timestamp,
+    customerId,
+    messageId: message.reaction.message_id,
+    action: emoji === '' ? 'unreact' : 'react',
+    emoji: emoji === '' ? null : emoji,
+  };
+};
+
+const locationOf = (message: WhatsAppMessage): MetaPoint | null =>
+  message.location === undefined
+    ? null
+    : {
+        latitude: message.location.latitude,
+        longitude: message.location.longitude,
+        name: message.location.name ?? null,
+        address: message.location.address ?? null,
+        url: message.location.url ?? null,
+      };
+
 /** One WhatsApp message as an event. Everything Helpdock does not file is `unsupported` or `ignored`. */
 const classifyWhatsAppMessage = (
   message: WhatsAppMessage,
@@ -502,20 +552,8 @@ const classifyWhatsAppMessage = (
   const errors = errorsOf(message.errors);
 
   if (message.type === 'system') {
-    const system = message.system;
-    if (system?.type === 'user_changed_number' || system?.type === 'customer_changed_number') {
-      return {
-        kind: 'user_changed_number',
-        platform,
-        timestamp,
-        customerId: customerId ?? null,
-        oldWaId: digitsOnly(system.customer),
-        newWaId: digitsOnly(system.wa_id ?? system.new_wa_id),
-      };
-    }
-    return ignored(platform, 'system', system?.type ?? null, timestamp);
+    return whatsappSystemEvent(message, customerId ?? null, timestamp);
   }
-
   if (message.type === 'unsupported') {
     return {
       kind: 'unsupported',
@@ -527,38 +565,16 @@ const classifyWhatsAppMessage = (
       errors,
     };
   }
-
   if (customerId === undefined || customerId === null) {
     return ignored(platform, 'no-customer', message.type, timestamp);
   }
-
   if (message.type === 'reaction') {
-    const emoji = message.reaction?.emoji ?? '';
-    return message.reaction === undefined
-      ? ignored(platform, 'malformed', 'reaction', timestamp)
-      : {
-          kind: 'reaction',
-          platform,
-          timestamp,
-          customerId,
-          messageId: message.reaction.message_id,
-          action: emoji === '' ? 'unreact' : 'react',
-          emoji: emoji === '' ? null : emoji,
-        };
+    return whatsappReactionEvent(message, customerId, timestamp);
   }
 
   const files = mediaRef(message);
   const text = captionOf(message);
-  const location =
-    message.location === undefined
-      ? null
-      : {
-          latitude: message.location.latitude,
-          longitude: message.location.longitude,
-          name: message.location.name ?? null,
-          address: message.location.address ?? null,
-          url: message.location.url ?? null,
-        };
+  const location = locationOf(message);
   const shared = sharedContactsOf(message);
   if (text === '' && files.length === 0 && location === null && shared.length === 0) {
     // An empty text is nothing to file. Anything else with no content Helpdock
@@ -899,33 +915,39 @@ export const classifyMessagingEvent = (event: unknown, platform: MetaPlatform): 
     return ignored(platform, 'malformed', 'sender', timestamp);
   }
 
+  return classifyCustomerEvent(data, { platform, timestamp, customerId: sender });
+};
+
+interface CustomerEventContext {
+  readonly platform: MetaPlatform;
+  readonly timestamp: Date | null;
+  readonly customerId: string;
+}
+
+/** The events a customer's action causes that are not a message: receipts, reactions, edits, taps. */
+const classifyCustomerEvent = (
+  data: z.infer<typeof messagingEventSchema>,
+  { platform, timestamp, customerId }: CustomerEventContext,
+): MetaEvent => {
+  const base = { platform, timestamp, customerId } as const;
+
   if (data.delivery !== undefined) {
     return {
       kind: 'delivery',
-      platform,
-      timestamp,
-      customerId: sender,
+      ...base,
       watermark: millisToDate(data.delivery.watermark),
       mids: data.delivery.mids ?? [],
     };
   }
   if (data.read !== undefined) {
     return data.read.mid === undefined
-      ? {
-          kind: 'read',
-          platform,
-          timestamp,
-          customerId: sender,
-          watermark: millisToDate(data.read.watermark),
-        }
-      : { kind: 'seen', platform, timestamp, customerId: sender, messageId: data.read.mid };
+      ? { kind: 'read', ...base, watermark: millisToDate(data.read.watermark) }
+      : { kind: 'seen', ...base, messageId: data.read.mid };
   }
   if (data.reaction !== undefined) {
     return {
       kind: 'reaction',
-      platform,
-      timestamp,
-      customerId: sender,
+      ...base,
       messageId: data.reaction.mid,
       action: data.reaction.action === 'unreact' ? 'unreact' : 'react',
       emoji: data.reaction.emoji ?? null,
@@ -934,9 +956,7 @@ export const classifyMessagingEvent = (event: unknown, platform: MetaPlatform): 
   if (data.message_edit !== undefined) {
     return {
       kind: 'edit',
-      platform,
-      timestamp,
-      customerId: sender,
+      ...base,
       messageId: data.message_edit.mid,
       text: data.message_edit.text ?? '',
       editNumber: data.message_edit.num_edit ?? null,
@@ -945,9 +965,7 @@ export const classifyMessagingEvent = (event: unknown, platform: MetaPlatform): 
   if (data.postback !== undefined) {
     return {
       kind: 'postback',
-      platform,
-      timestamp,
-      customerId: sender,
+      ...base,
       messageId: data.postback.mid ?? null,
       title: data.postback.title ?? null,
       payload: data.postback.payload ?? null,
@@ -956,9 +974,7 @@ export const classifyMessagingEvent = (event: unknown, platform: MetaPlatform): 
   if (data.referral !== undefined) {
     return {
       kind: 'referral',
-      platform,
-      timestamp,
-      customerId: sender,
+      ...base,
       source: data.referral.source ?? data.referral.ref ?? null,
     };
   }

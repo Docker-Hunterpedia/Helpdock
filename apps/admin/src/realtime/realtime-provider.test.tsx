@@ -4,9 +4,9 @@ import type {
   Session,
   SettablePresenceStatus,
 } from '@helpdock/schemas';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MOCK_BRANDS, MOCK_USER } from '../auth/mock-api.js';
 import { SessionProvider } from '../auth/session.tsx';
 import { renderApp } from '../test/render.tsx';
@@ -18,15 +18,16 @@ import { RealtimeProvider, usePresence, useRealtime } from './realtime-provider.
 const BRAND = MOCK_BRANDS[0]?.id ?? '';
 const OMAR = '0192c3f0-1a2b-7c3d-8e4f-00000000000b';
 /**
- * Short enough that the watcher's real timer fires well inside `waitFor`'s
- * budget. Fake timers would not help: the watcher is armed in a mount effect,
- * so installing them afterwards leaves that timeout on the real clock.
+ * The idle window the away-timer tests ask for. The watcher's timer is armed in
+ * a mount effect, so these tests install fake timers before they render and
+ * move the window with `vi.advanceTimersByTime`: nothing depends on how long a
+ * slow machine takes to get from one line to the next.
  *
- * Only the away-timer tests ask for it. Every other test runs with a window
- * longer than any test run, because a timer that can fire during a test about
- * something else is a race, and on a slow machine it loses.
+ * Every other test runs with a window longer than any test run, because a timer
+ * that can fire during a test about something else is a race, and on a slow
+ * machine it loses.
  */
-const IDLE_MS = 20;
+const IDLE_MS = 5 * 60_000;
 const NEVER_IDLE_MS = 600_000;
 
 /** A client a test drives: it never opens anything and announces on demand. */
@@ -197,30 +198,50 @@ describe('RealtimeProvider', () => {
   });
 
   describe('the away timer', () => {
-    it('sets away after the idle window and back to online on the next keypress', async () => {
-      const { user } = await renderProbe(client, IDLE_MS);
-      client.announce(MOCK_USER.id, 'online');
-      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('online'));
+    beforeEach(() => {
+      // Only the timer: React's scheduler and the promises of the mock APIs
+      // stay real, so rendering and `act` behave as they do everywhere else.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
 
-      // The window between mounting and getting here is not ours to bound, and
-      // the timer only restarts on a sign of life. This is that sign, so the
-      // idle window that follows starts from a point the test chose.
-      await user.keyboard('x');
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('away'));
+    const idleFor = (ms: number) =>
+      act(async () => {
+        vi.advanceTimersByTime(ms);
+      });
+    const keypress = () =>
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+      });
+
+    it('sets away after the idle window and back to online on the next keypress, each announced once', async () => {
+      await renderProbe(client, IDLE_MS);
+      act(() => client.announce(MOCK_USER.id, 'online'));
+      expect(screen.getByTestId('status')).toHaveTextContent('online');
+
+      await idleFor(IDLE_MS - 1);
+      expect(screen.getByTestId('status')).toHaveTextContent('online');
+      expect(client.set).toEqual([]);
+
+      await idleFor(1);
+      expect(screen.getByTestId('status')).toHaveTextContent('away');
       expect(client.set).toEqual(['away']);
 
-      await user.keyboard('a');
-
-      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('online'));
+      await keypress();
+      expect(screen.getByTestId('status')).toHaveTextContent('online');
       expect(client.set).toEqual(['away', 'online']);
+
+      await idleFor(IDLE_MS);
+      expect(client.set).toEqual(['away', 'online', 'away']);
     });
 
     it('leaves someone who is already offline alone', async () => {
       await renderProbe(client, IDLE_MS);
 
-      // Long enough for the watcher to have fired had it been going to.
-      await new Promise((resolve) => setTimeout(resolve, IDLE_MS * 5));
+      await idleFor(IDLE_MS * 5);
 
       expect(client.set).toEqual([]);
       expect(screen.getByTestId('status')).toHaveTextContent('offline');

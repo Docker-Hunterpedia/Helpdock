@@ -815,6 +815,50 @@ describe.skipIf(!hasDocker)('settings invalidation over Redis', () => {
 });
 ```
 
+### Standing in for a vendor
+
+No suite reaches a vendor: CI has no network and no credentials. Telegram has a
+local Bot API server (`apps/api/src/testing/fake-telegram.ts`); the Meta
+channels (WhatsApp, Messenger, Instagram; [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md))
+have a stand-in for Graph and a driver that posts signed webhooks, both
+exported by `@helpdock/channels` from `packages/channels/src/meta/testing/`.
+The same package exports the fixtures they and the unit tests share
+(`whatsappText`, `pageText`, `instagramText`, `whatsappStatus`, …), written
+against the Graph version `META_GRAPH_VERSION` defaults to. Bumping that version
+means reading Meta's changelog for these shapes first, and the fixtures second.
+
+```ts
+import { FakeGraph, MetaWebhookDriver, whatsappText } from '@helpdock/channels';
+
+const graph = new FakeGraph();
+await graph.start();
+
+// Point the api at it, and let `safeFetch` reach 127.0.0.1:
+//   META_GRAPH_API_ROOT=<graph.facebookRoot>
+//   META_INSTAGRAM_API_ROOT=<graph.instagramRoot>
+//   OUTBOUND_ALLOW_CIDRS=127.0.0.0/8
+graph.connect({ platform: 'whatsapp', id: '106540352242922', name: 'Acme', token: 'EAAG…' });
+
+// Meta posts: signed with the test app's secret, through the Nest app's `inject`.
+const meta = new MetaWebhookDriver({ target: app, secret: 'the-test-app-secret' });
+await meta.post(whatsappText({ wamid: 'wamid.1', text: 'Hello' }));
+
+// What Helpdock sent back, and to whom.
+graph.sentTo('16505551234'); // the messages it accepted
+graph.callsTo('/messages');  // every call, with root, version, token, query and body
+```
+
+`graph.windowClosed`, `.pairLimited`, `.blocked` and `.expiredTokens` make it
+refuse the way Meta does (`131047`, `131056`, `551`, `190`), `graph.failures`
+queues a 5xx or a redirect for the next matching request, and a token is good
+on the root of its own platform only, so a call sent to the wrong host fails as
+it would in production. It checks every body it is sent against the contract in
+`send-payloads.ts` and the platforms' text limits (4096 characters, 2000
+characters, 1000 bytes), so a splitter that cuts wrongly fails a test and not a
+customer. The driver's `post(body, { secret, header, tamper })` sends a wrong
+signature, none, or a body changed after it was signed, and `handshake` makes
+the callback-URL request.
+
 ## CI
 
 Five workflows, under [`.github/workflows/`](../../.github/workflows/). Every

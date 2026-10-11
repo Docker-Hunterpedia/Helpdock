@@ -47,7 +47,7 @@ Definition of done asks for.
 
 | Id | Deliverable | Spec | Tests beyond unit | Estimate | Issue | Status |
 |---|---|---|---|---|---|---|
-| M10-01 | Schema, config and the shared Graph adapter: migration `0050_meta_channels` (`meta_accounts`, `meta_conversations`, `meta_deliveries`, the three channel and identity enum values), the `meta.*` settings and `META_*` keys, `packages/channels/src/meta/` (Graph client over `safeFetch` with the host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter), and the stand-in for Graph with the signed-webhook driver | A §5, §8, §13; D §13; ADR 0025 (1, 2, 5) | Integration: the three tables in the RLS negative suite (D §1.6), the migration round-trip; the stand-in's own suite | 3 d | | planned |
+| M10-01 | Schema, config and the shared Graph adapter: migration `0050_meta_channels` (`meta_accounts`, `meta_conversations`, `meta_deliveries`, the three channel and identity enum values), the `meta.*` settings and `META_*` keys, `packages/channels/src/meta/` (Graph client over `safeFetch` with the host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter), and the stand-in for Graph with the signed-webhook driver | A §5, §8, §13; D §13; ADR 0025 (1, 2, 5) | Integration: the three tables in the RLS negative suite (D §1.6), the migration round-trip; the stand-in's own suite | 3 d | | built, awaiting review: [notes](#m10-01-schema-config-and-the-shared-adapter) |
 | M10-02 | The webhook: `GET\|POST /api/meta/webhook`, the handshake, the raw body kept for the signature, constant-time checks against both app secrets, routing by `object` and `entry[].id` to the account across brands, a transaction per entry, dedupe on `wamid`/`mid`, 200 for everything after a valid signature, 410 for a brand in its deletion grace | ADR 0025 (4, 6); D §6 | Integration: a signed batch with entries of two brands files two tickets, each in its brand; a redelivered batch files nothing twice; a wrong signature is 401 and files nothing; the race of two deliveries ends with one message | 2 d | | planned |
 | M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | planned |
 | M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | planned |
@@ -87,6 +87,20 @@ stand-in for Graph and the signed-webhook driver, on real Postgres and Redis
       platform, replies, health.
 - [ ] The Channels › Meta screens and the Meta ticket pass their Playwright
       suites in `en` and `ar` with axe.
+
+## Migrations
+
+- `0050_meta_channels` (M10-01): `meta_accounts` and `meta_conversations` (brand) and
+  `meta_deliveries` (department, moved with its ticket by a trigger of its own, as
+  `telegram_deliveries` is), the enums `meta_platform`, `meta_account_status`,
+  `meta_token_kind` and `meta_delivery_status`, and `whatsapp`, `messenger` and
+  `instagram` added to `ticket_channel`, `contact_identity_kind`,
+  `contact_duplicate_reason` and `blocked_sender_kind`. The three tables are in
+  `TENANT_TABLES`, with their `FORCE`d policies in the migration, and in the RLS
+  negative suite, where `meta_deliveries` also has the same-brand, other-department
+  case. `meta_accounts.access_token` is in `ENVELOPE_COLUMNS`, so a master key
+  rotation re-encrypts it. Nothing in the migration uses one of the new enum values,
+  so it runs inside the migration's transaction.
 
 ## Open questions
 
@@ -171,6 +185,88 @@ Written down before the work starts, so nobody discovers them in review.
 | A Facebook Page and an Instagram professional account for staging, with the maintainer in an app role | `needed` | The Messenger and Instagram runs under Standard Access |
 | App Review for `pages_messaging`, `instagram_business_manage_messages` and the Human Agent feature on the staging app | `not started` | Messages from anyone outside the app's roles; M10-09's tag |
 
+## M10-01 Schema, config and the shared adapter
+
+The contract names (platforms, statuses, jobs, events, limits, error classes) are the ones
+fixed before the work started, and none changed.
+
+**Database.** `packages/db/src/schema/meta.ts` and migration `0050_meta_channels` as
+[Migrations](#migrations) lists. `(platform, external_id)` is unique across the install;
+`(account_id, customer_id)` is unique per conversation; a delivery has one row per ticket
+message.
+
+**Schemas.** `packages/schemas/src/meta.ts` holds the vocabulary (`metaPlatformSchema`,
+`metaAccountStatusSchema`, `metaTokenKindSchema`, `metaDeliveryStatusSchema`), the account
+input and output (`metaAccountSchema` carries `tokenHint` and no field that could hold the
+token), `metaRefusalSchema`, the test, subscribe and status results, the App card, the
+delivery and ticket-context views, `replyWindowSchema`, `metaFileRefSchema` (the reference
+the `meta.media` outbox event carries), the route parameters and the constants
+(`META_TEXT_LIMITS`, `META_ATTACHMENT_LIMITS`, `META_SUBSCRIBED_FIELDS`, the windows, the
+pacing). `contactIdentityKindSchema`, `ticketChannelSchema`, `blockedSenderKindSchema`,
+the widget protocol's conversation channel and the System page's channel kind gain the
+three platforms; `normaliseMeta` spells their ids (`invalid-meta` is the new refusal);
+`IDENTITY_SOURCE_RULES` gains `whatsapp.cloud` (kinds `whatsapp` and `phone`),
+`messenger.page` and `instagram.account`, all verified, and `VERIFIABLE_IDENTITY_KINDS.phone`
+is `true`: only `whatsapp.cloud` produces a verified phone, and a phone an agent types is
+still unverified. `AI_AUTO_REPLY_CHANNELS` is unchanged, and a test says so.
+
+**Configuration.** `META_GRAPH_VERSION`, `META_GRAPH_API_ROOT`, `META_INSTAGRAM_API_ROOT`
+in the bootstrap schema (defaults live in `graph-client.ts`), and the install settings
+`meta.appId`, `meta.appSecret`, `meta.instagramAppSecret`, `meta.webhookVerifyToken`
+(overridable as `HD_META_*`). The [configuration guide](../guides/configuration.md) is
+regenerated from them.
+
+**The shared adapter**, `packages/channels/src/meta/` (all exported from `@helpdock/channels`):
+
+| File | What it holds |
+|---|---|
+| `graph-client.ts` | `GraphClient` (`get`, `post`, `delete`, `postMultipart`, `download`) over `safeFetch` with `policies.graph`; `isAllowedGraphHost`; `multipartBody`; the defaults |
+| `errors.ts` | `classifyGraphError`, `classifyGraphCode`, `GraphApiFailure` (`kind`, `code`, `subcode`, `status`, `detail`, `permanent`, `reason`), `redactToken` |
+| `signature.ts` | `verifyHubSignature` (any of several secrets, constant time, an empty secret never matches), `hubChallenge`, `hubSignature` |
+| `envelope.ts` | `metaEnvelopeSchema`, `classifyWhatsAppValue`, `classifyMessagingEvent`, `routeEnvelope` (events cut by account), the `MetaEvent` union, `metaExternalId`, `metaIdentityValue` |
+| `text.ts` | `splitMetaText`, `metaLocationText`, `contactsText`, `storyText` |
+| `reply-window.ts` | `replyWindow` (the one pure function every window check uses), `replyWindowView` |
+| `graph-responses.ts`, `send-payloads.ts` | Zod for what Graph answers and for what Helpdock sends |
+| `inbound-message.ts`, `whatsapp/`, `messenger/`, `instagram/` | `MetaInboundMessage`, `MetaChannelAdapter`, `toWhatsAppInboundMessage`, `toMessengerInboundMessage`, `toInstagramInboundMessage` and the three adapter classes |
+| `fixtures.ts`, `testing/` | the webhook bodies and Graph answers; `FakeGraph` and `MetaWebhookDriver` |
+
+Decisions taken inside the plan, each with its reason in a comment where it is made:
+
+- **Where things live.** The reply-window function, the stand-in and the driver are in
+  `packages/channels/src/meta/` rather than `apps/api/src/`, because the first is pure and the
+  other two are shared by every suite, including the admin's browser suites, which cannot
+  import an app. M10-06 may re-export the function from `apps/api/src/meta/meta-window.ts`. The envelope and send-payload schemas are in the channels
+  package beside the code that reads and builds them, as Telegram's `Update` is; only the
+  shapes the screens and the outbox events share are in `packages/schemas`.
+- **The window closes at its instant.** Open while `now` is before the customer's last message
+  plus 24 hours, closed from that instant on; the extended 7 days work the same way.
+- **Counting characters.** WhatsApp and Messenger limits are counted in UTF-16 code units, never
+  fewer than code points, because Meta does not say how it counts beyond the Basic Multilingual
+  Plane; a part may be shorter than the limit for emoji-heavy text, never longer. Instagram
+  counts UTF-8 bytes. A cut never splits a code point.
+- **No redirect is followed**, for any Graph call or download, because the host a redirect names
+  was never checked against the allow-list. If Meta's media hosts redirect in practice, the
+  staging run will show it as a `blocked` failure and this is the line to revisit.
+- **The token goes only to Meta hosts.** `download` sends it to a Graph root and to
+  `lookaside.fbsbx.com`, and never to `*.fbcdn.net`, whatever the caller passed.
+- **Stand-in strictness.** A token is good on the root of its own platform only; every send body
+  is checked against `send-payloads.ts`; text over the platform's limit is refused. A Meta call
+  that these let through is a call Meta would have accepted.
+- **Ids that JSON cannot hold exactly** (a number past 2^53) are refused rather than rounded;
+  Meta writes such ids as strings.
+
+Knock-on changes the wider enums needed so the repository still compiles, none of them a
+feature: the admin's channel icon maps and catalogs (`en` and `ar`) name the three platforms
+(the icons are stand-ins until the M10 artboards pick theirs), the api's own-sender rule treats
+them like a phone or a chat, and "Block sender" on a Meta ticket blocks the customer's id on that
+platform. The block list's kind picker therefore offers the three kinds from now on; nothing
+consults them until the inbound services of M10-03 to M10-05.
+
+Not in this deliverable, by design: the api module, the webhook route, the admin screens and
+their browser stand-in (`apps/admin/e2e/api/fake-graph.ts`, M10-07), and the guide pages that
+describe behaviour no one can reach yet (`contacts.md` still says a phone is never verified;
+M10-03 changes that behaviour and its guide).
+
 ## Interfaces for other milestones
 
 Planned; the implementation brief names the files. Corrected here as they land.
@@ -183,6 +279,7 @@ Planned; the implementation brief names the files. Corrected here as they land.
 | i18n | namespace `meta` (what the api sends to customers: the location label, the refused-file line), `channels:meta.*`, `tickets:meta.*` |
 | Permissions | none new: `brand:manage` for accounts, `install:admin` for the App card's secrets through Settings, `ticket:read` / `ticket:write` for the ticket's context and deliveries |
 | Routes | `GET\|POST /api/meta/webhook`; `GET /api/meta/app` and `POST /api/meta/app/verify-token`; `/api/brands/:brandId/meta/accounts` (list, create, `test`, `:id`, `:id/test`, `:id/subscribe`, `:id/status`, `:id/refresh`); `GET /api/brands/:brandId/tickets/:ticketId/meta`, `POST …/meta/deliveries/:deliveryId/retry` |
+| Packages | `@helpdock/channels` exports `GraphClient`, `classifyGraphError`, `verifyHubSignature`, `hubChallenge`, `metaEnvelopeSchema`, `routeEnvelope`, `splitMetaText`, `replyWindow`, the three adapters and, for tests, `FakeGraph`, `MetaWebhookDriver` and the fixtures; `@helpdock/net` gains `policies.graph`; `@helpdock/schemas` exports `meta.ts` |
 | Channel kinds | `ticket_channel` gains `whatsapp`, `messenger`, `instagram`; `contact_identity_kind`, `contact_duplicate_reason` and `blocked_sender_kind` gain the same three |
 
 ## Pull requests

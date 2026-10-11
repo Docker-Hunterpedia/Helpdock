@@ -12,6 +12,7 @@ Admin of the brand can open (`brand:manage`).
 |---|---|---|---|---|
 | Email | Mail to a mailbox address, fetched over IMAP or posted by the provider's inbound-parse webhook | Email from the brand's sender | Channels › Mailboxes, Channels › Outbound email | [Receiving mail](email.md), [Outbound email](outbound-email.md) |
 | Telegram | A message to the brand's bot | The same chat | Channels › Telegram | [Telegram](telegram.md) |
+| WhatsApp, Messenger, Instagram | In development (M10): the webhook Meta calls exists; the inbound services and Channels › Meta do not yet | The same conversation, inside Meta's reply window | — | [Meta channels](meta-channels.md) |
 | Chat widget | The widget on the brand's site, or a native app speaking its protocol | The widget, live | Channels › Widget | [Widget protocol](widget-protocol.md) |
 | Web form | The hosted contact page, `/contact` on the help center domain | Email | Channels › Web form | [Web form](web-form.md) |
 | REST API | `POST /api/v1/tickets` with an API key | Your integration, which reads the thread with `GET /api/v1/tickets/{ticketId}/messages` | Developers › API keys | [API](api.md) |
@@ -40,5 +41,7 @@ Agents can also open a ticket by hand from the ticket list
 
 ## Not in v1
 
-WhatsApp, Messenger, Instagram, Slack and Discord are on the v1.1 backlog
+Slack and Discord are on the v1.1 backlog
 ([REQUIREMENTS §6](../planning/REQUIREMENTS.md#6-add-on-features-v11-backlog)).
+WhatsApp, Messenger and Instagram moved into scope as M10 and are being built
+([Meta channels](meta-channels.md)).

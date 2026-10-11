@@ -128,10 +128,34 @@ describe('MetaAppService verify token', () => {
     );
   });
 
-  it('refuses to store a token outside a request with a principal', async () => {
+  it('refuses to store a token outside a request', async () => {
     const { service } = serviceWith();
 
-    await expect(service.verifyToken()).rejects.toThrow();
+    await expect(service.verifyToken()).rejects.toThrow(/request context/);
+  });
+
+  it('refuses to store a token for a request that has no principal', async () => {
+    const { service } = serviceWith();
+    const context = new RequestContext({ requestId: 'meta-app-test', method: 'POST', path: '/' });
+
+    await expect(runInRequestContext(context, () => service.rotateVerifyToken())).rejects.toThrow(
+      'without a principal',
+    );
+  });
+
+  it('lets a failure to save that is not a lock through untouched', async () => {
+    const settings = settingsWith();
+    const failure = new Error('the settings table is gone');
+    const service = new MetaAppService(
+      {
+        get: settings.get.bind(settings),
+        isLockedByEnv: settings.isLockedByEnv.bind(settings),
+        set: () => Promise.reject(failure),
+      },
+      { APP_URL },
+    );
+
+    await expect(asInstallAdmin(() => service.rotateVerifyToken())).rejects.toBe(failure);
   });
 });
 

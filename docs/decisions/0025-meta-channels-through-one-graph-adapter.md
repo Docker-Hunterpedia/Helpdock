@@ -250,3 +250,12 @@ stand-in for the vendor in every test (`apps/api/src/testing/fake-telegram.ts`).
   Review, and pasting the dashboard's token mirrors Telegram.
 - **Embedded Signup and Tech Provider onboarding.** Rejected: a hosted-SaaS
   pattern.
+
+## Amendments
+
+- **2026-10-11, M10-02.** Decision 4 says a brand in its deletion grace is answered 200 like any event
+  after a valid signature. DOMAIN-RULES §11 says a brand's channels answer 410, and the milestone's
+  M10-02 row follows it. The webhook does both: a batch in which **every** account belongs to a brand
+  in its grace is 410, and a batch that also holds a live brand's events, or an account Helpdock does
+  not know, stays 200 with the deleted brand's part passed over, so a deleted brand cannot make Meta
+  redeliver, or Messenger unsubscribe the app for, the others. Awaiting the owner's confirmation.

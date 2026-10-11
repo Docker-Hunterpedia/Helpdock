@@ -48,7 +48,7 @@ Definition of done asks for.
 | Id | Deliverable | Spec | Tests beyond unit | Estimate | Issue | Status |
 |---|---|---|---|---|---|---|
 | M10-01 | Schema, config and the shared Graph adapter: migration `0050_meta_channels` (`meta_accounts`, `meta_conversations`, `meta_deliveries`, the three channel and identity enum values), the `meta.*` settings and `META_*` keys, `packages/channels/src/meta/` (Graph client over `safeFetch` with the host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter), and the stand-in for Graph with the signed-webhook driver | A §5, §8, §13; D §13; ADR 0025 (1, 2, 5) | Integration: the three tables in the RLS negative suite (D §1.6), the migration round-trip; the stand-in's own suite | 3 d | | built, awaiting review: [notes](#m10-01-schema-config-and-the-shared-adapter) |
-| M10-02 | The webhook: `GET\|POST /api/meta/webhook`, the handshake, the raw body kept for the signature, constant-time checks against both app secrets, routing by `object` and `entry[].id` to the account across brands, a transaction per entry, dedupe on `wamid`/`mid`, 200 for everything after a valid signature, 410 for a brand in its deletion grace | ADR 0025 (4, 6); D §6 | Integration: a signed batch with entries of two brands files two tickets, each in its brand; a redelivered batch files nothing twice; a wrong signature is 401 and files nothing; the race of two deliveries ends with one message | 2 d | | planned |
+| M10-02 | The webhook: `GET\|POST /api/meta/webhook`, the handshake, the raw body kept for the signature, constant-time checks against both app secrets, routing by `object` and `entry[].id` to the account across brands, a transaction per entry, dedupe on `wamid`/`mid`, 200 for everything after a valid signature, 410 for a brand in its deletion grace | ADR 0025 (4, 6); D §6 | Integration: a signed batch with entries of two brands files two tickets, each in its brand; a redelivered batch files nothing twice; a wrong signature is 401 and files nothing; the race of two deliveries ends with one message | 2 d | | built, awaiting review: [notes](#m10-02-the-webhook-routing-dedupe-and-the-module-skeleton) |
 | M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | planned |
 | M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | planned |
 | M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | planned |
@@ -267,18 +267,107 @@ their browser stand-in (`apps/admin/e2e/api/fake-graph.ts`, M10-07), and the gui
 describe behaviour no one can reach yet (`contacts.md` still says a phone is never verified;
 M10-03 changes that behaviour and its guide).
 
+## M10-02 The webhook, routing, dedupe and the module skeleton
+
+`GET|POST /api/meta/webhook` and `MetaModule` (`apps/api/src/meta/`), wired into `AppModule` and
+`createApiApp`. The guide is [Meta channels](../guides/meta-channels.md).
+
+| File | What it holds |
+|---|---|
+| `meta-webhook-body.ts` | `registerMetaWebhookBody(adapter)`: the JSON parser that keeps the signed bytes on `request.rawBody` for this route only, and the 3 MiB body limit for it |
+| `meta-webhook.controller.ts` | `@Public()` `GET` (the handshake, `text/plain`) and `POST`, 3,000 requests a minute per address |
+| `meta-webhook.service.ts` | `verify`, `receive`, and `metaWebhookVerdict` (the status a batch is answered with) |
+| `meta-inbound.service.ts` | `MetaInboundService.receive`: one account's events in one brand transaction; `PlatformInboundService`, `MetaInboundHandlers`, `unhandledInbound` |
+| `meta-inbound-gate.ts` | `metaMessageSeen` (the dedupe key) and `metaSenderBlocked` (the block list), for all three platforms |
+| `meta-app.service.ts`, `meta-app.controller.ts` | the install's Meta app: `secrets()`, the verify token, `GET /api/meta/app`, `POST /api/meta/app/verify-token` (`install:admin`) |
+| `meta.repository.ts` | accounts (`list`, `find`, `account`, `insert`, `update`, `delete`, `departmentExists`, `markEvent`, `markError`), install scope (`locate`, `listAll`), conversations (`conversation`, `upsertConversation`, `setConversationTicket`, `conversationForTicket`), deliveries (`insertDelivery`, `delivery`, `deliveriesForTicket`, `recordPart`, `markSent`, `markRefused`, `recordFailure`, `requeue`, `advanceStatus`, `advanceByWatermark`) and `activity` |
+| `meta-failure.ts` | `MetaFailure(reason, details?)`, mapped in `http/error-response.ts` to a `meta: { reason, details? }` field of the error body (`packages/schemas/src/error.ts`) |
+| `meta-events.ts` | `META_EVENTS` (`meta.reply`, `meta.media`, `meta_account.changed`), their enqueue helpers and event handlers, `metaSendJobId`, `metaMediaFetchJobId`, `registerMetaEventHandlers` |
+| `graph-client-factory.ts`, `meta.module.ts` | `MetaModule.forRoot({ env, db, logger, overrides? })`; `MetaModuleOverrides { graph?, inbound? }`; the `META_GRAPH` token |
+
+**The seam the inbound services fill.** `PlatformInboundService.handle({ tx, account, now }, event)`
+in `meta-inbound.service.ts`, one per platform, called once per event of the platform's accounts in
+the order Meta sent them, with the `MetaEvent` that `routeEnvelope` made. `tx` is a savepoint of the
+account's brand transaction (system context, `app.principal_id = meta.webhook`). It returns a
+`MetaEventOutcome` (`handled`, `duplicate`, `ignored` with a reason) and throws to refuse the whole
+route. A handler registers by replacing its platform's entry in the `handlers` map of
+`MetaModule.forRoot` (the default is `unhandledInbound`, which logs the platform and the kind and
+answers `unhandled`); a suite passes `overrides.inbound` instead. M10-03 to M10-05 therefore do **not**
+repeat two checks: before a customer's `message` reaches `handle`, the service has already answered
+`duplicate` for a `messageId` that `ticket_messages.external_message_id` holds for the platform, and
+`ignored: blocked-sender` for a sender on the block list (counted on the block row).
+
+Decisions taken inside the plan, each with its reason where it is made:
+
+- **A brand in its deletion grace: 410, but only for a batch that holds nothing else.** The sources
+  disagree. This row, DOMAIN-RULES §11 ("channels answer 410") and the assignment say 410; ADR 0025
+  (4) and the implementation brief say a brand in its grace is 200 like every other event after a
+  valid signature, because Meta redelivers a non-200 and a batch can carry several brands. The
+  webhook does both: a batch whose **every** account belongs to a brand being deleted is 410, and a
+  batch that also holds a live brand's events, or an account Helpdock does not know, is 200 with the
+  deleted brand's part passed over. `metaWebhookVerdict` is the one function to change if the ADR is
+  amended the other way. **Orchestrating session: please confirm, and amend ADR 0025 (4) or this.**
+- **500 only when nothing was filed.** A batch is answered 500, so Meta redelivers, when no account in
+  it was filed and at least one failed. A batch in which something was filed is 200 even if another
+  account failed (logged, and on `meta_accounts.last_error`), so an account that always throws cannot
+  keep every brand in the batch in Meta's retry loop. Redelivery is safe either way: the dedupe key.
+- **One transaction per account, a savepoint per event.** The unique index on
+  `ticket_messages (brand_id, channel, external_message_id)` decides the race of two concurrent
+  deliveries: the loser's insert fails inside its savepoint, and the event is answered `duplicate` only
+  if the message is now there. Any other unique violation is the handler's bug and fails the route.
+- **The dedupe check and the sender gate are the service's**, not each platform's, so the three cannot
+  come to ask them three ways. The brief's M10-03 text has the WhatsApp service do them in an early
+  transaction; that is no longer needed (nothing is downloaded in the request).
+- **`rawBody` through the adapter.** Nest registers its JSON parser when the app initialises and a
+  second one for the type is refused, so `registerMetaWebhookBody` asks the adapter to register its
+  parsers first (it skips them at init) and replaces the JSON one with a parser that calls Fastify's
+  own default parser, with the same prototype-poisoning actions, so `__proto__` is refused here as
+  everywhere. `createApiApp` keeps the `FastifyAdapter` it builds, because `app.getHttpAdapter()` is typed as the framework-neutral server, which has no parser registration.
+- **The handshake sets its content type after the token is accepted.** Nest applies `@Header` before the
+  handler runs, which made the 403's JSON body unsendable (Fastify refuses an object under
+  `text/plain`).
+- **The verify token is made on the App card, never by the public route.** `GET /api/meta/app` makes and
+  stores one when none exists; the handshake only reads. A stranger's request cannot write a setting.
+  `meta.webhookVerifyToken` is audited as `settings.updated` by key.
+- **`last_error` names the innermost cause**, because the outer error of a failed query quotes the
+  statement and its parameters, which are a customer's words.
+- **Job payload types are local.** `meta.send` and `meta.media_fetch` do not exist in `@helpdock/jobs`
+  until M10-06 and M10-03, so `meta-events.ts` declares the producer-side shapes (`MetaSendJobPayload`,
+  `MetaMediaFetchJobPayload`) and the queue interfaces; those deliverables replace them with the
+  schemas' inferred types. `registerMetaEventHandlers` takes each consumer as optional and is **not
+  called by `start-worker.ts` yet**: the dispatcher refuses a second handler for an event, and no
+  consumer exists, so each owner adds its own queue to the one call when its job lands. Nothing
+  enqueues a `meta.*` event until then.
+- **`MetaModule.forRoot` has no `storage`.** Nothing in M10-02 stores a file; M10-03 adds it with its
+  media sink. `overrides.graph` and the `META_GRAPH` token are in because three later deliverables read
+  the client through them; nothing in M10-02 calls Graph, and a suite asserts it.
+- **`InboundSender.kind`** (`ticketing/sender-gate.ts`) accepts the three platforms, which M10-03 was
+  going to do.
+- **No i18n catalogs.** The brief names none for this deliverable.
+
+Not in this deliverable, by design: any inbound service, the accounts' routes, the deliveries' routes
+and the reply hook, the worker's registration, the admin screens.
+
+Tests: unit for the body parser, the verdict, the signature path, the router's decisions, the dedupe
+and the gate, the App service and the events; `meta-webhook.integration.test.ts` against real Postgres
+and Redis with `FakeGraph` and `MetaWebhookDriver` (the handshake with the right and wrong token; a
+batch of two brands reaching the service once per entry inside its brand; a redelivered batch deduped;
+a wrong, missing and tampered signature; the Instagram secret; 410; two concurrent deliveries; a failing
+route rolled back and redelivered; the App card) and the repository's queries.
+
 ## Interfaces for other milestones
 
 Planned; the implementation brief names the files. Corrected here as they land.
 
 | Kind | Name |
 |---|---|
-| Outbox events | `meta.reply` `{ deliveryId }`, `meta.media` `{ attachmentId, accountId, ref }`, `meta_account.changed` `{ accountId }`; M10-09 adds `meta.template` |
+| Outbox events | `meta.reply` `{ deliveryId }`, `meta.media` `{ attachmentId, accountId, ref }`, `meta_account.changed` `{ accountId }`; M10-09 adds `meta.template`. Declared in `apps/api/src/meta/meta-events.ts` (M10-02) |
+| Seams | `PlatformInboundService` and `MetaInboundHandlers` in `apps/api/src/meta/meta-inbound.service.ts` (M10-02): the WhatsApp, Messenger and Instagram inbound services implement one and replace their platform's entry in `MetaModule.forRoot`; `MetaModuleOverrides { graph?, inbound? }` for suites |
 | Jobs | `meta.send` (`outbound`, `kind: 'reply' \| 'template'`), `meta.media_fetch` (`inbound`), `meta.health` and `meta.health.schedule` (`maintenance`), `meta.templates.sync` (`maintenance`, M10-09) |
 | Config | `META_GRAPH_VERSION`, `META_GRAPH_API_ROOT`, `META_INSTAGRAM_API_ROOT`; settings `meta.appId`, `meta.appSecret`, `meta.instagramAppSecret`, `meta.webhookVerifyToken` (overridable as `HD_META_*`) |
 | i18n | namespace `meta` (what the api sends to customers: the location label, the refused-file line), `channels:meta.*`, `tickets:meta.*` |
 | Permissions | none new: `brand:manage` for accounts, `install:admin` for the App card's secrets through Settings, `ticket:read` / `ticket:write` for the ticket's context and deliveries |
-| Routes | `GET\|POST /api/meta/webhook`; `GET /api/meta/app` and `POST /api/meta/app/verify-token`; `/api/brands/:brandId/meta/accounts` (list, create, `test`, `:id`, `:id/test`, `:id/subscribe`, `:id/status`, `:id/refresh`); `GET /api/brands/:brandId/tickets/:ticketId/meta`, `POST …/meta/deliveries/:deliveryId/retry` |
+| Routes | `GET\|POST /api/meta/webhook` (built, M10-02); `GET /api/meta/app` and `POST /api/meta/app/verify-token` (built, M10-02); `/api/brands/:brandId/meta/accounts` (list, create, `test`, `:id`, `:id/test`, `:id/subscribe`, `:id/status`, `:id/refresh`); `GET /api/brands/:brandId/tickets/:ticketId/meta`, `POST …/meta/deliveries/:deliveryId/retry` |
 | Packages | `@helpdock/channels` exports `GraphClient`, `classifyGraphError`, `verifyHubSignature`, `hubChallenge`, `metaEnvelopeSchema`, `routeEnvelope`, `splitMetaText`, `replyWindow`, the three adapters and, for tests, `FakeGraph`, `MetaWebhookDriver` and the fixtures; `@helpdock/net` gains `policies.graph`; `@helpdock/schemas` exports `meta.ts` |
 | Channel kinds | `ticket_channel` gains `whatsapp`, `messenger`, `instagram`; `contact_identity_kind`, `contact_duplicate_reason` and `blocked_sender_kind` gain the same three |
 

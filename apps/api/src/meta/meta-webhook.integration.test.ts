@@ -115,7 +115,6 @@ if (!hasDocker) {
 
 interface Seeded {
   readonly departmentId: string;
-  readonly statusId: string;
   readonly ticketId: string;
   readonly accounts: Readonly<Record<string, MetaAccount>>;
 }
@@ -320,7 +319,6 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
         .returning();
       seeded.set(id, {
         departmentId,
-        statusId,
         ticketId,
         accounts: Object.fromEntries(rows.map((row) => [row.id, row])),
       });
@@ -947,6 +945,48 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
         expect(row.lastErrorAt).toEqual(at(2));
         expect(row.lastError).toHaveLength(300);
       });
+      it('connects, edits, finds and disconnects an account inside its brand', async () => {
+        const departmentId = seeded.get(BRAND_B)?.departmentId ?? '';
+
+        await inBrand(BRAND_B, async (tx) => {
+          const created = await repository.insert(tx, {
+            brandId: BRAND_B,
+            platform: 'messenger',
+            departmentId,
+            externalId: 'page-temp',
+            displayName: 'Temp',
+            accessToken: 'v1.key.sealed',
+            tokenKind: 'page',
+            tokenUpdatedAt: new Date(),
+          });
+          expect(created).toMatchObject({ status: 'connected', humanAgentEnabled: false });
+          const id = created?.id ?? '';
+
+          await expect(repository.departmentExists(tx, departmentId)).resolves.toBe(true);
+          await expect(repository.departmentExists(tx, uuidv7())).resolves.toBe(false);
+
+          const updated = await repository.update(tx, id, {
+            displayName: 'Renamed',
+            humanAgentEnabled: true,
+            status: 'token_expired',
+          });
+          expect(updated).toMatchObject({
+            displayName: 'Renamed',
+            humanAgentEnabled: true,
+            status: 'token_expired',
+          });
+          await expect(repository.find(tx, id)).resolves.toMatchObject({
+            account: { id, displayName: 'Renamed' },
+            departmentName: 'Support',
+            tokenUpdatedByName: null,
+          });
+
+          await expect(repository.delete(tx, id)).resolves.toMatchObject({ id });
+          await expect(repository.find(tx, id)).resolves.toBeUndefined();
+          await expect(repository.update(tx, id, { displayName: 'x' })).resolves.toBeUndefined();
+          await expect(repository.delete(tx, id)).resolves.toBeUndefined();
+        });
+      });
     });
 
     describe('conversations', () => {
@@ -1086,7 +1126,8 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
     describe('deliveries', () => {
       const withConversation = async (brandId: string, account: MetaAccount) => {
         const contactId = await addContact(brandId);
-        const customerId = `cust-${String((sequence += 1))}`;
+        sequence += 1;
+        const customerId = `cust-${String(sequence)}`;
         const conversation = await inBrand(brandId, (tx) =>
           repository.upsertConversation(tx, {
             brandId,

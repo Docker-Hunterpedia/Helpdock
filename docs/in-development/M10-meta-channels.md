@@ -574,10 +574,9 @@ Decisions taken inside the plan, each with its reason where it is made:
   the webhook never calls Graph). After the router has filed the message, a conversation whose `profile_name` is null and
   whose `profile_checked_at` is null (a conversation the message has just opened counts as both) gets
   `enqueueMetaProfile(tx, brandId, { conversationId, accountId, platform: 'messenger' })` in the message's own transaction.
-  The `meta.profile_fetch` job, the `profile_checked_at` column (migration 0051) and the real `enqueueMetaProfile` are
-  **M10-05's**; here the function is a stand-in in `messenger-profile.ts`, and the column is read as an optional property of
-  the conversation row, so until the merge a nameless conversation asks again with every message. Until the job has written
-  the name, the contact is named by its identity value and the thread draws "Messenger user" (M10-08); a refused lookup
+  The `meta.profile_fetch` job, the `profile_checked_at` column (migration 0051) and `enqueueMetaProfile` in
+  `meta-events.ts` are **M10-05's**, and Messenger uses them as merged (the stand-in it was built on is gone). Until the
+  job has written the name, the contact is named by its identity value and the thread draws "Messenger user" (M10-08); a refused lookup
   (a Page without the reviewed feature) leaves it so for good.
 - **Two tests recognise Helpdock's own echo, and only two.** `app_id` equal to `meta.appId` (set it, or this test never
   matches) and `metadata` naming a delivery of *this* account (a delivery id of another account is not ours). The echo of

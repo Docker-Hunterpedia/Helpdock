@@ -46,7 +46,8 @@ vi.mock('./meta-inbound-gate.js', () => ({
     state.seen.has(messageId),
   metaSenderBlocked: async () => false,
 }));
-vi.mock('./messenger-profile.js', () => ({
+vi.mock('./meta-events.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./meta-events.js')>()),
   enqueueMetaProfile: async (_tx: unknown, brandId: string, profile: unknown) => {
     state.profileRequests.push({ brandId, profile });
     return 'outbox-id';
@@ -93,6 +94,7 @@ const conversation = (over: Partial<MetaConversation> = {}): MetaConversation =>
     contactId: CONTACT,
     ticketId: TICKET.id,
     profileName: null,
+    profileCheckedAt: null,
     ...over,
   }) as MetaConversation;
 

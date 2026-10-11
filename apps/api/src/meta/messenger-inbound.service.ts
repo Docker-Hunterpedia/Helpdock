@@ -6,8 +6,8 @@ import type {
 } from '@helpdock/db';
 import { ContactFailure } from '../contacts/contact-failure.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
-import { enqueueMetaProfile } from './messenger-profile.js';
 import type { MetaRepository } from './meta.repository.js';
+import { enqueueMetaProfile } from './meta-events.js';
 import type {
   MetaEventContext,
   MetaEventOutcome,
@@ -69,13 +69,10 @@ const routeContextOf = ({ tx, account, now }: MetaEventContext): MetaRouteContex
 /**
  * Whether a customer's name has been looked for. `profile_checked_at` is the
  * profile job's mark (M10-05, migration 0051): it is set whether Graph answered
- * or refused, so a lookup is made once per conversation. The column is not on
- * this branch's schema yet, so it is read as an optional property: until it
- * exists a nameless conversation asks again with every message.
+ * or refused, so a lookup is made once per conversation.
  */
-const profileAsked = (
-  conversation: MetaConversationRow & { readonly profileCheckedAt?: Date | null },
-): boolean => conversation.profileName !== null || (conversation.profileCheckedAt ?? null) !== null;
+const profileAsked = (conversation: MetaConversationRow): boolean =>
+  conversation.profileName !== null || conversation.profileCheckedAt !== null;
 
 /** How a line in the thread came out. */
 type NoteResult = 'written' | 'duplicate' | 'no-open-ticket';

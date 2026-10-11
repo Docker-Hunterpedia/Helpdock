@@ -293,6 +293,35 @@ on each bot instead; a bot with a webhook set refuses polling
 Optional. The Telegram Bot API server. Defaults to https://api.telegram.org;
 set it only when you run your own Bot API server.
 
+### META_GRAPH_VERSION
+
+| Key | Required | Default | In `.env.example` |
+|---|---|---|---|
+| `META_GRAPH_VERSION` | no | — | `v25.0` |
+
+Optional. The Graph API version every WhatsApp, Messenger and Instagram call
+names. Defaults to v25.0, which Meta retires on 2028-07-29; bump it before
+then and read Meta's changelog for the webhook changes of the new version.
+
+### META_GRAPH_API_ROOT
+
+| Key | Required | Default | In `.env.example` |
+|---|---|---|---|
+| `META_GRAPH_API_ROOT` | no | — | `https://graph.facebook.com` |
+
+Optional. The Graph API host WhatsApp and Messenger calls go to. Defaults to
+https://graph.facebook.com; set it only to point an automated test at a local
+stand-in, and allow the stand-in's address in OUTBOUND_ALLOW_CIDRS.
+
+### META_INSTAGRAM_API_ROOT
+
+| Key | Required | Default | In `.env.example` |
+|---|---|---|---|
+| `META_INSTAGRAM_API_ROOT` | no | — | `https://graph.instagram.com` |
+
+Optional. The Graph API host Instagram calls go to. Defaults to
+https://graph.instagram.com; set it only for a local stand-in, as above.
+
 ### KNOWLEDGE_CRAWL_RENDER
 
 | Key | Required | Default | In `.env.example` |
@@ -438,6 +467,10 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_TRANSCRIPTION_ENDPOINT` | `transcription.endpoint` | install | no | — | Whisper-compatible transcription endpoint for voice notes, for example https://api.openai.com/v1/audio/transcriptions. Empty turns transcription off. |
 | `HD_TRANSCRIPTION_MODEL` | `transcription.model` | install | no | `whisper-1` | Model the transcription endpoint is asked for. |
 | `HD_TRANSCRIPTION_API_KEY` | `transcription.apiKey` | install | yes | — | API key for the transcription endpoint. Empty for a local server that asks for none. |
+| `HD_META_APP_ID` | `meta.appId` | install | no | — | Id of the install’s Meta developer app, from the app dashboard. Messenger echoes of Helpdock’s own replies are recognised by it (M10-04). |
+| `HD_META_APP_SECRET` | `meta.appSecret` | install | yes | — | App secret of the Meta developer app. Every webhook from Meta is signed with it (X-Hub-Signature-256) and refused without a match. |
+| `HD_META_INSTAGRAM_APP_SECRET` | `meta.instagramAppSecret` | install | yes | — | Instagram app secret, from the Instagram product of the Meta app. Empty when Instagram webhooks are signed with the app secret; a webhook is accepted when either matches. |
+| `HD_META_WEBHOOK_VERIFY_TOKEN` | `meta.webhookVerifyToken` | install | yes | — | The token Meta sends with its callback-URL handshake. Generated on first read when empty; paste the same value into the Meta dashboard. |
 
 ## Tracing
 

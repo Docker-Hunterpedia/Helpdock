@@ -65,6 +65,9 @@ describe('the settings registry', () => {
       'knowledge.notion.clientSecret',
       'knowledge.google.clientSecret',
       'transcription.apiKey',
+      'meta.appSecret',
+      'meta.instagramAppSecret',
+      'meta.webhookVerifyToken',
     ]);
   });
 });
@@ -111,5 +114,42 @@ describe('the schemas the registry declares', () => {
     expect(settingsSchema['auth.magicLinkTtlMinutes'].safeParse(10).success).toBe(true);
     expect(settingsSchema['auth.magicLinkTtlMinutes'].safeParse(0).success).toBe(false);
     expect(settingsSchema['auth.magicLinkTtlMinutes'].safeParse(120).success).toBe(false);
+  });
+});
+
+describe('the Meta app settings (M10-01)', () => {
+  const keys = [
+    'meta.appId',
+    'meta.appSecret',
+    'meta.instagramAppSecret',
+    'meta.webhookVerifyToken',
+  ];
+
+  it('are install-wide, because a Meta app has one callback URL and one secret', () => {
+    for (const key of keys) {
+      expect(settingDefinitions[key as keyof typeof settingDefinitions].scope, key).toBe('install');
+    }
+  });
+
+  it('map to the HD_META_* overrides the guides name', () => {
+    expect(keys.map((key) => toEnvKey(key))).toEqual([
+      'HD_META_APP_ID',
+      'HD_META_APP_SECRET',
+      'HD_META_INSTAGRAM_APP_SECRET',
+      'HD_META_WEBHOOK_VERIFY_TOKEN',
+    ]);
+  });
+
+  it('start empty, so an install with no Meta app configured accepts no webhook', () => {
+    for (const key of keys) {
+      expect(settingDefinitions[key as keyof typeof settingDefinitions].default, key).toBe('');
+    }
+  });
+
+  it('takes an app id as digits only, and empty', () => {
+    expect(settingsSchema['meta.appId'].safeParse('1234567890123456').success).toBe(true);
+    expect(settingsSchema['meta.appId'].safeParse('').success).toBe(true);
+    expect(settingsSchema['meta.appId'].safeParse('app-123').success).toBe(false);
+    expect(settingsSchema['meta.appId'].safeParse('1'.repeat(26)).success).toBe(false);
   });
 });

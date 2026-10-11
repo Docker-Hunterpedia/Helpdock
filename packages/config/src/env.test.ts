@@ -217,6 +217,42 @@ describe('loadEnv', () => {
     }
   });
 
+  it('leaves the Meta keys unset, so the defaults live beside the code that calls Graph', () => {
+    const env = loadEnv(completeEnv);
+
+    expect(env.META_GRAPH_VERSION).toBeUndefined();
+    expect(env.META_GRAPH_API_ROOT).toBeUndefined();
+    expect(env.META_INSTAGRAM_API_ROOT).toBeUndefined();
+  });
+
+  it('takes a Graph version, and the two roots a test points at a stand-in', () => {
+    const env = loadEnv(
+      envWith({
+        META_GRAPH_VERSION: ' v26.0 ',
+        META_GRAPH_API_ROOT: 'http://127.0.0.1:4010/facebook',
+        META_INSTAGRAM_API_ROOT: 'http://127.0.0.1:4010/instagram',
+      }),
+    );
+
+    expect(env.META_GRAPH_VERSION).toBe('v26.0');
+    expect(env.META_GRAPH_API_ROOT).toBe('http://127.0.0.1:4010/facebook');
+    expect(env.META_INSTAGRAM_API_ROOT).toBe('http://127.0.0.1:4010/instagram');
+  });
+
+  it.each(['25.0', 'v25', 'latest', 'v25.0.1', 'V25.0'])(
+    'refuses %s as a Graph version, because an unversioned call is never made',
+    (version) => {
+      expectInvalidKeys(envWith({ META_GRAPH_VERSION: version }), ['META_GRAPH_VERSION']);
+    },
+  );
+
+  it('refuses a Graph root that is not an http(s) URL', () => {
+    expectInvalidKeys(
+      envWith({ META_GRAPH_API_ROOT: 'ftp://graph.example.com', META_INSTAGRAM_API_ROOT: 'graph' }),
+      ['META_GRAPH_API_ROOT', 'META_INSTAGRAM_API_ROOT'],
+    );
+  });
+
   it('treats a blank value as unset so a template key can stay empty', () => {
     const env = loadEnv(
       envWith({ PORT: '', APP_MASTER_KEY_PREVIOUS: '   ', OUTBOUND_ALLOW_CIDRS: '' }),

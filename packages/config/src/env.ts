@@ -344,6 +344,26 @@ export const envSchema = z.object({
     .describe(
       'optional; the Bot API server, default https://api.telegram.org. Set it only for a self-hosted Bot API server',
     ),
+  // Optional rather than defaulted, for the reason TELEGRAM_POLLING gives; the
+  // defaults live beside the code that reads them (`packages/channels/src/meta/graph-client.ts`).
+  META_GRAPH_VERSION: z
+    .string()
+    .trim()
+    .regex(/^v\d+\.\d+$/)
+    .optional()
+    .describe(
+      'optional; the Graph API version every WhatsApp, Messenger and Instagram call names, such as v25.0, default v25.0. Meta retires a version about two years after it ships, so bump it before then (M10-01)',
+    ),
+  META_GRAPH_API_ROOT: urlSchema('http:', 'https:')
+    .optional()
+    .describe(
+      'optional; the Graph API host WhatsApp and Messenger calls go to, default https://graph.facebook.com. Set it only to point an automated test at a local stand-in (M10-01)',
+    ),
+  META_INSTAGRAM_API_ROOT: urlSchema('http:', 'https:')
+    .optional()
+    .describe(
+      'optional; the Graph API host Instagram calls go to, default https://graph.instagram.com. Set it only to point an automated test at a local stand-in (M10-01)',
+    ),
   KNOWLEDGE_CRAWL_RENDER: z
     .stringbool()
     .optional()

@@ -1,12 +1,17 @@
 import {
   classifyGraphError,
   GraphApiFailure,
+  graphSubscribedApp,
   graphSubscribedApps,
   graphTokenExpired,
   META_FIXTURE,
 } from '@helpdock/channels';
 import type { MetaAccount } from '@helpdock/db';
-import { META_ERROR_MAX_LENGTH, META_SUBSCRIBED_FIELDS } from '@helpdock/schemas';
+import {
+  META_ERROR_MAX_LENGTH,
+  META_SUBSCRIBED_FIELDS,
+  type MetaPlatform,
+} from '@helpdock/schemas';
 import { describe, expect, it, vi } from 'vitest';
 import { checkMetaAccount, type MetaHealthChecks } from './meta-health.js';
 import type { TokenRefreshResult } from './meta-token-refresh.js';
@@ -19,7 +24,7 @@ import type { TokenRefreshResult } from './meta-token-refresh.js';
 
 const TOKEN = 'EAAGhealthTOKEN1234567890abcdef';
 const NOW = new Date('2026-10-11T09:20:00.000Z');
-const APP_ID = META_FIXTURE.appId;
+const APP_ID: string = META_FIXTURE.appId;
 
 const account = (overrides: Partial<MetaAccount> = {}): MetaAccount => ({
   id: '01924f00-0000-7000-8000-0000000000ac',
@@ -118,8 +123,15 @@ const permissionDenied = {
   },
 };
 
-const subscribedTo = (platform: Parameters<typeof graphSubscribedApps>[0], appId = APP_ID) =>
-  graphSubscribedApps(platform, { appId, fields: META_SUBSCRIBED_FIELDS[platform] });
+type Platform = MetaPlatform;
+/** `GET /{id}/subscribed_apps` listing one app per id. */
+const subscribedApps = (platform: Platform, ...appIds: string[]) => ({
+  data: appIds.map((appId) =>
+    graphSubscribedApp(platform, { appId, fields: META_SUBSCRIBED_FIELDS[platform] }),
+  ),
+});
+const subscribedTo = (platform: Platform, appId: string = APP_ID) =>
+  subscribedApps(platform, appId);
 const nobody = { data: [] };
 
 const check = (
@@ -330,7 +342,7 @@ describe('step 2, the subscription', () => {
         return { success: true };
       }
       return subscribed
-        ? { data: [...subscribedTo('messenger').data, ...subscribedTo('messenger', '999').data] }
+        ? subscribedApps('messenger', '999', APP_ID)
         : subscribedTo('messenger', '999');
     });
 

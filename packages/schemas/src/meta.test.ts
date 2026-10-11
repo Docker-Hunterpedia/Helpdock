@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { errorResponseSchema } from './error.js';
 import {
+  firstWordOf,
   META_ATTACHMENT_LIMITS,
   META_ERROR_MAX_LENGTH,
   META_HUMAN_AGENT_WINDOW_MS,
@@ -24,6 +25,7 @@ import {
   metaDeliverySchema,
   metaDeliveryStatusSchema,
   metaFileRefSchema,
+  metaOpeningLine,
   metaRefusalDetailsSchema,
   metaRefusalSchema,
   metaSubscribeResultSchema,
@@ -616,5 +618,33 @@ describe('metaFileRefSchema', () => {
     ['a kind nobody fetches', { kind: 'attach', url: 'https://x.test/a', type: 'image' }],
   ])('refuses %s', (_label, ref) => {
     expect(metaFileRefSchema.safeParse(ref).success).toBe(false);
+  });
+});
+
+describe('metaOpeningLine', () => {
+  it('joins the author’s first name and the brand with a middle dot', () => {
+    expect(metaOpeningLine({ firstName: 'Lina', brand: 'Helpdock' })).toBe('Lina · Helpdock');
+  });
+
+  it('is the brand alone when nobody wrote it: the assistant’s reply, a rule’s', () => {
+    expect(metaOpeningLine({ firstName: null, brand: 'Helpdock' })).toBe('Helpdock');
+    expect(metaOpeningLine({ firstName: '  ', brand: 'Helpdock' })).toBe('Helpdock');
+  });
+
+  it('trims what it is given and keeps Arabic as it is', () => {
+    expect(metaOpeningLine({ firstName: ' لينا ', brand: ' هيلب دوك ' })).toBe('لينا · هيلب دوك');
+  });
+});
+
+describe('firstWordOf', () => {
+  it('is the part of a display name before the first space', () => {
+    expect(firstWordOf('Lina Haddad')).toBe('Lina');
+    expect(firstWordOf('  Lina   Haddad  ')).toBe('Lina');
+    expect(firstWordOf('Madonna')).toBe('Madonna');
+  });
+
+  it('is null for a name with nothing in it', () => {
+    expect(firstWordOf('')).toBeNull();
+    expect(firstWordOf('   ')).toBeNull();
   });
 });

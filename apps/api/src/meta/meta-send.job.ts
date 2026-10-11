@@ -6,18 +6,19 @@ import {
   graphSendResponseSchema,
   type MessagingSendPayload,
   parseGraph,
-  splitMetaText,
   type WhatsAppSendPayload,
 } from '@helpdock/channels';
 import { decryptSecret, type Keyring } from '@helpdock/config';
 import {
   type Attachment,
+  brands,
   type Db,
   type DbTransaction,
   type MetaAccount,
   type MetaConversation,
   type MetaDelivery,
   ticketMessages,
+  users,
   withSystem,
 } from '@helpdock/db';
 import {
@@ -31,12 +32,14 @@ import {
 } from '@helpdock/jobs';
 import {
   type DownloadVariant,
+  firstWordOf,
   META_ATTACHMENT_LIMITS,
   META_ERROR_MAX_LENGTH,
   type MetaPlatform,
+  metaOpeningLine,
 } from '@helpdock/schemas';
 import { DelayedError, type Job, UnrecoverableError } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { objectKeyBeside } from '../media/keys.js';
 import type { ObjectStorage } from '../media/storage.js';
@@ -51,6 +54,7 @@ import {
   replyAttachments,
 } from './meta-attachments.js';
 import { holdRecipientPace, paceKey, RecipientPaceHeld, withRecipientPace } from './meta-pacing.js';
+import { replyTextParts } from './meta-reply-text.js';
 import { fileLeftOutText } from './meta-text.js';
 import { conversationWindow, windowClosedCode } from './meta-window.js';
 import { WINDOW_CLOSED_NOTE } from './outbound-meta.service.js';
@@ -352,8 +356,22 @@ const sendReply = async (
     delivery.customerId,
   );
   const [message] = await tx
-    .select({ bodyText: ticketMessages.bodyText, authorType: ticketMessages.authorType })
+    .select({
+      bodyText: ticketMessages.bodyText,
+      authorType: ticketMessages.authorType,
+      authorName: users.name,
+      brandName: brands.name,
+    })
     .from(ticketMessages)
+    .innerJoin(brands, eq(brands.id, ticketMessages.brandId))
+    // `author_id` is text: it names a user, a contact or a job by `author_type`.
+    .leftJoin(
+      users,
+      and(
+        eq(ticketMessages.authorType, 'staff'),
+        sql`${users.id}::text = ${ticketMessages.authorId}`,
+      ),
+    )
     .where(eq(ticketMessages.id, delivery.ticketMessageId))
     .limit(1);
   /* c8 ignore next 3 -- each cascade-deletes the delivery with it. */
@@ -385,6 +403,11 @@ const sendReply = async (
   };
   const courier = platform === 'whatsapp' ? whatsappCourier(context) : messagingCourier(context);
   const files = await replyAttachments(tx, delivery.ticketMessageId);
+  // "Lina · Helpdock" for a person, the brand alone for the assistant or a rule.
+  const openingLine = metaOpeningLine({
+    firstName: message.authorName === null ? null : firstWordOf(message.authorName),
+    brand: message.brandName,
+  });
 
   /** What an attachment becomes: sent, replaced by a notice to the customer, or left out. */
   const filePart = (file: Attachment): Part => {
@@ -457,7 +480,7 @@ const sendReply = async (
   // Every attachment is a part, sent, replaced by a notice or left out, so a
   // part's index never moves between attempts.
   const parts: Part[] = [
-    ...splitMetaText(message.bodyText, platform).map(
+    ...replyTextParts({ platform, openingLine, bodyText: message.bodyText }).map(
       (text): Part => ({ sends: true, run: () => courier.text(text) }),
     ),
     ...files.map(filePart),

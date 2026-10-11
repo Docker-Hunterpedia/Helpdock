@@ -110,6 +110,9 @@ const TOKEN = {
   instagram: 'IGAAinstagramtoken0000000004',
 } as const;
 
+/** The seeded admin is "Dev Admin" and the seeded brand "Helpdock Dev" (`metaOpeningLine`). */
+const OPENING = 'Dev · Helpdock Dev';
+
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
 
@@ -814,7 +817,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
 
         const sent = sentOn(platform, recipient);
         expect(sent).toHaveLength(1);
-        const text = 'Sorry about that.\nIt ships today.';
+        const text = `${OPENING}\nSorry about that.\nIt ships today.`;
         expect(sent[0]?.payload).toEqual(
           platform === 'whatsapp'
             ? {
@@ -1009,13 +1012,69 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
         expect(Buffer.byteLength(part, 'utf8')).toBeLessThanOrEqual(1_000);
         // Whole words: no letter was cut, and the text survives the bytes.
         expect(part).not.toContain('�');
-        expect(part.split(' ').every((word) => word === 'الطلب')).toBe(true);
         expect(Buffer.from(part, 'utf8').toString('utf8')).toBe(part);
       }
-      expect(parts.join(' ')).toBe(text);
+      // The opening line is on the first part and counts toward its bytes.
+      expect(parts[0]?.startsWith(`${OPENING}\n`)).toBe(true);
+      expect(parts[1]).not.toContain('Helpdock');
+      const bodies = parts.map((part, index) =>
+        index === 0 ? part.slice(OPENING.length + 1) : part,
+      );
+      for (const body of bodies) {
+        expect(body.split(' ').every((word) => word === 'الطلب')).toBe(true);
+      }
+      expect(bodies.join(' ')).toBe(text);
       const delivery = await onlyDelivery(customer.ticketId);
       expect(delivery).toMatchObject({ status: 'sent', partsSent: 2 });
       expect(delivery.platformMessageIds).toHaveLength(2);
+    });
+
+    it('opens only the first message of a long reply with the author’s first name and the brand', async () => {
+      const customer = await converse({
+        account: accounts.get(PAGE) as MetaAccount,
+        customerId: '5012',
+        lastInboundAgoMs: HOUR,
+      });
+      // Two paragraphs that cannot share a 2000-character message.
+      const body = `<p>${'a'.repeat(1_500)}</p><p>${'b'.repeat(1_500)}</p>`;
+
+      expect((await reply(customer.ticketId, body)).status).toBe(201);
+      const [ran] = await runNew();
+
+      expect(ran?.outcome).toBe('done');
+      const parts = sentOn('messenger', '5012').map(
+        (message) => (message.payload as { message: { text: string } }).message.text,
+      );
+      expect(parts).toEqual([`${OPENING}\n${'a'.repeat(1_500)}`, 'b'.repeat(1_500)]);
+    });
+
+    it('sends the opening line as a message of its own when the reply is only files', async () => {
+      const waId = '16505550122';
+      const customer = await converse({
+        account: accounts.get(NUMBER) as MetaAccount,
+        customerId: waId,
+        waId,
+        lastInboundAgoMs: HOUR,
+      });
+      const terms = await attach(customer.ticketId, {
+        name: 'terms.pdf',
+        kind: 'file',
+        mime: 'application/pdf',
+        variant: 'original',
+        bytes: Buffer.from('%PDF-1.7 terms'),
+      });
+
+      expect((await reply(customer.ticketId, '<p></p>', { attachmentIds: [terms] })).status).toBe(
+        201,
+      );
+      const [ran] = await runNew();
+
+      expect(ran?.outcome).toBe('done');
+      expect(sentOn('whatsapp', waId).map((message) => message.payload)).toEqual([
+        expect.objectContaining({ type: 'text', text: { body: OPENING } }),
+        expect.objectContaining({ type: 'document' }),
+      ]);
+      expect(await onlyDelivery(customer.ticketId)).toMatchObject({ partsSent: 2 });
     });
 
     it('sends two files on WhatsApp as three messages, and resumes after the one that failed', async () => {
@@ -1067,7 +1126,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       expect(retried?.outcome).toBe('done');
       const sent = sentOn('whatsapp', waId).map((message) => message.payload);
       expect(sent).toEqual([
-        expect.objectContaining({ type: 'text', text: { body: 'Here you are.' } }),
+        expect.objectContaining({ type: 'text', text: { body: `${OPENING}\nHere you are.` } }),
         expect.objectContaining({
           type: 'image',
           image: { id: expect.stringMatching(/^FAKEMEDIA/), caption: 'label.jpg' },
@@ -1189,7 +1248,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       expect(ran?.outcome).toBe('done');
       const sent = sentOn('instagram', '6003').map((message) => message.payload);
       expect(sent).toHaveLength(3);
-      expect(sent[0]).toMatchObject({ message: { text: 'Our terms.' } });
+      expect(sent[0]).toMatchObject({ message: { text: `${OPENING}\nOur terms.` } });
       // In its place, a line in Arabic that names the file and says what Instagram takes.
       const notice = (sent[1] as { message: { text: string } }).message.text;
       expect(notice).toContain('warranty-terms.docx');
@@ -1453,6 +1512,16 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       const delivery = await onlyDelivery(customer.ticketId);
       expect(delivery.status).toBe('queued');
       expect(await outboxRowsFor(delivery.id)).toHaveLength(1);
+
+      // Nobody wrote it, so the opening line is the brand alone: no first name.
+      const [ran] = await runNew();
+
+      expect(ran?.outcome).toBe('done');
+      expect(
+        sentOn('messenger', '5008').map(
+          (message) => (message.payload as { message: { text: string } }).message.text,
+        ),
+      ).toEqual(['Helpdock Dev\nCan I help?']);
     });
   });
 

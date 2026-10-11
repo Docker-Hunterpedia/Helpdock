@@ -169,6 +169,40 @@ export const META_HUMAN_AGENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** WhatsApp refuses a second message to one user inside this many milliseconds (`131056`). */
 export const META_PACE_MS = 6_000;
 
+/** The line between a reply's author and the brand: "Lina · Helpdock". */
+export const META_OPENING_SEPARATOR = ' · ';
+
+/**
+ * The first line of a reply to a Meta customer (M10-06, DESIGN §6.3 MetaMessages):
+ * the author's first name and the brand's name, "Lina · Helpdock", because an
+ * account has one name and the customer should see who is answering. A reply
+ * with no person behind it (the assistant's, a rule's) carries the brand's name
+ * alone. It opens the first message only, and counts toward the platform's text
+ * limit, so a caller cuts the text after putting it first, and the composer
+ * counts the parts of a draft the same way.
+ *
+ * `firstName` is the author's display name up to the first space
+ * ({@link firstWordOf}); null or blank leaves the brand alone.
+ */
+export const metaOpeningLine = ({
+  firstName,
+  brand,
+}: {
+  readonly firstName: string | null;
+  readonly brand: string;
+}): string => {
+  const name = firstName?.trim() ?? '';
+
+  return name === '' ? brand.trim() : `${name}${META_OPENING_SEPARATOR}${brand.trim()}`;
+};
+
+/** "Lina" from "Lina Haddad": the part of a display name before the first space, or null for a blank one. */
+export const firstWordOf = (name: string): string | null => {
+  const [first = ''] = name.trim().split(/\s+/u);
+
+  return first === '' ? null : first;
+};
+
 // --------------------------------------------------------------------------
 // Files that arrive with a message
 // --------------------------------------------------------------------------

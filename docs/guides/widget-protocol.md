@@ -655,8 +655,6 @@ parsed, so malformed events count too. An event over it is answered
 `{ ok: false, error: { code: 'rate_limited' } }`, the socket stays open, and
 REST requests are unaffected. A `message:send` also still counts against the
 write rule. A throttled request gets `rate_limited` (429). Back off and retry.
-The bundled widget sends a few events a minute, typing starts and stops
-included.
 
 Every refusal is counted in `rate_limit_refusals_total{bucket="widget-socket-event"}`
 ([operations](operations.md#what-is-measured)).

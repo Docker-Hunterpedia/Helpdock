@@ -139,9 +139,8 @@ filename="api.json"` (a browser that navigates to an API URL downloads it
 instead of rendering it) and `Cache-Control: no-store`, so no cache keeps a
 brand's tickets, contacts or settings (`apps/api/src/http/json-disposition.ts`,
 ASVS 8.2.1). A route that caches its JSON on purpose sets its own
-`Cache-Control` and keeps it: the widget's source maps and `config` (`no-cache`
-with an ETag), and the admin's hashed assets. Pages, scripts and fonts are not
-JSON and keep the caching they set. The admin,
+`Cache-Control` and keeps it: the widget's `config` (`no-cache` with an ETag).
+Pages, scripts and fonts are not JSON and keep the caching they set. The admin,
 the help center, the web form and the widget each send the policy their own
 content needs. The admin hashes its bootstrap script and gives Emotion a fresh
 style nonce on every response; it does not permit inline script or un-nonced

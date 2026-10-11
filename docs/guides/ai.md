@@ -302,8 +302,8 @@ keeps assist on past the budget ("Keep assist after the hard stop", on by
 default), in which case assist calls `complete()` with `allowOverBudget` and
 only auto-reply stops. The call is still logged and counted.
 
-**Which system prompt.** Every item sends the brand's system prompt after its
-own instructions, and chooses it as auto-reply does: the Arabic one when the
+**Which system prompt.** Every item sends the brand's system prompt, and chooses
+it as auto-reply does: the Arabic one when the
 ticket is in Arabic and the brand wrote one, the main one otherwise. The
 ticket's language is that of the customer's last message, or the contact's
 language, or the brand's, while the customer has said nothing. It follows the
@@ -425,8 +425,9 @@ holds **more than 1,000 entries** or declares **more than 100 MiB uncompressed**
 in total, when it is ZIP64 or its directory is damaged, or when an entry
 unpacks to more than its directory says (each entry is inflated once, up to
 its declared size, to check; a directory that lies is caught there). A refused
-file fails the sync with a `file.rejected` log line that names the limit; in a
-Drive folder it is skipped with the same reason and the walk goes on. Ordinary
+upload is logged as `file.rejected` with the limit it broke and is rejected as a
+file, not a failed sync; in a Drive folder it is skipped, logged as
+`document.skipped` with the same reason, and the walk goes on. Ordinary
 documents are far below both limits. The limits are the constants
 `DOCX_MAX_ENTRIES` and `DOCX_MAX_UNCOMPRESSED_BYTES` in
 `packages/ai/src/knowledge/zip-limits.ts`.
@@ -721,7 +722,7 @@ closed or has been quiet for 24 hours.
 | `POST /api/brands/:brandId/knowledge/files` | `ai:manage` | Presign a file upload; creates the source |
 | `POST …/knowledge/sources/:sourceId/confirm` | `ai:manage` | The upload is done; the sync starts. 409 `upload-missing` |
 | `POST …/knowledge/sources/:sourceId/oauth/:provider` | `ai:manage` | The Notion or Google consent URL. 409 `oauth-not-configured` |
-| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected`. The `state` is signed, good for ten minutes and **single-use**: a second callback with the same `state` answers 400 `oauth-state-invalid` and exchanges nothing. (No PKCE yet: the provider's `code` is still bound to the client secret only.) |
+| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected`. The `state` is signed, good for ten minutes and **single-use**: a second callback with the same `state` answers 400 `oauth-state-invalid` and exchanges nothing. (No PKCE yet: the token request carries no code verifier.) |
 
 A refusal carries `error.ai.reason`, as `aiRefusalSchema` in `@helpdock/schemas`
 declares, for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`), and

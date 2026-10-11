@@ -121,8 +121,7 @@ export const metaSendJobId = (outboxId: string): string => `meta.send.${outboxId
 
 export const metaMediaFetchJobId = (outboxId: string): string => `meta.media_fetch.${outboxId}`;
 
-export const metaProfileFetchJobId = (outboxId: string): string =>
-  `meta.profile_fetch.${outboxId}`;
+export const metaProfileFetchJobId = (outboxId: string): string => `meta.profile_fetch.${outboxId}`;
 
 export const createMetaReplyEventHandler =
   (queue: MetaSendQueue): OutboxEventHandler =>

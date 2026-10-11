@@ -7,31 +7,32 @@ import {
   instagramSeen,
   instagramStoryReply,
   instagramText,
+  instagramUnsupported,
   type MetaEvent,
   type MetaInboundMessage,
 } from '@helpdock/channels';
-import type { DbTransaction, MetaAccount, MetaConversation } from '@helpdock/db';
+import type { DbTransaction, MetaAccount, MetaConversation, Ticket } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
-import type { TicketRepository } from '../tickets/tickets.repository.js';
-import type { DeferredAttachmentSink } from './deferred-sink.js';
 import {
   InstagramInboundService,
   type InstagramInboundServiceOptions,
 } from './instagram-inbound.service.js';
-import type { MetaRepository } from './meta.repository.js';
 import { enqueueMetaProfile } from './meta-events.js';
 import type { MetaEventContext } from './meta-inbound.service.js';
-import type { MetaConversationRouter } from './meta-router.js';
+import { metaSenderBlocked } from './meta-inbound-gate.js';
+
+// The outbox row and the block list are the integration suite's to prove; here
+// only that they are asked for.
+vi.mock('./meta-events.js', () => ({
+  enqueueMetaProfile: vi.fn(() => Promise.resolve('outbox-id')),
+}));
+vi.mock('./meta-inbound-gate.js', () => ({
+  metaSenderBlocked: vi.fn(() => Promise.resolve(false)),
+}));
 
 const IG_ACCOUNT = '17841400000000000';
 const IGSID = '17841499999999999';
 const NOW = new Date('2026-10-11T08:00:00Z');
-
-// The outbox row is the integration suite's to prove; here only that it is asked for.
-vi.mock('./meta-events.js', () => ({
-  enqueueMetaProfile: vi.fn(() => Promise.resolve('outbox-id')),
-}));
 
 const account = {
   id: '0196a1b2-0000-7000-8000-000000000001',
@@ -46,89 +47,105 @@ const conversation = (overrides: Partial<MetaConversation> = {}): MetaConversati
   ({
     id: '0196a1b2-0000-7000-8000-000000000004',
     contactId: '0196a1b2-0000-7000-8000-000000000005',
-    ticketId: null,
+    customerId: IGSID,
+    ticketId: '0196a1b2-0000-7000-8000-000000000006',
     profileName: null,
     username: null,
     profileCheckedAt: null,
     ...overrides,
   }) as MetaConversation;
 
+const ticket = {
+  id: '0196a1b2-0000-7000-8000-000000000006',
+  contactId: '0196a1b2-0000-7000-8000-000000000005',
+} as Ticket;
+
 const eventOf = (body: Record<string, unknown>): MetaEvent => {
   const entry = (body.entry as { messaging: unknown[] }[])[0];
   return classifyMessagingEvent(entry?.messaging[0], 'instagram');
 };
 
-interface Harness {
-  readonly service: InstagramInboundService;
-  readonly context: MetaEventContext;
-  readonly routed: MetaInboundMessage[];
-  readonly log: {
-    info: ReturnType<typeof vi.fn>;
-    warn: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-  };
-  readonly repository: {
-    conversation: ReturnType<typeof vi.fn>;
-    delivery: ReturnType<typeof vi.fn>;
-    advanceStatus: ReturnType<typeof vi.fn>;
-  };
+interface Setup {
+  readonly existing?: MetaConversation;
+  readonly account?: MetaAccount;
+  readonly appId?: string;
+  readonly delivery?: { accountId: string };
+  readonly advanced?: unknown;
+  /** The message `messageByPlatformId` finds. */
+  readonly found?: { ticketId: string; bodyText: string };
+  /** The ticket the router calls open; undefined for a closed or missing one. */
+  readonly open?: Ticket;
+  /** Whether a system line with the external id is already in the brand. */
+  readonly lineExists?: boolean;
 }
 
-const harness = (
-  setup: {
-    /** The conversation before the message, and (if it differs) as the router leaves it. */
-    readonly existing?: MetaConversation;
-    readonly afterRouting?: MetaConversation;
-    readonly account?: MetaAccount;
-    readonly appId?: string;
-    readonly delivery?: { accountId: string };
-    readonly advanced?: unknown;
-  } = {},
-): Harness => {
+const harness = (setup: Setup = {}) => {
   const routed: MetaInboundMessage[] = [];
   const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const repository = {
-    // The service looks twice: before it routes, and again for the row the router wrote.
-    conversation: vi
-      .fn()
-      .mockResolvedValueOnce(setup.existing)
-      .mockResolvedValue(setup.afterRouting ?? setup.existing ?? conversation()),
+    conversation: vi.fn(() => Promise.resolve(setup.existing)),
     delivery: vi.fn(() => Promise.resolve(setup.delivery)),
     advanceStatus: vi.fn(() => Promise.resolve(setup.advanced)),
+    messageByPlatformId: vi.fn(() =>
+      Promise.resolve(setup.found === undefined ? undefined : { id: 'm', ...setup.found }),
+    ),
+    upsertConversation: vi.fn(() => Promise.resolve(conversation())),
   };
-  const options: InstagramInboundServiceOptions = {
-    repository: repository as unknown as MetaRepository,
-    router: {
-      route: (_context: unknown, message: MetaInboundMessage) => {
-        routed.push(message);
-        return Promise.resolve({ kind: 'created', ticketId: 't', messageId: 'm', contactId: 'c' });
-      },
-    } as unknown as MetaConversationRouter,
-    sink: {} as DeferredAttachmentSink,
-    tickets: {} as TicketRepository,
-    lifecycleReads: {
-      localeForContact: () => Promise.resolve('en'),
-    } as unknown as TicketLifecycleRepository,
+  const router = {
+    route: vi.fn((_context: unknown, message: MetaInboundMessage) => {
+      routed.push(message);
+      return Promise.resolve({
+        kind: 'created' as const,
+        ticketId: 't',
+        messageId: 'm',
+        contactId: 'c',
+        conversationId: conversation().id,
+      });
+    }),
+    openTicket: vi.fn(() => Promise.resolve(setup.open)),
+    writeSystemLine: vi.fn((_tx: DbTransaction, _input: { text: string }) =>
+      Promise.resolve('line-id'),
+    ),
+  };
+  const options = {
+    router,
+    sink: { store: vi.fn() },
+    repository,
+    lifecycleReads: { localeForContact: () => Promise.resolve('en' as const) },
     appId: () => Promise.resolve(setup.appId ?? '1234567890123456'),
     log,
-  };
+  } as unknown as InstagramInboundServiceOptions;
+  // `#lineExists` is one select chain on the transaction.
+  const tx = {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          limit: () => Promise.resolve(setup.lineExists === true ? [{ id: 'line' }] : []),
+        }),
+      }),
+    }),
+  } as unknown as DbTransaction;
+  const context: MetaEventContext = { tx, account: setup.account ?? account, now: NOW };
 
   return {
     service: new InstagramInboundService(options),
-    context: { tx: {} as DbTransaction, account: setup.account ?? account, now: NOW },
+    context,
     routed,
     log,
     repository,
+    router,
   };
 };
 
 beforeEach(() => {
   vi.mocked(enqueueMetaProfile).mockClear();
+  vi.mocked(metaSenderBlocked).mockClear();
+  vi.mocked(metaSenderBlocked).mockResolvedValue(false);
 });
 
 describe('InstagramInboundService › a message', () => {
   it('files the message and asks for the customer’s name with an event beside it', async () => {
-    const { service, context, routed } = harness({ afterRouting: conversation() });
+    const { service, context, routed, router } = harness();
 
     const outcome = await service.handle(context, eventOf(instagramText({ text: 'Hi there' })));
 
@@ -142,6 +159,21 @@ describe('InstagramInboundService › a message', () => {
       from: { kind: 'instagram', value: `${IG_ACCOUNT}:${IGSID}`, name: null },
       meta: { profileName: null, username: null, customerId: IGSID },
     });
+    expect(router.route).toHaveBeenCalledWith(
+      {
+        tx: context.tx,
+        brandId: account.brandId,
+        account: {
+          id: account.id,
+          departmentId: account.departmentId,
+          platform: 'instagram',
+          externalId: IG_ACCOUNT,
+        },
+        now: NOW,
+      },
+      routed[0],
+      expect.anything(),
+    );
     expect(enqueueMetaProfile).toHaveBeenCalledExactlyOnceWith(context.tx, account.brandId, {
       conversationId: conversation().id,
       accountId: account.id,
@@ -154,8 +186,7 @@ describe('InstagramInboundService › a message', () => {
     ['a handle', { username: 'sheena.n' }],
     ['an answer from Graph, however it came out', { profileCheckedAt: NOW }],
   ])('asks for nothing about a customer who already has %s', async (_what, facts) => {
-    const known = conversation(facts);
-    const { service, context } = harness({ existing: known, afterRouting: known });
+    const { service, context } = harness({ existing: conversation(facts) });
 
     await service.handle(context, eventOf(instagramText()));
 
@@ -260,10 +291,7 @@ describe('InstagramInboundService › echoes', () => {
 
     expect(
       await service.handle(context, echoWith({ metadata: 'campaign-7', app_id: '42' })),
-    ).toEqual({
-      outcome: 'ignored',
-      reason: 'echo',
-    });
+    ).toEqual({ outcome: 'ignored', reason: 'echo' });
     expect(repository.delivery).not.toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledOnce();
   });
@@ -278,7 +306,122 @@ describe('InstagramInboundService › echoes', () => {
   });
 });
 
-describe('InstagramInboundService › the rest', () => {
+describe('InstagramInboundService › an unsent message', () => {
+  const found = { ticketId: ticket.id, bodyText: 'Wrong thread, sorry' };
+
+  it('keeps the message and writes one line on the open ticket, keyed by the message it marks', async () => {
+    const { service, context, router, repository } = harness({ found, open: ticket });
+
+    const outcome = await service.handle(
+      context,
+      eventOf(instagramDeleted({ mid: fixtureMid(9) })),
+    );
+
+    expect(outcome).toEqual({ outcome: 'handled' });
+    expect(repository.messageByPlatformId).toHaveBeenCalledWith(
+      context.tx,
+      account.brandId,
+      'instagram',
+      fixtureMid(9),
+    );
+    expect(router.openTicket).toHaveBeenCalledWith(context.tx, ticket.id);
+    expect(router.writeSystemLine).toHaveBeenCalledExactlyOnceWith(context.tx, {
+      ticket,
+      accountId: account.id,
+      text: 'The customer unsent this message.',
+      externalMessageId: `unsent:${fixtureMid(9)}`,
+    });
+  });
+
+  it('is a duplicate when the line is already there, and asks nothing else', async () => {
+    const { service, context, repository } = harness({ found, open: ticket, lineExists: true });
+
+    expect(await service.handle(context, eventOf(instagramDeleted()))).toEqual({
+      outcome: 'duplicate',
+    });
+    expect(repository.messageByPlatformId).not.toHaveBeenCalled();
+  });
+
+  it('writes no line for a message Helpdock never filed', async () => {
+    const { service, context, router } = harness();
+
+    expect(await service.handle(context, eventOf(instagramDeleted()))).toEqual({
+      outcome: 'ignored',
+      reason: 'message-unknown',
+    });
+    expect(router.writeSystemLine).not.toHaveBeenCalled();
+  });
+
+  it('writes no line on a ticket that is closed or spam', async () => {
+    const { service, context, router } = harness({ found });
+
+    expect(await service.handle(context, eventOf(instagramDeleted()))).toEqual({
+      outcome: 'ignored',
+      reason: 'no-open-ticket',
+    });
+    expect(router.writeSystemLine).not.toHaveBeenCalled();
+  });
+});
+
+describe('InstagramInboundService › something it cannot show', () => {
+  it('moves the window to the message and writes a line on the open ticket', async () => {
+    const { service, context, repository, router } = harness({
+      existing: conversation(),
+      open: ticket,
+    });
+    const at = Math.floor(NOW.getTime() / 1_000) - 10;
+
+    const outcome = await service.handle(
+      context,
+      eventOf(instagramUnsupported({ mid: fixtureMid(7), timestamp: at })),
+    );
+
+    expect(outcome).toEqual({ outcome: 'handled' });
+    expect(repository.upsertConversation).toHaveBeenCalledWith(
+      context.tx,
+      expect.objectContaining({
+        accountId: account.id,
+        customerId: IGSID,
+        contactId: conversation().contactId,
+        inbound: { at: new Date(at * 1_000), messageId: fixtureMid(7) },
+      }),
+    );
+    expect(router.writeSystemLine).toHaveBeenCalledExactlyOnceWith(context.tx, {
+      ticket,
+      accountId: account.id,
+      text: 'The customer sent something that cannot be shown here.',
+      externalMessageId: fixtureMid(7),
+    });
+  });
+
+  it('counts a first message, which has no conversation to note it on', async () => {
+    const { service, context, repository, router } = harness();
+
+    expect(await service.handle(context, eventOf(instagramUnsupported()))).toEqual({
+      outcome: 'ignored',
+      reason: 'no-conversation',
+    });
+    expect(repository.upsertConversation).not.toHaveBeenCalled();
+    expect(router.writeSystemLine).not.toHaveBeenCalled();
+  });
+
+  it('is a duplicate when its line is already there, and drops a blocked sender', async () => {
+    const seen = harness({ existing: conversation(), open: ticket, lineExists: true });
+    expect(await seen.service.handle(seen.context, eventOf(instagramUnsupported()))).toEqual({
+      outcome: 'duplicate',
+    });
+
+    const blocked = harness({ existing: conversation(), open: ticket });
+    vi.mocked(metaSenderBlocked).mockResolvedValue(true);
+    expect(await blocked.service.handle(blocked.context, eventOf(instagramUnsupported()))).toEqual({
+      outcome: 'ignored',
+      reason: 'blocked-sender',
+    });
+    expect(blocked.router.writeSystemLine).not.toHaveBeenCalled();
+  });
+});
+
+describe('InstagramInboundService › receipts and reactions', () => {
   it('moves a reply to read when the customer has seen it', async () => {
     const { service, context, repository } = harness({ advanced: { id: 'delivery' } });
 
@@ -302,12 +445,54 @@ describe('InstagramInboundService › the rest', () => {
     });
   });
 
-  it('drops a reaction that was taken back without a line', async () => {
-    const { service, context } = harness();
+  it.each([
+    ['a reaction with its emoji', { action: 'react', emoji: '❤️' }, 'reacted ❤️ to a message'],
+    ['a reaction taken back', { action: 'unreact' }, 'removed their reaction'],
+  ] as const)('writes %s as a line on the open ticket', async (_what, input, words) => {
+    const { service, context, router } = harness({
+      found: { ticketId: ticket.id, bodyText: 'We ship worldwide.' },
+      open: ticket,
+    });
 
-    expect(
-      await service.handle(context, eventOf(instagramReaction({ action: 'unreact' }))),
-    ).toEqual({ outcome: 'ignored', reason: 'unreact' });
+    const outcome = await service.handle(context, eventOf(instagramReaction(input)));
+
+    expect(outcome).toEqual({ outcome: 'handled' });
+    expect(router.writeSystemLine).toHaveBeenCalledOnce();
+    expect(vi.mocked(router.writeSystemLine).mock.calls[0]?.[1].text).toContain(words);
+  });
+
+  it('words a reaction Meta sent without an emoji as a reaction to a message, and cuts a long one', async () => {
+    const { service, context, router } = harness({
+      found: { ticketId: ticket.id, bodyText: 'x' },
+      open: ticket,
+    });
+    const bare = eventOf(instagramReaction());
+    if (bare.kind !== 'reaction') {
+      throw new Error('the fixture is a reaction');
+    }
+
+    await service.handle(context, { ...bare, emoji: null });
+    await service.handle(context, { ...bare, emoji: 'x'.repeat(100) });
+
+    const texts = vi.mocked(router.writeSystemLine).mock.calls.map((call) => call[1].text);
+    expect(texts[0]).toBe('The customer reacted to a message.');
+    expect(texts[1]).toBe(`The customer reacted ${'x'.repeat(32)} to a message.`);
+  });
+
+  it('drops a reaction to a message it does not know, and from a blocked sender', async () => {
+    const unknown = harness();
+    expect(await unknown.service.handle(unknown.context, eventOf(instagramReaction()))).toEqual({
+      outcome: 'ignored',
+      reason: 'unknown-message',
+    });
+
+    const blocked = harness({ found: { ticketId: ticket.id, bodyText: 'x' }, open: ticket });
+    vi.mocked(metaSenderBlocked).mockResolvedValue(true);
+    expect(await blocked.service.handle(blocked.context, eventOf(instagramReaction()))).toEqual({
+      outcome: 'ignored',
+      reason: 'blocked-sender',
+    });
+    expect(blocked.router.writeSystemLine).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -330,22 +515,6 @@ describe('InstagramInboundService › the rest', () => {
       outcome: 'ignored',
       reason,
     });
-    expect(routed).toEqual([]);
-  });
-
-  it('writes no line for an unsent message it has no row for', async () => {
-    // Both lookups (the marker, then the message) find nothing.
-    const { service, context, routed } = harness();
-    const tx = {
-      select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) }),
-    };
-
-    const outcome = await service.handle(
-      { ...context, tx: tx as unknown as DbTransaction },
-      eventOf(instagramDeleted({ mid: fixtureMid(9) })),
-    );
-
-    expect(outcome).toEqual({ outcome: 'ignored', reason: 'message-unknown' });
     expect(routed).toEqual([]);
   });
 });

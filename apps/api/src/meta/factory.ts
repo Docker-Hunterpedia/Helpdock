@@ -13,9 +13,11 @@ import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.j
 import { TicketRepository } from '../tickets/tickets.repository.js';
 import { DeferredAttachmentSink } from './deferred-sink.js';
 import type { GraphClientFactory } from './graph-client-factory.js';
+import { InstagramInboundService } from './instagram-inbound.service.js';
 import { MessengerInboundService } from './messenger-inbound.service.js';
 import { MetaRepository } from './meta.repository.js';
 import { accountFailureRecorder, createMetaMediaFetchProcessor } from './meta-media.job.js';
+import { createMetaProfileProcessor } from './meta-profile.job.js';
 import { MetaConversationRouter } from './meta-router.js';
 import { WhatsAppInboundService } from './whatsapp-inbound.service.js';
 
@@ -40,10 +42,10 @@ export interface MetaInboundOptions {
   readonly keyring: Keyring;
   readonly graph: GraphClientFactory;
   /**
-   * The install's Meta app id (`meta.appId`), which Messenger puts on the echo of
-   * every message the app sent. Settings are read through the module's providers,
-   * so the module hands the accessor in; the worker, which runs no inbound
-   * service, hands none.
+   * The install's `meta.appId`, which Messenger and Instagram put on the echo of
+   * every message the app sent, so their inbound services can tell Helpdock's own
+   * sends from the rest. The module hands the accessor in through the settings;
+   * the worker, which runs no inbound service, hands none.
    */
   readonly appId?: () => Promise<string>;
 }
@@ -55,8 +57,12 @@ export interface MetaInbound {
   readonly whatsapp: WhatsAppInboundService;
   /** Messenger's events (M10-04), for `MetaModule`'s handler map. */
   readonly messenger: MessengerInboundService;
+  /** Instagram's events (M10-05), for `MetaModule`'s handler map. */
+  readonly instagram: InstagramInboundService;
   /** The `meta.media_fetch` consumer, for the worker's `inbound` queue. */
   readonly mediaFetch: (job: Job) => Promise<void>;
+  /** The `meta.profile_fetch` consumer (M10-05, shared with M10-04), for the same queue. */
+  readonly profileFetch: (job: Job) => Promise<void>;
 }
 
 export const createMetaInboundService = (options: MetaInboundOptions): MetaInbound => {
@@ -96,6 +102,21 @@ export const createMetaInboundService = (options: MetaInboundOptions): MetaInbou
       lifecycleReads,
       appId: options.appId ?? (() => Promise.resolve('')),
       log: options.log,
+    }),
+    instagram: new InstagramInboundService({
+      router,
+      sink,
+      repository: meta,
+      lifecycleReads,
+      appId: options.appId ?? (() => Promise.resolve('')),
+      log: options.log,
+    }),
+    profileFetch: createMetaProfileProcessor({
+      db: options.db,
+      log: options.log,
+      repository: meta,
+      keyring: options.keyring,
+      graph: options.graph,
     }),
     mediaFetch: createMetaMediaFetchProcessor({
       db: options.db,

@@ -44,10 +44,10 @@ export const META_GRAPH = Symbol('helpdock.meta.graph');
  *
  * **The inbound services.** The webhook hands each account's events to the
  * {@link MetaInboundHandlers} of its platform. WhatsApp's (M10-03) and
- * Messenger's (M10-04) are installed; until M10-05 lands Instagram's, the
- * default for a platform logs and counts what arrived (`unhandledInbound`), so
- * the route is complete and testable without it. Each deliverable replaces its
- * platform's entry in `handlers` below.
+ * Messenger's (M10-04) and Instagram's (M10-05) are installed beside WhatsApp's;
+ * the default for a platform logs and counts what arrived (`unhandledInbound`),
+ * so the route stays complete and testable. Each deliverable replaces its
+ * platform's entry in `handlersFor` below.
  */
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
@@ -64,7 +64,26 @@ export class MetaModule {
     const repository = new MetaRepository();
     const storage = options.storage ?? new S3ObjectStorage(createS3Client(env), env.S3_BUCKET);
     const graph = overrides?.graph ?? graphClientFactory(env);
-    const keyring = createKeyring(env);
+    // The inbound services read the install's settings (the app id, to recognise
+    // Helpdock's own echoes), which Nest hands over once it has built them.
+    const handlersFor = (settings: Settings): MetaInboundHandlers => {
+      const inbound = createMetaInboundService({
+        db,
+        storage,
+        log: logger,
+        keyring: createKeyring(env),
+        graph,
+        appId: () => settings.get('meta.appId'),
+      });
+
+      return {
+        ...unhandledInboundHandlers(logger),
+        whatsapp: inbound.whatsapp,
+        messenger: inbound.messenger,
+        instagram: inbound.instagram,
+        ...overrides?.inbound,
+      };
+    };
 
     return {
       module: MetaModule,
@@ -90,33 +109,20 @@ export class MetaModule {
         },
         {
           provide: MetaWebhookService,
-          inject: [MetaAppService],
-          useFactory: (app: MetaAppService): MetaWebhookService => {
-            // Built here, not in `forRoot`, because Messenger reads the app id
-            // through the settings the App service holds.
-            const inbound = createMetaInboundService({
-              db,
-              storage,
-              log: logger,
-              keyring,
-              graph,
-              appId: () => app.appId(),
-            });
-            const handlers: MetaInboundHandlers = {
-              ...unhandledInboundHandlers(logger),
-              whatsapp: inbound.whatsapp,
-              messenger: inbound.messenger,
-              ...overrides?.inbound,
-            };
-
-            return new MetaWebhookService({
+          inject: [MetaAppService, SETTINGS],
+          useFactory: (app: MetaAppService, settings: Settings): MetaWebhookService =>
+            new MetaWebhookService({
               db,
               repository,
               app,
               log: logger,
-              inbound: new MetaInboundService({ db, repository, handlers, log: logger }),
-            });
-          },
+              inbound: new MetaInboundService({
+                db,
+                repository,
+                handlers: handlersFor(settings),
+                log: logger,
+              }),
+            }),
         },
       ],
     };

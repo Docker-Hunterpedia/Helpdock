@@ -36,6 +36,7 @@ import {
   mediaProcessJob,
   metaHealthScheduleJob,
   metaMediaFetchJob,
+  metaProfileFetchJob,
   metaSendJob,
   notifyEmailJob,
   notifyPushJob,
@@ -643,6 +644,15 @@ export const workerDependencies: WorkerDependencies = {
           });
         },
       },
+      // M10-05: a Messenger or Instagram customer's name, read after the webhook answered.
+      profileQueue: {
+        add: async ({ jobId, payload }) => {
+          await inbound.add(metaProfileFetchJob.name, payload, {
+            ...metaProfileFetchJob.options,
+            jobId,
+          });
+        },
+      },
     });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
@@ -1090,14 +1100,17 @@ export const workerDependencies: WorkerDependencies = {
       }),
     });
 
-    // M10-03: the files a Meta message named, fetched after the webhook answered.
-    const metaMediaFetch = createMetaInboundService({
+    // M10-03: the files a Meta message named, fetched after the webhook answered;
+    // M10-05: a new customer's name, read after it.
+    const metaInbound = createMetaInboundService({
       db,
       storage: storageFor(env),
       log,
       keyring: createKeyring(env),
       graph: graphClientFactory(env),
-    }).mediaFetch;
+    });
+    const metaMediaFetch = metaInbound.mediaFetch;
+    const metaProfileFetch = metaInbound.profileFetch;
 
     const worker = new Worker(
       QUEUE_NAMES.inbound,
@@ -1108,6 +1121,10 @@ export const workerDependencies: WorkerDependencies = {
         }
         if (job.name === metaMediaFetchJob.name) {
           await metaMediaFetch(job);
+          return;
+        }
+        if (job.name === metaProfileFetchJob.name) {
+          await metaProfileFetch(job);
           return;
         }
         // `form.submit` shares this queue from M4.

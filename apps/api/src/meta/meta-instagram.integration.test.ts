@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import {
   FakeGraph,
@@ -39,17 +42,34 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import { type JobLogger, metaProfileFetchJob, silentLogger } from '@helpdock/jobs';
+import {
+  createJobProcessor,
+  type JobLogger,
+  type MetaMediaFetchPayload,
+  mediaProcessJob,
+  metaProfileFetchJob,
+  silentLogger,
+} from '@helpdock/jobs';
 import { contentPolicySchema } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
 import { and, asc, eq, sql } from 'drizzle-orm';
+import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
+import { createMediaTools } from '../media/ffmpeg.js';
+import { createMediaProcessor } from '../media/process.job.js';
+import { FakeStorage } from '../testing/media.js';
+import { createMetaInboundService } from './factory.js';
 import { MetaRepository } from './meta.repository.js';
-import { createMetaProfileEventHandler } from './meta-events.js';
+import {
+  createMetaMediaEventHandler,
+  createMetaProfileEventHandler,
+  META_EVENTS,
+} from './meta-events.js';
 import { createMetaProfileProcessor } from './meta-profile.job.js';
 
 /**
@@ -90,6 +110,12 @@ const TOKEN_A = 'IGQWRPbGl0ZXRva2VuQWNtZVNob3AxMjM0NTY3ODkw';
 const TOKEN_B = 'IGQWRPbGl0ZXRva2VuR2xvYmV4U2hvcDEyMzQ1Njc4';
 const STORY_URL = 'https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=2&signature=y';
 
+const JPEG = await sharp({
+  create: { width: 8, height: 8, channels: 3, background: { r: 20, g: 120, b: 200 } },
+})
+  .jpeg()
+  .toBuffer();
+
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
   timeout: 10_000,
 }).then(
@@ -122,6 +148,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
   const repository = new MetaRepository();
   const seeded = new Map<string, Seeded>();
   let driver: MetaWebhookDriver;
+  let storage: FakeStorage;
   let counter = 0;
 
   /** A mid and an igsid no other test uses, so the cases cannot see each other's rows. */
@@ -277,6 +304,106 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
     return thrown;
   };
 
+  const handledMedia = new Set<string>();
+
+  /**
+   * Every file of a ticket fetched by `meta.media_fetch` and processed by
+   * `media.process`, as the worker does after the relay: the outbox rows ask for
+   * the jobs, the jobs fetch through the stand-in, the pipeline makes the variants.
+   * Answers what the fetches threw, which BullMQ would retry.
+   */
+  const mediaPipeline = async (ticketId: string): Promise<unknown[]> => {
+    const ids = new Set(
+      (await owner.db.select().from(attachments).where(eq(attachments.ticketId, ticketId))).map(
+        (row) => row.id,
+      ),
+    );
+    const { mediaFetch } = createMetaInboundService({
+      db: runtime.db,
+      storage,
+      log: silentLogger,
+      keyring: createKeyring(envFor()),
+      graph: () =>
+        new GraphClient({
+          root: graph.facebookRoot,
+          instagramRoot: graph.instagramRoot,
+          allowCidrs: ['127.0.0.0/8'],
+        }),
+    });
+    const errors: unknown[] = [];
+
+    for (const row of await owner.db
+      .select()
+      .from(outbox)
+      .where(eq(outbox.event, META_EVENTS.media))) {
+      if (handledMedia.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
+        continue;
+      }
+      handledMedia.add(row.id);
+      const added: { jobId: string; payload: MetaMediaFetchPayload }[] = [];
+      await withSystem(runtime.db, row.brandId, (tx) =>
+        createMetaMediaEventHandler({ add: async (job) => void added.push(job) })({
+          outboxId: row.id,
+          brandId: row.brandId,
+          event: row.event,
+          payload: row.payload,
+          tx,
+          log: silentLogger,
+        }),
+      );
+      for (const job of added) {
+        await mediaFetch({
+          name: 'meta.media_fetch',
+          id: job.jobId,
+          data: job.payload,
+          attemptsMade: 0,
+          opts: { attempts: 5 },
+        } as unknown as Job).catch((error: unknown) => void errors.push(error));
+      }
+    }
+
+    const process = createJobProcessor(
+      mediaProcessJob,
+      createMediaProcessor({
+        storage,
+        tools: createMediaTools({ ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' }),
+        scanner: undefined,
+      }),
+      { db: runtime.db, log: silentLogger },
+    );
+    for (const row of await owner.db
+      .select()
+      .from(outbox)
+      .where(eq(outbox.event, 'attachment.uploaded'))) {
+      if (handledMedia.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
+        continue;
+      }
+      handledMedia.add(row.id);
+      const added: { jobId: string; payload: { brandId: string; attachmentId: string } }[] = [];
+      await withSystem(runtime.db, row.brandId, (tx) =>
+        createAttachmentUploadedHandler({ add: async (job) => void added.push(job) })({
+          outboxId: row.id,
+          brandId: row.brandId,
+          event: row.event,
+          payload: row.payload,
+          tx,
+          log: silentLogger,
+        }),
+      );
+      for (const job of added) {
+        await process({
+          name: 'media.process',
+          id: job.jobId,
+          data: job.payload,
+          attemptsMade: 0,
+          opts: { attempts: 3 },
+        } as unknown as Job);
+      }
+    }
+
+    return errors;
+  };
+
   const contactNameOf = async (contactId: string) => {
     const [row] = await owner.db.select().from(contacts).where(eq(contacts.id, contactId));
     return row?.name;
@@ -405,8 +532,10 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       }),
     });
     // No inbound override: the webhook runs the real Instagram service.
+    storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-meta-instagram-')));
     app = await createApiApp({
       runtime,
+      objectStorage: storage,
       meta: {
         graph: () =>
           new GraphClient({
@@ -891,8 +1020,9 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       }
     });
 
-    it('files a story reply with the story’s media and a line naming it', async () => {
+    it('files a story reply with the story’s media and a line naming it, and the media reaches ready', async () => {
       const igsid = nextIgsid();
+      const storyUrl = graph.serveCdn('story-reply.jpg', JPEG, 'image/jpeg');
       graph.profiles.set(igsid, { name: 'Story', username: 'story.fan' });
 
       await post(
@@ -901,29 +1031,46 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
           igsid,
           mid: nextMid(),
           text: 'Love this one!',
-          url: STORY_URL,
+          url: storyUrl,
         }),
       );
 
       const account = accountOf(BRAND_A);
       const { ticket } = await ticketFor(account, igsid);
       const [message] = await messagesOf(ticket.id);
-      expect(message?.bodyText).toBe(`Love this one!\nReplied to your story\n${STORY_URL}`);
-      const rows = await owner.db
+      expect(message?.bodyText).toBe(`Love this one!\nReplied to your story\n${storyUrl}`);
+      const [pending] = await owner.db
         .select()
         .from(attachments)
         .where(eq(attachments.ticketId, ticket.id));
-      expect(rows).toMatchObject([{ messageId: message?.id, status: 'pending' }]);
+      expect(pending).toMatchObject({ messageId: message?.id, status: 'pending', kind: 'image' });
       const events = (await mediaEvents()).filter(
-        (row) => (row.payload as { attachmentId: string }).attachmentId === rows[0]?.id,
+        (row) => (row.payload as { attachmentId: string }).attachmentId === pending?.id,
       );
       expect(events).toMatchObject([
         {
           payload: {
             accountId: account.id,
-            ref: { kind: 'cdn_url', url: STORY_URL, type: 'story' },
+            ref: { kind: 'cdn_url', url: storyUrl, type: 'story' },
           },
         },
+      ]);
+      // The webhook fetched nothing: the bytes are the job's.
+      expect(graph.mediaRequests).toEqual([]);
+
+      expect(await mediaPipeline(ticket.id)).toEqual([]);
+
+      const [ready] = await owner.db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.ticketId, ticket.id));
+      expect(ready).toMatchObject({ status: 'ready', kind: 'image', size: JPEG.length });
+      expect(Object.keys(ready?.variants ?? {})).toContain('webp');
+      const webp = await storage.read(`brands/${BRAND_A}/tickets/${ticket.id}/${ready?.id}/webp`);
+      expect((await sharp(webp).metadata()).format).toBe('webp');
+      // A CDN link is fetched with no token: the story belongs to the customer's feed.
+      expect(graph.mediaRequests).toEqual([
+        { kind: 'cdn', name: 'story-reply.jpg', authorization: null },
       ]);
     });
 
@@ -989,8 +1136,14 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       );
 
       const { ticket } = await ticketFor(account, igsid);
-      const messages = await messagesOf(ticket.id);
-      expect(messages.at(-1)?.bodyText).toBe('> Yes, in three days.\nPerfect, thanks');
+      const [reply] = (await messagesOf(ticket.id)).slice(-1);
+      // The router quotes it, above the customer's own words (DOMAIN-RULES §4.8).
+      expect(reply?.bodyHtml).toContain('<blockquote>');
+      expect(reply?.bodyText).toContain('Yes, in three days.');
+      expect(reply?.bodyText).toContain('Perfect, thanks');
+      expect(reply?.bodyText.indexOf('Yes, in three days.')).toBeLessThan(
+        reply?.bodyText.indexOf('Perfect, thanks') ?? 0,
+      );
     });
 
     it('does not quote a message that is on another conversation’s ticket', async () => {
@@ -1015,7 +1168,9 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       );
 
       const { ticket } = await ticketFor(account, mine);
-      expect((await messagesOf(ticket.id)).at(-1)?.bodyText).toBe('Replying');
+      const [reply] = (await messagesOf(ticket.id)).slice(-1);
+      expect(reply?.bodyText).toBe('Replying');
+      expect(reply?.bodyHtml).not.toContain('blockquote');
     });
   });
 
@@ -1103,8 +1258,8 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       expect(messages[1]).toMatchObject({
         kind: 'system',
         authorType: 'system',
-        bodyText: 'Unsent by the customer',
-        bodyHtml: '<p>Unsent by the customer</p>',
+        bodyText: 'The customer unsent this message.',
+        bodyHtml: '<p>The customer unsent this message.</p>',
         externalMessageId: `unsent:${mid}`,
         channel: 'instagram',
       });
@@ -1124,7 +1279,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       await post(instagramDeleted({ igAccountId: IG_A, igsid, mid }));
 
       expect((await systemLines(ticket.id)).map((line) => line.bodyText)).toEqual([
-        'ألغى العميل إرسال الرسالة',
+        'ألغى العميل إرسال هذه الرسالة.',
       ]);
     });
 
@@ -1250,7 +1405,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
   // --------------------------------------------------------------- reactions
 
   describe('a reaction', () => {
-    it('is a system line on the message’s ticket, never a message, and a reaction taken back is nothing', async () => {
+    it('is a system line on the message’s ticket, never a message, and a reaction taken back is another line', async () => {
       const igsid = nextIgsid();
       const mid = nextMid();
       graph.profiles.set(igsid, { name: 'Fan', username: 'fan' });
@@ -1261,10 +1416,14 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       await post(instagramReaction({ igAccountId: IG_A, igsid, mid, action: 'unreact' }));
 
       const messages = await messagesOf(ticket.id);
-      expect(messages).toHaveLength(2);
+      expect(messages).toHaveLength(3);
       expect(messages[1]).toMatchObject({
         kind: 'system',
-        bodyText: 'Reacted ❤️ to a message',
+        bodyText: 'The customer reacted ❤️ to a message.',
+      });
+      expect(messages[2]).toMatchObject({
+        kind: 'system',
+        bodyText: 'The customer removed their reaction to a message.',
       });
       // Not an anchor: the window still opens at the message.
       const after = await conversationOf(accountOf(BRAND_A).id, igsid);

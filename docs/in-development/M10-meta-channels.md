@@ -622,23 +622,23 @@ enforcement is on the account and reads `failing` until the next event.
 ## M10-05 Instagram inbound
 
 `InstagramInboundService` (`apps/api/src/meta/instagram-inbound.service.ts`) fills the seam M10-02 left for
-`instagram`: `MetaModule.forRoot` builds it (`instagram-factory.ts`) and registers it as the platform's
-handler, so a signed `object: instagram` webhook files tickets. By the time `handle` runs the dedupe on the
+`instagram`: `createMetaInboundService` (`factory.ts`, beside WhatsApp's) builds it on the same router and sink, and
+`MetaModule.forRoot` registers it as the platform's handler, so a signed `object: instagram` webhook files tickets. By the time `handle` runs the dedupe on the
 `mid` and the block list have been checked for a customer's message (M10-02), so neither is repeated here.
 
 | Instagram sends | `MetaEvent` | Helpdock files |
 |---|---|---|
 | A text | `message` | A public message under the ticket of the conversation, or a new one in the account's department. The contact is the identity `<ig account id>:<igsid>` (`instagram.account`, verified), named by its identity until the profile job (below) has the customer's `name`, else `@username`. A customer nobody has named and Graph has not been asked about gets one `meta.profile` outbox row in the same transaction. The reply window anchors on the message (`last_inbound_at`, at Meta's time, never later than now). |
-| `reply_to.mid` | `message` | When the quoted message is on the conversation's ticket (the customer's, or a reply of ours found by its delivery), a leading `> …` line with its text, one line, cut at 160 characters. |
+| `reply_to.mid` | `message` | The router's quote (M10-03, DOMAIN-RULES §4.8): the quoted message's words above the customer's own when it is on the ticket the message lands on. The service adds nothing of its own. |
 | Image, video, audio, file, sticker | `message` | The caption (or nothing) as the body and each file as an attachment `pending` with a `cdn_url` reference, and a `meta.media` outbox row for `meta.media_fetch` (M10-03). A kind the brand's content policy switches off is `rejected: kind_disabled` at once, with no outbox row. |
 | `reply_to.story` | `message` | The reply's text, a line "Replied to your story" with the story's URL, and the story's media as a `cdn_url` reference of type `story`. |
 | `story_mention` | `message` | A line "Mentioned you in their story" with the URL, and the media as a reference of type `story_mention`. |
 | `share`, `ig_post`, `post`, `ig_reel`, `reel`, `fallback` | `message` | A line with the URL (its title first when given). No attachment: the link is Instagram's. |
 | `is_echo` | `echo` | Dropped. One that carries the install's `meta.appId` or a delivery id of this account in `metadata` is Helpdock's own and silent; any other (typed in the Instagram app or Business Suite) is dropped and logged. |
-| `is_deleted` | `deleted` | The message and its body stay. A **system line** "Unsent by the customer" is written on the message's ticket (the primary, if it was merged) with the external id `unsent:<mid>`, which is how the thread finds the message it marks (M10-08) and how a redelivered event is told from a new one. An unknown `mid` files nothing. |
-| `is_unsupported`, an attachment of a type Helpdock cannot show, nothing to file | `unsupported` | A system line "The customer sent something that cannot be shown here." on the conversation's ticket, counted in the log. The customer did write, so the conversation's window moves to it. A first message that is unsupported has no ticket and is counted only. |
+| `is_deleted` | `deleted` | The message and its body stay. A **system line** ("The customer unsent this message.") is written through the router's `writeSystemLine` on the message's open ticket (the primary, if it was merged; a closed or spam ticket gets none) with the external id `unsent:<mid>`, which is how the thread finds the message it marks (M10-08) and how a redelivered event is told from a new one. An unknown `mid` files nothing. |
+| `is_unsupported`, an attachment of a type Helpdock cannot show, nothing to file | `unsupported` | A system line ("The customer sent something that cannot be shown here.") on the conversation's open ticket, counted in the log. The customer did write, so the conversation's window moves to it. A first message that is unsupported has no ticket and is counted only. |
 | `messaging_seen` | `seen` | `advanceStatus(mid, 'read', timestamp)`: the delivery that sent that `mid` becomes `read` (and `delivered`), never back. |
-| A reaction | `reaction` | A system line "Reacted {emoji} to a message" on the ticket of the message (the customer's, or a reply of ours). Never a message, never a window anchor. A reaction taken back is dropped. |
+| A reaction | `reaction` | A system line ("The customer reacted {emoji} to a message.") on the open ticket of the message (the customer's, or a reply of ours); one taken back is "The customer removed their reaction to a message."; one Meta sent without an emoji is "The customer reacted to a message." Never a message, never a window anchor. |
 | Postback, referral, `message_edit`, standby, anything else | `postback`, `referral`, `edit`, `ignored`, … | Counted (the webhook's report) and dropped. |
 
 Decisions taken inside the plan, each with its reason where it is made:
@@ -664,11 +664,14 @@ Decisions taken inside the plan, each with its reason where it is made:
 - **Idempotency.** The receipt is `meta.profile_fetch:<conversationId>`, claimed in the job's transaction: two lookups
   raised by messages that arrive before the first runs read once, and a lookup that finds the conversation already
   answered (or its row, account or platform gone or changed) does nothing.
-- **A ticket message has no column for "unsent" or "quoted".** The mark is the system line above; the quote is
-  the leading line of the body. Both conventions are in `instagram-rules.ts` for M10-08 to read.
-- **A system line goes to the primary of a merge**, in the contact's language, with no outbox event: like the
-  other system lines (the AI pause, a merge) it appears on the next read, and a `ticket.replied` for it would be
-  sent to every webhook subscriber.
+- **A ticket message has no column for "unsent".** The mark is the system line above, found by the external id
+  `unsent:<mid>` (`unsentExternalId` in `instagram-rules.ts`, for M10-08 to read). Whether a line is already there is
+  asked of the brand's tickets whatever their channel, because a line goes to the primary of a merge and that can be
+  an email ticket, whose unique key is its own.
+- **System lines are the router's** (`openTicket`, `writeSystemLine`): the primary of a merge, in the contact's
+  language, none on a closed or spam ticket, with no outbox event, like the other system lines (the AI pause, a
+  merge): it appears on the next read, and a `ticket.replied` for it would be sent to every webhook subscriber.
+  The words are `metaSystemLine`'s; this deliverable added one line to the catalog, `thread.reactionPlain`.
 - **`unsupported` moves the window; a reaction, a postback and an unsent message do not** (DOMAIN-RULES §4.8).
 - **Timestamps** are Meta's, clamped to Helpdock's clock, so a skewed or forged value cannot hold a window open
   into the future.
@@ -676,18 +679,9 @@ Decisions taken inside the plan, each with its reason where it is made:
   is called by its identity value; the job replaces only that, so an agent's rename is never overwritten. The
   conversation's `username` is where the ticket's identity card reads the `@handle` (M10-08).
 
-**Stand-ins for M10-03's shared code.** The branch for M10-03 had not landed when this was built, so three of the
-files the brief (§4.1) assigns to it exist here in their smallest working form, each marked
-`// M10-05 stand-in for M10-03's version; the orchestrator keeps M10-03's at merge.`: `meta-router.ts`
-(`MetaConversationRouter.route(context, message, sink)`, the twin of the Telegram router), `deferred-sink.ts`
-(`DeferredAttachmentSink.store`) and `meta-text.ts` with the `meta` i18n namespace (`thread.location`,
-`thread.contact`, `thread.story.reply`, `thread.story.mention`, `thread.unsupported`, `thread.unsent`,
-`thread.reaction`, `thread.reactionPlain`). `meta-media.job.ts`, `factory.ts` and the `storage` option of
-`MetaModule.forRoot` were not needed: nothing here stores an object.
-
 Tests: unit for the profile job's decisions (`meta-profile.test.ts`: who wants a name, when a queued lookup has nothing
 to do, what each platform is asked, Graph's answer read as a name, an empty answer, a refusal, a retry or a dead token,
-the contact's name and when it may be replaced), the quote, the clock and the marker, the service's dispatch over stubs
+the contact's name and when it may be replaced), the clock and the marker, the service's dispatch over stubs
 (the event raised once, and not for a named, checked or unreachable customer; every echo origin; receipts; counted
 events), the `meta.profile` event and its handler, and the job's definition. `meta-instagram.integration.test.ts` ›
 "Instagram (M10-05)" against real Postgres and Redis through the signed-webhook driver and the stand-in for Graph:
@@ -700,25 +694,26 @@ not raised again; a 500 leaves the customer unnamed and the next message asks ag
 window, continues in a new ticket past it); a blocked sender is dropped before any contact exists and before any lookup;
 two accounts of two brands in one batch file two tickets and raise two lookups, each in its brand and read with its own
 token; an image is a `pending` attachment with its `meta.media` row, and rejected at once when the policy switches
-images off; a story reply files the story's media and the line naming it; a story mention in Arabic; a shared reel is a
-line with its URL; a reply to an earlier message is quoted, and not from another conversation's ticket; echoes by app id,
+images off; a story reply files the story's media and the line naming it, and `meta.media_fetch` and `media.process` take the story image to `ready` (a WebP, fetched with no token); a story mention in Arabic; a shared reel is a
+line with its URL; a reply to an earlier message is quoted by the router, and not from another conversation's ticket; echoes by app id,
 by delivery id and typed elsewhere file nothing; an unsent message keeps its row and gains one line, once, in the
 contact's language, on the primary of a merge; an unsupported message adds one line and moves the window;
 `messaging_seen` marks the delivery read once and never back; a reaction adds a line on the customer's message or on our
-reply.
+reply, and one taken back adds another.
 
 **Names other deliverables use.** Event `meta.profile` (`META_EVENTS.profile`), `enqueueMetaProfile(tx, brandId, { conversationId, accountId, platform })`
 and `createMetaProfileEventHandler(queue)` in `meta-events.ts`; the job `metaProfileFetchJob` (`meta.profile_fetch`,
 `inbound`, receipt `meta.profile_fetch:<conversationId>`) and `metaProfileFetchPayloadSchema { brandId, conversationId, accountId, platform: 'messenger' | 'instagram' }`
 in `packages/jobs/src/jobs.ts`; `wantsProfile`, `readProfile` and `PROFILE_READS` in `meta-profile.ts`;
-`createMetaProfileProcessor` in `meta-profile.job.ts`, registered by `start-worker.ts` on the `inbound` worker, and the
-`profileQueue` consumer of `registerMetaEventHandlers`.
+`createMetaProfileProcessor` in `meta-profile.job.ts`, built by `createMetaInboundService` as `profileFetch` beside
+`mediaFetch` and registered by `start-worker.ts` on the `inbound` worker, and the `profileQueue` consumer of
+`registerMetaEventHandlers`; `createMetaInboundService` also takes an optional `appId` (the install's `meta.appId`, for
+echoes) and returns `instagram`.
 
 ### M10-05 What is left
 
-The `meta.media_fetch` job that turns a `pending` Instagram attachment into a `ready` one (M10-03) and the
-thread's drawing of the unsent mark, the quote line and the story line (M10-08). The guide's "What customers can
-send" is M10-11's.
+The thread's drawing of the unsent mark and the story line (M10-08), and the guide's "What customers can send"
+(M10-11).
 
 ## M10-06 Replies, the window, `meta.send`, deliveries and pacing
 

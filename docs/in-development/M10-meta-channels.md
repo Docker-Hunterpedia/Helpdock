@@ -434,7 +434,7 @@ job, the thread's wording, the factory, the erasure and the retention purge. The
 | `apps/api/src/meta/deferred-sink.ts` | `DeferredAttachmentSink.store`: each file `pending` with no object and a `meta.media` outbox row; `declaredFile`, `metaFileName` |
 | `apps/api/src/meta/meta-media.job.ts` | the `meta.media_fetch` consumer: `createMetaMediaFetchHandler`, `createMetaMediaFetchProcessor`, `accountFailureRecorder`, `matchesDigest`, `sizeCap`, `actionFor`, `accountFailureOf` |
 | `apps/api/src/meta/meta-text.ts`, `packages/i18n/locales/*/meta.json` | the `meta` namespace: `metaText`, `metaInboundLabels`, `metaSystemLine` |
-| `apps/api/src/meta/factory.ts` | `createMetaInboundService({ db, storage, log, keyring, graph })` → `{ router, sink, mediaFetch }` (the WhatsApp service is built on it in `meta.module.ts`) |
+| `apps/api/src/meta/factory.ts` | `createMetaInboundService({ db, storage, log, keyring, graph })` → `{ router, sink, whatsapp, mediaFetch }`; `MetaModule` takes `whatsapp` for its handler map and the worker takes `mediaFetch` for the `inbound` queue |
 | `apps/api/src/meta/whatsapp-inbound.service.ts` | `WhatsAppInboundService`, the `PlatformInboundService` for `whatsapp`, registered by `MetaModule` |
 | `apps/api/src/contacts/identity.ts` | `attachVerifiedIdentity`, `planVerifiedAttach`, `removeIdentity` |
 | `apps/api/src/meta/meta.repository.ts` | `messageByPlatformId`, `failByReport`, `recordPricing` |

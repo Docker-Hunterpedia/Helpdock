@@ -1,6 +1,6 @@
 import type { GraphClient } from '@helpdock/channels';
 import { decryptSecret, type Keyring } from '@helpdock/config';
-import type { Db } from '@helpdock/db';
+import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import {
   claimReceipt,
   type JobLogger,
@@ -58,67 +58,102 @@ export type MetaHealthRun =
   | { readonly ran: false; readonly reason: MetaHealthSkip };
 
 /**
+ * The account to check, once this worker holds the hour's receipt for it, or
+ * the reason there is nothing to check.
+ */
+const claimAccount = async (
+  deps: MetaHealthDependencies,
+  tx: DbTransaction,
+  { brandId, accountId }: MetaHealthPayload,
+  now: Date,
+): Promise<{ readonly account: MetaAccount } | { readonly skip: MetaHealthSkip }> => {
+  const account = await deps.repository.account(tx, accountId);
+  if (account === undefined) {
+    // Disconnected, or its brand purged (which deletes rows without an event).
+    await deps.scheduler.remove(accountId);
+    return { skip: 'account-gone' };
+  }
+  // M8-07: a brand being deleted gets no calls to Meta. The scheduler stays, so
+  // a restore within the grace period picks up where checking stopped.
+  if (await isBrandGone(deps.db, brandId)) {
+    return { skip: 'brand-gone' };
+  }
+  // Claimed before Graph is asked, and held by this transaction until it ends:
+  // a second worker blocks here, then finds the key taken.
+  if (!(await claimReceipt(tx, metaHealthReceiptKey(accountId, now)))) {
+    return { skip: 'already-checked' };
+  }
+
+  return { account };
+};
+
+const diagnose = async (
+  deps: MetaHealthDependencies,
+  account: MetaAccount,
+  now: Date,
+): Promise<MetaHealthUpdate> => {
+  const refresh = (row: MetaAccount) =>
+    refreshInstagramToken(
+      {
+        db: deps.db,
+        repository: deps.repository,
+        keyring: deps.keyring,
+        graph: deps.graph,
+        now: () => now,
+      },
+      row,
+    );
+
+  return checkMetaAccount(
+    { graph: deps.graph, appId: await deps.appId(), refresh },
+    account,
+    decryptSecret(account.accessToken, deps.keyring),
+    now,
+  );
+};
+
+/**
  * One account's check. A failure that is no answer from Graph (it is down,
  * rate-limited) is thrown with nothing written, which rolls the receipt back
  * and lets BullMQ ask again.
  */
-export const runMetaHealth = async (
+export const runMetaHealth = (
   deps: MetaHealthDependencies,
-  { brandId, accountId }: MetaHealthPayload,
+  payload: MetaHealthPayload,
   jobId: string,
 ): Promise<MetaHealthRun> => {
   const now = (deps.now ?? (() => new Date()))();
 
-  return withSystemJob(deps.db, brandId, jobId, async (tx): Promise<MetaHealthRun> => {
-    const account = await deps.repository.account(tx, accountId);
-    if (account === undefined) {
-      // Disconnected, or its brand purged (which deletes rows without an event).
-      await deps.scheduler.remove(accountId);
-      return { ran: false, reason: 'account-gone' };
+  return withSystemJob(deps.db, payload.brandId, jobId, async (tx): Promise<MetaHealthRun> => {
+    const claimed = await claimAccount(deps, tx, payload, now);
+    if ('skip' in claimed) {
+      return { ran: false, reason: claimed.skip };
     }
-    // M8-07: a brand being deleted gets no calls to Meta. The scheduler stays,
-    // so a restore within the grace period picks up where checking stopped.
-    if (await isBrandGone(deps.db, brandId)) {
-      return { ran: false, reason: 'brand-gone' };
-    }
-    // Claimed before Graph is asked, and held by this transaction until it ends:
-    // a second worker blocks here, then finds the key taken.
-    if (!(await claimReceipt(tx, metaHealthReceiptKey(accountId, now)))) {
-      return { ran: false, reason: 'already-checked' };
-    }
-
-    const update = await checkMetaAccount(
-      {
-        graph: deps.graph,
-        appId: await deps.appId(),
-        refresh: (row) =>
-          refreshInstagramToken(
-            {
-              db: deps.db,
-              repository: deps.repository,
-              keyring: deps.keyring,
-              graph: deps.graph,
-              now: () => now,
-            },
-            row,
-          ),
-      },
-      account,
-      decryptSecret(account.accessToken, deps.keyring),
-      now,
-    );
+    const { account } = claimed;
+    const update = await diagnose(deps, account, now);
 
     // An operator may have pasted a new token while Graph was being asked
     // about the old one. What was found is about a token no longer in use, so
     // it is not written; the next hour checks the new one.
-    const current = await deps.repository.account(tx, accountId);
+    const current = await deps.repository.account(tx, account.id);
     if (current?.tokenUpdatedAt.getTime() !== account.tokenUpdatedAt.getTime()) {
       return { ran: false, reason: 'token-replaced' };
     }
-    await deps.repository.update(tx, accountId, update);
+    await deps.repository.update(tx, account.id, update);
 
     return { ran: true, update };
   });
+};
+
+const logRun = (log: JobLogger, accountId: string, run: MetaHealthRun): void => {
+  const fields = { job: metaHealthJob.name, accountId };
+  if (!run.ran) {
+    log.info({ ...fields, skipped: run.reason }, 'meta health check skipped');
+  } else if (run.update.status === 'token_expired' || run.update.status === 'unsubscribed') {
+    log.warn({ ...fields, status: run.update.status }, 'meta account needs attention');
+  } else {
+    log.info({ ...fields, status: run.update.status ?? 'unchanged' }, 'meta account checked');
+  }
 };
 
 /**
@@ -135,26 +170,11 @@ export const createMetaHealthProcessor =
         );
       case metaHealthJob.name: {
         const payload = parseJobPayloadOrFail(metaHealthJob, job.data);
-        return runMetaHealth(
-          deps,
-          payload,
-          job.id ?? metaHealthSchedulerId(payload.accountId),
-        ).then((run) => {
-          const fields = { job: job.name, accountId: payload.accountId };
-          if (!run.ran) {
-            deps.log.info({ ...fields, skipped: run.reason }, 'meta health check skipped');
-          } else if (
-            run.update.status === 'token_expired' ||
-            run.update.status === 'unsubscribed'
-          ) {
-            deps.log.warn({ ...fields, status: run.update.status }, 'meta account needs attention');
-          } else {
-            deps.log.info(
-              { ...fields, status: run.update.status ?? 'unchanged' },
-              'meta account checked',
-            );
-          }
-        });
+        const jobId = job.id ?? metaHealthSchedulerId(payload.accountId);
+
+        return runMetaHealth(deps, payload, jobId).then((run) =>
+          logRun(deps.log, payload.accountId, run),
+        );
       }
       default:
         return undefined;

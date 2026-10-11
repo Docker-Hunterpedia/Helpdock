@@ -98,42 +98,74 @@ export const refreshInstagramToken = async (
   }
 
   const token = decryptSecret(account.accessToken, deps.keyring);
-  let renewed: { readonly access_token: string; readonly expires_in: number };
-  try {
-    renewed = parseGraph(
-      graphRefreshTokenSchema,
-      await deps.graph.get('/refresh_access_token', {
-        token,
-        api: 'instagram',
-        query: { grant_type: 'ig_refresh_token' },
-      }),
-      'the token renewal',
-      token,
-    );
-  } catch (error) {
-    if (!(error instanceof GraphApiFailure) || !error.permanent) {
-      throw error;
-    }
-    // Meta calling the token dead, or the row's own date having passed, is an
-    // expired token. Any other refusal is a problem to read, not yet an outage.
-    const expired =
-      error.kind === 'token_dead' ||
-      (account.tokenExpiresAt !== null && account.tokenExpiresAt.getTime() <= now.getTime());
-    await whileTokenUnchanged(deps, account, async (tx) => {
-      await deps.repository.markError(
-        tx,
-        account.id,
-        redactToken(`Instagram would not renew the token: ${error.detail}`, token),
-        now,
-      );
-      if (expired) {
-        await deps.repository.update(tx, account.id, { status: 'token_expired' });
-      }
-    });
+  const answer = await askForRenewal(deps.graph, token);
+  if ('refusal' in answer) {
+    await recordRefusal(deps, account, answer.refusal, token, now);
 
     return { outcome: 'refused' };
   }
 
+  return storeRenewal(deps, account, answer.renewed, now);
+};
+
+type RenewedToken = { readonly access_token: string; readonly expires_in: number };
+
+/**
+ * Meta's answer to the renewal: the renewed token, or the refusal it meant. A
+ * failure that is no answer (Graph or the network down, a rate limit) is thrown.
+ */
+const askForRenewal = async (
+  graph: TokenRefreshDeps['graph'],
+  token: string,
+): Promise<{ readonly renewed: RenewedToken } | { readonly refusal: GraphApiFailure }> => {
+  try {
+    const body = await graph.get('/refresh_access_token', {
+      token,
+      api: 'instagram',
+      query: { grant_type: 'ig_refresh_token' },
+    });
+
+    return { renewed: parseGraph(graphRefreshTokenSchema, body, 'the token renewal', token) };
+  } catch (error) {
+    if (error instanceof GraphApiFailure && error.permanent) {
+      return { refusal: error };
+    }
+    throw error;
+  }
+};
+
+const recordRefusal = async (
+  deps: TokenRefreshDeps,
+  account: TokenRefreshAccount,
+  refusal: GraphApiFailure,
+  token: string,
+  now: Date,
+): Promise<void> => {
+  // Meta calling the token dead, or the row's own date having passed, is an
+  // expired token. Any other refusal is a problem to read, not yet an outage.
+  const expired =
+    refusal.kind === 'token_dead' ||
+    (account.tokenExpiresAt !== null && account.tokenExpiresAt.getTime() <= now.getTime());
+
+  await whileTokenUnchanged(deps, account, async (tx) => {
+    await deps.repository.markError(
+      tx,
+      account.id,
+      redactToken(`Instagram would not renew the token: ${refusal.detail}`, token),
+      now,
+    );
+    if (expired) {
+      await deps.repository.update(tx, account.id, { status: 'token_expired' });
+    }
+  });
+};
+
+const storeRenewal = async (
+  deps: TokenRefreshDeps,
+  account: TokenRefreshAccount,
+  renewed: RenewedToken,
+  now: Date,
+): Promise<TokenRefreshResult> => {
   const expiresAt = new Date(now.getTime() + renewed.expires_in * 1000);
   const stored = await whileTokenUnchanged(deps, account, async (tx) => {
     await deps.repository.update(tx, account.id, {

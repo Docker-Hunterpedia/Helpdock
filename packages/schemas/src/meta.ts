@@ -368,6 +368,19 @@ export const metaRefusalSchema = z.enum([
 ]);
 export type MetaRefusal = z.infer<typeof metaRefusalSchema>;
 
+/**
+ * What a `reply-window-closed` refusal adds to the 409 (M10-02, ADR 0025, 8):
+ * the platform, the customer's last message that anchored the window, and when
+ * the window closed, so the composer can say what happened and what an agent can
+ * do. Both instants are null when the customer never wrote.
+ */
+export const metaRefusalDetailsSchema = z.object({
+  platform: metaPlatformSchema,
+  anchorAt: z.iso.datetime().nullable(),
+  closedAt: z.iso.datetime().nullable(),
+});
+export type MetaRefusalDetails = z.infer<typeof metaRefusalDetailsSchema>;
+
 /** "Test" and "Test connection": a read with the stored token, or with a typed one. */
 export const metaTestResultSchema = z.discriminatedUnion('ok', [
   z.object({

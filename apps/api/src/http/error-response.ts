@@ -12,6 +12,8 @@ import type {
   HcRefusal,
   IdentityProblem,
   KnowledgeRefusal,
+  MetaRefusal,
+  MetaRefusalDetails,
   SetupRefusal,
   StaffRefusal,
   TelegramRefusal,
@@ -33,6 +35,7 @@ import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { KnowledgeFailure } from '../knowledge/knowledge-failure.js';
+import { MetaFailure } from '../meta/meta-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TelegramFailure } from '../telegram/telegram-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
@@ -73,6 +76,8 @@ export interface MappedError {
   readonly domains?: DomainsRefusal;
   /** Only on a refused Telegram bot action; see `telegram/telegram-failure.ts`. */
   readonly telegram?: TelegramRefusal;
+  /** Only on a refused Meta channel action; see `meta/meta-failure.ts`. */
+  readonly meta?: { readonly reason: MetaRefusal; readonly details?: MetaRefusalDetails };
   /** Only on a refused widget request; see `widget/widget-failure.ts`. */
   readonly widget?: WidgetErrorCode;
   /** Only on a refused help center change; see `help-center/help-center-failure.ts`. */
@@ -225,6 +230,20 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // M10-02. Before the generic branch, for the reason the ones above give.
+  if (error instanceof MetaFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      meta: {
+        reason: error.reason,
+        ...(error.details === undefined ? {} : { details: error.details }),
+      },
+      unexpected: false,
+    };
+  }
+
   // M5-07. Before the generic branch, for the reason the ones above give.
   if (error instanceof DomainsFailure) {
     return {
@@ -353,6 +372,7 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
     ...(mapped.domains === undefined ? {} : { domains: { reason: mapped.domains } }),
     ...(mapped.telegram === undefined ? {} : { telegram: { reason: mapped.telegram } }),
+    ...(mapped.meta === undefined ? {} : { meta: mapped.meta }),
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),
     ...(mapped.helpCenter === undefined ? {} : { helpCenter: { reason: mapped.helpCenter } }),
     ...(mapped.ai === undefined ? {} : { ai: { reason: mapped.ai } }),

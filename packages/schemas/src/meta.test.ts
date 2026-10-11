@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { errorResponseSchema } from './error.js';
 import {
   META_ATTACHMENT_LIMITS,
   META_ERROR_MAX_LENGTH,
@@ -23,6 +24,7 @@ import {
   metaDeliverySchema,
   metaDeliveryStatusSchema,
   metaFileRefSchema,
+  metaRefusalDetailsSchema,
   metaRefusalSchema,
   metaSubscribeResultSchema,
   metaTestResultSchema,
@@ -286,6 +288,49 @@ describe('metaRefusalSchema', () => {
       'reply-window-closed',
       'subscribe-failed',
     ]);
+  });
+});
+
+describe('metaRefusalDetailsSchema', () => {
+  it('carries the platform and the two instants of a closed reply window', () => {
+    expect(
+      metaRefusalDetailsSchema.parse({ platform: 'whatsapp', anchorAt: STAMP, closedAt: STAMP }),
+    ).toEqual({ platform: 'whatsapp', anchorAt: STAMP, closedAt: STAMP });
+  });
+
+  it('allows both instants to be null for a customer who never wrote', () => {
+    expect(
+      metaRefusalDetailsSchema.safeParse({ platform: 'messenger', anchorAt: null, closedAt: null })
+        .success,
+    ).toBe(true);
+  });
+
+  it('rejects a platform Helpdock has no channel for', () => {
+    expect(
+      metaRefusalDetailsSchema.safeParse({ platform: 'sms', anchorAt: null, closedAt: null })
+        .success,
+    ).toBe(false);
+  });
+
+  it('travels in the error body beside the reason', () => {
+    const body = {
+      error: {
+        code: 'conflict',
+        message: 'The reply window is closed',
+        requestId: 'req_1',
+        meta: {
+          reason: 'reply-window-closed',
+          details: { platform: 'instagram', anchorAt: STAMP, closedAt: STAMP },
+        },
+      },
+    };
+
+    expect(errorResponseSchema.parse(body).error.meta?.details?.platform).toBe('instagram');
+    expect(
+      errorResponseSchema.safeParse({
+        error: { ...body.error, meta: { reason: 'not-a-refusal' } },
+      }).success,
+    ).toBe(false);
   });
 });
 

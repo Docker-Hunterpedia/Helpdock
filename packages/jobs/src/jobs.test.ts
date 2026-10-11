@@ -32,6 +32,7 @@ import {
   META_HEALTH_CRON,
   META_HEALTH_SCHEDULE_CRON,
   META_SEND_JOB_ATTEMPTS,
+  type MetaSendPayload,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
@@ -698,9 +699,9 @@ describe('the Meta send job (M10-06)', () => {
   const deliveryId = '01924f00-0000-7000-8000-0000000000ee';
 
   it('keys a send by its delivery, whatever the job id', () => {
-    expect(idempotencyKeyFor(metaSendJob, { kind: 'reply', brandId, deliveryId }, 'any')).toBe(
-      `meta.send:${deliveryId}`,
-    );
+    const payload: MetaSendPayload = { kind: 'reply', brandId, deliveryId };
+
+    expect(idempotencyKeyFor(metaSendJob, payload, 'any')).toBe(`meta.send:${deliveryId}`);
   });
 
   it('sends on the outbound queue, five attempts from ten seconds', () => {

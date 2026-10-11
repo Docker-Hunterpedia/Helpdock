@@ -660,20 +660,29 @@ describe.skipIf(!hasDocker)('the auth service', () => {
         expect(nonce).not.toBe('');
       });
 
-      it('refuses a callback from a browser without that cookie and signs nobody in', async () => {
-        const fetchMock = vi.fn();
-        vi.stubGlobal('fetch', fetchMock);
-        const { state } = await begin();
+      it.each([
+        ['without that cookie', undefined],
+        ['with the cookie of another flow', 'a-nonce-this-flow-never-issued'],
+      ])(
+        'refuses a callback from a browser %s, signs nobody in and clears the cookie',
+        async (_case, nonce) => {
+          const fetchMock = vi.fn();
+          vi.stubGlobal('fetch', fetchMock);
+          const { state } = await begin();
 
-        const response = await callbackWith(state);
+          const response = await callbackWith(state, nonce);
 
-        expect(response.statusCode).toBe(302);
-        expect(new URL(String(response.headers.location)).searchParams.get('error')).toBe(
-          'no-account',
-        );
-        expect(response.cookies.some((cookie) => cookie.name === REFRESH_COOKIE)).toBe(false);
-        expect(fetchMock).not.toHaveBeenCalled();
-      });
+          expect(response.statusCode).toBe(302);
+          expect(new URL(String(response.headers.location)).searchParams.get('error')).toBe(
+            'no-account',
+          );
+          expect(response.cookies.some((cookie) => cookie.name === REFRESH_COOKIE)).toBe(false);
+          expect(
+            response.cookies.find((cookie) => cookie.name === OAUTH_NONCE_COOKIE),
+          ).toMatchObject({ value: '', path: '/api/auth/oauth/google' });
+          expect(fetchMock).not.toHaveBeenCalled();
+        },
+      );
 
       it('takes the browser that started the flow on to the provider, and clears the cookie either way', async () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 500 }));

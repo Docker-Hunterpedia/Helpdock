@@ -421,6 +421,12 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
           model: 'whisper-1',
         });
 
+      const transcriptionBefore = await call<TranscriptionSettingsView>(
+        'GET',
+        '/api/install/ai/transcription',
+        adminToken,
+      );
+
       const responses = await Promise.all([
         provider('http://llm.example.com/v1'),
         embedding('http://embeddings.example.com/v1'),
@@ -450,7 +456,7 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
         '/api/install/ai/transcription',
         adminToken,
       );
-      expect(transcriptionNow.body.endpoint).toBe('');
+      expect(transcriptionNow.body.endpoint).toBe(transcriptionBefore.body.endpoint);
     });
 
     it('sets the default model, refusing one the provider does not offer', async () => {

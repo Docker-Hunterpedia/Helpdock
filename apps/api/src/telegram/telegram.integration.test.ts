@@ -29,6 +29,7 @@ import {
 } from '@helpdock/db';
 import { type JobLogger, silentLogger, type TelegramSendPayload } from '@helpdock/jobs';
 import {
+  type ErrorResponse,
   TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH,
   type TelegramBot,
   type TelegramBotList,
@@ -458,13 +459,15 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     });
 
     it('refuses a language prompt too long for one line above two buttons', async () => {
-      const tooLong = await call('PUT', `${botsPath()}/${bot.id}`, ada, {
+      const tooLong = await call<ErrorResponse>('PUT', `${botsPath()}/${bot.id}`, ada, {
         displayName: 'Acme Help',
         departmentId: support,
         languagePrompt: 'x'.repeat(TELEGRAM_LANGUAGE_PROMPT_MAX_LENGTH + 1),
       });
 
       expect(tooLong.status).toBe(400);
+      expect(tooLong.body.error.code).toBe('validation_failed');
+      expect(tooLong.body.error.fields?.map((field) => field.path)).toEqual(['languagePrompt']);
     });
 
     it('tests a typed token before the bot exists, and refuses one Telegram does not know', async () => {
@@ -977,29 +980,29 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     });
 
     it('records the language from the button, rewrites the prompt to it and welcomes in it, in that order', async () => {
+      const chat = 4_242_017;
+      await deliver(textUpdate(nextUpdate(), chat, '/start'));
+      await runOutbox();
       const before = telegram.calls.length;
 
-      await pressLanguage(catalogChat, 'ar', 7, 'cq-ar');
+      await pressLanguage(chat, 'ar', 7, 'cq-ar');
       await runOutbox();
 
-      expect(await contactLocale(catalogChat)).toBe('ar');
+      expect(await contactLocale(chat)).toBe('ar');
       const [chatRow] = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx
           .select()
           .from(telegramChats)
-          .where(eq(telegramChats.chatId, String(catalogChat))),
+          .where(eq(telegramChats.chatId, String(chat))),
       );
       expect(chatRow?.languageChosenAt).toBeInstanceOf(Date);
       expect(telegram.calls.slice(before).map((entry) => [entry.method, entry.body])).toEqual([
         ['answerCallbackQuery', { callback_query_id: 'cq-ar' }],
-        [
-          'editMessageText',
-          { chat_id: String(catalogChat), message_id: 7, text: 'اللغة: العربية' },
-        ],
+        ['editMessageText', { chat_id: String(chat), message_id: 7, text: 'اللغة: العربية' }],
         [
           'sendMessage',
           {
-            chat_id: String(catalogChat),
+            chat_id: String(chat),
             text: 'مرحبًا! أرسل لنا سؤالك وسيرد عليك الفريق هنا.',
           },
         ],
@@ -1007,17 +1010,22 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
     });
 
     it('welcomes with the bot’s own text for the language chosen', async () => {
-      await pressLanguage(ownChat, 'en', 9);
+      const chat = 4_242_018;
+      await saveBot({ welcomeEn: 'Welcome to Acme support.' });
+      await deliver(textUpdate(nextUpdate(), chat, '/start'));
       await runOutbox();
 
-      expect(await contactLocale(ownChat)).toBe('en');
+      await pressLanguage(chat, 'en', 9);
+      await runOutbox();
+
+      expect(await contactLocale(chat)).toBe('en');
       expect(telegram.callsOf('editMessageText').at(-1)?.body).toEqual({
-        chat_id: String(ownChat),
+        chat_id: String(chat),
         message_id: 9,
         text: 'Language: English',
       });
-      expect(sentTo(ownChat).at(-1)?.body).toEqual({
-        chat_id: String(ownChat),
+      expect(sentTo(chat).at(-1)?.body).toEqual({
+        chat_id: String(chat),
         text: 'Welcome to Acme support.',
       });
     });
@@ -1053,13 +1061,16 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
       const chat = 4_242_014;
       await saveBot({ languagePick: false });
 
-      await deliver(
-        textUpdate(nextUpdate(), chat, '/start', {
-          from: { id: chat, is_bot: false, first_name: 'Mona', language_code: 'ar' },
-        }),
-      );
-      await runOutbox();
-      await saveBot({ languagePick: true });
+      try {
+        await deliver(
+          textUpdate(nextUpdate(), chat, '/start', {
+            from: { id: chat, is_bot: false, first_name: 'Mona', language_code: 'ar' },
+          }),
+        );
+        await runOutbox();
+      } finally {
+        await saveBot({ languagePick: true });
+      }
 
       expect(sentTo(chat).map((entry) => entry.body)).toEqual([
         { chat_id: String(chat), text: 'مرحبًا! أرسل لنا سؤالك وسيرد عليك الفريق هنا.' },

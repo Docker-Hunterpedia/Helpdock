@@ -139,12 +139,24 @@ describe('extractFile', () => {
       ).not.toThrow();
     });
 
-    it('still reads an ordinary DOCX of a few entries', async () => {
-      const convert = vi.spyOn(mammoth, 'convertToHtml');
+    it('accepts an archive exactly at the entry cap and at the unpacked-size cap', () => {
+      const atEntryCap = craftedZip(
+        Array.from({ length: DOCX_MAX_ENTRIES }, (_, index) => ({
+          name: `word/media/${index}.png`,
+          declaredSize: 0,
+          inflated: Buffer.alloc(0),
+        })),
+      );
+      const atSizeCap = craftedZip([
+        {
+          name: 'word/document.xml',
+          declaredSize: DOCX_MAX_UNCOMPRESSED_BYTES,
+          inflated: Buffer.alloc(DOCX_MAX_UNCOMPRESSED_BYTES, 0x20),
+        },
+      ]);
 
-      await extractFile(minimalDocx(['# Refund policy']), DOCX, 'policy.docx');
-
-      expect(convert).toHaveBeenCalledOnce();
+      expect(() => assertArchiveWithinLimits(atEntryCap)).not.toThrow();
+      expect(() => assertArchiveWithinLimits(atSizeCap)).not.toThrow();
     });
   });
 

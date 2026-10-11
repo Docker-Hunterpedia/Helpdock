@@ -1224,7 +1224,7 @@ describe.skipIf(!hasDocker)('data retention', () => {
         chats: await tx.select().from(telegramChats),
         deliveries: await tx.select().from(telegramDeliveries),
         calls: await tx.select().from(aiCalls),
-        webhookCopies: await tx.select().from(webhookDeliveries),
+        webhookCopies: await tx.select().from(webhookDeliveries).orderBy(webhookDeliveries.event),
         audit: (
           await tx
             .select()
@@ -1248,8 +1248,8 @@ describe.skipIf(!hasDocker)('data retention', () => {
           (row) => row.payload.data as { ticket?: { id: string }; contact?: { id: string } },
         ),
       ).toEqual([
-        { ticket: { id: bystanderTicket.id, contactId: bystanderId } },
         { contact: { id: bystanderId } },
+        { ticket: { id: bystanderTicket.id, contactId: bystanderId } },
       ]);
       expect(after.audit?.meta).toMatchObject({
         telegramChatCount: 1,

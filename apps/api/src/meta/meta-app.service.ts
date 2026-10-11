@@ -62,6 +62,15 @@ export class MetaAppService {
   }
 
   /**
+   * The app's id, empty when none is set. Messenger and Instagram put it on the
+   * echo of every message the app sent, which is how Helpdock's own are told
+   * from the rest (M10-04).
+   */
+  appId(): Promise<string> {
+    return this.#settings.get('meta.appId');
+  }
+
+  /**
    * The handshake's token as stored, empty when none was ever made. The public
    * route reads this, never {@link verifyToken}: a stranger's request must not
    * be what writes a setting.

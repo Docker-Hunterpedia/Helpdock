@@ -213,7 +213,7 @@ const whatsappCourier = (context: CourierContext): Courier => {
         file.variant,
         META_ATTACHMENT_LIMITS.whatsapp.file,
       );
-      const uploaded = parseGraph(
+      const { id } = parseGraph(
         graphMediaUploadSchema,
         await deps.graph.postMultipart(`/${account.externalId}/media`, {
           token,
@@ -223,7 +223,6 @@ const whatsappCourier = (context: CourierContext): Courier => {
         'a media upload',
         token,
       );
-      const { id } = uploaded;
       switch (file.method) {
         case 'image':
           return postSend(context, {
@@ -296,10 +295,16 @@ const messagingCourier = (context: CourierContext): Courier => {
 // -------------------------------------------------------------------- the job
 
 /**
- * The step the job takes next, as a closure: `null` is a part that left nothing
- * to send, so the index of every part stays where it was between attempts.
+ * One part of a reply. `run` answers the platform's id for what it sent, or null
+ * for a part that left nothing to send, so the index of every part stays where it
+ * was between attempts. `sends` is whether it reaches the customer, which is
+ * what WhatsApp's pace is about: a part that sends nothing neither waits for
+ * the customer's slot nor takes it.
  */
-type Part = () => Promise<string | null>;
+interface Part {
+  readonly sends: boolean;
+  readonly run: () => Promise<string | null>;
+}
 
 export const createMetaSendHandler =
   (deps: MetaSendDependencies): JobHandler<MetaSendPayload> =>
@@ -381,57 +386,81 @@ const sendReply = async (
   const courier = platform === 'whatsapp' ? whatsappCourier(context) : messagingCourier(context);
   const files = await replyAttachments(tx, delivery.ticketMessageId);
 
-  // Every attachment is a part, sent, replaced by a notice or left out, so a
-  // part's index never moves between attempts.
-  const parts: Part[] = [
-    ...splitMetaText(message.bodyText, platform).map(
-      (text): Part =>
-        () =>
-          courier.text(text),
-    ),
-    ...files.map(
-      (file): Part =>
-        async () => {
-          const plan = planOutgoingFile(file, platform);
-          if (plan.kind === 'wait') {
-            throw new MetaFileNotReadyError();
-          }
-          if (plan.kind === 'skip') {
-            log.info(
-              {
-                brandId: payload.brandId,
-                deliveryId: delivery.id,
-                attachmentId: file.id,
-                reason: plan.reason,
-              },
-              'meta reply: an attachment cannot be sent and is left out',
-            );
-            return customerIsTold(plan.reason)
-              ? courier.text(
-                  fileLeftOutText({
-                    locale: await deps.locales.localeForContact(
-                      tx,
-                      payload.brandId,
-                      conversation.contactId,
-                    ),
-                    platform,
-                    name: file.originalName,
-                    reason: plan.reason,
-                    isFile: file.kind === 'file',
-                  }),
-                )
-              : null;
-          }
-          return courier.file({
+  /** What an attachment becomes: sent, replaced by a notice to the customer, or left out. */
+  const filePart = (file: Attachment): Part => {
+    const plan = planOutgoingFile(file, platform);
+    if (plan.kind === 'wait') {
+      return {
+        sends: false,
+        run: () => {
+          throw new MetaFileNotReadyError();
+        },
+      };
+    }
+    if (plan.kind === 'send') {
+      return {
+        sends: true,
+        run: () =>
+          courier.file({
             row: file,
             method: plan.method,
             variant: plan.variant,
             size: plan.size,
             mime: plan.mime,
             fileName: outgoingFileName(file, plan.variant),
-          });
+          }),
+      };
+    }
+
+    const leaveOut = (): void =>
+      log.info(
+        {
+          brandId: payload.brandId,
+          deliveryId: delivery.id,
+          attachmentId: file.id,
+          reason: plan.reason,
         },
+        'meta reply: an attachment cannot be sent and is left out',
+      );
+    if (!customerIsTold(plan.reason)) {
+      return {
+        sends: false,
+        run: async () => {
+          leaveOut();
+          return null;
+        },
+      };
+    }
+    const { reason } = plan;
+    return {
+      sends: true,
+      run: async () => {
+        leaveOut();
+        const locale = await deps.locales.localeForContact(
+          tx,
+          payload.brandId,
+          conversation.contactId,
+        );
+        return courier.text(
+          fileLeftOutText({
+            locale,
+            platform,
+            name: file.originalName,
+            reason,
+            isFile: file.kind === 'file',
+          }),
+        );
+      },
+    };
+  };
+
+  // Every attachment is a part, sent, replaced by a notice or left out, so a
+  // part's index never moves between attempts.
+  const parts: Part[] = [
+    ...splitMetaText(message.bodyText, platform).map(
+      (text): Part => ({ sends: true, run: () => courier.text(text) }),
     ),
+    ...files.map(filePart),
   ];
 
   const key = paceKey(account.id, delivery.customerId);
@@ -480,7 +509,9 @@ const runPart = async (
   },
 ): Promise<string | null> => {
   try {
-    return platform === 'whatsapp' ? await withRecipientPace(deps.redis, key, part) : await part();
+    return platform === 'whatsapp' && part.sends
+      ? await withRecipientPace(deps.redis, key, part.run)
+      : await part.run();
   } catch (error) {
     if (error instanceof RecipientPaceHeld) {
       await job.moveToDelayed(Date.now() + error.remainingMs, token);

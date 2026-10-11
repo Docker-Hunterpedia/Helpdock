@@ -197,10 +197,27 @@ describe('tokens', () => {
   });
 
   it('lets one system-user token open two WhatsApp numbers', async () => {
-    graph.connect({ platform: 'whatsapp', id: '222', name: 'Second', token: WA_TOKEN });
+    graph.connect({
+      platform: 'whatsapp',
+      id: '222',
+      name: 'Second',
+      wabaId: WABA_ID,
+      token: WA_TOKEN,
+    });
 
     expect((await call('GET', fb('/222'), { token: WA_TOKEN })).status).toBe(200);
     expect((await call('GET', fb(`/${PHONE_ID}`), { token: WA_TOKEN })).status).toBe(200);
+  });
+
+  it('will not connect a WhatsApp number without its business account, so no fixture forgets it', () => {
+    expect(() =>
+      graph.connect({
+        platform: 'whatsapp',
+        id: '333',
+        name: 'Orphan',
+        token: 'orphan-token-0123456',
+      }),
+    ).toThrow('wabaId');
   });
 });
 
@@ -752,13 +769,62 @@ describe('subscribed apps', () => {
     expect(graph.subscriptionOf(IG_ID)).toContain('messaging_seen');
   });
 
-  it('lists a WhatsApp number’s app in the wrapper WhatsApp uses', async () => {
-    graph.subscribe(PHONE_ID);
-    const listed = await call('GET', fb(`/${PHONE_ID}/subscribed_apps`), { token: WA_TOKEN });
+  it('lists a WhatsApp business account’s app in the wrapper WhatsApp uses', async () => {
+    graph.subscribe(WABA_ID);
+    const listed = await call('GET', fb(`/${WABA_ID}/subscribed_apps`), { token: WA_TOKEN });
 
     expect(listed.json).toMatchObject({
       data: [{ whatsapp_business_api_data: { id: '1234567890123456', name: 'Helpdock' } }],
     });
+  });
+
+  it('subscribes a business account over HTTP, and the subscription covers every number under it', async () => {
+    graph.connect({
+      platform: 'whatsapp',
+      id: '222',
+      name: 'Second',
+      wabaId: WABA_ID,
+      token: WA_TOKEN,
+    });
+
+    const subscribe = await call('POST', fb(`/${WABA_ID}/subscribed_apps`), { token: WA_TOKEN });
+
+    expect(subscribe.json).toEqual({ success: true });
+    expect(graph.subscriptionOf(WABA_ID)).toEqual(['messages']);
+    await call('DELETE', fb(`/${WABA_ID}/subscribed_apps`), { token: WA_TOKEN });
+    expect(graph.subscriptionOf(WABA_ID)).toEqual([]);
+  });
+
+  it.each(['GET', 'POST', 'DELETE'])(
+    'answers %s on a phone number’s subscribed_apps with the error for an unsupported edge',
+    async (method) => {
+      const reply = await call(method, fb(`/${PHONE_ID}/subscribed_apps`), { token: WA_TOKEN });
+
+      expect(reply.status).toBe(400);
+      expect(errorOf(reply)).toMatchObject({
+        code: 100,
+        message: expect.stringContaining(`Unsupported ${method.toLowerCase()} request`),
+      });
+      expect(graph.subscriptionOf(WABA_ID)).toEqual([]);
+    },
+  );
+
+  it('keeps a business account’s subscription from a token that does not open it', async () => {
+    graph.subscribe(WABA_ID);
+
+    const reply = await call('GET', fb(`/${WABA_ID}/subscribed_apps`), { token: PAGE_TOKEN });
+
+    expect(reply.status).toBe(400);
+  });
+
+  it('tells a test that subscribes or drops a WhatsApp number which id to use', () => {
+    for (const act of [
+      () => graph.subscribe(PHONE_ID),
+      () => graph.dropSubscription(PHONE_ID),
+      () => graph.subscriptionOf(PHONE_ID),
+    ]) {
+      expect(act).toThrow(`use ${WABA_ID}, not ${PHONE_ID}`);
+    }
   });
 
   it('drops the app on DELETE, and when a test says Meta did', async () => {
@@ -806,6 +872,44 @@ describe('debug_token', () => {
     });
   });
 
+  it('names the business accounts a WhatsApp token opens, which is how a number is traced to its own', async () => {
+    graph.connect({
+      platform: 'whatsapp',
+      id: '222',
+      name: 'Elsewhere',
+      wabaId: '555000111',
+      token: WA_TOKEN,
+    });
+
+    const reply = await call('GET', fb('/debug_token'), {
+      token: WA_TOKEN,
+      query: { input_token: WA_TOKEN },
+    });
+
+    expect(reply.json).toMatchObject({
+      data: {
+        granular_scopes: [
+          { scope: 'whatsapp_business_management', target_ids: [WABA_ID, '555000111'] },
+          { scope: 'whatsapp_business_messaging', target_ids: [WABA_ID, '555000111'] },
+        ],
+      },
+    });
+  });
+
+  it('names no business account for a Page or an Instagram token', async () => {
+    const page = await call('GET', fb('/debug_token'), {
+      token: PAGE_TOKEN,
+      query: { input_token: PAGE_TOKEN },
+    });
+    const instagram = await call('GET', ig('/debug_token'), {
+      token: IG_TOKEN,
+      query: { input_token: IG_TOKEN },
+    });
+
+    expect(page.json.data).not.toHaveProperty('granular_scopes');
+    expect(instagram.json.data).not.toHaveProperty('granular_scopes');
+  });
+
   it('says an unknown token is not valid, with Graph’s 190 inside a 200 answer', async () => {
     const reply = await call('GET', fb('/debug_token'), {
       token: WA_TOKEN,
@@ -827,6 +931,48 @@ describe('debug_token', () => {
 
     expect(reply.status).toBe(400);
     expect(errorOf(reply).code).toBe(190);
+  });
+});
+
+describe('the numbers under a business account', () => {
+  it('lists the numbers connected under it with their name, number and rating', async () => {
+    graph.connect({
+      platform: 'whatsapp',
+      id: '222',
+      name: 'Second',
+      displayPhone: '+1 555 078 3882',
+      wabaId: WABA_ID,
+      qualityRating: 'GREEN',
+      token: WA_TOKEN,
+    });
+
+    const reply = await call('GET', fb(`/${WABA_ID}/phone_numbers`), { token: WA_TOKEN });
+
+    expect(reply.status).toBe(200);
+    expect(reply.json).toEqual({
+      data: [
+        {
+          id: PHONE_ID,
+          display_phone_number: '+1 555 078 3881',
+          verified_name: 'Acme Support',
+        },
+        {
+          id: '222',
+          display_phone_number: '+1 555 078 3882',
+          verified_name: 'Second',
+          quality_rating: 'GREEN',
+        },
+      ],
+    });
+  });
+
+  it('answers a business account the token does not open, and a number’s own id, with Graph’s error', async () => {
+    const elsewhere = await call('GET', fb(`/${WABA_ID}/phone_numbers`), { token: PAGE_TOKEN });
+    const number = await call('GET', fb(`/${PHONE_ID}/phone_numbers`), { token: WA_TOKEN });
+
+    expect(elsewhere.status).toBe(400);
+    expect(number.status).toBe(400);
+    expect(errorOf(number).code).toBe(100);
   });
 });
 

@@ -51,7 +51,13 @@ afterAll(async () => {
 
 beforeEach(() => {
   graph.reset();
-  graph.connect({ platform: 'whatsapp', id: PHONE_ID, name: 'Acme Support', token: WA_TOKEN });
+  graph.connect({
+    platform: 'whatsapp',
+    id: PHONE_ID,
+    name: 'Acme Support',
+    wabaId: '102290129340398',
+    token: WA_TOKEN,
+  });
   graph.connect({ platform: 'messenger', id: PAGE_ID, name: 'Acme Page', token: PAGE_TOKEN });
   graph.connect({
     platform: 'instagram',

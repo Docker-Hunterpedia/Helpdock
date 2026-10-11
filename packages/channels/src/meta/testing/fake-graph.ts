@@ -64,8 +64,15 @@ export interface FakeGraphAccount {
   readonly name: string;
   readonly username?: string;
   readonly displayPhone?: string;
-  /** WhatsApp: the business account; its templates are listed under it. */
+  /**
+   * WhatsApp: the business account the number belongs to, required. Meta keeps
+   * the webhook subscription (`/{waba}/subscribed_apps`), the list of numbers
+   * (`/{waba}/phone_numbers`) and the templates under it, and answers an
+   * unsupported-edge error for the same paths on the number's own id.
+   */
   readonly wabaId?: string;
+  /** WhatsApp: the rating `GET /{waba}/phone_numbers` reports, such as `GREEN`. */
+  readonly qualityRating?: string;
 }
 
 /** An uploaded file as the stand-in records it. */
@@ -140,11 +147,12 @@ const graphFailure = (
 ): Answer =>
   reply(status, { error: { message, type: 'OAuthException', code, fbtrace_id: 'FAKE', ...extra } });
 
-const unknownObject = (id: string): Answer =>
+/** Graph's answer to an id that is not there, is not the token's, or has no such edge. */
+const unknownObject = (id: string, method = 'GET'): Answer =>
   graphFailure(
     400,
     100,
-    `Unsupported get request. Object with ID '${id}' does not exist, cannot be loaded due to missing permissions, or does not support this operation`,
+    `Unsupported ${method.toLowerCase()} request. Object with ID '${id}' does not exist, cannot be loaded due to missing permissions, or does not support this operation`,
     { error_subcode: 33 },
   );
 
@@ -256,6 +264,8 @@ export class FakeGraph {
   url = '';
 
   readonly #accounts = new Map<string, FakeGraphAccount>();
+  /** WhatsApp business account id → the ids of the numbers connected under it. */
+  readonly #wabas = new Map<string, Set<string>>();
   readonly #tokens = new Map<string, TokenFacts>();
   readonly #subscriptions = new Map<string, FakeSubscription[]>();
   readonly #appId: string;
@@ -332,7 +342,9 @@ export class FakeGraph {
 
   /**
    * Makes an account and a token that opens it. A system-user token can open
-   * several WhatsApp numbers: connect the second with the same `token`.
+   * several WhatsApp numbers: connect the second with the same `token`. A
+   * WhatsApp number needs its `wabaId`, and the token opens the business account
+   * as well as the number, as a system user's does.
    */
   connect(
     account: FakeGraphAccount & {
@@ -342,14 +354,27 @@ export class FakeGraph {
     },
   ): void {
     const { token, expiresAt, ...identity } = account;
-    this.#accounts.set(identity.id, identity);
+    if (identity.platform === 'whatsapp' && identity.wabaId === undefined) {
+      throw new Error('A WhatsApp number belongs to a business account: pass its wabaId');
+    }
     const root = toRoot(identity.platform);
     const known = this.#tokens.get(token);
     if (known !== undefined && known.root !== root) {
       throw new Error('One token is good on one root only');
     }
+    this.#accounts.set(identity.id, identity);
+    if (identity.wabaId !== undefined) {
+      this.#wabas.set(
+        identity.wabaId,
+        new Set([...(this.#wabas.get(identity.wabaId) ?? []), identity.id]),
+      );
+    }
     this.#tokens.set(token, {
-      ids: new Set([...(known?.ids ?? []), identity.id]),
+      ids: new Set([
+        ...(known?.ids ?? []),
+        identity.id,
+        ...(identity.wabaId === undefined ? [] : [identity.wabaId]),
+      ]),
       root,
       kind:
         identity.platform === 'whatsapp'
@@ -362,29 +387,50 @@ export class FakeGraph {
     });
   }
 
-  /** Subscribes the app to an account's webhooks, as `POST /{id}/subscribed_apps` does. */
-  subscribe(accountId: string, fields?: readonly string[]): void {
-    const account = this.#accounts.get(accountId);
-    if (account === undefined) {
-      throw new Error(`No account ${accountId}`);
-    }
-    this.#subscriptions.set(accountId, [
+  /**
+   * Subscribes the app to the webhooks of a Page, an Instagram account or, for
+   * WhatsApp, a business account (`wabaId`), as `POST /{id}/subscribed_apps`
+   * does. The subscription of a business account covers every number under it.
+   */
+  subscribe(id: string, fields?: readonly string[]): void {
+    const platform = this.#subscribable(id);
+    this.#subscriptions.set(id, [
       {
         appId: this.#appId,
         name: this.#appName,
-        fields: fields ?? META_SUBSCRIBED_FIELDS[account.platform],
+        fields: fields ?? META_SUBSCRIBED_FIELDS[platform],
       },
     ]);
   }
 
-  /** Unsubscribes the app, as Meta does after an hour of failed deliveries. */
-  dropSubscription(accountId: string): void {
-    this.#subscriptions.delete(accountId);
+  /** Unsubscribes the app, as Meta does after an hour of failed deliveries. Takes `wabaId` for WhatsApp. */
+  dropSubscription(id: string): void {
+    this.#subscribable(id);
+    this.#subscriptions.delete(id);
   }
 
-  /** The fields the app is subscribed to for an account; empty when it is not. */
-  subscriptionOf(accountId: string): readonly string[] {
-    return this.#subscriptions.get(accountId)?.[0]?.fields ?? [];
+  /** The fields the app is subscribed to; empty when it is not. Takes `wabaId` for WhatsApp. */
+  subscriptionOf(id: string): readonly string[] {
+    this.#subscribable(id);
+    return this.#subscriptions.get(id)?.[0]?.fields ?? [];
+  }
+
+  /** The platform of an id that carries a subscription: a Page, an Instagram account or a business account. */
+  #subscribable(id: string): MetaPlatform {
+    if (this.#wabas.has(id)) {
+      return 'whatsapp';
+    }
+    const account = this.#accounts.get(id);
+    if (account === undefined) {
+      throw new Error(`No account ${id}`);
+    }
+    if (account.platform === 'whatsapp') {
+      throw new Error(
+        `WhatsApp subscribes the business account, not the number: use ${account.wabaId ?? 'its wabaId'}, not ${id}`,
+      );
+    }
+
+    return account.platform;
   }
 
   /** Whether a token is one the stand-in knows, refreshed ones included. */
@@ -573,6 +619,9 @@ export class FakeGraph {
       if (second === 'subscribed_apps') {
         return this.#subscribedApps(method, id, context.facts, context.query);
       }
+      if (second === 'phone_numbers' && method === 'GET') {
+        return this.#phoneNumbers(id, context.facts);
+      }
       if (second === 'message_templates' && method === 'GET') {
         return reply(200, { data: this.templates.get(id) ?? [], paging: {} });
       }
@@ -749,15 +798,20 @@ export class FakeGraph {
     facts: TokenFacts,
     query: Readonly<Record<string, string>>,
   ): Answer {
-    const account = this.#accounts.get(id);
-    if (account === undefined || !this.#owns(facts, id)) {
-      return unknownObject(id);
+    const platform = this.#wabas.has(id) ? 'whatsapp' : this.#accounts.get(id)?.platform;
+    if (platform === undefined || !this.#owns(facts, id)) {
+      return unknownObject(id, method);
+    }
+    // The edge is on the business account. A number's own id has none, which
+    // is what Graph answers there and how a caller using it finds out.
+    if (this.#accounts.get(id)?.platform === 'whatsapp') {
+      return unknownObject(id, method);
     }
     if (method === 'GET') {
       const apps = this.#subscriptions.get(id) ?? [];
       return reply(200, {
         data: apps.map((app) =>
-          graphSubscribedApp(account.platform, {
+          graphSubscribedApp(platform, {
             appId: app.appId,
             name: app.name,
             fields: app.fields,
@@ -776,6 +830,42 @@ export class FakeGraph {
     }
 
     return graphFailure(400, 100, 'Unknown path components');
+  }
+
+  /** `GET /{waba}/phone_numbers`: the numbers connected under a business account. */
+  #phoneNumbers(id: string, facts: TokenFacts): Answer {
+    const numbers = this.#wabas.get(id);
+    if (numbers === undefined || !this.#owns(facts, id)) {
+      return unknownObject(id);
+    }
+
+    return reply(200, {
+      data: [...numbers].flatMap((numberId) => {
+        const account = this.#accounts.get(numberId);
+        return account === undefined
+          ? []
+          : [
+              {
+                id: account.id,
+                display_phone_number: account.displayPhone ?? '',
+                verified_name: account.name,
+                ...(account.qualityRating === undefined
+                  ? {}
+                  : { quality_rating: account.qualityRating }),
+              },
+            ];
+      }),
+    });
+  }
+
+  /** The business accounts a WhatsApp token opens, which is how a number is traced to its own. */
+  #granularScopes(facts: TokenFacts): unknown[] {
+    const targets = [...facts.ids].filter((id) => this.#wabas.has(id));
+
+    return ['whatsapp_business_management', 'whatsapp_business_messaging'].map((scope) => ({
+      scope,
+      target_ids: targets,
+    }));
   }
 
   #debugToken(input: string): Answer {
@@ -808,6 +898,7 @@ export class FakeGraph {
           'pages_messaging',
           'instagram_business_manage_messages',
         ],
+        ...(facts.kind === 'SYSTEM_USER' ? { granular_scopes: this.#granularScopes(facts) } : {}),
       },
     });
   }

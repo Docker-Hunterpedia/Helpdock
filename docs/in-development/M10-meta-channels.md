@@ -430,9 +430,9 @@ job, the thread's wording, the factory, the erasure and the retention purge. The
 
 | File | What it holds |
 |---|---|
-| `apps/api/src/meta/meta-router.ts` | `MetaConversationRouter`: `route(context, message, sink, options?)` (the contact, `upsertConversation`, follow merges, `onCustomerReply` or a new ticket with `channel: platform` in the account's department, the same activity, outbox and auto-assign calls as Telegram's), `contactFor`, `followMerge`, `openTicket`, `writeSystemLine` |
+| `apps/api/src/meta/meta-router.ts` | `MetaConversationRouter`: `route(context, message, sink, options?)` (the contact, `upsertConversation`, follow merges, `onCustomerReply` or a new ticket with `channel: platform` in the account's department, the same activity, outbox and auto-assign calls as Telegram's), `contactFor`, `followMerge`, `openTicket`, `writeSystemLine`; the `MetaAttachmentSink` and `MetaSinkInput` it calls |
 | `apps/api/src/meta/deferred-sink.ts` | `DeferredAttachmentSink.store`: each file `pending` with no object and a `meta.media` outbox row; `declaredFile`, `metaFileName` |
-| `apps/api/src/meta/meta-media.job.ts` | the `meta.media_fetch` consumer: `createMetaMediaFetchHandler`, `createMetaMediaFetchProcessor`, `accountFailureRecorder`, `matchesDigest`, `sizeCap` |
+| `apps/api/src/meta/meta-media.job.ts` | the `meta.media_fetch` consumer: `createMetaMediaFetchHandler`, `createMetaMediaFetchProcessor`, `accountFailureRecorder`, `matchesDigest`, `sizeCap`, `actionFor`, `accountFailureOf` |
 | `apps/api/src/meta/meta-text.ts`, `packages/i18n/locales/*/meta.json` | the `meta` namespace: `metaText`, `metaInboundLabels`, `metaSystemLine` |
 | `apps/api/src/meta/factory.ts` | `createMetaInboundService({ db, storage, log, keyring, graph })` → `{ router, sink, mediaFetch }` (the WhatsApp service is built on it in `meta.module.ts`) |
 | `apps/api/src/meta/whatsapp-inbound.service.ts` | `WhatsAppInboundService`, the `PlatformInboundService` for `whatsapp`, registered by `MetaModule` |
@@ -516,6 +516,11 @@ media.process     sniff, re-encode, scan, ffmpeg  →  ready | rejected
   at compose time would be stricter than Meta. A reaction does not, as DOMAIN-RULES §2.6 says.
 - **A phone on the block list stops WhatsApp too.** The webhook asks about the user id; an admin who blocked a
   number by hand meant the person.
+- **Two proofs of one number are suggested, not merged.** DOMAIN-RULES §4.4 lists a phone as auto-merging
+  "between two verified phones". The contact of a WhatsApp message is settled by its user id before the
+  number is looked at, so merging two contacts there would be a decision made in the middle of a webhook;
+  `attachVerifiedIdentity` leaves the number where it is, suggests the pair and logs it. The table's row is
+  for a caller that finds a contact by a verified phone, and none does yet.
 - **A number that is not a phone number never costs the message.** `attachVerifiedIdentity` refusing it, or
   two contacts proving the same one, is logged and the message is filed: Meta redelivers a failed batch for
   seven days.

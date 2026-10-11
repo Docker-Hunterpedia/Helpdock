@@ -12,6 +12,7 @@ import { checkUpload, PolicyRefusal, readContentPolicy } from '../media/content-
 import { attachmentKey, ORIGINAL_VARIANT } from '../media/keys.js';
 import type { MediaRepository } from '../media/media.repository.js';
 import { enqueueMetaMedia } from './meta-events.js';
+import type { MetaAttachmentSink, MetaSinkInput } from './meta-router.js';
 
 /**
  * The attachment sink of the Meta channels (M10-03, ADR 0025, 6): the files of
@@ -36,29 +37,6 @@ import { enqueueMetaMedia } from './meta-events.js';
  * no object, so the agent sees that something was sent and why it is not
  * there; nothing is fetched for it.
  */
-
-export interface MetaSinkInput {
-  readonly brandId: string;
-  readonly ticketId: string;
-  readonly departmentId: string;
-  readonly messageId: string;
-  readonly contactId: string;
-  /** The account whose token the fetch uses. */
-  readonly accountId: string;
-  readonly refs: readonly MetaFileRef[];
-  readonly ids: readonly string[];
-  /**
-   * Meta has already said these files cannot be served (an `errors[]` on the
-   * message, a story that expired): record them rejected with this reason and
-   * fetch nothing.
-   */
-  readonly refusal?: AttachmentRejectReason;
-}
-
-/** What the router needs of a sink, so the router is tested without a database. */
-export interface MetaAttachmentSink {
-  store(tx: DbTransaction, input: MetaSinkInput): Promise<void>;
-}
 
 /** What a reference says about its file before anyone has fetched it. */
 export interface DeclaredFile {
@@ -184,15 +162,14 @@ export class DeferredAttachmentSink implements MetaAttachmentSink {
       if (id === undefined) {
         continue;
       }
-      await this.#storeOne(tx, input, ref, id, policy);
+      await this.#storeOne(tx, input, { ref, id }, policy);
     }
   }
 
   async #storeOne(
     tx: DbTransaction,
     input: MetaSinkInput,
-    ref: MetaFileRef,
-    id: string,
+    { ref, id }: { readonly ref: MetaFileRef; readonly id: string },
     policy: ContentPolicy,
   ): Promise<void> {
     const declared = declaredFile(ref);

@@ -71,7 +71,7 @@ each other's customers.
 | WhatsApp business-scoped user id, Messenger page-scoped id, Instagram-scoped id | Always (they come in a webhook Meta signed) | Yes |
 | Signed `external_id` | Always (HMAC) | Yes |
 | Visitor id | Always (the server issued it) | Yes |
-| Phone | **Only as the `wa_id` of a WhatsApp message** (source `whatsapp.cloud`, M10-03); never when an agent or a form typed it. Helpdock sends no SMS | Yes, between two verified phones — see below |
+| Phone | **Only as the `wa_id` of a WhatsApp message** (source `whatsapp.cloud`, M10-03); never when an agent or a form typed it. Helpdock sends no SMS | No: a number two contacts both proved is suggested as a duplicate, not merged — see below |
 | Email typed into a form | Never | No; suggests a duplicate |
 
 A caller never says whether an identifier is verified; it says **where it came

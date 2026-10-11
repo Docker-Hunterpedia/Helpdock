@@ -18,6 +18,8 @@ import {
   policyWith,
 } from '../testing/media.js';
 import {
+  accountFailureOf,
+  actionFor,
   createMetaMediaFetchHandler,
   type MetaAccountFailure,
   matchesDigest,
@@ -327,26 +329,17 @@ describe('a link in a Messenger or Instagram payload', () => {
     });
   });
 
-  it('is rejected when the server answers with a type the kind does not allow', async () => {
-    const result = await run({
-      ref: link('image'),
-      download: { bytes, contentType: 'text/html' },
-    });
+  it.each([
+    ['a type the kind does not allow', 'text/html'],
+    ['no type at all', null],
+  ])('is rejected when the server answers with %s', async (_what, contentType) => {
+    const result = await run({ ref: link('image'), download: { bytes, contentType } });
 
     expect(result.state.row).toMatchObject({
       status: 'rejected',
       rejectReason: 'mime_not_allowed',
     });
     await expect(result.storage.read(KEY)).rejects.toThrow();
-  });
-
-  it('is rejected when the server names no type at all', async () => {
-    const result = await run({ ref: link('image'), download: { bytes, contentType: null } });
-
-    expect(result.state.row).toMatchObject({
-      status: 'rejected',
-      rejectReason: 'mime_not_allowed',
-    });
   });
 
   it('is never fetched from a host that is not Meta’s', async () => {
@@ -522,6 +515,70 @@ describe('an attachment that is not there to fetch', () => {
       status: 'rejected',
       rejectReason: 'processing_failed',
     });
+  });
+});
+
+describe('what a failure comes to', () => {
+  const failure = (
+    kind: ConstructorParameters<typeof GraphApiFailure>[0],
+    facts: ConstructorParameters<typeof GraphApiFailure>[2] = {},
+  ) => new GraphApiFailure(kind, 'detail', facts);
+
+  it.each([
+    ['a download past the cap', failure('permanent', { reason: 'too-large' }), 'too_large'],
+    [
+      'a host that is not Meta’s',
+      failure('permanent', { reason: 'host-not-allowed' }),
+      'processing_failed',
+    ],
+    [
+      'a destination the client refused',
+      failure('permanent', { reason: 'blocked' }),
+      'processing_failed',
+    ],
+    [
+      'a request Graph rejects',
+      failure('permanent', { status: 400, code: 100 }),
+      'processing_failed',
+    ],
+    [
+      'a missing permission',
+      failure('permission', { status: 403, code: 200 }),
+      'processing_failed',
+    ],
+    ['a restricted account', failure('account_restricted', { code: 368 }), 'processing_failed'],
+  ] as const)('settles at once on %s, whichever attempt it is', (_what, error, reason) => {
+    expect(actionFor(error, false)).toEqual({ kind: 'settle', reason });
+    expect(actionFor(error, true)).toEqual({ kind: 'settle', reason });
+  });
+
+  it.each([
+    ['a 404', failure('permanent', { status: 404 }), 'object_missing'],
+    [
+      'an object Graph says does not exist',
+      failure('permanent', { status: 400, code: 100, subcode: 33 }),
+      'object_missing',
+    ],
+    ['a dead token', failure('token_dead', { status: 401, code: 190 }), 'processing_failed'],
+    ['Graph failing', failure('retry', { status: 503 }), 'processing_failed'],
+    ['a rate limit', failure('rate_limited', { status: 429 }), 'processing_failed'],
+  ] as const)('asks again after %s, and settles on the last attempt', (_what, error, reason) => {
+    expect(actionFor(error, false)).toEqual({ kind: 'retry' });
+    expect(actionFor(error, true)).toEqual({ kind: 'settle', reason });
+  });
+
+  it('tells the account about a dead token, a permission and a restriction, and about nothing else', () => {
+    expect(accountFailureOf(failure('token_dead', { code: 190 }))).toEqual({
+      kind: 'token_dead',
+      detail: 'detail',
+    });
+    expect(accountFailureOf(failure('permission'))).toEqual({ kind: 'other', detail: 'detail' });
+    expect(accountFailureOf(failure('account_restricted'))).toEqual({
+      kind: 'other',
+      detail: 'detail',
+    });
+    expect(accountFailureOf(failure('retry', { status: 503 }))).toBeUndefined();
+    expect(accountFailureOf(failure('permanent', { status: 404 }))).toBeUndefined();
   });
 });
 

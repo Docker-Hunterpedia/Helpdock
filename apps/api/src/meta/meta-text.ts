@@ -32,15 +32,15 @@ export const metaInboundLabels = (locale: Locale): MetaInboundLabels => {
   };
 };
 
-/** The system lines of a Meta ticket's thread, as a `ticket_messages.body_text`. */
-export const metaSystemLine = (
-  locale: Locale,
-  line:
-    | { readonly kind: 'unsupported' }
-    | { readonly kind: 'unsent' }
-    | { readonly kind: 'reaction'; readonly emoji: string | null }
-    | { readonly kind: 'numberChanged'; readonly from: string; readonly to: string },
-): string => {
+/** A line of a Meta ticket's thread that no person wrote. */
+export type MetaSystemLine =
+  | { readonly kind: 'unsupported' }
+  | { readonly kind: 'unsent' }
+  | { readonly kind: 'reaction'; readonly emoji: string | null }
+  | { readonly kind: 'numberChanged'; readonly from: string; readonly to: string };
+
+/** The words of a system line in a locale, as a `ticket_messages.body_text`. */
+export const metaSystemLine = (locale: Locale, line: MetaSystemLine): string => {
   const t = metaText(locale);
   switch (line.kind) {
     case 'unsupported':

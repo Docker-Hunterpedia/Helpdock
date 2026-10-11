@@ -9,7 +9,6 @@ import { ContactFailure } from '../contacts/contact-failure.js';
 import { attachVerifiedIdentity, findByIdentity, removeIdentity } from '../contacts/identity.js';
 import { isSenderBlocked } from '../ticketing/sender-gate.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
-import type { MetaAttachmentSink } from './deferred-sink.js';
 import type { MetaRepository } from './meta.repository.js';
 import type {
   MetaEventContext,
@@ -18,8 +17,12 @@ import type {
   PlatformInboundService,
 } from './meta-inbound.service.js';
 import { metaMessageSeen, metaSenderBlocked } from './meta-inbound-gate.js';
-import type { MetaConversationRouter } from './meta-router.js';
-import { metaInboundLabels, metaSystemLine } from './meta-text.js';
+import type {
+  MetaAttachmentSink,
+  MetaConversationRouter,
+  MetaRouteContext,
+} from './meta-router.js';
+import { type MetaSystemLine, metaInboundLabels, metaSystemLine } from './meta-text.js';
 
 /**
  * What a WhatsApp event becomes (M10-03, DOMAIN-RULES §4.7 and §4.8): the
@@ -64,6 +67,19 @@ type WhatsAppMessage = Extract<MetaEvent, { kind: 'message' }>;
 
 const ignored = (reason: string): MetaEventOutcome => ({ outcome: 'ignored', reason });
 const handled: MetaEventOutcome = { outcome: 'handled' };
+
+/** Where a message came to, in the shape the router takes. */
+const routeContextOf = ({ tx, account, now }: MetaEventContext): MetaRouteContext => ({
+  tx,
+  brandId: account.brandId,
+  account: {
+    id: account.id,
+    departmentId: account.departmentId,
+    platform: 'whatsapp',
+    externalId: account.externalId,
+  },
+  now,
+});
 
 /** `131026: Message undeliverable`, in Meta's words and nobody else's. */
 const describeError = (error: MetaEventError | undefined): string => {
@@ -121,7 +137,6 @@ export class WhatsAppInboundService implements PlatformInboundService {
       },
       event.timestamp ?? now,
     );
-    const hasFiles = event.files.length > 0;
     if (event.errors.length > 0) {
       // Meta could not serve what the customer sent (a media file it failed to
       // store). With a file, the attachment says so; without one, this is all
@@ -134,20 +149,10 @@ export class WhatsAppInboundService implements PlatformInboundService {
 
     try {
       await this.#options.router.route(
-        {
-          tx,
-          brandId: account.brandId,
-          account: {
-            id: account.id,
-            departmentId: account.departmentId,
-            platform: 'whatsapp',
-            externalId: account.externalId,
-          },
-          now,
-        },
+        routeContextOf(context),
         message,
         this.#options.sink,
-        hasFiles && event.errors.length > 0 ? { fileRefusal: 'unreadable' } : {},
+        event.files.length > 0 && event.errors.length > 0 ? { fileRefusal: 'unreadable' } : {},
       );
     } catch (error) {
       if (error instanceof ContactFailure) {
@@ -234,29 +239,18 @@ export class WhatsAppInboundService implements PlatformInboundService {
     context: MetaEventContext,
     event: Extract<MetaEvent, { kind: 'user_changed_number' }>,
   ): Promise<MetaEventOutcome> {
-    const { tx, account, now } = context;
-    const repository = this.#options.repository;
+    const { tx, account } = context;
     const conversation =
       event.customerId === null
         ? undefined
-        : await repository.conversation(tx, account.id, event.customerId);
+        : await this.#options.repository.conversation(tx, account.id, event.customerId);
     if (conversation === undefined || event.newWaId === null) {
       return ignored('unknown-conversation');
     }
 
     const previous = event.oldWaId ?? conversation.waId;
     try {
-      await attachVerifiedIdentity(tx, account.brandId, conversation.contactId, {
-        kind: 'phone',
-        value: `+${event.newWaId}`,
-        source: 'whatsapp.cloud',
-      });
-      if (previous !== null && previous !== event.newWaId) {
-        await removeIdentity(tx, account.brandId, conversation.contactId, {
-          kind: 'phone',
-          value: `+${previous}`,
-        });
-      }
+      await this.#relinkPhone(context, conversation.contactId, previous, event.newWaId);
     } catch (error) {
       if (!(error instanceof ContactFailure)) {
         throw error;
@@ -267,7 +261,7 @@ export class WhatsAppInboundService implements PlatformInboundService {
       );
       return ignored('invalid-number');
     }
-    await repository.upsertConversation(tx, {
+    await this.#options.repository.upsertConversation(tx, {
       brandId: account.brandId,
       accountId: account.id,
       customerId: conversation.customerId,
@@ -278,32 +272,32 @@ export class WhatsAppInboundService implements PlatformInboundService {
       // Not a customer message: the window stays where the last one put it.
       inbound: null,
     });
+    await this.#note(context, conversation.ticketId, {
+      kind: 'numberChanged',
+      from: previous === null ? '' : `+${previous}`,
+      to: `+${event.newWaId}`,
+    });
+    return handled;
+  }
 
-    const ticket =
-      conversation.ticketId === null
-        ? undefined
-        : await this.#options.router.openTicket(tx, conversation.ticketId);
-    if (ticket !== undefined) {
-      const locale = await this.#options.lifecycleReads.localeForContact(
-        tx,
-        account.brandId,
-        conversation.contactId,
-      );
-      await this.#options.router.writeSystemLine(tx, {
-        ticket,
-        accountId: account.id,
-        text: metaSystemLine(locale, {
-          kind: 'numberChanged',
-          from: previous === null ? '' : `+${previous}`,
-          to: `+${event.newWaId}`,
-        }),
+  /** The new number proved, the old one taken off. Throws `ContactFailure` for a number that is not one. */
+  async #relinkPhone(
+    { tx, account }: MetaEventContext,
+    contactId: string,
+    previous: string | null,
+    next: string,
+  ): Promise<void> {
+    await attachVerifiedIdentity(tx, account.brandId, contactId, {
+      kind: 'phone',
+      value: `+${next}`,
+      source: 'whatsapp.cloud',
+    });
+    if (previous !== null && previous !== next) {
+      await removeIdentity(tx, account.brandId, contactId, {
+        kind: 'phone',
+        value: `+${previous}`,
       });
     }
-    this.#options.log.info(
-      { accountId: account.id, at: now.toISOString() },
-      'whatsapp number changed',
-    );
-    return handled;
   }
 
   // -------------------------------------------------- unsupported, reactions
@@ -348,26 +342,13 @@ export class WhatsAppInboundService implements PlatformInboundService {
       username: null,
       inbound: { at: event.timestamp ?? now, messageId: event.messageId },
     });
-    const ticket =
-      conversation.ticketId === null
-        ? undefined
-        : await this.#options.router.openTicket(tx, conversation.ticketId);
-    if (ticket === undefined) {
-      return ignored('no-open-ticket');
-    }
-
-    const locale = await this.#options.lifecycleReads.localeForContact(
-      tx,
-      account.brandId,
-      conversation.contactId,
+    const noted = await this.#note(
+      context,
+      conversation.ticketId,
+      { kind: 'unsupported' },
+      event.messageId,
     );
-    await this.#options.router.writeSystemLine(tx, {
-      ticket,
-      accountId: account.id,
-      text: metaSystemLine(locale, { kind: 'unsupported' }),
-      externalMessageId: event.messageId,
-    });
-    return handled;
+    return noted ? handled : ignored('no-open-ticket');
   }
 
   /**
@@ -393,22 +374,37 @@ export class WhatsAppInboundService implements PlatformInboundService {
     if (target === undefined) {
       return ignored('unknown-message');
     }
-    const ticket = await this.#options.router.openTicket(tx, target.ticketId);
+    const noted = await this.#note(context, target.ticketId, {
+      kind: 'reaction',
+      emoji: event.emoji,
+    });
+    return noted ? handled : ignored('no-open-ticket');
+  }
+
+  /**
+   * A line in the open ticket `ticketId` leads to, worded for its contact.
+   * False when there is none: no ticket, or one that is closed or spam.
+   */
+  async #note(
+    { tx, account }: MetaEventContext,
+    ticketId: string | null,
+    line: MetaSystemLine,
+    externalMessageId?: string,
+  ): Promise<boolean> {
+    const { router, lifecycleReads } = this.#options;
+    const ticket = ticketId === null ? undefined : await router.openTicket(tx, ticketId);
     if (ticket === undefined) {
-      return ignored('no-open-ticket');
+      return false;
     }
 
-    const locale = await this.#options.lifecycleReads.localeForContact(
-      tx,
-      account.brandId,
-      ticket.contactId,
-    );
-    await this.#options.router.writeSystemLine(tx, {
+    const locale = await lifecycleReads.localeForContact(tx, account.brandId, ticket.contactId);
+    await router.writeSystemLine(tx, {
       ticket,
       accountId: account.id,
-      text: metaSystemLine(locale, { kind: 'reaction', emoji: event.emoji }),
+      text: metaSystemLine(locale, line),
+      ...(externalMessageId === undefined ? {} : { externalMessageId }),
     });
-    return handled;
+    return true;
   }
 
   // ------------------------------------------------------------- the account

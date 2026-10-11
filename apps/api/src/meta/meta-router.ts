@@ -6,7 +6,12 @@ import type {
   TicketStatus as TicketStatusRow,
 } from '@helpdock/db';
 import { uuidv7 } from '@helpdock/db';
-import type { AttachmentRejectReason, IdentitySource, MetaPlatform } from '@helpdock/schemas';
+import type {
+  AttachmentRejectReason,
+  IdentitySource,
+  MetaFileRef,
+  MetaPlatform,
+} from '@helpdock/schemas';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { requestAutoAssign } from '../assignment/assignment-events.js';
 import { routesAutomatically } from '../assignment/ticket-assignment.js';
@@ -21,7 +26,6 @@ import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activ
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
 import { subjectFrom } from '../widget/plain-text.js';
-import type { MetaAttachmentSink } from './deferred-sink.js';
 import type { MetaRepository } from './meta.repository.js';
 
 /**
@@ -122,6 +126,41 @@ export interface FollowedTicket {
   readonly status: TicketStatusRow;
 }
 
+/** One message on its way in: what filing it needs beside the context. */
+interface Arrival {
+  readonly message: MetaInboundMessage;
+  readonly contactId: string;
+  readonly sink: MetaAttachmentSink;
+  readonly options: MetaRouteOptions;
+  readonly actor: ActivityActor;
+}
+
+/**
+ * What the router needs of a sink, so it is tested without a database. It lives
+ * here, with the client; `DeferredAttachmentSink` implements it.
+ */
+export interface MetaAttachmentSink {
+  store(tx: DbTransaction, input: MetaSinkInput): Promise<void>;
+}
+
+export interface MetaSinkInput {
+  readonly brandId: string;
+  readonly ticketId: string;
+  readonly departmentId: string;
+  readonly messageId: string;
+  readonly contactId: string;
+  /** The account whose token the fetch uses. */
+  readonly accountId: string;
+  readonly refs: readonly MetaFileRef[];
+  readonly ids: readonly string[];
+  /**
+   * Meta has already said these files cannot be served (an `errors[]` on the
+   * message, a story that expired): record them rejected with this reason and
+   * fetch nothing.
+   */
+  readonly refusal?: AttachmentRejectReason;
+}
+
 export class MetaConversationRouter {
   readonly #deps: MetaRouterDependencies;
 
@@ -179,11 +218,17 @@ export class MetaConversationRouter {
       conversation.ticketId === null
         ? undefined
         : await this.followMerge(tx, conversation.ticketId);
-    const actor = actorFor(account.id);
+    const arrival: Arrival = {
+      message,
+      contactId: contact.id,
+      sink,
+      options,
+      actor: actorFor(account.id),
+    };
     const outcome =
       current === undefined
-        ? await this.#create(context, message, contact.id, actor, sink, options)
-        : await this.#reply(context, current, message, contact.id, actor, sink, options);
+        ? await this.#create(context, arrival)
+        : await this.#reply(context, current, arrival);
 
     await this.#deps.meta.setConversationTicket(tx, conversation.id, outcome.ticketId);
     return { ...outcome, contactId: contact.id, conversationId: conversation.id };
@@ -281,13 +326,10 @@ export class MetaConversationRouter {
 
   async #create(
     context: MetaRouteContext,
-    message: MetaInboundMessage,
-    contactId: string,
-    actor: ActivityActor,
-    sink: MetaAttachmentSink,
-    options: MetaRouteOptions,
+    arrival: Arrival,
   ): Promise<Omit<MetaRouteOutcome, 'contactId' | 'conversationId'>> {
     const { tx, brandId } = context;
+    const { message, contactId, actor } = arrival;
     const { tickets: repository, lifecycleReads } = this.#deps;
     const status = await repository.findDefaultStatus(tx);
     const prefix = await repository.brandPrefix(tx, brandId);
@@ -310,11 +352,10 @@ export class MetaConversationRouter {
     });
     const messageId = await this.#writeMessage(
       context,
-      { ticket, seq: 1, mayQuote: false },
-      message,
-      contactId,
-      sink,
-      options,
+      { ticket, seq: 1 },
+      arrival,
+      // A new ticket has nothing earlier on it to quote.
+      { html: message.bodyHtml, text: message.bodyText },
     );
 
     await writeTicketActivity(tx, {
@@ -346,13 +387,10 @@ export class MetaConversationRouter {
   async #reply(
     context: MetaRouteContext,
     current: FollowedTicket,
-    message: MetaInboundMessage,
-    contactId: string,
-    actor: ActivityActor,
-    sink: MetaAttachmentSink,
-    options: MetaRouteOptions,
+    arrival: Arrival,
   ): Promise<Omit<MetaRouteOutcome, 'contactId' | 'conversationId'>> {
     const { tx, brandId } = context;
+    const { message, actor } = arrival;
     const repository = this.#deps.tickets;
     // Locks the ticket row first, so two messages from one customer take turns.
     let seq = await repository.nextSeq(tx, current.ticket.id);
@@ -371,11 +409,9 @@ export class MetaConversationRouter {
 
     const messageId = await this.#writeMessage(
       context,
-      { ticket: target, seq, mayQuote: true },
-      message,
-      contactId,
-      sink,
-      options,
+      { ticket: target, seq },
+      arrival,
+      await this.#withQuote(context, target, message),
     );
     await writeTicketActivity(tx, {
       brandId,
@@ -399,15 +435,10 @@ export class MetaConversationRouter {
 
   async #writeMessage(
     context: MetaRouteContext,
-    { ticket, seq, mayQuote }: { ticket: TicketRow; seq: number; mayQuote: boolean },
-    message: MetaInboundMessage,
-    contactId: string,
-    sink: MetaAttachmentSink,
-    options: MetaRouteOptions,
+    { ticket, seq }: { ticket: TicketRow; seq: number },
+    { message, contactId, sink, options }: Arrival,
+    body: { readonly html: string; readonly text: string },
   ): Promise<string> {
-    const body = mayQuote
-      ? await this.#withQuote(context, ticket, message)
-      : { html: message.bodyHtml, text: message.bodyText };
     const row = await this.#deps.tickets.insertMessage(context.tx, {
       brandId: context.brandId,
       ticketId: ticket.id,

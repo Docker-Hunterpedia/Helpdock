@@ -3,7 +3,13 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { GraphApiFailure, type GraphClient, graphMediaMetaSchema } from '@helpdock/channels';
 import { decryptSecret, type Keyring } from '@helpdock/config';
-import { type Db, type MetaAccount as MetaAccountRow, withSystem } from '@helpdock/db';
+import {
+  type Attachment as AttachmentRow,
+  type Db,
+  type DbTransaction,
+  type MetaAccount as MetaAccountRow,
+  withSystem,
+} from '@helpdock/db';
 import {
   createJobProcessor,
   isLastAttempt,
@@ -76,7 +82,7 @@ import type { MetaRepository } from './meta.repository.js';
  */
 
 /** How long one download may take. The job holds the brand's transaction for it. */
-export const META_MEDIA_DOWNLOAD_TIMEOUT_MS = 120_000;
+const META_MEDIA_DOWNLOAD_TIMEOUT_MS = 120_000;
 
 /** What a failed fetch tells the account's row. Never the token. */
 export interface MetaAccountFailure {
@@ -141,17 +147,65 @@ export const matchesDigest = (bytes: Uint8Array, expected: string): boolean => {
  * image or a video until it is fetched, so it gets the larger of the two.
  */
 export const sizeCap = (policy: ContentPolicy, ref: MetaFileRef): number => {
-  const declared = declaredFile(ref);
-  if (ref.kind === 'cdn_url' && (ref.type === 'story' || ref.type === 'story_mention')) {
+  if (isStoryLink(ref)) {
     return Math.max(policyFor(policy, 'image').maxBytes, policyFor(policy, 'video').maxBytes);
   }
 
-  return policyFor(policy, declared.kind).maxBytes;
+  return policyFor(policy, declaredFile(ref).kind).maxBytes;
 };
+
+/** A story is an image or a video, and only the server can say which. */
+const isStoryLink = (ref: MetaFileRef): boolean =>
+  ref.kind === 'cdn_url' && (ref.type === 'story' || ref.type === 'story_mention');
 
 /** Graph says an id or a link does not exist: expired, or not there yet. */
 const isMissing = (failure: GraphApiFailure): boolean =>
   failure.status === 404 || (failure.code === 100 && failure.subcode === 33);
+
+/** What a failed attempt comes to: the reason to settle on, or another attempt. */
+export type FailureAction =
+  | { readonly kind: 'settle'; readonly reason: AttachmentRejectReason }
+  | { readonly kind: 'retry' };
+
+const settleOn = (reason: AttachmentRejectReason): FailureAction => ({ kind: 'settle', reason });
+
+/**
+ * What to do about a Graph failure. A verdict (too large, a host that is not
+ * Meta's) and a refusal no retry fixes (a permission, a restriction, a request
+ * Graph rejects) settle at once. A file Meta no longer has, a dead token, and
+ * Graph or the network failing are asked for again until the last attempt, which
+ * settles: `object_missing` for the first, `processing_failed` for the rest.
+ */
+export const actionFor = (failure: GraphApiFailure, last: boolean): FailureAction => {
+  if (failure.reason === 'too-large') {
+    return settleOn('too_large');
+  }
+  if (failure.reason === 'host-not-allowed' || failure.reason === 'blocked') {
+    return settleOn('processing_failed');
+  }
+  const missing = isMissing(failure);
+  const passing =
+    missing ||
+    failure.kind === 'token_dead' ||
+    failure.kind === 'retry' ||
+    failure.kind === 'rate_limited';
+  if (!passing) {
+    return settleOn('processing_failed');
+  }
+
+  return last ? settleOn(missing ? 'object_missing' : 'processing_failed') : { kind: 'retry' };
+};
+
+/** What the account's row should say about a failure, if anything. */
+export const accountFailureOf = (failure: GraphApiFailure): MetaAccountFailure | undefined => {
+  if (failure.kind === 'token_dead') {
+    return { kind: 'token_dead', detail: failure.detail };
+  }
+
+  return failure.kind === 'permission' || failure.kind === 'account_restricted'
+    ? { kind: 'other', detail: failure.detail }
+    : undefined;
+};
 
 interface Fetched {
   readonly bytes: Buffer;
@@ -210,55 +264,77 @@ export const createMetaMediaFetchHandler =
       return;
     }
 
-    const policy = readContentPolicy(await deps.media.contentPolicy(tx, brandId));
-    const last = isLastAttempt(metaMediaFetchJob, job, undefined);
+    const fetching: Fetching = {
+      tx,
+      brandId,
+      row,
+      account,
+      ref: payload.ref,
+      policy: readContentPolicy(await deps.media.contentPolicy(tx, brandId)),
+    };
     try {
-      const fetched = await fetchFile(deps, account, payload.ref, policy);
-      const stored = await checkAndStore(deps, row, payload.ref, fetched, policy);
-      await deps.media.setStatus(tx, row.id, {
-        status: 'processing',
-        size: fetched.bytes.length,
-        mime: stored.mime,
-        kind: stored.kind,
-        originalName: metaFileName(payload.ref, stored.mime),
-      });
-      await enqueueAttachmentUploaded(tx, brandId, {
-        attachmentId: row.id,
-        ticketId: row.ticketId,
-      });
+      await fetchAndHandOver(deps, fetching);
     } catch (error) {
-      await onFailure({ deps, error, account, brandId, attachmentId: row.id, last, log, settle });
+      await onFailure({
+        deps,
+        error,
+        fetching,
+        last: isLastAttempt(metaMediaFetchJob, job, undefined),
+        log,
+        settle,
+      });
     }
   };
 
+/** Everything one attempt works on. */
+interface Fetching {
+  readonly tx: DbTransaction;
+  readonly brandId: string;
+  readonly row: AttachmentRow;
+  readonly account: MetaAccountRow;
+  readonly ref: MetaFileRef;
+  readonly policy: ContentPolicy;
+}
+
+/** The bytes into the bucket, then the row to `processing` and the event `media.process` waits for. */
+const fetchAndHandOver = async (
+  deps: MetaMediaFetchDependencies,
+  fetching: Fetching,
+): Promise<void> => {
+  const { tx, brandId, row, ref } = fetching;
+  const fetched = await fetchFile(deps, fetching);
+  const stored = await checkAndStore(deps, fetching, fetched);
+  await deps.media.setStatus(tx, row.id, {
+    status: 'processing',
+    size: fetched.bytes.length,
+    mime: stored.mime,
+    kind: stored.kind,
+    originalName: metaFileName(ref, stored.mime),
+  });
+  await enqueueAttachmentUploaded(tx, brandId, { attachmentId: row.id, ticketId: row.ticketId });
+};
+
 /**
- * What a failed attempt comes to: a verdict, a rejection now, a rejection on
- * the last attempt, or a throw so BullMQ asks again.
+ * What a failed attempt comes to: a verdict or a settled rejection, or a throw
+ * so BullMQ asks again ({@link actionFor}). What Graph said about the account is
+ * written first, in a transaction of its own, because a throw rolls this one back.
  */
 const onFailure = async ({
   deps,
   error,
-  account,
-  brandId,
-  attachmentId,
+  fetching,
   last,
   log,
   settle,
 }: {
   readonly deps: MetaMediaFetchDependencies;
   readonly error: unknown;
-  readonly account: MetaAccountRow;
-  readonly brandId: string;
-  readonly attachmentId: string;
+  readonly fetching: Fetching;
   readonly last: boolean;
   readonly log: JobLogger;
   readonly settle: (reason: AttachmentRejectReason) => Promise<void>;
 }): Promise<void> => {
-  if (error instanceof Verdict) {
-    await settle(error.reason);
-    return;
-  }
-  if (error instanceof PolicyRefusal) {
+  if (error instanceof Verdict || error instanceof PolicyRefusal) {
     await settle(error.reason);
     return;
   }
@@ -269,47 +345,25 @@ const onFailure = async ({
     if (!last) {
       throw error;
     }
-    log.error({ attachmentId, err: error }, 'meta media could not be stored; giving up');
+    log.error({ attachmentId: fetching.row.id, err: error }, 'meta media could not be stored');
     await settle('processing_failed');
     return;
   }
 
   // Never the link (it carries Meta's signature) and never the token.
   log.warn(
-    { attachmentId, kind: failure.kind, status: failure.status, code: failure.code },
+    { attachmentId: fetching.row.id, kind: failure.kind, status: failure.status },
     'meta media could not be fetched',
   );
-
-  if (failure.reason === 'too-large') {
-    await settle('too_large');
-    return;
+  const note = accountFailureOf(failure);
+  if (note !== undefined) {
+    await deps.recordAccountFailure(fetching.brandId, fetching.account.id, note);
   }
-  if (failure.reason === 'host-not-allowed' || failure.reason === 'blocked') {
-    await settle('processing_failed');
-    return;
-  }
-
-  if (failure.kind === 'token_dead') {
-    await deps.recordAccountFailure(brandId, account.id, {
-      kind: 'token_dead',
-      detail: failure.detail,
-    });
-  } else if (failure.kind === 'permission' || failure.kind === 'account_restricted') {
-    await deps.recordAccountFailure(brandId, account.id, {
-      kind: 'other',
-      detail: failure.detail,
-    });
-  }
-
-  const retryable =
-    isMissing(failure) ||
-    failure.kind === 'token_dead' ||
-    failure.kind === 'retry' ||
-    failure.kind === 'rate_limited';
-  if (retryable && !last) {
+  const action = actionFor(failure, last);
+  if (action.kind === 'retry') {
     throw failure;
   }
-  await settle(isMissing(failure) ? 'object_missing' : 'processing_failed');
+  await settle(action.reason);
 };
 
 /** A Graph failure, or undefined for anything else; a Graph answer we cannot read is Graph failing. */
@@ -332,9 +386,7 @@ const toFailure = (error: unknown): GraphApiFailure | undefined => {
 
 const fetchFile = async (
   deps: MetaMediaFetchDependencies,
-  account: MetaAccountRow,
-  ref: MetaFileRef,
-  policy: ContentPolicy,
+  { account, ref, policy }: Fetching,
 ): Promise<Fetched> => {
   const client: Pick<GraphClient, 'get' | 'download'> = deps.graph();
   const cap = sizeCap(policy, ref);
@@ -378,18 +430,13 @@ const fetchFile = async (
  */
 const checkAndStore = async (
   deps: MetaMediaFetchDependencies,
-  row: { readonly s3Key: string },
-  ref: MetaFileRef,
+  { row, ref, policy }: Fetching,
   fetched: Fetched,
-  policy: ContentPolicy,
 ): Promise<{ mime: string; kind: AttachmentKind }> => {
   const declared = declaredFile(ref);
   const mime = declared.mime ?? bareMime(fetched.contentType ?? 'application/octet-stream');
   // A story's kind is the server's to say; every other kind was declared.
-  const kind =
-    ref.kind === 'cdn_url' && (ref.type === 'story' || ref.type === 'story_mention')
-      ? kindForMime(mime)
-      : declared.kind;
+  const kind = isStoryLink(ref) ? kindForMime(mime) : declared.kind;
   checkUpload(policy, { kind, mime, size: fetched.bytes.length });
 
   await withTempDir(async (dir) => {

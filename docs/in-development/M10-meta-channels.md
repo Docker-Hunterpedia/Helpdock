@@ -53,7 +53,7 @@ Definition of done asks for.
 | M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | planned |
 | M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | planned |
 | M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | planned |
-| M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | planned |
+| M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | admin side built, API next: [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
 | M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | planned |
 | M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; `HUMAN_AGENT` on a person's reply at day 3 and never on an AI or rule reply; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10** | 4 d | | later |
 | M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | planned |
@@ -354,6 +354,70 @@ and Redis with `FakeGraph` and `MetaWebhookDriver` (the handshake with the right
 batch of two brands reaching the service once per entry inside its brand; a redelivered batch deduped;
 a wrong, missing and tampered signature; the Instagram secret; a brand in its grace answered 200 with nothing filed; two concurrent deliveries; a failing
 route rolled back and redelivered; the App card) and the repository's queries.
+
+## M10-07 Admin API and the Channels › Meta screens
+
+Artboards: `Admin/Channels-Meta` and `Admin/Channels-Meta-Account`. The admin side is built; the api
+routes follow it (see [What is left](#m10-07-what-is-left)).
+
+**The admin client** (`apps/admin/src/meta/`, mirroring `apps/admin/src/telegram/`): `MetaApi`
+(`app`, `rotateVerifyToken`, `accounts`, `account`, `createAccount`, `updateAccount`,
+`deleteAccount`, `testToken`, `testAccount`, `subscribe`, `status`), `HttpMetaApi`, `metaKeys`,
+`MetaError` and `isMetaError`, `MetaApiProvider` and `useMetaApi`, and `MockMetaApi` with the
+fixture of the artboard (two WhatsApp numbers, a Messenger Page, an Instagram account whose token
+Meta invalidated) and the `MOCK_*` ids and tokens the unit and browser suites paste. A refusal
+crosses as `error.meta.reason` in the error body (`errorResponseSchema` gained `meta`) and becomes
+a `MetaError`, which the dialogs turn into a sentence. The ticket view's half of the interface
+(`ticketContext`, `retryDelivery`) is M10-08's.
+
+**The screens** (`apps/admin/src/screens/admin/channels/meta/`):
+
+| File | What it draws |
+|---|---|
+| `meta-tab.tsx` | the tab: the App card, the accounts table or the empty state, "How messages arrive" and the health legend, and the two dialogs; "Connect account" sits in the page header, which owns the dialog |
+| `app-card.tsx` | MetaAppCard, install admins only: the callback URL with Copy, the verify token (made here, replaced after a confirmation, shown once in a SecretReveal), what the app id and the two secrets are |
+| `account-table.tsx`, `account-health.tsx` | MetaAccountTable and its HealthIndicator, with Expiring read from the token's date (under a week left means the weekly renewal did not run) and the failure named ("Token expired") |
+| `connect-account-dialog.tsx`, `token-test.tsx` | ConnectAccountDialog: platform RadioCards, the id named per platform, the token, the department, Test before Connect; a refusal sits under the field it concerns |
+| `account-page.tsx`, `account-draft.ts` | MetaAccountPage: the form saved together, the Activity card and the Disconnect card |
+| `connection-section.tsx`, `reconnect-dialog.tsx` | Connection (masked token, kind, expiry, Test connection) and, once Meta has invalidated the token, what Meta said and Reconnect |
+| `subscription-section.tsx` | Subscription: state, fields as tags, last checked, Meta's last problem, Subscribe now |
+| `number-section.tsx`, `routing-section.tsx`, `human-agent-section.tsx` | Number (WhatsApp only, with the charge and no-Human-Agent notes), Routing, Human Agent (Messenger and Instagram only) |
+| `disconnect-dialog.tsx` | the typed-id confirmation, from the table's menu and from the page |
+| `platforms-card.tsx`, `platforms.ts`, `code-text.tsx` | "What each platform asks for" beside the empty state; the platform icons (DESIGN §5: WhatsApp `phone`, Messenger `messages-square`, Instagram `camera`) and labels; backticked names in catalog sentences drawn as mono code |
+
+The System page's Channels card lists the three kinds, the Meta tab has the `network` icon, and the
+stand-in icons of M10-01 (contact identities, ticket channel badge) now are the three DESIGN §5 picks.
+`Field` takes a node as its hint so a sentence can hold a code span.
+
+**Where the artboard asked for more than the schemas carry**, the screen shows what they carry and
+says nothing it cannot know:
+
+- The App card cannot show the app id or the Graph version, nor whether a secret is set unless the
+  environment holds it: `metaAppSchema` is `appIdSet`, `callbackUrl`, `verifyTokenHint` and
+  `secretsLockedByEnv`. The app id reads "Set" or "Not set", a locked secret is an EnvLockedField with
+  the "Set by environment" chip, and an unlocked one says it is not set by the environment. There is no
+  Meta section on Settings, so the card names the `HD_META_*` variables instead of "Change it on
+  Settings". Connect is held off in the empty state only when an install admin sees no app id or no
+  verify token; any other missing secret is the api's `app-not-configured`.
+- Messages delivered in 24 hours and the WhatsApp quality rating are not in the status response, so
+  the Activity card and the Number section leave them out. "Renewed by Helpdock" needs a field the
+  account row does not have; the table says Subscribed, Not subscribed, or Not checked since the time
+  of the last subscription.
+- Test names what Meta returned as `name`, `username` and the token's expiry; the number itself is the
+  row's `displayPhone` once connected.
+
+**Tests.** Unit: the api client and fixture, every screen (`meta-tab.test.tsx`,
+`account-page.test.tsx`, the health, draft and platform helpers) and the System card. Playwright
+`apps/admin/e2e/meta.spec.ts` against the fixture, in `en` and `ar` with axe: the list and the app
+card, the verify token, Connect with a refused token and then a good one for each platform, a Page's
+page (Test connection, Human Agent, Save, Disconnect by id), a WhatsApp number's page, and Reconnect.
+
+### M10-07 What is left
+
+The api side of the deliverable: `meta-accounts.service.ts`, `meta-accounts.controller.ts`,
+`graph-factory.ts`, the `channel-status` rows, the integration suite, and
+`apps/admin/e2e/api/meta.api.spec.ts` with its own stand-in. They wait for `MetaModule`,
+`meta.repository.ts` and `meta-app.service.ts` of M10-02.
 
 ## Interfaces for other milestones
 

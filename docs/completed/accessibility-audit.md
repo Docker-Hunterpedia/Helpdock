@@ -209,8 +209,9 @@ What is left cannot be decided from the DOM or the computed style. It needs a
 human pass before 1.0, recorded here when done:
 
 - **Screen readers.** NVDA with Firefox, JAWS with Chrome, VoiceOver on macOS
-  Safari and on iOS, and TalkBack on Android. The specs above prove the markup
-  they read; what they say is the person's check:
+  Safari and on iOS, and TalkBack on Android. The steps, the fixtures and the
+  results table are in [the screen-reader pass](../guides/screen-reader-pass.md).
+  The specs above prove the markup they read; what they say is the person's check:
   - Chat: is each new message read once, and the banners once rather than on
     every reconnect attempt? Is the typing indicator quiet enough? Is "Sent" or
     "Seen" read only when focus is on the message?

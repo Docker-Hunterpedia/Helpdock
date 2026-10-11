@@ -170,6 +170,10 @@ describe('MetaAppService.card', () => {
 
     expect(metaAppSchema.parse(card)).toEqual({
       appIdSet: true,
+      appId: '1234567890123456',
+      appSecretSet: true,
+      instagramAppSecretSet: false,
+      graphVersion: 'v25.0',
       callbackUrl: 'https://support.example.com/api/meta/webhook',
       verifyTokenHint: expect.stringMatching(/^.{4}$/),
       secretsLockedByEnv: ['meta.appId', 'meta.appSecret'],
@@ -182,9 +186,37 @@ describe('MetaAppService.card', () => {
 
     const { result: card } = await asInstallAdmin(() => service.card());
 
-    expect(card).toMatchObject({ appIdSet: false, secretsLockedByEnv: [] });
+    expect(card).toMatchObject({
+      appIdSet: false,
+      appId: '',
+      appSecretSet: false,
+      instagramAppSecretSet: false,
+      secretsLockedByEnv: [],
+    });
     expect(card.verifyTokenHint).toHaveLength(4);
     await expect(service.currentVerifyToken()).resolves.not.toBe('');
+  });
+
+  it('reports the Graph version the install pins, and the built-in one otherwise', async () => {
+    const pinned = new MetaAppService(settingsWith(), {
+      APP_URL,
+      META_GRAPH_VERSION: 'v26.0',
+    });
+
+    const { result: card } = await asInstallAdmin(() => pinned.card());
+    const { result: fallback } = await asInstallAdmin(() => serviceWith().service.card());
+
+    expect(card.graphVersion).toBe('v26.0');
+    expect(fallback.graphVersion).toBe('v25.0');
+  });
+
+  it('says an Instagram app secret is set when one is, and still shows no secret', async () => {
+    const { service } = serviceWith({ HD_META_INSTAGRAM_APP_SECRET: 'instagram-secret' });
+
+    const { result: card } = await asInstallAdmin(() => service.card());
+
+    expect(card).toMatchObject({ appSecretSet: false, instagramAppSecretSet: true });
+    expect(JSON.stringify(card)).not.toContain('instagram-secret');
   });
 
   it('builds the callback URL on the origin of APP_URL, as the Telegram webhook does', () => {

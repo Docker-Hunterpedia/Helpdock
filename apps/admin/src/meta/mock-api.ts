@@ -113,6 +113,10 @@ export class MockMetaApi implements MetaApi {
     const at = now();
     this.#app = {
       appIdSet: true,
+      appId: '1290457718832406',
+      appSecretSet: true,
+      instagramAppSecretSet: true,
+      graphVersion: 'v25.0',
       callbackUrl: `${APP_URL}${metaWebhookPath()}`,
       verifyTokenHint: 'e2f7',
       secretsLockedByEnv: ['meta.appSecret'],

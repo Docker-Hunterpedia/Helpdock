@@ -117,12 +117,12 @@ describe('Channels › Meta', () => {
       'https://support.helpdock.io/api/meta/webhook',
     );
     expect(within(card).getByLabelText('Verify token ending in e2f7')).toHaveValue('•••• e2f7');
-    expect(within(card).getByLabelText('App id')).toHaveValue('Set');
+    expect(within(card).getByLabelText('App id')).toHaveValue('1290457718832406');
     expect(within(card).getByText('Set by environment')).toBeVisible();
     expect(within(card).getByLabelText('App secret')).toHaveAttribute('readonly');
-    expect(within(card).getByLabelText('Instagram app secret')).toHaveValue(
-      'Not set by the environment',
-    );
+    expect(within(card).getByLabelText('App secret')).toHaveValue('••••••••••••');
+    expect(within(card).getByLabelText('Instagram app secret')).toHaveValue('Set');
+    expect(within(card).getByLabelText('Graph API version')).toHaveValue('v25.0');
     expect(within(card).getByText(/Last signed event \d\d:\d\d/)).toBeVisible();
   });
 
@@ -179,6 +179,30 @@ describe('Channels › Meta', () => {
     );
   });
 
+  it('says which settings are not set, and keeps Connect off until a secret and a verify token are', async () => {
+    const metaApi = new MockMetaApi();
+    vi.spyOn(metaApi, 'accounts').mockResolvedValue({ accounts: [] });
+    vi.spyOn(metaApi, 'app').mockResolvedValue({
+      appIdSet: false,
+      appId: '',
+      appSecretSet: false,
+      instagramAppSecretSet: false,
+      graphVersion: 'v26.0',
+      callbackUrl: 'https://support.helpdock.io/api/meta/webhook',
+      verifyTokenHint: 'e2f7',
+      secretsLockedByEnv: [],
+    });
+    await renderMeta({ metaApi });
+
+    const card = await screen.findByRole('region', { name: 'Meta app' }, LOAD);
+    expect(within(card).getByLabelText('App id')).toHaveValue('Not set');
+    expect(within(card).getByLabelText('App secret')).toHaveValue('Not set');
+    expect(within(card).getByLabelText('Instagram app secret')).toHaveValue('Not set');
+    expect(within(card).getByLabelText('Graph API version')).toHaveValue('v26.0');
+    expect(within(card).queryByText('Set by environment')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Connect account' })[1]).toBeDisabled();
+  });
+
   it('keeps the Meta app card from anyone who is not an install admin', async () => {
     await renderMeta({ installAdmin: false });
     await table();
@@ -215,6 +239,10 @@ describe('Channels › Meta', () => {
     vi.spyOn(metaApi, 'accounts').mockResolvedValue({ accounts: [] });
     vi.spyOn(metaApi, 'app').mockResolvedValue({
       appIdSet: true,
+      appId: '1290457718832406',
+      appSecretSet: true,
+      instagramAppSecretSet: false,
+      graphVersion: 'v25.0',
       callbackUrl: 'https://support.helpdock.io/api/meta/webhook',
       verifyTokenHint: '',
       secretsLockedByEnv: [],
@@ -226,7 +254,9 @@ describe('Channels › Meta', () => {
     ).toBeVisible();
     const buttons = screen.getAllByRole('button', { name: 'Connect account' });
     expect(buttons[1]).toBeDisabled();
-    expect(buttons[1]).toHaveAccessibleDescription(/An install admin has to set the Meta app id/);
+    expect(buttons[1]).toHaveAccessibleDescription(
+      /An install admin has to set the Meta app secret first/,
+    );
     expect(screen.getByRole('button', { name: 'Make one' })).toBeVisible();
   });
 

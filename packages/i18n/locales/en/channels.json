@@ -837,7 +837,7 @@
     "empty": {
       "heading": "No Meta accounts yet",
       "body": "Connect a WhatsApp number, a Facebook Page or an Instagram account, and everyone who writes to it becomes a contact, with their messages as tickets.",
-      "blocked": "An install admin has to set the Meta app id and secrets first, and make the verify token on the Meta app card."
+      "blocked": "An install admin has to set the Meta app secret first, and make the verify token on the Meta app card."
     },
     "arrive": {
       "heading": "How messages arrive",
@@ -881,18 +881,23 @@
       "installAdmins": "Install admins",
       "signed": "Last signed event {{time}}",
       "notSigned": "No signed event yet",
-      "notLocked": "Not set by the environment",
       "callback": {
         "label": "Callback URL",
         "hint": "Paste it under Webhooks for each product in the Meta dashboard. One address serves every brand on this install.",
         "copy": "Copy",
         "copyLabel": "Copy the callback URL"
       },
-      "appId": {
-        "label": "App id",
-        "hint": "From App settings › Basic in the Meta dashboard. An install setting: `HD_META_APP_ID`.",
+      "state": {
         "set": "Set",
         "notSet": "Not set"
+      },
+      "appId": {
+        "label": "App id",
+        "hint": "From App settings › Basic in the Meta dashboard. An install setting: `HD_META_APP_ID`."
+      },
+      "graphVersion": {
+        "label": "Graph API version",
+        "hint": "Every call to Meta names it. An install setting: `META_GRAPH_VERSION`. The operations guide says how to move to the next version."
       },
       "verify": {
         "label": "Verify token",
@@ -985,7 +990,7 @@
       "app-not-configured": "This install has no Meta app set up yet. An install admin sets the app id and secrets first.",
       "platform-mismatch": "That token is for a different Meta product than the platform you chose. Pick the matching platform or paste the matching token.",
       "reply-window-closed": "The reply window has closed. A reply can be written once the customer writes again.",
-      "subscribe-failed": "Meta refused to subscribe the app to this account. Check the app’s webhook settings, then try Subscribe now."
+      "subscribe-failed": "Meta refused to subscribe the app to this account. Check the token’s permissions and the app’s webhook settings, then connect again."
     },
     "detail": {
       "back": "Back to Meta accounts",

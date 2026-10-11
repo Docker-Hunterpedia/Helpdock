@@ -772,6 +772,10 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         appIdSet: false,
+        appId: '',
+        appSecretSet: true,
+        instagramAppSecretSet: false,
+        graphVersion: 'v25.0',
         callbackUrl: 'https://support.example.com/api/meta/webhook',
         verifyTokenHint: VERIFY_TOKEN.slice(-4),
         secretsLockedByEnv: [],

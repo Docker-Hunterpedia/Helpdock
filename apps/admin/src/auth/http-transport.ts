@@ -9,6 +9,7 @@ import type {
   IdentityProblem,
   KnowledgeRefusal,
   MetaRefusal,
+  MetaRefusalDetails,
   StaffRefusal,
   TelegramRefusal,
   TicketingRefusal,
@@ -236,7 +237,7 @@ const toError = async (
   let ai: AiRefusal | undefined;
   let knowledge: KnowledgeRefusal | undefined;
   let telegram: TelegramRefusal | undefined;
-  let meta: MetaRefusal | undefined;
+  let meta: { reason: MetaRefusal; details?: MetaRefusalDetails | undefined } | undefined;
   let assist: AssistRefusal | undefined;
   let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
 
@@ -253,7 +254,7 @@ const toError = async (
     ai = body.ai?.reason;
     knowledge = body.knowledge?.reason;
     telegram = body.telegram?.reason;
-    meta = body.meta?.reason;
+    meta = body.meta;
     assist = body.assist?.reason;
     webhooks = body.webhooks;
   } catch {
@@ -302,7 +303,7 @@ const toError = async (
   }
 
   if (meta !== undefined) {
-    return new MetaError(meta);
+    return new MetaError(meta.reason, meta.details);
   }
 
   if (assist !== undefined) {

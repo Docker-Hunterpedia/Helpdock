@@ -24,6 +24,11 @@ import type {
   ContactUpdateRequest,
 } from '@helpdock/schemas';
 import { CONTACT_PAGE_SIZE, normaliseIdentity } from '@helpdock/schemas';
+import {
+  MOCK_CONTACT_DANIEL,
+  MOCK_CONTACT_MESSENGER_USER,
+  MOCK_CONTACT_SARA,
+} from '../meta/mock-conversations.js';
 import { ContactError, type ContactsApi } from './api.js';
 
 /**
@@ -50,6 +55,8 @@ export const MOCK_CONTACT_GMAIL = '0192c3f0-1a2b-7c3d-8e4f-0000000000c2';
 export const MOCK_CONTACT_ARABIC = '0192c3f0-1a2b-7c3d-8e4f-0000000000c3';
 export const MOCK_CONTACT_ACCOUNT = '0192c3f0-1a2b-7c3d-8e4f-0000000000c4';
 export const MOCK_CONTACT_VISITOR = '0192c3f0-1a2b-7c3d-8e4f-0000000000c5';
+
+export { MOCK_CONTACT_DANIEL, MOCK_CONTACT_MESSENGER_USER, MOCK_CONTACT_SARA };
 
 export const MOCK_DUPLICATE = '0192c3f0-1a2b-7c3d-8e4f-0000000000d1';
 
@@ -114,13 +121,14 @@ const identity = (
   kind: ContactIdentityKind,
   value: string,
   verified = false,
+  source: ContactIdentity['source'] = verified ? 'email.inbound' : 'agent',
 ): ContactIdentity => ({
   id,
   kind,
   value,
   verified,
   verifiedAt: verified ? iso(30) : null,
-  source: verified ? 'email.inbound' : 'agent',
+  source,
 });
 
 const seedAccounts = (): Account[] => [
@@ -244,6 +252,84 @@ const seedContacts = (): MockContact[] => [
     anonymised: false,
     createdAt: iso(0),
     updatedAt: iso(0),
+  },
+  // M10-08: the customers of the three Meta tickets. Their identifiers are
+  // the platforms' own ids, verified by the platform, and none has an email.
+  {
+    id: MOCK_CONTACT_DANIEL,
+    name: 'Daniel Reyes',
+    accountId: null,
+    locale: 'en',
+    timezone: null,
+    externalId: null,
+    custom: {},
+    identities: [
+      identity(
+        '0192c3f0-1a2b-7c3d-8e4f-0000000000e9',
+        'whatsapp',
+        'US.13491208655302741918',
+        true,
+        'whatsapp.cloud',
+      ),
+      identity(
+        '0192c3f0-1a2b-7c3d-8e4f-0000000000ea',
+        'phone',
+        '+447700900123',
+        true,
+        'whatsapp.cloud',
+      ),
+    ],
+    notes: [],
+    stats: stats({ openTickets: 1, totalTickets: 2 }),
+    anonymised: false,
+    createdAt: iso(3),
+    updatedAt: iso(0),
+  },
+  {
+    id: MOCK_CONTACT_MESSENGER_USER,
+    name: 'Messenger user',
+    accountId: null,
+    locale: null,
+    timezone: null,
+    externalId: null,
+    custom: {},
+    identities: [
+      identity(
+        '0192c3f0-1a2b-7c3d-8e4f-0000000000eb',
+        'messenger',
+        '104857223916604:7120458839201457',
+        true,
+        'messenger.page',
+      ),
+    ],
+    notes: [],
+    stats: stats({ openTickets: 1, totalTickets: 1 }),
+    anonymised: false,
+    createdAt: iso(2),
+    updatedAt: iso(2),
+  },
+  {
+    id: MOCK_CONTACT_SARA,
+    name: 'Sara M.',
+    accountId: null,
+    locale: 'en',
+    timezone: null,
+    externalId: null,
+    custom: {},
+    identities: [
+      identity(
+        '0192c3f0-1a2b-7c3d-8e4f-0000000000ec',
+        'instagram',
+        '17841405822304914:6829104477310925',
+        true,
+        'instagram.account',
+      ),
+    ],
+    notes: [],
+    stats: stats({ openTickets: 1, totalTickets: 1 }),
+    anonymised: false,
+    createdAt: iso(9),
+    updatedAt: iso(9),
   },
 ];
 

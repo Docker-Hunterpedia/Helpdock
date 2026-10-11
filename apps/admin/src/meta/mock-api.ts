@@ -8,16 +8,28 @@ import {
   type MetaAccountStatusResponse,
   type MetaAccountUpdateRequest,
   type MetaApp,
+  type MetaDeliveryView,
   type MetaPlatform,
   type MetaSubscribeResult,
   type MetaTestResult,
+  type MetaTicketContext,
+  type MetaTicketContextResponse,
   type MetaTokenTestRequest,
   type MetaVerifyTokenReveal,
   metaAccountHealth,
   metaWebhookPath,
 } from '@helpdock/schemas';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
+import { metaDeliverySeed } from '../tickets/mock-meta-seed.js';
 import { type MetaApi, MetaError } from './api.js';
+import {
+  MOCK_META_CONVERSATIONS,
+  MOCK_TICKET_INSTAGRAM,
+  MOCK_TICKET_MESSENGER,
+  MOCK_TICKET_WHATSAPP,
+  mockAnchorAt,
+  mockReplyWindow,
+} from './mock-conversations.js';
 
 /**
  * The fixture behind Channels › Meta in the unit tests and the mock Playwright
@@ -105,12 +117,18 @@ const judge = (platform: MetaPlatform, token: string): Verdict => {
 export class MockMetaApi implements MetaApi {
   readonly #accounts = new Map<string, MetaAccount>();
   readonly #now: () => number;
+  /** When the fixture was built: the instant the Meta tickets' last customer messages are measured back from. */
+  readonly #epoch: number;
+  /** M10-08: each reply's delivery on the three Meta tickets, which Retry changes. */
+  readonly #deliveries: Record<string, MetaDeliveryView[]>;
   #app: MetaApp;
   #sequence = 0;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
     const at = now();
+    this.#epoch = at;
+    this.#deliveries = metaDeliverySeed(at);
     this.#app = {
       appIdSet: true,
       appId: '1290457718832406',
@@ -381,6 +399,109 @@ export class MockMetaApi implements MetaApi {
         openTickets: accountId === MOCK_WHATSAPP_ACCOUNT ? 14 : busy ? 9 : 0,
       },
     };
+  }
+
+  async ticketContext(_brandId: string, ticketId: string): Promise<MetaTicketContextResponse> {
+    await sleep();
+    const context = this.#ticketContext(ticketId);
+    if (context === null) {
+      return { context: null, deliveries: [] };
+    }
+
+    return {
+      context,
+      deliveries: (this.#deliveries[ticketId] ?? []).map((delivery) => ({
+        ...delivery,
+        leftOut: [...delivery.leftOut],
+      })),
+    };
+  }
+
+  async retryDelivery(_brandId: string, ticketId: string, deliveryId: string): Promise<void> {
+    await sleep();
+    const delivery = this.#deliveries[ticketId]?.find((candidate) => candidate.id === deliveryId);
+    const conversation = MOCK_META_CONVERSATIONS[ticketId];
+    if (delivery === undefined || conversation === undefined) {
+      throw new Error(`no such delivery: ${deliveryId}`);
+    }
+    if (delivery.status === 'refused') {
+      // The customer has to write first (DOMAIN-RULES §2.6): the same refusal
+      // a reply written after the window gets.
+      const window = mockReplyWindow(conversation, this.#epoch, this.#now());
+      throw new MetaError('reply-window-closed', {
+        platform: conversation.platform,
+        anchorAt: mockAnchorAt(conversation, this.#epoch),
+        closedAt: window.state === 'closed' ? window.closedAt : null,
+      });
+    }
+    if (delivery.status !== 'failed') {
+      return;
+    }
+    Object.assign(delivery, {
+      status: 'sent',
+      partsSent: delivery.partsTotal,
+      attempts: 0,
+      lastError: null,
+      errorCode: null,
+      failedAt: null,
+      sentAt: new Date(this.#now()).toISOString(),
+    } satisfies Partial<MetaDeliveryView>);
+  }
+
+  /** Who a fixture ticket is with and its window now, or null for any other ticket. */
+  #ticketContext(ticketId: string): MetaTicketContext | null {
+    const conversation = MOCK_META_CONVERSATIONS[ticketId];
+    if (conversation === undefined) {
+      return null;
+    }
+    const window = mockReplyWindow(conversation, this.#epoch, this.#now());
+    switch (ticketId) {
+      case MOCK_TICKET_WHATSAPP:
+        return {
+          account: {
+            id: MOCK_WHATSAPP_ACCOUNT,
+            platform: 'whatsapp',
+            externalId: MOCK_WHATSAPP_PHONE_ID,
+            displayName: 'Helpdock Support',
+            displayPhone: '+1 555 0142',
+          },
+          customerId: 'US.13491208655302741918',
+          phone: '+44 7700 900123',
+          phoneVerified: true,
+          profileName: 'Daniel R.',
+          window,
+        };
+      case MOCK_TICKET_MESSENGER:
+        return {
+          account: {
+            id: MOCK_MESSENGER_ACCOUNT,
+            platform: 'messenger',
+            externalId: MOCK_MESSENGER_PAGE_ID,
+            displayName: 'Helpdock',
+            username: 'Helpdock',
+          },
+          customerId: '7120458839201457',
+          phoneVerified: false,
+          window,
+        };
+      case MOCK_TICKET_INSTAGRAM:
+        return {
+          account: {
+            id: MOCK_INSTAGRAM_ACCOUNT,
+            platform: 'instagram',
+            externalId: MOCK_INSTAGRAM_ID,
+            displayName: 'Helpdock',
+            username: 'helpdock',
+          },
+          customerId: '6829104477310925',
+          phoneVerified: false,
+          profileName: 'Sara M.',
+          username: 'sara.makes',
+          window,
+        };
+      default:
+        return null;
+    }
   }
 
   #require(accountId: string): MetaAccount {

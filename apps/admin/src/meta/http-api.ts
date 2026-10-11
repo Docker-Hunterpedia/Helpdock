@@ -7,6 +7,7 @@ import {
   type MetaApp,
   type MetaSubscribeResult,
   type MetaTestResult,
+  type MetaTicketContextResponse,
   type MetaTokenTestRequest,
   type MetaVerifyTokenReveal,
   metaAccountListSchema,
@@ -15,6 +16,7 @@ import {
   metaAppSchema,
   metaSubscribeResultSchema,
   metaTestResultSchema,
+  metaTicketContextResponseSchema,
   metaVerifyTokenRevealSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
@@ -96,6 +98,23 @@ export class HttpMetaApi implements MetaApi {
     return metaAccountStatusResponseSchema.parse(
       await this.#transport.request('GET', `${this.#account(brandId, accountId)}/status`),
     );
+  }
+
+  async ticketContext(brandId: string, ticketId: string): Promise<MetaTicketContextResponse> {
+    return metaTicketContextResponseSchema.parse(
+      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/meta`),
+    );
+  }
+
+  async retryDelivery(brandId: string, ticketId: string, deliveryId: string): Promise<void> {
+    await this.#transport.request(
+      'POST',
+      `${this.#ticket(brandId, ticketId)}/meta/deliveries/${encodeURIComponent(deliveryId)}/retry`,
+    );
+  }
+
+  #ticket(brandId: string, ticketId: string): string {
+    return `/brands/${encodeURIComponent(brandId)}/tickets/${encodeURIComponent(ticketId)}`;
   }
 
   #accounts(brandId: string): string {

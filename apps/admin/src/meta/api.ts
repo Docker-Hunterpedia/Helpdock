@@ -6,8 +6,10 @@ import type {
   MetaAccountUpdateRequest,
   MetaApp,
   MetaRefusal,
+  MetaRefusalDetails,
   MetaSubscribeResult,
   MetaTestResult,
+  MetaTicketContextResponse,
   MetaTokenTestRequest,
   MetaVerifyTokenReveal,
 } from '@helpdock/schemas';
@@ -20,8 +22,9 @@ import type {
  * `TelegramApi`: one interface, two adapters, and refusals that cross as a code
  * the screen picks a sentence for.
  *
- * The ticket view's half (the reply window, each reply's delivery and Retry) is
- * M10-08's and joins this interface there.
+ * The ticket view's half (M10-08, `Admin/Ticket-Meta`) is `ticketContext` and
+ * `retryDelivery`: who a WhatsApp, Messenger or Instagram ticket is with, the
+ * reply window for a person writing now, and what happened to each reply.
  */
 export interface MetaApi {
   /** The App card, for install admins: the callback URL and what the settings hold. */
@@ -45,6 +48,18 @@ export interface MetaApi {
   /** "Subscribe now": the Meta app to the account's webhook fields. */
   subscribe(brandId: string, accountId: string): Promise<MetaSubscribeResult>;
   status(brandId: string, accountId: string): Promise<MetaAccountStatusResponse>;
+
+  /**
+   * M10-08: the conversation behind a Meta ticket, its reply window, and the
+   * deliveries of its replies. `context` is null for a ticket that is not on a
+   * Meta channel or has no conversation.
+   */
+  ticketContext(brandId: string, ticketId: string): Promise<MetaTicketContextResponse>;
+  /**
+   * M10-08: puts a `failed` delivery back. A `refused` one throws
+   * `MetaError('reply-window-closed')`: the customer has to write first.
+   */
+  retryDelivery(brandId: string, ticketId: string, deliveryId: string): Promise<void>;
 }
 
 export const metaKeys = {
@@ -54,15 +69,19 @@ export const metaKeys = {
     ['meta', brandId, 'accounts', accountId] as const,
   status: (brandId: string, accountId: string) =>
     ['meta', brandId, 'accounts', accountId, 'status'] as const,
+  ticket: (brandId: string, ticketId: string) => ['meta', brandId, 'tickets', ticketId] as const,
 };
 
 export class MetaError extends Error {
   readonly reason: MetaRefusal;
+  /** What a `reply-window-closed` refusal adds: the platform and when the window closed. */
+  readonly details: MetaRefusalDetails | undefined;
 
-  constructor(reason: MetaRefusal) {
+  constructor(reason: MetaRefusal, details?: MetaRefusalDetails) {
     super(`meta: ${reason}`);
     this.name = 'MetaError';
     this.reason = reason;
+    this.details = details;
   }
 }
 

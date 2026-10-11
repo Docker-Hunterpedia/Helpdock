@@ -67,6 +67,12 @@ import {
 } from '../contacts/mock-api.js';
 import { MOCK_CSAT_TOKENS } from '../csat/mock-api.js';
 import type { MockAttachmentUploader } from '../media/mock-uploader.js';
+import { MetaError } from '../meta/api.js';
+import {
+  MOCK_META_CONVERSATIONS,
+  mockAnchorAt,
+  mockReplyWindow,
+} from '../meta/mock-conversations.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
 import type { TicketingApi } from '../ticketing/api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -74,6 +80,7 @@ import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import type { MockMacros } from '../ticketing/mock-macros.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
+import { metaSeed } from './mock-meta-seed.js';
 import { mockSlaOf, mockSlaSummaryOf } from './mock-sla.js';
 import { MockViews } from './mock-views.js';
 
@@ -652,7 +659,15 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
     },
   ];
 
-  return { tickets, messages, activity };
+  // M10-08: one ticket per Meta platform, which the Meta fixture reads the
+  // window and the deliveries of.
+  const meta = metaSeed({ at, ticket, message, open: byId(MOCK_STATUS_OPEN) });
+
+  return {
+    tickets: [...tickets, ...meta.tickets],
+    messages: [...messages, ...meta.messages],
+    activity,
+  };
 };
 
 /** A ready file the customer sent on Telegram, as the media pipeline leaves it. */
@@ -1064,6 +1079,7 @@ export class MockTicketsApi implements TicketsApi {
     request: MessageCreateRequest,
   ): Promise<TicketMessage> {
     const ticket = this.#require(ticketId);
+    this.#assertCanDeliver(ticket, request);
 
     // DOMAIN-RULES §7: `(conversation_id, client_id)` is unique, so a retry
     // gets the message the first attempt wrote, with the same id and the same
@@ -1729,6 +1745,28 @@ export class MockTicketsApi implements TicketsApi {
       // M3-02: the SlaTimer the api judges, drawn from the fixture's due dates.
       sla: mockSlaSummaryOf(ticket, this.#now),
     };
+  }
+
+  /**
+   * M10-06's compose-time refusal (DOMAIN-RULES §2.6): a public reply on a Meta
+   * ticket whose window has closed is a 409 with `reply-window-closed` and
+   * writes nothing. The window is read at the moment of the send, from the
+   * browser's clock, so a test that moves the clock past the closing time gets
+   * the refusal an agent would get in the minute before the strip noticed.
+   */
+  #assertCanDeliver(ticket: Ticket, request: MessageCreateRequest): void {
+    const conversation = MOCK_META_CONVERSATIONS[ticket.id];
+    if (conversation === undefined || request.kind !== 'public') {
+      return;
+    }
+    const window = mockReplyWindow(conversation, this.#now, Date.now());
+    if (window.state === 'closed') {
+      throw new MetaError('reply-window-closed', {
+        platform: conversation.platform,
+        anchorAt: mockAnchorAt(conversation, this.#now),
+        closedAt: window.closedAt,
+      });
+    }
   }
 
   #require(ticketId: string): Ticket {

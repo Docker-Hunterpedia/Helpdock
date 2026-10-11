@@ -14,7 +14,7 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
 | M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | planned; vendor, budget and test window required |
-| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. Re-walk the chapters M6, M7 and M8 touched |
+| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. The re-walk of M6, M7 and M8 found more; the ones fixable in code are closed ([notes](#m9-02-re-walk-of-m6-m7-and-m8)) |
 | M9-03 | Load tests | #154 | in progress: suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); **the §14 host run is outstanding** |
 | M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | shipped (#147): [notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md); **the screen-reader pass needs a person** |
 | M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | #152, #156 | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); #152 patches the open Fastify advisory; the first release-tag ZAP run passed and #156 is closed |
@@ -136,6 +136,44 @@ minutes and waited for the clock before each code. The Compose smoke test
 (`scripts/compose-smoke.sh`) walks the wizard's administrator through the
 enrolment the first sign-in now demands, computing the code from the secret
 the api hands back.
+
+## M9-02 Re-walk of M6, M7 and M8
+
+The re-walk of 2026-10-09 found a second set of gaps in the chapters M6, M7 and
+M8 touched. The ones fixable in code are closed, each with tests and its guide
+updated; the rows of [asvs-l2](../completed/asvs-l2.md) are changed with the
+write-up of the re-walk, not here:
+
+- **Webhook events and scopes (4.1.3).** `webhooks:manage` alone cannot
+  subscribe to events whose data needs `tickets:read`, `contacts:read` or
+  `articles:read`: create, update, rotate and replay answer 403
+  `webhook-event-scope`.
+- **DOCX unpacking (12.1.2).** At most 1,000 entries and 100 MiB declared, and
+  each entry is inflated once up to its declared size, before mammoth runs.
+- **Erasure (8.3.2).** "Anonymise contact" also deletes the contact's Telegram
+  chats, clears the redaction maps of AI calls on their tickets and deletes the
+  webhook deliveries that carry their data.
+- **Delivery logs (8.3.8).** The nightly run deletes webhook and Telegram
+  deliveries after 30 days and idempotency keys after 24 hours.
+- **Model endpoints (12.6.1, 9.2.2).** A provider, embeddings or transcription
+  URL is checked when saved, by the check webhook endpoints pass.
+- **Refused keys (7.2.1).** A warning with the key prefix and address, and an
+  `api_key.refused` audit row for a revoked or expired key.
+- **Cache-Control (8.2.1).** `no-store` on every JSON answer that did not choose
+  its own.
+- **OpenAPI version (14.3.3).** The public document shows the API version, `1`.
+- **Key expiry (2.10.1, 3.5.2).** Optional `expiresAt` on a key (migration
+  0049). API only: the Create dialog draws no field, so the screen waits for an
+  artboard.
+- **Also fixed:** the connector OAuth `state` is single-use; an API key gets 403
+  on `@Authenticated` staff routes instead of a 500.
+
+Not done, and why: re-authentication before creating a key (3.7.1) and a field
+and column for the key's expiry need the Create dialog changed, so an artboard
+first; PKCE for Google Drive; running the DOCX read in a worker with a memory
+limit; checking a provider's base URL again before each chat completion (chat
+completions go through the vendors' clients, so the save-time check is the only
+one, [ADR 0018](../decisions/0018-pi-ai-provider-layer.md)).
 
 ## M9-03 Outbox concurrency
 

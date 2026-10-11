@@ -1,7 +1,13 @@
+import type { DbTransaction } from '@helpdock/db';
 import { isVerifiedIdentity } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { ContactFailure } from './contact-failure.js';
-import { assertVerifiable, requireNormalised } from './identity.js';
+import {
+  assertVerifiable,
+  attachVerifiedIdentity,
+  planVerifiedAttach,
+  requireNormalised,
+} from './identity.js';
 
 /**
  * The parts of the seam that need no database. `findOrCreateContactByIdentity`
@@ -80,5 +86,56 @@ describe('ContactFailure', () => {
 
   it('never repeats the identifier that was refused', () => {
     expect(new ContactFailure('identity-taken').message).not.toContain('@');
+  });
+});
+
+describe('planVerifiedAttach (M10-03)', () => {
+  const MINE = 'contact-mine';
+  const THEIRS = 'contact-theirs';
+
+  it.each([
+    ['nobody holds it', undefined, 'attach'],
+    ['it is mine and proven', { contactId: MINE, verified: true }, 'unchanged'],
+    ['it is mine and typed', { contactId: MINE, verified: false }, 'verify'],
+    ['another contact typed it', { contactId: THEIRS, verified: false }, 'move'],
+    ['another contact proved it', { contactId: THEIRS, verified: true }, 'suggest'],
+  ] as const)('when %s, the plan is %s', (_case, holder, plan) => {
+    expect(planVerifiedAttach(holder, MINE)).toBe(plan);
+  });
+});
+
+describe('attachVerifiedIdentity (M10-03)', () => {
+  // Both refusals come before the first statement, so no transaction is needed;
+  // the rows it writes are proved against Postgres in `meta.integration.test.ts`.
+  const noTransaction = undefined as unknown as DbTransaction;
+
+  it('takes only an identifier a channel proved, never one an agent typed', async () => {
+    await expect(
+      attachVerifiedIdentity(noTransaction, 'brand', 'contact', {
+        kind: 'phone',
+        value: '+16505551234',
+        source: 'agent',
+      }),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it('refuses a source that cannot produce the kind, as the rest of the seam does', async () => {
+    await expect(
+      attachVerifiedIdentity(noTransaction, 'brand', 'contact', {
+        kind: 'phone',
+        value: '+16505551234',
+        source: 'telegram.bot',
+      }),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it('refuses a number that is not international before it looks anything up', async () => {
+    await expect(
+      attachVerifiedIdentity(noTransaction, 'brand', 'contact', {
+        kind: 'phone',
+        value: '650 555 1234',
+        source: 'whatsapp.cloud',
+      }),
+    ).rejects.toThrow(ContactFailure);
   });
 });

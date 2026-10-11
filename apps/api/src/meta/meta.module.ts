@@ -1,8 +1,10 @@
-import type { Env, Settings } from '@helpdock/config';
+import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Logger } from '../logging/logger.js';
+import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
 import { SETTINGS } from '../runtime/tokens.js';
+import { createMetaInboundService } from './factory.js';
 import { type GraphClientFactory, graphClientFactory } from './graph-client-factory.js';
 import { MetaRepository } from './meta.repository.js';
 import { MetaAppController } from './meta-app.controller.js';
@@ -34,6 +36,9 @@ export interface MetaModuleOverrides {
 /** The Graph client the Meta services share, for the providers of M10-04, -05, -07 and -10. */
 export const META_GRAPH = Symbol('helpdock.meta.graph');
 
+/** The router and the attachment sink the three inbound services share (M10-03). */
+export const META_INBOUND = Symbol('helpdock.meta.inbound');
+
 /**
  * M10 in the api: the App card (M10-02), the webhook (M10-02) and, as the
  * deliverables land, the accounts' routes (M10-07) and the ticket's delivery
@@ -53,10 +58,21 @@ export class MetaModule {
     readonly env: Env;
     readonly db: Db;
     readonly logger: Logger;
+    /** The bucket the media fetch writes to; built from the bootstrap keys unless a suite hands one in. */
+    readonly storage?: ObjectStorage;
     readonly overrides?: MetaModuleOverrides;
   }): DynamicModule {
     const { env, db, logger, overrides } = options;
     const repository = new MetaRepository();
+    const storage = options.storage ?? new S3ObjectStorage(createS3Client(env), env.S3_BUCKET);
+    const graph = overrides?.graph ?? graphClientFactory(env);
+    const inbound = createMetaInboundService({
+      db,
+      storage,
+      log: logger,
+      keyring: createKeyring(env),
+      graph,
+    });
     const handlers: MetaInboundHandlers = {
       ...unhandledInboundHandlers(logger),
       ...overrides?.inbound,
@@ -78,7 +94,8 @@ export class MetaModule {
           useFactory: (): MetaDeliveriesService =>
             new MetaDeliveriesService(repository, new OutboundMetaService(repository)),
         },
-        { provide: META_GRAPH, useValue: overrides?.graph ?? graphClientFactory(env) },
+        { provide: META_GRAPH, useValue: graph },
+        { provide: META_INBOUND, useValue: inbound },
         {
           provide: MetaAppService,
           inject: [SETTINGS],

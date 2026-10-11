@@ -1,6 +1,7 @@
 import {
   aiCalls,
   type DbTransaction,
+  metaConversations,
   telegramChats,
   telegramDeliveries,
   tickets,
@@ -46,6 +47,32 @@ export const eraseTelegramChats = async (
       );
   }
   return chats.length;
+};
+
+/**
+ * Their WhatsApp, Messenger and Instagram conversations (M10-03). The row holds
+ * the platform's id for them, their number, their profile name and their
+ * `@username`, so it goes, and a later message from that id finds no contact
+ * and files a new one, as an erased email address does.
+ *
+ * The replies delivered through the conversation go with it: `meta_deliveries`
+ * freezes the platform id in `customer_id` and cascades from the conversation,
+ * so there is no copy to rewrite as there is for a Telegram chat. A reply that
+ * was still queued finds no delivery when its job runs and sends nothing,
+ * which is the outcome `eraseTelegramChats` arranges by replacing the id. The
+ * thread keeps the reply (§11 keeps ticket bodies) and loses only the platform's
+ * report on it.
+ */
+export const eraseMetaConversations = async (
+  tx: DbTransaction,
+  brandId: string,
+  contactId: string,
+): Promise<number> => {
+  const conversations = await tx
+    .delete(metaConversations)
+    .where(and(eq(metaConversations.brandId, brandId), eq(metaConversations.contactId, contactId)))
+    .returning({ id: metaConversations.id });
+  return conversations.length;
 };
 
 /** Which tickets are the contact's, in one place; each caller picks the column it compares. */

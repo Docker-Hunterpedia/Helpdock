@@ -103,8 +103,9 @@ export const NAMESPACES = [
   'reports',
   // `Admin/Developers` (M8-01, M8-03): API keys and outbound webhooks.
   'developers',
-  // M10: what the api sends to a WhatsApp, Messenger or Instagram customer, in
-  // their language (the line for a file that was left out, M10-06).
+  // M10: the `meta` catalog. What the api writes into a Meta (WhatsApp, Messenger,
+  // Instagram) ticket's thread in the customer's language (a location, a story, a
+  // reaction; M10-03) and what it sends to the customer (a file left out; M10-06).
   'meta',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];

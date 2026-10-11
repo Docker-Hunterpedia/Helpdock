@@ -1,4 +1,17 @@
 {
+  "thread": {
+    "location": "Location",
+    "contact": "Contact",
+    "story": {
+      "reply": "Replied to your story",
+      "mention": "Mentioned you in their story"
+    },
+    "unsupported": "The customer sent something that cannot be shown here.",
+    "unsent": "The customer unsent this message.",
+    "reaction": "The customer reacted {{emoji}} to a message.",
+    "reactionRemoved": "The customer removed their reaction to a message.",
+    "numberChanged": "The customer's WhatsApp number changed from {{from}} to {{to}}."
+  },
   "reply": {
     "platform": {
       "whatsapp": "WhatsApp",

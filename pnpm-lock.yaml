@@ -636,6 +636,9 @@ importers:
       '@helpdock/db':
         specifier: workspace:*
         version: link:../db
+      '@helpdock/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       bullmq:
         specifier: 6.3.6
         version: 6.3.6(ioredis@6.0.0(supports-color@7.2.0))

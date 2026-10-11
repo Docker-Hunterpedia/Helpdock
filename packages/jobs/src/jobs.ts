@@ -1,3 +1,4 @@
+import { metaFileRefSchema } from '@helpdock/schemas';
 import { type Job, type JobsOptions, UnrecoverableError } from 'bullmq';
 import { z } from 'zod';
 import { QUEUE_NAMES, type QueueName } from './queues.js';
@@ -1390,6 +1391,50 @@ export const metaSendJob = defineJob({
   idempotencyKey: (payload) => `meta.send:${payload.deliveryId}`,
 });
 
+// Meta channels (M10)
+// --------------------------------------------------------------------------
+
+export const metaMediaFetchPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `pending` attachment the webhook filed, whose bytes this job fetches. */
+  attachmentId: z.uuid(),
+  /** The `meta_accounts` row whose token the fetch needs. */
+  accountId: z.uuid(),
+  /** A WhatsApp media id and digest, or a Messenger or Instagram CDN link. */
+  ref: metaFileRefSchema,
+});
+export type MetaMediaFetchPayload = z.infer<typeof metaMediaFetchPayloadSchema>;
+
+/** Attempts before a file Meta will not serve is `rejected` (M10-03). */
+export const META_MEDIA_FETCH_ATTEMPTS = 5;
+
+/**
+ * M10-03's `meta.media_fetch` (ADR 0025, 6; `inbound` queue): the bytes of a
+ * file a WhatsApp, Messenger or Instagram webhook named but did not carry.
+ * Meta wants the webhook answered within seconds, so the request files the
+ * message with a `pending` attachment and a `meta.media` outbox row, and this
+ * job, added with that row's id, fetches the file, checks it and hands it to
+ * `media.process` as for any upload.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "the Meta media fetch by the attachment
+ * id"). Five attempts backing off from 30 s: a WhatsApp media URL lives five
+ * minutes and every attempt asks Graph for a fresh one, and a CDN link that
+ * answers 404 may only be late. The last attempt settles the attachment as
+ * `rejected` instead of failing the job, so a file is never left `pending`.
+ */
+export const metaMediaFetchJob = defineJob({
+  name: 'meta.media_fetch',
+  queue: QUEUE_NAMES.inbound,
+  schema: metaMediaFetchPayloadSchema,
+  options: {
+    attempts: META_MEDIA_FETCH_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: ({ attachmentId }) => `meta.media_fetch:${attachmentId}`,
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -1429,10 +1474,11 @@ export const JOB_DEFINITIONS = Object.freeze({
 
   [aiAutoReplyJob.name]: aiAutoReplyJob,
 
-  // M10-10
+  // M10: each Meta job is added by the deliverable that builds it.
   [metaHealthJob.name]: metaHealthJob,
   [metaHealthScheduleJob.name]: metaHealthScheduleJob,
   [metaSendJob.name]: metaSendJob,
+  [metaMediaFetchJob.name]: metaMediaFetchJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

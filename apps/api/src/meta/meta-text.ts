@@ -1,14 +1,60 @@
+import type { MetaInboundLabels } from '@helpdock/channels';
 import { createI18n, type Locale } from '@helpdock/i18n';
 import { META_ATTACHMENT_LIMITS, type MetaPlatform } from '@helpdock/schemas';
 import type { MetaSkipReason } from './meta-attachments.js';
 
 /**
- * What the api says to a WhatsApp, Messenger or Instagram customer on its own
- * account (M10-06), in their language: the `meta` catalog, from one i18next
- * instance for the process, as `telegram-text.ts` has for the bot.
+ * The `meta` catalog, in the customer's language: what the api writes into a
+ * WhatsApp, Messenger or Instagram ticket's thread (the word for a shared
+ * location, the line for a story, the system lines for something it cannot
+ * show; M10-03 to M10-05) and what it says to the customer on the brand's own
+ * account (the line for a file that was left out; M10-06).
+ *
+ * One i18next instance for the process, for the reason `telegram-text.ts`
+ * gives: the catalogs are bundled, so a fixed `t` per locale is all a message
+ * needs. Read by the customer's language rather than the agent's, because the
+ * words are filed with the message and read by whoever opens the ticket.
  */
 
 const i18n = createI18n();
+
+/** `t` over the `meta` catalog. */
+export const metaText = (locale: Locale) => i18n.getFixedT(locale, 'meta');
+
+/** The words `toWhatsAppInboundMessage` (and its two siblings) file a message with. */
+export const metaInboundLabels = (locale: Locale): MetaInboundLabels => {
+  const t = metaText(locale);
+
+  return {
+    location: t('thread.location'),
+    contact: t('thread.contact'),
+    story: { reply: t('thread.story.reply'), mention: t('thread.story.mention') },
+  };
+};
+
+/** The system lines of a Meta ticket's thread, as a `ticket_messages.body_text`. */
+export const metaSystemLine = (
+  locale: Locale,
+  line:
+    | { readonly kind: 'unsupported' }
+    | { readonly kind: 'unsent' }
+    | { readonly kind: 'reaction'; readonly emoji: string | null }
+    | { readonly kind: 'numberChanged'; readonly from: string; readonly to: string },
+): string => {
+  const t = metaText(locale);
+  switch (line.kind) {
+    case 'unsupported':
+      return t('thread.unsupported');
+    case 'unsent':
+      return t('thread.unsent');
+    case 'reaction':
+      return line.emoji === null
+        ? t('thread.reactionRemoved')
+        : t('thread.reaction', { emoji: line.emoji });
+    case 'numberChanged':
+      return t('thread.numberChanged', { from: line.from, to: line.to });
+  }
+};
 
 /** First strong isolate and pop: a file name in Latin script stays in one piece inside Arabic text. */
 const FIRST_STRONG_ISOLATE = '⁨';
@@ -29,7 +75,7 @@ export const fileLeftOutText = (input: {
   /** A file, not an image or a clip: what the platform's file list is about. */
   readonly isFile: boolean;
 }): string => {
-  const t = i18n.getFixedT(input.locale, 'meta');
+  const t = metaText(input.locale);
   const key =
     input.reason === 'too-large'
       ? 'reply.fileTooLarge'

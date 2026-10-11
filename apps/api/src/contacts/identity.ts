@@ -376,6 +376,130 @@ export const attachUnverifiedIdentity = async (
   return null;
 };
 
+/** What {@link attachVerifiedIdentity} does about the value's current holder. */
+export type VerifiedAttachPlan = 'attach' | 'unchanged' | 'verify' | 'move' | 'suggest';
+
+/**
+ * The decision of {@link attachVerifiedIdentity}, from who holds the value now.
+ * A function of its own so the table in that comment is tested without a database.
+ */
+export const planVerifiedAttach = (
+  holder: { readonly contactId: string; readonly verified: boolean } | undefined,
+  contactId: string,
+): VerifiedAttachPlan => {
+  if (holder === undefined) {
+    return 'attach';
+  }
+  if (holder.contactId === contactId) {
+    return holder.verified ? 'unchanged' : 'verify';
+  }
+
+  return holder.verified ? 'suggest' : 'move';
+};
+
+/** What {@link attachVerifiedIdentity} did, for the caller to log or count. */
+export interface VerifiedAttachment {
+  readonly plan: VerifiedAttachPlan;
+  /** The row that holds the value afterwards: this contact's, unless the plan was `suggest`. */
+  readonly identity: ContactIdentityRow;
+  /** The other contact, for `move` (it lost the value) and `suggest` (it kept it). */
+  readonly otherContactId: string | null;
+}
+
+/**
+ * An identifier a channel proved, recorded on a contact the channel already
+ * found by another identifier: the `wa_id` of a WhatsApp message, which
+ * arrives beside the business-scoped user id the contact is keyed on
+ * (DOMAIN-RULES §4.4, §4.7). Where {@link findOrCreateContactByIdentity}
+ * returns the other contact when a proven value matches a proven one, this
+ * cannot: the contact is already settled, and merging two of them is an agent's
+ * decision, not something to do in the middle of a webhook.
+ *
+ * | Who holds the value | What happens |
+ * |---|---|
+ * | nobody | it is recorded on this contact, verified (`attach`) |
+ * | this contact, typed | it is marked verified (`verify`) |
+ * | this contact, proven | nothing (`unchanged`) |
+ * | another contact, typed | it **moves** here, verified, and the pair is suggested as duplicates, as `takeVerified` does for a new contact (`move`) |
+ * | another contact, proven | nothing moves; the pair is suggested as duplicates (`suggest`) |
+ *
+ * An agent's typed number was a hint and this is the proof, so it moves; two
+ * proofs of one value are two contacts for one person, which is a merge.
+ */
+export const attachVerifiedIdentity = async (
+  tx: DbTransaction,
+  brandId: string,
+  contactId: string,
+  claim: IdentityClaim,
+): Promise<VerifiedAttachment> => {
+  if (!isVerifiedIdentity(claim.kind, claim.source)) {
+    throw new TypeError(`attachVerifiedIdentity takes proven identifiers, not ${claim.source}`);
+  }
+  const value = requireNormalised(claim.kind, claim.value);
+  const holder = await findByIdentity(tx, brandId, claim.kind, value);
+  const plan = planVerifiedAttach(holder, contactId);
+
+  if (holder === undefined) {
+    const identity = await insertIdentity(tx, {
+      brandId,
+      contactId,
+      kind: claim.kind,
+      value,
+      verified: true,
+      source: claim.source,
+    });
+    return { plan, identity, otherContactId: null };
+  }
+  if (plan === 'unchanged') {
+    return { plan, identity: holder, otherContactId: null };
+  }
+  if (plan === 'verify') {
+    return {
+      plan,
+      identity: await takeVerified(tx, holder.id, contactId, claim.source),
+      otherContactId: null,
+    };
+  }
+
+  await suggestDuplicate(tx, {
+    brandId,
+    contactId,
+    otherContactId: holder.contactId,
+    reason: claim.kind,
+  });
+  return {
+    plan,
+    identity: plan === 'move' ? await takeVerified(tx, holder.id, contactId, claim.source) : holder,
+    otherContactId: holder.contactId,
+  };
+};
+
+/**
+ * Takes an identifier off a contact that holds it, for a channel that learned
+ * it is no longer theirs (a customer's WhatsApp number changed). Answers
+ * whether this contact held it.
+ */
+export const removeIdentity = async (
+  tx: DbTransaction,
+  brandId: string,
+  contactId: string,
+  claim: Pick<IdentityClaim, 'kind' | 'value'>,
+): Promise<boolean> => {
+  const removed = await tx
+    .delete(contactIdentities)
+    .where(
+      and(
+        eq(contactIdentities.brandId, brandId),
+        eq(contactIdentities.contactId, contactId),
+        eq(contactIdentities.kind, claim.kind),
+        eq(contactIdentities.value, requireNormalised(claim.kind, claim.value)),
+      ),
+    )
+    .returning({ id: contactIdentities.id });
+
+  return removed.length > 0;
+};
+
 // --------------------------------------------------------------------------
 
 const contactById = async (

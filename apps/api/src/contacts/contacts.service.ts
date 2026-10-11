@@ -538,6 +538,7 @@ export class ContactsService {
         attachmentCount: traces.attachments,
         messageCount: traces.messages,
         telegramChatCount: traces.telegramChats,
+        metaConversationCount: traces.metaConversations,
         aiCallCount: traces.aiCalls,
         webhookDeliveryCount: traces.webhookDeliveries,
       },

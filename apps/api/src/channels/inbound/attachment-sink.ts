@@ -44,7 +44,7 @@ export const kindForMime = (mime: string): AttachmentKind => {
 };
 
 /** `image/png; name=x` → `image/png`. */
-const bareMime = (contentType: string): string =>
+export const bareMime = (contentType: string): string =>
   (contentType.split(';')[0] ?? '').trim().toLowerCase() || 'application/octet-stream';
 
 export class StorageAttachmentSink implements AttachmentSink {

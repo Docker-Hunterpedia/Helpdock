@@ -35,6 +35,7 @@ import {
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
   metaHealthScheduleJob,
+  metaMediaFetchJob,
   metaSendJob,
   notifyEmailJob,
   notifyPushJob,
@@ -141,6 +142,7 @@ import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
+import { createMetaInboundService } from '../meta/factory.js';
 import { graphClientFactory } from '../meta/graph-client-factory.js';
 import { MetaRepository } from '../meta/meta.repository.js';
 import { registerMetaEventHandlers } from '../meta/meta-events.js';
@@ -633,6 +635,14 @@ export const workerDependencies: WorkerDependencies = {
           await outbound.add(metaSendJob.name, payload, { ...metaSendJob.options, jobId });
         },
       },
+      mediaQueue: {
+        add: async ({ jobId, payload }) => {
+          await inbound.add(metaMediaFetchJob.name, payload, {
+            ...metaMediaFetchJob.options,
+            jobId,
+          });
+        },
+      },
     });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
@@ -1080,11 +1090,24 @@ export const workerDependencies: WorkerDependencies = {
       }),
     });
 
+    // M10-03: the files a Meta message named, fetched after the webhook answered.
+    const metaMediaFetch = createMetaInboundService({
+      db,
+      storage: storageFor(env),
+      log,
+      keyring: createKeyring(env),
+      graph: graphClientFactory(env),
+    }).mediaFetch;
+
     const worker = new Worker(
       QUEUE_NAMES.inbound,
       async (job) => {
         if (job.name === telegramPollJob.name) {
           await telegramPoll(job);
+          return;
+        }
+        if (job.name === metaMediaFetchJob.name) {
+          await metaMediaFetch(job);
           return;
         }
         // `form.submit` shares this queue from M4.

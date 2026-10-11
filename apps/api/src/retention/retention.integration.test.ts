@@ -16,6 +16,9 @@ import {
   type DbTransaction,
   departments,
   jobReceipts,
+  metaAccounts,
+  metaConversations,
+  metaDeliveries,
   notifications,
   outbox,
   retentionSettings,
@@ -798,6 +801,100 @@ describe.skipIf(!hasDocker)('data retention', () => {
       ).toMatchObject({ webhookDeliveries: 0, telegramDeliveries: 0, idempotencyKeys: 0 });
     });
 
+    it('purges Meta deliveries past 30 days once they have an outcome, and keeps the queued and the recent (M10-03)', async () => {
+      const ages = [
+        ['sent', 31],
+        ['delivered', 40],
+        ['read', 45],
+        ['failed', 50],
+        ['refused', 60],
+        ['queued', 40],
+        ['sent', 1],
+      ] as const;
+      const owned: SeededTicket[] = [];
+      for (let index = 0; index < ages.length; index += 1) {
+        owned.push(await seedTicket(brandA, { status: 'open' }));
+      }
+      const foreign = await seedTicket(brandB, { status: 'open' });
+
+      const seedMeta = async (
+        brand: BrandFixture,
+        rows: readonly { ticket: SeededTicket; status: (typeof ages)[number][0]; age: number }[],
+      ) =>
+        withSystem(db(), brand.id, async (tx) => {
+          const [account] = await tx
+            .insert(metaAccounts)
+            .values({
+              brandId: brand.id,
+              platform: 'whatsapp',
+              departmentId: brand.departmentId,
+              externalId: String(Math.floor(Math.random() * 1e12)),
+              displayName: 'Retention number',
+              accessToken: 'v1.sealed',
+              tokenKind: 'system_user',
+              tokenUpdatedAt: new Date(),
+            })
+            .returning({ id: metaAccounts.id });
+          const [contact] = await tx
+            .insert(contacts)
+            .values({ brandId: brand.id, name: 'Mona' })
+            .returning({ id: contacts.id });
+          const [conversation] = await tx
+            .insert(metaConversations)
+            .values({
+              brandId: brand.id,
+              accountId: account?.id ?? '',
+              customerId: 'US.13491208655302741918',
+              contactId: contact?.id ?? '',
+            })
+            .returning({ id: metaConversations.id });
+          return tx
+            .insert(metaDeliveries)
+            .values(
+              rows.map((row) => ({
+                brandId: brand.id,
+                departmentId: brand.departmentId,
+                ticketId: row.ticket.id,
+                ticketMessageId: row.ticket.messageId,
+                accountId: account?.id ?? '',
+                conversationId: conversation?.id ?? '',
+                customerId: 'US.13491208655302741918',
+                status: row.status,
+                createdAt: daysAgo(row.age),
+              })),
+            )
+            .returning({ id: metaDeliveries.id, status: metaDeliveries.status });
+        });
+      const mine = await seedMeta(
+        brandA,
+        owned.map((ticket, index) => ({
+          ticket,
+          status: ages[index]?.[0] ?? 'sent',
+          age: ages[index]?.[1] ?? 0,
+        })),
+      );
+      await seedMeta(brandB, [{ ticket: foreign, status: 'sent', age: 90 }]);
+
+      const counts = await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-meta' });
+
+      // The five that ended and are past 30 days; the queued one and the day-old one stay.
+      expect(counts.metaDeliveries).toBe(5);
+      const left = await withSystem(db(), brandA.id, (tx) =>
+        tx.select({ id: metaDeliveries.id }).from(metaDeliveries),
+      );
+      expect(left.map((row) => row.id).sort()).toEqual([mine[5]?.id, mine[6]?.id].sort());
+      expect(mine[5]?.status).toBe('queued');
+      expect(
+        await withSystem(db(), brandB.id, (tx) =>
+          tx.select({ id: metaDeliveries.id }).from(metaDeliveries),
+        ),
+      ).toHaveLength(1);
+      expect(
+        (await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-meta-again' }))
+          .metaDeliveries,
+      ).toBe(0);
+    });
+
     it('removes expired closed and spam tickets with their messages, rows and objects, and nothing else', async () => {
       await setClosedWindow(brandA.id, 30);
       const expired = await seedTicket(brandA, {
@@ -1264,6 +1361,144 @@ describe.skipIf(!hasDocker)('data retention', () => {
           kind: 'telegram',
           value: CHAT,
           source: 'telegram.bot',
+        }),
+      );
+      expect(next).toMatchObject({ created: true });
+      expect(next.contact.id).not.toBe(contactId);
+    });
+
+    it('takes the WhatsApp conversation with its deliveries, and leaves other people alone (M10-03)', async () => {
+      const contactId = uuidv7();
+      const bystanderId = uuidv7();
+      const USER_ID = 'US.13491208655302741918';
+      const BYSTANDER_USER_ID = 'US.99999999999999999999';
+      let accountId = '';
+      await withSystem(db(), brandA.id, async (tx) => {
+        await tx.insert(contacts).values([
+          { id: contactId, brandId: brandA.id, name: 'Mona Khalil' },
+          { id: bystanderId, brandId: brandA.id, name: 'Omar Saleh' },
+        ]);
+        await tx.insert(contactIdentities).values([
+          {
+            brandId: brandA.id,
+            contactId,
+            kind: 'whatsapp',
+            value: USER_ID,
+            source: 'whatsapp.cloud',
+          },
+          {
+            brandId: brandA.id,
+            contactId,
+            kind: 'phone',
+            value: '+16505551234',
+            source: 'whatsapp.cloud',
+            verified: true,
+          },
+        ]);
+      });
+      const ticket = await seedTicket(brandA, { status: 'open', contactId });
+      const bystanderTicket = await seedTicket(brandA, { status: 'open', contactId: bystanderId });
+      await withSystem(db(), brandA.id, async (tx) => {
+        const [account] = await tx
+          .insert(metaAccounts)
+          .values({
+            brandId: brandA.id,
+            platform: 'whatsapp',
+            departmentId: brandA.departmentId,
+            externalId: String(Math.floor(Math.random() * 1e12)),
+            displayName: 'Acme',
+            accessToken: 'v1.sealed',
+            tokenKind: 'system_user',
+            tokenUpdatedAt: new Date(),
+          })
+          .returning({ id: metaAccounts.id });
+        accountId = account?.id ?? '';
+        const [mine, theirs] = await tx
+          .insert(metaConversations)
+          .values([
+            {
+              brandId: brandA.id,
+              accountId,
+              customerId: USER_ID,
+              contactId,
+              waId: '16505551234',
+              profileName: 'Mona Khalil',
+              ticketId: ticket.id,
+            },
+            {
+              brandId: brandA.id,
+              accountId,
+              customerId: BYSTANDER_USER_ID,
+              contactId: bystanderId,
+              waId: '16505550000',
+            },
+          ])
+          .returning({ id: metaConversations.id });
+        const delivery = (
+          ticketId: string,
+          ticketMessageId: string,
+          conversationId: string,
+          customerId: string,
+        ) => ({
+          brandId: brandA.id,
+          departmentId: brandA.departmentId,
+          ticketId,
+          ticketMessageId,
+          accountId,
+          conversationId,
+          customerId,
+          status: 'queued' as const,
+        });
+        await tx
+          .insert(metaDeliveries)
+          .values([
+            delivery(ticket.id, ticket.messageId, mine?.id ?? '', USER_ID),
+            delivery(
+              bystanderTicket.id,
+              bystanderTicket.messageId,
+              theirs?.id ?? '',
+              BYSTANDER_USER_ID,
+            ),
+          ]);
+      });
+
+      const response = await call<ContactDetail>(
+        'POST',
+        `/api/brands/${brandA.id}/contacts/${contactId}/anonymise`,
+        adminToken,
+      );
+      expect(response.status).toBe(201);
+
+      const after = await withSystem(db(), brandA.id, async (tx) => ({
+        conversations: await tx
+          .select()
+          .from(metaConversations)
+          .where(eq(metaConversations.accountId, accountId)),
+        deliveries: await tx
+          .select()
+          .from(metaDeliveries)
+          .where(eq(metaDeliveries.accountId, accountId)),
+        audit: (
+          await tx
+            .select()
+            .from(auditLog)
+            .where(and(eq(auditLog.action, 'contact.anonymised'), eq(auditLog.targetId, contactId)))
+        )[0],
+      }));
+      // The number, the name and the platform id are gone with the conversation; so is the
+      // delivery that froze the id, so a reply still queued finds nothing to send.
+      expect(after.conversations.map((row) => row.customerId)).toEqual([BYSTANDER_USER_ID]);
+      expect(after.deliveries.map((row) => row.customerId)).toEqual([BYSTANDER_USER_ID]);
+      expect(after.audit?.meta).toMatchObject({ metaConversationCount: 1 });
+      expect(JSON.stringify(after)).not.toContain('16505551234');
+      expect(JSON.stringify(after.audit?.meta)).not.toContain(USER_ID);
+
+      // A later message from the same person meets nobody and files a new contact.
+      const next = await withSystem(db(), brandA.id, (tx) =>
+        findOrCreateContactByIdentity(tx, brandA.id, {
+          kind: 'whatsapp',
+          value: USER_ID,
+          source: 'whatsapp.cloud',
         }),
       );
       expect(next).toMatchObject({ created: true });

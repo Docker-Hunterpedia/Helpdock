@@ -1,15 +1,6 @@
 import type { ContactIdentity, ContactIdentityKind } from '@helpdock/schemas';
 import { Box, Typography } from '@mui/material';
-import {
-  Camera,
-  Code,
-  Mail,
-  MessageCircle,
-  MessageSquareText,
-  MessagesSquare,
-  Phone,
-  Send,
-} from 'lucide-react';
+import { Camera, Code, Mail, MessageCircle, MessagesSquare, Phone, Send } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -24,17 +15,14 @@ import { identityLabel, initialsOf } from './format.js';
  * be readable by somebody who cannot tell green from grey.
  */
 
-/**
- * DESIGN §5: one icon per channel, from the set the whole product uses. The
- * three Meta icons are stand-ins until the M10 artboards pick theirs.
- */
+/** DESIGN §5: one icon per channel, from the set the whole product uses. */
 export const CHANNEL_ICONS = {
   email: Mail,
   phone: Phone,
   telegram: Send,
   visitor: MessageCircle,
   external: Code,
-  whatsapp: MessageSquareText,
+  whatsapp: Phone,
   messenger: MessagesSquare,
   instagram: Camera,
 } as const;

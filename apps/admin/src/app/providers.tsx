@@ -29,6 +29,8 @@ import { HelpCenterApiProvider } from '../help-center/context.tsx';
 import type { KnowledgeApi } from '../knowledge/api.js';
 import { KnowledgeApiProvider } from '../knowledge/context.tsx';
 import type { AttachmentUploader } from '../media/upload.js';
+import type { MetaApi } from '../meta/api.js';
+import { MetaApiProvider } from '../meta/context.tsx';
 import type { NotificationsApi } from '../notifications/api.js';
 import type { BrowserPush } from '../notifications/browser-push.js';
 import { NotificationsProvider } from '../notifications/context.tsx';
@@ -147,6 +149,8 @@ export interface AppProvidersProps {
   readonly settingsApi?: SettingsApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
+  /** Defaults to the matching adapter. Channels › Meta and a Meta ticket read it (M10). */
+  readonly metaApi?: MetaApi;
   /** Defaults to the matching adapter. The ticket view and Help center › Proposals read it (M7). */
   readonly assistApi?: AssistApi;
   /** Defaults to the matching adapter. Only the Developers page reads it (M8-01, M8-03). */
@@ -190,6 +194,7 @@ export function AppProviders({
   systemApi,
   settingsApi,
   telegramApi,
+  metaApi,
   assistApi,
   developersApi,
   queryClient,
@@ -225,6 +230,7 @@ export function AppProviders({
   const system = systemApi ?? fallback.system;
   const settings = settingsApi ?? fallback.settings;
   const telegram = telegramApi ?? fallback.telegram;
+  const meta = metaApi ?? fallback.meta;
   const assist = assistApi ?? fallback.assist;
   const developers = developersApi ?? fallback.developers;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
@@ -298,23 +304,25 @@ export function AppProviders({
                     <AiApiProvider api={ai}>
                       <KnowledgeApiProvider api={knowledge}>
                         <TelegramApiProvider api={telegram}>
-                          <DevelopersApiProvider api={developers}>
-                            <HelpCenterApiProvider api={helpCenter}>
-                              <AssistApiProvider api={assist}>
-                                <ReportsApiProvider api={reports}>
-                                  <SystemApiProvider api={system}>
-                                    <SettingsApiProvider api={settings}>
-                                      <NotificationsProvider api={notifications} push={push}>
-                                        <ToastProvider>
-                                          <Router>{children}</Router>
-                                        </ToastProvider>
-                                      </NotificationsProvider>
-                                    </SettingsApiProvider>
-                                  </SystemApiProvider>
-                                </ReportsApiProvider>
-                              </AssistApiProvider>
-                            </HelpCenterApiProvider>
-                          </DevelopersApiProvider>
+                          <MetaApiProvider api={meta}>
+                            <DevelopersApiProvider api={developers}>
+                              <HelpCenterApiProvider api={helpCenter}>
+                                <AssistApiProvider api={assist}>
+                                  <ReportsApiProvider api={reports}>
+                                    <SystemApiProvider api={system}>
+                                      <SettingsApiProvider api={settings}>
+                                        <NotificationsProvider api={notifications} push={push}>
+                                          <ToastProvider>
+                                            <Router>{children}</Router>
+                                          </ToastProvider>
+                                        </NotificationsProvider>
+                                      </SettingsApiProvider>
+                                    </SystemApiProvider>
+                                  </ReportsApiProvider>
+                                </AssistApiProvider>
+                              </HelpCenterApiProvider>
+                            </DevelopersApiProvider>
+                          </MetaApiProvider>
                         </TelegramApiProvider>
                       </KnowledgeApiProvider>
                     </AiApiProvider>

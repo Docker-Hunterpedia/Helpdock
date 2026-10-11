@@ -13,9 +13,9 @@ import {
   FileText,
   Mail,
   MessageCircle,
-  MessageSquareText,
   MessagesSquare,
   PauseCircle,
+  Phone,
   Plug,
   Send,
   SquarePen,
@@ -214,7 +214,6 @@ export function SlaTimer({
   );
 }
 
-// The three Meta icons are stand-ins until the M10 artboards pick theirs.
 const CHANNEL_ICONS = {
   email: Mail,
   chat: MessageCircle,
@@ -222,7 +221,7 @@ const CHANNEL_ICONS = {
   form: FileText,
   api: Plug,
   manual: SquarePen,
-  whatsapp: MessageSquareText,
+  whatsapp: Phone,
   messenger: MessagesSquare,
   instagram: Camera,
 } as const;

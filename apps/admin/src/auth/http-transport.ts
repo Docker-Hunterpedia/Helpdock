@@ -8,6 +8,7 @@ import type {
   HcRefusal,
   IdentityProblem,
   KnowledgeRefusal,
+  MetaRefusal,
   StaffRefusal,
   TelegramRefusal,
   TicketingRefusal,
@@ -23,6 +24,7 @@ import { WebhooksError } from '../developers/api.js';
 import { DomainsError } from '../domains/api.js';
 import { HelpCenterError } from '../help-center/api.js';
 import { KnowledgeError } from '../knowledge/api.js';
+import { MetaError } from '../meta/api.js';
 import { StaffError } from '../staff/api.js';
 import { TelegramError } from '../telegram/api.js';
 import { TicketingError } from '../ticketing/api.js';
@@ -216,6 +218,7 @@ const toError = async (
   | DomainsError
   | HelpCenterError
   | KnowledgeError
+  | MetaError
   | StaffError
   | TelegramError
   | TicketingError
@@ -233,6 +236,7 @@ const toError = async (
   let ai: AiRefusal | undefined;
   let knowledge: KnowledgeRefusal | undefined;
   let telegram: TelegramRefusal | undefined;
+  let meta: MetaRefusal | undefined;
   let assist: AssistRefusal | undefined;
   let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
 
@@ -249,6 +253,7 @@ const toError = async (
     ai = body.ai?.reason;
     knowledge = body.knowledge?.reason;
     telegram = body.telegram?.reason;
+    meta = body.meta?.reason;
     assist = body.assist?.reason;
     webhooks = body.webhooks;
   } catch {
@@ -294,6 +299,10 @@ const toError = async (
 
   if (telegram !== undefined) {
     return new TelegramError(telegram);
+  }
+
+  if (meta !== undefined) {
+    return new MetaError(meta);
   }
 
   if (assist !== undefined) {

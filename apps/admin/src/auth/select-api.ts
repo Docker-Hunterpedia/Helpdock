@@ -31,6 +31,9 @@ import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
 import { HttpAttachmentUploader } from '../media/upload.js';
+import type { MetaApi } from '../meta/api.js';
+import { HttpMetaApi } from '../meta/http-api.js';
+import { MockMetaApi } from '../meta/mock-api.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import {
   type BrowserPush,
@@ -100,6 +103,8 @@ export interface AdminApis {
   readonly settings: SettingsApi;
   /** M6: Channels › Telegram and a Telegram ticket's chat. */
   readonly telegram: TelegramApi;
+  /** M10: Channels › Meta and a Meta ticket's conversation. */
+  readonly meta: MetaApi;
   /** M7-05, M7-09: agent assist and transcripts on a ticket, Help center › Proposals. */
   readonly assist: AssistApi;
   /** M8-01, M8-03: the Developers page. */
@@ -156,6 +161,7 @@ export function createApis(
       system: new HttpSystemApi(() => transport.currentAccessToken()),
       settings: new HttpSettingsApi(transport),
       telegram: new HttpTelegramApi(transport),
+      meta: new HttpMetaApi(transport),
       assist: new HttpAssistApi(transport),
       developers: new HttpDevelopersApi(transport),
     };
@@ -204,6 +210,7 @@ export function createApis(
     system: new HttpSystemApi(),
     settings: new MockSettingsApi(),
     telegram: new MockTelegramApi(),
+    meta: new MockMetaApi(),
     // It reads the ticket fixture for closed tickets and their messages, and
     // files an approved proposal's draft in the help center fixture.
     assist: new MockAssistApi({ tickets, helpCenter }),

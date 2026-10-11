@@ -45,7 +45,7 @@ A key is `hd_live_` followed by 43 characters. Helpdock stores its SHA-256 and i
 
 **Webhook events follow read scopes.** A delivery carries the same data a read would, so `webhooks:manage` alone cannot subscribe to it: `ticket.*` and `csat.received` need `tickets:read`, `contact.created` needs `contacts:read`, `article.published` needs `articles:read`. A key that lacks one gets `403` with `error.webhooks.reason: "webhook-event-scope"` when it creates an endpoint, when it changes one (checked against the events the endpoint would have afterwards, so a key cannot repoint an endpoint it could not have made), and when it rotates the secret of, or replays a delivery of, an endpoint whose events exceed its scopes. The Admin's Developers page is not held to scopes: it acts as a staff member with `brand:manage`.
 
-A key reaches Its scopes are the only permissions it holds: a key cannot call the admin's routes, and a signed-in staff member cannot call `/api/v1`.
+A key reaches every department of its brand and no other brand. Its scopes are the only permissions it holds: a key cannot call the admin's routes, and a signed-in staff member cannot call `/api/v1`.
 
 ## Authentication and limits
 
@@ -56,7 +56,7 @@ Authorization: Bearer hd_live_...
 | Answer | When |
 |---|---|
 | `401` | No key, an unknown key, a revoked key, or one past its `expiresAt` |
-| `403` | The key does not hold the route's scope |
+| `403` | The key does not hold the route's scope, or the route is one a person uses, such as `/api/me`: a key reaches `/api/v1` and nothing else |
 | `404` | Nothing with that id in the key's brand |
 | `429` | The key made more requests in the last minute than its `rateLimitPerMinute` (600 unless set, at most 10 000) |
 

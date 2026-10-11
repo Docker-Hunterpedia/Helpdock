@@ -111,6 +111,24 @@ added or confirmed ([asvs-l2](../completed/asvs-l2.md#gaps-and-partials-closed-b
   every rate-limit refusal is counted in `rate_limit_refusals_total`, which the
   [first alert set](operations.md#a-first-alert-set) watches.
 
+## API keys
+
+[API keys](api.md#api-keys) are the one credential that is not a person's, and
+they are held tighter than a session:
+
+- A key is stored as its SHA-256, scoped to one brand and to the scopes it was
+  issued with, throttled per key, and revoked at once. It may be given an
+  `expiresAt` when it is made; past it, it is refused like a revoked key.
+- A key reaches `/api/v1` and nothing else. Every route that acts for a person
+  (`@Authenticated()`, such as `/api/me`) answers it `403`
+  ([ADR 0019](../decisions/0019-api-scopes-and-openapi-from-zod.md)).
+- `webhooks:manage` cannot be used to read data the key could not read itself: an
+  endpoint's events need the matching `tickets:read`, `contacts:read` or
+  `articles:read` ([webhooks](webhooks.md)).
+- A refused key is a warning in the api's log with its prefix and the caller's
+  address, and a revoked or expired one is an `api_key.refused` row in its
+  brand's [audit log](audit-log.md#api-keys). The key itself is never logged.
+
 ## Headers
 
 The api's JSON responses carry a deny-everything Content-Security-Policy,
@@ -147,6 +165,8 @@ replies.
 - Keep Postgres and Redis on the Compose network. The production Compose file
   publishes neither; Redis has no password there, so it must stay unreachable
   from anywhere else.
+- Give API keys an `expiresAt` when you create them, and revoke the ones an
+  integration no longer uses ([API keys](api.md#api-keys)).
 - Pin the image to a release and upgrade when a security release is published
   ([operations › Upgrading](operations.md#upgrading)). Each release has a
   CycloneDX SBOM attached ([security scanning](security-scanning.md#sbom)).

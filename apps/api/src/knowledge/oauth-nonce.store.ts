@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Redis } from 'ioredis';
 import { OAUTH_STATE_TTL_MS } from './oauth-state.js';
 
 /**
@@ -14,10 +13,16 @@ import { OAUTH_STATE_TTL_MS } from './oauth-state.js';
 const nonceKey = (nonce: string): string =>
   `knowledge:oauth:${createHash('sha256').update(nonce).digest('hex')}`;
 
-export class OAuthNonceStore {
-  readonly #redis: Pick<Redis, 'set' | 'getdel'>;
+/** The two Redis commands the store uses, so a test can stand in for it. */
+export interface NonceRedis {
+  set(key: string, value: string, mode: 'EX', seconds: number): Promise<unknown>;
+  getdel(key: string): Promise<string | null>;
+}
 
-  constructor(redis: Pick<Redis, 'set' | 'getdel'>) {
+export class OAuthNonceStore {
+  readonly #redis: NonceRedis;
+
+  constructor(redis: NonceRedis) {
     this.#redis = redis;
   }
 

@@ -99,6 +99,8 @@ const CONTAINER_STARTUP_MS = 120_000;
 const APP_SECRET = 'integration-app-secret';
 
 const NUMBER = '106540352242922';
+/** The business account the stand-in requires a WhatsApp number to belong to. */
+const WABA_ID = '105027842193350';
 const PAGE = '112233445566778';
 const INSTAGRAM = '17841400000000000';
 
@@ -287,7 +289,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       id: externalId,
       name: `Acme ${platform}`,
       token,
-      ...(platform === 'whatsapp' ? { displayPhone: '+1 555 0142' } : {}),
+      ...(platform === 'whatsapp' ? { displayPhone: '+1 555 0142', wabaId: WABA_ID } : {}),
       ...(platform === 'instagram' ? { username: 'acme_support' } : {}),
     });
     const [row] = await inBrand((tx) =>
@@ -299,7 +301,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
           departmentId: support,
           externalId,
           displayName: `Acme ${platform}`,
-          ...(platform === 'whatsapp' ? { displayPhone: '+1 555 0142' } : {}),
+          ...(platform === 'whatsapp' ? { displayPhone: '+1 555 0142', wabaId: WABA_ID } : {}),
           ...(platform === 'instagram' ? { username: 'acme_support' } : {}),
           accessToken: encryptSecret(token, createKeyring(envFor())),
           tokenKind:

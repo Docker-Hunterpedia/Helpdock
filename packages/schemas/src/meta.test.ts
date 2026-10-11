@@ -22,6 +22,7 @@ import {
   metaDeliveryParamSchema,
   metaDeliverySchema,
   metaDeliveryStatusSchema,
+  metaFileRefSchema,
   metaRefusalSchema,
   metaSubscribeResultSchema,
   metaTestResultSchema,
@@ -495,5 +496,45 @@ describe('the route parameters', () => {
     expect(metaDeliveryParamSchema.safeParse({ brandId: BRAND, ticketId: TICKET }).success).toBe(
       false,
     );
+  });
+});
+
+describe('metaFileRefSchema', () => {
+  const media = {
+    kind: 'whatsapp_media',
+    type: 'image',
+    mediaId: '1234567890',
+    mimeType: 'image/jpeg',
+    sha256: 'n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDwCgg=',
+  };
+
+  it('names a WhatsApp media id with the digest to check the bytes against', () => {
+    expect(metaFileRefSchema.parse(media)).toEqual(media);
+    expect(
+      metaFileRefSchema.parse({ ...media, type: 'audio', voice: true, sha256: null }),
+    ).toMatchObject({ voice: true, sha256: null });
+    expect(
+      metaFileRefSchema.parse({ ...media, type: 'document', filename: 'invoice.pdf' }),
+    ).toMatchObject({ filename: 'invoice.pdf' });
+  });
+
+  it('names a CDN link and what the platform called it', () => {
+    const ref = {
+      kind: 'cdn_url',
+      url: 'https://scontent.xx.fbcdn.net/v/t1/a.jpg?x=1',
+      type: 'image',
+    };
+
+    expect(metaFileRefSchema.parse(ref)).toEqual(ref);
+  });
+
+  it.each([
+    ['a link that is not http(s)', { kind: 'cdn_url', url: 'file:///etc/passwd', type: 'image' }],
+    ['a link that is no URL', { kind: 'cdn_url', url: 'not a url', type: 'image' }],
+    ['a media type WhatsApp does not have', { ...media, type: 'gif' }],
+    ['an empty media id', { ...media, mediaId: '' }],
+    ['a kind nobody fetches', { kind: 'attach', url: 'https://x.test/a', type: 'image' }],
+  ])('refuses %s', (_label, ref) => {
+    expect(metaFileRefSchema.safeParse(ref).success).toBe(false);
   });
 });

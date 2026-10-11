@@ -552,6 +552,9 @@ importers:
 
   packages/channels:
     dependencies:
+      '@helpdock/net':
+        specifier: workspace:*
+        version: link:../net
       '@helpdock/schemas':
         specifier: workspace:*
         version: link:../schemas

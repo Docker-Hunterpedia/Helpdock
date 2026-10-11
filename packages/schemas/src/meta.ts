@@ -170,6 +170,41 @@ export const META_HUMAN_AGENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const META_PACE_MS = 6_000;
 
 // --------------------------------------------------------------------------
+// Files that arrive with a message
+// --------------------------------------------------------------------------
+
+/** What a WhatsApp media message declares about its file. */
+export const whatsappMediaTypeSchema = z.enum(['image', 'video', 'audio', 'document', 'sticker']);
+export type WhatsAppMediaType = z.infer<typeof whatsappMediaTypeSchema>;
+
+/**
+ * A file a webhook names but does not carry (ADR 0025, 6): a WhatsApp media id,
+ * fetched with the account's token, or a CDN link inside a Messenger or
+ * Instagram payload. It travels in the `meta.media` outbox event to the
+ * `meta.media_fetch` job, which is why it is a schema and not only a type.
+ */
+export const metaFileRefSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('whatsapp_media'),
+    type: whatsappMediaTypeSchema,
+    mediaId: z.string().min(1).max(200),
+    mimeType: z.string().min(1).max(200),
+    /** Base64 of the SHA-256 Meta computed; the fetch job checks the bytes against it. */
+    sha256: z.string().max(200).nullable(),
+    filename: z.string().max(500).optional(),
+    /** A voice note rather than an audio file. */
+    voice: z.boolean().optional(),
+  }),
+  z.object({
+    kind: z.literal('cdn_url'),
+    url: z.url({ protocol: /^https?$/ }).max(4_096),
+    /** As the platform declared it: `image`, `video`, `audio`, `file`, `sticker`, `story`, `story_mention`. */
+    type: z.string().min(1).max(64),
+  }),
+]);
+export type MetaFileRef = z.infer<typeof metaFileRefSchema>;
+
+// --------------------------------------------------------------------------
 // Health
 // --------------------------------------------------------------------------
 

@@ -2,8 +2,9 @@
  * The one interface every channel implements (ARCHITECTURE §8, REQUIREMENTS
  * §4.4: "normalize inbound → message; render outbound; identity mapping;
  * health check"). M2 ships the email adapter; M4's widget and form, M6's
- * Telegram and M8's API implement the same shape, and so will v1.1's WhatsApp
- * and Slack without the router learning anything new.
+ * Telegram, M8's API and M10's WhatsApp, Messenger and Instagram implement the
+ * same shape, and so will v1.1's Slack without the router learning anything
+ * new.
  *
  * The adapter only *translates*. Deciding which contact a message is from,
  * which ticket it belongs to and whether it may thread there at all is the
@@ -12,7 +13,7 @@
  * way, for every channel.
  */
 
-/** ARCHITECTURE §8's list. The v1.1 names are reserved, not implemented. */
+/** ARCHITECTURE §8's list. `slack` and `discord` are reserved, not implemented. */
 export type ChannelKind =
   | 'email'
   | 'telegram'
@@ -32,7 +33,15 @@ export type ChannelKind =
  * worth.
  */
 export interface InboundIdentity {
-  readonly kind: 'email' | 'telegram' | 'visitor' | 'external' | 'phone';
+  readonly kind:
+    | 'email'
+    | 'telegram'
+    | 'visitor'
+    | 'external'
+    | 'phone'
+    | 'whatsapp'
+    | 'messenger'
+    | 'instagram';
   readonly value: string;
   readonly name: string | null;
 }

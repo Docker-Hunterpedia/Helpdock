@@ -76,8 +76,8 @@ export const DEFAULT_TOTAL_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_BODY_BYTES = 10 * MIB;
 
 /**
- * The three response caps DOMAIN-RULES §13 names. A caller picks one and may
- * still override any field by spreading it.
+ * The response caps DOMAIN-RULES §13 names, and the Graph client's. A caller
+ * picks one and may still override any field by spreading it.
  */
 export const policies = {
   /** Crawling help-center and knowledge pages: 10 MB. */
@@ -86,6 +86,12 @@ export const policies = {
   webhook: { maxBodyBytes: 1 * MIB, totalTimeoutMs: 15_000 },
   /** Remote image proxy: 20 MB. */
   imageProxy: { maxBodyBytes: 20 * MIB },
+  /**
+   * The Graph API (M10, ADR 0025): JSON answers of a few hundred bytes, so 1 MB
+   * is generous. A media download passes the cap of its attachment policy
+   * instead.
+   */
+  graph: { maxBodyBytes: 1 * MIB, totalTimeoutMs: 30_000 },
 } as const satisfies Record<string, SafeFetchPolicy>;
 
 const defaultLookup: LookupFunction = async (hostname) => await dnsLookup(hostname, { all: true });

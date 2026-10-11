@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   GoneException,
-  Header,
   HttpCode,
   HttpException,
   HttpStatus,
@@ -12,8 +11,9 @@ import {
   Post,
   type RawBodyRequest,
   Req,
+  Res,
 } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public } from '../auth/route-declaration.js';
 import { createIpRateLimiter } from '../routes/ip-rate-limit.js';
 import { MetaWebhookService } from './meta-webhook.service.js';
@@ -44,13 +44,22 @@ export class MetaWebhookController {
     this.#webhooks = webhooks;
   }
 
-  /** The handshake: `hub.challenge` as plain text for the install's verify token. */
+  /**
+   * The handshake: `hub.challenge` as plain text for the install's verify token.
+   * The content type is set once the token is accepted, not by a `@Header`
+   * decorator, which Nest applies before the handler runs and so would turn the
+   * 403's JSON body into a payload Fastify refuses to send.
+   */
   @Get()
   @Public()
-  @Header('content-type', 'text/plain; charset=utf-8')
-  verify(@Req() request: FastifyRequest): Promise<string> {
+  async verify(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<string> {
     this.#admit(request);
-    return this.#webhooks.verify(request.query as Record<string, unknown>);
+    const challenge = await this.#webhooks.verify(request.query as Record<string, unknown>);
+    void reply.header('content-type', 'text/plain; charset=utf-8');
+    return challenge;
   }
 
   @Post()

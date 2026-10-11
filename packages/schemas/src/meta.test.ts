@@ -37,6 +37,7 @@ import {
   metaVerifyTokenRevealSchema,
   metaWebhookPath,
   replyWindowSchema,
+  splitMetaText,
 } from './meta.js';
 
 const DEPARTMENT = '01924f00-0000-7000-8000-0000000000aa';
@@ -665,5 +666,44 @@ describe('firstWordOf', () => {
   it('is null for a name with nothing in it', () => {
     expect(firstWordOf('')).toBeNull();
     expect(firstWordOf('   ')).toBeNull();
+  });
+});
+
+describe('splitMetaText', () => {
+  const bytes = (text: string): number => new TextEncoder().encode(text).byteLength;
+
+  it('counts nothing for a reply that is only whitespace, so an attachment alone sends no text', () => {
+    for (const platform of META_PLATFORMS) {
+      expect(splitMetaText('', platform)).toEqual([]);
+      expect(splitMetaText(' \n\n ', platform)).toEqual([]);
+    }
+  });
+
+  it('counts a short reply as one message on every platform', () => {
+    for (const platform of META_PLATFORMS) {
+      expect(splitMetaText('  Thanks for writing in.\n', platform)).toEqual([
+        'Thanks for writing in.',
+      ]);
+    }
+  });
+
+  it.each([
+    ['whatsapp', 4_096],
+    ['messenger', 2_000],
+  ] as const)('keeps %s text at its limit in one message and cuts one more', (platform, max) => {
+    expect(splitMetaText('a'.repeat(max), platform)).toHaveLength(1);
+    expect(splitMetaText('a'.repeat(max + 1), platform).map((part) => part.length)).toEqual([
+      max,
+      1,
+    ]);
+  });
+
+  it('counts Instagram in bytes: 500 Arabic letters fit, 501 are two messages cut at a letter', () => {
+    const letter = '\u0628';
+
+    expect(splitMetaText(letter.repeat(500), 'instagram')).toHaveLength(1);
+    const parts = splitMetaText(letter.repeat(501), 'instagram');
+    expect(parts).toEqual([letter.repeat(500), letter]);
+    expect(parts.every((part) => bytes(part) <= META_TEXT_LIMITS.instagram.max)).toBe(true);
   });
 });

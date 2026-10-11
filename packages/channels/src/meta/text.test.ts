@@ -1,4 +1,8 @@
-import { META_TEXT_LIMITS, type MetaPlatform } from '@helpdock/schemas';
+import {
+  META_TEXT_LIMITS,
+  type MetaPlatform,
+  splitMetaText as splitInSchemas,
+} from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import {
   contactsText,
@@ -17,6 +21,10 @@ const ARABIC_WORD = 'مرحبا'; // 5 letters, 10 bytes
 const ARABIC_LETTER = 'ب'; // 2 bytes
 
 describe('splitMetaText', () => {
+  it('is the schemas package’s splitter, so the admin composer counts what the job sends', () => {
+    expect(splitMetaText).toBe(splitInSchemas);
+  });
+
   it.each(['whatsapp', 'messenger', 'instagram'] as const)(
     'returns nothing for an empty reply on %s, so an attachment alone sends no text part',
     (platform) => {

@@ -1,4 +1,3 @@
-import { META_TEXT_LIMITS, type MetaPlatform } from '@helpdock/schemas';
 import { locationText } from '../telegram/render.js';
 import type { MetaPoint, MetaSharedContact, MetaStory } from './envelope.js';
 
@@ -8,93 +7,12 @@ import type { MetaPoint, MetaSharedContact, MetaStory } from './envelope.js';
  * sent plain text: nothing an agent typed can be read as markup.
  */
 
-const encoder = new TextEncoder();
-
 /**
- * How much of a platform's limit a run of text uses. WhatsApp and Messenger
- * say "characters" without saying how they count a character outside the Basic
- * Multilingual Plane, so UTF-16 code units are counted: never fewer than
- * code points, which keeps a part under the limit either way. Instagram counts
- * UTF-8 **bytes**, which is two per Arabic letter.
+ * The splitter moved to `@helpdock/schemas` (M10-08) so the admin composer can
+ * count the messages a reply becomes with the code that cuts them. It is
+ * re-exported here, where the send job and the view have always found it.
  */
-type Measure = (text: string) => number;
-
-const measureOf = (platform: MetaPlatform): Measure =>
-  META_TEXT_LIMITS[platform].unit === 'bytes'
-    ? (text) => encoder.encode(text).byteLength
-    : (text) => text.length;
-
-/** Where `separator` last starts in a run of code points, or -1. */
-const lastIndexOf = (points: readonly string[], separator: string): number => {
-  const needle = [...separator];
-  for (let index = points.length - needle.length; index >= 0; index -= 1) {
-    if (needle.every((point, offset) => points[index + offset] === point)) {
-      return index;
-    }
-  }
-  return -1;
-};
-
-/** Separators in the order a cut prefers them: a paragraph, then a line, then a space. */
-const SEPARATORS = ['\n\n', '\n', ' '] as const;
-
-/**
- * A reply in the parts a platform accepts: at most `META_TEXT_LIMITS[platform]`
- * each, cut at a paragraph, then a line, then a space, and only mid-word when
- * one word is longer than a part. A cut never splits a code point, so a part of
- * Arabic text on Instagram ends at a letter, whatever the byte count says.
- *
- * Whitespace around a cut is dropped, nothing else is: joining the parts with
- * a space gives the text back.
- */
-export const splitMetaText = (text: string, platform: MetaPlatform): string[] => {
-  const limit = META_TEXT_LIMITS[platform].max;
-  const measure = measureOf(platform);
-  const parts: string[] = [];
-  let rest = [...text.trim()];
-
-  while (measure(rest.join('')) > limit) {
-    const head = rest.slice(0, fittingPrefix(rest, limit, measure));
-    if (head.length === 0) {
-      throw new RangeError(`A single character does not fit in ${String(limit)} ${platform} units`);
-    }
-    const at = cutPoint(head, limit, measure);
-    parts.push(rest.slice(0, at).join('').trimEnd());
-    rest = [...rest.slice(at).join('').trimStart()];
-  }
-
-  const last = rest.join('');
-  if (last !== '') {
-    parts.push(last);
-  }
-
-  return parts;
-};
-
-/** How many leading code points fit in `limit`. */
-const fittingPrefix = (points: readonly string[], limit: number, measure: Measure): number => {
-  let used = 0;
-  let fitted = 0;
-  for (const point of points) {
-    used += measure(point);
-    if (used > limit) {
-      break;
-    }
-    fitted += 1;
-  }
-
-  return fitted;
-};
-
-/**
- * Where to cut a run that just fits: after the last paragraph, line or space
- * that leaves more than half a part behind it, so a cut never strands a stub,
- * and at the end of the run (mid-word) when there is none.
- */
-const cutPoint = (head: readonly string[], limit: number, measure: Measure): number =>
-  SEPARATORS.map((separator) => lastIndexOf(head, separator)).find(
-    (index) => index > 0 && measure(head.slice(0, index).join('')) > limit / 2,
-  ) ?? head.length;
+export { splitMetaText } from '@helpdock/schemas';
 
 /**
  * "Location: 52.52, 13.405", the venue, and a map link: the line Telegram

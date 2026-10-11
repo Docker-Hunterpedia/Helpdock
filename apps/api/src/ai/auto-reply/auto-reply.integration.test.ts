@@ -785,7 +785,9 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
       const report = await withSystem(runtime.db, brandId(), (tx) =>
         usage.report(tx, { brandId: brandId(), from: today, to: today, timezone: 'UTC' }),
       );
-      expect(report.available).toBe(true);
+      if (!report.available) {
+        throw new Error('the usage report is unavailable');
+      }
       return report.deflection;
     };
     const before = await deflection();

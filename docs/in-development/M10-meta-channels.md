@@ -606,10 +606,14 @@ Decisions taken inside the plan, each with its reason where it is made:
   the M10-01 schemas. M10-08 draws "warranty-terms.docx left out", "Sending · part 2 of 3" and "WhatsApp · +1 555 0142"
   from them, and none can be derived on the client: `leftOut` is the planner's answer, which the client must not
   re-implement.
-- **No "First name · Brand" line.** `MetaMessages` says a reply's first message starts with it; the composer's caption
-  on the same artboards says "Plain text, no signature", and Telegram's identical note was never built. The reply is
-  the agent's text, as Telegram's is. If the line is wanted, it is one prefix in `meta-send.job.ts`, counted against
-  the first part's limit. To be settled with the owner.
+- **The first message of a reply opens with "First name · Brand"** (settled with the owner; `MetaMessages` in
+  DESIGN §6.3 and the `Meta/Chat` boards): the author's first name (the display name up to its first space), a middle
+  dot and the brand's name, "Lina · Helpdock", then a newline and the agent's text. A reply nobody wrote (the
+  assistant's, a rule's) carries the brand's name alone. Only the first message has it, and it counts toward the
+  platform's limit, so the text is cut after the line is put in front (`meta-reply-text.ts`). A reply that is only files
+  sends the line as a message of its own, so the customer still sees who wrote. The rule is the pure
+  `metaOpeningLine({ firstName, brand })` in `@helpdock/schemas` (with `firstWordOf`), so M10-08's composer counts "Sent
+  as N messages" the same way. The name comes from the message's staff author row and the brand from the brand row.
 - **The Human Agent tag is M10-09's.** A person's reply in the extended days is composed and queued, goes out as
   `RESPONSE`, and Meta refuses it with the closed-window error, so the delivery ends `refused` with Meta's code.
   `MESSAGE_TAG` with `HUMAN_AGENT` is two lines in `messagingCourier`, with the delivery's `tag`, the day-3 case and

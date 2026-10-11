@@ -110,7 +110,7 @@ A reply is **parts**: its text cut at the platform's limit, then each attachment
 | A file | uploaded to `/{phone-number-id}/media`, then sent by its id; the file name is the caption of an image or a video and the `filename` of a document | a five-minute presigned link, `is_reusable: false` | a five-minute presigned link |
 | Pacing | one message per six seconds to one customer | none | none |
 
-Text is plain: nothing an agent typed can be read as markup. The message of a Messenger or Instagram reply carries the delivery's id as `metadata`, so the echo of Helpdock's own send can be told from a message typed in the Page inbox.
+Text is plain: nothing an agent typed can be read as markup. The first message of a reply opens with one line, the author's first name and the brand, "Lina · Helpdock" (the brand alone for a reply nobody wrote), and that line counts toward the platform's limit; a reply that is only files sends it as a message of its own. The message of a Messenger or Instagram reply carries the delivery's id as `metadata`, so the echo of Helpdock's own send can be told from a message typed in the Page inbox.
 
 **Files.** What is sent is what the media pipeline made of the upload: an image's kept original or its WebP, a voice note's Opus, a file's original. The limits are Meta's, and the types are the worse case its pages allow:
 

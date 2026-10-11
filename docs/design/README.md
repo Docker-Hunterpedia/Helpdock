@@ -11,7 +11,7 @@ A rendered snapshot of every artboard on the Helpdock design canvas, so contribu
 | Path | Contents |
 |---|---|
 | [`artboards/`](artboards/) | The source of each artboard (`*.dc.html`) and `canvas.json`, the canvas manifest with every board's title, size and position. Diff these in a PR to review a design change. |
-| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m8`. |
+| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m8`, then `m10`. |
 
 The artboards are static mockups. Names, numbers, domains and size caps on them are sample values; behaviour comes from [DOMAIN-RULES.md](../planning/DOMAIN-RULES.md).
 
@@ -172,6 +172,16 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 | `Email/CSAT-EN-AR` | M8-06 | [Email-CSAT-EN-AR.png](screens/m8/Email-CSAT-EN-AR.png) | [EmailCsat.dc.html](artboards/EmailCsat.dc.html) |
 | `Widget/CSAT-EN` | M8-06 | [Widget-CSAT-EN.png](screens/m8/Widget-CSAT-EN.png) | [WidgetCsatEN.dc.html](artboards/WidgetCsatEN.dc.html) |
 | `Widget/CSAT-AR` | M8-06 | [Widget-CSAT-AR.png](screens/m8/Widget-CSAT-AR.png) | [WidgetCsatAR.dc.html](artboards/WidgetCsatAR.dc.html) |
+
+### M10 Meta channels
+
+| Artboard | Deliverables | Screen | Source |
+|---|---|---|---|
+| `Admin/Channels-Meta` | M10-07 | [Admin-Channels-Meta.png](screens/m10/Admin-Channels-Meta.png) | [AdminChannelsMeta.dc.html](artboards/AdminChannelsMeta.dc.html) |
+| `Admin/Channels-Meta-Account` | M10-07, M10-10 | [Admin-Channels-Meta-Account.png](screens/m10/Admin-Channels-Meta-Account.png) | [AdminChannelsMetaAccount.dc.html](artboards/AdminChannelsMetaAccount.dc.html) |
+| `Admin/Ticket-Meta` | M10-06, M10-08 | [Admin-Ticket-Meta.png](screens/m10/Admin-Ticket-Meta.png) | [AdminTicketMeta.dc.html](artboards/AdminTicketMeta.dc.html) |
+| `Meta/Chat-EN` | M10-06 | [Meta-Chat-EN.png](screens/m10/Meta-Chat-EN.png) | [MetaChatEN.dc.html](artboards/MetaChatEN.dc.html) |
+| `Meta/Chat-AR` | M10-06 | [Meta-Chat-AR.png](screens/m10/Meta-Chat-AR.png) | [MetaChatAR.dc.html](artboards/MetaChatAR.dc.html) |
 
 ## Gallery
 
@@ -560,3 +570,26 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 #### `Widget/CSAT-AR`
 
 ![Widget/CSAT-AR](screens/m8/Widget-CSAT-AR.png)
+
+
+### M10 Meta channels
+
+#### `Admin/Channels-Meta`
+
+![Admin/Channels-Meta](screens/m10/Admin-Channels-Meta.png)
+
+#### `Admin/Channels-Meta-Account`
+
+![Admin/Channels-Meta-Account](screens/m10/Admin-Channels-Meta-Account.png)
+
+#### `Admin/Ticket-Meta`
+
+![Admin/Ticket-Meta](screens/m10/Admin-Ticket-Meta.png)
+
+#### `Meta/Chat-EN`
+
+![Meta/Chat-EN](screens/m10/Meta-Chat-EN.png)
+
+#### `Meta/Chat-AR`
+
+![Meta/Chat-AR](screens/m10/Meta-Chat-AR.png)

@@ -539,21 +539,22 @@ Postgres and Redis with `FakeGraph` and `MetaWebhookDriver`, and the erasure and
 seam M10-02 built: `PlatformInboundService.handle({ tx, account, now }, event)`, called once per event of a
 Page, inside the route's brand transaction, after the seam has already answered `duplicate` for a `mid` that
 `ticket_messages.external_message_id` holds and `ignored: blocked-sender` for a sender on the block list.
-It calls Graph for one thing only, the customer's name (below), and writes every other side effect as an outbox row.
+It never calls Graph (ADR 0025): everything an event causes outside the database, the media fetch and the customer's name, is an outbox row.
 
 | File | What it holds |
 |---|---|
-| `messenger-inbound.service.ts` | the service; `PROFILE_TIMEOUT_MS` |
+| `messenger-inbound.service.ts` | the service |
 | `meta-thread.ts` | `ticketOfMessage` (the ticket a platform message is on: a customer's message by `external_message_id`, one of Helpdock's replies by `meta_deliveries.platform_message_ids`) and `writeSystemLine`; M10-03 and M10-05 write the same lines and use the same two |
 | `meta-app.service.ts` | `MetaAppService.appId()`: the install's `meta.appId`, for the echo rule |
 | `packages/i18n/locales/{en,ar}/meta.json` | the `meta` namespace: `thread.reaction`, `reactionPlain`, `reactionRemoved`, `edited`, `unsupported` (and the words a location, a contact and a story are filed under) |
+| `messenger-profile.ts` | **stand-in for M10-05's `enqueueMetaProfile`** (marked as such): the `meta.profile` outbox row `{ conversationId, accountId, platform }` that asks for the customer's name |
 | `meta-router.ts`, `deferred-sink.ts`, `meta-text.ts`, `factory.ts` | **stand-ins for M10-03's files** of the same names (brief §4.1), marked as such in a leading comment, so this branch runs before M10-03 lands. `meta.module.ts` builds the inbound pipeline through `createMetaInboundService` in `factory.ts`, which is where M10-03 and M10-05 register their platform's service |
 
 **What each event becomes**
 
 | Event | What happens | Outcome the route reports |
 |---|---|---|
-| `message` (text, `image`, `video`, `audio`, `file`, `sticker`, `fallback`) | `router.route` under the identity `<page id>:<psid>` (`messenger.page`, verified); the name is `null` unless the profile read below succeeds; each `image`, `video`, `audio`, `file` attachment is a `cdn_url` ref with the declared `type`, a `sticker` the same ref filed as an image, written `pending` with a `meta.media` outbox row (nothing is fetched in the request); a `fallback` with a URL is a text line (`title`, then the URL); one without, and any attachment of a type Helpdock cannot show, adds a system line "The customer sent something Helpdock cannot show." beside the rest of the message | `handled` |
+| `message` (text, `image`, `video`, `audio`, `file`, `sticker`, `fallback`) | `router.route` under the identity `<page id>:<psid>` (`messenger.page`, verified), named by the id until the profile job has the name; the first message of a conversation that has no name and no lookup yet leaves a `meta.profile` outbox row; each `image`, `video`, `audio`, `file` attachment is a `cdn_url` ref with the declared `type`, a `sticker` the same ref filed as an image, written `pending` with a `meta.media` outbox row (nothing is fetched in the request); a `fallback` with a URL is a text line (`title`, then the URL); one without, and any attachment of a type Helpdock cannot show, adds a system line "The customer sent something Helpdock cannot show." beside the rest of the message | `handled` |
 | `unsupported` (`is_unsupported`, or a message with nothing to file) | the same system line on the conversation's ticket; none when the customer has no conversation or ticket | `handled`, or `ignored: no-ticket` / `no-customer` |
 | `echo` | `app_id` equal to `meta.appId`, or `metadata` naming a `meta_deliveries` row of this account: Helpdock's own send, dropped silently. Any other echo (typed in the Page inbox, another app): dropped, logged at `info` without a word of it | `ignored: echo`, `ignored: echo-not-ours` |
 | `delivery` | `advanceByWatermark(conversation, 'delivered', watermark)`: every delivery of the conversation sent at or before the watermark; and `advanceStatus(mid, 'delivered', …)` for each `mid` the report names, which a watermark earlier than the message does not reach. Both only move a delivery forward | `handled`; `ignored: no-conversation` / `empty-receipt` |
@@ -566,15 +567,15 @@ It calls Graph for one thing only, the customer's name (below), and writes every
 
 Decisions taken inside the plan, each with its reason where it is made:
 
-- **The customer's name is read in the request, once, with a deadline.** Brief §4.3 asks for `GET /{psid}?fields=first_name,last_name`
-  once per conversation and the checklist says the webhook never calls Graph; the brief is the more specific, so the
-  read is made, but only when the conversation row does not exist yet, with the Page's token, and the wait is cut at
-  `PROFILE_TIMEOUT_MS` (3 s). A refusal (a Page without the reviewed feature answers 400 or 403), a Graph that is down,
-  a slow one and a reply in a shape Helpdock does not know all leave the name `null` and file the message. A name that
-  is not read is **never stored**: the contact is named by its identity value, `meta_conversations.profile_name` stays
-  null, and the thread draws "Messenger user" (M10-08). Accepted gap: a *transient* failure on the first message
-  costs the conversation its name for good, because asking again on every message would cost every Page without the
-  feature a failing call per message. A failure that is not Graph's (a decryption error) fails the route.
+- **The customer's name is asked for with an outbox row, never read in the request.** Brief §4.3 had the service call
+  `GET /{psid}?fields=first_name,last_name` once per conversation; the coordinator moved it out of the request (ADR 0025:
+  the webhook never calls Graph). After the router has filed the message, a conversation whose `profile_name` is null and
+  whose `profile_checked_at` is null gets `enqueueMetaProfile(tx, brandId, { conversationId, accountId, platform: 'messenger' })`
+  in the message's own transaction. The `meta.profile_fetch` job, the `profile_checked_at` column (migration 0051) and the
+  real `enqueueMetaProfile` are **M10-05's**; here the function is a stand-in in `messenger-profile.ts`, and the column is read
+  as an optional property of the conversation row, so until the merge a nameless conversation asks again with every message.
+  Until the job has written the name, the contact is named by its identity value and the thread draws "Messenger user"
+  (M10-08); a refused lookup (a Page without the reviewed feature) leaves it so for good.
 - **Two tests recognise Helpdock's own echo, and only two.** `app_id` equal to `meta.appId` (set it, or this test never
   matches) and `metadata` naming a delivery of *this* account (a delivery id of another account is not ours). The echo of
   a part sent with neither is counted as foreign, `echo-not-ours`, and dropped all the same.
@@ -595,14 +596,15 @@ Decisions taken inside the plan, each with its reason where it is made:
   `ignored: invalid-customer-id` instead of failing the batch, which Meta would redeliver for ever. Meta's ids are never such a thing.
 
 Not in this deliverable, by design: the `meta.media_fetch` job and the end-to-end "photo reaches `ready`" test (M10-03 owns
-the job; this branch proves the `pending` attachment and the `meta.media` row), the thread's rendering of the lines
+the job; this branch proves the `pending` attachment and the `meta.media` row), the `meta.profile_fetch` job with its column and
+migration (M10-05), the thread's rendering of the lines
 (M10-08), the reply path (M10-06), the Instagram twin (M10-05).
 
-Tests: `messenger-inbound.service.test.ts` (each event kind with the database and Graph faked),
-`meta-thread.test.ts`, `deferred-sink.test.ts`, the `appId` cases of `meta-app.service.test.ts`, and
+Tests: `messenger-inbound.service.test.ts` (each event kind with the database faked),
+`meta-thread.test.ts`, `deferred-sink.test.ts`, `messenger-profile.test.ts`, the `appId` cases of `meta-app.service.test.ts`, and
 `meta-messenger.integration.test.ts` against real Postgres and Redis through the signed-webhook driver and the stand-in for
-Graph: a message opens a ticket under the contact keyed on `<page id>:<psid>`, named by the profile; a second continues
-it without a second read; a redelivery files nothing; a Page without profile access still gets the message; a blocked
+Graph: a message opens a ticket under the contact keyed on `<page id>:<psid>`, leaves a `meta.profile` row and calls nothing on Graph; a second
+continues it; a redelivery files nothing; a conversation that has a name asks for none; a blocked
 sender is dropped before a contact exists and counted; the reopen policy (inside the window the ticket comes back, past
 it a new one continues it); an image, a video, an audio file and a file become `pending` attachments with a `meta.media`
 row and nothing is fetched; a sticker is an image; a `fallback` is a text line; two Pages of two brands in one batch file

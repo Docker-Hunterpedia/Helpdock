@@ -58,12 +58,13 @@ import { MetaRepository } from './meta.repository.js';
  * double in the way: the webhook, the seam, the Messenger service, the router
  * and the sink are the real ones.
  *
- * 1. **Messages**: a message opens a ticket under `<page id>:<psid>`, named by
- *    the profile read once; a second continues it; a redelivery files nothing;
- *    a Page without profile access still gets the message; a blocked sender is
- *    dropped before a contact exists; the reopen policy applies; files become
- *    `pending` attachments and `meta.media` outbox rows (nothing is fetched in
- *    the request); two Pages of two brands in one batch file into their brands.
+ * 1. **Messages**: a message opens a ticket under `<page id>:<psid>` and asks
+ *    for the customer's name with a `meta.profile` outbox row, the webhook
+ *    calling nothing; a second continues it; a redelivery files nothing; a
+ *    blocked sender is dropped before a contact exists; the reopen policy
+ *    applies; files become `pending` attachments and `meta.media` outbox rows
+ *    (nothing is fetched in the request); two Pages of two brands in one batch
+ *    file into their brands.
  * 2. **Echoes**: the echo of a Helpdock send files nothing, and nor does any
  *    other.
  * 3. **Receipts**: a watermark marks the earlier deliveries of the
@@ -305,6 +306,17 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     return row;
   };
 
+  /** The `meta.profile` rows asked for a conversation: the profile job's work, not run here. */
+  const profileRequests = async (conversationId: string) =>
+    (
+      await owner.db
+        .select({ payload: outbox.payload })
+        .from(outbox)
+        .where(eq(outbox.event, 'meta.profile'))
+    )
+      .map((row) => row.payload as { conversationId: string })
+      .filter((payload) => payload.conversationId === conversationId);
+
   const accountRow = async (account = accountA()): Promise<MetaAccount> => {
     const [row] = await owner.db.select().from(metaAccounts).where(eq(metaAccounts.id, account.id));
     if (row === undefined) {
@@ -403,10 +415,9 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
   // --------------------------------------------------------------- messages
 
   describe('a message', () => {
-    it('opens a ticket under the Page-scoped contact, named by the profile read once', async () => {
+    it('opens a ticket under the Page-scoped contact and asks for the customer’s name, without asking Meta', async () => {
       const psid = newPsid();
       const mid = newMid();
-      graph.profiles.set(psid, { first_name: 'Mona', last_name: 'Khalil' });
 
       await post(pageText({ psid, mid, text: 'My order #77 has not arrived' }));
 
@@ -418,7 +429,8 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
         subject: 'My order #77 has not arrived',
       });
       const [found] = await contactsOf(psid);
-      expect(found?.contact.name).toBe('Mona Khalil');
+      // Named by its id until the profile job has the name; the thread says "Messenger user".
+      expect(found?.contact.name).toBe(identityOf(psid));
       expect(found?.identity).toMatchObject({
         kind: 'messenger',
         value: identityOf(psid),
@@ -438,26 +450,25 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       expect(await conversationOf(psid)).toMatchObject({
         contactId: found?.contact.id,
         ticketId: ticket?.id,
-        profileName: 'Mona Khalil',
+        profileName: null,
         lastInboundMessageId: mid,
         lastInboundAt: at(META_FIXTURE.time),
       });
 
-      // The profile is the one thing the request asks Graph, with the Page's token.
-      expect(graph.calls).toMatchObject([
+      // The webhook never calls Graph (ADR 0025): the name is an outbox row for a job.
+      expect(graph.calls).toEqual([]);
+      expect(await profileRequests((await conversationOf(psid)).id)).toEqual([
         {
-          method: 'GET',
-          path: `/${psid}`,
-          token: PAGE_TOKEN,
-          query: { fields: 'first_name,last_name' },
+          conversationId: (await conversationOf(psid)).id,
+          accountId: accountA().id,
+          platform: 'messenger',
         },
       ]);
       expect((await accountRow()).lastEventAt).not.toBeNull();
     });
 
-    it('continues the conversation’s ticket with the next message, without reading the profile again', async () => {
+    it('continues the conversation’s ticket with the next message', async () => {
       const first = await customerWhoWrote('First message');
-      graph.reset();
       const mid = newMid();
 
       await post(
@@ -496,19 +507,18 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       ).toHaveLength(1);
     });
 
-    it('is filed with the id for a name when the Page cannot read profiles, and the read is not repeated', async () => {
-      const psid = newPsid();
-      graph.profileDenied.add(psid);
+    it('does not ask for the name of a conversation that has one', async () => {
+      const { psid, conversation } = await customerWhoWrote();
+      await owner.db
+        .update(metaConversations)
+        .set({ profileName: 'Mona Khalil' })
+        .where(eq(metaConversations.id, conversation.id));
+      const before = (await profileRequests(conversation.id)).length;
 
-      await post(pageText({ psid, mid: newMid(), text: 'Hello' }));
       await post(pageText({ psid, mid: newMid(), text: 'Hello again' }));
 
-      const [ticket] = await ticketsOf(psid);
-      expect(await messagesOf(ticket?.id ?? '')).toHaveLength(2);
-      // Stored as the id: the thread draws "Messenger user" in its place, never a name Meta did not give.
-      expect((await contactsOf(psid))[0]?.contact.name).toBe(identityOf(psid));
-      expect((await conversationOf(psid)).profileName).toBeNull();
-      expect(graph.calls.map((call) => call.path)).toEqual([`/${psid}`]);
+      expect(before).toBe(1);
+      expect(await profileRequests(conversation.id)).toHaveLength(before);
     });
 
     it('drops a blocked sender before a contact exists, and counts it', async () => {
@@ -615,7 +625,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
         ]);
         // Meta wants the webhook answered in seconds: the bytes are the job's.
         expect(graph.mediaRequests).toEqual([]);
-        expect(graph.calls.map((call) => call.method)).toEqual(['GET']);
+        expect(graph.calls).toEqual([]);
       },
     );
 

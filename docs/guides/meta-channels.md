@@ -160,7 +160,7 @@ A message to a connected Page opens a ticket in the Page's department, or contin
 |---|---|
 | Text, an image, a video, an audio file or a file | Files the message. Each file becomes an attachment that is *pending* until a job has fetched it from Meta's CDN; the webhook never downloads anything. A sticker is filed as an image. |
 | A shared link Messenger could not render | The title and the URL as text. Without a URL, a line in the customer's ticket says they sent something Helpdock cannot show (nothing is filed when they have no ticket yet). |
-| The customer's name | Read from Meta once, when the conversation begins. When Meta refuses the read, as it can for an app without its profile-access feature, or does not answer within three seconds, the contact is named by its id and the message is filed as usual. |
+| The customer's name | Not in the webhook. The first message of a conversation asks for it with a job that reads it from Meta once; until it has, and for good when Meta refuses the read (as it can for an app without its profile-access feature), the contact is named by its id. The message is filed as usual. |
 | A reaction, or an edit of a message | A line in the thread of the message's ticket ("The customer reacted ❤️ to a message", "The customer edited a message. It now reads: …"). The message keeps what it said. |
 | An echo of a message the Page sent | Dropped. Helpdock recognises its own sends by the app id (`meta.appId`, set by `HD_META_APP_ID`) and by the delivery id a reply is sent with; a reply typed in Meta Business Suite is dropped too, not imported. |
 | A delivery or read report | Moves every reply of that conversation sent before it to delivered or read, and never back. |

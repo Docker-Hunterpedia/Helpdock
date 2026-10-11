@@ -1,6 +1,4 @@
 import {
-  GraphApiFailure,
-  type GraphClient,
   META_FIXTURE,
   type MetaEvent,
   type MetaWebhookBody,
@@ -17,7 +15,6 @@ import {
   pageText,
   routeEnvelope,
 } from '@helpdock/channels';
-import { createKeyring, encryptSecret } from '@helpdock/config';
 import type { DbTransaction, MetaAccount, MetaConversation, MetaDelivery } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -27,7 +24,7 @@ import {
 import type { MetaEventContext } from './meta-inbound.service.js';
 
 /**
- * The service's decisions with the database and Graph faked. That a message
+ * The service's decisions with the database faked. That a message
  * opens a ticket under the right contact, that a watermark marks the right
  * deliveries and that a redelivery files nothing twice is proved against
  * Postgres in `meta-messenger.integration.test.ts`.
@@ -37,6 +34,13 @@ const state = vi.hoisted(() => ({
   seen: new Set<string>(),
   threads: new Map<string, { ticketId: string; departmentId: string }>(),
   lines: [] as { thread: unknown; line: { text: string; key: string | null } }[],
+  profileRequests: [] as { brandId: string; profile: unknown }[],
+}));
+vi.mock('./messenger-profile.js', () => ({
+  enqueueMetaProfile: async (_tx: unknown, brandId: string, profile: unknown) => {
+    state.profileRequests.push({ brandId, profile });
+    return 'outbox-id';
+  },
 }));
 vi.mock('./meta-inbound-gate.js', () => ({
   metaMessageSeen: async (_tx: unknown, _brand: string, _platform: string, messageId: string) =>
@@ -68,16 +72,13 @@ const CONVERSATION = '01924f00-0000-7000-8000-0000000000d1';
 const DELIVERY = '01924f00-0000-7000-8000-0000000000e1';
 const THREAD = { ticketId: '01924f00-0000-7000-8000-0000000000f1', departmentId: 'dept-1' };
 const NOW = new Date('2026-10-11T09:00:00.000Z');
-const TOKEN = 'EAAGunittesttoken';
 
-const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64') });
 const account = {
   id: ACCOUNT_ID,
   brandId: BRAND,
   platform: 'messenger',
   externalId: META_FIXTURE.pageId,
   departmentId: 'dept-1',
-  accessToken: encryptSecret(TOKEN, keyring),
 } as MetaAccount;
 
 const eventOf = (body: MetaWebhookBody): MetaEvent => {
@@ -103,7 +104,6 @@ const conversation = (over: Partial<MetaConversation> = {}): MetaConversation =>
   }) as MetaConversation;
 
 const harness = (over: Partial<MessengerInboundServiceOptions> = {}) => {
-  const get = vi.fn(async (): Promise<unknown> => ({ id: META_FIXTURE.psid, first_name: 'Mona' }));
   const route = vi.fn(async () => ({
     kind: 'created' as const,
     ticketId: THREAD.ticketId,
@@ -130,37 +130,30 @@ const harness = (over: Partial<MessengerInboundServiceOptions> = {}) => {
     sink: { store },
     tickets: { insertMessage: vi.fn(), nextSeq: vi.fn(), findTicket },
     lifecycleReads: { localeForContact },
-    graph: () => ({ get }) as unknown as GraphClient,
-    keyring,
     app: { appId },
     log,
-    profileTimeoutMs: 25,
     ...over,
   } as unknown as MessengerInboundServiceOptions);
   const handle = (body: MetaWebhookBody, now = NOW) =>
     service.handle({ tx: {} as DbTransaction, account, now } as MetaEventContext, eventOf(body));
 
-  return { handle, get, route, store, lookups, localeForContact, findTicket, appId, log };
+  return { handle, route, store, lookups, localeForContact, findTicket, appId, log };
 };
 
 beforeEach(() => {
   state.seen.clear();
   state.threads.clear();
   state.lines.length = 0;
+  state.profileRequests.length = 0;
 });
 
 describe('a message', () => {
-  it('is routed under the Page-scoped identity, named by the profile read once as the conversation begins', async () => {
-    const { handle, route, get } = harness();
+  it('is routed under the Page-scoped identity, nameless until the profile job has been', async () => {
+    const { handle, route } = harness();
 
     const outcome = await handle(pageText({ mid: 'mid.1', text: 'My order has not come' }));
 
     expect(outcome).toEqual({ outcome: 'handled' });
-    expect(get).toHaveBeenCalledOnce();
-    expect(get).toHaveBeenCalledWith(`/${META_FIXTURE.psid}`, {
-      token: TOKEN,
-      query: { fields: 'first_name,last_name' },
-    });
     expect(route).toHaveBeenCalledOnce();
     const [context, message] = route.mock.calls[0] as unknown as [
       { brandId: string; account: MetaAccount },
@@ -173,102 +166,57 @@ describe('a message', () => {
       from: {
         kind: 'messenger',
         value: `${META_FIXTURE.pageId}:${META_FIXTURE.psid}`,
-        name: 'Mona',
+        name: null,
       },
       meta: { customerId: META_FIXTURE.psid },
     });
   });
 
-  it('joins first and last name, and keeps only a name when the reply has no other', async () => {
-    const both = harness();
-    both.get.mockResolvedValue({ id: 'x', first_name: ' Mona ', last_name: 'Khalil' });
-    await both.handle(pageText({ mid: 'mid.1' }));
-    expect(both.route.mock.calls[0]?.[1]).toMatchObject({ from: { name: 'Mona Khalil' } });
-
-    const none = harness();
-    none.get.mockResolvedValue({ id: 'x', first_name: '  ' });
-    await none.handle(pageText({ mid: 'mid.1' }));
-    expect(none.route.mock.calls[0]?.[1]).toMatchObject({ from: { name: null } });
-  });
-
-  it('does not read the profile again for a conversation that exists, and files under the stored name', async () => {
-    const { handle, route, get, lookups } = harness();
+  it('is filed under the name already stored for the conversation', async () => {
+    const { handle, route, lookups } = harness();
     lookups.conversation.mockResolvedValue(conversation({ profileName: 'Mona Khalil' }));
 
     await handle(pageText({ mid: 'mid.2' }));
 
-    expect(get).not.toHaveBeenCalled();
     expect(route.mock.calls[0]?.[1]).toMatchObject({ from: { name: 'Mona Khalil' } });
   });
 
-  it('is filed without a name when Graph refuses the profile, and says why without the customer', async () => {
-    const { handle, route, get, log } = harness();
-    get.mockRejectedValue(
-      new GraphApiFailure('permanent', 'Unsupported get request', { code: 100, status: 400 }),
-    );
-
-    const outcome = await handle(pageText({ mid: 'mid.1' }));
-
-    expect(outcome).toEqual({ outcome: 'handled' });
-    expect(route.mock.calls[0]?.[1]).toMatchObject({ from: { name: null } });
-    expect(log.info).toHaveBeenCalledWith(
-      { accountId: ACCOUNT_ID, kind: 'permanent', code: 100 },
-      'messenger profile not available',
-    );
-  });
-
-  it('is filed without a name when Graph is down or answers in a shape it does not know', async () => {
-    const down = harness();
-    down.get.mockRejectedValue(
-      new GraphApiFailure('retry', 'unreachable', { reason: 'transport' }),
-    );
-    await down.handle(pageText({ mid: 'mid.1' }));
-    expect(down.route.mock.calls[0]?.[1]).toMatchObject({ from: { name: null } });
-
-    const odd = harness();
-    odd.get.mockResolvedValue('not an object');
-    await odd.handle(pageText({ mid: 'mid.1' }));
-    expect(odd.route.mock.calls[0]?.[1]).toMatchObject({ from: { name: null } });
-  });
-
-  it('is filed without a name when Graph is slower than the webhook can wait', async () => {
-    const { handle, route, get, log } = harness();
-    get.mockReturnValue(new Promise(() => undefined));
+  it('asks for the customer’s name, once the message is filed, when the conversation has none', async () => {
+    const { handle, route, lookups } = harness();
+    // Before the router there is no conversation; after it there is, with no name.
+    lookups.conversation.mockResolvedValueOnce(undefined).mockResolvedValue(conversation());
 
     await handle(pageText({ mid: 'mid.1' }));
 
-    expect(route.mock.calls[0]?.[1]).toMatchObject({ from: { name: null } });
-    expect(log.warn).toHaveBeenCalledWith(
-      { accountId: ACCOUNT_ID },
-      'messenger profile read timed out',
-    );
-  });
-
-  it('does not swallow a failure that is not Graph’s', async () => {
-    const { handle, get, route } = harness();
-    get.mockRejectedValue(new TypeError('a bug'));
-
-    await expect(handle(pageText({ mid: 'mid.1' }))).rejects.toThrow('a bug');
-    expect(route).not.toHaveBeenCalled();
-  });
-
-  it('does not put an odd customer id in a Graph path, and still files the message', async () => {
-    const { handle, get, route } = harness();
-
-    await handle(pageText({ mid: 'mid.1', psid: '12.34' }));
-
-    expect(get).not.toHaveBeenCalled();
+    expect(state.profileRequests).toEqual([
+      {
+        brandId: BRAND,
+        profile: { conversationId: CONVERSATION, accountId: ACCOUNT_ID, platform: 'messenger' },
+      },
+    ]);
     expect(route).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['it has a name', { profileName: 'Mona Khalil' }],
+    ['the lookup was made and refused', { profileName: null, profileCheckedAt: NOW }],
+  ])('does not ask again when %s', async (_why, over) => {
+    const { handle, lookups } = harness();
+    lookups.conversation.mockResolvedValue(conversation(over as Partial<MetaConversation>));
+
+    await handle(pageText({ mid: 'mid.2' }));
+
+    expect(state.profileRequests).toEqual([]);
+  });
+
   it('refuses a customer id the contact layer could not spell, instead of failing the batch', async () => {
-    const { handle, route, get } = harness();
+    const { handle, route } = harness();
 
     const outcome = await handle(pageText({ mid: 'mid.1', psid: 'a b' }));
 
     expect(outcome).toEqual({ outcome: 'ignored', reason: 'invalid-customer-id' });
     expect(route).not.toHaveBeenCalled();
-    expect(get).not.toHaveBeenCalled();
+    expect(state.profileRequests).toEqual([]);
   });
 
   it('files a message at the time Meta gave it, and never from the future', async () => {

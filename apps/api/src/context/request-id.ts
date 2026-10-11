@@ -19,9 +19,10 @@ export const isUsableRequestId = (value: string): boolean =>
   value.length > 0 && value.length <= MAX_LENGTH && SAFE_ID.test(value);
 
 /**
- * The id for this request: the one the proxy passed when `TRUST_PROXY` is on
- * and the value is safe, a fresh UUIDv7 otherwise. UUIDv7 rather than v4 so ids
- * sort by time, which is what makes them useful in a log.
+ * The id for this request: the one the proxy passed when the request came from
+ * a hop `TRUST_PROXY` believes (`trustProxy` is that verdict, see
+ * `trustedPeerCheck`) and the value is safe, a fresh UUIDv7 otherwise. UUIDv7
+ * rather than v4 so ids sort by time, which is what makes them useful in a log.
  */
 export const resolveRequestId = (
   header: string | string[] | undefined,

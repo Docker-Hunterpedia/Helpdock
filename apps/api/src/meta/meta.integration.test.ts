@@ -532,6 +532,7 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
     graph.connect({
       platform: 'whatsapp',
       id: NUMBER_A,
+      wabaId: META_FIXTURE.wabaId,
       name: 'ACME WhatsApp',
       displayPhone: '+15550783881',
       token: TOKEN,
@@ -539,6 +540,7 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
     graph.connect({
       platform: 'whatsapp',
       id: NUMBER_B,
+      wabaId: WABA_B,
       name: 'GLOBEX WhatsApp',
       displayPhone: '+15550783882',
       token: TOKEN,

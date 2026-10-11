@@ -16,7 +16,7 @@ The route is public (Meta has no session) and protected by the verify token and 
 
 ## The app's settings
 
-Four install settings describe the app. Each can be set from the environment, which also locks it ([configuration](configuration.md)); the App card of Channels › Meta (M10-07) will show whether each is set:
+Four install settings describe the app. Each can be set from the environment, which also locks it ([configuration](configuration.md)); the App card of Channels › Meta shows whether each is set and which an environment variable has locked:
 
 | Setting | Environment | What it is for |
 |---|---|---|
@@ -39,7 +39,7 @@ Helpdock answers `200` with the challenge as `text/plain` when `hub.mode` is `su
 
 The token is made the first time an install admin reads the App card (`GET /api/meta/app`); a request to the public handshake never writes a setting. `POST /api/meta/app/verify-token` makes a new one and returns it once as `{ verifyToken }`; the old one stops working at once, and the change is recorded in the audit log by key, never by value. Both routes need `install:admin`. A token set by `HD_META_WEBHOOK_VERIFY_TOKEN` cannot be replaced from the screen (`409`).
 
-`GET /api/meta/app` answers `{ appIdSet, callbackUrl, verifyTokenHint, secretsLockedByEnv }`: whether an app id is saved, where Meta posts, the last four characters of the verify token and which of the four settings an environment variable has taken over. No secret is ever returned.
+`GET /api/meta/app` answers `{ appIdSet, appId, appSecretSet, instagramAppSecretSet, graphVersion, callbackUrl, verifyTokenHint, secretsLockedByEnv }`: the app id (it is not a secret), whether each of the two secrets is set, the Graph version every call names (`META_GRAPH_VERSION`), where Meta posts, the last four characters of the verify token and which of the four settings an environment variable has taken over. No secret is ever returned.
 
 ## Deliveries
 

@@ -29,9 +29,15 @@ import {
   knowledgeReembedJob,
   knowledgeSyncJob,
   knowledgeSyncSchedulerId,
+  META_HEALTH_CRON,
+  META_HEALTH_SCHEDULE_CRON,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
+  metaHealthJob,
+  metaHealthReceiptKey,
+  metaHealthScheduleJob,
+  metaHealthSchedulerId,
   notifyEmailJob,
   notifyPushJob,
   OUTBOX_RELAY_INTERVAL_MS,
@@ -641,5 +647,46 @@ describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
 
   it('looks for brands past their grace nightly, an hour after retention', () => {
     expect(brandPurgeScheduleJob.schedule).toEqual({ cron: '0 4 * * *' });
+  });
+});
+
+describe('the Meta account health check (M10-10)', () => {
+  const accountId = '01924f00-0000-7000-8000-0000000000ac';
+
+  it('checks each account every hour on the maintenance queue', () => {
+    const payload = parseJobPayload(metaHealthJob, { brandId, accountId });
+
+    // The M10 milestone doc and the operations guide name the cadence.
+    expect(META_HEALTH_CRON).toBe('0 * * * *');
+    expect(metaHealthJob.queue).toBe('maintenance');
+    expect(metaHealthJob.options.attempts).toBe(3);
+    expect(payload).toEqual({ brandId, accountId });
+    expect(metaHealthJob.schedule).toBeUndefined();
+  });
+
+  it('refuses a payload without a brand, as every job payload carries one', () => {
+    expect(() => parseJobPayload(metaHealthJob, { accountId })).toThrow(PayloadValidationError);
+    expect(() => parseJobPayload(metaHealthJob, { brandId, accountId: 'nope' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('names one scheduler per account', () => {
+    expect(metaHealthSchedulerId(accountId)).toBe(`meta.health.${accountId}`);
+  });
+
+  it('keys the receipt on the account and the UTC hour, so a second run in the hour is a repeat', () => {
+    const early = metaHealthReceiptKey(accountId, new Date('2026-10-11T09:00:00.000Z'));
+    const late = metaHealthReceiptKey(accountId, new Date('2026-10-11T09:59:59.999Z'));
+
+    expect(early).toBe(`meta.health:${accountId}:2026-10-11T09`);
+    expect(late).toBe(early);
+    expect(metaHealthReceiptKey(accountId, new Date('2026-10-11T10:00:00.000Z'))).not.toBe(early);
+  });
+
+  it('registers the schedulers again daily, never on the hour the checks run', () => {
+    expect(metaHealthScheduleJob.schedule).toEqual({ cron: META_HEALTH_SCHEDULE_CRON });
+    expect(META_HEALTH_SCHEDULE_CRON).not.toBe(META_HEALTH_CRON);
+    expect(parseJobPayload(metaHealthScheduleJob, {})).toEqual({});
   });
 });

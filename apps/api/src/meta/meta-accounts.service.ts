@@ -430,7 +430,8 @@ export class MetaAccountsService {
           db: this.#db,
           repository: this.#repository,
           keyring: this.#keyring,
-          graph: this.#graph,
+          graph: this.#graph(),
+          now: this.#now,
         },
         account,
       );

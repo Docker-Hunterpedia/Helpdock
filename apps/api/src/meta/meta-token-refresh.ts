@@ -1,108 +1,201 @@
 import {
   GraphApiFailure,
+  type GraphClient,
   graphRefreshTokenSchema,
   parseGraph,
   redactToken,
 } from '@helpdock/channels';
-import { encryptSecret, type Keyring } from '@helpdock/config';
-import type { Db, MetaAccount as MetaAccountRow } from '@helpdock/db';
+import { decryptSecret, encryptSecret, type Keyring } from '@helpdock/config';
+import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import { withSystemJob } from '../tenant/system-job.js';
-import { type GraphClientFactory, graphForAccount } from './graph-factory.js';
 import type { MetaRepository } from './meta.repository.js';
 
 /**
- * An Instagram user token lasts 60 days and is renewed with one call, once it
- * is old enough (M10-07's `POST …/refresh`, M10-10's hourly job; ADR 0025, 3
- * and 10). One function so the route and the job cannot disagree about when a
- * token is due, what is stored when Graph renews it, or what is recorded when
- * it refuses.
+ * Renewing an Instagram token (M10-10, ADR 0025, 3 and 10). An Instagram user
+ * token lives 60 days and Meta renews it for another 60 on request, so
+ * Helpdock asks once a week and a few refusals still leave weeks to paste a
+ * new one. Messenger's Page tokens and WhatsApp's system-user tokens do not
+ * expire, so for them there is nothing to renew.
  *
- * It runs in a transaction of its own for the account's brand, as a job does,
- * so the route can call it from a request and the job from the worker.
+ * A plain function with no framework, because two callers need it: the hourly
+ * `meta.health` job and the account page's "refresh now" route. Both get the
+ * same effect on the row, so what the function learns it records itself.
  */
 
-/** Instagram renews a token that is at least a day old; Helpdock waits a week, as the artboards say. */
-export const REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+/** A token renewed more recently than this is left alone. */
+export const INSTAGRAM_REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Names this path on the audit rows its writes would carry. */
+const REFRESH_PRINCIPAL = 'meta.token_refresh';
 
 export interface TokenRefreshDeps {
   readonly db: Db;
-  readonly repository: MetaRepository;
+  readonly repository: Pick<MetaRepository, 'account' | 'update' | 'markError'>;
   readonly keyring: Keyring;
-  readonly graph: GraphClientFactory;
+  /** Only `get` is called: the renewal is a `GET`, as Meta defines it. */
+  readonly graph: Pick<GraphClient, 'get'>;
+  readonly now?: () => Date;
 }
 
+export type TokenRefreshAccount = Pick<
+  MetaAccount,
+  | 'id'
+  | 'brandId'
+  | 'platform'
+  | 'accessToken'
+  | 'tokenExpiresAt'
+  | 'tokenRefreshedAt'
+  | 'tokenUpdatedAt'
+>;
+
 export interface TokenRefreshResult {
-  /** `not-due` when the account has no expiring token or its token is younger than a week. */
+  /**
+   * `refreshed`: Meta issued a new expiry and the row holds it. `refused`: Meta
+   * answered no, and the row says so. `not-due`: nothing was stored, because the
+   * account is not Instagram, the token was renewed within a week, or an operator
+   * replaced it while Meta was being asked.
+   */
   readonly outcome: 'refreshed' | 'refused' | 'not-due';
-  /** The new expiry, when the token was renewed. */
+  /** When the renewed token expires; only with `refreshed`. */
   readonly expiresAt?: Date;
 }
 
-type Refreshable = Pick<
-  MetaAccountRow,
-  'platform' | 'tokenKind' | 'tokenRefreshedAt' | 'tokenUpdatedAt'
->;
-
-/** Whether this account's token is one that is renewed, and old enough to be. */
-export const isRefreshDue = (account: Refreshable, now: Date): boolean =>
+/**
+ * Whether an Instagram token is due: its last renewal, or when it was pasted if
+ * it has never been renewed, is more than a week old. The expiry the row holds
+ * is not part of the question. A token the row calls expired but Meta still
+ * accepts has a stale date, and asking for a renewal is how it gets a true one.
+ */
+export const instagramRefreshDue = (
+  account: Pick<TokenRefreshAccount, 'platform' | 'tokenRefreshedAt' | 'tokenUpdatedAt'>,
+  now: Date,
+): boolean =>
   account.platform === 'instagram' &&
-  account.tokenKind === 'instagram_user' &&
-  now.getTime() - (account.tokenRefreshedAt ?? account.tokenUpdatedAt).getTime() >=
-    REFRESH_AFTER_MS;
+  now.getTime() - (account.tokenRefreshedAt ?? account.tokenUpdatedAt).getTime() >
+    INSTAGRAM_REFRESH_AFTER_MS;
 
 /**
- * Renews an Instagram account's token if it is due.
+ * Asks Meta to renew an Instagram account's token when it is due
+ * (`GET /refresh_access_token?grant_type=ig_refresh_token`) and stores what it
+ * answers: the new token encrypted under the master key, its expiry and the
+ * moment of the renewal.
  *
- * - **Renewed**: the token Graph answers with is stored encrypted, with its new
- *   expiry and `token_refreshed_at`. Graph may hand back the same string or a
- *   new one; either way the stored one is what it said.
- * - **Refused**: `last_error` says why, in Graph's words without the token, and
- *   a token Graph calls dead (or one past its expiry) makes the account
- *   `token_expired`. The caller decides what that means to a person.
- * - **Graph or the network failed**: thrown as the {@link GraphApiFailure}, which
- *   a job retries; nothing is recorded, because nothing was learnt.
+ * A refusal (Meta says the token cannot be renewed) is recorded as the
+ * account's `last_error` and, when the row's expiry has passed, as
+ * `token_expired`. A failure that is not an answer (Graph down, rate-limited)
+ * is thrown for the caller to retry, because the token is not at fault.
+ *
+ * Each write is a transaction of its own: the renewal must not wait on a
+ * caller's, and the new token must be on disk before anything else can fail.
  */
 export const refreshInstagramToken = async (
-  { db, repository, keyring, graph }: TokenRefreshDeps,
-  account: MetaAccountRow,
+  deps: TokenRefreshDeps,
+  account: TokenRefreshAccount,
 ): Promise<TokenRefreshResult> => {
-  const now = new Date();
-  if (!isRefreshDue(account, now)) {
+  const now = (deps.now ?? (() => new Date()))();
+  if (!instagramRefreshDue(account, now)) {
     return { outcome: 'not-due' };
   }
 
-  try {
-    const renewed = parseGraph(
-      graphRefreshTokenSchema,
-      await graphForAccount(account, keyring, graph).refreshInstagramToken(),
-      'to the token refresh',
-    );
-    const expiresAt = new Date(now.getTime() + renewed.expires_in * 1_000);
-    await withSystemJob(db, account.brandId, 'meta.token_refresh', (tx) =>
-      repository.update(tx, account.id, {
-        accessToken: encryptSecret(renewed.access_token, keyring),
-        tokenExpiresAt: expiresAt,
-        tokenRefreshedAt: now,
-      }),
-    );
-
-    return { outcome: 'refreshed', expiresAt };
-  } catch (error) {
-    if (
-      !(error instanceof GraphApiFailure) ||
-      error.kind === 'retry' ||
-      error.kind === 'rate_limited'
-    ) {
-      throw error;
-    }
-    const pastExpiry = account.tokenExpiresAt !== null && account.tokenExpiresAt <= now;
-    await withSystemJob(db, account.brandId, 'meta.token_refresh', async (tx) => {
-      await repository.markError(tx, account.id, redactToken(error.detail), now);
-      if (error.kind === 'token_dead' || pastExpiry) {
-        await repository.update(tx, account.id, { status: 'token_expired' });
-      }
-    });
+  const token = decryptSecret(account.accessToken, deps.keyring);
+  const answer = await askForRenewal(deps.graph, token);
+  if ('refusal' in answer) {
+    await recordRefusal(deps, account, answer.refusal, token, now);
 
     return { outcome: 'refused' };
   }
+
+  return storeRenewal(deps, account, answer.renewed, now);
 };
+
+type RenewedToken = { readonly access_token: string; readonly expires_in: number };
+
+/**
+ * Meta's answer to the renewal: the renewed token, or the refusal it meant. A
+ * failure that is no answer (Graph or the network down, a rate limit) is thrown.
+ */
+const askForRenewal = async (
+  graph: TokenRefreshDeps['graph'],
+  token: string,
+): Promise<{ readonly renewed: RenewedToken } | { readonly refusal: GraphApiFailure }> => {
+  try {
+    const body = await graph.get('/refresh_access_token', {
+      token,
+      api: 'instagram',
+      query: { grant_type: 'ig_refresh_token' },
+    });
+
+    return { renewed: parseGraph(graphRefreshTokenSchema, body, 'the token renewal', token) };
+  } catch (error) {
+    if (error instanceof GraphApiFailure && error.permanent) {
+      return { refusal: error };
+    }
+    throw error;
+  }
+};
+
+const recordRefusal = async (
+  deps: TokenRefreshDeps,
+  account: TokenRefreshAccount,
+  refusal: GraphApiFailure,
+  token: string,
+  now: Date,
+): Promise<void> => {
+  // Meta calling the token dead, or the row's own date having passed, is an
+  // expired token. Any other refusal is a problem to read, not yet an outage.
+  const expired =
+    refusal.kind === 'token_dead' ||
+    (account.tokenExpiresAt !== null && account.tokenExpiresAt.getTime() <= now.getTime());
+
+  await whileTokenUnchanged(deps, account, async (tx) => {
+    await deps.repository.markError(
+      tx,
+      account.id,
+      redactToken(`Instagram would not renew the token: ${refusal.detail}`, token),
+      now,
+    );
+    if (expired) {
+      await deps.repository.update(tx, account.id, { status: 'token_expired' });
+    }
+  });
+};
+
+const storeRenewal = async (
+  deps: TokenRefreshDeps,
+  account: TokenRefreshAccount,
+  renewed: RenewedToken,
+  now: Date,
+): Promise<TokenRefreshResult> => {
+  const expiresAt = new Date(now.getTime() + renewed.expires_in * 1000);
+  const stored = await whileTokenUnchanged(deps, account, async (tx) => {
+    await deps.repository.update(tx, account.id, {
+      // Meta may answer with the token it was given or with a new string; either way the row holds what it said.
+      accessToken: encryptSecret(renewed.access_token, deps.keyring),
+      tokenExpiresAt: expiresAt,
+      tokenRefreshedAt: now,
+    });
+  });
+
+  return stored ? { outcome: 'refreshed', expiresAt } : { outcome: 'not-due' };
+};
+
+/**
+ * Runs a write in a transaction of its own, unless the account's token is no
+ * longer the one Meta was asked about: an operator may have pasted a new one
+ * meanwhile, and what Meta said of the old one must not land on the new. The
+ * write and the check share the transaction, so the window is a statement wide.
+ */
+const whileTokenUnchanged = (
+  deps: TokenRefreshDeps,
+  account: TokenRefreshAccount,
+  write: (tx: DbTransaction) => Promise<void>,
+): Promise<boolean> =>
+  withSystemJob(deps.db, account.brandId, REFRESH_PRINCIPAL, async (tx) => {
+    const current = await deps.repository.account(tx, account.id);
+    if (current?.accessToken !== account.accessToken) {
+      return false;
+    }
+    await write(tx);
+
+    return true;
+  });

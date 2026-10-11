@@ -6,12 +6,12 @@ import type { GraphClientFactory } from './graph-client-factory.js';
 
 /**
  * Graph calls made with one token (M10-07). The shared client is stateless and
- * every call names its token; the routes, the refresh and the health job each
- * hold a token for a few statements, and this keeps it where nothing can log it:
- * a private field of a class that serialises to its platform and nothing else.
- * The only paths a token leaves by are the `Authorization` header and the two
- * Graph calls that take it as a parameter, which are methods here rather than
- * a `query` a caller builds.
+ * every call names its token; the routes hold a token for a few statements, and
+ * this keeps it where nothing can log it: a private field of a class that
+ * serialises to its platform and nothing else. The only paths a token leaves by
+ * are the `Authorization` header and `debug_token`, the one Graph call that
+ * takes it as a parameter, which is a method here rather than a `query` a
+ * caller builds.
  *
  * `GraphClientFactory` itself is `graph-client-factory.ts`'s, the seam M10-02
  * left; this file is what turns it and a stored account into something a
@@ -78,19 +78,6 @@ export class AccountGraph {
       token: this.#token,
       api: this.#api,
       query: { input_token: this.#token },
-    });
-  }
-
-  /**
-   * `GET /refresh_access_token`: an Instagram user token good for another 60
-   * days. Instagram's edge reads the token as a parameter, so the bearer is
-   * sent as well and the stand-in and Meta both find it.
-   */
-  refreshInstagramToken(): Promise<unknown> {
-    return this.#client.get('/refresh_access_token', {
-      token: this.#token,
-      api: 'instagram',
-      query: { grant_type: 'ig_refresh_token', access_token: this.#token },
     });
   }
 

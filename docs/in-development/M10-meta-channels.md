@@ -56,7 +56,7 @@ Definition of done asks for.
 | M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | built, awaiting review: [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
 | M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | planned |
 | M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; `HUMAN_AGENT` on a person's reply at day 3 and never on an AI or rule reply; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10** | 4 d | | later |
-| M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | planned |
+| M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | built, awaiting review: [notes](#m10-10-health-jobs) |
 | M10-11 | Docs and the guide: `docs/guides/meta-channels.md` (the Meta dashboard walk-through per platform, App Review, pricing, limits), `channels.md`, `configuration.md` and `.env.example` for the `META_*` keys, `contacts.md` for the new identifiers, `tickets.md` for the reply window, `data-retention.md` for the deliveries, the OpenAPI changes, this document and the PRD | AGENTS.md, Definition of done 1 | `docs-guard` before the PR | 2 d | | planned |
 
 ## Exit criteria
@@ -519,6 +519,102 @@ isolation between brands and the System card. Playwright against the real api
 (`apps/admin/e2e/api/meta.api.spec.ts`, with `fake-graph.ts` started beside the install): the app card
 and a verify token shown once, a refused token and each platform connected, an account that is taken,
 a Page tested, saved, subscribed again and disconnected by its id.
+
+## M10-10 Health jobs
+
+`meta.health` checks each connected account hourly: its token, its webhook subscription (subscribing
+the app again when Meta dropped it) and, for Instagram, the weekly renewal of the 60-day token. What
+it finds goes on the `meta_accounts` row. The operator's view is
+[Operating Helpdock › Meta account health](../guides/operations.md#meta-account-health).
+
+| File | What it holds |
+|---|---|
+| `meta-token-refresh.ts` | `refreshInstagramToken({ db, repository, keyring, graph }, account)` → `{ outcome: 'refreshed' \| 'refused' \| 'not-due', expiresAt? }`, a plain function the job and M10-07's `POST :accountId/refresh` share; `instagramRefreshDue`, `INSTAGRAM_REFRESH_AFTER_MS` |
+| `meta-health.ts` | `checkMetaAccount(checks, account, token, now)`: the four steps as a decision from what Graph says to the update the row should get. Reads Graph, writes nothing |
+| `meta-health.job.ts` | `runMetaHealth` (one account in its brand's transaction with the hour's receipt), `createMetaHealthProcessor` (the `maintenance` worker's processor for both jobs), `queueMetaHealthScheduler`, `scheduleAllMetaHealth`, `createMetaAccountChangedHandler` |
+| `packages/jobs/src/jobs.ts` | `metaHealthJob` (`meta.health`), `metaHealthScheduleJob` (`meta.health.schedule`), `metaHealthPayloadSchema`, `META_HEALTH_CRON`, `META_HEALTH_SCHEDULE_CRON`, `metaHealthSchedulerId`, `metaHealthReceiptKey` |
+| `worker/start-worker.ts` | the `meta.health` processor and `scheduleAllMetaHealth` on the `maintenance` worker, `meta.health.schedule` in its cron loop, `META_*` keys in `WorkerEnv`, and the one `registerMetaEventHandlers` call (`accountChanged`) |
+
+**What each step does.** The decision table is in the header comment of `meta-health.ts` and proved
+in `meta-health.test.ts`.
+
+1. *The token.* WhatsApp and Messenger: `GET /debug_token?input_token=<the token>` with the token
+   itself; Instagram, which has no `debug_token`: `GET /me` on the Instagram root. A 190-class
+   refusal, or a 200 with `is_valid: false`, sets `status = token_expired` and `last_error`, and
+   ends the run.
+2. *The subscription.* `GET /{external_id}/subscribed_apps`; the install's app (`meta.appId`, any
+   app while it is unset) missing → `POST` it with the platform's fields (`META_SUBSCRIBED_FIELDS`;
+   none for WhatsApp) and read it back. Still missing, or the `POST` refused → `unsubscribed`.
+3. *The renewal.* Instagram only, via `refreshInstagramToken`. Refused → `last_error`; and
+   `token_expired` when the row's expiry has passed or Meta calls the token dead.
+4. *All well.* `connected`, `subscription_checked_at`, `subscribed_fields` as Graph listed them,
+   `subscribed_at` when the job subscribed the app itself.
+
+Decisions taken inside the plan, each with its reason where it is made:
+
+- **The payload carries `brandId`.** The brief had `{ accountId }`; DOMAIN-RULES §1.4 says every job
+  payload carries the brand, the worker opens that brand's transaction before any query, and
+  `telegram.poll` does the same. The scheduler's template data is `{ brandId, accountId }`.
+- **`meta.health.schedule` is a daily re-registration, not a second hourly tick.** The brief named the
+  job without saying what it does. The checks come from one scheduler per account
+  (`meta.health.<account id>`, `0 * * * *` UTC), as `telegram.poll` has; the schedule job, `30 5 * * *`,
+  runs `scheduleAllMetaHealth` again so a scheduler lost while the worker kept running (a Redis flush,
+  a `meta_account.changed` that failed for good) is back within a day. It is off the hour on purpose:
+  upserting a scheduler at the instant it fires is a race. A scheduler whose account is gone
+  removes itself on its next run, which is how a brand's purge (rows deleted, no event) leaves nothing
+  behind.
+- **The receipt is claimed in the check's transaction, before Graph is asked.** `job_receipts` is
+  keyed `meta.health:<account>:<UTC hour>`; the second worker blocks on the primary key until the
+  first commits, then stands down, and a check that throws rolls its receipt back so the retry runs.
+  The check holds one connection for its Graph calls, as `telegram.send` does, and the renewal uses
+  a second for its own short write.
+- **A refused renewal does not make the account unhealthy by itself.** The brief said `connected`
+  when "all three pass". A token Meta would not renew still works until its date, so status stays
+  `connected` and the reason is the account's `last_error` (which turns the health word red until a
+  message is filed after it); only a passed expiry, or Meta calling the token dead, is
+  `token_expired`.
+- **A token is due for renewal a week after the last renewal, or after it was pasted, whatever the
+  row's expiry says.** The brief's condition "`token_expires_at` in the future" would never renew a
+  token whose expiry the row does not know (null) and would leave a stale past date in place for good;
+  asking Meta is how the row gets a true one. Meta's refusal of a token that is really expired is
+  then recorded as above.
+- **`last_error` is cleared only on recovery.** A clean run clears the error of an account that was
+  `token_expired` or `unsubscribed`, because the error described that state. On a `connected` account
+  it is left, since it may be the inbound pipeline's (M10-02) and not Meta's.
+- **A refusal that gives no verdict is not a status.** Permission, restricted-account and
+  malformed-request answers to a health read are recorded in `last_error` and leave `status`
+  alone; a `retry` or `rate_limited` failure is thrown so BullMQ asks again (three attempts, one
+  and two minutes apart) with nothing written.
+- **An operator's new token wins.** The check re-reads `token_updated_at` before it writes, and
+  the renewal re-reads the stored token inside its own transaction; either finding a different
+  token discards what Meta said about the old one.
+- **The Instagram token is sent as a bearer header** to `/refresh_access_token`, as every Graph call
+  here sends it (M10-01); Meta's page writes it as the `access_token` query parameter. The stand-in
+  takes both. If the staging run shows the bearer form refused, the line to change is in
+  `meta-token-refresh.ts`.
+- **WhatsApp's subscription is read at `GET /{phone number id}/subscribed_apps`**, as the stand-in
+  answers it and the brief writes it. Meta documents `subscribed_apps` on the WhatsApp Business
+  Account (`waba_id`, which the row may hold). Whichever M10-07's "Subscribe now" settles on, this job
+  must use the same id: the one helper to change is `subscribe`/`listSubscribedApps` in
+  `meta-health.ts`.
+
+Not in this deliverable: the Reconnect form and the captions on the account page (M10-07, already
+drawn: it reads `status`, `last_error`, `token_expires_at` and `subscription_checked_at`), the
+`POST :accountId/refresh` route (M10-07; it calls `refreshInstagramToken`), a backfill of the
+messages missed while unsubscribed, and a System page row for accounts that need attention.
+
+Tests: unit for the decision table (`meta-health.test.ts`, each answer of each step against a Graph
+double), the renewal (`meta-token-refresh.test.ts`), the scheduler, the changed handler, the
+processor, and the two things only a double can stage in `runMetaHealth`: a token replaced while
+Graph was being asked, and a log with no token in it (`meta-health.job.test.ts`), and the job
+definitions (`packages/jobs`);
+`meta-health.integration.test.ts` against real Postgres and Redis with `FakeGraph`: a dropped
+subscription restored on each platform and a present one left alone; an Instagram token eight days
+old renewed once, the expiry moved and the renewed token used a week later; a refused renewal
+recorded without the token; a dead token marked and the account brought back an hour after a good
+one; the job twice in one hour, and in two workers at once, checking once; a brand in its grace
+skipped; and the BullMQ schedulers registered for the accounts of two brands and followed through
+`meta_account.changed`.
 
 ## Interfaces for other milestones
 

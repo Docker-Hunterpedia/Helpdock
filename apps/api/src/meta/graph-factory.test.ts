@@ -66,18 +66,12 @@ describe('graphForAccount and graphForToken', () => {
     expect(stub.calls[0]).toMatchObject({ root: 'instagram', token: TOKEN });
   });
 
-  it('names its token as a parameter only for the two calls that must', async () => {
+  it('names its token as a parameter only for debug_token', async () => {
     await graphForToken('messenger', PAGE_TOKEN, factory).debugToken();
-    await graphForToken('instagram', TOKEN, factory).refreshInstagramToken();
 
     expect(stub.calls[0]).toMatchObject({
       path: '/debug_token',
       query: { input_token: PAGE_TOKEN },
-    });
-    expect(stub.calls[1]).toMatchObject({
-      root: 'instagram',
-      path: '/refresh_access_token',
-      query: { grant_type: 'ig_refresh_token', access_token: TOKEN },
     });
   });
 

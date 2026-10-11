@@ -29,7 +29,10 @@ export const QUEUE_NAMES = {
   outbox: 'outbox',
   /** `assignment.offline_unassign` (M1-07). Delayed jobs. */
   assignment: 'assignment',
-  /** `cleanup.tokens`, `maintenance.retention`, `stats.rollup`. */
+  /**
+   * `cleanup.tokens`, `maintenance.retention`, `stats.rollup`; `meta.health`, the hourly check of
+   * each connected Meta account, and its daily re-registration `meta.health.schedule` (M10-10).
+   */
   maintenance: 'maintenance',
   /** `domain.verify` and its schedule (M5-07): custom-domain DNS and TLS checks. */
   domains: 'domains',

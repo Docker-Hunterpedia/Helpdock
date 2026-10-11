@@ -154,6 +154,21 @@ describe('what a call looks like on the wire', () => {
     expect(graph.calls[0]?.query).not.toHaveProperty('access_token');
   });
 
+  it('reaches a root an operator wrote with trailing slashes, without doubling them', async () => {
+    const client = new GraphClient({
+      root: `${graph.facebookRoot}///`,
+      instagramRoot: `${graph.instagramRoot}/`,
+      allowCidrs: ['127.0.0.0/8'],
+    });
+    await client.get(`/${PHONE_ID}`, { token: WA_TOKEN });
+    await client.get('/me', { token: IG_TOKEN, api: 'instagram' });
+
+    expect(graph.calls.map((call) => [call.root, call.path])).toEqual([
+      ['facebook', `/${PHONE_ID}`],
+      ['instagram', '/me'],
+    ]);
+  });
+
   it('names the version it was configured with', async () => {
     await clientFor({ version: 'v26.0' }).get(`/${PHONE_ID}`, { token: WA_TOKEN });
 

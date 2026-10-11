@@ -48,7 +48,15 @@ const PATH = /^\/[A-Za-z0-9_.:@-]+(?:\/[A-Za-z0-9_.:@-]+)*$/;
 
 const hostOf = (root: string): string => new URL(root).hostname.toLowerCase();
 
-const withoutTrailingSlashes = (url: string): string => url.replace(/\/+$/, '');
+// A loop rather than `/\/+$/`: the root comes from configuration, and a
+// trailing-repetition regex on it is the pattern CodeQL flags as polynomial.
+const withoutTrailingSlashes = (url: string): string => {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') {
+    end -= 1;
+  }
+  return url.slice(0, end);
+};
 
 /**
  * Whether `hostname` is one Helpdock may fetch from or send a token to: the two

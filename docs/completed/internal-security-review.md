@@ -85,8 +85,9 @@ callback. A sign-in begun before the upgrade has to be started again.
 **F5, Low: a brand in deletion grace kept its API keys and webhooks.** `/api/v1`
 routes are not `@Public()`, so `BrandGoneGuard` never ran, and `withAllBrands`
 (`api/tenant/all-brands.ts`) includes brands in `deleting`. Fixed in `275a3f2`:
-`ApiKeyPrincipalResolver` answers 410 through `isBrandGone` before the key's
-budget is spent (`api/api-keys/api-key-principal-resolver.ts`), and
+`ApiKeyPrincipalResolver` answers 410 from the shared `BrandAvailability`
+cache, after the key's per-minute budget is spent so that a gone brand's key is
+throttled like any other (`api/api-keys/api-key-principal-resolver.ts`), and
 `webhook-deliver.job.ts` marks the delivery `skipped`. A restore brings the keys
 back; skipped deliveries are not replayed.
 

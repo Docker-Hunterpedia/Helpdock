@@ -1,20 +1,13 @@
-import { apiKeys, auditLog, type Db, systemContext, withTenant } from '@helpdock/db';
-import { eq, sql } from 'drizzle-orm';
-import { withAllBrands } from '../tenant/all-brands.js';
+import { auditLog, type Db, systemContext, withTenant } from '@helpdock/db';
+import { currentRequestContext } from '../context/request-context.js';
+import type { EndedApiKey } from './api-keys.repository.js';
 
 /**
- * What the resolver learns about a key it just refused (ASVS 7.2.1): whether it
- * is a key Helpdock issued and then ended (revoked, or past its expiry), as
- * opposed to one that never existed, so the log can say which and the key's own
- * brand can be told. The lookup ignores both on purpose;
- * `ApiKeysRepository.findActiveByHash` is the only way a key is accepted.
+ * The record of a key the resolver refused (ASVS 7.2.1) when it is one Helpdock
+ * issued and then ended, as opposed to one that never existed, so the key's own
+ * brand can be told. Whether a key is ended is judged once, in
+ * `ApiKeysRepository.findByHash`; this only writes down what it said.
  */
-
-export interface RefusedApiKey {
-  readonly id: string;
-  readonly brandId: string;
-  readonly reason: 'revoked' | 'expired';
-}
 
 export interface RefusalFacts {
   /** `hd_live_` and four more characters, as the Developers page shows the key. */
@@ -31,34 +24,17 @@ export class RefusedApiKeys {
     this.#db = db;
   }
 
-  /** The key with this hash if it exists but may not be used; undefined for a hash nobody holds. */
-  async find(keyHash: string): Promise<RefusedApiKey | undefined> {
-    const [row] = await withAllBrands(this.#db, API_KEY_REFUSED_AUDIT_PRINCIPAL, (tx) =>
-      tx
-        .select({
-          id: apiKeys.id,
-          brandId: apiKeys.brandId,
-          revoked: sql<boolean>`${apiKeys.revokedAt} is not null`,
-          // The database's clock, the one `findActiveByHash` judged expiry by.
-          expired: sql<boolean>`${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} <= now()`,
-        })
-        .from(apiKeys)
-        .where(eq(apiKeys.keyHash, keyHash))
-        .limit(1),
-    );
-    if (row === undefined || (!row.revoked && !row.expired)) {
-      return undefined;
-    }
-    return { id: row.id, brandId: row.brandId, reason: row.revoked ? 'revoked' : 'expired' };
-  }
-
   /** In the key's own brand, naming the key and where it was presented from, never the key. */
-  async audit(key: RefusedApiKey, { prefix, ip }: RefusalFacts): Promise<void> {
+  async audit(key: EndedApiKey, { prefix, ip }: RefusalFacts): Promise<void> {
     await withTenant(
       this.#db,
       {
         ...systemContext(key.brandId, API_KEY_REFUSED_AUDIT_PRINCIPAL),
-        request: { requestId: '', ip: ip ?? null, userAgent: null },
+        request: {
+          requestId: currentRequestContext()?.requestId ?? '',
+          ip: ip ?? null,
+          userAgent: null,
+        },
       },
       (tx) =>
         tx.insert(auditLog).values({
@@ -68,7 +44,7 @@ export class RefusedApiKeys {
           action: 'api_key.refused',
           targetType: 'api_key',
           targetId: key.id,
-          meta: { prefix, reason: key.reason },
+          meta: { prefix, reason: key.state },
         }),
     );
   }

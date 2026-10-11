@@ -28,6 +28,7 @@ import { RateLimiter } from './auth/rate-limit.js';
 import { RefreshStore } from './auth/session/refresh-store.js';
 import { SessionPrincipalResolver } from './auth/session/session-principal-resolver.js';
 import { loadOrCreateSigningKeys, type SigningKeys } from './auth/session/signing-keys.js';
+import { BrandAvailability } from './brands/brand-availability.js';
 import { INBOUND_PARSE_ROUTE, registerFormBodies } from './channels/inbound/inbound-parse-body.js';
 import { registerClientFacts } from './context/client-facts.js';
 import { registerJsonDisposition } from './http/json-disposition.js';
@@ -230,10 +231,15 @@ export const createApiApp = async ({
     logger,
   });
 
+  // The 410 guard on the public routes and the API key resolver read one cache,
+  // so a brand put into deletion is seen by both within the same few seconds.
+  const brandAvailability = new BrandAvailability(runtime.db);
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
       env,
       db: runtime.db,
+      brandAvailability,
       settings: runtime.settings,
       redis: runtime.redis,
       logger,
@@ -246,6 +252,7 @@ export const createApiApp = async ({
         keys: new ApiKeysRepository(),
         limiter: new RateLimiter(runtime.redis),
         refused: new RefusedApiKeys(runtime.db),
+        availability: brandAvailability,
         log: logger,
         fallback: createPrincipalResolver({ env, logger, session: sessionResolver }),
       }),

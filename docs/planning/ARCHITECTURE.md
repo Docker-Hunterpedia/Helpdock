@@ -21,6 +21,7 @@ Companion to `REQUIREMENTS.md` and `DOMAIN-RULES.md` (same folder). Behavioural 
 | Email out | Nodemailer | 10.0 | SMTP per brand |
 | Email in | imapflow + mailparser | 2.0 / 3.9 | IMAP IDLE/polling, robust MIME parsing |
 | Telegram | grammY | 1.46 | Webhook + polling, typed Bot API |
+| Meta channels | Graph API over `packages/net`, no SDK | `META_GRAPH_VERSION`, pinned (v25.0) | WhatsApp Cloud API, Messenger, Instagram with Instagram Login: six endpoints, and the SSRF policy covers the media URLs ([ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)) |
 | AI | @mariozechner/pi-ai + pi-agent-core | 0.73 | Multi-provider, API key **or** OAuth/subscription, cost tracking |
 | Images | sharp | 0.35 | WebP conversion, thumbnails, EXIF strip |
 | Audio/video | ffmpeg (static binary in image) | — | Voice-note normalization, video posters |
@@ -56,7 +57,7 @@ helpdock/
 │   ├── db/             # Drizzle schema, migrations, RLS policies, seed
 │   ├── schemas/        # Zod schemas shared by api/admin/widget (single source of truth)
 │   ├── ai/             # pi-ai wrapper: providers, embeddings, chunking, guardrails
-│   ├── channels/       # ChannelAdapter interface + email, telegram, widget, form, api adapters
+│   ├── channels/       # ChannelAdapter interface + email, telegram, widget, form, api adapters; meta/ (whatsapp, messenger, instagram, M10)
 │   ├── ui/             # Shared React bits (theme tokens → MUI theme, RTL provider)
 │   ├── i18n/           # en/, ar/ catalogs for all apps + email templates
 │   ├── config/         # Config loader: .env + DB settings, Zod-validated, typed
@@ -114,7 +115,7 @@ Two layers, one typed object (`packages/config`), validated with Zod at boot.
    `DATABASE_URL`, `REDIS_URL`, `S3_*`, `APP_MASTER_KEY` (32 bytes, base64), `APP_URL`, `APP_ROLE`, `NODE_ENV`, `PORT`.
    Any other setting *may* be set here; if it is, it **overrides** the DB value and the admin UI shows it as locked ("set by environment").
 2. **Database `settings` table — everything else** (editable in admin): SMTP defaults, OAuth client ids/secrets, LLM providers, feature toggles, limits, branding, CAPTCHA keys, etc.
-   Secret-typed keys are encrypted with AES-256-GCM under `APP_MASTER_KEY` (key id stored with each row for rotation) and never returned to the client after save.
+   Secret-typed keys are encrypted with AES-256-GCM under `APP_MASTER_KEY` (key id stored with each row for rotation) and never returned to the client after save. The Meta app's id, secrets and webhook verify token (M10) are install-scope keys here, `meta.*`.
 
 Config is cached in-process with a Redis pub/sub invalidation so a change in admin applies to all replicas within a second, without restart.
 
@@ -142,6 +143,13 @@ sla_policies(conditions jsonb, time_mode, targets jsonb, escalation jsonb, posit
 ticket_sla_clocks(ticket_id, kind, cycle, is_current, target_minutes, elapsed_ms, checkpoint_at, paused_at, due_at, satisfied_at, breached_at, fired_steps)   -- DOMAIN-RULES §3
 workflow_rules(trigger, conditions jsonb, actions jsonb, order, enabled), workflow_runs
 channels(kind, config_encrypted, status, last_error) ; mailbox/telegram/widget/form/api rows
+meta_accounts(brand_id, platform: whatsapp|messenger|instagram, department_id, external_id /*phone_number_id | page_id | ig_account_id; unique with platform across the install*/,
+              waba_id, display_phone, username, access_token /*encrypted*/, token_kind, token_expires_at, token_refreshed_at, human_agent_enabled,
+              subscribed_fields[], subscribed_at, subscription_checked_at, status: connected|token_expired|unsubscribed, last_event_at, last_error)   -- M10, ADR 0025
+meta_conversations(brand_id, account_id, customer_id /*BSUID | PSID | IGSID*/, contact_id, ticket_id, wa_id, profile_name, username, last_inbound_at /*the reply-window anchor, DOMAIN-RULES §2.6*/)
+meta_deliveries(brand_id, department_id /*denormalised for RLS*/, ticket_id, ticket_message_id, account_id, conversation_id, customer_id,
+                status: queued|sent|delivered|read|failed|refused, parts_sent, platform_message_ids[], attempts, last_error, error_code, tag, template_name, pricing_category,
+                sent_at, delivered_at, read_at, failed_at)
 api_keys(brand_id, hash, scopes[], rate_limit, last_used_at, expires_at)
 webhooks, webhook_deliveries
 hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, status, visibility), hc_settings, hc_media
@@ -182,7 +190,7 @@ Search: `tickets.search` and the help center index `hc_search_documents.search` 
 
 ```ts
 interface ChannelAdapter {
-  kind: 'email' | 'telegram' | 'widget' | 'form' | 'api' | /* v1.1: */ 'whatsapp' | 'slack' | …;
+  kind: 'email' | 'telegram' | 'widget' | 'form' | 'api' | 'whatsapp' | 'messenger' | 'instagram' | /* v1.1: */ 'slack' | …;
   init(channel: ChannelConfig): Promise<void>;        // start poller / register webhook
   handleInbound(raw: unknown): Promise<InboundMessage>; // normalize (text, attachments, identity, thread hints)
   send(msg: OutboundMessage): Promise<SendResult>;      // render + deliver
@@ -193,8 +201,9 @@ interface ChannelAdapter {
 - Inbound path: adapter → `InboundMessage` → `ConversationRouter` (find contact by identity, find open ticket by thread key, else create ticket in the channel's default department) → `ticket.replied|created` events.
 - Email thread key: `In-Reply-To`/`References` → known message ids, or `[PREFIX-N]` in subject, **and** the sender must be a ticket participant; otherwise new ticket with a mismatch note (DOMAIN-RULES §4.3).
 - Telegram: `chat_id` = identity; open ticket per chat; media downloaded via Bot API `getFile` into S3 then processed.
+- Meta (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)): one shared `packages/channels/src/meta/` (Graph client through `packages/net` with a host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier) and three thin adapters. One webhook per install, `GET|POST /api/meta/webhook`, routed by `object` and `entry[].id` to the `meta_accounts` row; the message filed in the request as Telegram's is, media fetched by `meta.media_fetch`. Identity per platform: WhatsApp business-scoped user id (with `wa_id` as a verified phone), Messenger page-scoped id, Instagram-scoped id; open ticket per conversation. Replies through `meta.send` with per-recipient pacing; the reply window refused at compose time and checked again when sending (DOMAIN-RULES §2.6).
 - Widget: Socket.IO namespace `/widget`, rooms per conversation; SSE fallback via `GET /widget/stream`.
-- Outbound always through the outbox → BullMQ (`send-email`, `send-telegram`, …) with retries, idempotency by `ticket_message_id`, and per-channel rate limits.
+- Outbound always through the outbox → BullMQ (`email.send`, `telegram.send`, `meta.send`, …) with retries, idempotency by `ticket_message_id`, and per-channel rate limits.
 
 ---
 
@@ -257,8 +266,8 @@ packages/ai
 
 | Queue | Jobs | Notes |
 |---|---|---|
-| `inbound` | `email.poll` (per mailbox, repeatable), `telegram.poll` (per bot, development only; production updates arrive by webhook and are filed in the request), `form.submit` | dedupe by external id |
-| `outbound` | `email.send`, `telegram.send`, `widget.deliver` | retries 5, backoff exp, DLQ |
+| `inbound` | `email.poll` (per mailbox, repeatable), `telegram.poll` (per bot, development only; production updates arrive by webhook and are filed in the request), `form.submit`, `meta.media_fetch` (M10: the bytes of an attachment a Meta webhook named, into the pipeline) | dedupe by external id |
+| `outbound` | `email.send`, `telegram.send`, `meta.send` (M10, paced per recipient), `widget.deliver` | retries 5, backoff exp, DLQ |
 | `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02) |
 | `rules` | `rules.evaluate`, `rules.time_based` (cron) | depth guard |
 | `ai` | `ai.assist`, `ai.autoreply`, `ai.classify`, `ai.transcribe` | per-brand concurrency + budget check |
@@ -269,7 +278,7 @@ packages/ai
 | `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |
 | `assignment` | `assignment.offline_unassign` (delayed) | M1-07's auto-unassign timer; a no-op if the agent came back or left again later |
 | `domains` | `domain.verify`, `domain.verify.schedule` (every 15 min) | M5-07's custom-domain DNS and TLS check; a request arrives through the `domain.check_requested` outbox event |
-| `maintenance` | `cleanup.tokens`, `maintenance.retention`, `stats.rollup` | cron |
+| `maintenance` | `cleanup.tokens`, `maintenance.retention`, `stats.rollup`; `meta.health` (hourly per connected account: token, subscription, Instagram refresh) and `meta.health.schedule`, `meta.templates.sync` (daily per WhatsApp account, M10-09) | cron |
 
 Bull Board (auth-protected) mounted in admin System page for queue inspection.
 
@@ -288,7 +297,7 @@ Bull Board (auth-protected) mounted in admin System page for queue inspection.
 ## 15. Testing strategy
 
 - **Unit** (Vitest): services, rule engine, thread-key resolver, guardrails, chunker.
-- **Integration** (Vitest + Testcontainers): real Postgres (RLS policies verified: a brand can never read another brand's rows), Redis, MinIO; adapters with mocked external APIs (Telegram, SMTP via Mailpit).
+- **Integration** (Vitest + Testcontainers): real Postgres (RLS policies verified: a brand can never read another brand's rows), Redis, MinIO; adapters with mocked external APIs (Telegram, SMTP via Mailpit, a local stand-in for Graph with a signed-webhook driver from M10).
 - **E2E** (Playwright): admin flows (create brand → mailbox → rule → ticket lifecycle), widget in all four modes, help center SSR + RTL snapshot.
 - **Security**: CI runs `pnpm audit`, CodeQL, Semgrep rules for Nest; a ZAP baseline scan against the docker-compose stack on release branches.
 - Coverage gate 80 % on `packages/*`.
@@ -336,6 +345,7 @@ MinIO is pulled from Quay, MinIO's own registry, rather than from Docker Hub, an
 | M7 | AI | Providers (key/OAuth), knowledge sources (articles/files/crawl/Notion/Drive), assist/auto-reply/triage, guardrails, budget |
 | M8 | API, webhooks, reports | Tenant API + keys, outbound webhooks, dashboards, CSV |
 | M9 | Hardening & release | Pentest, a11y pass, docs, `1.0.0` |
+| M10 | Meta channels | WhatsApp Cloud API, Messenger, Instagram DMs through one Graph adapter; reply windows; templates and the Human Agent tag; health jobs (scope change of 2026-10-11) |
 
 ---
 
@@ -346,3 +356,4 @@ MinIO is pulled from Quay, MinIO's own registry, rather than from Docker Hub, an
 - CAPTCHA default: Cloudflare Turnstile (free, privacy-friendly), hCaptcha as alternative.
 - Bull Board vs custom queue page: Bull Board embedded, custom summary on System page.
 - Embedding model scope: one per install, no per-brand override in v1 (DOMAIN-RULES §8).
+- Meta channels (M10, 2026-10-11): one shared Graph adapter with three thin platform adapters, Instagram through Instagram Login, one webhook per install, inbound filed in the request with media by job, the reply window enforced at compose time and at send time — settled by [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md).

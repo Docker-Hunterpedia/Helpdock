@@ -959,6 +959,78 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       expect(read.body.context).not.toHaveProperty('phone');
     });
 
+    it('tells the thread which Instagram messages the customer unsent, and which line marks each', async () => {
+      const customer = await converse({
+        account: accounts.get(INSTAGRAM) as MetaAccount,
+        customerId: '6007',
+        lastInboundAgoMs: HOUR,
+      });
+      const message = (seq: number, kind: 'public' | 'system', externalMessageId: string) =>
+        inBrand(async (tx) => {
+          const [row] = await tx
+            .insert(ticketMessages)
+            .values({
+              brandId: seeded.brandId,
+              ticketId: customer.ticketId,
+              departmentId: support,
+              seq,
+              kind,
+              authorType: kind === 'system' ? 'system' : 'contact',
+              bodyHtml: '<p>x</p>',
+              bodyText: 'x',
+              channel: 'instagram',
+              externalMessageId,
+            })
+            .returning({ id: ticketMessages.id });
+          return row?.id ?? '';
+        });
+      const original = await message(2, 'public', 'mid.unsent-1');
+      const line = await message(3, 'system', 'unsent:mid.unsent-1');
+      // A line whose message is not on this ticket marks nothing here.
+      await message(4, 'system', 'unsent:mid.elsewhere');
+
+      const read = await call<MetaTicketContextResponse>(
+        'GET',
+        `/api/brands/${seeded.brandId}/tickets/${customer.ticketId}/meta`,
+        sam,
+      );
+
+      expect(read.status).toBe(200);
+      expect(read.body.unsent).toEqual([
+        { ticketMessageId: original, lineId: line, at: expect.any(String) },
+      ]);
+    });
+
+    it('says nothing unsent on a WhatsApp ticket, whatever its lines are called', async () => {
+      const customer = await converse({
+        account: accounts.get(NUMBER) as MetaAccount,
+        customerId: 'US.13491208655302741777',
+        lastInboundAgoMs: HOUR,
+      });
+      await inBrand((tx) =>
+        tx.insert(ticketMessages).values({
+          brandId: seeded.brandId,
+          ticketId: customer.ticketId,
+          departmentId: support,
+          seq: 2,
+          kind: 'system',
+          authorType: 'system',
+          bodyHtml: '<p>x</p>',
+          bodyText: 'x',
+          channel: 'whatsapp',
+          externalMessageId: 'unsent:wamid.1',
+        }),
+      );
+
+      const read = await call<MetaTicketContextResponse>(
+        'GET',
+        `/api/brands/${seeded.brandId}/tickets/${customer.ticketId}/meta`,
+        sam,
+      );
+
+      expect(read.body.unsent).toEqual([]);
+    });
+
     it('answers a null context for a ticket on another channel, and 404 for another department’s', async () => {
       const [other] = await inBrand((tx) =>
         tx
@@ -977,7 +1049,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       const path = (ticketId: string) => `/api/brands/${seeded.brandId}/tickets/${ticketId}/meta`;
 
       const plain = await call<MetaTicketContextResponse>('GET', path(other?.id ?? ''), sam);
-      expect(plain.body).toEqual({ context: null, deliveries: [] });
+      expect(plain.body).toEqual({ context: null, deliveries: [], unsent: [] });
 
       const customer = await converse({
         account: accounts.get(PAGE) as MetaAccount,

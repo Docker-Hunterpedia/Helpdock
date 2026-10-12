@@ -34,6 +34,7 @@ import {
   metaTicketContextSchema,
   metaTicketParamSchema,
   metaTokenTestRequestSchema,
+  metaUnsentSchema,
   metaVerifyTokenRevealSchema,
   metaWebhookPath,
   replyWindowSchema,
@@ -569,7 +570,20 @@ describe('deliveries and the ticket context', () => {
     expect(metaTicketContextResponseSchema.parse({ context: null, deliveries: [] })).toEqual({
       context: null,
       deliveries: [],
+      unsent: [],
     });
+  });
+
+  it('names the message each unsent line belongs to, and when the customer unsent it', () => {
+    const unsent = { ticketMessageId: MESSAGE, lineId: TICKET, at: STAMP };
+
+    expect(
+      metaTicketContextResponseSchema.parse({ context: null, deliveries: [], unsent: [unsent] })
+        .unsent,
+    ).toEqual([unsent]);
+    expect(
+      metaUnsentSchema.safeParse({ ticketMessageId: 'x', lineId: TICKET, at: STAMP }).success,
+    ).toBe(false);
   });
 });
 

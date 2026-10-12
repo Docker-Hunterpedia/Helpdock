@@ -1,11 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { instantOf, unsentExternalId } from './instagram-rules.js';
+import {
+  instantOf,
+  UNSENT_ID_PREFIX,
+  unsentExternalId,
+  unsentMessageId,
+} from './instagram-rules.js';
 
 describe('unsentExternalId', () => {
   it('names the message the line is about and cannot be a real mid', () => {
     expect(unsentExternalId('m_abc')).toBe('unsent:m_abc');
     // A real mid never contains a colon, so the marker cannot collide with a message.
     expect(unsentExternalId('m_abc')).not.toBe('m_abc');
+  });
+});
+
+describe('unsentMessageId', () => {
+  it('reads back the mid unsentExternalId wrote', () => {
+    expect(unsentMessageId(unsentExternalId('m_abc'))).toBe('m_abc');
+    expect(unsentExternalId('m_abc').startsWith(UNSENT_ID_PREFIX)).toBe(true);
+  });
+
+  it('is null for an id that is a message’s own, or names nothing', () => {
+    expect(unsentMessageId('m_abc')).toBeNull();
+    expect(unsentMessageId('unsent:')).toBeNull();
+    expect(unsentMessageId('')).toBeNull();
   });
 });
 

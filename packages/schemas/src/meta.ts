@@ -613,9 +613,28 @@ export const metaTicketContextSchema = z.object({
 });
 export type MetaTicketContext = z.infer<typeof metaTicketContextSchema>;
 
+/**
+ * A message the customer unsent on Instagram (M10-05). The message keeps its row;
+ * what marks it is a system line whose external id is `unsent:<mid>`, and a
+ * ticket message carries no external id on the wire, so the ticket read says
+ * which message each line belongs to. The thread then draws "Unsent by the
+ * customer" on the message instead of a bare line beside it (M10-08).
+ */
+export const metaUnsentSchema = z.object({
+  /** The customer's message that was unsent. */
+  ticketMessageId: z.uuid(),
+  /** The system line that marks it. */
+  lineId: z.uuid(),
+  /** When Instagram said the customer unsent it. */
+  at: z.iso.datetime(),
+});
+export type MetaUnsent = z.infer<typeof metaUnsentSchema>;
+
 export const metaTicketContextResponseSchema = z.object({
   context: metaTicketContextSchema.nullable(),
   deliveries: z.array(metaDeliverySchema),
+  /** Oldest first; empty for a ticket that is not on Instagram or has nothing unsent. */
+  unsent: z.array(metaUnsentSchema).default([]),
 });
 export type MetaTicketContextResponse = z.infer<typeof metaTicketContextResponseSchema>;
 

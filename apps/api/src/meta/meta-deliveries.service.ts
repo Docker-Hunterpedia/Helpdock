@@ -11,9 +11,11 @@ import {
   type MetaDeliveryList,
   type MetaPlatform,
   type MetaTicketContextResponse,
+  type MetaUnsent,
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, like } from 'drizzle-orm';
+import { UNSENT_ID_PREFIX, unsentMessageId } from './instagram-rules.js';
 import type { MetaRepository } from './meta.repository.js';
 import { MetaFailure } from './meta-failure.js';
 import { deliveryFacts, toMetaDelivery, toMetaTicketContext } from './meta-view.js';
@@ -64,6 +66,7 @@ export class MetaDeliveriesService {
     return {
       context: target === undefined ? null : toMetaTicketContext(target),
       deliveries: await this.#deliveries(tx, ticketId),
+      unsent: target?.account.platform === 'instagram' ? await this.#unsent(tx, ticketId) : [],
     };
   }
 
@@ -128,6 +131,61 @@ export class MetaDeliveriesService {
         ),
       ),
     );
+  }
+
+  /**
+   * The messages the customer unsent, each with the line that marks it: the
+   * thread draws the mark on the message. A line whose message is not on this
+   * ticket (it stayed on a merged one) names nothing here and the thread keeps
+   * it as a line.
+   */
+  async #unsent(tx: DbTransaction, ticketId: string): Promise<MetaUnsent[]> {
+    const lines = await tx
+      .select({
+        id: ticketMessages.id,
+        externalMessageId: ticketMessages.externalMessageId,
+        createdAt: ticketMessages.createdAt,
+      })
+      .from(ticketMessages)
+      .where(
+        and(
+          eq(ticketMessages.ticketId, ticketId),
+          eq(ticketMessages.kind, 'system'),
+          like(ticketMessages.externalMessageId, `${UNSENT_ID_PREFIX}%`),
+        ),
+      )
+      .orderBy(asc(ticketMessages.seq));
+    const named = lines.flatMap((line) => {
+      const mid = line.externalMessageId === null ? null : unsentMessageId(line.externalMessageId);
+      return mid === null ? [] : [{ line, mid }];
+    });
+    if (named.length === 0) {
+      return [];
+    }
+
+    const originals = new Map(
+      (
+        await tx
+          .select({ id: ticketMessages.id, externalMessageId: ticketMessages.externalMessageId })
+          .from(ticketMessages)
+          .where(
+            and(
+              eq(ticketMessages.ticketId, ticketId),
+              inArray(
+                ticketMessages.externalMessageId,
+                named.map(({ mid }) => mid),
+              ),
+            ),
+          )
+      ).map((row) => [row.externalMessageId, row.id]),
+    );
+
+    return named.flatMap(({ line, mid }) => {
+      const ticketMessageId = originals.get(mid);
+      return ticketMessageId === undefined
+        ? []
+        : [{ ticketMessageId, lineId: line.id, at: line.createdAt.toISOString() }];
+    });
   }
 
   async #platformsOf(

@@ -17,11 +17,11 @@ import {
   type OutboxRow,
   policyWith,
 } from '../testing/media.js';
+import type { MetaAccountFailure } from './meta-account-failure.js';
 import {
   accountFailureOf,
   actionFor,
   createMetaMediaFetchHandler,
-  type MetaAccountFailure,
   matchesDigest,
   sizeCap,
 } from './meta-media.job.js';

@@ -1,5 +1,6 @@
 import type { DbTransaction } from '@helpdock/db';
 import {
+  type MetaMediaFetchPayload,
   type MetaProfileFetchPayload,
   type MetaSendPayload,
   outboxEvents,
@@ -15,7 +16,6 @@ import {
   enqueueMetaProfile,
   enqueueMetaReply,
   META_EVENTS,
-  type MetaMediaFetchJobPayload,
   metaMediaFetchJobId,
   metaProfileFetchJobId,
   metaSendJobId,
@@ -130,7 +130,7 @@ describe('the Meta outbox events', () => {
   });
 
   it('turns a media event into one meta.media_fetch job under the outbox row’s id', async () => {
-    const { added, queue } = capture<MetaMediaFetchJobPayload>();
+    const { added, queue } = capture<MetaMediaFetchPayload>();
     await createMetaMediaEventHandler(queue)(
       context(META_EVENTS.media, { attachmentId, accountId, ref }),
     );
@@ -162,7 +162,7 @@ describe('the Meta outbox events', () => {
 
   it('refuses a payload it cannot trust, so the event lands in the failed set', async () => {
     const send = capture<MetaSendPayload>();
-    const media = capture<MetaMediaFetchJobPayload>();
+    const media = capture<MetaMediaFetchPayload>();
     const profile = capture<MetaProfileFetchPayload>();
 
     await expect(
@@ -183,24 +183,20 @@ describe('the Meta outbox events', () => {
     expect(profile.added).toEqual([]);
   });
 
-  it('registers only the consumers it is given', () => {
+  it('registers all four consumers, once: a second call is refused by the dispatcher', () => {
     const noop = () => Promise.resolve();
-    registerMetaEventHandlers({ sendQueue: { add: noop } });
-
-    expect(outboxEvents.events).toContain('meta.reply');
-    expect(outboxEvents.events).not.toContain('meta.media');
-    expect(outboxEvents.events).not.toContain('meta_account.changed');
-
-    expect(outboxEvents.events).not.toContain('meta.profile');
-
-    registerMetaEventHandlers({
+    const consumers = {
+      sendQueue: { add: noop },
       mediaQueue: { add: noop },
       profileQueue: { add: noop },
       accountChanged: noop,
-    });
+    };
 
-    expect(outboxEvents.events).toContain('meta.media');
-    expect(outboxEvents.events).toContain('meta.profile');
-    expect(outboxEvents.events).toContain('meta_account.changed');
+    registerMetaEventHandlers(consumers);
+
+    expect(outboxEvents.events).toEqual(
+      expect.arrayContaining(['meta.reply', 'meta.media', 'meta.profile', 'meta_account.changed']),
+    );
+    expect(() => registerMetaEventHandlers(consumers)).toThrow();
   });
 });

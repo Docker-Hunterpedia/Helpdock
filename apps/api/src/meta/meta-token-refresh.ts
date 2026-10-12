@@ -30,7 +30,7 @@ const REFRESH_PRINCIPAL = 'meta.token_refresh';
 
 export interface TokenRefreshDeps {
   readonly db: Db;
-  readonly repository: Pick<MetaRepository, 'account' | 'update' | 'markError'>;
+  readonly repository: Pick<MetaRepository, 'account' | 'update' | 'markError' | 'markTokenDead'>;
   readonly keyring: Keyring;
   /** Only `get` is called: the renewal is a `GET`, as Meta defines it. */
   readonly graph: GraphClient;
@@ -143,15 +143,10 @@ const recordRefusal = async (
     (account.tokenExpiresAt !== null && account.tokenExpiresAt.getTime() <= now.getTime());
 
   await whileTokenUnchanged(deps, account, async (tx) => {
-    await deps.repository.markError(
-      tx,
-      account.id,
-      graph.redact(`Instagram would not renew the token: ${refusal.detail}`),
-      now,
-    );
-    if (expired) {
-      await deps.repository.update(tx, account.id, { status: 'token_expired' });
-    }
+    const detail = graph.redact(`Instagram would not renew the token: ${refusal.detail}`);
+    await (expired
+      ? deps.repository.markTokenDead(tx, account.id, detail, now)
+      : deps.repository.markError(tx, account.id, detail, now));
   });
 };
 

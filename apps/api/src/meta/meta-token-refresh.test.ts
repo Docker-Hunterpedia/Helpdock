@@ -82,6 +82,7 @@ describe('refreshInstagramToken', () => {
     account: vi.fn(),
     update: vi.fn(),
     markError: vi.fn(),
+    markTokenDead: vi.fn(),
   };
   const deps = (): TokenRefreshDeps => ({
     db: {} as Db,
@@ -96,6 +97,7 @@ describe('refreshInstagramToken', () => {
     repository.account.mockReset().mockResolvedValue({ accessToken: ciphertext });
     repository.update.mockReset().mockResolvedValue(undefined);
     repository.markError.mockReset().mockResolvedValue(undefined);
+    repository.markTokenDead.mockReset().mockResolvedValue(undefined);
   });
 
   it('stores the renewed token encrypted, with its new expiry and the moment of renewal', async () => {
@@ -174,9 +176,13 @@ describe('refreshInstagramToken', () => {
 
     await refreshInstagramToken(deps(), row);
 
-    expect(repository.update).toHaveBeenCalledExactlyOnceWith({}, row.id, {
-      status: 'token_expired',
-    });
+    expect(repository.markTokenDead).toHaveBeenCalledExactlyOnceWith(
+      {},
+      row.id,
+      'Instagram would not renew the token: 100: Cannot be refreshed',
+      NOW,
+    );
+    expect(repository.markError).not.toHaveBeenCalled();
   });
 
   it('marks the account token_expired when Meta itself calls the token dead', async () => {
@@ -190,9 +196,13 @@ describe('refreshInstagramToken', () => {
 
     await refreshInstagramToken(deps(), account({ tokenExpiresAt: null }));
 
-    expect(repository.update).toHaveBeenCalledExactlyOnceWith({}, expect.any(String), {
-      status: 'token_expired',
-    });
+    expect(repository.markTokenDead).toHaveBeenCalledExactlyOnceWith(
+      {},
+      expect.any(String),
+      'Instagram would not renew the token: 190: Cannot refresh an expired token',
+      NOW,
+    );
+    expect(repository.markError).not.toHaveBeenCalled();
   });
 
   it('treats an answer it cannot read as a refusal', async () => {

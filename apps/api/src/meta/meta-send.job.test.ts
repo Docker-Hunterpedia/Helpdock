@@ -27,7 +27,7 @@ const record = async (error: unknown, job: Partial<Job> = {}) => {
     markRefused: note('markRefused'),
     recordFailure: note('recordFailure'),
     markError: note('markError'),
-    update: note('update'),
+    markTokenDead: note('markTokenDead'),
   } as unknown as MetaRepository;
 
   await recordSendFailure({
@@ -143,11 +143,7 @@ describe('recordSendFailure: what a failed attempt leaves, by what Graph said (b
         'delivery-1',
         expect.objectContaining({ dead: true, errorCode: '190/463' }),
       ],
-      [
-        'update',
-        'account-1',
-        { status: 'token_expired', lastError: '190: Graph said no', lastErrorAt: at },
-      ],
+      ['markTokenDead', 'account-1', '190: Graph said no', at],
     ]);
   });
 

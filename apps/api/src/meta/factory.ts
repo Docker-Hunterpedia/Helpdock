@@ -16,7 +16,8 @@ import { DeferredAttachmentSink } from './deferred-sink.js';
 import { InstagramInboundService } from './instagram-inbound.service.js';
 import { MessengerInboundService } from './messenger-inbound.service.js';
 import { MetaRepository } from './meta.repository.js';
-import { accountFailureRecorder, createMetaMediaFetchProcessor } from './meta-media.job.js';
+import { accountFailureRecorder } from './meta-account-failure.js';
+import { createMetaMediaFetchProcessor } from './meta-media.job.js';
 import { createMetaProfileProcessor } from './meta-profile.job.js';
 import { MetaConversationRouter } from './meta-router.js';
 import { WhatsAppInboundService } from './whatsapp-inbound.service.js';
@@ -91,6 +92,7 @@ export interface MetaInboundJobs {
 /** The jobs the inbound services raise outbox rows for: the files a message named, a customer's name. */
 export const createMetaInboundJobs = (options: MetaInboundJobsOptions): MetaInboundJobs => {
   const repository = new MetaRepository();
+  const recordAccountFailure = accountFailureRecorder(options.db, repository);
 
   return {
     profileFetch: createMetaProfileProcessor({
@@ -99,6 +101,7 @@ export const createMetaInboundJobs = (options: MetaInboundJobsOptions): MetaInbo
       repository,
       keyring: options.keyring,
       graph: options.graph,
+      recordAccountFailure,
     }),
     mediaFetch: createMetaMediaFetchProcessor({
       db: options.db,
@@ -108,7 +111,7 @@ export const createMetaInboundJobs = (options: MetaInboundJobsOptions): MetaInbo
       keyring: options.keyring,
       repository,
       media: new MediaRepository(),
-      recordAccountFailure: accountFailureRecorder(options.db, repository),
+      recordAccountFailure,
     }),
   };
 };

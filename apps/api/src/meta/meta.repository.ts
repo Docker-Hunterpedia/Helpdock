@@ -174,6 +174,23 @@ export class MetaRepository {
       .where(eq(metaAccounts.id, id));
   }
 
+  /**
+   * Meta no longer knows the account's token: `token_expired`, with what Graph
+   * said, which an Admin reads before pasting a new one. The one write for it,
+   * from the send job, the media and profile jobs, the renewal and the routes.
+   */
+  async markTokenDead(tx: DbTransaction, id: string, error: string, at: Date): Promise<void> {
+    await tx
+      .update(metaAccounts)
+      .set({
+        status: 'token_expired',
+        lastError: error.slice(0, META_ERROR_MAX_LENGTH),
+        lastErrorAt: at,
+        updatedAt: new Date(),
+      })
+      .where(eq(metaAccounts.id, id));
+  }
+
   // --------------------------------------------------------- install scope
 
   /**

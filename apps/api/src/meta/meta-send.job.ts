@@ -736,11 +736,7 @@ export const recordSendFailure = async ({
   });
   if (graph?.kind === 'token_dead') {
     // Meta no longer knows the token: an Admin pastes a new one (ADR 0025, 10).
-    await repository.update(tx, delivery.accountId, {
-      status: 'token_expired',
-      lastError: clipped,
-      lastErrorAt: at,
-    });
+    await repository.markTokenDead(tx, delivery.accountId, clipped, at);
   } else if (graph !== null) {
     await repository.markError(tx, delivery.accountId, clipped, at);
   }

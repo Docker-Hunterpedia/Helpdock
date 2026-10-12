@@ -391,10 +391,10 @@ export class MetaAccountsService {
     const outcome = await this.#subscribe(graph, account.platform, node);
 
     if (!outcome.ok) {
-      await this.#repository.markError(tx, id, graph.redact(outcome.failure.detail), now);
-      if (outcome.failure.kind === 'token_dead') {
-        await this.#repository.update(tx, id, { status: 'token_expired' });
-      }
+      const detail = graph.redact(outcome.failure.detail);
+      await (outcome.failure.kind === 'token_dead'
+        ? this.#repository.markTokenDead(tx, id, detail, now)
+        : this.#repository.markError(tx, id, detail, now));
       return { ok: false, detail: clip(graph.redact(outcome.failure.detail)) };
     }
 

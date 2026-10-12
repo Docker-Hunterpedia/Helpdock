@@ -98,9 +98,6 @@ export const enqueueMetaAccountChanged = async (
     payload: metaAccountChangedEventSchema.parse({ accountId }),
   });
 
-/** What `meta.media_fetch` is asked to do: the job's own schema in `@helpdock/jobs` (M10-03). */
-export type MetaMediaFetchJobPayload = MetaMediaFetchPayload;
-
 /** The producer half of `meta.send`; the worker hands it a BullMQ queue. */
 export interface MetaSendQueue {
   add(input: { readonly jobId: string; readonly payload: MetaSendPayload }): Promise<void>;
@@ -108,7 +105,7 @@ export interface MetaSendQueue {
 
 /** The producer half of `meta.media_fetch`. */
 export interface MetaMediaFetchQueue {
-  add(input: { readonly jobId: string; readonly payload: MetaMediaFetchJobPayload }): Promise<void>;
+  add(input: { readonly jobId: string; readonly payload: MetaMediaFetchPayload }): Promise<void>;
 }
 
 /** The producer half of `meta.profile_fetch`. */
@@ -155,11 +152,11 @@ export const createMetaProfileEventHandler =
 
 /**
  * Called by the worker's start-up, before the consumer exists
- * (`worker/start-worker.ts`). Every consumer is optional because they land one
- * deliverable at a time (`meta.send` with M10-06, `meta.media_fetch` with
- * M10-03, the health follower with M10-10): each adds its own to the one call,
- * which is made once, because the dispatcher refuses a second handler for an
- * event.
+ * (`worker/start-worker.ts`). The four consumers are required, so a Meta outbox
+ * event is never left without a handler: `meta.reply` queues a send on
+ * `outbound`, `meta.media` and `meta.profile` queue a fetch on `inbound`, and an
+ * account that changed moves its hourly health check. The call is made once,
+ * because the dispatcher refuses a second handler for an event.
  */
 export const registerMetaEventHandlers = ({
   sendQueue,
@@ -167,21 +164,13 @@ export const registerMetaEventHandlers = ({
   profileQueue,
   accountChanged,
 }: {
-  readonly sendQueue?: MetaSendQueue;
-  readonly mediaQueue?: MetaMediaFetchQueue;
-  readonly profileQueue?: MetaProfileFetchQueue;
-  readonly accountChanged?: OutboxEventHandler;
+  readonly sendQueue: MetaSendQueue;
+  readonly mediaQueue: MetaMediaFetchQueue;
+  readonly profileQueue: MetaProfileFetchQueue;
+  readonly accountChanged: OutboxEventHandler;
 }): void => {
-  if (sendQueue !== undefined) {
-    registerEventHandler(META_EVENTS.reply, createMetaReplyEventHandler(sendQueue));
-  }
-  if (mediaQueue !== undefined) {
-    registerEventHandler(META_EVENTS.media, createMetaMediaEventHandler(mediaQueue));
-  }
-  if (profileQueue !== undefined) {
-    registerEventHandler(META_EVENTS.profile, createMetaProfileEventHandler(profileQueue));
-  }
-  if (accountChanged !== undefined) {
-    registerEventHandler(META_EVENTS.accountChanged, accountChanged);
-  }
+  registerEventHandler(META_EVENTS.reply, createMetaReplyEventHandler(sendQueue));
+  registerEventHandler(META_EVENTS.media, createMetaMediaEventHandler(mediaQueue));
+  registerEventHandler(META_EVENTS.profile, createMetaProfileEventHandler(profileQueue));
+  registerEventHandler(META_EVENTS.accountChanged, accountChanged);
 };

@@ -14,10 +14,11 @@ import {
   metaProfileFetchJob,
   readJob,
 } from '@helpdock/jobs';
-import { META_ERROR_MAX_LENGTH } from '@helpdock/schemas';
 import type { Job } from 'bullmq';
+import { failureFields } from '../channels/pg-errors.js';
 import { graphForAccount } from './account-graph.js';
 import type { MetaRepository } from './meta.repository.js';
+import type { AccountFailureRecorder } from './meta-account-failure.js';
 import { planProfileLookup, readProfile, wantsProfile } from './meta-profile.js';
 
 /**
@@ -53,7 +54,7 @@ import { planProfileLookup, readProfile, wantsProfile } from './meta-profile.js'
 export interface MetaProfileDependencies {
   readonly repository: Pick<
     MetaRepository,
-    'account' | 'conversationById' | 'recordProfile' | 'recordProfileCheck' | 'update'
+    'account' | 'conversationById' | 'recordProfile' | 'recordProfileCheck'
   >;
   readonly keyring: Keyring;
   readonly graph: GraphClient;
@@ -61,6 +62,8 @@ export interface MetaProfileDependencies {
   readonly transaction: <T>(brandId: string, work: (tx: DbTransaction) => Promise<T>) => Promise<T>;
   /** Claims the delivery's receipt, in the transaction that writes what the delivery did. */
   readonly claim: (tx: DbTransaction, key: string) => Promise<boolean>;
+  /** Marks the account `token_expired` in a transaction of its own: the throw that follows ends the attempt. */
+  readonly recordAccountFailure: AccountFailureRecorder;
   readonly now?: () => Date;
 }
 
@@ -110,23 +113,17 @@ export const createMetaProfileHandler = (deps: MetaProfileDependencies) => {
       await record(tx, current);
     });
 
-  /** In a transaction of its own, because the throw that follows ends the job's attempt. */
+  /** A token Graph calls dead is recorded on the account, and a failure to record it never hides that one. */
   const expireToken = async (
     account: MetaAccountRow,
     detail: string,
     log: JobLogger,
   ): Promise<void> => {
     await deps
-      .transaction(account.brandId, (tx) =>
-        deps.repository.update(tx, account.id, {
-          status: 'token_expired',
-          lastError: detail.slice(0, META_ERROR_MAX_LENGTH),
-          lastErrorAt: now(),
-        }),
-      )
+      .recordAccountFailure(account.brandId, account.id, { kind: 'token_dead', detail })
       .catch((error: unknown) => {
         log.error(
-          { err: error, accountId: account.id },
+          { accountId: account.id, ...failureFields(error) },
           'could not mark a meta account token_expired',
         );
       });

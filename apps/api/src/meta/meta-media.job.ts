@@ -21,7 +21,6 @@ import {
   type AttachmentKind,
   type AttachmentRejectReason,
   type ContentPolicy,
-  META_ERROR_MAX_LENGTH,
   type MetaFileRef,
   policyFor,
 } from '@helpdock/schemas';
@@ -37,6 +36,7 @@ import { withTempDir } from '../media/temp-dir.js';
 import { graphForAccount } from './account-graph.js';
 import { declaredFile, metaFileName } from './deferred-sink.js';
 import type { MetaRepository } from './meta.repository.js';
+import type { AccountFailureRecorder, MetaAccountFailure } from './meta-account-failure.js';
 
 /**
  * `meta.media_fetch` (M10-03, ADR 0025, 6): the bytes of a file a WhatsApp,
@@ -89,12 +89,6 @@ import type { MetaRepository } from './meta.repository.js';
  * dead token at once rather than after the last attempt.
  */
 
-/** What a failed fetch tells the account's row. Never the token. */
-export interface MetaAccountFailure {
-  readonly kind: 'token_dead' | 'other';
-  readonly detail: string;
-}
-
 export interface MetaMediaFetchDependencies {
   /** Where the bytes go: the same bucket `media.process` reads. */
   readonly storage: Pick<ObjectStorage, 'upload'>;
@@ -107,30 +101,9 @@ export interface MetaMediaFetchDependencies {
   /** Claims the delivery's receipt, in the transaction that writes what the delivery did. */
   readonly claim: (tx: DbTransaction, key: string) => Promise<boolean>;
   /** Writes a fact about the account in a transaction of its own (see the note above). */
-  readonly recordAccountFailure: (
-    brandId: string,
-    accountId: string,
-    failure: MetaAccountFailure,
-  ) => Promise<void>;
+  readonly recordAccountFailure: AccountFailureRecorder;
   readonly now?: () => Date;
 }
-
-/** `recordAccountFailure` over the database: `token_expired` and `last_error` on the row. */
-export const accountFailureRecorder =
-  (
-    db: Db,
-    repository: Pick<MetaRepository, 'update'>,
-    now: () => Date = () => new Date(),
-  ): MetaMediaFetchDependencies['recordAccountFailure'] =>
-  (brandId, accountId, failure) =>
-    withSystem(db, brandId, async (tx) => {
-      const at = now();
-      await repository.update(tx, accountId, {
-        ...(failure.kind === 'token_dead' ? { status: 'token_expired' as const } : {}),
-        lastError: failure.detail.slice(0, META_ERROR_MAX_LENGTH),
-        lastErrorAt: at,
-      });
-    });
 
 // --------------------------------------------------------------------------
 // Pure decisions

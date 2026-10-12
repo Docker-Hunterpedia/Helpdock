@@ -54,6 +54,10 @@ describe('MetaAccountsService (Graph reads)', () => {
     markError: async (_tx: unknown, id: string, detail: string) => {
       marked.push({ id, detail });
     },
+    markTokenDead: async (_tx: unknown, id: string, detail: string) => {
+      marked.push({ id, detail });
+      updated.push({ id, values: { status: 'token_expired' } });
+    },
     update: async (_tx: unknown, id: string, values: Record<string, unknown>) => {
       updated.push({ id, values });
     },

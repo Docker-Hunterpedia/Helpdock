@@ -65,6 +65,7 @@ import { createMediaProcessor } from '../media/process.job.js';
 import { FakeStorage } from '../testing/media.js';
 import { createMetaInboundJobs } from './factory.js';
 import { MetaRepository } from './meta.repository.js';
+import { accountFailureRecorder } from './meta-account-failure.js';
 import {
   createMetaMediaEventHandler,
   createMetaProfileEventHandler,
@@ -270,6 +271,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
         instagramRoot: graph.instagramRoot,
         allowCidrs: ['127.0.0.0/8'],
       }),
+      recordAccountFailure: accountFailureRecorder(runtime.db, repository),
     });
     const rows = await owner.db
       .select()

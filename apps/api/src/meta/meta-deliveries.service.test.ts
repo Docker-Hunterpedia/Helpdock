@@ -217,7 +217,7 @@ describe('ticketContext', () => {
 
     const result = await service.ticketContext(fakeTx({ tickets: [ticketRow('email')] }), TICKET);
 
-    expect(result).toEqual({ context: null, deliveries: [] });
+    expect(result).toEqual({ context: null, deliveries: [], unsent: [] });
     expect(outbound.targetFor).not.toHaveBeenCalled();
   });
 

@@ -121,6 +121,8 @@ describe('a WhatsApp ticket', () => {
       'Lina Haddad: Sorry about that, Daniel. Could you send a photo of the label on the box too?',
     );
     expect(within(thread()).getByText('Here it is.')).toBeVisible();
+    // The customer's words decide their own direction, so an Arabic admin keeps an English sentence's punctuation.
+    expect(within(thread()).getByText('Here it is.').closest('[dir="auto"]')).not.toBeNull();
     expect(within(thread()).getByRole('img', { name: 'Sticker' })).toBeVisible();
     // A sticker is a figure, not a file chip.
     expect(within(thread()).queryByText('sticker.webp')).toBeNull();

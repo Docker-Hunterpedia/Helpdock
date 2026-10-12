@@ -95,6 +95,13 @@ export interface MetaContent {
 }
 
 export interface ThreadMeta {
+  /**
+   * What the strip under the thread is doing to the thread's height: it is read
+   * after the thread is drawn, and takes room from it, so a thread already
+   * scrolled to its end must be scrolled again when the strip arrives and when
+   * a refusal adds its second line.
+   */
+  readonly pinKey: 'strip' | 'refused';
   /** Before a message's time: "via +1 555 0142" on the customer's, "to WhatsApp" on a reply. */
   leadFor(message: TicketMessage): ReactNode;
   /** After a reply's time: Sending, Sent, Delivered or Read. */
@@ -279,6 +286,7 @@ export function useTicketMeta({
   );
 
   const thread: ThreadMeta = {
+    pinKey: state.kind === 'closed' && state.refused ? 'refused' : 'strip',
     leadFor: (message) =>
       message.authorType === 'contact'
         ? lead(t('tickets:meta.via', { account }))

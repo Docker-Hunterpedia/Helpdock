@@ -124,6 +124,7 @@ export function Thread({
   const { locale } = usePreferences();
   const end = useRef<HTMLDivElement | null>(null);
   const count = items.length;
+  const pinKey = meta?.pinKey;
   // M10-08: the line that marks an unsent Instagram message is drawn on the
   // message, so it is not a second event beside it.
   const shown =
@@ -133,10 +134,12 @@ export function Thread({
 
   // The newest message is the one somebody opened the ticket to read. The
   // count, not the items: a re-read that changes nothing must not scroll.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the count is the trigger.
+  // M10-08: and again when the Meta strip arrives below it, which takes room
+  // from the thread after it was scrolled.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the count and the pin are the triggers.
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' });
-  }, [count]);
+  }, [count, pinKey]);
 
   return (
     <>
@@ -447,6 +450,7 @@ function SentMessage({
       meta={metaOf(message, names, locale, now, telegram, meta)}
       {...(label === undefined ? {} : { label })}
       {...(content === undefined ? {} : { before: content.before })}
+      {...(meta === undefined ? {} : { bodyDir: 'auto' as const })}
       bodyHtml={located?.html ?? html}
       body={assist?.bodyFor(message)}
       facts={assist?.factsFor(message)}

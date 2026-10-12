@@ -82,7 +82,7 @@ the same client with a host allow-list: `graph.facebook.com` and
 `graph.instagram.com` (or the hosts `META_GRAPH_API_ROOT` and
 `META_INSTAGRAM_API_ROOT` name), `lookaside.fbsbx.com`, and `*.fbcdn.net`. Any
 other host is refused, no redirect is followed, and an access token is sent only
-to Meta's own API hosts, never to a CDN host
+to Meta's API hosts and to `lookaside.fbsbx.com`, never to a CDN host
 ([Meta channels](meta-channels.md#how-metas-posts-are-checked),
 [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md), 2).
 

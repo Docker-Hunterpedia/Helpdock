@@ -13,11 +13,11 @@ Accounts are managed on **Channels › Meta**, which only an Admin of the brand 
 | What the customer writes to | A business number on the WhatsApp Cloud API | A Facebook Page | An Instagram professional account (business or creator) |
 | The id Helpdock asks for | The phone number id, not the number | The Page id | The Instagram account id |
 | The token | A system-user token, with the WhatsApp business account assigned to that system user | A Page access token | An Instagram user token, from **Generate token** |
-| How long the token lasts | Never, when generated with expiry set to Never | No expiry date. It stops working if the password changes, the person who made it loses the Page role, or the app is removed from the Page | 60 days. Helpdock renews it once it is a week old |
+| How long the token lasts | Never, when generated with expiry set to Never | No expiry date. It stops working if the password changes, the person who made it loses the Page role, or the app is de-authorised | 60 days. Helpdock renews it once it is a week old |
 | Reply window | 24 hours | 24 hours; 7 days for a person's reply when the Human Agent switch is on | 24 hours; 7 days for a person's reply when the Human Agent switch is on |
 | Customers outside your roles | Works for your own business portfolio. Other businesses' use needs Advanced Access | Needs App Review for `pages_messaging` | Needs App Review and Business Verification for accounts you do not manage |
 
-The token lifetimes are as Meta's documentation described them in October 2026 (per Meta's documentation, as of October 2026). Meta can change them.
+Per Meta's documentation as of October 2026, which Meta can change, these are the token lifetimes.
 
 ## The Meta app
 
@@ -121,7 +121,7 @@ The routes behind the dialog are under `/api/brands/:brandId/meta/accounts` and 
 
 ## Health, Subscribe now and Reconnect
 
-Once an hour, for every connected account in every brand, the health job checks four things (`meta.health`, UTC):
+Once an hour, for every connected account except those in a brand being deleted, the health job checks four things (`meta.health`, UTC):
 
 1. **The token.** WhatsApp and Messenger ask Meta about the token. Instagram asks for its own account.
 2. **The subscription.** Helpdock's app must still be subscribed to the account. If it is not, Helpdock subscribes it again and reads it back.
@@ -135,7 +135,7 @@ The account's state, as the list and its page show it:
 | **Healthy** | Connected and a message has arrived | Nothing |
 | **Waiting** | Connected, no message yet | Wait, or send a test message from an allowed account |
 | **Failing** | The last thing that happened was an error, or the account is not connected | Read the account's last error and fix it |
-| **Expiring** | An Instagram token with less than a week left; its renewal has not worked | Reconnect |
+| **Expiring** | A token with less than a week left, which in practice is an Instagram token whose renewal has not worked | Reconnect |
 | **Token expired** | Meta no longer accepts the token. Nothing is sent or fetched for the account | **Reconnect** with a new token |
 | **Not subscribed** | Meta no longer sends the account's messages to Helpdock, and the check could not restore it | Fix what Meta's last problem names, then **Subscribe now** |
 

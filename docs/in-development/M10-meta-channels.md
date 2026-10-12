@@ -121,7 +121,8 @@ written here.
   retry** (one hour, then unsubscribed, on the Messenger page; 36 hours on
   the Instagram page). The design assumes the worse case of each.
   *Status (2026-10-12):* answered by the design, not by a run. The webhook files a batch in the
-  request and answers at once, and the health job checks hourly; both assume the worse case.
+  request, with no call to Meta, and answers once it is filed; the health job checks hourly. Both
+  assume the worse case.
 - **The closed-window error on Messenger and Instagram** (`10` with subcode
   `2018278`) is widely documented but was not readable on Meta's reference;
   the stand-in uses it, and a real refusal confirms the code the classifier
@@ -717,7 +718,7 @@ the database, the media fetch and the customer's name, is an outbox row.
 | `echo` | `app_id` equal to `meta.appId`, or `metadata` naming a `meta_deliveries` row of this account: Helpdock's own send, dropped silently. Any other echo (typed in the Page inbox, another app): dropped, logged at `info` without a word of it | `ignored: echo`, `ignored: echo-not-ours` |
 | `delivery` | `advanceByWatermark(conversation, 'delivered', watermark)`: every delivery of the conversation sent at or before the watermark; and `advanceStatus(mid, 'delivered', …)` for each `mid` the report names, which a watermark earlier than the message does not reach. Both only move a delivery forward | `handled`; `ignored: no-conversation` / `empty-receipt` |
 | `read` | `advanceByWatermark(conversation, 'read', watermark)` | the same |
-| `reaction` | a system line on the ticket of the message reacted to, a customer's or one of Helpdock's replies (`messageByPlatformId`): "The customer reacted ❤️ to a message.", "…reacted to a message." without an emoji, "…removed their reaction to a message."; none when the ticket is closed or spam (`openTicket`). Never a window anchor | `handled`; `duplicate`; `ignored: unknown-message` / `no-open-ticket` |
+| `reaction` | a system line on the ticket of the message reacted to, a customer's or one of Helpdock's replies (`messageByPlatformId`): "The customer reacted <emoji> to a message.", "…reacted to a message." without an emoji, "…removed their reaction to a message."; none when the ticket is closed or spam (`openTicket`). Never a window anchor | `handled`; `duplicate`; `ignored: unknown-message` / `no-open-ticket` |
 | `edit` | a system line with the new words, on the message's open ticket; the message keeps what it said | the same, and `ignored: empty-edit` |
 | `postback`, `referral`, `standby` (and any other `ignored` event) | counted, dropped | `ignored: postback` / `referral` / `standby` / the classifier's reason |
 | `policy_enforcement` | counted, dropped, and recorded as the account's `last_error` (`messaging_policy_enforcement block: <Meta's reason>`) | `ignored: policy-enforcement` |

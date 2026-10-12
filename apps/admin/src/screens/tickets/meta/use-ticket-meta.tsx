@@ -12,6 +12,7 @@ import { Box } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleAlert, type LucideIcon, Smile, Undo2 } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { Trans } from 'react-i18next';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { isMetaError, metaKeys } from '../../../meta/api.js';
@@ -275,13 +276,13 @@ export function useTicketMeta({
       ? t(platform === 'messenger' ? 'tickets:meta.messengerUser' : 'tickets:meta.theCustomer')
       : customerName;
 
-  const lead = (text: string): ReactNode => (
+  const lead = (content: ReactNode): ReactNode => (
     <Box
       component="span"
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, verticalAlign: 'middle' }}
     >
       <Icon size={14} aria-hidden="true" />
-      {text}
+      {content}
     </Box>
   );
 
@@ -289,7 +290,14 @@ export function useTicketMeta({
     pinKey: state.kind === 'closed' && state.refused ? 'refused' : 'strip',
     leadFor: (message) =>
       message.authorType === 'contact'
-        ? lead(t('tickets:meta.via', { account }))
+        ? lead(
+            <Trans
+              ns="tickets"
+              i18nKey="meta.via"
+              values={{ account }}
+              components={{ bdi: <bdi /> }}
+            />,
+          )
         : isReply(message)
           ? lead(t('tickets:meta.to', { channel: platformName }))
           : null,

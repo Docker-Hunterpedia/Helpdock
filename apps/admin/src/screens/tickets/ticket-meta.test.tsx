@@ -92,8 +92,15 @@ describe('a WhatsApp ticket', () => {
     await open(MOCK_TICKET_WHATSAPP);
 
     const header = screen.getByRole('region', { name: 'Ticket header' });
-    expect(await within(header).findByText(/WhatsApp · \+1 555 0142 · Support/)).toBeVisible();
-    expect(within(thread()).getAllByText('via +1 555 0142').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(header).toHaveTextContent('WhatsApp · +1 555 0142 · Support');
+    });
+    // The number is an isolate, so the Arabic line cannot turn it round.
+    expect(within(header).getByText('+1 555 0142').tagName).toBe('BDI');
+    expect(thread()).toHaveTextContent('via +1 555 0142');
+    expect(
+      within(thread()).getAllByText('+1 555 0142', { selector: 'bdi' }).length,
+    ).toBeGreaterThan(0);
     expect(within(thread()).getAllByText('to WhatsApp').length).toBeGreaterThan(0);
   });
 
@@ -280,7 +287,9 @@ describe('a Messenger ticket', () => {
     await open(MOCK_TICKET_MESSENGER);
 
     const header = screen.getByRole('region', { name: 'Ticket header' });
-    expect(await within(header).findByText(/Messenger · Helpdock · Support/)).toBeVisible();
+    await waitFor(() => {
+      expect(header).toHaveTextContent('Messenger · Helpdock · Support');
+    });
     const card = await screen.findByRole('region', { name: 'Messenger identity' });
     expect(within(card).getByText('7120458839201457')).toBeVisible();
     expect(within(card).getByText('Messenger user')).toBeVisible();

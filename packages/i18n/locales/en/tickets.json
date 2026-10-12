@@ -588,8 +588,8 @@
     }
   },
   "meta": {
-    "chip": "{{channel}} · {{account}}",
-    "via": "via {{account}}",
+    "chip": "{{channel}} · <bdi>{{account}}</bdi>",
+    "via": "via <bdi>{{account}}</bdi>",
     "to": "to {{channel}}",
     "messengerUser": "Messenger user",
     "theCustomer": "the customer",

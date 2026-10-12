@@ -21,6 +21,7 @@ import {
   SquarePen,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Trans } from 'react-i18next';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -248,12 +249,21 @@ export function ChannelLabel({
   const t = useT();
   const Icon = CHANNEL_ICONS[channel];
   const channelName = t(`tickets:channel.${channel}`);
-  const name =
-    account !== undefined
-      ? t('tickets:meta.chip', { channel: channelName, account })
-      : handle === undefined
-        ? channelName
-        : t('tickets:telegram.chip', { channel: channelName, username: handle });
+  // The brand's number or handle is an isolate of its own (DESIGN §7): inside
+  // the Arabic label a bare "+1 555 0142" reads back to front.
+  const name: ReactNode =
+    account !== undefined ? (
+      <Trans
+        ns="tickets"
+        i18nKey="meta.chip"
+        values={{ channel: channelName, account }}
+        components={{ bdi: <bdi /> }}
+      />
+    ) : handle === undefined ? (
+      channelName
+    ) : (
+      t('tickets:telegram.chip', { channel: channelName, username: handle })
+    );
 
   return (
     <Typography
@@ -261,7 +271,10 @@ export function ChannelLabel({
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}
     >
       <Icon size={14} aria-hidden="true" />
-      <bdi>{departmentName === undefined ? name : `${name} · ${departmentName}`}</bdi>
+      <bdi>
+        {name}
+        {departmentName === undefined ? null : ` · ${departmentName}`}
+      </bdi>
     </Typography>
   );
 }

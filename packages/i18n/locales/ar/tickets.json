@@ -596,8 +596,8 @@
     }
   },
   "meta": {
-    "chip": "{{channel}} · {{account}}",
-    "via": "عبر {{account}}",
+    "chip": "{{channel}} · <bdi>{{account}}</bdi>",
+    "via": "عبر <bdi>{{account}}</bdi>",
     "to": "إلى {{channel}}",
     "messengerUser": "مستخدم ماسنجر",
     "theCustomer": "العميل",

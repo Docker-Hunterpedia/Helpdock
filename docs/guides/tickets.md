@@ -1060,21 +1060,23 @@ GET  /api/brands/:brandId/tickets/:ticketId/meta/deliveries               ticket
 POST /api/brands/:brandId/tickets/:ticketId/meta/deliveries/:id/retry     ticket:write
 ```
 
-The first answers `{ context, deliveries }`. `context` is null for a ticket that is
-not on a Meta channel or has no conversation. Otherwise `context.account` names
-the account (`id`, `platform`, `externalId`, `displayName`, and `username` or
-`displayPhone` when there is one), `context.customerId` is the customer's id, with
-`phone` and `phoneVerified` for a WhatsApp number Meta sent, `profileName` and
-`username`, and `context.window` is the **window for a person writing now**:
-`{ state: "open", closesAt }`, `{ state: "human_agent", closesAt }` or
-`{ state: "closed", closedAt }`. Each delivery carries `status`
+The first answers `{ context, deliveries, unsent }`. `context` is null for a ticket that is
+not on a Meta channel or has no conversation. Otherwise it names the account
+(`id`, `platform`, `externalId`, `displayName`, and `username` or `displayPhone`
+when there is one), the customer (`customerId`, `phone` and `phoneVerified` for a
+WhatsApp number Meta sent, `profileName`, `username`) and the **window for a
+person writing now**: `{ state: "open", closesAt }`, `{ state: "human_agent",
+closesAt }` or `{ state: "closed", closedAt }`. Each delivery carries `status`
 (`queued`, `sent`, `delivered`, `read`, `failed`, `refused`), `partsSent` of
 `partsTotal` (the text in the platform's parts, then one message per attachment),
 `attempts`, Meta's `lastError` and `errorCode`, the four times, and `leftOut`: the
 files the platform would not take, each with its name and `unsupported-type` or
 `too-large`. The customer was told in their language; the agent reads it under the
 reply. A delivery moves forward only, and the platform's own reports (`delivered`,
-`read`) arrive by webhook.
+`read`) arrive by webhook. `unsent` (Instagram tickets only, oldest first) names each
+message the customer took back and the system line that marks it, with when: a ticket
+message carries no platform id on the wire, so this is how the thread draws the mark
+on the message ([below](#a-whatsapp-messenger-or-instagram-ticket)).
 
 **Retry** puts a `failed` delivery back, keeping the parts already sent as sent. A
 `refused` one answers `409` with the same `reply-window-closed`, and its details
@@ -1310,6 +1312,114 @@ M1-11's is the last: **Mark as spam**, in danger text behind a separator, which
 opens the confirmation of panel 5 with a ticked "Block <sender>" card when the
 api says the sender may be blocked; or **Not spam** on a ticket already in
 Spam, which reopens it at once. A merged secondary offers neither.
+
+### A WhatsApp, Messenger or Instagram ticket
+
+What an agent sees on a ticket that is with a customer on WhatsApp, Messenger or
+Instagram (M10-08, `Admin/Ticket-Meta`). It is the ticket view above plus a few
+additions that appear only on these three channels; a ticket on any other channel
+draws none of them. The rules behind them (the window, the parts, what a refusal
+does) are in [Reply windows](#reply-windows) and the
+[Meta channels guide](meta-channels.md#replying).
+
+**Which account.** The header's chip names the brand's side of the conversation,
+then the department: "WhatsApp · +1 555 0142 · Support", "Messenger · Helpdock ·
+Support", "Instagram · @helpdock · Sales". The customer is named in the details
+panel, not here. In the ticket list the platform is an icon after the reference,
+with its name for a screen reader. A customer's message says "via +1 555 0142"
+(the number, Page or handle the customer wrote to) and an agent's reply says "to
+WhatsApp".
+
+**Where a reply stands.** The end of a reply's author line says what the platform
+last reported, and only ever moves forward:
+
+| Shows | Means |
+|---|---|
+| Sending, or "Sending · part 2 of 3" | Queued, or some of its parts have gone. Helpdock reads the deliveries again every five seconds while one is sending |
+| Sent | The platform accepted every part |
+| Delivered 09:44 | The customer's device has it |
+| Read 09:44, with two checks | The customer opened it. Sent and Delivered keep one check, as the widget's Seen does, so the word is what tells the three apart |
+| "· 2 messages" | The reply was cut or carried files and went as several |
+
+A reply that did not go is a red strip under it, never a toast. **Not sent** means
+the window had closed before the first part: it gives the platform's words and
+code and says "No Retry: write a new reply once the customer writes again", because
+Retry cannot mend it. **Not delivered** is a failure: it gives the part that failed,
+Meta's words, the code and the attempts, with **Retry**, and when earlier parts
+reached the customer it says so ("The first part reached the customer; Retry sends
+the rest"). A file the platform would not take is a line under the reply, "warranty-terms.docx
+left out: Instagram sends PDF files only. The customer was told." A reply's
+accessible name carries its state ("Reply from Lina Haddad, read"). Nothing in the
+thread is a live region of its own: a message, a reaction or a failure that arrives is
+announced, and Sent, Delivered and Read changing in place are not.
+
+**What the customer sent.** A quoted earlier message, when it is on the ticket,
+leads the message as a quote with its author. A sticker is a figure. A story reply
+or mention has a "Replied to your story" caption over the story's picture. A
+location or shared contact is text. A reaction, an edit and anything Helpdock cannot
+show are lines of the thread with an icon. A message an Instagram customer unsent
+keeps its words and gains "Unsent by the customer · 10:26" under them; the line that
+marks it is left out of the thread (the ticket read says which message each one
+belongs to, `unsent` below).
+
+**The reply window strip.** Between the thread and the composer, one strip says
+whether a reply may be written now. It is a `role="status"` outside the thread, so it
+speaks when its state changes and not every minute: the countdown is hidden from a
+screen reader and moves once a minute, and the closing time is a `<time>`.
+
+| State | When | It says |
+|---|---|---|
+| Open | The window is open and has more than an hour left | "Reply window open · 22h 54m left · closes tomorrow at 09:25", and the platform's rule at the end |
+| Closing | The last hour of an open window | The same in the warning colour, and "Send now, or the customer must write first." |
+| Human Agent | Messenger or Instagram, after 24 hours, with the account's switch on | The days left, and that only a person's reply may use them |
+| Closed | Nothing may be written | When it closed, that the platform accepts no reply until the customer writes again, and on Messenger and Instagram that an internal note is still possible |
+
+A closed window is waiting on the customer, as Awaiting customer is, so it is a
+warning and never a danger. The strip reads the window the api answered against the
+clock, so a window that runs out while the ticket is open turns closed on the next
+minute without a request (and the ticket is read again, because on Messenger and
+Instagram the Human Agent days may begin where the 24 hours ended). If the api
+refuses a reply with `reply-window-closed` while the strip still said open (the last
+minute's race), the strip turns closed and adds "**Not sent:** the window closed at
+09:25 while you were writing. Your text is kept below." The text, its files and a
+staged macro go back into the composer, nothing was written, and there is no bubble
+to retry.
+
+**The composer.** The recipient caption names the customer, the platform, their
+number or handle and the brand's account: "To Daniel Reyes on WhatsApp +44 7700 900123
+· from +1 555 0142". Under the text a caption counts the messages the reply becomes,
+by the same function the send job cuts them with: "Plain text. Sent as 3 messages:
+1 text, 2 attachments. Meta may charge for each." (the charge is WhatsApp's),
+"Sent as 2 messages: the text is cut at 2000 characters." (Messenger), "Sent as 3
+messages: the text in 2 parts of up to 1000 bytes, 1 attachment." (Instagram). The
+first message opens with the agent's first name and the brand, "Lina · Helpdock"
+([Replying](meta-channels.md#what-is-sent)), and that line is counted: a reply that is
+only files counts it as one text message. On Instagram a file that is not a PDF is
+named in the warning colour before Send, because it will be left out. While the strip
+is closed, **Send** keeps its place but is `aria-disabled` and described by the strip,
+the text stays, and the caption says what the reply would be ("Would go as 1 message;
+Send turns on when Sara M. writes again."). An internal note is never refused.
+
+**The details panel.** A card under the contact says who the customer is on the
+platform, with the id in mono and a **Copy** button named after it ("Copy user id"):
+WhatsApp shows the user id, the phone with a verified mark (or "Not shared by the
+customer" when Meta sent none), the profile name and the brand's number; Messenger the
+page-scoped id, the name (or "Messenger user" until the app passes Meta's review for
+profile access) and the Page; Instagram the Instagram-scoped id, the `@username`, the
+name and the account. Its footer says which value Meta verifies and which can change.
+
+**What it reads.** `GET …/tickets/:id/meta` once the ticket opens (window, account,
+customer, deliveries and the unsent messages), and again whenever the thread grows,
+after a send, and every five seconds while a reply is sending. `context: null` (a ticket on
+another channel, or one with no conversation) draws nothing Meta. Retry is `POST
+…/meta/deliveries/:id/retry`; a refused delivery answers `409` and the screen says the
+customer has to write first.
+
+**Not there yet.** "Send template…" on a closed WhatsApp window and the Human Agent tag
+on a reply in the extended days are M10-09: until then a reply written in those days is
+refused by Meta and ends **Not sent**. The closed strip says when the window closed
+rather than who wrote last, because the context carries the window and not the message
+that opened it.
 
 ### What the screen cannot do yet, and why
 

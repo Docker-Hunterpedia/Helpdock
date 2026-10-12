@@ -577,6 +577,93 @@ and a verify token shown once, a refused token, a WhatsApp token never assigned 
 and each platform connected (the subscription read back from the business account for WhatsApp), an
 account that is taken, a Page tested, saved, subscribed again and disconnected by its id.
 
+## M10-08 The ticket thread
+
+Artboard: `Admin/Ticket-Meta`. The guide is [A WhatsApp, Messenger or Instagram
+ticket](../guides/tickets.md#a-whatsapp-messenger-or-instagram-ticket). The api it reads is M10-06's
+([`GET …/meta`, `GET …/meta/deliveries`, `POST …/meta/deliveries/:id/retry`](#m10-06-replies-the-window-metasend-deliveries-and-pacing))
+plus one field this deliverable adds (`unsent`, below).
+
+**The admin client** (`apps/admin/src/meta/`) gains `MetaApi.ticketContext` and `retryDelivery`
+(`HttpMetaApi`, `MockMetaApi`), `metaKeys.ticket`, and `MetaError.details` for the platform, the anchor and the
+closing time a `reply-window-closed` refusal carries (the transport passes `error.meta` whole). The mock holds
+the three tickets of the artboard (`mock-conversations.ts`, `tickets/mock-meta-seed.ts`): HD-1040 on WhatsApp
+(the customer wrote 66 minutes ago, 22 h 54 m left), HD-1038 on Messenger (30 hours ago, Human Agent switch on)
+and HD-1036 on Instagram (8 days ago, closed), with a delivery in every state, and it refuses a reply the way the
+api does, from the clock at the moment of the send.
+
+| File (`apps/admin/src/screens/tickets/…`) | What it holds |
+|---|---|
+| `meta/use-ticket-meta.tsx` | `useTicketMeta`, mirroring `useTicketTelegram`: reads the context, and gives the view the header's account, the thread's `ThreadMeta` (`leadFor`, `trailFor`, `labelFor`, `contentFor`, `hides`, `lineIcon`, `attachmentFor`, `pinKey`), the strip, the composer's `ComposerMeta`, the identity card, `deliveryFooter`, `refused` and `refresh` |
+| `meta/reply-window-strip.tsx`, `meta/reply-window.ts`, `meta/use-minute-clock.ts` | ReplyWindowStrip (open, closing, Human Agent, closed, and the refused second line), `stripState` (the api's window read against the clock and a refusal), and the one-minute clock |
+| `meta/delivery-state.tsx` | `DeliveryTrail` (Sending with the part, Sent, Delivered, Read) and `DeliveryNotice` (Not sent without Retry, Not delivered with Retry and the earlier-parts caption, a file left out) |
+| `meta/channel-identity-rows.tsx` | the ChannelIdentityCard's rows per platform, Copy named after the id |
+| `meta/composer-meta.tsx`, `meta/meta-count.ts` | the recipient caption and "Sent as N messages", counted with `splitMetaText` after `metaOpeningLine` |
+| `meta/meta-content.ts`, `meta/meta-figures.tsx`, `meta/meta-format.ts` | reading a quote, a story, a sticker and the lines nobody wrote back out of the thread; their figures and the unsent caption; the account, handle, time-left and closing-time wording |
+| `ticket-view.tsx`, `thread.tsx`, `composer.tsx`, `badges.tsx`, `ticket-header.tsx`, `ticket-row.tsx`, `message-bubble.tsx` | a `meta` prop beside `telegram` in each, the header chip (`ChannelLabel account`), the list row's `ChannelMark`, the bubble's `label`, `before` and `bodyDir` |
+
+`details-panel.tsx` needed no change: its `channelIdentity` slot takes Telegram's card or this one.
+`@helpdock/schemas` gains `splitMetaText` (moved from `@helpdock/channels`, which re-exports it: the composer
+counts with the function the send job cuts with) and `metaUnsentSchema`.
+
+**Decisions taken inside the plan**, each with its reason where it is made:
+
+- **The unsent mark comes from the context read, not from a field on every message.** M10-05 marks an unsent
+  Instagram message with a system line whose external id is `unsent:<mid>`, "for M10-08 to read", but a ticket
+  message carries no external id on the wire (`ticket-view.ts` leaves `external_message_id` unmapped on purpose,
+  and the public API and the webhooks serialise the same schema). `GET …/meta` therefore answers `unsent:
+  [{ ticketMessageId, lineId, at }]` for an Instagram ticket (two plain selects in `MetaDeliveriesService`, the
+  line's prefix and its reverse in `instagram-rules.ts`). The thread draws "Unsent by the customer · 10:26" under
+  the message and leaves the line out; a line whose message is not on this ticket marks nothing and stays a line
+  with its `Undo2` icon.
+- **A quote, a story and a sticker are read back from the words and files that were filed.** The thread has no
+  column for any of them: the inbound services file the story label and the reaction and unsupported sentences from
+  the shared `meta` catalog in the contact's language, a quote as a leading `<blockquote>`, a sticker as
+  `sticker.webp`. `meta-content.ts` matches the catalog in both languages, so a catalog change moves the writer and
+  the reader together and the suite pins it. The quote's author is the earlier message of the thread that begins
+  with the quoted words; with no match the quote is drawn without a name rather than with a guess.
+- **The closed strip says when the window closed, not who wrote last.** DESIGN's sentence is "Sara last wrote 8
+  days ago"; the context carries the window (`closedAt`) and not the message that opened it, and the last
+  customer message in the thread is not always that message (an unsupported one opens the window and is a line).
+  "It closed 7 days ago, Oct 5 at 19:45" is exact. It is the same instant the api's `reply-window-closed` carries.
+- **Send is held, not disabled.** `aria-disabled="true"`, described by the strip, on `bg.muted` with
+  `text.disabled`; it keeps its place and focus, the form refuses to submit, and the draft stays. An internal note
+  is never held.
+- **The strip reads the clock once a minute.** `useMinuteClock` is the only timer; the api's window is read against it, so
+  a window that runs out turns closed without a request and the context is read again then (the Human Agent
+  days may begin where the 24 hours ended). A refusal at Send turns the strip closed at once with its second line
+  and holds until a later read shows the window open; the text, the files and a staged macro go back into the
+  composer, and nothing is drawn as "not sent, retry" because the api wrote nothing.
+- **The thread scrolls to its end again when the strip arrives.** The strip is read after the thread and takes
+  room from it, which left the last reply under the strip; `ThreadMeta.pinKey` re-runs the thread's scroll when
+  the strip appears and when a refusal adds its line. The Playwright suite checks the last reply ends above the strip.
+- **The first line of a reply is counted once the brand is read.** `metaOpeningLine({ firstName:
+  firstWordOf(viewer), brand })` needs the brand's name; until the brand has been read the count is the text
+  alone, and a files-only draft counts the line as one text message.
+- **A left-out file's reason is worded from its kind.** The api records `unsupported-type` or `too-large`; the
+  strip says "sends PDF files only" for a document on a platform that takes PDF alone and "does not take this kind
+  of file" for anything else, from the attachment's kind, which the thread already holds.
+- **Numbers and handles are isolates.** The header chip and the "via" line put the account in `<bdi>` (without it
+  the Arabic label read "0142 555 1+"), and a Meta message's body takes `dir="auto"` so a customer's English
+  sentence keeps its punctuation in the Arabic admin.
+- **Reactions, edits and the unsupported line keep the System event** with `Smile` or `CircleAlert`, as DESIGN
+  has them; only the unsent mark moved onto its message.
+
+**Not in this deliverable, by design.** "Send template…" on a closed WhatsApp window and the Human Agent tag
+(M10-09: until then a reply in the extended days is refused by Meta and drawn **Not sent**), and the guide's
+walk-through of the Meta dashboard (M10-11).
+
+**Tests.** Unit: the strip in every state and its countdown on fake timers, `stripState` to the minute, every
+delivery state in `en` and `ar`, the composer's count and held Send (`meta-count.test.ts`, `ticket-meta.test.tsx`), the
+thread of each platform (`ticket-meta.test.tsx`), the client (`http-api.test.ts`, `mock-api.test.ts`), the
+splitter in its new home (`packages/schemas/src/meta.test.ts`), `unsentMessageId`. Integration
+(`meta-replies.integration.test.ts`): the context names the unsent message and its line, leaves a line whose message
+is elsewhere out, and answers nothing unsent off Instagram. Playwright `apps/admin/e2e/meta.spec.ts` › the ticket
+against the fixture, in `en` and `ar` with axe: an open window (the chip, the strip, the identity card, every state,
+the count, a send), a refused delivery with no Retry, the Human Agent days with Retry on a failed part, a closed window
+that holds Send, never refuses a note and marks what was unsent, the window closing while the agent writes (the 409
+turns the strip closed and keeps the text), and the countdown moving.
+
 ## M10-03 WhatsApp inbound and the shared conversation router
 
 A WhatsApp message becomes a ticket, or a reply on the conversation's open one, through the same lifecycle

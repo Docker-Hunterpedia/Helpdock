@@ -48,17 +48,17 @@ Definition of done asks for.
 
 | Id | Deliverable | Spec | Tests beyond unit | Estimate | Issue | Status |
 |---|---|---|---|---|---|---|
-| M10-01 | Schema, config and the shared Graph adapter: migration `0050_meta_channels` (`meta_accounts`, `meta_conversations`, `meta_deliveries`, the three channel and identity enum values), the `meta.*` settings and `META_*` keys, `packages/channels/src/meta/` (Graph client over `safeFetch` with the host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter), and the stand-in for Graph with the signed-webhook driver | A §5, §8, §13; D §13; ADR 0025 (1, 2, 5) | Integration: the three tables in the RLS negative suite (D §1.6), the migration round-trip; the stand-in's own suite | 3 d | | built, awaiting review: [notes](#m10-01-schema-config-and-the-shared-adapter) |
-| M10-02 | The webhook: `GET\|POST /api/meta/webhook`, the handshake, the raw body kept for the signature, constant-time checks against both app secrets, routing by `object` and `entry[].id` to the account across brands, a transaction per entry, dedupe on `wamid`/`mid`, 200 for everything after a valid signature, a brand in its deletion grace passed over and counted | ADR 0025 (4, 6); D §6 | Integration: a signed batch with entries of two brands files two tickets, each in its brand; a redelivered batch files nothing twice; a wrong signature is 401 and files nothing; the race of two deliveries ends with one message | 2 d | | built, awaiting review: [notes](#m10-02-the-webhook-routing-dedupe-and-the-module-skeleton) |
-| M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | built, awaiting review: [notes](#m10-03-whatsapp-inbound-and-the-shared-conversation-router) |
-| M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | built, awaiting review: [notes](#m10-04-messenger-inbound) |
-| M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | built, awaiting review: [notes](#m10-05-instagram-inbound) |
-| M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | built, awaiting review: [notes](#m10-06-replies-the-window-metasend-deliveries-and-pacing) |
-| M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | built, awaiting review: [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
+| M10-01 | Schema, config and the shared Graph adapter: migration `0050_meta_channels` (`meta_accounts`, `meta_conversations`, `meta_deliveries`, the three channel and identity enum values), the `meta.*` settings and `META_*` keys, `packages/channels/src/meta/` (Graph client over `safeFetch` with the host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter), and the stand-in for Graph with the signed-webhook driver | A §5, §8, §13; D §13; ADR 0025 (1, 2, 5) | Integration: the three tables in the RLS negative suite (D §1.6), the migration round-trip; the stand-in's own suite | 3 d | | built and reviewed (PR #168): [notes](#m10-01-schema-config-and-the-shared-adapter) |
+| M10-02 | The webhook: `GET\|POST /api/meta/webhook`, the handshake, the raw body kept for the signature, constant-time checks against both app secrets, routing by `object` and `entry[].id` to the account across brands, a transaction per entry, dedupe on `wamid`/`mid`, 200 for everything after a valid signature, a brand in its deletion grace passed over and counted | ADR 0025 (4, 6); D §6 | Integration: a signed batch with entries of two brands files two tickets, each in its brand; a redelivered batch files nothing twice; a wrong signature is 401 and files nothing; the race of two deliveries ends with one message | 2 d | | built and reviewed (PR #168): [notes](#m10-02-the-webhook-routing-dedupe-and-the-module-skeleton) |
+| M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; profile name; text, media (image, video, document, audio and voice, sticker) through `meta.media_fetch` and the pipeline with the `sha256` check; captions, quoted context, locations and shared contacts as text; `user_changed_number`; `unsupported` as a system line; `statuses[]` onto deliveries; the sender gate | R §4.4; D §4.4, §4.7, §4.8; ADR 0025 (6) | Integration: each message type from the fixtures lands as the mapping in D §4.8 says; a 20 MB media id is fetched by the job, verified and processed; a phone typed by an agent before the WhatsApp message becomes a duplicate suggestion and the verified claim takes it | 3 d | | built and reviewed (PR #168): [notes](#m10-03-whatsapp-inbound-and-the-shared-conversation-router) |
+| M10-04 | Messenger inbound → tickets: identity on the page-scoped id, "Messenger user" without profile access; text, attachments from the CDN URL through the fetch job, stickers, `fallback` links as text; echoes of Helpdock's own sends dropped by `app_id` and `metadata`; `delivery` and `read` watermarks onto deliveries; reactions and edits as system lines; postbacks counted and dropped | R §4.4; D §4.7, §4.8; ADR 0025 (6) | Integration: the fixtures' events; an echo of a Helpdock send files nothing; a watermark marks every earlier delivery of that conversation and none later | 2 d | | built and reviewed (PR #168): [notes](#m10-04-messenger-inbound) |
+| M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | built and reviewed (PR #168): [notes](#m10-05-instagram-inbound) |
+| M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | built and reviewed (PR #168): [notes](#m10-06-replies-the-window-metasend-deliveries-and-pacing) |
+| M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | built and reviewed (PR #168): [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
 | M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | planned |
 | M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10.** The `HUMAN_AGENT` tag and its integration cases (a person's day-3 reply goes out tagged on both platforms, the assistant's is refused) shipped early in M10-06 after review, so only the templates, the picker and the delivery's `template_name` remain | 4 d | | later (templates only) |
-| M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | built, awaiting review: [notes](#m10-10-health-jobs) |
-| M10-11 | Docs and the guide: `docs/guides/meta-channels.md` (the Meta dashboard walk-through per platform, App Review, pricing, limits), `channels.md`, `configuration.md` and `.env.example` for the `META_*` keys, `contacts.md` for the new identifiers, `tickets.md` for the reply window, `data-retention.md` for the deliveries, the OpenAPI changes, this document and the PRD | AGENTS.md, Definition of done 1 | `docs-guard` before the PR | 2 d | built, awaiting review: [notes](#m10-11-docs-and-the-guide) |
+| M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | built and reviewed (PR #168): [notes](#m10-10-health-jobs) |
+| M10-11 | Docs and the guide: `docs/guides/meta-channels.md` (the Meta dashboard walk-through per platform, App Review, pricing, limits), `channels.md`, `configuration.md` and `.env.example` for the `META_*` keys, `contacts.md` for the new identifiers, `tickets.md` for the reply window, `data-retention.md` for the deliveries, the OpenAPI changes, this document and the PRD | AGENTS.md, Definition of done 1 | `docs-guard` before the PR | 2 d | built and reviewed (PR #168): [notes](#m10-11-docs-and-the-guide) |
 
 ## Exit criteria
 
@@ -66,27 +66,27 @@ Copied from the PRD, ticked as they are met. Each is proved against the local
 stand-in for Graph and the signed-webhook driver, on real Postgres and Redis
 (Testcontainers), as M6's was against the Bot API stand-in.
 
-- [ ] A message on each platform opens a ticket with the right contact: a
+- [x] A message on each platform opens a ticket with the right contact: a
       WhatsApp message keyed on its business-scoped user id with the phone
       recorded as a verified identifier; a Messenger message on its
       page-scoped id; an Instagram message on its Instagram-scoped id with the
       `@username`. Two accounts of two brands in one webhook batch file two
       tickets, each in its brand.
-- [ ] A reply from the ticket arrives on the same platform: the stand-in
+- [x] A reply from the ticket arrives on the same platform: the stand-in
       receives `POST /{id}/messages` for the text and each attachment, once,
       when the job runs twice; the delivery shows Sent, then Delivered and
       Read from the status webhook.
-- [ ] A reply after the window is refused with the right message: at compose
+- [x] A reply after the window is refused with the right message: at compose
       time with `reply-window-closed` and the composer's strip, and in the
       job with the delivery `refused` and the platform's code when the window
       closed while it waited. On Messenger and Instagram with the Human Agent
       switch on, a person's reply at day 3 goes out tagged and an AI or rule
-      reply does not (M10-09).
-- [ ] Brand A cannot read brand B's `meta_accounts`, `meta_conversations` or
+      reply does not (the tag shipped with M10-06; templates stay M10-09's).
+- [x] Brand A cannot read brand B's `meta_accounts`, `meta_conversations` or
       `meta_deliveries` rows, by the negative suite of DOMAIN-RULES §1.6.
-- [ ] The stand-in suites pass in CI's `integration` job: webhook, inbound per
+- [x] The stand-in suites pass in CI's `integration` job: webhook, inbound per
       platform, replies, health.
-- [ ] The Channels › Meta screens and the Meta ticket pass their Playwright
+- [x] The Channels › Meta screens and the Meta ticket pass their Playwright
       suites in `en` and `ar` with axe.
 
 ## Migrations
@@ -393,315 +393,6 @@ and Redis with `FakeGraph` and `MetaWebhookDriver` (the handshake with the right
 batch of two brands reaching the service once per entry inside its brand; a redelivered batch deduped;
 a wrong, missing and tampered signature; the Instagram secret; a brand in its grace answered 200 with nothing filed; two concurrent deliveries; a failing
 route rolled back and redelivered; the App card) and the repository's queries.
-
-## M10-07 Admin API and the Channels › Meta screens
-
-Artboards: `Admin/Channels-Meta` and `Admin/Channels-Meta-Account`. Both halves are built: the
-admin screens below, and [the api](#m10-07-the-api) they call.
-
-**The admin client** (`apps/admin/src/meta/`, mirroring `apps/admin/src/telegram/`): `MetaApi`
-(`app`, `rotateVerifyToken`, `accounts`, `account`, `createAccount`, `updateAccount`,
-`deleteAccount`, `testToken`, `testAccount`, `subscribe`, `status`), `HttpMetaApi`, `metaKeys`,
-`MetaError` and `isMetaError`, `MetaApiProvider` and `useMetaApi`, and `MockMetaApi` with the
-fixture of the artboard (two WhatsApp numbers, a Messenger Page, an Instagram account whose token
-Meta invalidated) and the `MOCK_*` ids and tokens the unit and browser suites paste. A refusal
-crosses as `error.meta.reason` in the error body (`errorResponseSchema` gained `meta`) and becomes
-a `MetaError`, which the dialogs turn into a sentence. The ticket view's half of the interface
-(`ticketContext`, `retryDelivery`) is M10-08's.
-
-**The screens** (`apps/admin/src/screens/admin/channels/meta/`):
-
-| File | What it draws |
-|---|---|
-| `meta-tab.tsx` | the tab: the App card, the accounts table or the empty state, "How messages arrive" and the health legend, and the two dialogs; "Connect account" sits in the page header, which owns the dialog |
-| `app-card.tsx` | MetaAppCard, install admins only: the callback URL with Copy, the verify token (made here, replaced after a confirmation, shown once in a SecretReveal), what the app id and the two secrets are |
-| `account-table.tsx`, `account-health.tsx` | MetaAccountTable and its HealthIndicator, with Expiring read from the token's date (under a week left means the weekly renewal did not run) and the failure named ("Token expired") |
-| `connect-account-dialog.tsx`, `token-test.tsx`, `meta-note.tsx` | ConnectAccountDialog: platform RadioCards, the id named per platform, the token, the department, Test before Connect; a refusal sits under the field it concerns. `useTokenTest` holds the Test mutation both dialogs share (the shape check, the request, what it found, what to forget when a field changes); `MetaNote` draws every note and Test result on these screens (DESIGN §6.4, a Banner variant) |
-| `account-page.tsx`, `account-draft.ts` | MetaAccountPage: the form saved together, the Activity card and the Disconnect card |
-| `connection-section.tsx`, `reconnect-dialog.tsx` | Connection (masked token, kind, expiry, Test connection) and, once Meta has invalidated the token, what Meta said and Reconnect |
-| `subscription-section.tsx` | Subscription: state, fields as tags, last checked, Meta's last problem, Subscribe now |
-| `number-section.tsx`, `routing-section.tsx`, `human-agent-section.tsx` | Number (WhatsApp only, with the charge and no-Human-Agent notes), Routing, Human Agent (Messenger and Instagram only) |
-| `disconnect-dialog.tsx` | the typed-id confirmation, from the table's menu and from the page |
-| `platforms-card.tsx`, `platforms.ts`, `code-text.tsx` | "What each platform asks for" beside the empty state; the platform icons (DESIGN §5: WhatsApp `phone`, Messenger `messages-square`, Instagram `camera`) and labels; backticked names in catalog sentences drawn as mono code |
-
-The System page's Channels card lists the three kinds, the Meta tab has the `network` icon, and the
-stand-in icons of M10-01 (contact identities, ticket channel badge) now are the three DESIGN §5 picks.
-`Field` takes a node as its hint so a sentence can hold a code span.
-
-**Where the artboard asked for more than the schemas carry**, the screen shows what they carry and
-says nothing it cannot know:
-
-- The App card shows what the install can know and no more. `metaAppSchema` carries the app id (not
-  a secret, so it is shown), whether each of the two secrets is set, the Graph version
-  (`META_GRAPH_VERSION`), the callback URL, the verify token's last four characters and which settings
-  an `HD_META_*` variable has locked; a locked one is an EnvLockedField with the "Set by environment"
-  chip, an unlocked one reads "Set" or "Not set". The artboard's "Meta retires it on 29 Jul 2028" is
-  left out: it would be a date to keep current in the code. There is no Meta section on Settings, so the
-  card names the `HD_META_*` variables instead of "Change it on Settings". Connect is held off in the
-  empty state when an install admin sees no app secret or no verify token; for anyone else the api's
-  `app-not-configured` says it.
-- Messages delivered in 24 hours and the WhatsApp quality rating are not in the status response, so
-  the Activity card and the Number section leave them out. "Renewed by Helpdock" needs a field the
-  account row does not have; the table says Subscribed, Not subscribed, or Not checked since the time
-  of the last subscription.
-- Test names what Meta returned as `name`, `username` and the token's expiry; the number itself is the
-  row's `displayPhone` once connected.
-
-**Tests.** Unit: the api client and fixture, every screen (`meta-tab.test.tsx`,
-`account-page.test.tsx`, the health, draft and platform helpers) and the System card. Playwright
-`apps/admin/e2e/meta.spec.ts` against the fixture, in `en` and `ar` with axe: the list and the app
-card, the verify token, Connect with a refused token and then a good one for each platform, a Page's
-page (Test connection, Human Agent, Save, Disconnect by id), a WhatsApp number's page, and Reconnect.
-
-### M10-07 The api
-
-`apps/api/src/meta/`, mirroring `apps/api/src/telegram/telegram-bots.*`. Every route is
-`@Requires('brand:manage')`, reading included, under `/api/brands/:brandId/meta/accounts`:
-
-| Route | What it does | Answers |
-|---|---|---|
-| `GET` | the brand's accounts | `{ accounts }`, the token as its last four characters |
-| `POST` | connect: read the id and token against Graph, subscribe the app, store | `201` the account |
-| `POST test` | "Test" in the Connect and Reconnect dialogs: the same read with a typed token, nothing stored. **Reconnect** names the account (`accountId`), whose own id is then free for that account and for it alone | `{ ok: true, … }` or `{ ok: false, kind, detail }` |
-| `GET :accountId` | one account | the account |
-| `PUT :accountId` | save the form: department, Human Agent, and a new token when Replace was pressed | the account |
-| `DELETE :accountId` | unsubscribe the app as far as Meta allows, delete the row | `204` |
-| `POST :accountId/test` | "Test connection": the same read with the stored token | the result, a refusal answered rather than thrown |
-| `POST :accountId/subscribe` | "Subscribe now" | `{ ok: true, subscribedFields, subscribedAt }` or `{ ok: false, detail }` |
-| `GET :accountId/status` | the row, `GET /{node}/subscribed_apps` and `debug_token` now, and the Activity card | `metaAccountStatusResponseSchema`; what Graph could not say is `null` with `liveError` |
-| `POST :accountId/refresh` | renew an Instagram token that is due | the account; `400` for another platform |
-
-`GET /api/meta/app` (`install:admin`, M10-02) now also answers `appId`, `appSecretSet`,
-`instagramAppSecretSet` and `graphVersion`.
-
-**Connecting** (`MetaAccountsService.create`): the install must have an app secret
-(`app-not-configured`); the department must be the brand's (`department-not-found`); the
-`(platform, id)` must not be connected anywhere, which is looked up across brands before Graph is asked
-anything (`account-taken`, also what "Test" answers). Then one read says what the account is: a
-Page is `GET /{id}?fields=…` on Graph with `debug_token` beside it for the token's expiry, an Instagram
-account is `GET /me` on the Instagram host, compared with the id typed, and a WhatsApp number is
-`identifyWhatsApp` (below). What Graph says maps to a refusal:
-
-| Graph said | Refusal |
-|---|---|
-| the token is dead (`190` and kin) and is alive on the other host | `platform-mismatch` |
-| the token is dead | `token-invalid` |
-| the token is good but cannot read this id, or `/me` is another account (Messenger proves it as Instagram does: `GET /me?fields=id` must answer the id typed, since a user token that manages two Pages can read both) | `token-other-account` |
-| a WhatsApp token reads the number, but no business account it was granted on lists the number | `token-other-account` |
-| `5xx`, a rate limit, a timeout, a blocked destination, an answer in a shape Helpdock does not know | `graph-unreachable` |
-| the app cannot be subscribed to the account, for good | `subscribe-failed` |
-
-"Test" answers the first two and the unreachable case as `{ ok: false, kind: 'token' | 'connect' }`
-in Meta's words, and throws the rest, because those are about the id rather than the token. After the
-read the app is subscribed with `POST /{node}/subscribed_apps?subscribed_fields=…`, the lists of
-`META_SUBSCRIBED_FIELDS` (WhatsApp subscribes the whole `messages` field and sends none). A refusal for
-good aborts the connection with nothing stored; a failure for a
-moment (a 5xx, a limit) stores the account as `unsubscribed` with the reason in `last_error`, and the
-hourly health check or Subscribe now makes it good. The row is stored with the token encrypted under
-`APP_MASTER_KEY`, the token's expiry (an Instagram token's is estimated as 60 days from now until the
-first renewal says a real one), `token_updated_by`, and the account's name, handle or number.
-
-**Reconnect.** A replacement token for an account that is connected already names its own id, which the
-"already connected" rule would refuse. `POST test` therefore takes an optional `accountId`; the id is free
-for it when the account is the brand's (row-level security decides) and has the id and platform the request
-gives. Any other `accountId` (another account's, another brand's, a different id) is tested as a new
-connection, which the taken id refuses. The mock api, which has no taken check, is the admin client's and
-is left as it was; the real-api browser suite is what proves the flow (below).
-
-**WhatsApp's business account.** Meta keeps a WhatsApp webhook subscription on the business account
-(WABA), not on the phone number: `GET|POST|DELETE /{waba_id}/subscribed_apps` is the edge, and the
-number's own node answers an unsupported-edge error. The Connect dialog asks only for the phone
-number id, so `identifyWhatsApp(graph, phoneNumberId)` (`whatsapp-identity.ts`, the one place the
-order of these calls is written) finds the business account from the token:
-
-1. `GET /{phone_number_id}?fields=id,display_phone_number,verified_name` names the number and proves the
-   token opens it.
-2. `GET /debug_token` says the token is valid, until when, and what it was granted on
-   (`data.granular_scopes`). The candidates are the `target_ids` of `whatsapp_business_management`,
-   else of `whatsapp_business_messaging`.
-3. `GET /{waba_id}/phone_numbers` for each candidate (at most 25, in order); the first whose
-   `data[].id` includes the number is stored in `meta_accounts.waba_id`. A candidate the token may not
-   list (a Graph permission refusal with a code) is skipped; a rate limit, a 5xx or an answer in an
-   unknown shape is not a statement about the account and fails the whole read as `graph-unreachable`.
-
-No candidate that lists the number, or a token with no granted ids at all, is `token-other-account`:
-the token can read the number but could not subscribe the app. The operator's fix is to assign the
-business account to the system user and generate the token again (M10-11's guide says so; the refusal
-text in the dialog does too). A token check that went unanswered is Graph failing, not that refusal.
-`subscribe`, `remove` (the unsubscribe) and `status` (the live `subscribed_apps` read) use `waba_id` for
-WhatsApp and `external_id` for Messenger and Instagram (`subscriptionNodeOf`). A WhatsApp row whose
-`waba_id` is null (made before this, or by hand) cannot be subscribed or read: "Subscribe now" answers
-`{ ok: false, detail }` with "Disconnect it and connect it again", records it in `last_error`, the status
-panel's `liveError` says the same, and a disconnect skips the unsubscribe. Replacing the token fills
-`waba_id` again.
-
-**Saving** keeps `human_agent_enabled` false on WhatsApp whatever is sent. A new token must open the
-same account (`token-other-account` otherwise), brings the account back to `connected`, clears the last
-error and subscribes the app again (and, for WhatsApp, finds the business account again).
-**Disconnecting** sends `DELETE /{node}/subscribed_apps` (for a WhatsApp number only when no other
-number is connected on the same business account, in any brand, because Meta subscribes the app to the
-business account as a whole) and ignores
-its failure, so a revoked token does not keep an account the Admin is removing; conversations and
-deliveries go with the row, tickets and contacts stay.
-
-**Audit** (`target_type = meta_account`, never a token): `meta_account.created` `{ platform, externalId }`,
-`.updated` `{ tokenReplaced, departmentChanged, humanAgentEnabled? }` (the switch only when it changed),
-`.deleted` `{ platform, externalId }`, `.subscribed` `{ fields }` and `.refreshed` `{ expiresAt }`. Create,
-update and delete also write `meta_account.changed` on the outbox for the health job (M10-10) to follow.
-
-**The token stays where nothing logs it**: `account-graph.ts`'s `AccountGraph` holds it in a private
-field and serialises to its platform; `graphForAccount` is the one place a stored token is decrypted, and
-the routes and every job (the send job, the media and profile jobs, the health check, the renewal) call
-Graph through it. The only call that carries the token as a parameter is `debug_token`, which is its
-method rather than a query a caller builds, and `redactToken` has been over every `detail` that reaches
-`last_error` or a response. The subscription (the node, the `POST`, the `subscribed_apps` read, the
-missing-business-account sentence) is `meta-subscription.ts`, shared with the health check; "mark the
-account `token_expired`" is `MetaRepository.markTokenDead`, shared by the send job, the renewal, the
-routes and, through `accountFailureRecorder`, the media and profile jobs.
-
-`POST :accountId/refresh` calls M10-10's `refreshInstagramToken(deps, account)` in
-`meta-token-refresh.ts` (the same function the hourly job runs; the copy first written here was dropped
-at the merge) with the shared Graph client. `not-due` (a token renewed within a week, or replaced
-while Meta was asked) answers the account as it is, `refused` is `400 token-invalid` with Meta's words
-on the row, and a Graph failure for a moment is `409 graph-unreachable`; a renewal is audited as
-`meta_account.refreshed`.
-
-`channel-status.ts` lists the accounts of every brand on the System page, named by number, Page name or
-`@handle`, with their health word (or `token expired` / `unsubscribed`) and no token.
-
-**Decisions taken inside the plan**, with the reason where the code makes them:
-
-- **The subscribed fields are `META_SUBSCRIBED_FIELDS`**, which is the brief's lists (WhatsApp
-  `messages`; Messenger `messages` through `messaging_postbacks`; Instagram `messages`,
-  `message_reactions`, `messaging_seen`, `messaging_postbacks`) plus `messaging_referrals` and
-  `messaging_policy_enforcement` (Messenger) and `messaging_referral` (Instagram). The schema is
-  unchanged: M10-04 reads policy enforcement into the account's `last_error`, which needs the field,
-  and the referrals are the events the envelope classifier already counts and drops.
-- **`platform-mismatch` is read from the host the token opens**, not from the shape of the id: Meta
-  promises no shape, and the brief's "the id's shape" would refuse a real account the day Meta changed
-  one. One extra `GET /me` on the other host, only after a token was refused.
-- **`subscribe-failed` refuses the connection** when Meta refuses for good, instead of storing an
-  account that can never receive anything; the brief's "best effort" stays for failures that are not
-  for good.
-- **The business account is resolved when connecting**, from the token's own grants, because the
-  dialog asks for the number only and Meta subscribes per business account. It is stored in
-  `waba_id`, which M10-09 can read for templates instead of looking it up again.
-- **A WhatsApp subscription sends no field names.** The business account's edge subscribes the app to
-  the fields the app's webhook configuration names; `META_SUBSCRIBED_FIELDS.whatsapp` is what the row
-  records as subscribed, and the card shows it.
-
-**Unconfirmed against Meta**, for the staging run (open questions above): that `data.granular_scopes`
-of a system-user token carries the business accounts as `target_ids` under
-`whatsapp_business_management`; that `GET /{waba_id}/phone_numbers?limit=100` lists every number of an
-account (a business account with more than a page of numbers is not followed to the next page); and
-that `POST /{waba_id}/subscribed_apps` accepts a request with no query. The health job (M10-10) and
-this service name the subscription the same way: `waba_id` for WhatsApp, `external_id` otherwise.
-
-**Tests.** Unit: the Graph reads and every refusal they can cause, the status panel, the account view,
-the bound Graph calls (`meta-accounts.service.test.ts` and its neighbours), and the business-account
-lookup against a scripted Graph: the order of the calls, the scope fallback, the skipped and the thrown
-candidate (`whatsapp-identity.test.ts`, `token-facts.test.ts`).
-Integration against Postgres, Redis and the stand-in (`meta-accounts.integration.test.ts`): who may,
-every refusal over HTTP, the token stored encrypted and read back as its last four characters, the audit
-trail and the outbox event of each change, saving, testing, subscribing, renewing, disconnecting,
-isolation between brands and the System card; a replacement token tested for the connected account's own
-id and held to that account (the id stays taken for any other request), and a Page token whose own account is
-another Page refused. Playwright against the real api (`apps/admin/e2e/api/meta.api.spec.ts`, with `FakeGraph`
-from `@helpdock/channels/testing` started beside the install and reached over `/__control/`): the app card and
-a verify token shown once, a refused token, a WhatsApp token whose business account does not list the number
-(a refusal queued over `/__control/`) and each platform connected (the subscription read back from the
-business account for WhatsApp), an account that is taken, **a Page whose token Meta revoked: Subscribe now
-makes the account `token_expired`, Reconnect refuses the revoked token and another Page's, accepts a new
-token for the same Page and stores it, and the same id is still refused as a new account** (with the
-account id taken out of the request the spec fails at the Test), a Page tested, saved, subscribed again
-and disconnected by its id.
-
-## M10-08 The ticket thread
-
-Artboard: `Admin/Ticket-Meta`. The guide is [A WhatsApp, Messenger or Instagram
-ticket](../guides/tickets.md#a-whatsapp-messenger-or-instagram-ticket). The api it reads is M10-06's
-([`GET …/meta`, `GET …/meta/deliveries`, `POST …/meta/deliveries/:id/retry`](#m10-06-replies-the-window-metasend-deliveries-and-pacing))
-plus one field this deliverable adds (`unsent`, below).
-
-**The admin client** (`apps/admin/src/meta/`) gains `MetaApi.ticketContext` and `retryDelivery`
-(`HttpMetaApi`, `MockMetaApi`), `metaKeys.ticket`, and `MetaError.details` for the platform, the anchor and the
-closing time a `reply-window-closed` refusal carries (the transport passes `error.meta` whole). The mock holds
-the three tickets of the artboard (`mock-conversations.ts`, `tickets/mock-meta-seed.ts`): HD-1040 on WhatsApp
-(the customer wrote 66 minutes ago, 22 h 54 m left), HD-1038 on Messenger (30 hours ago, Human Agent switch on)
-and HD-1036 on Instagram (8 days ago, closed), with a delivery in every state, and it refuses a reply the way the
-api does, from the clock at the moment of the send.
-
-| File (`apps/admin/src/screens/tickets/…`) | What it holds |
-|---|---|
-| `meta/use-ticket-meta.tsx` | `useTicketMeta`, mirroring `useTicketTelegram`: reads the context, and gives the view the header's account, the thread's `ThreadMeta` (`leadFor`, `trailFor`, `labelFor`, `contentFor`, `hides`, `lineIcon`, `attachmentFor`, `pinKey`), the strip, the composer's `ComposerMeta`, the identity card, `deliveryFooter`, `refused` and `refresh` |
-| `meta/reply-window-strip.tsx`, `meta/reply-window.ts`, `meta/use-minute-clock.ts` | ReplyWindowStrip (open, closing, Human Agent, closed, and the refused second line), `stripState` (the api's window read against the clock and a refusal), and the one-minute clock |
-| `meta/delivery-state.tsx` | `DeliveryTrail` (Sending with the part, Sent, Delivered, Read) and `DeliveryNotice` (Not sent without Retry, Not delivered with Retry and the earlier-parts caption, a file left out) |
-| `meta/channel-identity-rows.tsx` | the ChannelIdentityCard's rows per platform, Copy named after the id |
-| `meta/composer-meta.tsx`, `meta/meta-count.ts` | the recipient caption and "Sent as N messages", counted with `splitMetaText` after `metaOpeningLine` |
-| `meta/meta-content.ts`, `meta/meta-figures.tsx`, `meta/meta-format.ts` | reading a quote, a story, a sticker and the lines nobody wrote back out of the thread; their figures and the unsent caption; the account, handle, time-left and closing-time wording |
-| `ticket-view.tsx`, `thread.tsx`, `composer.tsx`, `badges.tsx`, `ticket-header.tsx`, `ticket-row.tsx`, `message-bubble.tsx` | a `meta` prop beside `telegram` in each, the header chip (`ChannelLabel account`), the list row's `ChannelMark`, the bubble's `label`, `before` and `bodyDir` |
-
-`details-panel.tsx` needed no change: its `channelIdentity` slot takes Telegram's card or this one.
-`@helpdock/schemas` gains `splitMetaText` (moved from `@helpdock/channels`, which re-exports it: the composer
-counts with the function the send job cuts with) and `metaUnsentSchema`.
-
-**Decisions taken inside the plan**, each with its reason where it is made:
-
-- **The unsent mark comes from the context read, not from a field on every message.** M10-05 marks an unsent
-  Instagram message with a system line whose external id is `unsent:<mid>`, "for M10-08 to read", but a ticket
-  message carries no external id on the wire (`ticket-view.ts` leaves `external_message_id` unmapped on purpose,
-  and the public API and the webhooks serialise the same schema). `GET …/meta` therefore answers `unsent:
-  [{ ticketMessageId, lineId, at }]` for an Instagram ticket (two plain selects in `MetaDeliveriesService`, the
-  line's prefix and its reverse in `instagram-rules.ts`). The thread draws "Unsent by the customer · 10:26" under
-  the message and leaves the line out; a line whose message is not on this ticket marks nothing and stays a line
-  with its `Undo2` icon.
-- **A quote, a story and a sticker are read back from the words and files that were filed.** The thread has no
-  column for any of them: the inbound services file the story label and the reaction and unsupported sentences from
-  the shared `meta` catalog in the contact's language, a quote as a leading `<blockquote>`, a sticker as
-  `sticker.webp`. `meta-content.ts` matches the catalog in both languages, so a catalog change moves the writer and
-  the reader together and the suite pins it. The quote's author is the earlier message of the thread that begins
-  with the quoted words; with no match the quote is drawn without a name rather than with a guess.
-- **The closed strip says when the window closed, not who wrote last.** DESIGN's sentence is "Sara last wrote 8
-  days ago"; the context carries the window (`closedAt`) and not the message that opened it, and the last
-  customer message in the thread is not always that message (an unsupported one opens the window and is a line).
-  "It closed 7 days ago, Oct 5 at 19:45" is exact. It is the same instant the api's `reply-window-closed` carries.
-- **Send is held, not disabled.** `aria-disabled="true"`, described by the strip, on `bg.muted` with
-  `text.disabled`; it keeps its place and focus, the form refuses to submit, and the draft stays. An internal note
-  is never held.
-- **The strip reads the clock once a minute.** `useMinuteClock` is the only timer; the api's window is read against it, so
-  a window that runs out turns closed without a request and the context is read again then (the Human Agent
-  days may begin where the 24 hours ended). A refusal at Send turns the strip closed at once with its second line
-  and holds until a later read shows the window open; the text, the files and a staged macro go back into the
-  composer, and nothing is drawn as "not sent, retry" because the api wrote nothing.
-- **The thread scrolls to its end again when the strip arrives.** The strip is read after the thread and takes
-  room from it, which left the last reply under the strip; `ThreadMeta.pinKey` re-runs the thread's scroll when
-  the strip appears and when a refusal adds its line. The Playwright suite checks the last reply ends above the strip.
-- **The first line of a reply is counted once the brand is read.** `metaOpeningLine({ firstName:
-  firstWordOf(viewer), brand })` needs the brand's name; until the brand has been read the count is the text
-  alone, and a files-only draft counts the line as one text message.
-- **A left-out file's reason is worded from its kind.** The api records `unsupported-type` or `too-large`; the
-  strip says "sends PDF files only" for a document on a platform that takes PDF alone and "does not take this kind
-  of file" for anything else, from the attachment's kind, which the thread already holds.
-- **Numbers and handles are isolates.** The header chip and the "via" line put the account in `<bdi>` (without it
-  the Arabic label read "0142 555 1+"), and a Meta message's body takes `dir="auto"` so a customer's English
-  sentence keeps its punctuation in the Arabic admin.
-- **Reactions, edits and the unsupported line keep the System event** with `Smile` or `CircleAlert`, as DESIGN
-  has them; only the unsent mark moved onto its message.
-
-**Not in this deliverable, by design.** "Send template…" on a closed WhatsApp window and the Human Agent tag
-(M10-09: until then a reply in the extended days is refused by Meta and drawn **Not sent**), and the guide's
-walk-through of the Meta dashboard (M10-11).
-
-**Tests.** Unit: the strip in every state and its countdown on fake timers, `stripState` to the minute, every
-delivery state in `en` and `ar`, the composer's count and held Send (`meta-count.test.ts`, `ticket-meta.test.tsx`), the
-thread of each platform (`ticket-meta.test.tsx`), the client (`http-api.test.ts`, `mock-api.test.ts`), the
-splitter in its new home (`packages/schemas/src/meta.test.ts`), `unsentMessageId`. Integration
-(`meta-replies.integration.test.ts`): the context names the unsent message and its line, leaves a line whose message
-is elsewhere out, and answers nothing unsent off Instagram. Playwright `apps/admin/e2e/meta.spec.ts` › the ticket
-against the fixture, in `en` and `ar` with axe: an open window (the chip, the strip, the identity card, every state,
-the count, a send), a refused delivery with no Retry, the Human Agent days with Retry on a failed part, a closed window
-that holds Send, never refuses a note and marks what was unsent, the window closing while the agent writes (the 409
-turns the strip closed and keeps the text), and the countdown moving.
 
 ## M10-03 WhatsApp inbound and the shared conversation router
 
@@ -1136,6 +827,315 @@ refusal on a real Meta ticket.
 Not in this deliverable, by design: the thread's screens (M10-08), templates (M10-09), the
 inbound `statuses[]`, watermarks and `messaging_seen` handling (M10-03 to M10-05; the repository's `advanceStatus` and
 `advanceByWatermark` they call are M10-02's), and the guide's walk-through of the Meta dashboard (M10-11).
+
+## M10-07 Admin API and the Channels › Meta screens
+
+Artboards: `Admin/Channels-Meta` and `Admin/Channels-Meta-Account`. Both halves are built: the
+admin screens below, and [the api](#m10-07-the-api) they call.
+
+**The admin client** (`apps/admin/src/meta/`, mirroring `apps/admin/src/telegram/`): `MetaApi`
+(`app`, `rotateVerifyToken`, `accounts`, `account`, `createAccount`, `updateAccount`,
+`deleteAccount`, `testToken`, `testAccount`, `subscribe`, `status`), `HttpMetaApi`, `metaKeys`,
+`MetaError` and `isMetaError`, `MetaApiProvider` and `useMetaApi`, and `MockMetaApi` with the
+fixture of the artboard (two WhatsApp numbers, a Messenger Page, an Instagram account whose token
+Meta invalidated) and the `MOCK_*` ids and tokens the unit and browser suites paste. A refusal
+crosses as `error.meta.reason` in the error body (`errorResponseSchema` gained `meta`) and becomes
+a `MetaError`, which the dialogs turn into a sentence. The ticket view's half of the interface
+(`ticketContext`, `retryDelivery`) is M10-08's.
+
+**The screens** (`apps/admin/src/screens/admin/channels/meta/`):
+
+| File | What it draws |
+|---|---|
+| `meta-tab.tsx` | the tab: the App card, the accounts table or the empty state, "How messages arrive" and the health legend, and the two dialogs; "Connect account" sits in the page header, which owns the dialog |
+| `app-card.tsx` | MetaAppCard, install admins only: the callback URL with Copy, the verify token (made here, replaced after a confirmation, shown once in a SecretReveal), what the app id and the two secrets are |
+| `account-table.tsx`, `account-health.tsx` | MetaAccountTable and its HealthIndicator, with Expiring read from the token's date (under a week left means the weekly renewal did not run) and the failure named ("Token expired") |
+| `connect-account-dialog.tsx`, `token-test.tsx`, `meta-note.tsx` | ConnectAccountDialog: platform RadioCards, the id named per platform, the token, the department, Test before Connect; a refusal sits under the field it concerns. `useTokenTest` holds the Test mutation both dialogs share (the shape check, the request, what it found, what to forget when a field changes); `MetaNote` draws every note and Test result on these screens (DESIGN §6.4, a Banner variant) |
+| `account-page.tsx`, `account-draft.ts` | MetaAccountPage: the form saved together, the Activity card and the Disconnect card |
+| `connection-section.tsx`, `reconnect-dialog.tsx` | Connection (masked token, kind, expiry, Test connection) and, once Meta has invalidated the token, what Meta said and Reconnect |
+| `subscription-section.tsx` | Subscription: state, fields as tags, last checked, Meta's last problem, Subscribe now |
+| `number-section.tsx`, `routing-section.tsx`, `human-agent-section.tsx` | Number (WhatsApp only, with the charge and no-Human-Agent notes), Routing, Human Agent (Messenger and Instagram only) |
+| `disconnect-dialog.tsx` | the typed-id confirmation, from the table's menu and from the page |
+| `platforms-card.tsx`, `platforms.ts`, `code-text.tsx` | "What each platform asks for" beside the empty state; the platform icons (DESIGN §5: WhatsApp `phone`, Messenger `messages-square`, Instagram `camera`) and labels; backticked names in catalog sentences drawn as mono code |
+
+The System page's Channels card lists the three kinds, the Meta tab has the `network` icon, and the
+stand-in icons of M10-01 (contact identities, ticket channel badge) now are the three DESIGN §5 picks.
+`Field` takes a node as its hint so a sentence can hold a code span.
+
+**Where the artboard asked for more than the schemas carry**, the screen shows what they carry and
+says nothing it cannot know:
+
+- The App card shows what the install can know and no more. `metaAppSchema` carries the app id (not
+  a secret, so it is shown), whether each of the two secrets is set, the Graph version
+  (`META_GRAPH_VERSION`), the callback URL, the verify token's last four characters and which settings
+  an `HD_META_*` variable has locked; a locked one is an EnvLockedField with the "Set by environment"
+  chip, an unlocked one reads "Set" or "Not set". The artboard's "Meta retires it on 29 Jul 2028" is
+  left out: it would be a date to keep current in the code. There is no Meta section on Settings, so the
+  card names the `HD_META_*` variables instead of "Change it on Settings". Connect is held off in the
+  empty state when an install admin sees no app secret or no verify token; for anyone else the api's
+  `app-not-configured` says it.
+- Messages delivered in 24 hours and the WhatsApp quality rating are not in the status response, so
+  the Activity card and the Number section leave them out. "Renewed by Helpdock" needs a field the
+  account row does not have; the table says Subscribed, Not subscribed, or Not checked since the time
+  of the last subscription.
+- Test names what Meta returned as `name`, `username` and the token's expiry; the number itself is the
+  row's `displayPhone` once connected.
+
+**Tests.** Unit: the api client and fixture, every screen (`meta-tab.test.tsx`,
+`account-page.test.tsx`, the health, draft and platform helpers) and the System card. Playwright
+`apps/admin/e2e/meta.spec.ts` against the fixture, in `en` and `ar` with axe: the list and the app
+card, the verify token, Connect with a refused token and then a good one for each platform, a Page's
+page (Test connection, Human Agent, Save, Disconnect by id), a WhatsApp number's page, and Reconnect.
+
+### M10-07 The api
+
+`apps/api/src/meta/`, mirroring `apps/api/src/telegram/telegram-bots.*`. Every route is
+`@Requires('brand:manage')`, reading included, under `/api/brands/:brandId/meta/accounts`:
+
+| Route | What it does | Answers |
+|---|---|---|
+| `GET` | the brand's accounts | `{ accounts }`, the token as its last four characters |
+| `POST` | connect: read the id and token against Graph, subscribe the app, store | `201` the account |
+| `POST test` | "Test" in the Connect and Reconnect dialogs: the same read with a typed token, nothing stored. **Reconnect** names the account (`accountId`), whose own id is then free for that account and for it alone | `{ ok: true, … }` or `{ ok: false, kind, detail }` |
+| `GET :accountId` | one account | the account |
+| `PUT :accountId` | save the form: department, Human Agent, and a new token when Replace was pressed | the account |
+| `DELETE :accountId` | unsubscribe the app as far as Meta allows, delete the row | `204` |
+| `POST :accountId/test` | "Test connection": the same read with the stored token | the result, a refusal answered rather than thrown |
+| `POST :accountId/subscribe` | "Subscribe now" | `{ ok: true, subscribedFields, subscribedAt }` or `{ ok: false, detail }` |
+| `GET :accountId/status` | the row, `GET /{node}/subscribed_apps` and `debug_token` now, and the Activity card | `metaAccountStatusResponseSchema`; what Graph could not say is `null` with `liveError` |
+| `POST :accountId/refresh` | renew an Instagram token that is due | the account; `400` for another platform |
+
+`GET /api/meta/app` (`install:admin`, M10-02) now also answers `appId`, `appSecretSet`,
+`instagramAppSecretSet` and `graphVersion`.
+
+**Connecting** (`MetaAccountsService.create`): the install must have an app secret
+(`app-not-configured`); the department must be the brand's (`department-not-found`); the
+`(platform, id)` must not be connected anywhere, which is looked up across brands before Graph is asked
+anything (`account-taken`, also what "Test" answers). Then one read says what the account is: a
+Page is `GET /{id}?fields=…` on Graph with `debug_token` beside it for the token's expiry, an Instagram
+account is `GET /me` on the Instagram host, compared with the id typed, and a WhatsApp number is
+`identifyWhatsApp` (below). What Graph says maps to a refusal:
+
+| Graph said | Refusal |
+|---|---|
+| the token is dead (`190` and kin) and is alive on the other host | `platform-mismatch` |
+| the token is dead | `token-invalid` |
+| the token is good but cannot read this id, or `/me` is another account (Messenger proves it as Instagram does: `GET /me?fields=id` must answer the id typed, since a user token that manages two Pages can read both) | `token-other-account` |
+| a WhatsApp token reads the number, but no business account it was granted on lists the number | `token-other-account` |
+| `5xx`, a rate limit, a timeout, a blocked destination, an answer in a shape Helpdock does not know | `graph-unreachable` |
+| the app cannot be subscribed to the account, for good | `subscribe-failed` |
+
+"Test" answers the first two and the unreachable case as `{ ok: false, kind: 'token' | 'connect' }`
+in Meta's words, and throws the rest, because those are about the id rather than the token. After the
+read the app is subscribed with `POST /{node}/subscribed_apps?subscribed_fields=…`, the lists of
+`META_SUBSCRIBED_FIELDS` (WhatsApp subscribes the whole `messages` field and sends none). A refusal for
+good aborts the connection with nothing stored; a failure for a
+moment (a 5xx, a limit) stores the account as `unsubscribed` with the reason in `last_error`, and the
+hourly health check or Subscribe now makes it good. The row is stored with the token encrypted under
+`APP_MASTER_KEY`, the token's expiry (an Instagram token's is estimated as 60 days from now until the
+first renewal says a real one), `token_updated_by`, and the account's name, handle or number.
+
+**Reconnect.** A replacement token for an account that is connected already names its own id, which the
+"already connected" rule would refuse. `POST test` therefore takes an optional `accountId`; the id is free
+for it when the account is the brand's (row-level security decides) and has the id and platform the request
+gives. Any other `accountId` (another account's, another brand's, a different id) is tested as a new
+connection, which the taken id refuses. The mock api, which has no taken check, is the admin client's and
+is left as it was; the real-api browser suite is what proves the flow (below).
+
+**WhatsApp's business account.** Meta keeps a WhatsApp webhook subscription on the business account
+(WABA), not on the phone number: `GET|POST|DELETE /{waba_id}/subscribed_apps` is the edge, and the
+number's own node answers an unsupported-edge error. The Connect dialog asks only for the phone
+number id, so `identifyWhatsApp(graph, phoneNumberId)` (`whatsapp-identity.ts`, the one place the
+order of these calls is written) finds the business account from the token:
+
+1. `GET /{phone_number_id}?fields=id,display_phone_number,verified_name` names the number and proves the
+   token opens it.
+2. `GET /debug_token` says the token is valid, until when, and what it was granted on
+   (`data.granular_scopes`). The candidates are the `target_ids` of `whatsapp_business_management`,
+   else of `whatsapp_business_messaging`.
+3. `GET /{waba_id}/phone_numbers` for each candidate (at most 25, in order); the first whose
+   `data[].id` includes the number is stored in `meta_accounts.waba_id`. A candidate the token may not
+   list (a Graph permission refusal with a code) is skipped; a rate limit, a 5xx or an answer in an
+   unknown shape is not a statement about the account and fails the whole read as `graph-unreachable`.
+
+No candidate that lists the number, or a token with no granted ids at all, is `token-other-account`:
+the token can read the number but could not subscribe the app. The operator's fix is to assign the
+business account to the system user and generate the token again (M10-11's guide says so; the refusal
+text in the dialog does too). A token check that went unanswered is Graph failing, not that refusal.
+`subscribe`, `remove` (the unsubscribe) and `status` (the live `subscribed_apps` read) use `waba_id` for
+WhatsApp and `external_id` for Messenger and Instagram (`subscriptionNodeOf`). A WhatsApp row whose
+`waba_id` is null (made before this, or by hand) cannot be subscribed or read: "Subscribe now" answers
+`{ ok: false, detail }` with "Disconnect it and connect it again", records it in `last_error`, the status
+panel's `liveError` says the same, and a disconnect skips the unsubscribe. Replacing the token fills
+`waba_id` again.
+
+**Saving** keeps `human_agent_enabled` false on WhatsApp whatever is sent. A new token must open the
+same account (`token-other-account` otherwise), brings the account back to `connected`, clears the last
+error and subscribes the app again (and, for WhatsApp, finds the business account again).
+**Disconnecting** sends `DELETE /{node}/subscribed_apps` (for a WhatsApp number only when no other
+number is connected on the same business account, in any brand, because Meta subscribes the app to the
+business account as a whole) and ignores
+its failure, so a revoked token does not keep an account the Admin is removing; conversations and
+deliveries go with the row, tickets and contacts stay.
+
+**Audit** (`target_type = meta_account`, never a token): `meta_account.created` `{ platform, externalId }`,
+`.updated` `{ tokenReplaced, departmentChanged, humanAgentEnabled? }` (the switch only when it changed),
+`.deleted` `{ platform, externalId }`, `.subscribed` `{ fields }` and `.refreshed` `{ expiresAt }`. Create,
+update and delete also write `meta_account.changed` on the outbox for the health job (M10-10) to follow.
+
+**The token stays where nothing logs it**: `account-graph.ts`'s `AccountGraph` holds it in a private
+field and serialises to its platform; `graphForAccount` is the one place a stored token is decrypted, and
+the routes and every job (the send job, the media and profile jobs, the health check, the renewal) call
+Graph through it. The only call that carries the token as a parameter is `debug_token`, which is its
+method rather than a query a caller builds, and `redactToken` has been over every `detail` that reaches
+`last_error` or a response. The subscription (the node, the `POST`, the `subscribed_apps` read, the
+missing-business-account sentence) is `meta-subscription.ts`, shared with the health check; "mark the
+account `token_expired`" is `MetaRepository.markTokenDead`, shared by the send job, the renewal, the
+routes and, through `accountFailureRecorder`, the media and profile jobs.
+
+`POST :accountId/refresh` calls M10-10's `refreshInstagramToken(deps, account)` in
+`meta-token-refresh.ts` (the same function the hourly job runs; the copy first written here was dropped
+at the merge) with the shared Graph client. `not-due` (a token renewed within a week, or replaced
+while Meta was asked) answers the account as it is, `refused` is `400 token-invalid` with Meta's words
+on the row, and a Graph failure for a moment is `409 graph-unreachable`; a renewal is audited as
+`meta_account.refreshed`.
+
+`channel-status.ts` lists the accounts of every brand on the System page, named by number, Page name or
+`@handle`, with their health word (or `token expired` / `unsubscribed`) and no token.
+
+**Decisions taken inside the plan**, with the reason where the code makes them:
+
+- **The subscribed fields are `META_SUBSCRIBED_FIELDS`**, which is the brief's lists (WhatsApp
+  `messages`; Messenger `messages` through `messaging_postbacks`; Instagram `messages`,
+  `message_reactions`, `messaging_seen`, `messaging_postbacks`) plus `messaging_referrals` and
+  `messaging_policy_enforcement` (Messenger) and `messaging_referral` (Instagram). The schema is
+  unchanged: M10-04 reads policy enforcement into the account's `last_error`, which needs the field,
+  and the referrals are the events the envelope classifier already counts and drops.
+- **`platform-mismatch` is read from the host the token opens**, not from the shape of the id: Meta
+  promises no shape, and the brief's "the id's shape" would refuse a real account the day Meta changed
+  one. One extra `GET /me` on the other host, only after a token was refused.
+- **`subscribe-failed` refuses the connection** when Meta refuses for good, instead of storing an
+  account that can never receive anything; the brief's "best effort" stays for failures that are not
+  for good.
+- **The business account is resolved when connecting**, from the token's own grants, because the
+  dialog asks for the number only and Meta subscribes per business account. It is stored in
+  `waba_id`, which M10-09 can read for templates instead of looking it up again.
+- **A WhatsApp subscription sends no field names.** The business account's edge subscribes the app to
+  the fields the app's webhook configuration names; `META_SUBSCRIBED_FIELDS.whatsapp` is what the row
+  records as subscribed, and the card shows it.
+
+**Unconfirmed against Meta**, for the staging run (open questions above): that `data.granular_scopes`
+of a system-user token carries the business accounts as `target_ids` under
+`whatsapp_business_management`; that `GET /{waba_id}/phone_numbers?limit=100` lists every number of an
+account (a business account with more than a page of numbers is not followed to the next page); and
+that `POST /{waba_id}/subscribed_apps` accepts a request with no query. The health job (M10-10) and
+this service name the subscription the same way: `waba_id` for WhatsApp, `external_id` otherwise.
+
+**Tests.** Unit: the Graph reads and every refusal they can cause, the status panel, the account view,
+the bound Graph calls (`meta-accounts.service.test.ts` and its neighbours), and the business-account
+lookup against a scripted Graph: the order of the calls, the scope fallback, the skipped and the thrown
+candidate (`whatsapp-identity.test.ts`, `token-facts.test.ts`).
+Integration against Postgres, Redis and the stand-in (`meta-accounts.integration.test.ts`): who may,
+every refusal over HTTP, the token stored encrypted and read back as its last four characters, the audit
+trail and the outbox event of each change, saving, testing, subscribing, renewing, disconnecting,
+isolation between brands and the System card; a replacement token tested for the connected account's own
+id and held to that account (the id stays taken for any other request), and a Page token whose own account is
+another Page refused. Playwright against the real api (`apps/admin/e2e/api/meta.api.spec.ts`, with `FakeGraph`
+from `@helpdock/channels/testing` started beside the install and reached over `/__control/`): the app card and
+a verify token shown once, a refused token, a WhatsApp token whose business account does not list the number
+(a refusal queued over `/__control/`) and each platform connected (the subscription read back from the
+business account for WhatsApp), an account that is taken, **a Page whose token Meta revoked: Subscribe now
+makes the account `token_expired`, Reconnect refuses the revoked token and another Page's, accepts a new
+token for the same Page and stores it, and the same id is still refused as a new account** (with the
+account id taken out of the request the spec fails at the Test), a Page tested, saved, subscribed again
+and disconnected by its id.
+
+## M10-08 The ticket thread
+
+Artboard: `Admin/Ticket-Meta`. The guide is [A WhatsApp, Messenger or Instagram
+ticket](../guides/tickets.md#a-whatsapp-messenger-or-instagram-ticket). The api it reads is M10-06's
+([`GET …/meta`, `GET …/meta/deliveries`, `POST …/meta/deliveries/:id/retry`](#m10-06-replies-the-window-metasend-deliveries-and-pacing))
+plus one field this deliverable adds (`unsent`, below).
+
+**The admin client** (`apps/admin/src/meta/`) gains `MetaApi.ticketContext` and `retryDelivery`
+(`HttpMetaApi`, `MockMetaApi`), `metaKeys.ticket`, and `MetaError.details` for the platform, the anchor and the
+closing time a `reply-window-closed` refusal carries (the transport passes `error.meta` whole). The mock holds
+the three tickets of the artboard (`mock-conversations.ts`, `tickets/mock-meta-seed.ts`): HD-1040 on WhatsApp
+(the customer wrote 66 minutes ago, 22 h 54 m left), HD-1038 on Messenger (30 hours ago, Human Agent switch on)
+and HD-1036 on Instagram (8 days ago, closed), with a delivery in every state, and it refuses a reply the way the
+api does, from the clock at the moment of the send.
+
+| File (`apps/admin/src/screens/tickets/…`) | What it holds |
+|---|---|
+| `meta/use-ticket-meta.tsx` | `useTicketMeta`, mirroring `useTicketTelegram`: reads the context, and gives the view the header's account, the thread's `ThreadMeta` (`leadFor`, `trailFor`, `labelFor`, `contentFor`, `hides`, `lineIcon`, `attachmentFor`, `pinKey`), the strip, the composer's `ComposerMeta`, the identity card, `deliveryFooter`, `refused` and `refresh` |
+| `meta/reply-window-strip.tsx`, `meta/reply-window.ts`, `meta/use-minute-clock.ts` | ReplyWindowStrip (open, closing, Human Agent, closed, and the refused second line), `stripState` (the api's window read against the clock and a refusal), and the one-minute clock |
+| `meta/delivery-state.tsx` | `DeliveryTrail` (Sending with the part, Sent, Delivered, Read) and `DeliveryNotice` (Not sent without Retry, Not delivered with Retry and the earlier-parts caption, a file left out) |
+| `meta/channel-identity-rows.tsx` | the ChannelIdentityCard's rows per platform, Copy named after the id |
+| `meta/composer-meta.tsx`, `meta/meta-count.ts` | the recipient caption and "Sent as N messages", counted with `splitMetaText` after `metaOpeningLine` |
+| `meta/meta-content.ts`, `meta/meta-figures.tsx`, `meta/meta-format.ts` | reading a quote, a story, a sticker and the lines nobody wrote back out of the thread; their figures and the unsent caption; the account, handle, time-left and closing-time wording |
+| `ticket-view.tsx`, `thread.tsx`, `composer.tsx`, `badges.tsx`, `ticket-header.tsx`, `ticket-row.tsx`, `message-bubble.tsx` | a `meta` prop beside `telegram` in each, the header chip (`ChannelLabel account`), the list row's `ChannelMark`, the bubble's `label`, `before` and `bodyDir` |
+
+`details-panel.tsx` needed no change: its `channelIdentity` slot takes Telegram's card or this one.
+`@helpdock/schemas` gains `splitMetaText` (moved from `@helpdock/channels`, which re-exports it: the composer
+counts with the function the send job cuts with) and `metaUnsentSchema`.
+
+**Decisions taken inside the plan**, each with its reason where it is made:
+
+- **The unsent mark comes from the context read, not from a field on every message.** M10-05 marks an unsent
+  Instagram message with a system line whose external id is `unsent:<mid>`, "for M10-08 to read", but a ticket
+  message carries no external id on the wire (`ticket-view.ts` leaves `external_message_id` unmapped on purpose,
+  and the public API and the webhooks serialise the same schema). `GET …/meta` therefore answers `unsent:
+  [{ ticketMessageId, lineId, at }]` for an Instagram ticket (two plain selects in `MetaDeliveriesService`, the
+  line's prefix and its reverse in `instagram-rules.ts`). The thread draws "Unsent by the customer · 10:26" under
+  the message and leaves the line out; a line whose message is not on this ticket marks nothing and stays a line
+  with its `Undo2` icon.
+- **A quote, a story and a sticker are read back from the words and files that were filed.** The thread has no
+  column for any of them: the inbound services file the story label and the reaction and unsupported sentences from
+  the shared `meta` catalog in the contact's language, a quote as a leading `<blockquote>`, a sticker as
+  `sticker.webp`. `meta-content.ts` matches the catalog in both languages, so a catalog change moves the writer and
+  the reader together and the suite pins it. The quote's author is the earlier message of the thread that begins
+  with the quoted words; with no match the quote is drawn without a name rather than with a guess.
+- **The closed strip says when the window closed, not who wrote last.** DESIGN's sentence is "Sara last wrote 8
+  days ago"; the context carries the window (`closedAt`) and not the message that opened it, and the last
+  customer message in the thread is not always that message (an unsupported one opens the window and is a line).
+  "It closed 7 days ago, Oct 5 at 19:45" is exact. It is the same instant the api's `reply-window-closed` carries.
+- **Send is held, not disabled.** `aria-disabled="true"`, described by the strip, on `bg.muted` with
+  `text.disabled`; it keeps its place and focus, the form refuses to submit, and the draft stays. An internal note
+  is never held.
+- **The strip reads the clock once a minute.** `useMinuteClock` is the only timer; the api's window is read against it, so
+  a window that runs out turns closed without a request and the context is read again then (the Human Agent
+  days may begin where the 24 hours ended). A refusal at Send turns the strip closed at once with its second line
+  and holds until a later read shows the window open; the text, the files and a staged macro go back into the
+  composer, and nothing is drawn as "not sent, retry" because the api wrote nothing.
+- **The thread scrolls to its end again when the strip arrives.** The strip is read after the thread and takes
+  room from it, which left the last reply under the strip; `ThreadMeta.pinKey` re-runs the thread's scroll when
+  the strip appears and when a refusal adds its line. The Playwright suite checks the last reply ends above the strip.
+- **The first line of a reply is counted once the brand is read.** `metaOpeningLine({ firstName:
+  firstWordOf(viewer), brand })` needs the brand's name; until the brand has been read the count is the text
+  alone, and a files-only draft counts the line as one text message.
+- **A left-out file's reason is worded from its kind.** The api records `unsupported-type` or `too-large`; the
+  strip says "sends PDF files only" for a document on a platform that takes PDF alone and "does not take this kind
+  of file" for anything else, from the attachment's kind, which the thread already holds.
+- **Numbers and handles are isolates.** The header chip and the "via" line put the account in `<bdi>` (without it
+  the Arabic label read "0142 555 1+"), and a Meta message's body takes `dir="auto"` so a customer's English
+  sentence keeps its punctuation in the Arabic admin.
+- **Reactions, edits and the unsupported line keep the System event** with `Smile` or `CircleAlert`, as DESIGN
+  has them; only the unsent mark moved onto its message.
+
+**Not in this deliverable, by design.** "Send template…" on a closed WhatsApp window and the Human Agent tag
+(M10-09: until then a reply in the extended days is refused by Meta and drawn **Not sent**), and the guide's
+walk-through of the Meta dashboard (M10-11).
+
+**Tests.** Unit: the strip in every state and its countdown on fake timers, `stripState` to the minute, every
+delivery state in `en` and `ar`, the composer's count and held Send (`meta-count.test.ts`, `ticket-meta.test.tsx`), the
+thread of each platform (`ticket-meta.test.tsx`), the client (`http-api.test.ts`, `mock-api.test.ts`), the
+splitter in its new home (`packages/schemas/src/meta.test.ts`), `unsentMessageId`. Integration
+(`meta-replies.integration.test.ts`): the context names the unsent message and its line, leaves a line whose message
+is elsewhere out, and answers nothing unsent off Instagram. Playwright `apps/admin/e2e/meta.spec.ts` › the ticket
+against the fixture, in `en` and `ar` with axe: an open window (the chip, the strip, the identity card, every state,
+the count, a send), a refused delivery with no Retry, the Human Agent days with Retry on a failed part, a closed window
+that holds Send, never refuses a note and marks what was unsent, the window closing while the agent writes (the 409
+turns the strip closed and keeps the text), and the countdown moving.
 
 ## M10-10 Health jobs
 

@@ -373,6 +373,7 @@ describe('Connect a Meta account', () => {
   ])('connects $listed once its token works', async (scenario) => {
     const { user, metaApi } = await renderMeta();
     const create = vi.spyOn(metaApi, 'createAccount');
+    const testToken = vi.spyOn(metaApi, 'testToken');
     const dialog = await openDialog(user);
 
     await user.click(within(dialog).getByRole('radio', { name: scenario.platform }));
@@ -389,6 +390,8 @@ describe('Connect a Meta account', () => {
       expect.any(String),
       expect.objectContaining({ externalId: scenario.id, accessToken: scenario.token }),
     );
+    // A new connection names no account, so an id that is taken stays refused.
+    expect(testToken.mock.calls[0]?.[1]).not.toHaveProperty('accountId');
     expect(within(await table()).getByRole('link', { name: scenario.listed })).toBeVisible();
   });
 

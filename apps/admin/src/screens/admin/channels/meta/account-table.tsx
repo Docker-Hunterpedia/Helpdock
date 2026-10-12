@@ -59,7 +59,7 @@ export function AccountTable({
     >
       <Box
         sx={{
-          paddingBlock: '14px',
+          paddingBlock: 3,
           paddingInline: 4,
           display: 'flex',
           alignItems: 'baseline',
@@ -67,7 +67,7 @@ export function AccountTable({
           flexWrap: 'wrap',
         }}
       >
-        <Typography id={headingId} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+        <Typography id={headingId} variant="h3" component="h2">
           {t('channels:meta.heading')}
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -177,7 +177,7 @@ function SubscriptionCell({ account }: { readonly account: MetaAccount }): React
           display: 'inline-flex',
           alignItems: 'center',
           gap: 1,
-          fontSize: 13,
+          typography: 'body2',
           color: 'text.secondary',
         }}
       >
@@ -197,7 +197,7 @@ function SubscriptionCell({ account }: { readonly account: MetaAccount }): React
           display: 'inline-flex',
           alignItems: 'center',
           gap: 1,
-          fontSize: 13,
+          typography: 'body2',
           color: tokens['status.warning.text'],
         }}
       >
@@ -213,7 +213,7 @@ function SubscriptionCell({ account }: { readonly account: MetaAccount }): React
         display: 'inline-flex',
         alignItems: 'center',
         gap: 1,
-        fontSize: 13,
+        typography: 'body2',
         color: tokens['status.success.text'],
       }}
     >
@@ -235,7 +235,7 @@ function LastEvent({
   const at = account.lastEventAt;
 
   return (
-    <Typography variant="mono" component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
+    <Typography variant="mono" component="span" sx={{ color: 'text.secondary' }}>
       {at === null
         ? t('channels:meta.noEvent')
         : t('channels:meta.lastEvent', { time: clockTime(at, locale), ago: ago(at, now, locale) })}
@@ -263,11 +263,7 @@ function HealthCell({
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 2 }}>
         <AccountHealth account={account} now={now} />
         {at === null ? null : (
-          <Typography
-            variant="mono"
-            component="span"
-            sx={{ fontSize: 12, color: 'text.secondary' }}
-          >
+          <Typography variant="mono" component="span" sx={{ color: 'text.secondary' }}>
             {clockTime(at, locale)}
           </Typography>
         )}
@@ -276,26 +272,18 @@ function HealthCell({
             component={Link}
             to={metaAccountRoute(account.id)}
             aria-label={t('channels:meta.health.fixFor', { name })}
-            sx={{ fontSize: 12, fontWeight: 500 }}
+            variant="caption"
           >
             {t('channels:meta.health.fix')}
           </MuiLink>
         ) : null}
         {view === 'waiting' ? (
-          <Typography
-            variant="mono"
-            component="span"
-            sx={{ fontSize: 12, color: 'text.secondary' }}
-          >
+          <Typography variant="mono" component="span" sx={{ color: 'text.secondary' }}>
             {t('channels:meta.health.connectedAt', { time: clockTime(account.createdAt, locale) })}
           </Typography>
         ) : null}
         {view === 'expiring' && account.tokenExpiresAt !== null ? (
-          <Typography
-            variant="mono"
-            component="span"
-            sx={{ fontSize: 12, color: 'text.secondary' }}
-          >
+          <Typography variant="mono" component="span" sx={{ color: 'text.secondary' }}>
             {t('channels:meta.health.expiresOn', {
               date: shortDate(account.tokenExpiresAt, locale),
             })}
@@ -309,8 +297,6 @@ function HealthCell({
           dir="auto"
           sx={{
             color: tokens['status.danger.text'],
-            fontSize: 12,
-            lineHeight: '16px',
             overflowWrap: 'anywhere',
             display: '-webkit-box',
             WebkitLineClamp: 3,

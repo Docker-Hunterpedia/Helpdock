@@ -1,4 +1,4 @@
-import type { MetaAccount, MetaTestResult } from '@helpdock/schemas';
+import { META_TOKEN_MIN_LENGTH, type MetaAccount } from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -23,12 +23,7 @@ import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { looksLikeToken } from './account-draft.js';
 import { accountLabel } from './platforms.js';
-import {
-  problemFromError,
-  problemFromResult,
-  type TestProblem,
-  TokenWorks,
-} from './token-test.tsx';
+import { problemFromError, TokenWorks, useTokenTest } from './token-test.tsx';
 
 /**
  * "Reconnect @account" (M10-07, `Admin/Channels-Meta-Account` panel 3): a new
@@ -55,50 +50,32 @@ export function ReconnectDialog({
   const queryClient = useQueryClient();
   const tokenId = useId();
   const [token, setToken] = useState('');
-  const [tested, setTested] = useState<MetaTestResult | null>(null);
-  const [problem, setProblem] = useState<TestProblem | null>(null);
   const name = accountLabel(account);
+  // The account's own id is taken by definition: naming the account tells the api this is a
+  // replacement for it, which the id is free for, and for it alone.
+  const test = useTokenTest({
+    validate: () =>
+      looksLikeToken(token)
+        ? null
+        : {
+            field: 'token',
+            message: t('channels:meta.connect.malformedToken', { min: META_TOKEN_MIN_LENGTH }),
+          },
+    request: () => ({
+      platform: account.platform,
+      externalId: account.externalId,
+      accountId: account.id,
+      accessToken: token.trim(),
+    }),
+  });
+  const { tested, problem, setProblem, forget } = test;
 
   useEffect(() => {
     if (open) {
       setToken('');
-      setTested(null);
-      setProblem(null);
+      forget();
     }
-  }, [open]);
-
-  const test = useMutation({
-    mutationFn: async () => {
-      if (!looksLikeToken(token)) {
-        setProblem({
-          field: 'token',
-          message: t('channels:meta.connect.malformedToken', { min: 16 }),
-        });
-        return null;
-      }
-      return api.testToken(brand.id, {
-        platform: account.platform,
-        externalId: account.externalId,
-        accessToken: token.trim(),
-      });
-    },
-    onMutate: () => {
-      setTested(null);
-      setProblem(null);
-    },
-    onSuccess: (result) => {
-      if (result === null) {
-        return;
-      }
-      setTested(result);
-      if (!result.ok) {
-        setProblem(problemFromResult(result, t));
-      }
-    },
-    onError: (error: unknown) => {
-      setProblem(problemFromError(error, t));
-    },
-  });
+  }, [open, forget]);
 
   const reconnect = useMutation({
     mutationFn: () =>
@@ -121,7 +98,7 @@ export function ReconnectDialog({
   });
 
   const works = tested?.ok === true ? tested : null;
-  const busy = test.isPending || reconnect.isPending;
+  const busy = test.pending || reconnect.isPending;
   const hint = t(`channels:meta.reconnect.tokenHint.${account.platform}`);
   const error = problem?.message;
 
@@ -147,9 +124,7 @@ export function ReconnectDialog({
           }
         }}
       >
-        <DialogTitle
-          sx={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2 }}
-        >
+        <DialogTitle sx={{ typography: 'h3', display: 'flex', alignItems: 'center', gap: 2 }}>
           {t('channels:meta.reconnect.title', { name })}
           <IconButton
             size="small"
@@ -188,8 +163,7 @@ export function ReconnectDialog({
               fullWidth
               onChange={(event) => {
                 setToken(event.target.value);
-                setTested(null);
-                setProblem(null);
+                forget();
               }}
               slotProps={{
                 htmlInput: {
@@ -199,7 +173,7 @@ export function ReconnectDialog({
                   'aria-invalid': error !== undefined,
                 },
               }}
-              sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+              sx={{ '& input': (theme) => theme.typography.mono }}
             />
           </Field>
 
@@ -209,17 +183,15 @@ export function ReconnectDialog({
           <Button
             variant="outlined"
             disabled={busy || token.trim() === ''}
-            aria-busy={test.isPending}
+            aria-busy={test.pending}
             startIcon={
-              test.isPending ? (
+              test.pending ? (
                 <CircularProgress size={14} aria-hidden="true" />
               ) : (
                 <PlugZap size={16} aria-hidden="true" />
               )
             }
-            onClick={() => {
-              test.mutate();
-            }}
+            onClick={test.run}
             sx={{ marginInlineEnd: 'auto' }}
           >
             {t('channels:meta.connect.test')}

@@ -137,10 +137,10 @@ export function MetaAppCard({
           <Network size={16} />
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', flex: '1 1 280px', minWidth: 0 }}>
-          <Typography id={headingId} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+          <Typography id={headingId} variant="h3" component="h2">
             {t('channels:meta.app.heading')}
           </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('channels:meta.app.caption')}
           </Typography>
         </Box>
@@ -152,7 +152,7 @@ export function MetaAppCard({
             display: 'inline-flex',
             alignItems: 'center',
             borderRadius: '6px',
-            fontSize: 12,
+            typography: 'caption',
             color: 'text.secondary',
             backgroundColor: tokens['bg.muted'],
           }}
@@ -161,7 +161,7 @@ export function MetaAppCard({
         </Box>
         <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
           <HealthStateDot state={lastEventAt === null ? 'waiting' : 'healthy'} />
-          <Typography component="span" sx={{ fontSize: 13 }}>
+          <Typography component="span" variant="body2">
             {lastEventAt === null
               ? t('channels:meta.app.notSigned')
               : t('channels:meta.app.signed', { time: clockTime(lastEventAt, locale) })}
@@ -199,7 +199,7 @@ export function MetaAppCard({
                   'aria-describedby': `${callbackId}-hint`,
                 },
               }}
-              sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+              sx={{ '& input': (theme) => theme.typography.mono }}
             />
             <Button
               variant="outlined"
@@ -248,7 +248,7 @@ export function MetaAppCard({
                     : {}),
                 },
               }}
-              sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+              sx={{ '& input': (theme) => theme.typography.mono }}
             />
             <Button
               variant="outlined"
@@ -313,7 +313,7 @@ export function MetaAppCard({
             slotProps={{
               htmlInput: { readOnly: true, dir: 'ltr', 'aria-describedby': `${versionId}-hint` },
             }}
-            sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+            sx={{ '& input': (theme) => theme.typography.mono }}
           />
         </Field>
       </Box>
@@ -325,15 +325,13 @@ export function MetaAppCard({
           display: 'flex',
           alignItems: 'flex-start',
           gap: 2,
-          fontSize: 12,
-          lineHeight: '18px',
           color: 'text.secondary',
           borderBlockStart: `1px solid ${tokens['border.default']}`,
           backgroundColor: tokens['bg.canvas'],
         }}
       >
-        <Info size={14} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 2 }} />
-        <Typography variant="caption" sx={{ fontSize: 12, lineHeight: '18px' }}>
+        <Info size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+        <Typography variant="caption">
           <CodeText text={t('channels:meta.app.footer')} />
         </Typography>
       </Box>
@@ -370,7 +368,7 @@ export function MetaAppCard({
             gridTemplateColumns: 'max-content minmax(0, 1fr)',
             columnGap: 4,
             rowGap: 2,
-            fontSize: 13,
+            typography: 'body2',
             '& dt': { color: 'text.secondary', fontWeight: 500 },
             '& dd': { margin: 0 },
           }}
@@ -438,9 +436,7 @@ function SettingField({
         slotProps={{
           htmlInput: { readOnly: true, dir: 'ltr', 'aria-describedby': `${id}-hint` },
         }}
-        sx={
-          mono ? { '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) } : undefined
-        }
+        sx={mono ? { '& input': (theme) => theme.typography.mono } : undefined}
       />
     </Field>
   );

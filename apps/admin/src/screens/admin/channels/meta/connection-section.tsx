@@ -13,6 +13,7 @@ import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { clockTime, shortDate } from '../format.js';
 import { FormSection } from '../telegram/form-section.tsx';
+import { MetaNote, NoteText, NoteTitle } from './meta-note.tsx';
 import { accountLabel } from './platforms.js';
 
 /**
@@ -127,7 +128,7 @@ export function ConnectionSection({
                   : {}),
               },
             }}
-            sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+            sx={{ '& input': (theme) => theme.typography.mono }}
           />
           {token === null ? (
             <Button
@@ -150,7 +151,7 @@ export function ConnectionSection({
           gridTemplateColumns: 'minmax(120px, max-content) minmax(0, 1fr)',
           columnGap: 6,
           rowGap: 2,
-          fontSize: 13,
+          typography: 'body2',
           '& dt': { color: 'text.secondary' },
           '& dd': { margin: 0, minWidth: 0 },
         }}
@@ -169,7 +170,7 @@ export function ConnectionSection({
         </dd>
         <dt>{t('channels:meta.detail.connection.lastChecked')}</dt>
         <dd>
-          <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
+          <Typography variant="mono" component="span">
             {checkedAt === null
               ? t('channels:meta.detail.connection.notChecked')
               : clockTime(checkedAt, locale)}
@@ -220,58 +221,43 @@ function TestOutcome({
   readonly outcome: MetaTestResult;
 }): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const { locale } = usePreferences();
-  const tone = outcome.ok ? 'success' : 'danger';
-  const Icon = outcome.ok ? CircleCheck : TriangleAlert;
   const time = clockTime(at, locale);
 
   return (
-    <Box
+    <MetaNote
+      tone={outcome.ok ? 'success' : 'danger'}
       role={outcome.ok ? 'status' : 'alert'}
-      sx={{
-        display: 'flex',
-        gap: 2,
-        alignItems: 'flex-start',
-        paddingBlock: '10px',
-        paddingInline: 3,
-        borderRadius: '6px',
-        backgroundColor: tokens[`status.${tone}.tint`],
-        border: `1px solid ${tokens[`status.${tone}`]}`,
-        color: tokens[`status.${tone}.text`],
-        fontSize: 13,
-        lineHeight: '18px',
-      }}
+      icon={
+        outcome.ok ? (
+          <CircleCheck size={16} aria-hidden="true" />
+        ) : (
+          <TriangleAlert size={16} aria-hidden="true" />
+        )
+      }
     >
-      <Icon size={16} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 1 }} />
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-        <Typography component="span" sx={{ fontWeight: 500, fontSize: 13, color: 'inherit' }}>
-          {outcome.ok
-            ? t('channels:meta.detail.connection.connected', { time })
-            : outcome.kind === 'connect'
-              ? t('channels:meta.detail.connection.unreachable', { time })
-              : t('channels:meta.detail.connection.refused', { time })}
-        </Typography>
-        <Typography
-          component="span"
-          dir="auto"
-          sx={{ fontSize: 13, color: 'inherit', overflowWrap: 'anywhere' }}
-        >
-          {outcome.ok ? (
-            <bdi>
-              {t('channels:meta.detail.connection.connectedBody', {
-                name:
-                  outcome.username === undefined
-                    ? outcome.name
-                    : `${outcome.name} (@${outcome.username})`,
-                id: outcome.externalId,
-              })}
-            </bdi>
-          ) : (
-            (outcome.detail ?? '')
-          )}
-        </Typography>
-      </Box>
-    </Box>
+      <NoteTitle>
+        {outcome.ok
+          ? t('channels:meta.detail.connection.connected', { time })
+          : outcome.kind === 'connect'
+            ? t('channels:meta.detail.connection.unreachable', { time })
+            : t('channels:meta.detail.connection.refused', { time })}
+      </NoteTitle>
+      <NoteText dir="auto">
+        {outcome.ok ? (
+          <bdi>
+            {t('channels:meta.detail.connection.connectedBody', {
+              name:
+                outcome.username === undefined
+                  ? outcome.name
+                  : `${outcome.name} (@${outcome.username})`,
+              id: outcome.externalId,
+            })}
+          </bdi>
+        ) : (
+          (outcome.detail ?? '')
+        )}
+      </NoteText>
+    </MetaNote>
   );
 }

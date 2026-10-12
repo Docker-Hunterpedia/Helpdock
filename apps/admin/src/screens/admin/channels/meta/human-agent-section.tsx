@@ -35,13 +35,10 @@ export function HumanAgentSection({
           onChange={onChange}
         />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <Typography component="span" sx={{ fontSize: 14, fontWeight: 500 }} aria-hidden="true">
+          <Typography component="span" variant="bodyStrong" aria-hidden="true">
             {t('channels:meta.detail.humanAgent.switch')}
           </Typography>
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary', fontSize: 13, lineHeight: '18px' }}
-          >
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             <CodeText text={t('channels:meta.detail.humanAgent.body')} />
           </Typography>
           <Box
@@ -49,8 +46,7 @@ export function HumanAgentSection({
             sx={{
               margin: 0,
               paddingInlineStart: 5,
-              fontSize: 13,
-              lineHeight: '18px',
+              typography: 'body2',
               color: 'text.secondary',
               '& li + li': { marginBlockStart: 1 },
             }}
@@ -68,7 +64,7 @@ export function HumanAgentSection({
             display: 'inline-flex',
             alignItems: 'center',
             borderRadius: '6px',
-            fontSize: 12,
+            typography: 'caption',
             whiteSpace: 'nowrap',
             color: 'text.secondary',
             backgroundColor: tokens['bg.muted'],

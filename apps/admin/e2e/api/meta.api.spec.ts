@@ -4,12 +4,16 @@ import { expect, openAdmin, test } from './admin-session.js';
 import {
   E2E_INSTAGRAM,
   E2E_MESSENGER,
+  E2E_MESSENGER_RENEWED_TOKEN,
+  E2E_META_APP_ID,
+  E2E_OTHER_MESSENGER,
   E2E_REFUSED_META_DETAIL,
   E2E_REFUSED_META_TOKEN,
-  E2E_UNASSIGNED_WHATSAPP_TOKEN,
   E2E_WHATSAPP,
   E2E_WHATSAPP_PHONE,
   type E2eAccount,
+  queueRefusal,
+  revokeToken,
   subscriptionsUrl,
 } from './fake-graph.js';
 import { E2E_WEB_ORIGIN, SKIP_ENV } from './install.js';
@@ -18,8 +22,9 @@ import { E2E_WEB_ORIGIN, SKIP_ENV } from './install.js';
  * M10-07 against the real api, with a local stand-in for Graph: the install's
  * Meta app read from the environment and a verify token made and shown once;
  * a WhatsApp number, a Page and an Instagram account refused and then connected
- * through Graph's own answers, each subscribed; an account's page tested,
- * saved and subscribed again; and disconnected by its id.
+ * through Graph's own answers, each subscribed; a Page whose token Meta
+ * revoked reconnected with a new token for the same Page, and held to that Page;
+ * an account's page tested, saved and subscribed again; and disconnected by its id.
  *
  * The mock suite covers the screens in both languages. What this adds is the
  * wiring under them — the token checked against the id before it is stored,
@@ -64,9 +69,7 @@ test.describe('Channels › Meta against the real api', () => {
       card.getByLabel(t('channels:meta.app.callback.label'), { exact: true }),
     ).toHaveValue(`${E2E_WEB_ORIGIN}/api/meta/webhook`);
     // The app id and the app secret are the environment's, which the card says.
-    await expect(card.getByLabel(t('channels:meta.app.appId.label'))).toHaveValue(
-      '1290457718832406',
-    );
+    await expect(card.getByLabel(t('channels:meta.app.appId.label'))).toHaveValue(E2E_META_APP_ID);
     await expect(card.getByText(t('aiSettings:env.chip'))).toHaveCount(2);
     await expect(card.getByLabel(t('channels:meta.app.instagramSecret.label'))).toHaveValue(
       t('channels:meta.app.state.notSet'),
@@ -113,13 +116,18 @@ test.describe('Channels › Meta against the real api', () => {
     ).toBeVisible();
     await expect(connect).toBeDisabled();
 
-    // The token reads the number, but no business account it was granted on owns it.
-    await dialog.getByLabel(t('channels:meta.connect.token')).fill(E2E_UNASSIGNED_WHATSAPP_TOKEN);
+    // The token reads the number, but no business account it was granted on lists it.
+    await queueRefusal({
+      status: 403,
+      code: 200,
+      message: '(#200) Requires whatsapp_business_management permission',
+      match: 'phone_numbers',
+    });
+    await dialog.getByLabel(t('channels:meta.connect.token')).fill(E2E_WHATSAPP.token);
     await test.click();
     await expect(dialog.getByText(t('channels:meta.refusal.token-other-account'))).toBeVisible();
     await expect(connect).toBeDisabled();
 
-    await dialog.getByLabel(t('channels:meta.connect.token')).fill(E2E_WHATSAPP.token);
     await test.click();
     await expect(dialog.getByRole('status')).toContainText(E2E_WHATSAPP.name);
     await connect.click();
@@ -175,6 +183,79 @@ test.describe('Channels › Meta against the real api', () => {
     expect(await subscribedFields(E2E_INSTAGRAM)).toContain('messaging_seen');
   });
 
+  test('reconnects a Page whose token Meta revoked with a token for the same Page, and no other', async ({
+    page,
+  }) => {
+    await openMeta(page);
+    await accountsTable(page).getByRole('link', { name: E2E_MESSENGER.name, exact: true }).click();
+    const form = page.getByRole('form', { name: E2E_MESSENGER.name });
+
+    // Meta revokes the token; the next time the app is subscribed, Meta says so and the
+    // account is marked, which is when the page offers Reconnect.
+    await revokeToken(E2E_MESSENGER.token);
+    await form.getByRole('button', { name: t('channels:meta.detail.subscription.button') }).click();
+    const reconnect = form.getByRole('button', {
+      name: t('channels:meta.detail.connection.reconnect'),
+    });
+    await expect(reconnect).toBeVisible();
+    await reconnect.click();
+    const dialog = page.getByRole('dialog', {
+      name: t('channels:meta.reconnect.title', { name: E2E_MESSENGER.name }),
+    });
+    const token = dialog.getByLabel(new RegExp(`^${t('channels:meta.connect.token')}`));
+    const test = dialog.getByRole('button', { name: t('channels:meta.connect.test') });
+    const submit = dialog.getByRole('button', { name: t('channels:meta.reconnect.submit') });
+
+    // The revoked token is refused in Meta's words.
+    await token.fill(E2E_MESSENGER.token);
+    await test.click();
+    await expect(dialog.getByText(/Meta refused this token/)).toBeVisible();
+    await expect(submit).toBeDisabled();
+
+    // Another Page's token is a good token, but not for this Page.
+    await token.fill(E2E_OTHER_MESSENGER.token);
+    await test.click();
+    await expect(dialog.getByText(t('channels:meta.refusal.token-other-account'))).toBeVisible();
+    await expect(submit).toBeDisabled();
+
+    // A new token for this Page tests well, though the Page's id is already connected:
+    // the api is told which account the replacement is for.
+    await token.fill(E2E_MESSENGER_RENEWED_TOKEN);
+    await test.click();
+    await expect(dialog.getByRole('status')).toContainText(E2E_MESSENGER.name);
+    await expect(submit).toBeEnabled();
+    await submit.click();
+
+    await expect(
+      page.getByText(t('channels:meta.toast.reconnected', { name: E2E_MESSENGER.name })),
+    ).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await expect(reconnect).toHaveCount(0);
+    await expect(
+      form.getByLabel(
+        t('channels:meta.detail.connection.masked', {
+          hint: E2E_MESSENGER_RENEWED_TOKEN.slice(-4),
+        }),
+      ),
+    ).toBeVisible();
+    await expect(page.getByText(E2E_MESSENGER_RENEWED_TOKEN)).toHaveCount(0);
+
+    // Connecting the same id as a new account is still refused: only a reconnect may reuse it.
+    await openMeta(page);
+    await page.getByRole('button', { name: t('channels:meta.addAccount') }).click();
+    const connectDialog = page.getByRole('dialog', { name: t('channels:meta.connect.title') });
+    await connectDialog
+      .getByRole('radio', { name: new RegExp(t('channels:meta.platforms.messenger')) })
+      .check();
+    await connectDialog.getByLabel(t('channels:meta.connect.id.messenger')).fill(E2E_MESSENGER.id);
+    await connectDialog
+      .getByLabel(t('channels:meta.connect.token'))
+      .fill(E2E_MESSENGER_RENEWED_TOKEN);
+    await connectDialog.getByRole('button', { name: t('channels:meta.connect.test') }).click();
+    await expect(connectDialog.getByText(t('channels:meta.refusal.account-taken'))).toBeVisible();
+    await connectDialog.getByRole('button', { name: t('common:actions.cancel') }).click();
+  });
+
   test('tests a Page, saves its Human Agent switch, subscribes it again and disconnects it by its id', async ({
     page,
   }) => {
@@ -184,10 +265,12 @@ test.describe('Channels › Meta against the real api', () => {
     // Encrypted at rest and shown as its last four characters.
     await expect(
       form.getByLabel(
-        t('channels:meta.detail.connection.masked', { hint: E2E_MESSENGER.token.slice(-4) }),
+        t('channels:meta.detail.connection.masked', {
+          hint: E2E_MESSENGER_RENEWED_TOKEN.slice(-4),
+        }),
       ),
-    ).toHaveValue(`•••• ${E2E_MESSENGER.token.slice(-4)}`);
-    await expect(page.getByText(E2E_MESSENGER.token)).toHaveCount(0);
+    ).toHaveValue(`•••• ${E2E_MESSENGER_RENEWED_TOKEN.slice(-4)}`);
+    await expect(page.getByText(E2E_MESSENGER_RENEWED_TOKEN)).toHaveCount(0);
 
     await form.getByRole('button', { name: t('channels:meta.detail.connection.test') }).click();
     await expect(form.getByRole('status').first()).toContainText(E2E_MESSENGER.id);

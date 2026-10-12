@@ -1,4 +1,8 @@
-import type { MetaAccount, MetaAccountStatusResponse } from '@helpdock/schemas';
+import {
+  META_TOKEN_MIN_LENGTH,
+  type MetaAccount,
+  type MetaAccountStatusResponse,
+} from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -203,8 +207,8 @@ function AccountForm({
             <Box
               aria-hidden="true"
               sx={{
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 borderRadius: '6px',
                 display: 'grid',
                 placeItems: 'center',
@@ -214,7 +218,7 @@ function AccountForm({
               <Icon size={16} />
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <Typography variant="h1" component="h2" sx={{ fontSize: 20 }}>
+              <Typography variant="h2">
                 <bdi>{name}</bdi>
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -230,11 +234,7 @@ function AccountForm({
             <Box sx={{ marginInlineStart: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
               <AccountHealth account={account} now={now} />
               {checkedAt === null ? null : (
-                <Typography
-                  variant="mono"
-                  component="span"
-                  sx={{ fontSize: 12, color: 'text.secondary' }}
-                >
+                <Typography variant="mono" component="span" sx={{ color: 'text.secondary' }}>
                   {t('channels:meta.detail.checked', { time: clockTime(checkedAt, locale) })}
                 </Typography>
               )}
@@ -248,7 +248,7 @@ function AccountForm({
             tokenError={
               errors.token === undefined
                 ? undefined
-                : t('channels:meta.connect.malformedToken', { min: 16 })
+                : t('channels:meta.connect.malformedToken', { min: META_TOKEN_MIN_LENGTH })
             }
             onTokenChange={(token) => {
               change('token', token);
@@ -336,11 +336,7 @@ function AccountForm({
         <ActivityCard account={account} status={status} />
         <Card label={t('channels:meta.detail.danger.heading')} tone="danger">
           <Box sx={{ padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Typography
-              variant="h3"
-              component="h2"
-              sx={{ fontSize: 16, color: tokens['status.danger.text'] }}
-            >
+            <Typography variant="h3" component="h2" sx={{ color: tokens['status.danger.text'] }}>
               {t('channels:meta.detail.danger.heading')}
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -414,7 +410,7 @@ function ActivityCard({
   return (
     <Card label={t('channels:meta.detail.activity.heading')}>
       <Box sx={{ padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Typography variant="h3" component="h2" sx={{ fontSize: 16 }}>
+        <Typography variant="h3" component="h2">
           {t('channels:meta.detail.activity.heading')}
         </Typography>
         <Box
@@ -425,7 +421,7 @@ function ActivityCard({
             gridTemplateColumns: 'minmax(0, 1fr) max-content',
             rowGap: 2,
             columnGap: 4,
-            fontSize: 13,
+            typography: 'body2',
             '& dt': { color: 'text.secondary' },
             '& dd': { margin: 0 },
           }}
@@ -434,14 +430,14 @@ function ActivityCard({
             <Box key={label} sx={{ display: 'contents' }}>
               <dt>{label}</dt>
               <dd>
-                <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
+                <Typography variant="mono" component="span">
                   {value}
                 </Typography>
               </dd>
             </Box>
           ))}
         </Box>
-        <MuiLink component={Link} to={ROUTES.systemQueues} sx={{ fontSize: 13 }}>
+        <MuiLink component={Link} to={ROUTES.systemQueues} variant="body2">
           {t('channels:meta.detail.activity.failedJobs')}
         </MuiLink>
       </Box>

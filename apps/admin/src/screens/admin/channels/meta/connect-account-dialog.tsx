@@ -1,4 +1,4 @@
-import { META_PLATFORMS, type MetaPlatform, type MetaTestResult } from '@helpdock/schemas';
+import { META_PLATFORMS, META_TOKEN_MIN_LENGTH, type MetaPlatform } from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -27,13 +27,9 @@ import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { looksLikeId, looksLikeToken } from './account-draft.js';
 import { CodeText } from './code-text.tsx';
+import { MetaNote, NoteText } from './meta-note.tsx';
 import { PLATFORM_ICONS } from './platforms.js';
-import {
-  problemFromError,
-  problemFromResult,
-  type TestProblem,
-  TokenWorks,
-} from './token-test.tsx';
+import { problemFromError, TokenWorks, useTokenTest } from './token-test.tsx';
 
 /**
  * "Connect a Meta account" (M10-07, `Admin/Channels-Meta` panel 2): the
@@ -67,8 +63,21 @@ export function ConnectAccountDialog({
   const [externalId, setExternalId] = useState('');
   const [token, setToken] = useState('');
   const [department, setDepartment] = useState('');
-  const [tested, setTested] = useState<MetaTestResult | null>(null);
-  const [problem, setProblem] = useState<TestProblem | null>(null);
+  const test = useTokenTest({
+    validate: () => {
+      if (!looksLikeId(externalId)) {
+        return { field: 'id', message: t('channels:meta.connect.malformedId') };
+      }
+      return looksLikeToken(token)
+        ? null
+        : {
+            field: 'token',
+            message: t('channels:meta.connect.malformedToken', { min: META_TOKEN_MIN_LENGTH }),
+          };
+    },
+    request: () => ({ platform, externalId: externalId.trim(), accessToken: token.trim() }),
+  });
+  const { tested, problem, setProblem, forget } = test;
 
   const departments = useQuery({
     queryKey: ['departments', brand.id],
@@ -82,55 +91,15 @@ export function ConnectAccountDialog({
       setPlatform('whatsapp');
       setExternalId('');
       setToken('');
-      setTested(null);
-      setProblem(null);
+      forget();
     }
-  }, [open]);
+  }, [open, forget]);
 
   useEffect(() => {
     if (department === '' && first !== '') {
       setDepartment(first);
     }
   }, [department, first]);
-
-  const forget = (): void => {
-    setTested(null);
-    setProblem(null);
-  };
-
-  const test = useMutation({
-    mutationFn: async () => {
-      if (!looksLikeId(externalId)) {
-        setProblem({ field: 'id', message: t('channels:meta.connect.malformedId') });
-        return null;
-      }
-      if (!looksLikeToken(token)) {
-        setProblem({
-          field: 'token',
-          message: t('channels:meta.connect.malformedToken', { min: 16 }),
-        });
-        return null;
-      }
-      return api.testToken(brand.id, {
-        platform,
-        externalId: externalId.trim(),
-        accessToken: token.trim(),
-      });
-    },
-    onMutate: forget,
-    onSuccess: (result) => {
-      if (result === null) {
-        return;
-      }
-      setTested(result);
-      if (!result.ok) {
-        setProblem(problemFromResult(result, t));
-      }
-    },
-    onError: (error: unknown) => {
-      setProblem(problemFromError(error, t));
-    },
-  });
 
   const connect = useMutation({
     mutationFn: () =>
@@ -159,7 +128,7 @@ export function ConnectAccountDialog({
   });
 
   const works = tested?.ok === true ? tested : null;
-  const busy = test.isPending || connect.isPending;
+  const busy = test.pending || connect.isPending;
   const departmentLabel = (id: string): string => {
     const found = departments.data?.departments.find((candidate) => candidate.id === id);
     return (locale === 'ar' ? found?.nameAr : null) ?? found?.name ?? '';
@@ -192,9 +161,7 @@ export function ConnectAccountDialog({
           }
         }}
       >
-        <DialogTitle
-          sx={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2 }}
-        >
+        <DialogTitle sx={{ typography: 'h3', display: 'flex', alignItems: 'center', gap: 2 }}>
           {t('channels:meta.connect.title')}
           <IconButton
             size="small"
@@ -212,10 +179,7 @@ export function ConnectAccountDialog({
           </Typography>
 
           <Box component="fieldset" sx={{ margin: 0, padding: 0, border: 0, minWidth: 0 }}>
-            <Typography
-              component="legend"
-              sx={{ fontSize: 13, fontWeight: 500, lineHeight: '20px', marginBlockEnd: '6px' }}
-            >
+            <Typography component="legend" variant="bodyStrong" sx={{ marginBlockEnd: 2 }}>
               {t('channels:meta.connect.platform')}
             </Typography>
             <Box
@@ -273,7 +237,7 @@ export function ConnectAccountDialog({
                       <Typography
                         id={`${inputId}-hint`}
                         variant="caption"
-                        sx={{ fontSize: 12, lineHeight: '16px', color: 'text.secondary' }}
+                        sx={{ color: 'text.secondary' }}
                       >
                         {t(`channels:meta.connect.platformHint.${option}`)}
                       </Typography>
@@ -324,7 +288,7 @@ export function ConnectAccountDialog({
                     'aria-invalid': idError !== undefined,
                   },
                 }}
-                sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+                sx={{ '& input': (theme) => theme.typography.mono }}
               />
             </Field>
 
@@ -387,61 +351,40 @@ export function ConnectAccountDialog({
                   'aria-invalid': tokenError !== undefined,
                 },
               }}
-              sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+              sx={{ '& input': (theme) => theme.typography.mono }}
             />
           </Field>
 
           {works === null ? null : <TokenWorks result={works} />}
 
           {formError === undefined ? null : (
-            <Typography
-              variant="caption"
-              role="alert"
-              sx={{ color: tokens['status.danger.text'], fontSize: 13 }}
-            >
+            <Typography variant="body2" role="alert" sx={{ color: tokens['status.danger.text'] }}>
               {formError}
             </Typography>
           )}
 
           {platform === 'whatsapp' ? null : (
-            <Box
-              role="note"
-              sx={{
-                display: 'flex',
-                gap: 2,
-                alignItems: 'flex-start',
-                padding: 3,
-                borderRadius: '6px',
-                backgroundColor: tokens['status.info.tint'],
-                border: `1px solid ${tokens['status.info']}`,
-                color: tokens['status.info.text'],
-                fontSize: 13,
-                lineHeight: '18px',
-              }}
-            >
-              <Info size={16} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 1 }} />
-              <Typography variant="body2" sx={{ color: 'inherit', fontSize: 13 }}>
+            <MetaNote tone="info" icon={<Info size={16} aria-hidden="true" />}>
+              <NoteText>
                 <strong>{t('channels:meta.connect.appReview.lead')}</strong>{' '}
                 <CodeText text={t(`channels:meta.connect.appReview.${platform}`)} />
-              </Typography>
-            </Box>
+              </NoteText>
+            </MetaNote>
           )}
         </DialogContent>
         <DialogActions sx={{ paddingBlock: 4, paddingInline: 6, gap: 2 }}>
           <Button
             variant="outlined"
             disabled={busy || externalId.trim() === '' || token.trim() === ''}
-            aria-busy={test.isPending}
+            aria-busy={test.pending}
             startIcon={
-              test.isPending ? (
+              test.pending ? (
                 <CircularProgress size={14} aria-hidden="true" />
               ) : (
                 <PlugZap size={16} aria-hidden="true" />
               )
             }
-            onClick={() => {
-              test.mutate();
-            }}
+            onClick={test.run}
             sx={{ marginInlineEnd: 'auto' }}
           >
             {t('channels:meta.connect.test')}

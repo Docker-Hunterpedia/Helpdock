@@ -95,7 +95,7 @@ export function DisconnectDialog({
             setTyped(event.target.value);
           }}
           slotProps={{ htmlInput: { dir: 'ltr', spellCheck: false } }}
-          sx={{ '& input': (theme) => ({ ...theme.typography.mono, fontSize: 13 }) }}
+          sx={{ '& input': (theme) => theme.typography.mono }}
         />
       </Field>
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>

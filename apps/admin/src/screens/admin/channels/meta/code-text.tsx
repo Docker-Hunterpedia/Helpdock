@@ -25,7 +25,8 @@ export function CodeText({ text }: { readonly text: string }): ReactNode {
             dir="ltr"
             sx={{
               fontFamily: 'var(--hd-font-mono, monospace)',
-              fontSize: '0.92em',
+              // The size of the words around it: code is mono, not a smaller size.
+              fontSize: 'inherit',
               backgroundColor: tokens['bg.muted'],
               paddingInline: 1,
               borderRadius: '4px',

@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import { E2E_GRAPH_ROOT, E2E_INSTAGRAM_ROOT, startFakeGraph } from './fake-graph.js';
+import {
+  E2E_GRAPH_ROOT,
+  E2E_INSTAGRAM_ROOT,
+  E2E_META_APP_ID,
+  startFakeGraph,
+} from './fake-graph.js';
 import { E2E_TELEGRAM_ROOT, startFakeTelegram } from './fake-telegram.js';
 
 /**
@@ -204,7 +209,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
     META_GRAPH_API_ROOT: E2E_GRAPH_ROOT,
     META_INSTAGRAM_API_ROOT: E2E_INSTAGRAM_ROOT,
     OUTBOUND_ALLOW_CIDRS: '127.0.0.0/8',
-    HD_META_APP_ID: '1290457718832406',
+    HD_META_APP_ID: E2E_META_APP_ID,
     HD_META_APP_SECRET: 'e2e-meta-app-secret',
     ...(setupKey === undefined ? {} : { HD_SETUP_TOKEN: setupKey }),
   });

@@ -3,8 +3,8 @@ import { Box, Typography } from '@mui/material';
 import { CircleDollarSign, Clock } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../../../app/i18n.js';
-import { useSemanticTokens } from '../../../../app/tokens.js';
 import { FormSection } from '../telegram/form-section.tsx';
+import { MetaNote, NoteText } from './meta-note.tsx';
 
 /**
  * Number (M10-07, WhatsApp only): what Meta reports about the number, and the
@@ -31,7 +31,7 @@ export function NumberSection({
           gridTemplateColumns: 'minmax(120px, max-content) minmax(0, 1fr)',
           columnGap: 6,
           rowGap: 2,
-          fontSize: 13,
+          typography: 'body2',
           '& dt': { color: 'text.secondary' },
           '& dd': { margin: 0, minWidth: 0 },
         }}
@@ -52,7 +52,7 @@ export function NumberSection({
           <>
             <dt>{t('channels:meta.detail.number.waba')}</dt>
             <dd>
-              <Typography variant="mono" component="bdi" sx={{ fontSize: 12 }}>
+              <Typography variant="mono" component="bdi">
                 {account.wabaId}
               </Typography>
             </dd>
@@ -60,51 +60,18 @@ export function NumberSection({
         )}
       </Box>
 
-      <Note icon={<CircleDollarSign size={16} aria-hidden="true" />}>
-        <strong>{t('channels:meta.detail.number.chargeLead')}</strong>{' '}
-        {t('channels:meta.detail.number.charge')}
-      </Note>
-      <Note icon={<Clock size={16} aria-hidden="true" />}>
-        <strong>{t('channels:meta.detail.number.noHumanLead')}</strong>{' '}
-        {t('channels:meta.detail.number.noHuman')}
-      </Note>
+      <MetaNote icon={<CircleDollarSign size={16} aria-hidden="true" />}>
+        <NoteText>
+          <strong>{t('channels:meta.detail.number.chargeLead')}</strong>{' '}
+          {t('channels:meta.detail.number.charge')}
+        </NoteText>
+      </MetaNote>
+      <MetaNote icon={<Clock size={16} aria-hidden="true" />}>
+        <NoteText>
+          <strong>{t('channels:meta.detail.number.noHumanLead')}</strong>{' '}
+          {t('channels:meta.detail.number.noHuman')}
+        </NoteText>
+      </MetaNote>
     </FormSection>
-  );
-}
-
-/** A `role="note"` box on `bg.canvas`: a fact beside the form, not a status. */
-function Note({
-  icon,
-  children,
-}: {
-  readonly icon: ReactNode;
-  readonly children: ReactNode;
-}): ReactNode {
-  const tokens = useSemanticTokens();
-
-  return (
-    <Box
-      role="note"
-      sx={{
-        display: 'flex',
-        gap: 2,
-        alignItems: 'flex-start',
-        padding: 3,
-        borderRadius: '6px',
-        backgroundColor: tokens['bg.canvas'],
-        border: `1px solid ${tokens['border.default']}`,
-        fontSize: 13,
-        lineHeight: '18px',
-        color: 'text.secondary',
-        '& strong': { color: 'text.primary' },
-      }}
-    >
-      <Box component="span" sx={{ flexShrink: 0, marginBlockStart: '1px', display: 'inline-flex' }}>
-        {icon}
-      </Box>
-      <Typography variant="body2" sx={{ color: 'inherit', fontSize: 13, lineHeight: '18px' }}>
-        {children}
-      </Typography>
-    </Box>
   );
 }

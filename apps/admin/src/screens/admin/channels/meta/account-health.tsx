@@ -78,10 +78,8 @@ export function AccountHealth({
       <HealthStateDot state={DOT_STATE[view]} />
       <Typography
         component="span"
-        sx={{
-          fontSize: 13,
-          ...(text === undefined ? {} : { color: tokens[text], fontWeight: 500 }),
-        }}
+        variant="body2"
+        sx={text === undefined ? {} : { color: tokens[text], fontWeight: 500 }}
       >
         {t(`channels:meta.health.${accountHealthWord(account, now)}`)}
       </Typography>
@@ -103,7 +101,7 @@ export function AccountHealthLegend(): ReactNode {
         padding: 0,
         display: 'flex',
         flexDirection: 'column',
-        gap: '6px',
+        gap: 2,
       }}
     >
       {LEGEND.map((state) => (

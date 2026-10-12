@@ -821,14 +821,16 @@ No suite reaches a vendor: CI has no network and no credentials. Telegram has a
 local Bot API server (`apps/api/src/testing/fake-telegram.ts`); the Meta
 channels (WhatsApp, Messenger, Instagram; [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md))
 have a stand-in for Graph and a driver that posts signed webhooks, both
-exported by `@helpdock/channels` from `packages/channels/src/meta/testing/`.
-The same package exports the fixtures they and the unit tests share
-(`whatsappText`, `pageText`, `instagramText`, `whatsappStatus`, …), written
-against the Graph version `META_GRAPH_VERSION` defaults to. Bumping that version
-means reading Meta's changelog for these shapes first, and the fixtures second.
+exported from `packages/channels/src/meta/testing/` as
+`@helpdock/channels/testing`. That subpath is for tests only: the package's root,
+which the api and the worker import, has none of it. It also exports the fixtures
+the stand-in, the driver and the unit tests share (`whatsappText`, `pageText`,
+`instagramText`, `whatsappStatus`, …), written against the Graph version
+`META_GRAPH_VERSION` defaults to. Bumping that version means reading Meta's
+changelog for these shapes first, and the fixtures second.
 
 ```ts
-import { FakeGraph, MetaWebhookDriver, whatsappText } from '@helpdock/channels';
+import { FakeGraph, MetaWebhookDriver, whatsappText } from '@helpdock/channels/testing';
 
 const graph = new FakeGraph();
 await graph.start();
@@ -879,11 +881,17 @@ when given a number's.
 The driver posts to the Nest app's `inject` in the example above. To post to a
 running server instead, pass `httpWebhookTarget(baseUrl)` as the target.
 
-The admin's browser suites have their own copy of the Graph stand-in,
-`apps/admin/e2e/api/fake-graph.ts`, which answers only the calls the Channels ›
-Meta screens make. The seeded api is started with `META_GRAPH_API_ROOT` and
+The admin's browser suites start the same `FakeGraph` (`apps/admin/e2e/api/fake-graph.ts`
+connects the accounts the specs use, as a workspace devDependency on
+`@helpdock/channels`). The seeded api is started with `META_GRAPH_API_ROOT` and
 `META_INSTAGRAM_API_ROOT` pointed at it, on `HD_E2E_GRAPH_PORT` (3095 by
-default). Nothing runs the stand-in from a shell on its own, and Meta cannot reach
+default). A spec runs in another process than the stand-in, so it reaches it
+over HTTP, under `/__control/`, with no token: `GET /__control/subscriptions/<id>`
+reads back the fields the app is subscribed to (on the business account for a
+number), `POST /__control/tokens/expire` and `/restore` with `{ token }` make a
+token Meta has revoked and give it back, and `POST /__control/failures` with
+`{ status, body?, match? }` queues a refusal for the next call whose `METHOD /path`
+matches the pattern. Nothing runs the stand-in from a shell on its own, and Meta cannot reach
 a development machine, so a real webhook needs a public HTTPS address at
 `APP_URL`, as in production. The [Meta channels guide](meta-channels.md#developing-without-meta)
 covers the rest. Two reads help a connect flow find the business account

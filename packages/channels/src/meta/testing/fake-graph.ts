@@ -35,6 +35,10 @@ import {
  * Two roots, one server: a token registered for a WhatsApp number or a Page is
  * good on `facebookRoot` only, an Instagram token on `instagramRoot` only, as
  * on Meta, so a call sent to the wrong host fails the way it would in production.
+ *
+ * A suite that runs in another process than the stand-in, as a browser suite
+ * does, cannot reach its methods; `/__control/` is the few of them it may call
+ * over HTTP, with no token.
  */
 
 export type FakeGraphRoot = 'facebook' | 'instagram';
@@ -514,9 +518,63 @@ export class FakeGraph {
 
   // ------------------------------------------------------------------------
 
+  /**
+   * What a suite in another process may ask of the stand-in, over HTTP and with
+   * no token (it is not Graph):
+   *
+   * | Request | Does |
+   * |---|---|
+   * | `GET /__control/subscriptions/<id>` | answers `{ fields }` the app is subscribed to on a Page, an Instagram account or, for WhatsApp, a business account; `[]` when it is not |
+   * | `POST /__control/tokens/expire` `{ token }` | makes every call with the token answer `190`, as for a token Meta revoked |
+   * | `POST /__control/tokens/restore` `{ token }` | undoes that |
+   * | `POST /__control/failures` `{ status, body?, match? }` | queues a refusal for the next request whose `METHOD /path` matches the pattern `match` (any request without one) |
+   */
+  async #control(method: string, route: string, body: unknown): Promise<Answer> {
+    const subscription = /^subscriptions\/(\d+)$/.exec(route);
+    if (subscription !== null && method === 'GET') {
+      const id = subscription[1] ?? '';
+      try {
+        return reply(200, { fields: [...this.subscriptionOf(id)] });
+      } catch {
+        return reply(404, { error: `No account or business account ${id}` });
+      }
+    }
+    if (method !== 'POST') {
+      return reply(404, { error: 'Unknown control route' });
+    }
+    const input = (body ?? {}) as Record<string, unknown>;
+    if (
+      (route === 'tokens/expire' || route === 'tokens/restore') &&
+      typeof input.token === 'string'
+    ) {
+      if (route === 'tokens/expire') {
+        this.expiredTokens.add(input.token);
+      } else {
+        this.expiredTokens.delete(input.token);
+      }
+      return reply(200, { ok: true });
+    }
+    if (route === 'failures' && typeof input.status === 'number') {
+      this.failures.push({
+        status: input.status,
+        ...(input.body === undefined ? {} : { body: input.body }),
+        ...(typeof input.match === 'string' ? { match: new RegExp(input.match) } : {}),
+      });
+      return reply(200, { ok: true });
+    }
+
+    return reply(404, { error: 'Unknown control route' });
+  }
+
   async #handle(request: IncomingMessage): Promise<Answer> {
     const url = new URL(request.url ?? '/', 'http://stand-in.test');
     const path = url.pathname;
+
+    const control = /^\/__control\/(.+)$/.exec(path);
+    if (control !== null) {
+      const { recorded } = await readBody(request);
+      return this.#control(request.method ?? 'GET', control[1] ?? '', recorded);
+    }
 
     const cdn = /^\/cdn\/(.+)$/.exec(path);
     if (cdn !== null) {

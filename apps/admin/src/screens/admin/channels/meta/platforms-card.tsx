@@ -39,7 +39,7 @@ export function PlatformsCard(): ReactNode {
         id={headingId}
         variant="h3"
         component="h2"
-        sx={{ fontSize: 16, paddingBlock: '14px', paddingInline: 4 }}
+        sx={{ paddingBlock: 3, paddingInline: 4 }}
       >
         {t('channels:meta.guide.heading')}
       </Typography>

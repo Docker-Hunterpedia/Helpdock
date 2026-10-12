@@ -784,6 +784,69 @@ describe('queued failures', () => {
   });
 });
 
+describe('the control routes of a suite in another process', () => {
+  const control = async (method: string, route: string, body?: unknown) => {
+    const response = await fetch(`${graph.url}/__control/${route}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    });
+
+    return { status: response.status, json: (await response.json()) as Record<string, unknown> };
+  };
+
+  it('reads back the app’s subscription on a Page and on a business account, and says nothing for an id it has not', async () => {
+    graph.subscribe(PAGE_ID, ['messages']);
+    graph.subscribe(WABA_ID);
+
+    expect(await control('GET', `subscriptions/${PAGE_ID}`)).toEqual({
+      status: 200,
+      json: { fields: ['messages'] },
+    });
+    expect(await control('GET', `subscriptions/${WABA_ID}`)).toEqual({
+      status: 200,
+      json: { fields: ['messages'] },
+    });
+    graph.dropSubscription(PAGE_ID);
+    expect((await control('GET', `subscriptions/${PAGE_ID}`)).json).toEqual({ fields: [] });
+    expect((await control('GET', 'subscriptions/999')).status).toBe(404);
+  });
+
+  it('revokes a token, as Meta does, and gives it back', async () => {
+    await control('POST', 'tokens/expire', { token: PAGE_TOKEN });
+    const refused = await call('GET', fb(`/${PAGE_ID}`), { token: PAGE_TOKEN });
+    await control('POST', 'tokens/restore', { token: PAGE_TOKEN });
+    const restored = await call('GET', fb(`/${PAGE_ID}`), { token: PAGE_TOKEN });
+
+    expect(refused.status).toBe(400);
+    expect(errorOf(refused).code).toBe(190);
+    expect(restored.status).toBe(200);
+  });
+
+  it('queues a refusal for the next request its pattern matches', async () => {
+    await control('POST', 'failures', {
+      status: 403,
+      body: { error: { code: 200, message: '(#200) Requires whatsapp_business_management' } },
+      match: 'phone_numbers',
+    });
+
+    expect((await call('GET', fb(`/${PHONE_ID}`), { token: WA_TOKEN })).status).toBe(200);
+    const refused = await call('GET', fb(`/${WABA_ID}/phone_numbers`), { token: WA_TOKEN });
+    expect(refused.status).toBe(403);
+    expect(errorOf(refused).code).toBe(200);
+    expect((await call('GET', fb(`/${WABA_ID}/phone_numbers`), { token: WA_TOKEN })).status).toBe(
+      200,
+    );
+  });
+
+  it('answers 404 to a route it does not have, and it is no Graph call', async () => {
+    expect((await control('POST', 'tokens/forget', { token: PAGE_TOKEN })).status).toBe(404);
+    expect((await control('DELETE', 'failures')).status).toBe(404);
+    expect(graph.calls).toEqual([]);
+  });
+});
+
 describe('uploading media', () => {
   const upload = (
     token: string,

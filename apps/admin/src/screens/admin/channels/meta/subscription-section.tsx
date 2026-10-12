@@ -41,6 +41,10 @@ export function SubscriptionSection({
   const subscribe = useMutation({
     mutationFn: () => api.subscribe(brand.id, account.id),
     onSuccess: async (result) => {
+      // A refusal is read again too: the api records it on the account, and a token Meta calls
+      // dead makes it `token_expired`, which is when the page must offer Reconnect.
+      await queryClient.invalidateQueries({ queryKey: metaKeys.account(brand.id, account.id) });
+      await queryClient.invalidateQueries({ queryKey: metaKeys.accounts(brand.id) });
       if (!result.ok) {
         toast({
           tone: 'danger',
@@ -48,8 +52,6 @@ export function SubscriptionSection({
         });
         return;
       }
-      await queryClient.invalidateQueries({ queryKey: metaKeys.account(brand.id, account.id) });
-      await queryClient.invalidateQueries({ queryKey: metaKeys.accounts(brand.id) });
       toast({
         tone: 'success',
         message: t('channels:meta.toast.subscribed', { name: accountLabel(account) }),
@@ -78,7 +80,7 @@ export function SubscriptionSection({
           gridTemplateColumns: 'minmax(120px, max-content) minmax(0, 1fr)',
           columnGap: 6,
           rowGap: 2,
-          fontSize: 13,
+          typography: 'body2',
           '& dt': { color: 'text.secondary' },
           '& dd': { margin: 0, minWidth: 0 },
         }}
@@ -115,13 +117,12 @@ export function SubscriptionSection({
                   key={field}
                   dir="ltr"
                   sx={{
-                    height: 22,
+                    height: 24,
                     paddingInline: 2,
                     display: 'inline-flex',
                     alignItems: 'center',
                     borderRadius: '6px',
-                    fontFamily: 'var(--hd-font-mono, monospace)',
-                    fontSize: 12,
+                    typography: 'mono',
                     fontWeight: 500,
                     backgroundColor: tokens['bg.canvas'],
                     border: `1px solid ${tokens['border.default']}`,
@@ -136,7 +137,7 @@ export function SubscriptionSection({
 
         <dt>{t('channels:meta.detail.subscription.lastChecked')}</dt>
         <dd>
-          <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
+          <Typography variant="mono" component="span">
             {checkedAt === null
               ? t('channels:meta.detail.connection.notChecked')
               : clockTime(checkedAt, locale)}
@@ -152,8 +153,9 @@ export function SubscriptionSection({
           ) : (
             <Typography
               component="span"
+              variant="body2"
               dir="auto"
-              sx={{ fontSize: 13, color: 'inherit', overflowWrap: 'anywhere' }}
+              sx={{ color: 'inherit', overflowWrap: 'anywhere' }}
             >
               {t('channels:meta.detail.subscription.problem', {
                 time: clockTime(account.lastErrorAt, locale),

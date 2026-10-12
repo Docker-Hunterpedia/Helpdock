@@ -269,6 +269,7 @@ describe('an Instagram account whose token Meta invalidated', () => {
   it('says what Meta said and reconnects with a token that tests well', async () => {
     const { user, metaApi } = await renderAccount(MOCK_INSTAGRAM_ACCOUNT);
     const update = vi.spyOn(metaApi, 'updateAccount');
+    const testToken = vi.spyOn(metaApi, 'testToken');
     await screen.findByLabelText('Saved token ending in Qw7L', {}, LOAD);
 
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -293,6 +294,13 @@ describe('an Instagram account whose token Meta invalidated', () => {
     expect(await within(dialog).findByRole('status')).toHaveTextContent(
       /Token works · “Helpdock” · @helpdock · expires/,
     );
+    // The account's own id is taken by definition: the test names the account being reconnected.
+    expect(testToken).toHaveBeenLastCalledWith(expect.any(String), {
+      platform: 'instagram',
+      externalId: expect.any(String),
+      accountId: MOCK_INSTAGRAM_ACCOUNT,
+      accessToken: MOCK_INSTAGRAM_TOKEN,
+    });
     await user.click(reconnect);
 
     await waitFor(() => {
@@ -334,6 +342,25 @@ describe('an Instagram account whose token Meta invalidated', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Reconnect' }));
 
     expect(await within(dialog).findByText(/belongs to a different account/)).toBeVisible();
+  });
+});
+
+describe('a Subscribe now that Meta refuses', () => {
+  it('reads the account again, because the api recorded the refusal on it', async () => {
+    const { user, metaApi } = await renderAccount(MOCK_MESSENGER_ACCOUNT);
+    await screen.findByLabelText('Saved token ending in 8KQZ', {}, LOAD);
+    vi.spyOn(metaApi, 'subscribe').mockResolvedValue({
+      ok: false,
+      detail: '190: Error validating access token',
+    });
+    const read = vi.spyOn(metaApi, 'account');
+
+    await user.click(screen.getByRole('button', { name: 'Subscribe now' }));
+
+    expect(await screen.findByText(/Meta refused the subscription/)).toBeVisible();
+    await waitFor(() => {
+      expect(read).toHaveBeenCalled();
+    });
   });
 });
 

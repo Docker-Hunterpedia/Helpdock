@@ -275,6 +275,9 @@ importers:
       '@axe-core/playwright':
         specifier: 4.13.0
         version: 4.13.0(playwright-core@1.63.0)
+      '@helpdock/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0

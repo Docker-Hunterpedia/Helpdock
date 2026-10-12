@@ -846,6 +846,86 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
       ).toHaveLength(0);
     });
 
+    it('tests a replacement token for the connected account’s own id, and holds it to that account', async () => {
+      const registered = fresh('messenger', 'Reconnected Page');
+      const created = await connect('messenger', registered);
+      const other = await connect('messenger', fresh('messenger', 'Another Page'));
+      const renewed = `${registered.token}Renewed`;
+      graph.connect({
+        platform: 'messenger',
+        id: registered.id,
+        name: 'Reconnected Page',
+        token: renewed,
+      });
+      const test = (principal: Principal, brandId: string, body: Record<string, unknown>) =>
+        call('POST', `${accounts(brandId)}/test`, principal, {
+          platform: 'messenger',
+          externalId: registered.id,
+          accessToken: renewed,
+          ...body,
+        });
+      graph.calls.length = 0;
+
+      // The id is taken by definition when its own account is being reconnected: not otherwise.
+      const own = await test(adminA, BRAND_A, { accountId: created.id });
+      const askedMeta = graph.calls.length;
+      const anonymous = await test(adminA, BRAND_A, {});
+      const another = await test(adminA, BRAND_A, { accountId: other.id });
+      const crossBrand = await test(adminB, BRAND_B, { accountId: created.id });
+
+      expect(own.statusCode).toBe(200);
+      expect(own.json()).toMatchObject({ ok: true, externalId: registered.id });
+      for (const refused of [anonymous, another, crossBrand]) {
+        expect([refused.statusCode, reasonOf(refused)]).toEqual([409, 'account-taken']);
+      }
+      // Meta was asked for the reconnect only: the others were refused by the id alone.
+      expect(askedMeta).toBeGreaterThan(0);
+      expect(graph.calls).toHaveLength(askedMeta);
+      expect(
+        await owner.db
+          .select()
+          .from(metaAccounts)
+          .where(eq(metaAccounts.externalId, registered.id)),
+      ).toHaveLength(1);
+      expect((await row(created.id)).accessToken).not.toContain(renewed);
+    });
+
+    it('refuses a Page token whose own account is another Page, though it can read this one', async () => {
+      const first = fresh('messenger', 'First Page');
+      const second = fresh('messenger', 'Second Page');
+      // A token that manages both Pages reads either, and `/me` is the first.
+      graph.connect({
+        platform: 'messenger',
+        id: second.id,
+        name: 'Second Page',
+        token: first.token,
+      });
+
+      const test = await call('POST', `${accounts(BRAND_A)}/test`, adminA, {
+        platform: 'messenger',
+        externalId: second.id,
+        accessToken: first.token,
+      });
+      const connectIt = await call('POST', accounts(BRAND_A), adminA, {
+        platform: 'messenger',
+        externalId: second.id,
+        accessToken: first.token,
+        departmentId: SUPPORT_A,
+      });
+      const own = await call('POST', `${accounts(BRAND_A)}/test`, adminA, {
+        platform: 'messenger',
+        externalId: first.id,
+        accessToken: first.token,
+      });
+
+      expect([test.statusCode, reasonOf(test)]).toEqual([400, 'token-other-account']);
+      expect([connectIt.statusCode, reasonOf(connectIt)]).toEqual([400, 'token-other-account']);
+      expect(own.json()).toMatchObject({ ok: true, name: 'First Page' });
+      expect(
+        await owner.db.select().from(metaAccounts).where(eq(metaAccounts.externalId, second.id)),
+      ).toHaveLength(0);
+    });
+
     it('shows the row, Meta’s live answer and the Activity card', async () => {
       const registered = fresh('messenger');
       const created = await connect('messenger', registered);

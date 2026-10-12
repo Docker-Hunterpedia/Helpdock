@@ -1,4 +1,5 @@
-import { FakeGraph, GraphClient } from '@helpdock/channels';
+import { GraphClient } from '@helpdock/channels';
+import { FakeGraph } from '@helpdock/channels/testing';
 import { createKeyring, encryptSecret } from '@helpdock/config';
 import type { Db, DbTransaction, MetaAccount as MetaAccountRow } from '@helpdock/db';
 import type { MetaPlatform } from '@helpdock/schemas';

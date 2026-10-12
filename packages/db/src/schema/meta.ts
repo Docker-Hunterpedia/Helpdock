@@ -233,6 +233,10 @@ export const metaDeliveries = pgTable(
     // A delivery or read watermark marks every delivery of one conversation
     // sent at or before it (DOMAIN-RULES §4.8).
     index('meta_deliveries_conversation_sent_idx').on(table.conversationId, table.sentAt),
+    // A status webhook names one of Meta's ids and finds the delivery it belongs to
+    // with `platform_message_ids @> array[id]`; without the index every status scans
+    // the brand's deliveries.
+    index('meta_deliveries_platform_ids_idx').using('gin', table.platformMessageIds),
   ],
 );
 

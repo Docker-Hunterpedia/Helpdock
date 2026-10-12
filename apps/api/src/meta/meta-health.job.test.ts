@@ -1,4 +1,5 @@
-import { type GraphClient, graphSubscribedApps, META_FIXTURE } from '@helpdock/channels';
+import type { GraphClient } from '@helpdock/channels';
+import { graphSubscribedApps, META_FIXTURE } from '@helpdock/channels/testing';
 import { createKeyring, encryptSecret } from '@helpdock/config';
 import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import {

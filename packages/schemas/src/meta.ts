@@ -18,6 +18,10 @@ export type MetaPlatform = z.infer<typeof metaPlatformSchema>;
 
 export const META_PLATFORMS: readonly MetaPlatform[] = metaPlatformSchema.options;
 
+/** Whether a ticket's `channel` is one of the three Meta platforms, which are channels by the same names. */
+export const isMetaChannel = (channel: string): channel is MetaPlatform =>
+  (META_PLATFORMS as readonly string[]).includes(channel);
+
 /**
  * | State | Meaning |
  * |---|---|
@@ -156,9 +160,6 @@ export const META_ERROR_MAX_LENGTH = 300;
 
 /** How much of a stored token the account form shows. */
 export const META_TOKEN_HINT_LENGTH = 4;
-
-/** Attempts before a reply is `failed`. Also the `meta.send` job's. */
-export const META_SEND_ATTEMPTS = 5;
 
 /** The reply window on every platform: 24 hours from the customer's last message. */
 export const META_REPLY_WINDOW_MS = 24 * 60 * 60 * 1000;

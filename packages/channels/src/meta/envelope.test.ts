@@ -5,7 +5,6 @@ import {
   type MetaEvent,
   type MetaMessageEvent,
   metaEnvelopeSchema,
-  metaExternalId,
   metaIdentityValue,
   platformOfObject,
   routeEnvelope,
@@ -854,13 +853,7 @@ describe('routeEnvelope', () => {
   });
 });
 
-describe('metaExternalId and metaIdentityValue', () => {
-  it('keeps the id Meta gave a message as its dedupe key, on every platform', () => {
-    expect(metaExternalId('whatsapp', fixtureWamid(1))).toBe(fixtureWamid(1));
-    expect(metaExternalId('messenger', fixtureMid(1))).toBe(fixtureMid(1));
-    expect(metaExternalId('instagram', fixtureMid(1))).toBe(fixtureMid(1));
-  });
-
+describe('metaIdentityValue', () => {
   it('stores the WhatsApp user id alone and the others beside their account (DOMAIN-RULES §4.7)', () => {
     expect(metaIdentityValue('whatsapp', META_FIXTURE.phoneNumberId, META_FIXTURE.userId)).toBe(
       META_FIXTURE.userId,

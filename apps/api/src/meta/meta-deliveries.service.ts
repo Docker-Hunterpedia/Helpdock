@@ -7,7 +7,7 @@ import {
   tickets,
 } from '@helpdock/db';
 import {
-  META_PLATFORMS,
+  isMetaChannel,
   type MetaDeliveryList,
   type MetaPlatform,
   type MetaTicketContextResponse,
@@ -28,8 +28,6 @@ import type { OutboundMetaService } from './outbound-meta.service.js';
  * the customer, with "Retry" for one that did not. All run in the request's
  * transaction, so a ticket outside the reader's departments is not found.
  */
-
-const META_CHANNELS: ReadonlySet<string> = new Set(META_PLATFORMS);
 
 export class MetaDeliveriesService {
   readonly #repository: MetaRepository;
@@ -59,7 +57,7 @@ export class MetaDeliveriesService {
    */
   async ticketContext(tx: DbTransaction, ticketId: string): Promise<MetaTicketContextResponse> {
     const ticket = await requireTicket(tx, ticketId);
-    const target = META_CHANNELS.has(ticket.channel)
+    const target = isMetaChannel(ticket.channel)
       ? await this.#outbound.targetFor(tx, ticket, true)
       : undefined;
 

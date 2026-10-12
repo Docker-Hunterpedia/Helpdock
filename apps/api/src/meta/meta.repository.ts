@@ -1,4 +1,4 @@
-import { metaExternalId, metaIdentityValue } from '@helpdock/channels';
+import { metaIdentityValue } from '@helpdock/channels';
 import {
   contacts,
   type Db,
@@ -563,7 +563,7 @@ export class MetaRepository {
       .set(progressColumns(status, at))
       .where(
         and(
-          sql`${platformMessageId} = any(${metaDeliveries.platformMessageIds})`,
+          sql`${metaDeliveries.platformMessageIds} @> array[${platformMessageId}]::text[]`,
           inArray(metaDeliveries.status, [...BEHIND[status]]),
         ),
       )
@@ -623,7 +623,7 @@ export class MetaRepository {
         and(
           eq(ticketMessages.brandId, brandId),
           eq(ticketMessages.channel, platform),
-          eq(ticketMessages.externalMessageId, metaExternalId(platform, platformMessageId)),
+          eq(ticketMessages.externalMessageId, platformMessageId),
         ),
       )
       .limit(1);
@@ -639,7 +639,7 @@ export class MetaRepository {
       })
       .from(metaDeliveries)
       .innerJoin(ticketMessages, eq(ticketMessages.id, metaDeliveries.ticketMessageId))
-      .where(sql`${platformMessageId} = any(${metaDeliveries.platformMessageIds})`)
+      .where(sql`${metaDeliveries.platformMessageIds} @> array[${platformMessageId}]::text[]`)
       .limit(1);
     return sent[0];
   }
@@ -694,7 +694,7 @@ export class MetaRepository {
       })
       .where(
         and(
-          sql`${platformMessageId} = any(${metaDeliveries.platformMessageIds})`,
+          sql`${metaDeliveries.platformMessageIds} @> array[${platformMessageId}]::text[]`,
           inArray(metaDeliveries.status, ['queued', 'sent']),
         ),
       )
@@ -711,7 +711,7 @@ export class MetaRepository {
     await tx
       .update(metaDeliveries)
       .set({ pricingCategory })
-      .where(sql`${platformMessageId} = any(${metaDeliveries.platformMessageIds})`);
+      .where(sql`${metaDeliveries.platformMessageIds} @> array[${platformMessageId}]::text[]`);
   }
 
   /** The Activity card of one account: its last reply, recent failures and open tickets. */

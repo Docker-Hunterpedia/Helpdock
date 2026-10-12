@@ -1,4 +1,4 @@
-import { metaExternalId, metaIdentityValue } from '@helpdock/channels';
+import { metaIdentityValue } from '@helpdock/channels';
 import {
   type DbTransaction,
   type MetaAccount as MetaAccountRow,
@@ -32,7 +32,7 @@ export const metaMessageSeen = async (
       and(
         eq(ticketMessages.brandId, brandId),
         eq(ticketMessages.channel, platform),
-        eq(ticketMessages.externalMessageId, metaExternalId(platform, messageId)),
+        eq(ticketMessages.externalMessageId, messageId),
       ),
     )
     .limit(1);

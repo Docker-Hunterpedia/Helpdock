@@ -1276,122 +1276,7 @@ export const aiAutoReplyJob = defineJob({
 export const aiAutoReplyJobId = (messageId: string): string => `ai.auto_reply.${messageId}`;
 
 // --------------------------------------------------------------------------
-// M10-10: Meta account health
-// --------------------------------------------------------------------------
-
-export const metaHealthPayloadSchema = z.object({
-  /** DOMAIN-RULES §1.4: the worker opens the brand's transaction before any query. */
-  brandId: z.uuid(),
-  accountId: z.uuid(),
-});
-export type MetaHealthPayload = z.infer<typeof metaHealthPayloadSchema>;
-
-/** Every hour on the hour, UTC: the cadence of {@link metaHealthJob}. */
-export const META_HEALTH_CRON = '0 * * * *';
-
-/**
- * M10-10 (ADR 0025, 10): the hourly check of one connected WhatsApp number,
- * Page or Instagram account. Is the token still good, is the app still
- * subscribed to the account's webhooks (Messenger and Instagram drop it after
- * an hour of failed deliveries), and for Instagram, is the 60-day token due its
- * weekly renewal. What it finds goes on the `meta_accounts` row.
- *
- * One BullMQ job scheduler per account, id {@link metaHealthSchedulerId} on
- * {@link META_HEALTH_CRON}, upserted on boot and when `meta_account.changed`
- * says an account came or went, as `telegram.poll` is for bots.
- *
- * **Idempotent per hour** (DOMAIN-RULES §6): the receipt
- * {@link metaHealthReceiptKey} is claimed in the check's transaction, so two
- * workers, a retry that lands after the first attempt committed, or a
- * re-registration inside the same hour check an account once. The hour is the
- * run's, not the payload's, because the scheduler's template carries no tick.
- *
- * Three attempts: Graph being down at :00 is worth a retry, not a wait for the
- * next hour. A permanent answer from Graph is a finding, recorded on the row,
- * and ends the job.
- */
-export const metaHealthJob = defineJob({
-  name: 'meta.health',
-  queue: QUEUE_NAMES.maintenance,
-  schema: metaHealthPayloadSchema,
-  options: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 60_000 },
-    removeOnComplete: { age: 86_400, count: 1_000 },
-    removeOnFail: 1_000,
-  },
-});
-
-/** The scheduler id of one account's hourly check. Dots, for the reason {@link retentionJobId} gives. */
-export const metaHealthSchedulerId = (accountId: string): string => `meta.health.${accountId}`;
-
-/** The `job_receipts` key of one account's check in one hour: `meta.health:<account>:2026-10-11T09`. */
-export const metaHealthReceiptKey = (accountId: string, at: Date): string =>
-  `meta.health:${accountId}:${at.toISOString().slice(0, 13)}`;
-
-/** 05:30 UTC every day, off the hour so it never meets the checks it re-registers. */
-export const META_HEALTH_SCHEDULE_CRON = '30 5 * * *';
-
-/**
- * The daily tick that registers every account's {@link metaHealthJob} scheduler
- * again, so a scheduler lost while the worker kept running (a Redis flush, a
- * `meta_account.changed` that failed for good) is back within a day and not at
- * the next restart. No payload: the accounts table is the input.
- */
-export const metaHealthScheduleJob = defineJob({
-  name: 'meta.health.schedule',
-  queue: QUEUE_NAMES.maintenance,
-  schema: z.object({}),
-  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
-  schedule: { cron: META_HEALTH_SCHEDULE_CRON },
-});
-
-/**
- * What `meta.send` is asked to do (M10-06). `reply` is an agent's reply to a
- * WhatsApp, Messenger or Instagram customer; M10-09 adds `template`, which
- * reaches a WhatsApp customer after the window. Both are about one
- * `meta_deliveries` row.
- */
-export const metaSendPayloadSchema = z.object({
-  kind: z.enum(['reply', 'template']),
-  brandId: z.uuid(),
-  /** The `meta_deliveries` row: the whole job is about it, and it is the natural key. */
-  deliveryId: z.uuid(),
-});
-export type MetaSendPayload = z.infer<typeof metaSendPayloadSchema>;
-
-/** Attempts before a reply to a Meta customer is `failed` (M10-06). */
-export const META_SEND_JOB_ATTEMPTS = 5;
-
-/**
- * M10-06's outbound Meta (ADR 0025, 7; `outbound` queue): an agent's reply to a
- * WhatsApp number, a Messenger user or an Instagram user. Asked for through the
- * outbox (`meta.reply` beside the `meta_deliveries` row) and added by that
- * event's handler with the outbox row's id.
- *
- * **Idempotent** (DOMAIN-RULES §6: "Telegram and Meta sends keyed by
- * `ticket_message_id`"): keyed by the delivery, which is one per ticket
- * message. A part already accepted is recorded as it lands, so a retry resumes
- * after it.
- *
- * The job may also move itself to delayed and end with BullMQ's `DelayedError`
- * (WhatsApp refuses a second message to one user inside six seconds): that
- * spends no attempt, which is why the attempts below count failures only.
- */
-export const metaSendJob = defineJob({
-  name: 'meta.send',
-  queue: QUEUE_NAMES.outbound,
-  schema: metaSendPayloadSchema,
-  options: {
-    attempts: META_SEND_JOB_ATTEMPTS,
-    backoff: { type: 'exponential', delay: 10_000 },
-    removeOnComplete: { age: 86_400, count: 10_000 },
-    removeOnFail: false,
-  },
-  idempotencyKey: (payload) => `meta.send:${payload.deliveryId}`,
-});
-
-// Meta channels (M10)
+// M10-03: the files a message named
 // --------------------------------------------------------------------------
 
 export const metaMediaFetchPayloadSchema = z.object({
@@ -1472,6 +1357,125 @@ export const metaProfileFetchJob = defineJob({
     removeOnFail: 1_000,
   },
   idempotencyKey: ({ conversationId }) => `meta.profile_fetch:${conversationId}`,
+});
+
+// --------------------------------------------------------------------------
+// M10-06: a reply to a Meta customer
+// --------------------------------------------------------------------------
+
+/**
+ * What `meta.send` is asked to do (M10-06): an agent's reply to a WhatsApp,
+ * Messenger or Instagram customer, about one `meta_deliveries` row. M10-09 adds
+ * a `template` kind, which reaches a WhatsApp customer after the window.
+ */
+export const metaSendPayloadSchema = z.object({
+  kind: z.enum(['reply']),
+  brandId: z.uuid(),
+  /** The `meta_deliveries` row: the whole job is about it, and it is the natural key. */
+  deliveryId: z.uuid(),
+});
+export type MetaSendPayload = z.infer<typeof metaSendPayloadSchema>;
+
+/** Attempts before a reply to a Meta customer is `failed` (M10-06). */
+export const META_SEND_JOB_ATTEMPTS = 5;
+
+/**
+ * M10-06's outbound Meta (ADR 0025, 7; `outbound` queue): an agent's reply to a
+ * WhatsApp number, a Messenger user or an Instagram user. Asked for through the
+ * outbox (`meta.reply` beside the `meta_deliveries` row) and added by that
+ * event's handler with the outbox row's id.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "Telegram and Meta sends keyed by
+ * `ticket_message_id`"): keyed by the delivery, which is one per ticket
+ * message. A part already accepted is recorded as it lands, so a retry resumes
+ * after it.
+ *
+ * The job may also move itself to delayed and end with BullMQ's `DelayedError`
+ * (WhatsApp refuses a second message to one user inside six seconds): that
+ * spends no attempt, which is why the attempts below count failures only.
+ */
+export const metaSendJob = defineJob({
+  name: 'meta.send',
+  queue: QUEUE_NAMES.outbound,
+  schema: metaSendPayloadSchema,
+  options: {
+    attempts: META_SEND_JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `meta.send:${payload.deliveryId}`,
+});
+
+// --------------------------------------------------------------------------
+// M10-10: Meta account health
+// --------------------------------------------------------------------------
+
+export const metaHealthPayloadSchema = z.object({
+  /** DOMAIN-RULES §1.4: the worker opens the brand's transaction before any query. */
+  brandId: z.uuid(),
+  accountId: z.uuid(),
+});
+export type MetaHealthPayload = z.infer<typeof metaHealthPayloadSchema>;
+
+/** Every hour on the hour, UTC: the cadence of {@link metaHealthJob}. */
+export const META_HEALTH_CRON = '0 * * * *';
+
+/**
+ * M10-10 (ADR 0025, 10): the hourly check of one connected WhatsApp number,
+ * Page or Instagram account. Is the token still good, is the app still
+ * subscribed to the account's webhooks (Messenger and Instagram drop it after
+ * an hour of failed deliveries), and for Instagram, is the 60-day token due its
+ * weekly renewal. What it finds goes on the `meta_accounts` row.
+ *
+ * One BullMQ job scheduler per account, id {@link metaHealthSchedulerId} on
+ * {@link META_HEALTH_CRON}, upserted on boot and when `meta_account.changed`
+ * says an account came or went, as `telegram.poll` is for bots.
+ *
+ * **Idempotent per hour** (DOMAIN-RULES §6): the receipt
+ * {@link metaHealthReceiptKey} is claimed in the check's transaction, so two
+ * workers, a retry that lands after the first attempt committed, or a
+ * re-registration inside the same hour check an account once. The hour is the
+ * run's, not the payload's, because the scheduler's template carries no tick.
+ *
+ * Three attempts: Graph being down at :00 is worth a retry, not a wait for the
+ * next hour. A permanent answer from Graph is a finding, recorded on the row,
+ * and ends the job.
+ */
+export const metaHealthJob = defineJob({
+  name: 'meta.health',
+  queue: QUEUE_NAMES.maintenance,
+  schema: metaHealthPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The scheduler id of one account's hourly check. Dots, for the reason {@link retentionJobId} gives. */
+export const metaHealthSchedulerId = (accountId: string): string => `meta.health.${accountId}`;
+
+/** The `job_receipts` key of one account's check in one hour: `meta.health:<account>:2026-10-11T09`. */
+export const metaHealthReceiptKey = (accountId: string, at: Date): string =>
+  `meta.health:${accountId}:${at.toISOString().slice(0, 13)}`;
+
+/** 05:30 UTC every day, off the hour so it never meets the checks it re-registers. */
+export const META_HEALTH_SCHEDULE_CRON = '30 5 * * *';
+
+/**
+ * The daily tick that registers every account's {@link metaHealthJob} scheduler
+ * again, so a scheduler lost while the worker kept running (a Redis flush, a
+ * `meta_account.changed` that failed for good) is back within a day and not at
+ * the next restart. No payload: the accounts table is the input.
+ */
+export const metaHealthScheduleJob = defineJob({
+  name: 'meta.health.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: META_HEALTH_SCHEDULE_CRON },
 });
 
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */

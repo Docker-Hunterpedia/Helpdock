@@ -1,14 +1,8 @@
 import type { MetaFileRef, MetaPlatform } from '@helpdock/schemas';
-import {
-  type ChannelAdapter,
-  ChannelCapabilityError,
-  type ChannelHealth,
-  type InboundMessage,
-  type SendResult,
-} from '../adapter.js';
+import type { InboundMessage } from '../adapter.js';
 import { paragraphsToHtml } from '../email/customer-layout.js';
 import { sanitizeMessageBody } from '../html/text.js';
-import { type MetaMessageEvent, metaExternalId, metaIdentityValue } from './envelope.js';
+import { type MetaMessageEvent, metaIdentityValue } from './envelope.js';
 import { contactsText, metaLocationText, type StoryLabels, storyText } from './text.js';
 
 /**
@@ -86,7 +80,7 @@ export const toMetaInboundMessage = (
 
   return {
     channel: platform,
-    externalId: metaExternalId(platform, event.messageId),
+    externalId: event.messageId,
     from: {
       kind: platform,
       value: metaIdentityValue(platform, accountExternalId, event.customerId),
@@ -113,39 +107,3 @@ export const toMetaInboundMessage = (
     },
   };
 };
-
-/**
- * The {@link ChannelAdapter} of one Meta platform. Inbound it turns a classified
- * message into the shape the api files; sending is the `meta.send` job's,
- * through the outbox, as email's is the `email.send` job's, and the adapter
- * does not pretend to.
- */
-export class MetaChannelAdapter implements ChannelAdapter<MetaInboundInput, unknown> {
-  readonly kind: MetaPlatform;
-  readonly #now: () => Date;
-
-  constructor(kind: MetaPlatform, { now = () => new Date() }: { readonly now?: () => Date } = {}) {
-    this.kind = kind;
-    this.#now = now;
-  }
-
-  /** The webhook is registered in the Meta dashboard and "Subscribe now"; there is nothing to start. */
-  async init(): Promise<void> {
-    await Promise.resolve();
-  }
-
-  async handleInbound(input: MetaInboundInput): Promise<MetaInboundMessage> {
-    await Promise.resolve();
-    return toMetaInboundMessage(this.kind, input, this.#now());
-  }
-
-  send(): Promise<SendResult> {
-    return Promise.reject(new ChannelCapabilityError(this.kind, 'send outside the outbox'));
-  }
-
-  /** An account's health is read from its row (`metaAccountHealth` in `@helpdock/schemas`). */
-  async health(): Promise<ChannelHealth> {
-    await Promise.resolve();
-    return { state: 'healthy', detail: null };
-  }
-}

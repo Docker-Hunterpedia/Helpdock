@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { FakeGraph, GraphClient } from '@helpdock/channels';
+import { GraphClient } from '@helpdock/channels';
+import { FakeGraph } from '@helpdock/channels/testing';
 import { createKeyring, decryptSecret, type Env } from '@helpdock/config';
 import {
   auditLog,

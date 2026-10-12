@@ -1,12 +1,10 @@
 import {
   type MetaEvent,
   type MetaRoute,
-  type MetaWebhookBody,
   metaEnvelopeSchema,
-  pageDelivery,
-  pageText,
   routeEnvelope,
 } from '@helpdock/channels';
+import { type MetaWebhookBody, pageDelivery, pageText } from '@helpdock/channels/testing';
 import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccountLocator, MetaRepository } from './meta.repository.js';

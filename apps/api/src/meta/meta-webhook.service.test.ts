@@ -1,11 +1,5 @@
-import {
-  batchOf,
-  hubSignature,
-  META_FIXTURE,
-  type MetaRoute,
-  pageText,
-  whatsappText,
-} from '@helpdock/channels';
+import { hubSignature, type MetaRoute } from '@helpdock/channels';
+import { batchOf, META_FIXTURE, pageText, whatsappText } from '@helpdock/channels/testing';
 import type { Db } from '@helpdock/db';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

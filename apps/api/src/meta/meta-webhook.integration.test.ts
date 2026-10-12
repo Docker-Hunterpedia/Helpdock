@@ -1,18 +1,16 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { GraphClient, type MetaEvent } from '@helpdock/channels';
 import {
   FakeGraph,
   fixtureMid,
   fixtureWamid,
-  GraphClient,
   instagramText,
-  type MetaEvent,
   type MetaWebhookBody,
   MetaWebhookDriver,
-  metaExternalId,
   pageText,
   whatsappText,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import { createKeyring, type Env, encryptSecret } from '@helpdock/config';
 import {
   auditLog,
@@ -208,7 +206,7 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
       bodyHtml: `<p>${event.text}</p>`,
       bodyText: event.text,
       channel: account.platform,
-      externalMessageId: metaExternalId(account.platform, event.messageId),
+      externalMessageId: event.messageId,
     });
   };
 

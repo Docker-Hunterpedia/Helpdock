@@ -1,4 +1,5 @@
-import { classifyGraphError, type GraphClient, graphRefreshToken } from '@helpdock/channels';
+import { classifyGraphError, type GraphClient } from '@helpdock/channels';
+import { graphRefreshToken } from '@helpdock/channels/testing';
 import { createKeyring, decryptSecret, encryptSecret } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

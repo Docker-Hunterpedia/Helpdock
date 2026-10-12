@@ -1,10 +1,8 @@
+import { type MetaEvent, metaEnvelopeSchema, routeEnvelope } from '@helpdock/channels';
 import {
   fixtureWamid,
   META_FIXTURE,
-  type MetaEvent,
   type MetaWebhookBody,
-  metaEnvelopeSchema,
-  routeEnvelope,
   whatsappImage,
   whatsappNoWaId,
   whatsappReaction,
@@ -12,7 +10,7 @@ import {
   whatsappText,
   whatsappUnsupported,
   whatsappUserChangedNumber,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import type { DbTransaction, MetaAccount, MetaConversation, Ticket } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContactFailure } from '../contacts/contact-failure.js';

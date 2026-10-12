@@ -3,10 +3,10 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { GraphClient } from '@helpdock/channels';
 import {
   FakeGraph,
   fixtureMid,
-  GraphClient,
   META_FIXTURE,
   type MetaWebhookBody,
   MetaWebhookDriver,
@@ -20,7 +20,7 @@ import {
   pageRead,
   pageSticker,
   pageText,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import { createKeyring, type Env, encryptSecret } from '@helpdock/config';
 import {
   attachments,

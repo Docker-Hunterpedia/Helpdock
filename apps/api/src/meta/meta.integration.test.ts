@@ -3,11 +3,10 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { GraphApiFailure, GraphClient } from '@helpdock/channels';
 import {
   FakeGraph,
   fixtureWamid,
-  GraphApiFailure,
-  GraphClient,
   META_FIXTURE,
   type MetaWebhookBody,
   MetaWebhookDriver,
@@ -23,7 +22,7 @@ import {
   whatsappText,
   whatsappUnsupported,
   whatsappUserChangedNumber,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import { createKeyring, type Env, encryptSecret } from '@helpdock/config';
 import {
   attachments,

@@ -1075,13 +1075,11 @@ export const routeEnvelope = (envelope: MetaEnvelope): MetaRouting => {
 // Identity and the dedupe key
 // --------------------------------------------------------------------------
 
-/**
- * The dedupe key of DOMAIN-RULES §6 for one message: the id Meta gave it,
- * unchanged. `wamid.…` and `mid` are unique across Meta, so no account or
- * conversation needs to be prefixed; the function exists so the three
- * inbound services cannot come to spell the key three ways.
+/*
+ * The dedupe key of DOMAIN-RULES §6 for one message is the id Meta gave it,
+ * unchanged (`ticket_messages.external_message_id`): `wamid.…` and `mid` are
+ * unique across Meta, so no account or conversation is prefixed to them.
  */
-export const metaExternalId = (_platform: MetaPlatform, messageId: string): string => messageId;
 
 /**
  * The value stored in `contact_identities` for a customer (DOMAIN-RULES §4.7):

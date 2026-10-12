@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { ChannelCapabilityError } from '../adapter.js';
 import { type MetaMessageEvent, metaEnvelopeSchema, routeEnvelope } from './envelope.js';
 import {
   fixtureMid,
@@ -19,15 +18,9 @@ import {
   whatsappText,
 } from './fixtures.js';
 import type { MetaInboundInput, MetaInboundLabels } from './inbound-message.js';
-import {
-  InstagramChannelAdapter,
-  toInstagramInboundMessage,
-} from './instagram/instagram-adapter.js';
-import {
-  MessengerChannelAdapter,
-  toMessengerInboundMessage,
-} from './messenger/messenger-adapter.js';
-import { toWhatsAppInboundMessage, WhatsAppChannelAdapter } from './whatsapp/whatsapp-adapter.js';
+import { toInstagramInboundMessage } from './instagram/instagram-adapter.js';
+import { toMessengerInboundMessage } from './messenger/messenger-adapter.js';
+import { toWhatsAppInboundMessage } from './whatsapp/whatsapp-adapter.js';
 
 const RECEIVED = new Date('2026-10-11T08:00:05.000Z');
 
@@ -255,57 +248,18 @@ describe('giving a message to the wrong adapter', () => {
   });
 });
 
-describe('the adapters', () => {
-  const fixedNow = () => RECEIVED;
-
+describe('the per-platform functions', () => {
   it.each([
-    [
-      'whatsapp',
-      new WhatsAppChannelAdapter({ now: fixedNow }),
-      whatsappText(),
-      META_FIXTURE.phoneNumberId,
-    ],
-    ['messenger', new MessengerChannelAdapter({ now: fixedNow }), pageText(), META_FIXTURE.pageId],
-    [
-      'instagram',
-      new InstagramChannelAdapter({ now: fixedNow }),
-      instagramText(),
-      META_FIXTURE.igAccountId,
-    ],
+    ['whatsapp', toWhatsAppInboundMessage, whatsappText(), META_FIXTURE.phoneNumberId],
+    ['messenger', toMessengerInboundMessage, pageText(), META_FIXTURE.pageId],
+    ['instagram', toInstagramInboundMessage, instagramText(), META_FIXTURE.igAccountId],
   ] as const)(
-    '%s files an inbound message stamped with the clock it was given',
-    async (kind, adapter, body, account) => {
-      expect(adapter.kind).toBe(kind);
-
-      const message = await adapter.handleInbound(inputOf(body, account));
+    '%s files an inbound message stamped with the time it was given',
+    (kind, toMessage, body, account) => {
+      const message = toMessage(inputOf(body, account), RECEIVED);
 
       expect(message.channel).toBe(kind);
       expect(message.receivedAt).toEqual(RECEIVED);
     },
   );
-
-  it.each([
-    new WhatsAppChannelAdapter(),
-    new MessengerChannelAdapter(),
-    new InstagramChannelAdapter(),
-  ])(
-    '$kind starts nothing, reports itself healthy, and refuses to send outside the outbox',
-    async (adapter) => {
-      await expect(adapter.init()).resolves.toBeUndefined();
-      await expect(adapter.health()).resolves.toEqual({ state: 'healthy', detail: null });
-      await expect(adapter.send()).rejects.toBeInstanceOf(ChannelCapabilityError);
-      await expect(adapter.send()).rejects.toThrow(
-        `The ${adapter.kind} channel cannot send outside the outbox`,
-      );
-    },
-  );
-
-  it('stamps the real time when no clock is given', async () => {
-    const before = Date.now();
-    const message = await new WhatsAppChannelAdapter().handleInbound(
-      inputOf(whatsappText(), META_FIXTURE.phoneNumberId),
-    );
-
-    expect(message.receivedAt.getTime()).toBeGreaterThanOrEqual(before);
-  });
 });

@@ -40,6 +40,7 @@ import {
 import { DelayedError, type Job, UnrecoverableError } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
+import { failureFields } from '../channels/pg-errors.js';
 import { objectKeyBeside } from '../media/keys.js';
 import type { ObjectStorage } from '../media/storage.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
@@ -311,10 +312,6 @@ interface Part {
 export const createMetaSendHandler =
   (deps: MetaSendDependencies): JobHandler<MetaSendPayload> =>
   async ({ payload, tx, log, job, token }) => {
-    if (payload.kind !== 'reply') {
-      // M10-09 adds template sends; nothing enqueues one before then.
-      throw new UnrecoverableError(`meta.send does not handle a ${payload.kind} yet`);
-    }
     await sendReply(deps, tx, { payload, log, job, token });
   };
 
@@ -687,7 +684,7 @@ export const createMetaSendProcessor = ({
         throw error;
       }
       const parsed = metaSendPayloadSchema.safeParse(job.data);
-      if (parsed.success && parsed.data.kind === 'reply') {
+      if (parsed.success) {
         const { brandId, deliveryId } = parsed.data;
         await withSystem(db, brandId, async (tx) => {
           const delivery = await repository.delivery(tx, deliveryId);
@@ -695,7 +692,10 @@ export const createMetaSendProcessor = ({
             await recordSendFailure({ repository, tx, delivery, error, job, at: now() });
           }
         }).catch((recordError: unknown) => {
-          log.error({ err: recordError, jobId: job.id }, 'could not record a meta.send failure');
+          log.error(
+            { ...failureFields(recordError), jobId: job.id },
+            'could not record a meta.send failure',
+          );
         });
       }
       throw error;

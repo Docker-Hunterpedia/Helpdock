@@ -714,12 +714,12 @@ describe('the Meta send job (M10-06)', () => {
     expect(metaSendJob.options.backoff).toEqual({ type: 'exponential', delay: 10_000 });
   });
 
-  it('knows a reply and a template, and nothing else', () => {
+  it('knows a reply, and nothing else until M10-09 adds the template', () => {
     expect(metaSendPayloadSchema.safeParse({ kind: 'reply', brandId, deliveryId }).success).toBe(
       true,
     );
     expect(metaSendPayloadSchema.safeParse({ kind: 'template', brandId, deliveryId }).success).toBe(
-      true,
+      false,
     );
     expect(() => parseJobPayload(metaSendJob, { kind: 'notice', brandId, deliveryId })).toThrow(
       PayloadValidationError,

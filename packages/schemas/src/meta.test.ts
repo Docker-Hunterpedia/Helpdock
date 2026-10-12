@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { errorResponseSchema } from './error.js';
 import {
   firstWordOf,
+  isMetaChannel,
   META_ATTACHMENT_LIMITS,
   META_ERROR_MAX_LENGTH,
   META_HUMAN_AGENT_WINDOW_MS,
   META_PACE_MS,
   META_PLATFORMS,
   META_REPLY_WINDOW_MS,
-  META_SEND_ATTEMPTS,
   META_SIGNATURE_HEADER,
   META_SUBSCRIBED_FIELDS,
   META_TEXT_LIMITS,
@@ -85,6 +85,17 @@ describe('metaAccountHealth', () => {
   });
 });
 
+describe('isMetaChannel', () => {
+  it('knows a ticket on WhatsApp, Messenger or Instagram, and no other channel', () => {
+    for (const channel of ['whatsapp', 'messenger', 'instagram']) {
+      expect(isMetaChannel(channel)).toBe(true);
+    }
+    for (const channel of ['email', 'widget', 'telegram', 'WhatsApp', '']) {
+      expect(isMetaChannel(channel)).toBe(false);
+    }
+  });
+});
+
 describe('the constants the branches of M10 agree on', () => {
   it('names the three platforms, and the token each connects with', () => {
     expect(META_PLATFORMS).toEqual(['whatsapp', 'messenger', 'instagram']);
@@ -133,7 +144,6 @@ describe('the constants the branches of M10 agree on', () => {
     expect(META_REPLY_WINDOW_MS).toBe(86_400_000);
     expect(META_HUMAN_AGENT_WINDOW_MS).toBe(604_800_000);
     expect(META_PACE_MS).toBe(6_000);
-    expect(META_SEND_ATTEMPTS).toBe(5);
     expect(META_ERROR_MAX_LENGTH).toBe(300);
     expect(META_TOKEN_HINT_LENGTH).toBe(4);
   });

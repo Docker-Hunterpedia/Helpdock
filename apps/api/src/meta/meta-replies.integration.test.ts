@@ -3,16 +3,15 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { GraphClient, type GraphJsonRequest } from '@helpdock/channels';
 import {
   FakeGraph,
-  GraphClient,
-  type GraphJsonRequest,
   instagramSeen,
   MetaWebhookDriver,
   pageDelivery,
   pageRead,
   whatsappStatus,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import { createKeyring, decodeMasterKey, type Env, encryptSecret } from '@helpdock/config';
 import {
   attachments,
@@ -2031,6 +2030,20 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
         ['done', 0],
       ]);
       expect(sentOn('messenger', '5011')).toHaveLength(2);
+    });
+  });
+
+  describe('finding a delivery by one of Meta’s ids', () => {
+    it('is served by the GIN index on platform_message_ids, not by a scan of the brand’s deliveries', async () => {
+      const plan = await owner.db.transaction(async (tx) => {
+        // The table is a handful of rows here, so the planner would scan it whatever the index is for.
+        await tx.execute(sql`set local enable_seqscan = off`);
+        return tx.execute(
+          sql`explain select id from meta_deliveries where platform_message_ids @> array['wamid.x']::text[]`,
+        );
+      });
+
+      expect(JSON.stringify(plan)).toContain('meta_deliveries_platform_ids_idx');
     });
   });
 });

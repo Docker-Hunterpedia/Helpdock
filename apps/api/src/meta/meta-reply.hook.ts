@@ -1,5 +1,5 @@
 import type { DbTransaction } from '@helpdock/db';
-import { META_PLATFORMS } from '@helpdock/schemas';
+import { isMetaChannel } from '@helpdock/schemas';
 import {
   type ReplyAssertion,
   ReplyDeliveryHook,
@@ -23,8 +23,6 @@ import type { OutboundMetaService } from './outbound-meta.service.js';
  *   `refused` delivery with no job, and the message stands.
  */
 
-const META_CHANNELS: ReadonlySet<string> = new Set(META_PLATFORMS);
-
 export class MetaReplyHook extends ReplyDeliveryHook {
   readonly #outbound: OutboundMetaService;
 
@@ -34,7 +32,7 @@ export class MetaReplyHook extends ReplyDeliveryHook {
   }
 
   override async assertCanDeliver(tx: DbTransaction, event: ReplyAssertion): Promise<void> {
-    if (!META_CHANNELS.has(event.ticket.channel)) {
+    if (!isMetaChannel(event.ticket.channel)) {
       return;
     }
 
@@ -51,7 +49,7 @@ export class MetaReplyHook extends ReplyDeliveryHook {
     tx: DbTransaction,
     event: StaffPublicReplyEvent,
   ): Promise<void> {
-    if (!META_CHANNELS.has(event.ticket.channel)) {
+    if (!isMetaChannel(event.ticket.channel)) {
       return;
     }
 

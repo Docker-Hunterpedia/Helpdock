@@ -1,5 +1,6 @@
 import { META_TOKEN_HINT_LENGTH, type MetaAccount, metaAccountHealth } from '@helpdock/schemas';
 import type { AccountWithNames } from './meta.repository.js';
+import { iso } from './meta-view.js';
 
 /**
  * A `meta_accounts` row as Channels › Meta reads it (M10-07). The token is
@@ -7,8 +8,6 @@ import type { AccountWithNames } from './meta.repository.js';
  * §5.1 lets leave the server, so the view takes the decrypted token only to cut
  * those few characters off it and keeps nothing else of it.
  */
-
-const iso = (value: Date | null): string | null => value?.toISOString() ?? null;
 
 /** The last characters of a token, which is all of it the screen shows. */
 export const tokenHint = (token: string): string => token.slice(-META_TOKEN_HINT_LENGTH);

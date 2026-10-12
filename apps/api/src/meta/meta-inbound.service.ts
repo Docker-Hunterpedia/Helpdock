@@ -1,7 +1,7 @@
 import type { MetaEvent, MetaIgnoredReason, MetaRoute } from '@helpdock/channels';
 import type { Db, DbTransaction, MetaAccount as MetaAccountRow } from '@helpdock/db';
 import type { MetaPlatform } from '@helpdock/schemas';
-import { isUniqueViolation } from '../channels/pg-errors.js';
+import { failureFields, isUniqueViolation } from '../channels/pg-errors.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import type { AccountLocator, MetaRepository } from './meta.repository.js';
 import { metaMessageSeen, metaSenderBlocked } from './meta-inbound-gate.js';
@@ -207,7 +207,8 @@ export class MetaInboundService {
       );
     } catch (recordError) {
       this.#options.log.warn(
-        { accountId: locator.id, err: recordError },
+        // Its class and code only: a failed query's message quotes what it was writing.
+        { accountId: locator.id, ...failureFields(recordError) },
         'could not record meta account health',
       );
     }

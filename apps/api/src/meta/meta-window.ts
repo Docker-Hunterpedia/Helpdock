@@ -10,12 +10,12 @@ import type { MetaPlatform, MetaRefusalDetails } from '@helpdock/schemas';
 /**
  * The reply window of DOMAIN-RULES §2.6 is one pure function, `replyWindow` in
  * `@helpdock/channels` (M10-01), which the compose-time hook, the `meta.send`
- * job, the ticket view and the strip all ask. This file re-exports it under the
- * path the implementation brief names and adds the one adapter every caller
- * would otherwise write for itself: from a conversation row and an account row
- * to the function's input, so none of them can read a different column.
+ * job, the ticket view and the strip all ask. This file re-exports its type and
+ * its view and adds the one adapter every caller would otherwise write for
+ * itself: from a conversation row and an account row to the function's input,
+ * so none of them can read a different column.
  */
-export { type ReplyWindow, replyWindow, replyWindowView } from '@helpdock/channels';
+export { type ReplyWindow, replyWindowView } from '@helpdock/channels';
 
 export interface ConversationWindowInput {
   readonly conversation: Pick<MetaConversation, 'lastInboundAt'>;

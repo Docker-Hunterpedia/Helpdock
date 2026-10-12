@@ -1,5 +1,9 @@
 import {
   classifyMessagingEvent,
+  type MetaEvent,
+  type MetaInboundMessage,
+} from '@helpdock/channels';
+import {
   fixtureMid,
   instagramDeleted,
   instagramEcho,
@@ -8,9 +12,7 @@ import {
   instagramStoryReply,
   instagramText,
   instagramUnsupported,
-  type MetaEvent,
-  type MetaInboundMessage,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import type { DbTransaction, MetaAccount, MetaConversation, Ticket } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContactFailure } from '../contacts/contact-failure.js';

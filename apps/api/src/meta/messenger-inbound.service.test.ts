@@ -1,8 +1,7 @@
+import { type MetaEvent, metaEnvelopeSchema, routeEnvelope } from '@helpdock/channels';
 import {
   META_FIXTURE,
-  type MetaEvent,
   type MetaWebhookBody,
-  metaEnvelopeSchema,
   pageAttachment,
   pageDelivery,
   pageEcho,
@@ -13,8 +12,7 @@ import {
   pageRead,
   pageSticker,
   pageText,
-  routeEnvelope,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import type {
   DbTransaction,
   MetaAccount,

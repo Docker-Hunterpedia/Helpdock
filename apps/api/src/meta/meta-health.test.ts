@@ -1,12 +1,10 @@
+import { classifyGraphError, GraphApiFailure, type GraphClient } from '@helpdock/channels';
 import {
-  classifyGraphError,
-  GraphApiFailure,
-  type GraphClient,
   graphSubscribedApp,
   graphSubscribedApps,
   graphTokenExpired,
   META_FIXTURE,
-} from '@helpdock/channels';
+} from '@helpdock/channels/testing';
 import type { MetaAccount } from '@helpdock/db';
 import {
   META_ERROR_MAX_LENGTH,

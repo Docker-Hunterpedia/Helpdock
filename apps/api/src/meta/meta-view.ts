@@ -19,7 +19,7 @@ import { type ReplyWindow, replyWindowView } from './meta-window.js';
  * here reaches Graph, and no token is in any row it is given.
  */
 
-const iso = (value: Date | null): string | null => value?.toISOString() ?? null;
+export const iso = (value: Date | null): string | null => value?.toISOString() ?? null;
 
 /** What a delivery's row cannot say by itself: how many messages it is, and which files stayed out. */
 export interface DeliveryFacts {

@@ -1,4 +1,5 @@
-import { FakeGraph, GraphClient } from '@helpdock/channels';
+import { GraphClient } from '@helpdock/channels';
+import { FakeGraph } from '@helpdock/channels/testing';
 import { createKeyring, encryptSecret } from '@helpdock/config';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AccountGraph, graphForAccount, graphForToken } from './account-graph.js';

@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { GraphClient, type GraphJsonRequest } from '@helpdock/channels';
 import {
   FakeGraph,
@@ -48,18 +46,20 @@ import type {
   MetaPlatform,
   MetaTicketContextResponse,
 } from '@helpdock/schemas';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedRedisContainer } from '@testcontainers/redis';
 import { DelayedError, type Job, Queue, Worker } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { objectKeyBeside } from '../media/keys.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { FakeStorage } from '../testing/media.js';
+import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
+import { createOutboxDrain, type OutboxDrain } from '../testing/meta-outbox.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { MetaRepository } from './meta.repository.js';
@@ -87,12 +87,8 @@ import { OutboundMetaService } from './outbound-meta.service.js';
  * and times the send job records are proved to be the ones Meta's reports name.
  */
 
-const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
-const REDIS_IMAGE = 'redis:7-alpine';
-const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 43).toString('base64');
 const AGENT_PASSWORD = 'an agent password';
-const CONTAINER_STARTUP_MS = 120_000;
 const APP_SECRET = 'integration-app-secret';
 
 const NUMBER = '106540352242922';
@@ -112,13 +108,6 @@ const OPENING = 'Dev · Helpdock Dev';
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
-
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
 
 if (!hasDocker) {
   process.stderr.write(
@@ -199,36 +188,13 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
   const repository = new MetaRepository();
   const accounts = new Map<string, MetaAccount>();
   const handled = new Set<string>();
+  let drain: OutboxDrain;
   /** The time the send job believes it is, when a test needs it to be later than it is. */
   const clock: { now: Date | null } = { now: null };
   let counter = 0;
 
   const envFor = (): Env =>
-    ({
-      APP_URL: 'https://support.example.com',
-      APP_ROLE: 'api',
-      APP_MASTER_KEY: MASTER_KEY,
-      NODE_ENV: 'test',
-      LOG_LEVEL: 'silent',
-      PORT: 0,
-      TRUST_PROXY: false,
-      DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/${postgres.getDatabase()}`,
-      DATABASE_MIGRATION_URL: postgres.getConnectionUri(),
-      REDIS_URL: redisContainer.getConnectionUrl(),
-      S3_ENDPOINT: 'http://minio:9000',
-      S3_REGION: 'us-east-1',
-      S3_BUCKET: 'helpdock',
-      S3_ACCESS_KEY_ID: 'access',
-      S3_SECRET_ACCESS_KEY: 'secret',
-      S3_FORCE_PATH_STYLE: true,
-      FFMPEG_PATH: 'ffmpeg',
-      FFPROBE_PATH: 'ffprobe',
-      CLAMAV_PORT: 3310,
-      ADMIN_DIST_DIR: '/nonexistent',
-      OUTBOUND_ALLOW_CIDRS: ['127.0.0.0/8'],
-      META_GRAPH_API_ROOT: graph.facebookRoot,
-      META_INSTAGRAM_API_ROOT: graph.instagramRoot,
-    }) as Env;
+    metaEnv({ masterKey: MASTER_KEY, postgres, redis: redisContainer, graph });
 
   const call = <T>(
     method: 'GET' | 'POST',
@@ -605,41 +571,16 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
 
   /** The `meta.reply` rows nobody has handled yet, each run as the job it asks for. */
   const runNew = async (options: { attemptsMade?: number; autoPace?: boolean } = {}) => {
-    const rows = await owner.db
-      .select({ id: outbox.id, brandId: outbox.brandId, payload: outbox.payload })
-      .from(outbox)
-      .where(eq(outbox.event, META_EVENTS.reply))
-      .orderBy(outbox.id);
+    const rows = await drain.drain<MetaSendPayload>(META_EVENTS.reply, createMetaReplyEventHandler);
     const ran: Ran[] = [];
-    for (const row of rows.filter((candidate) => !handled.has(candidate.id))) {
-      handled.add(row.id);
-      ran.push(await runRow(row, options));
+    for (const row of rows) {
+      const [job] = row.jobs;
+      if (job === undefined) {
+        throw new Error('the event handler added no job');
+      }
+      ran.push(await run(row.id, job.jobId, job.payload, options));
     }
     return ran;
-  };
-
-  const runRow = async (
-    row: { id: string; brandId: string; payload: Record<string, unknown> },
-    options: { attemptsMade?: number; autoPace?: boolean } = {},
-  ): Promise<Ran> => {
-    const added: { jobId: string; payload: MetaSendPayload }[] = [];
-    await withSystem(runtime.db, row.brandId, (tx) =>
-      createMetaReplyEventHandler({
-        add: async (input) => void added.push(input),
-      })({
-        outboxId: row.id,
-        brandId: row.brandId,
-        event: META_EVENTS.reply,
-        payload: row.payload,
-        tx,
-        log: silentLogger,
-      }),
-    );
-    const [job] = added;
-    if (job === undefined) {
-      throw new Error('the event handler added no job');
-    }
-    return run(row.id, job.jobId, job.payload, options);
   };
 
   /** The same job again, as after a crash between the send and the acknowledgement. */
@@ -650,11 +591,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
     graph.sentTo(to).filter((message) => message.platform === platform);
 
   beforeAll(async () => {
-    [postgres, redisContainer] = await Promise.all([
-      new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      new RedisContainer(REDIS_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      graph.start(),
-    ]);
+    [postgres, redisContainer] = await Promise.all([startPostgres(), startRedis(), graph.start()]);
     client = new TestGraph({
       root: graph.facebookRoot,
       instagramRoot: graph.instagramRoot,
@@ -674,6 +611,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       meta: { graph: client },
     });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
+    drain = createOutboxDrain({ db: runtime.db, owner: owner.db, handled });
     redis = createQueueConnection(redisContainer.getConnectionUrl());
     driver = new MetaWebhookDriver({ target: app, secret: APP_SECRET });
     await runtime.settings.set('meta.appSecret', APP_SECRET, { updatedBy: 'suite' });
@@ -718,6 +656,12 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
     await redis?.quit();
     await graph.stop();
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
+  });
+
+  // A failure inside the stand-in reads to Helpdock as Meta being down, and a retry test would
+  // pass on it: it is said here, in the test it happened in.
+  afterEach(() => {
+    expect(graph.errors).toEqual([]);
   });
 
   beforeEach(async () => {
@@ -1927,31 +1871,15 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
         concurrency: 2,
       });
       try {
-        const rows = await owner.db
-          .select({ id: outbox.id, brandId: outbox.brandId, payload: outbox.payload })
-          .from(outbox)
-          .where(eq(outbox.event, META_EVENTS.reply))
-          .orderBy(outbox.id);
-        const mine = rows.filter((row) => !handled.has(row.id));
+        const mine = await drain.drain<MetaSendPayload>(
+          META_EVENTS.reply,
+          createMetaReplyEventHandler,
+        );
         expect(mine).toHaveLength(2);
         const ids: string[] = [];
-        for (const row of mine) {
-          handled.add(row.id);
-          await withSystem(runtime.db, row.brandId, (tx) =>
-            createMetaReplyEventHandler({
-              add: async ({ jobId, payload }) => {
-                ids.push(jobId);
-                await queue.add(metaSendJob.name, payload, { ...metaSendJob.options, jobId });
-              },
-            })({
-              outboxId: row.id,
-              brandId: row.brandId,
-              event: META_EVENTS.reply,
-              payload: row.payload,
-              tx,
-              log: silentLogger,
-            }),
-          );
+        for (const { jobId, payload } of mine.flatMap((row) => row.jobs)) {
+          ids.push(jobId);
+          await queue.add(metaSendJob.name, payload, { ...metaSendJob.options, jobId });
         }
 
         await vi.waitFor(

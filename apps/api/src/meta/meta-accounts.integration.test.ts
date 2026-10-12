@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { GraphClient } from '@helpdock/channels';
 import { FakeGraph } from '@helpdock/channels/testing';
 import { createKeyring, decryptSecret, type Env } from '@helpdock/config';
@@ -16,14 +14,15 @@ import {
   uuidv7,
 } from '@helpdock/db';
 import type { MetaPlatform, Principal } from '@helpdock/schemas';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedRedisContainer } from '@testcontainers/redis';
 import { and, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { DEV_PRINCIPAL_ENV_KEY, DEV_PRINCIPAL_HEADER } from '../auth/principal-resolver.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { readChannelStatuses } from '../channels/channel-status.js';
 import { createLogger } from '../logging/logger.js';
+import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
 
 /**
  * Channels › Meta's routes (M10-07) against real Postgres and Redis, with the
@@ -39,11 +38,7 @@ import { createLogger } from '../logging/logger.js';
  * 5. **The System page's Channels card** lists the accounts.
  */
 
-const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
-const REDIS_IMAGE = 'redis:7-alpine';
-const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 43).toString('base64');
-const CONTAINER_STARTUP_MS = 120_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
 const BRAND_A = uuidv7();
@@ -78,13 +73,6 @@ const asPrincipal = (principal: Principal): Record<string, string> => ({
   [DEV_PRINCIPAL_HEADER]: JSON.stringify(principal),
 });
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
-
 if (!hasDocker) {
   process.stderr.write(
     'Skipping the M10-07 Meta accounts integration tests: Docker is not available. Start Docker and re-run `pnpm test:integration`.\n',
@@ -113,31 +101,7 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
   let sequence = 0;
 
   const envFor = (): Env =>
-    ({
-      APP_URL: 'https://support.example.com',
-      APP_ROLE: 'api',
-      APP_MASTER_KEY: MASTER_KEY,
-      NODE_ENV: 'test',
-      LOG_LEVEL: 'silent',
-      PORT: 0,
-      TRUST_PROXY: false,
-      DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/${postgres.getDatabase()}`,
-      DATABASE_MIGRATION_URL: postgres.getConnectionUri(),
-      REDIS_URL: redisContainer.getConnectionUrl(),
-      S3_ENDPOINT: 'http://minio:9000',
-      S3_REGION: 'us-east-1',
-      S3_BUCKET: 'helpdock',
-      S3_ACCESS_KEY_ID: 'access',
-      S3_SECRET_ACCESS_KEY: 'secret',
-      S3_FORCE_PATH_STYLE: true,
-      FFMPEG_PATH: 'ffmpeg',
-      FFPROBE_PATH: 'ffprobe',
-      CLAMAV_PORT: 3310,
-      ADMIN_DIST_DIR: '/nonexistent',
-      OUTBOUND_ALLOW_CIDRS: ['127.0.0.0/8'],
-      META_GRAPH_API_ROOT: graph.facebookRoot,
-      META_INSTAGRAM_API_ROOT: graph.instagramRoot,
-    }) as Env;
+    metaEnv({ masterKey: MASTER_KEY, postgres, redis: redisContainer, graph });
 
   /** An account and a token the stand-in knows, never used before. */
   const fresh = (
@@ -232,11 +196,7 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
 
   beforeAll(async () => {
     process.env[DEV_PRINCIPAL_ENV_KEY] = '1';
-    [postgres, redisContainer] = await Promise.all([
-      new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      new RedisContainer(REDIS_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      graph.start(),
-    ]);
+    [postgres, redisContainer] = await Promise.all([startPostgres(), startRedis(), graph.start()]);
 
     runtime = await createRuntime({
       env: envFor(),
@@ -280,6 +240,12 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
     await owner?.close();
     await graph.stop();
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
+  });
+
+  // A failure inside the stand-in reads to Helpdock as Meta being down, and a retry test would
+  // pass on it: it is said here, in the test it happened in.
+  afterEach(() => {
+    expect(graph.errors).toEqual([]);
   });
 
   // ---------------------------------------------------------------- who may

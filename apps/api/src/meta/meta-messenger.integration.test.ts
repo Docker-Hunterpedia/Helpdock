@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { GraphClient } from '@helpdock/channels';
 import {
   FakeGraph,
@@ -46,28 +44,22 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import {
-  createJobProcessor,
-  type MetaMediaFetchPayload,
-  mediaProcessJob,
-  silentLogger,
-} from '@helpdock/jobs';
+import { type MetaMediaFetchPayload, silentLogger } from '@helpdock/jobs';
 import { metaAccountHealth } from '@helpdock/schemas';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
 import sharp from 'sharp';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
-import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
-import { createMediaProcessor } from '../media/process.job.js';
 import { FakeStorage } from '../testing/media.js';
+import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
+import { createOutboxDrain, type OutboxDrain } from '../testing/meta-outbox.js';
 import { createMetaInboundJobs } from './factory.js';
 import { MetaRepository } from './meta.repository.js';
-import { createMetaMediaEventHandler, META_EVENTS } from './meta-events.js';
 
 /**
  * M10-04, Messenger inbound, against real Postgres and Redis through the
@@ -92,11 +84,7 @@ import { createMetaMediaEventHandler, META_EVENTS } from './meta-events.js';
  *    enforcement, which also goes on the account.
  */
 
-const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
-const REDIS_IMAGE = 'redis:7-alpine';
-const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 43).toString('base64');
-const CONTAINER_STARTUP_MS = 120_000;
 
 const APP_SECRET = 'messenger-app-secret';
 const PAGE_TOKEN = 'EAAGmessengerpagetoken';
@@ -106,13 +94,6 @@ const BRAND_A = uuidv7();
 const BRAND_B = uuidv7();
 const PAGE_A = META_FIXTURE.pageId;
 const PAGE_B = '998877665544332';
-
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
 
 if (!hasDocker) {
   process.stderr.write(
@@ -144,7 +125,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
   let storage: FakeStorage;
   const graph = new FakeGraph();
   const repository = new MetaRepository();
-  const handledOutbox = new Set<string>();
+  let drain: OutboxDrain;
   const seeded = new Map<string, Seeded>();
 
   /** A customer of its own for every test, so conversations never meet. */
@@ -160,31 +141,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
   };
 
   const envFor = (): Env =>
-    ({
-      APP_URL: 'https://support.example.com',
-      APP_ROLE: 'api',
-      APP_MASTER_KEY: MASTER_KEY,
-      NODE_ENV: 'test',
-      LOG_LEVEL: 'silent',
-      PORT: 0,
-      TRUST_PROXY: false,
-      DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/${postgres.getDatabase()}`,
-      DATABASE_MIGRATION_URL: postgres.getConnectionUri(),
-      REDIS_URL: redisContainer.getConnectionUrl(),
-      S3_ENDPOINT: 'http://minio:9000',
-      S3_REGION: 'us-east-1',
-      S3_BUCKET: 'helpdock',
-      S3_ACCESS_KEY_ID: 'access',
-      S3_SECRET_ACCESS_KEY: 'secret',
-      S3_FORCE_PATH_STYLE: true,
-      FFMPEG_PATH: 'ffmpeg',
-      FFPROBE_PATH: 'ffprobe',
-      CLAMAV_PORT: 3310,
-      ADMIN_DIST_DIR: '/nonexistent',
-      OUTBOUND_ALLOW_CIDRS: ['127.0.0.0/8'],
-      META_GRAPH_API_ROOT: graph.facebookRoot,
-      META_INSTAGRAM_API_ROOT: graph.instagramRoot,
-    }) as Env;
+    metaEnv({ masterKey: MASTER_KEY, postgres, redis: redisContainer, graph });
 
   const accountA = (): MetaAccount => {
     const found = seeded.get(BRAND_A);
@@ -235,11 +192,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     });
 
   beforeAll(async () => {
-    [postgres, redisContainer] = await Promise.all([
-      new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      new RedisContainer(REDIS_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      graph.start(),
-    ]);
+    [postgres, redisContainer] = await Promise.all([startPostgres(), startRedis(), graph.start()]);
 
     runtime = await createRuntime({
       env: envFor(),
@@ -251,6 +204,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-messenger-')));
     app = await createApiApp({ runtime, objectStorage: storage, meta: { graph: graphClient() } });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
+    drain = createOutboxDrain({ db: runtime.db, owner: owner.db });
     driver = new MetaWebhookDriver({ target: app, secret: APP_SECRET });
 
     const keyring = createKeyring(envFor());
@@ -268,6 +222,12 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     await owner?.close();
     await graph.stop();
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
+  });
+
+  // A failure inside the stand-in reads to Helpdock as Meta being down, and a retry test would
+  // pass on it: it is said here, in the test it happened in.
+  afterEach(() => {
+    expect(graph.errors).toEqual([]);
   });
 
   beforeEach(() => {
@@ -640,30 +600,6 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       readonly payload: MetaMediaFetchPayload;
     }
 
-    const fetchJobsFor = async (ids: ReadonlySet<string>): Promise<FetchJob[]> => {
-      const rows = await owner.db.select().from(outbox).where(eq(outbox.event, META_EVENTS.media));
-      const jobs: FetchJob[] = [];
-      for (const row of rows) {
-        if (handledOutbox.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
-          continue;
-        }
-        handledOutbox.add(row.id);
-        await withSystem(runtime.db, row.brandId, (tx) =>
-          createMetaMediaEventHandler({
-            add: async (job) => void jobs.push({ jobId: job.jobId, payload: job.payload }),
-          })({
-            outboxId: row.id,
-            brandId: row.brandId,
-            event: row.event,
-            payload: row.payload,
-            tx,
-            log: silentLogger,
-          }),
-        );
-      }
-      return jobs;
-    };
-
     const runFetch = (job: FetchJob): Promise<unknown> =>
       createMetaInboundJobs({
         db: runtime.db,
@@ -684,62 +620,12 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
           (error: unknown) => error,
         );
 
-    /** `attachment.uploaded` rows of these attachments, run through `media.process`. */
-    const processUploads = async (ids: ReadonlySet<string>): Promise<void> => {
-      const process = createJobProcessor(
-        mediaProcessJob,
-        createMediaProcessor({
-          storage,
-          tools: createMediaTools({ ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' }),
-          scanner: undefined,
-        }),
-        { db: runtime.db, log: silentLogger },
-      );
-      const rows = await owner.db
-        .select()
-        .from(outbox)
-        .where(eq(outbox.event, 'attachment.uploaded'));
-      for (const row of rows) {
-        if (handledOutbox.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
-          continue;
-        }
-        handledOutbox.add(row.id);
-        const added: { jobId: string; payload: { brandId: string; attachmentId: string } }[] = [];
-        await withSystem(runtime.db, row.brandId, (tx) =>
-          createAttachmentUploadedHandler({ add: async (job) => void added.push(job) })({
-            outboxId: row.id,
-            brandId: row.brandId,
-            event: row.event,
-            payload: row.payload,
-            tx,
-            log: silentLogger,
-          }),
-        );
-        for (const job of added) {
-          await process({
-            name: 'media.process',
-            id: job.jobId,
-            data: job.payload,
-            attemptsMade: 0,
-            opts: { attempts: 3 },
-          } as unknown as Job);
-        }
-      }
-    };
-
     /** Every file of a ticket fetched and processed, as the worker does after the relay. */
-    const pipeline = async (ticketId: string): Promise<unknown[]> => {
-      const ids = new Set((await attachmentsOf(ticketId)).map((row) => row.id));
-      const errors: unknown[] = [];
-      for (const job of await fetchJobsFor(ids)) {
-        const error = await runFetch(job);
-        if (error !== undefined) {
-          errors.push(error);
-        }
-      }
-      await processUploads(ids);
-      return errors;
-    };
+    const pipeline = async (ticketId: string): Promise<unknown[]> =>
+      drain.mediaPipeline(new Set((await attachmentsOf(ticketId)).map((row) => row.id)), runFetch, {
+        storage,
+        tools: () => createMediaTools({ ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' }),
+      });
 
     it('files a photo pending, fetches it from the CDN link without a token, and makes it a WebP', async () => {
       const psid = newPsid();

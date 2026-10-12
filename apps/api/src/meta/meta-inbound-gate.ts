@@ -40,10 +40,24 @@ export const metaMessageSeen = async (
 };
 
 /**
- * Whether the block list holds this customer (M1-11). The value is the one the
- * contact's identity will have, so an agent who blocks a Meta ticket's sender
- * blocks exactly what this looks up. A drop is counted on the block row in the
- * caller's transaction.
+ * The block-list entry a Meta customer is: the value their contact's identity
+ * has (`metaIdentityValue`), under the platform's own kind. "Block sender" on a
+ * Meta ticket blocks what `senderOf` finds in the contact's identities, which
+ * is this, and the inbound gate looks the same pair up, so the two cannot come
+ * apart (the join is `meta-inbound-gate.test.ts` and the Block sender case of
+ * `meta.integration.test.ts`).
+ */
+export const metaBlockEntry = (
+  account: Pick<MetaAccountRow, 'platform' | 'externalId'>,
+  customerId: string,
+): { readonly kind: MetaPlatform; readonly value: string } => ({
+  kind: account.platform,
+  value: metaIdentityValue(account.platform, account.externalId, customerId),
+});
+
+/**
+ * Whether the block list holds this customer (M1-11). A drop is counted on the
+ * block row in the caller's transaction.
  */
 export const metaSenderBlocked = async (
   tx: DbTransaction,
@@ -51,14 +65,8 @@ export const metaSenderBlocked = async (
   customerId: string,
   now: Date,
 ): Promise<boolean> => {
-  const gate = await isSenderBlocked(
-    tx,
-    account.brandId,
-    {
-      kind: account.platform,
-      value: metaIdentityValue(account.platform, account.externalId, customerId),
-    },
-    { now },
-  );
+  const gate = await isSenderBlocked(tx, account.brandId, metaBlockEntry(account, customerId), {
+    now,
+  });
   return gate.blocked;
 };

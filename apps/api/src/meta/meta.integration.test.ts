@@ -44,29 +44,27 @@ import {
   ticketMessages,
   ticketStatuses,
   tickets,
+  users,
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import {
-  createJobProcessor,
-  type MetaMediaFetchPayload,
-  mediaProcessJob,
-  silentLogger,
-} from '@helpdock/jobs';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import { type MetaMediaFetchPayload, silentLogger } from '@helpdock/jobs';
+import type { Principal } from '@helpdock/schemas';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import sharp from 'sharp';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { DEV_PRINCIPAL_ENV_KEY, DEV_PRINCIPAL_HEADER } from '../auth/principal-resolver.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
-import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
 import { createMediaTools, type MediaTools } from '../media/ffmpeg.js';
-import { createMediaProcessor } from '../media/process.job.js';
 import { FakeStorage } from '../testing/media.js';
+import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
+import { createOutboxDrain, type OutboxDrain } from '../testing/meta-outbox.js';
 import { createMetaInboundJobs } from './factory.js';
-import { createMetaMediaEventHandler, META_EVENTS } from './meta-events.js';
+import { META_EVENTS } from './meta-events.js';
 
 /**
  * The Meta channels against real Postgres and Redis, with the stand-in for
@@ -83,28 +81,27 @@ import { createMetaMediaEventHandler, META_EVENTS } from './meta-events.js';
  * back; a blocked sender is dropped before any contact exists.
  */
 
-const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
-const REDIS_IMAGE = 'redis:7-alpine';
-const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 47).toString('base64');
-const CONTAINER_STARTUP_MS = 120_000;
 
 const APP_SECRET = 'whatsapp-integration-app-secret';
 const TOKEN = 'EAAGwhatsappintegrationtoken0123456789';
 const BRAND_A = uuidv7();
 const BRAND_B = uuidv7();
+const AGENT_A = uuidv7();
 const NUMBER_A = '106540352242922';
 const NUMBER_B = '106540352242999';
 const WABA_B = '202290129340399';
 
+/** A person on brand A's desk, who reaches the routes the dev principal header stands in for. */
+const agentA: Principal = {
+  type: 'staff',
+  id: AGENT_A,
+  brands: { [BRAND_A]: { role: 'agent', departmentIds: 'all' } },
+  installAdmin: false,
+};
+
 const run = promisify(execFile);
 
-const hasDocker = await run('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
 const hasFfmpeg = await Promise.all(
   ['ffmpeg', 'ffprobe'].map((binary) =>
     run(binary, ['-version'], { timeout: 10_000 }).then(
@@ -147,38 +144,14 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
   let closedStatusId = '';
   let toOpusCalls = 0;
   const graph = new FakeGraph();
-  const handled = new Set<string>();
+  let drain: OutboxDrain;
   let customers = 0;
   let wamids = 100;
   let clock = 0;
 
   const keyring = createKeyring({ APP_MASTER_KEY: MASTER_KEY });
   const envFor = (): Env =>
-    ({
-      APP_URL: 'https://support.example.com',
-      APP_ROLE: 'api',
-      APP_MASTER_KEY: MASTER_KEY,
-      NODE_ENV: 'test',
-      LOG_LEVEL: 'silent',
-      PORT: 0,
-      TRUST_PROXY: false,
-      DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/${postgres.getDatabase()}`,
-      DATABASE_MIGRATION_URL: postgres.getConnectionUri(),
-      REDIS_URL: redisContainer.getConnectionUrl(),
-      S3_ENDPOINT: 'http://minio:9000',
-      S3_REGION: 'us-east-1',
-      S3_BUCKET: 'helpdock',
-      S3_ACCESS_KEY_ID: 'access',
-      S3_SECRET_ACCESS_KEY: 'secret',
-      S3_FORCE_PATH_STYLE: true,
-      FFMPEG_PATH: 'ffmpeg',
-      FFPROBE_PATH: 'ffprobe',
-      CLAMAV_PORT: 3310,
-      ADMIN_DIST_DIR: '/nonexistent',
-      OUTBOUND_ALLOW_CIDRS: ['127.0.0.0/8'],
-      META_GRAPH_API_ROOT: graph.facebookRoot,
-      META_INSTAGRAM_API_ROOT: graph.instagramRoot,
-    }) as Env;
+    metaEnv({ masterKey: MASTER_KEY, postgres, redis: redisContainer, graph });
 
   const graphClient = () =>
     new GraphClient({
@@ -398,29 +371,7 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
     }) as unknown as Job;
 
   /** The `meta.media_fetch` jobs `meta.media` outbox rows of these attachments ask for. */
-  const fetchJobsFor = async (ids: ReadonlySet<string>): Promise<FetchJob[]> => {
-    const rows = await owner.db.select().from(outbox).where(eq(outbox.event, META_EVENTS.media));
-    const jobs: FetchJob[] = [];
-    for (const row of rows) {
-      if (handled.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
-        continue;
-      }
-      handled.add(row.id);
-      await withSystem(runtime.db, row.brandId, (tx) =>
-        createMetaMediaEventHandler({
-          add: async (job) => void jobs.push({ jobId: job.jobId, payload: job.payload }),
-        })({
-          outboxId: row.id,
-          brandId: row.brandId,
-          event: row.event,
-          payload: row.payload,
-          tx,
-          log: silentLogger,
-        }),
-      );
-    }
-    return jobs;
-  };
+  const fetchJobsFor = (ids: ReadonlySet<string>): Promise<FetchJob[]> => drain.fetchJobsFor(ids);
 
   /** Runs one fetch job and answers what it threw, which BullMQ would retry. */
   const runFetch = (job: FetchJob, attempt = 0): Promise<unknown> =>
@@ -431,58 +382,13 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
         (error: unknown) => error,
       );
 
-  /** `attachment.uploaded` rows of these attachments, run through `media.process`. */
-  const processUploads = async (ids: ReadonlySet<string>): Promise<void> => {
-    const process = createJobProcessor(
-      mediaProcessJob,
-      createMediaProcessor({ storage, tools: tools(), scanner: undefined }),
-      { db: runtime.db, log: silentLogger },
-    );
-    const rows = await owner.db
-      .select()
-      .from(outbox)
-      .where(eq(outbox.event, 'attachment.uploaded'));
-    for (const row of rows) {
-      if (handled.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
-        continue;
-      }
-      handled.add(row.id);
-      const added: { jobId: string; payload: { brandId: string; attachmentId: string } }[] = [];
-      await withSystem(runtime.db, row.brandId, (tx) =>
-        createAttachmentUploadedHandler({ add: async (job) => void added.push(job) })({
-          outboxId: row.id,
-          brandId: row.brandId,
-          event: row.event,
-          payload: row.payload,
-          tx,
-          log: silentLogger,
-        }),
-      );
-      for (const job of added) {
-        await process({
-          name: 'media.process',
-          id: job.jobId,
-          data: job.payload,
-          attemptsMade: 0,
-          opts: { attempts: 3 },
-        } as unknown as Job);
-      }
-    }
-  };
-
   /** Every file of a ticket fetched and processed, as the worker does after the relay. */
-  const pipeline = async (ticketId: string): Promise<unknown[]> => {
-    const ids = new Set((await attachmentsOf(ticketId)).map((row) => row.id));
-    const errors: unknown[] = [];
-    for (const job of await fetchJobsFor(ids)) {
-      const error = await runFetch(job);
-      if (error !== undefined) {
-        errors.push(error);
-      }
-    }
-    await processUploads(ids);
-    return errors;
-  };
+  const pipeline = async (ticketId: string): Promise<unknown[]> =>
+    drain.mediaPipeline(
+      new Set((await attachmentsOf(ticketId)).map((row) => row.id)),
+      (job) => runFetch(job),
+      { storage, tools },
+    );
 
   // ----------------------------------------------------------------- setup
 
@@ -523,11 +429,8 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
   };
 
   beforeAll(async () => {
-    [postgres, redisContainer] = await Promise.all([
-      new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      new RedisContainer(REDIS_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      graph.start(),
-    ]);
+    process.env[DEV_PRINCIPAL_ENV_KEY] = '1';
+    [postgres, redisContainer] = await Promise.all([startPostgres(), startRedis(), graph.start()]);
     graph.connect({
       platform: 'whatsapp',
       id: NUMBER_A,
@@ -555,7 +458,11 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
     storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-meta-')));
     app = await createApiApp({ runtime, objectStorage: storage, meta: { graph: graphClient() } });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
+    drain = createOutboxDrain({ db: runtime.db, owner: owner.db });
     driver = new MetaWebhookDriver({ target: app, secret: APP_SECRET });
+    await owner.db
+      .insert(users)
+      .values({ id: AGENT_A, email: 'agent@example.com', name: 'Sara Hassan' });
 
     accountA = await seedBrand(BRAND_A, 'ACME', NUMBER_A, META_FIXTURE.wabaId);
     departmentA = accountA.departmentId;
@@ -575,11 +482,23 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
   }, 300_000);
 
   afterAll(async () => {
+    delete process.env[DEV_PRINCIPAL_ENV_KEY];
     await app?.close();
     await runtime?.close();
     await owner?.close();
     await graph.stop();
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
+  });
+
+  // A failure inside the stand-in reads to Helpdock as Meta being down, and a retry test would
+  // pass on it: it is said here, in the test it happened in.
+  afterEach(() => {
+    expect(graph.errors).toEqual([]);
+  });
+
+  // What a test programs the stand-in with, and the calls it made, are that test's alone.
+  beforeEach(() => {
+    graph.reset();
   });
 
   // =========================================================================
@@ -659,6 +578,40 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
         ]);
         expect(await conversationOf(customer)).toMatchObject({ lastInboundMessageId: second });
         expect(await identitiesOf((await contactOf(customer))?.id ?? '')).toHaveLength(2);
+      });
+
+      it('files a new customer’s first message once when Meta posts it twice at the same moment', async () => {
+        const customer = newCustomer();
+        const wamid = nextWamid();
+        const body = whatsappText({ ...base(customer, wamid), text: 'First, and doubled' });
+
+        // Contact, conversation and ticket are all new: the two posts race to create each, and
+        // the message's unique index is what decides between them.
+        const [one, other] = await Promise.all([driver.post(body), driver.post(body)]);
+
+        expect([one.status, other.status]).toEqual([200, 200]);
+        const identities = await owner.db
+          .select()
+          .from(contactIdentities)
+          .where(
+            and(
+              eq(contactIdentities.brandId, BRAND_A),
+              eq(contactIdentities.kind, 'whatsapp'),
+              eq(contactIdentities.value, customer.userId),
+            ),
+          );
+        expect(identities).toHaveLength(1);
+        expect(
+          await owner.db
+            .select()
+            .from(metaConversations)
+            .where(eq(metaConversations.customerId, customer.userId)),
+        ).toHaveLength(1);
+        const [ticket, ...rest] = await ticketsOf(customer);
+        expect(rest).toEqual([]);
+        expect((await messagesOf(ticket?.id ?? '')).map((row) => row.externalMessageId)).toEqual([
+          wamid,
+        ]);
       });
 
       it('reopens a closed ticket inside the reopen window', async () => {
@@ -1090,23 +1043,23 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
 
         try {
           expect(await runFetch(job as FetchJob, 0)).toBeInstanceOf(GraphApiFailure);
+
+          const [account] = await owner.db
+            .select()
+            .from(metaAccounts)
+            .where(eq(metaAccounts.id, accountA.id));
+          expect(account).toMatchObject({ status: 'token_expired' });
+          expect(account?.lastError).toContain('190');
+          expect(account?.lastError).not.toContain(TOKEN);
+          expect((await attachmentsOf(ticket?.id ?? ''))[0]?.status).toBe('pending');
         } finally {
           graph.expiredTokens.delete(TOKEN);
+          // The account is shared: put it back for the tests after this one, whatever was found.
+          await owner.db
+            .update(metaAccounts)
+            .set({ status: 'connected', lastError: null, lastErrorAt: null })
+            .where(eq(metaAccounts.id, accountA.id));
         }
-
-        const [account] = await owner.db
-          .select()
-          .from(metaAccounts)
-          .where(eq(metaAccounts.id, accountA.id));
-        expect(account).toMatchObject({ status: 'token_expired' });
-        expect(account?.lastError).toContain('190');
-        expect(account?.lastError).not.toContain(TOKEN);
-        expect((await attachmentsOf(ticket?.id ?? ''))[0]?.status).toBe('pending');
-        // Put the account back for the tests after this one.
-        await owner.db
-          .update(metaAccounts)
-          .set({ status: 'connected', lastError: null, lastErrorAt: null })
-          .where(eq(metaAccounts.id, accountA.id));
       });
 
       it('records the files of a message Meta reported an error for as rejected, and fetches none', async () => {
@@ -1270,19 +1223,18 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
         const customer = newCustomer();
         const { ticket } = await openTicket(customer);
         const wamid = nextWamid();
-        const before = await conversationOf(customer);
+        const stamped = base(customer, wamid);
 
-        await send(whatsappUnsupported({ ...base(customer, wamid) }));
-        await send(whatsappUnsupported({ ...base(customer, wamid) }));
+        await send(whatsappUnsupported(stamped));
+        await send(whatsappUnsupported(stamped));
 
         expect(await systemLines(ticket.id)).toEqual([
           'The customer sent something that cannot be shown here.',
         ]);
         const after = await conversationOf(customer);
+        // The customer wrote, so the window moves to the time Meta stamped the message with.
         expect(after).toMatchObject({ lastInboundMessageId: wamid });
-        expect(after?.lastInboundAt?.getTime()).toBeGreaterThanOrEqual(
-          before?.lastInboundAt?.getTime() ?? 0,
-        );
+        expect(after?.lastInboundAt?.getTime()).toBe(stamped.timestamp * 1_000);
         // Not a message: the thread still has the one the customer wrote.
         expect((await messagesOf(ticket.id)).filter((row) => row.kind === 'public')).toHaveLength(
           1,
@@ -1454,17 +1406,20 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
           ],
         };
 
-        await send(body);
+        try {
+          await send(body);
 
-        const [account] = await owner.db
-          .select()
-          .from(metaAccounts)
-          .where(eq(metaAccounts.id, accountA.id));
-        expect(account?.lastError).toBe('131031: Account locked');
-        await owner.db
-          .update(metaAccounts)
-          .set({ lastError: null, lastErrorAt: null })
-          .where(eq(metaAccounts.id, accountA.id));
+          const [account] = await owner.db
+            .select()
+            .from(metaAccounts)
+            .where(eq(metaAccounts.id, accountA.id));
+          expect(account?.lastError).toBe('131031: Account locked');
+        } finally {
+          await owner.db
+            .update(metaAccounts)
+            .set({ lastError: null, lastErrorAt: null })
+            .where(eq(metaAccounts.id, accountA.id));
+        }
       });
     });
 
@@ -1489,6 +1444,33 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
           .where(eq(blockedSenders.value, customer.userId));
         expect(row?.dropped).toBe(1);
         expect(graph.callsTo(`/${mediaId}`)).toEqual([]);
+      });
+
+      it('drops the next message of a customer an agent blocked with Block sender on their ticket', async () => {
+        const customer = newCustomer();
+        const { ticket } = await openTicket(customer, 'Buy my things');
+
+        // The agent's own route, as the ticket's "Mark as spam" dialog calls it with the box ticked.
+        const blocked = await app.inject({
+          method: 'POST',
+          url: `/api/brands/${BRAND_A}/tickets/${ticket.id}/spam`,
+          headers: { [DEV_PRINCIPAL_HEADER]: JSON.stringify(agentA) },
+          payload: { blockSender: true },
+        });
+        expect(blocked.statusCode).toBe(201);
+        await say(customer, 'Buy my things, please');
+
+        // What the route blocked is what the gate looks up: the customer's id on the platform.
+        const [entry] = await owner.db
+          .select()
+          .from(blockedSenders)
+          .where(
+            and(eq(blockedSenders.brandId, BRAND_A), eq(blockedSenders.value, customer.userId)),
+          );
+        expect(entry).toMatchObject({ kind: 'whatsapp', droppedCount: 1 });
+        expect((await messagesOf(ticket.id)).filter((row) => row.kind === 'public')).toHaveLength(
+          1,
+        );
       });
 
       it('drops a message from a number an admin blocked by hand', async () => {

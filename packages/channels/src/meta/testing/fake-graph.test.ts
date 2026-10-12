@@ -847,6 +847,27 @@ describe('the control routes of a suite in another process', () => {
   });
 });
 
+describe('a failure inside the stand-in', () => {
+  it('is recorded and answered as a failure of its own, not left looking like Meta being down', async () => {
+    // A body that cannot be read as the multipart it says it is makes the handler throw.
+    const response = await fetch(fb(`/${PHONE_ID}/media`), {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${WA_TOKEN}`,
+        'content-type': 'multipart/form-data; boundary=nothing-like-it',
+      },
+      body: 'this is not multipart',
+    });
+
+    expect(response.status).toBe(500);
+    expect(((await response.json()) as { error: { type: string } }).error.type).toBe(
+      'StandInError',
+    );
+    expect(graph.errors).toHaveLength(1);
+    graph.errors.length = 0;
+  });
+});
+
 describe('uploading media', () => {
   const upload = (
     token: string,

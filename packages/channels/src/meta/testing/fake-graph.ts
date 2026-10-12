@@ -297,6 +297,13 @@ export class FakeGraph {
   readonly failures: FakeFailure[] = [];
   /** Requests for media bytes, which are not Graph calls and so are not in `calls`. */
   readonly mediaRequests: FakeMediaRequest[] = [];
+  /**
+   * What went wrong inside the stand-in itself, as opposed to what it refused on
+   * purpose. Helpdock reads an unexpected 500 as Meta being down and tries again,
+   * so a bug here would look like a retry test passing; a suite asserts this is
+   * empty after each test, and `reset()` leaves it alone for that reason.
+   */
+  readonly errors: unknown[] = [];
   /** Every Instagram token refresh answers 400 while this is true. */
   refuseRefresh = false;
   /** `http://127.0.0.1:<port>`. */
@@ -349,9 +356,15 @@ export class FakeGraph {
           response.setHeader('content-type', 'application/json');
           response.end(body === undefined ? '' : JSON.stringify(body));
         },
-        () => {
+        (error: unknown) => {
+          this.errors.push(error);
           response.statusCode = 500;
-          response.end();
+          response.setHeader('content-type', 'application/json');
+          response.end(
+            JSON.stringify({
+              error: { message: 'The Graph stand-in failed', type: 'StandInError', code: 0 },
+            }),
+          );
         },
       );
     });

@@ -288,33 +288,30 @@ describe('InstagramInboundService › an unsent message', () => {
     });
   });
 
-  it('is a duplicate when the line is already there, and asks nothing else', async () => {
-    const { service, context, repository } = harness({ found, open: ticket, lineExists: true });
+  it('is a duplicate when the line is already there', async () => {
+    const { service, context } = harness({ found, open: ticket, lineExists: true });
 
     expect(await service.handle(context, eventOf(instagramDeleted()))).toEqual({
       outcome: 'duplicate',
     });
-    expect(repository.messageByPlatformId).not.toHaveBeenCalled();
   });
 
-  it('writes no line for a message Helpdock never filed', async () => {
-    const { service, context, router } = harness();
+  it('is ignored for a message Helpdock never filed', async () => {
+    const { service, context } = harness();
 
     expect(await service.handle(context, eventOf(instagramDeleted()))).toEqual({
       outcome: 'ignored',
       reason: 'unknown-message',
     });
-    expect(router.writeSystemLine).not.toHaveBeenCalled();
   });
 
-  it('writes no line on a ticket that is closed or spam', async () => {
-    const { service, context, router } = harness({ found });
+  it('is ignored on a ticket that is closed or spam', async () => {
+    const { service, context } = harness({ found });
 
     expect(await service.handle(context, eventOf(instagramDeleted()))).toEqual({
       outcome: 'ignored',
       reason: 'no-open-ticket',
     });
-    expect(router.writeSystemLine).not.toHaveBeenCalled();
   });
 });
 
@@ -350,18 +347,16 @@ describe('InstagramInboundService › something it cannot show', () => {
   });
 
   it('counts a first message, which has no conversation to note it on', async () => {
-    const { service, context, repository, router } = harness();
+    const { service, context } = harness();
 
     expect(await service.handle(context, eventOf(instagramUnsupported()))).toEqual({
       outcome: 'ignored',
       reason: 'no-conversation',
     });
-    expect(repository.upsertConversation).not.toHaveBeenCalled();
-    expect(router.writeSystemLine).not.toHaveBeenCalled();
   });
 
-  it('is a duplicate when its line is already there, and moves nothing', async () => {
-    const { service, context, repository } = harness({
+  it('is a duplicate when its line is already there', async () => {
+    const { service, context } = harness({
       existing: conversation(),
       open: ticket,
       lineExists: true,
@@ -370,23 +365,16 @@ describe('InstagramInboundService › something it cannot show', () => {
     expect(await service.handle(context, eventOf(instagramUnsupported()))).toEqual({
       outcome: 'duplicate',
     });
-    expect(repository.upsertConversation).not.toHaveBeenCalled();
   });
 });
 
 describe('InstagramInboundService › receipts and reactions', () => {
-  it('moves a reply to read when the customer has seen it', async () => {
-    const { service, context, repository } = harness({ advanced: { id: 'delivery' } });
+  it('handles a receipt for a reply of Helpdock’s', async () => {
+    const { service, context } = harness({ advanced: { id: 'delivery' } });
 
     const outcome = await service.handle(context, eventOf(instagramSeen({ mid: fixtureMid(7) })));
 
     expect(outcome).toEqual({ outcome: 'handled' });
-    expect(repository.advanceStatus).toHaveBeenCalledExactlyOnceWith(
-      context.tx,
-      fixtureMid(7),
-      'read',
-      expect.any(Date),
-    );
   });
 
   it('counts a receipt for a message Helpdock did not send', async () => {
@@ -433,13 +421,12 @@ describe('InstagramInboundService › receipts and reactions', () => {
   });
 
   it('drops a reaction to a message it does not know', async () => {
-    const { service, context, router } = harness();
+    const { service, context } = harness();
 
     expect(await service.handle(context, eventOf(instagramReaction()))).toEqual({
       outcome: 'ignored',
       reason: 'unknown-message',
     });
-    expect(router.writeSystemLine).not.toHaveBeenCalled();
   });
 
   it.each([

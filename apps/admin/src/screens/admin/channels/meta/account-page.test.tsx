@@ -345,6 +345,46 @@ describe('an Instagram account whose token Meta invalidated', () => {
   });
 });
 
+describe('an Instagram account whose renewal Meta refused', () => {
+  const REFUSAL = 'Instagram would not renew the token: 100: The token cannot be refreshed';
+
+  /** The api's answer for it: still connected, since the token is not yet dead, and failing. */
+  const refusedRenewal = () => {
+    const metaApi = new MockMetaApi();
+    const real = metaApi.account.bind(metaApi);
+    vi.spyOn(metaApi, 'account').mockImplementation(async (brandId, accountId) => ({
+      ...(await real(brandId, accountId)),
+      status: 'connected',
+      health: 'failing',
+      lastError: REFUSAL,
+      lastErrorAt: '2026-10-11T09:00:00.000Z',
+      tokenExpiresAt: '2026-10-20T00:00:00.000Z',
+    }));
+    return metaApi;
+  };
+
+  it('says it is failing and quotes what Meta said, with no Reconnect yet', async () => {
+    await renderAccount(MOCK_INSTAGRAM_ACCOUNT, refusedRenewal());
+
+    expect(await screen.findByText('Failing', {}, LOAD)).toBeVisible();
+    // The words are Meta's own, in the subscription's "last problem" and not hidden behind a reload.
+    expect(await screen.findByText(new RegExp(REFUSAL))).toBeVisible();
+    // Reconnect is for a token Meta has invalidated: this one still works until it ends.
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+    expect(screen.queryByText(/^Invalidated /)).toBeNull();
+  });
+
+  it('still lets the Admin test the saved token, and Subscribe now', async () => {
+    const { user } = await renderAccount(MOCK_INSTAGRAM_ACCOUNT, refusedRenewal());
+    await screen.findByText('Failing', {}, LOAD);
+
+    expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Subscribe now' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/^Meta refused the saved token · /)).toBeVisible();
+  });
+});
+
 describe('a Subscribe now that Meta refuses', () => {
   it('reads the account again, because the api recorded the refusal on it', async () => {
     const { user, metaApi } = await renderAccount(MOCK_MESSENGER_ACCOUNT);
@@ -365,7 +405,7 @@ describe('a Subscribe now that Meta refuses', () => {
 });
 
 describe('a Meta account that is gone', () => {
-  it('says so', async () => {
+  it('says the account is gone and links back to the Meta accounts', async () => {
     await renderAccount('0192c3f0-1a2b-7c3d-8e4f-0000000008ff');
 
     expect(

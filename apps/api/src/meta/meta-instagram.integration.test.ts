@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { GraphClient } from '@helpdock/channels';
 import {
   FakeGraph,
@@ -43,34 +41,28 @@ import {
   withSystem,
 } from '@helpdock/db';
 import {
-  createJobProcessor,
   type JobLogger,
-  type MetaMediaFetchPayload,
-  mediaProcessJob,
+  type MetaProfileFetchPayload,
   metaProfileFetchJob,
   silentLogger,
 } from '@helpdock/jobs';
 import { contentPolicySchema } from '@helpdock/schemas';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import sharp from 'sharp';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
-import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
-import { createMediaProcessor } from '../media/process.job.js';
 import { FakeStorage } from '../testing/media.js';
+import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
+import { createOutboxDrain, type OutboxDrain } from '../testing/meta-outbox.js';
 import { createMetaInboundJobs } from './factory.js';
 import { MetaRepository } from './meta.repository.js';
 import { accountFailureRecorder } from './meta-account-failure.js';
-import {
-  createMetaMediaEventHandler,
-  createMetaProfileEventHandler,
-  META_EVENTS,
-} from './meta-events.js';
+import { createMetaProfileEventHandler, META_EVENTS } from './meta-events.js';
 import { createMetaProfileProcessor } from './meta-profile.job.js';
 
 /**
@@ -94,11 +86,7 @@ import { createMetaProfileProcessor } from './meta-profile.job.js';
  * suite proves the row and the outbox event the job starts from.
  */
 
-const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
-const REDIS_IMAGE = 'redis:7-alpine';
-const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 43).toString('base64');
-const CONTAINER_STARTUP_MS = 120_000;
 
 const APP_SECRET = 'integration-app-secret';
 const INSTAGRAM_SECRET = 'integration-instagram-secret';
@@ -116,13 +104,6 @@ const JPEG = await sharp({
 })
   .jpeg()
   .toBuffer();
-
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
 
 if (!hasDocker) {
   process.stderr.write(
@@ -161,31 +142,14 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
   const nextIgsid = (): string => `178414${String(next()).padStart(11, '0')}`;
 
   const envFor = (): Env =>
-    ({
-      APP_URL: 'https://support.example.com',
-      APP_ROLE: 'api',
-      APP_MASTER_KEY: MASTER_KEY,
-      NODE_ENV: 'test',
-      LOG_LEVEL: 'silent',
-      PORT: 0,
-      TRUST_PROXY: false,
-      DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/${postgres.getDatabase()}`,
-      DATABASE_MIGRATION_URL: postgres.getConnectionUri(),
-      REDIS_URL: redisContainer.getConnectionUrl(),
-      S3_ENDPOINT: 'http://minio:9000',
-      S3_REGION: 'us-east-1',
-      S3_BUCKET: 'helpdock',
-      S3_ACCESS_KEY_ID: 'access',
-      S3_SECRET_ACCESS_KEY: 'secret',
-      S3_FORCE_PATH_STYLE: true,
-      FFMPEG_PATH: 'ffmpeg',
-      FFPROBE_PATH: 'ffprobe',
-      CLAMAV_PORT: 3310,
-      ADMIN_DIST_DIR: '/nonexistent',
-      OUTBOUND_ALLOW_CIDRS: ['127.0.0.0/8'],
-      META_GRAPH_API_ROOT: graph.facebookRoot,
-      META_INSTAGRAM_API_ROOT: graph.instagramRoot,
-    }) as Env;
+    metaEnv({ masterKey: MASTER_KEY, postgres, redis: redisContainer, graph });
+
+  const graphClient = () =>
+    new GraphClient({
+      root: graph.facebookRoot,
+      instagramRoot: graph.instagramRoot,
+      allowCidrs: ['127.0.0.0/8'],
+    });
 
   const post = (body: MetaWebhookBody) => driver.post(body);
 
@@ -252,7 +216,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       (row) => (row.payload as { conversationId: string }).conversationId === conversationId,
     );
 
-  const handledProfileEvents = new Set<string>();
+  let drain: OutboxDrain;
 
   /**
    * The worker's half, played by hand as Telegram's suite plays it: every
@@ -266,46 +230,25 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       log,
       repository,
       keyring: createKeyring(envFor()),
-      graph: new GraphClient({
-        root: graph.facebookRoot,
-        instagramRoot: graph.instagramRoot,
-        allowCidrs: ['127.0.0.0/8'],
-      }),
+      graph: graphClient(),
       recordAccountFailure: accountFailureRecorder(runtime.db, repository),
     });
-    const rows = await owner.db
-      .select()
-      .from(outbox)
-      .where(eq(outbox.event, 'meta.profile'))
-      .orderBy(asc(outbox.id));
     const thrown: unknown[] = [];
-    for (const row of rows.filter((candidate) => !handledProfileEvents.has(candidate.id))) {
-      handledProfileEvents.add(row.id);
-      const added: { jobId: string; payload: unknown }[] = [];
-      await withSystem(runtime.db, row.brandId, (tx) =>
-        createMetaProfileEventHandler({ add: async (input) => void added.push(input) })({
-          outboxId: row.id,
-          brandId: row.brandId,
-          event: row.event,
-          payload: row.payload,
-          tx,
-          log: silentLogger,
-        }),
-      );
-      for (const job of added) {
-        await process({
-          name: metaProfileFetchJob.name,
-          id: job.jobId,
-          data: job.payload,
-          attemptsMade,
-          opts: { attempts: 3 },
-        } as unknown as Job).catch((error: unknown) => void thrown.push(error));
-      }
+    const rows = await drain.drain<MetaProfileFetchPayload>(
+      META_EVENTS.profile,
+      createMetaProfileEventHandler,
+    );
+    for (const job of rows.flatMap((row) => row.jobs)) {
+      await process({
+        name: metaProfileFetchJob.name,
+        id: job.jobId,
+        data: job.payload,
+        attemptsMade,
+        opts: { attempts: 3 },
+      } as unknown as Job).catch((error: unknown) => void thrown.push(error));
     }
     return thrown;
   };
-
-  const handledMedia = new Set<string>();
 
   /**
    * Every file of a ticket fetched by `meta.media_fetch` and processed by
@@ -324,84 +267,24 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       storage,
       log: silentLogger,
       keyring: createKeyring(envFor()),
-      graph: new GraphClient({
-        root: graph.facebookRoot,
-        instagramRoot: graph.instagramRoot,
-        allowCidrs: ['127.0.0.0/8'],
-      }),
+      graph: graphClient(),
     });
-    const errors: unknown[] = [];
 
-    for (const row of await owner.db
-      .select()
-      .from(outbox)
-      .where(eq(outbox.event, META_EVENTS.media))) {
-      if (handledMedia.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
-        continue;
-      }
-      handledMedia.add(row.id);
-      const added: { jobId: string; payload: MetaMediaFetchPayload }[] = [];
-      await withSystem(runtime.db, row.brandId, (tx) =>
-        createMetaMediaEventHandler({ add: async (job) => void added.push(job) })({
-          outboxId: row.id,
-          brandId: row.brandId,
-          event: row.event,
-          payload: row.payload,
-          tx,
-          log: silentLogger,
-        }),
-      );
-      for (const job of added) {
-        await mediaFetch({
+    return drain.mediaPipeline(
+      ids,
+      (job) =>
+        mediaFetch({
           name: 'meta.media_fetch',
           id: job.jobId,
           data: job.payload,
           attemptsMade: 0,
           opts: { attempts: 5 },
-        } as unknown as Job).catch((error: unknown) => void errors.push(error));
-      }
-    }
-
-    const process = createJobProcessor(
-      mediaProcessJob,
-      createMediaProcessor({
-        storage,
-        tools: createMediaTools({ ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' }),
-        scanner: undefined,
-      }),
-      { db: runtime.db, log: silentLogger },
+        } as unknown as Job).then(
+          () => undefined,
+          (error: unknown) => error,
+        ),
+      { storage, tools: () => createMediaTools({ ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' }) },
     );
-    for (const row of await owner.db
-      .select()
-      .from(outbox)
-      .where(eq(outbox.event, 'attachment.uploaded'))) {
-      if (handledMedia.has(row.id) || !ids.has(String(row.payload.attachmentId))) {
-        continue;
-      }
-      handledMedia.add(row.id);
-      const added: { jobId: string; payload: { brandId: string; attachmentId: string } }[] = [];
-      await withSystem(runtime.db, row.brandId, (tx) =>
-        createAttachmentUploadedHandler({ add: async (job) => void added.push(job) })({
-          outboxId: row.id,
-          brandId: row.brandId,
-          event: row.event,
-          payload: row.payload,
-          tx,
-          log: silentLogger,
-        }),
-      );
-      for (const job of added) {
-        await process({
-          name: 'media.process',
-          id: job.jobId,
-          data: job.payload,
-          attemptsMade: 0,
-          opts: { attempts: 3 },
-        } as unknown as Job);
-      }
-    }
-
-    return errors;
   };
 
   const contactNameOf = async (contactId: string) => {
@@ -518,11 +401,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
   };
 
   beforeAll(async () => {
-    [postgres, redisContainer] = await Promise.all([
-      new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      new RedisContainer(REDIS_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
-      graph.start(),
-    ]);
+    [postgres, redisContainer] = await Promise.all([startPostgres(), startRedis(), graph.start()]);
 
     runtime = await createRuntime({
       env: envFor(),
@@ -545,6 +424,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       },
     });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
+    drain = createOutboxDrain({ db: runtime.db, owner: owner.db });
     // Instagram Login signs with the Instagram app secret.
     driver = new MetaWebhookDriver({ target: app, secret: INSTAGRAM_SECRET });
 
@@ -564,6 +444,12 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
   });
 
+  // A failure inside the stand-in reads to Helpdock as Meta being down, and a retry test would
+  // pass on it: it is said here, in the test it happened in.
+  afterEach(() => {
+    expect(graph.errors).toEqual([]);
+  });
+
   beforeEach(async () => {
     graph.reset();
     // A lookup an earlier test raised and left unrun is not this test's to run.
@@ -572,7 +458,7 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       .from(outbox)
       .where(eq(outbox.event, 'meta.profile'));
     for (const row of raised) {
-      handledProfileEvents.add(row.id);
+      drain.handled.add(row.id);
     }
   });
 

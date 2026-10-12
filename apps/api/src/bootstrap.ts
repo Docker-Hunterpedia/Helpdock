@@ -34,6 +34,7 @@ import { registerClientFacts } from './context/client-facts.js';
 import { registerJsonDisposition } from './http/json-disposition.js';
 import { registerPermissionsPolicy, securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
+import { MetaWebhookService } from './meta/meta-webhook.service.js';
 import { registerMetaWebhookBody } from './meta/meta-webhook-body.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { registerHttpMetrics } from './observability/http-metrics.js';
@@ -332,10 +333,11 @@ export const createApiApp = async ({
   // `onRoute` hook that raises their body limit only sees routes added after it.
   registerFormBodies(app.getHttpAdapter().getInstance(), [INBOUND_PARSE_ROUTE, WEB_FORM_ROUTE]);
 
-  // M10-02. The webhook's signature covers the bytes Meta wrote, so its route
-  // keeps them; before `init()` for the reason above, and because Nest would
-  // otherwise register the JSON parser that replaces it.
-  registerMetaWebhookBody(adapter);
+  // M10-02. The webhook's signature covers the bytes Meta wrote, so its route's
+  // parser checks it over them, and the address's budget, before it parses;
+  // before `init()` for the reason above, and because Nest would otherwise
+  // register the JSON parser that replaces it.
+  registerMetaWebhookBody(adapter, app.get(MetaWebhookService, { strict: false }));
 
   // M8-05: Bull Board brings its own router, so it is a Fastify plugin behind
   // its own install-admin session check (`queue-board.ts`, ADR 0017).

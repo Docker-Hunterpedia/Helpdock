@@ -16,40 +16,48 @@ export const hubSignature = (raw: Uint8Array, secret: string): string =>
   `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`;
 
 /**
- * Whether `header` is the HMAC-SHA256 of the **raw bytes** of the body under
- * any of `secrets`. Two secrets are normal: Meta signs most webhooks with the
- * app secret and, under Instagram Login, may sign Instagram's with the
- * Instagram app secret, and which it is has not been confirmed (the milestone's
- * open questions), so either is accepted.
+ * The first of `secrets` whose HMAC-SHA256 over the **raw bytes** of the body
+ * is `header`, or undefined when none is. Two secrets are normal: Meta signs
+ * most webhooks with the app secret and, under Instagram Login, may sign
+ * Instagram's with the Instagram app secret, and which it is has not been
+ * confirmed (the milestone's open questions), so either is accepted. Which one
+ * signed is the caller's to weigh against what the body says it is.
  *
  * An empty secret is skipped, never matched: a key of zero bytes is a key
  * anybody can sign with. Every secret is tried even after one matches, so the
  * time taken does not say which of them signed.
  */
-export const verifyHubSignature = (
+export const matchHubSignature = (
   raw: Uint8Array,
   header: string | undefined,
   secrets: readonly string[],
-): boolean => {
+): string | undefined => {
   const match = header === undefined ? null : SIGNATURE.exec(header.trim());
   if (match === null) {
-    return false;
+    return undefined;
   }
   const presented = Buffer.from(match[1] ?? '', 'hex');
 
-  let verified = false;
+  let signedWith: string | undefined;
   for (const secret of secrets) {
     if (secret === '') {
       continue;
     }
     const expected = createHmac('sha256', secret).update(raw).digest();
     if (timingSafeEqual(expected, presented)) {
-      verified = true;
+      signedWith ??= secret;
     }
   }
 
-  return verified;
+  return signedWith;
 };
+
+/** Whether `header` is the signature of `raw` under any of `secrets`. */
+export const verifyHubSignature = (
+  raw: Uint8Array,
+  header: string | undefined,
+  secrets: readonly string[],
+): boolean => matchHubSignature(raw, header, secrets) !== undefined;
 
 /** Compares two strings in constant time whatever their lengths. */
 const sameText = (a: string, b: string): boolean =>

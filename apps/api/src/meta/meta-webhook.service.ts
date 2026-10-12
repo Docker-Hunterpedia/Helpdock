@@ -1,15 +1,17 @@
 import {
   hubChallenge,
   type MetaRoute,
+  matchHubSignature,
   metaEnvelopeSchema,
   routeEnvelope,
-  verifyHubSignature,
 } from '@helpdock/channels';
 import type { Db } from '@helpdock/db';
 import type { MetaPlatform } from '@helpdock/schemas';
 import { BadRequestException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { ZodError } from 'zod';
 import { isBrandGone } from '../brands/brand-availability.js';
+import { failureFields } from '../channels/pg-errors.js';
+import { createIpRateLimiter, type IpRateLimiter } from '../routes/ip-rate-limit.js';
 import type { MetaRepository } from './meta.repository.js';
 import type { MetaAppService } from './meta-app.service.js';
 import type {
@@ -28,10 +30,16 @@ import type {
  *
  * **`POST`**, in this order:
  *
- * 1. The signature over the raw bytes against the app secret and, when set, the
- *    Instagram app secret. A bad or missing one is 401 and nothing is read
- *    further or filed. An install with no secret configured verifies nothing.
- * 2. The envelope, `{ object, entry[] }`; a body that is not one is 400.
+ * 1. The address's budget and the signature over the raw bytes, both checked by
+ *    the route's own body parser (`meta-webhook-body.ts`) before the JSON is
+ *    parsed, so a body that is unsigned costs the read and nothing more
+ *    ({@link MetaWebhookService.admit} and {@link MetaWebhookService.authenticate}).
+ *    The signature is made with the app secret or, when set, the Instagram app
+ *    secret; a bad or missing one is 401 and nothing is read further or filed.
+ *    An install with no secret configured verifies nothing.
+ * 2. The envelope, `{ object, entry[] }`; a body that is not one is 400. The
+ *    Instagram app secret vouches for `object: instagram` only, so it cannot
+ *    forge a WhatsApp or Messenger delivery: that is 401 as well.
  * 3. Each account in it, found across every brand by `(platform, external id)`
  *    (`routeEnvelope` has already cut the events by account). An unknown
  *    account is counted and passed over; one whose brand is being deleted is
@@ -104,7 +112,13 @@ export interface MetaWebhookResult {
 }
 
 /** The two things the webhook needs of the install's Meta app. */
-export type MetaAppSecrets = Pick<MetaAppService, 'secrets' | 'currentVerifyToken'>;
+export type MetaAppSecrets = Pick<MetaAppService, 'signingSecrets' | 'currentVerifyToken'>;
+
+/**
+ * Which secret signed a delivery: the app's, which vouches for any platform's
+ * envelope, or the Instagram app's, which vouches for Instagram's alone.
+ */
+export type MetaSigner = 'app' | 'instagram';
 
 export interface MetaWebhookServiceOptions {
   readonly db: Db;
@@ -134,11 +148,29 @@ export class MetaWebhookService {
   readonly #options: MetaWebhookServiceOptions;
   readonly #sayNotConfigured: () => boolean;
   readonly #sayRefused: () => boolean;
+  /**
+   * Generous: one delivery is up to 1000 WhatsApp events and Meta posts bursts.
+   * It bounds a stranger hammering the route without a secret, not Meta doing
+   * its job.
+   */
+  readonly #limiter: IpRateLimiter;
 
   constructor(options: MetaWebhookServiceOptions) {
     this.#options = options;
     this.#sayNotConfigured = onceAMinute(options.now ?? Date.now);
     this.#sayRefused = onceAMinute(options.now ?? Date.now);
+    this.#limiter = createIpRateLimiter({
+      bucket: 'meta-webhook',
+      limit: 3_000,
+      windowMs: MINUTE_MS,
+      maxTrackedIps: 4096,
+      ...(options.now === undefined ? {} : { now: options.now }),
+    });
+  }
+
+  /** Whether this address is within its budget; the route answers 429 when it is not. */
+  admit(ip: string): boolean {
+    return this.#limiter.allow(ip);
   }
 
   /** The handshake. Returns the challenge to echo; throws 403 for any other token. */
@@ -150,16 +182,55 @@ export class MetaWebhookService {
     return challenge;
   }
 
-  async receive(
-    raw: Buffer | undefined,
-    signature: string | undefined,
-    body: unknown,
-  ): Promise<MetaWebhookResult> {
-    await this.#verifySignature(raw, signature);
+  /**
+   * Which secret made the signature of these exact bytes, or undefined when
+   * none did. One refusal for every way to fail, so a stranger cannot tell an
+   * install with no Meta app from one with a different secret; the log says
+   * which, once a minute.
+   */
+  async authenticate(raw: Buffer, signature: string | undefined): Promise<MetaSigner | undefined> {
+    const { appSecret, instagramAppSecret } = await this.#options.app.signingSecrets();
+    const signedWith = matchHubSignature(raw, signature, [appSecret, instagramAppSecret]);
+    if (signedWith !== undefined) {
+      // One value for both settings is the app's own secret.
+      return signedWith === appSecret ? 'app' : 'instagram';
+    }
+
+    if (appSecret === '' && instagramAppSecret === '') {
+      if (this.#sayNotConfigured()) {
+        this.#options.log.warn({}, 'meta webhook refused: no Meta app secret is set');
+      }
+    } else if (this.#sayRefused()) {
+      this.#options.log.warn({}, 'meta webhook refused: bad or missing signature');
+    }
+    return undefined;
+  }
+
+  /**
+   * Files a delivery the route's parser has already authenticated: `signer` is
+   * what {@link authenticate} answered, and undefined (no signature was
+   * checked, as for a request with no JSON body) is refused like a wrong one.
+   */
+  async receive(body: unknown, signer: MetaSigner | undefined): Promise<MetaWebhookResult> {
+    if (signer === undefined) {
+      throw new UnauthorizedException('The Meta signature is missing or wrong');
+    }
 
     let routing: ReturnType<typeof routeEnvelope>;
     try {
-      routing = routeEnvelope(metaEnvelopeSchema.parse(body));
+      const envelope = metaEnvelopeSchema.parse(body);
+      // The Instagram app secret is for Instagram's envelopes: whoever holds it
+      // and nothing else must not be able to forge a WhatsApp or Page delivery.
+      if (signer === 'instagram' && envelope.object !== 'instagram') {
+        if (this.#sayRefused()) {
+          this.#options.log.warn(
+            { object: envelope.object },
+            'meta webhook refused: signed with the Instagram app secret for another platform',
+          );
+        }
+        throw new UnauthorizedException('The Meta signature is missing or wrong');
+      }
+      routing = routeEnvelope(envelope);
     } catch (error) {
       if (error instanceof ZodError) {
         throw new BadRequestException('The body is not a Meta webhook');
@@ -188,26 +259,6 @@ export class MetaWebhookService {
     return result;
   }
 
-  /**
-   * One refusal for every way to fail, so a stranger cannot tell an install
-   * with no Meta app from one with a different secret.
-   */
-  async #verifySignature(raw: Buffer | undefined, signature: string | undefined): Promise<void> {
-    const secrets = await this.#options.app.secrets();
-    if (raw !== undefined && verifyHubSignature(raw, signature, secrets)) {
-      return;
-    }
-
-    if (secrets.length === 0) {
-      if (this.#sayNotConfigured()) {
-        this.#options.log.warn({}, 'meta webhook refused: no Meta app secret is set');
-      }
-    } else if (this.#sayRefused()) {
-      this.#options.log.warn({}, 'meta webhook refused: bad or missing signature');
-    }
-    throw new UnauthorizedException('The Meta signature is missing or wrong');
-  }
-
   async #file(route: MetaRoute): Promise<MetaRouteReport> {
     const { platform, externalId } = route;
     const locator = await this.#options.repository.locate(this.#options.db, platform, externalId);
@@ -223,8 +274,10 @@ export class MetaWebhookService {
       const filed = await this.#options.inbound.receive(locator, route);
       return { status: 'filed', platform, accountId, brandId, events: filed.events };
     } catch (error) {
+      // Not `err: error`: a failed query's message and params quote the
+      // customer's words, a name or a number, and the log never carries those.
       this.#options.log.error(
-        { accountId, brandId, platform, err: error },
+        { accountId, brandId, platform, ...failureFields(error) },
         'meta webhook entry failed',
       );
       return { status: 'failed', platform, accountId, brandId };

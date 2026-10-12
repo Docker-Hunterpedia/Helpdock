@@ -57,11 +57,24 @@ export class MetaAppService {
    * nothing verifies.
    */
   async secrets(): Promise<string[]> {
+    const { appSecret, instagramAppSecret } = await this.signingSecrets();
+    return [appSecret, instagramAppSecret].filter((secret) => secret !== '');
+  }
+
+  /**
+   * The two secrets apart, empty when unset, for a webhook to tell which of them
+   * signed: the Instagram app secret vouches for Instagram's envelopes only
+   * (the webhook's `receive`), and the app secret for all three.
+   */
+  async signingSecrets(): Promise<{
+    readonly appSecret: string;
+    readonly instagramAppSecret: string;
+  }> {
     const [appSecret, instagramAppSecret] = await Promise.all([
       this.#settings.get('meta.appSecret'),
       this.#settings.get('meta.instagramAppSecret'),
     ]);
-    return [appSecret, instagramAppSecret].filter((secret) => secret !== '');
+    return { appSecret, instagramAppSecret };
   }
 
   /**

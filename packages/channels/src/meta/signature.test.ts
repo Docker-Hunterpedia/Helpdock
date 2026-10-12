@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { META_SIGNATURE_HEADER } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { hubChallenge, hubSignature, verifyHubSignature } from './signature.js';
+import { hubChallenge, hubSignature, matchHubSignature, verifyHubSignature } from './signature.js';
 
 const SECRET = 'app-secret-0123456789abcdef';
 const INSTAGRAM_SECRET = 'instagram-secret-fedcba9876543210';
@@ -85,6 +85,23 @@ describe('verifyHubSignature', () => {
 
   it('refuses everything when the install has no secret at all', () => {
     expect(verifyHubSignature(BODY, hubSignature(BODY, SECRET), [])).toBe(false);
+  });
+});
+
+describe('matchHubSignature', () => {
+  it('answers the secret that signed, so the caller can weigh it against what the body is', () => {
+    const secrets = [SECRET, INSTAGRAM_SECRET];
+
+    expect(matchHubSignature(BODY, hubSignature(BODY, SECRET), secrets)).toBe(SECRET);
+    expect(matchHubSignature(BODY, hubSignature(BODY, INSTAGRAM_SECRET), secrets)).toBe(
+      INSTAGRAM_SECRET,
+    );
+  });
+
+  it('answers nothing for a signature no secret made, and never the empty secret', () => {
+    expect(matchHubSignature(BODY, hubSignature(BODY, 'other'), [SECRET])).toBeUndefined();
+    expect(matchHubSignature(BODY, hubSignature(BODY, ''), ['', SECRET])).toBeUndefined();
+    expect(matchHubSignature(BODY, undefined, [SECRET])).toBeUndefined();
   });
 });
 

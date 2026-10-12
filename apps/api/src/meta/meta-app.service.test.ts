@@ -70,6 +70,25 @@ describe('MetaAppService.secrets', () => {
   });
 });
 
+describe('MetaAppService.signingSecrets', () => {
+  it('keeps the two apart, so a webhook can tell which of them signed', async () => {
+    const both = serviceWith({
+      HD_META_APP_SECRET: 'app-secret',
+      HD_META_INSTAGRAM_APP_SECRET: 'instagram-secret',
+    });
+    const onlyInstagram = serviceWith({ HD_META_INSTAGRAM_APP_SECRET: 'instagram-secret' });
+
+    await expect(both.service.signingSecrets()).resolves.toEqual({
+      appSecret: 'app-secret',
+      instagramAppSecret: 'instagram-secret',
+    });
+    await expect(onlyInstagram.service.signingSecrets()).resolves.toEqual({
+      appSecret: '',
+      instagramAppSecret: 'instagram-secret',
+    });
+  });
+});
+
 describe('MetaAppService.appId', () => {
   it('is empty on a fresh install and follows what is saved or set by the environment', async () => {
     expect(await serviceWith().service.appId()).toBe('');

@@ -43,10 +43,12 @@ const accounts = new Map<string, AccountLocator>([
 ]);
 
 const bytesOf = (body: unknown): Buffer => Buffer.from(JSON.stringify(body), 'utf8');
-const signed = (body: unknown, secret = APP_SECRET) => {
-  const raw = bytesOf(body);
-  return { raw, signature: hubSignature(raw, secret) };
-};
+
+/** An install with no Meta app configured, whose handshake token is `verifyToken`. */
+const unconfigured = (verifyToken: string): MetaWebhookServiceOptions['app'] => ({
+  signingSecrets: async () => ({ appSecret: '', instagramAppSecret: '' }),
+  currentVerifyToken: async () => verifyToken,
+});
 
 const harness = (overrides: Partial<MetaWebhookServiceOptions> = {}) => {
   const received: { locator: AccountLocator; route: MetaRoute }[] = [];
@@ -74,7 +76,10 @@ const harness = (overrides: Partial<MetaWebhookServiceOptions> = {}) => {
       },
     },
     app: {
-      secrets: async () => [APP_SECRET, INSTAGRAM_SECRET],
+      signingSecrets: async () => ({
+        appSecret: APP_SECRET,
+        instagramAppSecret: INSTAGRAM_SECRET,
+      }),
       currentVerifyToken: async () => VERIFY_TOKEN,
     },
     log,
@@ -174,9 +179,7 @@ describe('MetaWebhookService.verify', () => {
   });
 
   it('answers nobody while the install has no verify token', async () => {
-    const { service } = harness({
-      app: { secrets: async () => [], currentVerifyToken: async () => '' },
-    });
+    const { service } = harness({ app: unconfigured('') });
 
     await expect(
       service.verify({ 'hub.mode': 'subscribe', 'hub.verify_token': '', 'hub.challenge': '1' }),
@@ -184,101 +187,170 @@ describe('MetaWebhookService.verify', () => {
   });
 });
 
+describe('MetaWebhookService.admit', () => {
+  it('lets an address make 3,000 requests a minute and refuses the next', () => {
+    const { service } = harness();
+
+    const answers = Array.from({ length: 3_001 }, () => service.admit('203.0.113.7'));
+
+    expect(answers.filter(Boolean)).toHaveLength(3_000);
+    expect(answers.at(-1)).toBe(false);
+  });
+
+  it('counts each address on its own and starts a new minute afresh', () => {
+    const { service, advance } = harness();
+    for (let request = 0; request < 3_001; request += 1) {
+      service.admit('203.0.113.7');
+    }
+
+    expect(service.admit('203.0.113.8')).toBe(true);
+    advance(60_001);
+    expect(service.admit('203.0.113.7')).toBe(true);
+  });
+});
+
+describe('MetaWebhookService.authenticate', () => {
+  it('says the app secret signed a body signed with it', async () => {
+    const { service } = harness();
+    const raw = bytesOf(whatsappText());
+
+    await expect(service.authenticate(raw, hubSignature(raw, APP_SECRET))).resolves.toBe('app');
+  });
+
+  it('says the Instagram app secret signed a body signed with that', async () => {
+    const { service } = harness();
+    const raw = bytesOf(whatsappText());
+
+    await expect(service.authenticate(raw, hubSignature(raw, INSTAGRAM_SECRET))).resolves.toBe(
+      'instagram',
+    );
+  });
+
+  it('says the app signed when one value is set for both, which is the app’s own secret', async () => {
+    const { service } = harness({
+      app: {
+        signingSecrets: async () => ({ appSecret: APP_SECRET, instagramAppSecret: APP_SECRET }),
+        currentVerifyToken: async () => VERIFY_TOKEN,
+      },
+    });
+    const raw = bytesOf(whatsappText());
+
+    await expect(service.authenticate(raw, hubSignature(raw, APP_SECRET))).resolves.toBe('app');
+  });
+
+  it('refuses a signature made with a secret that is neither', async () => {
+    const { service } = harness();
+    const raw = bytesOf(whatsappText());
+
+    await expect(service.authenticate(raw, hubSignature(raw, 'wrong'))).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['not a signature', 'sha256=zz'],
+    ['the wrong scheme', 'sha1=abcd'],
+  ])('refuses a header that is %s', async (_name, header) => {
+    const { service } = harness();
+
+    await expect(service.authenticate(bytesOf(whatsappText()), header)).resolves.toBeUndefined();
+  });
+
+  it('refuses a body that was changed after it was signed', async () => {
+    const { service } = harness();
+    const signature = hubSignature(bytesOf(whatsappText({ text: 'Hello' })), APP_SECRET);
+
+    await expect(
+      service.authenticate(bytesOf(whatsappText({ text: 'Hellp' })), signature),
+    ).resolves.toBeUndefined();
+  });
+
+  it('verifies nothing while the install has no app secret, whatever the signature', async () => {
+    const { service } = harness({ app: unconfigured(VERIFY_TOKEN) });
+    const raw = bytesOf(whatsappText());
+
+    await expect(service.authenticate(raw, hubSignature(raw, ''))).resolves.toBeUndefined();
+  });
+
+  it('says why once a minute, not once a request', async () => {
+    const { service, warnings, advance } = harness();
+    const refuse = () => service.authenticate(Buffer.from('{}'), `sha256=${'0'.repeat(64)}`);
+
+    await refuse();
+    await refuse();
+    expect(warnings).toEqual(['meta webhook refused: bad or missing signature']);
+
+    advance(60_001);
+    await refuse();
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('says an unconfigured install is unconfigured, apart from a wrong signature', async () => {
+    const { service, warnings } = harness({ app: unconfigured('') });
+
+    await service.authenticate(Buffer.from('{}'), undefined);
+
+    expect(warnings).toEqual(['meta webhook refused: no Meta app secret is set']);
+  });
+});
+
 describe('MetaWebhookService.receive', () => {
-  describe('the signature', () => {
-    it('is checked before anything is looked up or filed', async () => {
-      const located = vi.fn();
-      const { service, received } = harness({ repository: { locate: located } });
-      const body = whatsappText();
+  describe('the Instagram app secret', () => {
+    it('vouches for an Instagram delivery', async () => {
+      const { service } = harness();
+      const body = { object: 'instagram', entry: [] };
 
-      await expect(
-        service.receive(bytesOf(body), hubSignature(bytesOf(body), 'wrong'), body),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
-
-      expect(located).not.toHaveBeenCalled();
-      expect(received).toEqual([]);
+      await expect(service.receive(body, 'instagram')).resolves.toMatchObject({ verdict: 'ok' });
     });
 
     it.each([
-      ['missing', undefined],
-      ['not a signature', 'sha256=zz'],
-      ['the wrong scheme', 'sha1=abcd'],
-    ])('refuses a header that is %s', async (_name, header) => {
-      const { service, received } = harness();
-      const { raw } = signed(whatsappText());
+      ['a WhatsApp', whatsappText()],
+      ['a Messenger', pageText()],
+    ])('cannot forge %s delivery', async (_name, body) => {
+      const { service, received, warnings } = harness();
 
-      await expect(service.receive(raw, header, whatsappText())).rejects.toBeInstanceOf(
+      await expect(service.receive(body, 'instagram')).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
+
       expect(received).toEqual([]);
+      expect(warnings).toEqual([
+        'meta webhook refused: signed with the Instagram app secret for another platform',
+      ]);
     });
 
-    it('refuses a body that was changed after it was signed', async () => {
-      const { service, received } = harness();
-      const body = whatsappText({ text: 'Hello' });
-      const { signature } = signed(body);
-      const tampered = bytesOf(whatsappText({ text: 'Hellp' }));
-
-      await expect(service.receive(tampered, signature, body)).rejects.toBeInstanceOf(
-        UnauthorizedException,
-      );
-      expect(received).toEqual([]);
-    });
-
-    it('refuses a request whose raw body was not kept', async () => {
+    it('is not the only secret that vouches for an Instagram delivery: the app secret does too', async () => {
       const { service } = harness();
-      const body = whatsappText();
-
-      await expect(service.receive(undefined, signed(body).signature, body)).rejects.toBeInstanceOf(
-        UnauthorizedException,
-      );
-    });
-
-    it('accepts the Instagram app secret as well as the app secret', async () => {
-      const { service, received } = harness();
-      const body = whatsappText();
-      const { raw, signature } = signed(body, INSTAGRAM_SECRET);
-
-      const result = await service.receive(raw, signature, body);
-
-      expect(result.verdict).toBe('ok');
-      expect(received).toHaveLength(1);
-    });
-
-    it('verifies nothing while the install has no app secret, whatever the signature', async () => {
-      const { service, received } = harness({
-        app: { secrets: async () => [], currentVerifyToken: async () => VERIFY_TOKEN },
-      });
-      const body = whatsappText();
 
       await expect(
-        service.receive(bytesOf(body), hubSignature(bytesOf(body), ''), body),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
-      expect(received).toEqual([]);
+        service.receive({ object: 'instagram', entry: [] }, 'app'),
+      ).resolves.toMatchObject({ verdict: 'ok' });
     });
 
     it('says why once a minute, not once a request', async () => {
       const { service, warnings, advance } = harness();
-      const refuse = () =>
-        service.receive(Buffer.from('{}'), 'sha256='.concat('0'.repeat(64)), {}).catch(() => {});
+      const forge = () => service.receive(whatsappText(), 'instagram').catch(() => {});
 
-      await refuse();
-      await refuse();
-      expect(warnings).toEqual(['meta webhook refused: bad or missing signature']);
+      await forge();
+      await forge();
+      expect(warnings).toHaveLength(1);
 
       advance(60_001);
-      await refuse();
+      await forge();
       expect(warnings).toHaveLength(2);
     });
+  });
 
-    it('says an unconfigured install is unconfigured, apart from a wrong signature', async () => {
-      const { service, warnings } = harness({
-        app: { secrets: async () => [], currentVerifyToken: async () => '' },
-      });
+  describe('a delivery nobody authenticated', () => {
+    it('is refused before anything is looked up or filed', async () => {
+      const located = vi.fn();
+      const { service, received } = harness({ repository: { locate: located } });
 
-      await service.receive(Buffer.from('{}'), undefined, {}).catch(() => {});
+      await expect(service.receive(whatsappText(), undefined)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
 
-      expect(warnings).toEqual(['meta webhook refused: no Meta app secret is set']);
+      expect(located).not.toHaveBeenCalled();
+      expect(received).toEqual([]);
     });
   });
 
@@ -286,20 +358,16 @@ describe('MetaWebhookService.receive', () => {
     it('answers 400 for a signed body that is not a Meta webhook', async () => {
       const { service, received } = harness();
       const body = { object: 'something_else', entry: [] };
-      const { raw, signature } = signed(body);
 
-      await expect(service.receive(raw, signature, body)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(service.receive(body, 'app')).rejects.toBeInstanceOf(BadRequestException);
       expect(received).toEqual([]);
     });
 
     it('is fine with a signed delivery that holds nothing to file', async () => {
       const { service, received } = harness();
       const body = { object: 'page', entry: [] };
-      const { raw, signature } = signed(body);
 
-      await expect(service.receive(raw, signature, body)).resolves.toMatchObject({
+      await expect(service.receive(body, 'app')).resolves.toMatchObject({
         verdict: 'ok',
         routes: [],
       });
@@ -312,9 +380,8 @@ describe('MetaWebhookService.receive', () => {
         object: 'whatsapp_business_account',
         entry: [{ id: META_FIXTURE.wabaId, changes: [{ field: 'account_update', value: {} }] }],
       };
-      const { raw, signature } = signed(body);
 
-      await expect(service.receive(raw, signature, body)).resolves.toMatchObject({
+      await expect(service.receive(body, 'app')).resolves.toMatchObject({
         verdict: 'ok',
         unrouted: 1,
       });
@@ -329,9 +396,8 @@ describe('MetaWebhookService.receive', () => {
         whatsappText({ text: 'two', phoneNumberId: NUMBER_B }),
         whatsappText({ text: 'three', phoneNumberId: NUMBER_A }),
       );
-      const { raw, signature } = signed(body);
 
-      const result = await service.receive(raw, signature, body);
+      const result = await service.receive(body, 'app');
 
       expect(result.verdict).toBe('ok');
       expect(received.map(({ locator }) => [locator.id, locator.brandId])).toEqual([
@@ -348,9 +414,8 @@ describe('MetaWebhookService.receive', () => {
         whatsappText({ phoneNumberId: '999' }),
         whatsappText({ phoneNumberId: NUMBER_A, wamid: 'wamid.second' }),
       );
-      const { raw, signature } = signed(body);
 
-      const result = await service.receive(raw, signature, body);
+      const result = await service.receive(body, 'app');
 
       expect(result.routes.map((route) => route.status)).toEqual(['unknown-account', 'filed']);
       expect(received).toHaveLength(1);
@@ -360,9 +425,8 @@ describe('MetaWebhookService.receive', () => {
     it('is told apart: a page and a WhatsApp number with the same id are different accounts', async () => {
       const { service, received } = harness();
       const body = pageText({ pageId: NUMBER_A });
-      const { raw, signature } = signed(body);
 
-      const result = await service.receive(raw, signature, body);
+      const result = await service.receive(body, 'app');
 
       expect(result.routes.map((route) => route.status)).toEqual(['unknown-account']);
       expect(received).toEqual([]);
@@ -372,9 +436,8 @@ describe('MetaWebhookService.receive', () => {
       gone.add(BRAND_A);
       const { service, received } = harness();
       const body = whatsappText({ phoneNumberId: NUMBER_A });
-      const { raw, signature } = signed(body);
 
-      const result = await service.receive(raw, signature, body);
+      const result = await service.receive(body, 'app');
 
       expect(result.verdict).toBe('ok');
       expect(result.routes.map((route) => route.status)).toEqual(['brand-gone']);
@@ -388,9 +451,8 @@ describe('MetaWebhookService.receive', () => {
         whatsappText({ phoneNumberId: NUMBER_A, wamid: 'wamid.a' }),
         whatsappText({ phoneNumberId: NUMBER_B, wamid: 'wamid.b' }),
       );
-      const { raw, signature } = signed(body);
 
-      const result = await service.receive(raw, signature, body);
+      const result = await service.receive(body, 'app');
 
       expect(result.verdict).toBe('ok');
       expect(result.routes.map((route) => route.status)).toEqual(['brand-gone', 'filed']);
@@ -419,13 +481,43 @@ describe('MetaWebhookService.receive', () => {
         whatsappText({ phoneNumberId: NUMBER_A, wamid: 'wamid.a' }),
         whatsappText({ phoneNumberId: NUMBER_B, wamid: 'wamid.b' }),
       );
-      const { raw, signature } = signed(body);
 
-      const result = await service.receive(raw, signature, body);
+      const result = await service.receive(body, 'app');
 
       expect(result.routes.map((route) => route.status)).toEqual(['failed', 'filed']);
       expect(result.verdict).toBe('ok');
       expect(error).toHaveBeenCalledOnce();
+    });
+
+    it('logs a failed query by its class, code and constraint, never by the words it was writing', async () => {
+      const error = vi.fn();
+      const database = Object.assign(new Error('duplicate key value violates unique constraint'), {
+        code: '23505',
+        constraint: 'ticket_messages_external_key',
+      });
+      const failedQuery = new Error('Failed query: insert … params: I want to return order 4471', {
+        cause: database,
+      });
+      const { service } = harness({
+        log: { info: () => undefined, warn: () => undefined, error },
+        inbound: {
+          receive: async () => {
+            throw failedQuery;
+          },
+        },
+      });
+
+      await service.receive(whatsappText(), 'app');
+
+      expect(error).toHaveBeenCalledOnce();
+      const [fields] = error.mock.calls[0] ?? [];
+      expect(fields).toMatchObject({
+        platform: 'whatsapp',
+        code: '23505',
+        constraint: 'ticket_messages_external_key',
+      });
+      expect(fields).not.toHaveProperty('err');
+      expect(JSON.stringify(fields)).not.toContain('order 4471');
     });
 
     it('asks Meta to redeliver when nothing could be filed', async () => {
@@ -437,9 +529,8 @@ describe('MetaWebhookService.receive', () => {
         },
       });
       const body = whatsappText();
-      const { raw, signature } = signed(body);
 
-      await expect(service.receive(raw, signature, body)).resolves.toMatchObject({
+      await expect(service.receive(body, 'app')).resolves.toMatchObject({
         verdict: 'failed',
       });
     });

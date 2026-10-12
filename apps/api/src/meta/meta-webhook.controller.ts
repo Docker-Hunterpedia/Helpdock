@@ -1,4 +1,3 @@
-import { META_SIGNATURE_HEADER } from '@helpdock/schemas';
 import {
   Controller,
   Get,
@@ -8,35 +7,25 @@ import {
   Inject,
   InternalServerErrorException,
   Post,
-  type RawBodyRequest,
   Req,
   Res,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public } from '../auth/route-declaration.js';
-import { createIpRateLimiter } from '../routes/ip-rate-limit.js';
 import { MetaWebhookService } from './meta-webhook.service.js';
+import type { MetaWebhookRequest } from './meta-webhook-body.js';
 
 /**
  * Where Meta calls the install (M10-02), one URL for WhatsApp, Messenger and
  * Instagram. `@Public()` because Meta has no session: the handshake is
- * answered for the verify token and every delivery is checked against the
- * app's signature, both in {@link MetaWebhookService}. The raw body the
- * signature covers is kept by `registerMetaWebhookBody`.
+ * answered for the verify token, and every delivery is authenticated against
+ * the app's signature by the route's body parser (`registerMetaWebhookBody`,
+ * which also charges the address's budget) before this handler runs. The
+ * parser leaves who signed on the request, and {@link MetaWebhookService}
+ * refuses a request that carries nobody.
  */
 @Controller('api/meta/webhook')
 export class MetaWebhookController {
-  /**
-   * Generous: one delivery is up to 1000 WhatsApp events and Meta posts bursts.
-   * It bounds a stranger hammering the route without a secret, not Meta doing
-   * its job.
-   */
-  readonly #limiter = createIpRateLimiter({
-    bucket: 'meta-webhook',
-    limit: 3_000,
-    windowMs: 60_000,
-    maxTrackedIps: 4096,
-  });
   readonly #webhooks: MetaWebhookService;
 
   constructor(@Inject(MetaWebhookService) webhooks: MetaWebhookService) {
@@ -55,7 +44,9 @@ export class MetaWebhookController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<string> {
-    this.#admit(request);
+    if (!this.#webhooks.admit(request.ip)) {
+      throw new HttpException('Too many Meta requests', HttpStatus.TOO_MANY_REQUESTS);
+    }
     const challenge = await this.#webhooks.verify(request.query as Record<string, unknown>);
     void reply.header('content-type', 'text/plain; charset=utf-8');
     return challenge;
@@ -64,14 +55,8 @@ export class MetaWebhookController {
   @Post()
   @Public()
   @HttpCode(HttpStatus.OK)
-  async receive(@Req() request: RawBodyRequest<FastifyRequest>): Promise<{ ok: true }> {
-    this.#admit(request);
-    const signature = request.headers[META_SIGNATURE_HEADER];
-    const { verdict } = await this.#webhooks.receive(
-      request.rawBody,
-      typeof signature === 'string' ? signature : undefined,
-      request.body,
-    );
+  async receive(@Req() request: FastifyRequest & MetaWebhookRequest): Promise<{ ok: true }> {
+    const { verdict } = await this.#webhooks.receive(request.body, request.metaSigner);
 
     if (verdict === 'failed') {
       // So Meta redelivers a batch nothing was filed from; the dedupe key makes
@@ -79,11 +64,5 @@ export class MetaWebhookController {
       throw new InternalServerErrorException('The webhook could not be filed');
     }
     return { ok: true };
-  }
-
-  #admit(request: FastifyRequest): void {
-    if (!this.#limiter.allow(request.ip)) {
-      throw new HttpException('Too many Meta requests', HttpStatus.TOO_MANY_REQUESTS);
-    }
   }
 }

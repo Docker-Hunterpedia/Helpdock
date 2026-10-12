@@ -592,6 +592,13 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
       await nothingFiled();
     });
 
+    it('is 401, not 400, for an unsigned body that is not even JSON: nothing is parsed before the signature', async () => {
+      const response = await driver.post(body(), { tamper: () => Buffer.from('{not json') });
+
+      expect(response.status).toBe(401);
+      await nothingFiled();
+    });
+
     it('is 400 for a signed body that is not a Meta webhook, and files nothing', async () => {
       const response = await driver.post({ object: 'something_else', entry: [] });
 
@@ -633,6 +640,26 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
         ).status,
       ).toBe(200);
       expect((await driver.post(body(), { secret: 'a-third-secret' })).status).toBe(401);
+    });
+
+    it('vouches for Instagram’s deliveries only: a WhatsApp or Page one it signed is 401', async () => {
+      await runtime.settings.set('meta.instagramAppSecret', INSTAGRAM_SECRET, {
+        updatedBy: 'suite',
+      });
+      handlerCalls.length = 0;
+
+      const whatsapp = await driver.post(
+        whatsappText({ phoneNumberId: NUMBER_A, wamid: fixtureWamid(172), text: 'forged' }),
+        { secret: INSTAGRAM_SECRET },
+      );
+      const page = await driver.post(
+        pageText({ pageId: PAGE_A, mid: fixtureMid(173), text: 'forged' }),
+        { secret: INSTAGRAM_SECRET },
+      );
+
+      expect([whatsapp.status, page.status]).toEqual([401, 401]);
+      expect(handlerCalls).toEqual([]);
+      expect(await filedMessages(BRAND_A, fixtureWamid(172), 'whatsapp')).toHaveLength(0);
     });
   });
 

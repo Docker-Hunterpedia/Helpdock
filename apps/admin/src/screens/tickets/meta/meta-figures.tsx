@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material';
-import { CircleDashed, Image as ImageIcon, Reply } from 'lucide-react';
+import { CircleDashed, Image as ImageIcon, Reply, Undo2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
@@ -53,6 +53,32 @@ export function QuoteLine({
         {author === null ? text : t('tickets:meta.quote.from', { author, text })}
       </bdi>
     </Box>
+  );
+}
+
+/**
+ * "Unsent by the customer · 10:26": what an Instagram message the customer took
+ * back is marked with. The message keeps its text (DOMAIN-RULES §4.8); this is a
+ * 12 px caption under it with `Undo2` and the time Instagram said it, in mono.
+ */
+export function UnsentCaption({ time }: { readonly time: string }): ReactNode {
+  const t = useT();
+
+  return (
+    <Typography
+      variant="caption"
+      component="p"
+      sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}
+    >
+      <Undo2 size={14} aria-hidden="true" />
+      <span>
+        {t('tickets:meta.unsent')}
+        <span aria-hidden="true"> · </span>
+        <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
+          <bdi>{time}</bdi>
+        </Typography>
+      </span>
+    </Typography>
   );
 }
 

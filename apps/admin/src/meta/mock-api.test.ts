@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isMetaError } from './api.js';
 import {
   MOCK_INSTAGRAM_ACCOUNT,
   MOCK_INSTAGRAM_TOKEN,
@@ -15,6 +16,12 @@ import {
   MOCK_WHATSAPP_TOKEN,
   MockMetaApi,
 } from './mock-api.js';
+import {
+  MOCK_TICKET_INSTAGRAM,
+  MOCK_TICKET_MESSENGER,
+  MOCK_TICKET_WHATSAPP,
+  metaDeliveryId,
+} from './mock-conversations.js';
 
 /**
  * The fixture refuses what the api refuses, closely enough for the screens'
@@ -231,5 +238,89 @@ describe('MockMetaApi', () => {
 
     await expect(api.account('brand', MOCK_INSTAGRAM_ACCOUNT)).rejects.toThrow();
     expect((await api.accounts('brand')).accounts).toHaveLength(3);
+  });
+});
+
+describe('MockMetaApi, the ticket’s half (M10-08)', () => {
+  const EPOCH = Date.parse('2026-10-11T10:31:00.000Z');
+  const HOUR = 60 * 60 * 1000;
+  const api = () => new MockMetaApi(() => EPOCH);
+
+  it('puts each of the three tickets in the window the artboard shows', async () => {
+    const whatsapp = await api().ticketContext('brand', MOCK_TICKET_WHATSAPP);
+    const messenger = await api().ticketContext('brand', MOCK_TICKET_MESSENGER);
+    const instagram = await api().ticketContext('brand', MOCK_TICKET_INSTAGRAM);
+
+    // The customer wrote 66 minutes before the fixture was built.
+    expect(whatsapp.context?.window).toEqual({
+      state: 'open',
+      closesAt: new Date(EPOCH - 66 * 60 * 1000 + 24 * HOUR).toISOString(),
+    });
+    expect(messenger.context?.window.state).toBe('human_agent');
+    expect(instagram.context?.window.state).toBe('closed');
+    expect(whatsapp.context?.account).toMatchObject({
+      platform: 'whatsapp',
+      displayPhone: '+1 555 0142',
+    });
+  });
+
+  it('lets the window run out with the clock', async () => {
+    let now = EPOCH;
+    const mock = new MockMetaApi(() => now);
+    expect((await mock.ticketContext('brand', MOCK_TICKET_WHATSAPP)).context?.window.state).toBe(
+      'open',
+    );
+
+    now = EPOCH + 23 * HOUR;
+    expect((await mock.ticketContext('brand', MOCK_TICKET_WHATSAPP)).context?.window.state).toBe(
+      'closed',
+    );
+  });
+
+  it('answers a null context for any other ticket, and names the unsent message only on Instagram', async () => {
+    expect(await api().ticketContext('brand', 'some-email-ticket')).toEqual({
+      context: null,
+      deliveries: [],
+      unsent: [],
+    });
+    expect((await api().ticketContext('brand', MOCK_TICKET_WHATSAPP)).unsent).toEqual([]);
+    expect((await api().ticketContext('brand', MOCK_TICKET_INSTAGRAM)).unsent).toHaveLength(1);
+  });
+
+  it('puts a failed delivery back, keeping the parts that went', async () => {
+    const mock = api();
+
+    await mock.retryDelivery('brand', MOCK_TICKET_MESSENGER, metaDeliveryId(0x23));
+
+    const { deliveries } = await mock.ticketContext('brand', MOCK_TICKET_MESSENGER);
+    expect(deliveries.find((delivery) => delivery.id === metaDeliveryId(0x23))).toMatchObject({
+      status: 'sent',
+      partsSent: 2,
+      lastError: null,
+    });
+  });
+
+  it('refuses Retry on a refused delivery, with where the window stands', async () => {
+    const error = await api()
+      .retryDelivery('brand', MOCK_TICKET_WHATSAPP, metaDeliveryId(0x15))
+      .catch((caught: unknown) => caught);
+
+    expect(isMetaError(error)).toBe(true);
+    expect(error).toMatchObject({
+      reason: 'reply-window-closed',
+      details: { platform: 'whatsapp', anchorAt: expect.any(String) },
+    });
+  });
+
+  it('leaves a delivery that is not failed alone, and does not know one that is not there', async () => {
+    const mock = api();
+
+    await mock.retryDelivery('brand', MOCK_TICKET_WHATSAPP, metaDeliveryId(0x17));
+
+    const { deliveries } = await mock.ticketContext('brand', MOCK_TICKET_WHATSAPP);
+    expect(deliveries.find((delivery) => delivery.id === metaDeliveryId(0x17))?.status).toBe(
+      'sent',
+    );
+    await expect(mock.retryDelivery('brand', MOCK_TICKET_WHATSAPP, 'nope')).rejects.toThrow();
   });
 });

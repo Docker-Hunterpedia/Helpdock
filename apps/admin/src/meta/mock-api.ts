@@ -15,12 +15,13 @@ import {
   type MetaTicketContext,
   type MetaTicketContextResponse,
   type MetaTokenTestRequest,
+  type MetaUnsent,
   type MetaVerifyTokenReveal,
   metaAccountHealth,
   metaWebhookPath,
 } from '@helpdock/schemas';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
-import { metaDeliverySeed } from '../tickets/mock-meta-seed.js';
+import { metaDeliverySeed, metaUnsentSeed } from '../tickets/mock-meta-seed.js';
 import { type MetaApi, MetaError } from './api.js';
 import {
   MOCK_META_CONVERSATIONS,
@@ -121,6 +122,8 @@ export class MockMetaApi implements MetaApi {
   readonly #epoch: number;
   /** M10-08: each reply's delivery on the three Meta tickets, which Retry changes. */
   readonly #deliveries: Record<string, MetaDeliveryView[]>;
+  /** M10-08: the messages the customer unsent, by ticket. */
+  readonly #unsent: Record<string, MetaUnsent[]>;
   #app: MetaApp;
   #sequence = 0;
 
@@ -129,6 +132,7 @@ export class MockMetaApi implements MetaApi {
     const at = now();
     this.#epoch = at;
     this.#deliveries = metaDeliverySeed(at);
+    this.#unsent = metaUnsentSeed(at);
     this.#app = {
       appIdSet: true,
       appId: '1290457718832406',
@@ -405,7 +409,7 @@ export class MockMetaApi implements MetaApi {
     await sleep();
     const context = this.#ticketContext(ticketId);
     if (context === null) {
-      return { context: null, deliveries: [] };
+      return { context: null, deliveries: [], unsent: [] };
     }
 
     return {
@@ -414,6 +418,7 @@ export class MockMetaApi implements MetaApi {
         ...delivery,
         leftOut: [...delivery.leftOut],
       })),
+      unsent: (this.#unsent[ticketId] ?? []).map((unsent) => ({ ...unsent })),
     };
   }
 

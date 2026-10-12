@@ -347,10 +347,23 @@ describe('an Instagram ticket', () => {
     expect(within(thread()).getByText('Is the green one back in stock?')).toBeVisible();
     // The story's media is the figure, not a chip as well.
     expect(within(thread()).queryByText('story.jpg')).toBeNull();
-    expect(within(thread()).getByText('The customer unsent this message.')).toBeVisible();
     expect(
       within(thread()).getByText('The customer sent something that cannot be shown here.'),
     ).toBeVisible();
+  });
+
+  it('marks the message the customer unsent on the message itself, and draws no second line for it', async () => {
+    await open(MOCK_TICKET_INSTAGRAM);
+
+    const caption = await within(thread()).findByText('Unsent by the customer');
+    const bubble = caption.closest('article');
+    // The message keeps its words; the caption is under them, with the time Instagram said.
+    expect(bubble).toHaveTextContent('Also the lid in blue?');
+    expect(caption.parentElement).toHaveTextContent('Unsent by the customer · 08:32');
+    // The system line that marks it is not drawn beside it.
+    expect(within(thread()).queryByText('The customer unsent this message.')).toBeNull();
+    // Only that message is marked.
+    expect(within(thread()).getAllByText('Unsent by the customer')).toHaveLength(1);
   });
 
   it('names the file Instagram would not take, under the reply that left it out', async () => {

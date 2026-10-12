@@ -156,3 +156,69 @@ describe('HttpMetaApi', () => {
     expect(error).toMatchObject({ reason: 'account-taken' });
   });
 });
+
+describe('HttpMetaApi, the ticket’s half (M10-08)', () => {
+  const TICKET = '0192c3f0-1a2b-7c3d-8e4f-000000001040';
+  const DELIVERY = '0192c3f0-1a2b-7c3d-8e4f-0000000a0011';
+  const path = `/api/brands/${BRAND}/tickets/${TICKET}/meta`;
+
+  it('reads the context, the deliveries and what was unsent in one request', async () => {
+    const read = await new MockMetaApi().ticketContext(BRAND, TICKET);
+
+    fetchMock.mockResolvedValueOnce(json(read));
+    const answered = await api.ticketContext(BRAND, TICKET);
+
+    expect(lastCall()).toMatchObject({ url: path, method: 'GET' });
+    expect(answered.context?.account.platform).toBe('whatsapp');
+    expect(answered.deliveries.length).toBeGreaterThan(0);
+  });
+
+  it('reads an answer from before the api sent what was unsent as nothing unsent', async () => {
+    fetchMock.mockResolvedValueOnce(json({ context: null, deliveries: [] }));
+
+    expect(await api.ticketContext(BRAND, TICKET)).toEqual({
+      context: null,
+      deliveries: [],
+      unsent: [],
+    });
+  });
+
+  it('posts Retry to the delivery and takes the 204', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await api.retryDelivery(BRAND, TICKET, DELIVERY);
+
+    expect(lastCall()).toMatchObject({
+      url: `${path}/deliveries/${DELIVERY}/retry`,
+      method: 'POST',
+    });
+  });
+
+  it('carries where the window stands when a reply is refused for it', async () => {
+    const details = {
+      platform: 'whatsapp',
+      anchorAt: '2026-10-10T08:00:00.000Z',
+      closedAt: '2026-10-11T08:00:00.000Z',
+    };
+    fetchMock.mockResolvedValueOnce(
+      json(
+        {
+          error: {
+            code: 'conflict',
+            message: 'The customer’s reply window is closed',
+            requestId: 'r2',
+            meta: { reason: 'reply-window-closed', details },
+          },
+        },
+        409,
+      ),
+    );
+
+    const error = await api
+      .retryDelivery(BRAND, TICKET, DELIVERY)
+      .catch((caught: unknown) => caught);
+
+    expect(isMetaError(error)).toBe(true);
+    expect(error).toMatchObject({ reason: 'reply-window-closed', details });
+  });
+});

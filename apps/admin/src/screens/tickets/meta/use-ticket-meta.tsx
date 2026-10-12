@@ -29,8 +29,14 @@ import {
   splitQuote,
   splitStory,
 } from './meta-content.js';
-import { QuoteLine, StickerFigure, StoryCaption, StoryFigure } from './meta-figures.tsx';
-import { accountLabel, customerHandle } from './meta-format.js';
+import {
+  QuoteLine,
+  StickerFigure,
+  StoryCaption,
+  StoryFigure,
+  UnsentCaption,
+} from './meta-figures.tsx';
+import { accountLabel, clockTime, customerHandle } from './meta-format.js';
 import { stripState, type WindowRefusal } from './reply-window.js';
 import { ReplyWindowStrip } from './reply-window-strip.tsx';
 import { useMinuteClock } from './use-minute-clock.js';
@@ -84,6 +90,8 @@ export interface MetaContent {
   readonly html: string;
   /** The story caption and figure, and the quote, in the order they open the bubble. */
   readonly before: ReactNode;
+  /** Under the text: "Unsent by the customer · 10:26" on a message Instagram says the customer took back. */
+  readonly after?: ReactNode;
 }
 
 export interface ThreadMeta {
@@ -93,8 +101,13 @@ export interface ThreadMeta {
   trailFor(message: TicketMessage): ReactNode;
   /** A reply's accessible name carries its state: "Reply from Lina Haddad, read". */
   labelFor(message: TicketMessage, author: string): string | undefined;
-  /** The quote and the story a customer's message opens with. */
+  /** The quote and the story a customer's message opens with, and the mark of an unsent one. */
   contentFor(message: TicketMessage): MetaContent | undefined;
+  /**
+   * A line the thread leaves out: the system line that marks an unsent message
+   * is drawn on the message instead, so it is not a second event beside it.
+   */
+  hides(message: TicketMessage): boolean;
   /** The icon of a line nobody wrote: a reaction, an unsent message, something Helpdock cannot show. */
   lineIcon(message: TicketMessage): LucideIcon | undefined;
   /** A sticker or a story's media as a figure; `null` for a file drawn elsewhere; undefined for any other file. */
@@ -192,6 +205,8 @@ export function useTicketMeta({
 
   const context = read.data?.context ?? undefined;
   const deliveries = read.data?.deliveries ?? [];
+  const unsent = new Map((read.data?.unsent ?? []).map((item) => [item.ticketMessageId, item]));
+  const marks = new Set((read.data?.unsent ?? []).map((item) => item.lineId));
   const deliveryOf = (message: TicketMessage): MetaDeliveryView | undefined =>
     isReply(message)
       ? deliveries.find((delivery) => delivery.ticketMessageId === message.id)
@@ -289,7 +304,8 @@ export function useTicketMeta({
       }
       const story = splitStory(message);
       const quote = splitQuote(story?.html ?? message.bodyHtml);
-      if (story === undefined && quote === undefined) {
+      const unsentMark = unsent.get(message.id);
+      if (story === undefined && quote === undefined && unsentMark === undefined) {
         return undefined;
       }
       const earlier = messages.filter((candidate) => candidate.seq < message.seq);
@@ -319,8 +335,12 @@ export function useTicketMeta({
             )}
           </>
         ),
+        ...(unsentMark === undefined
+          ? {}
+          : { after: <UnsentCaption time={clockTime(unsentMark.at, locale)} /> }),
       };
     },
+    hides: (message) => message.kind === 'system' && marks.has(message.id),
     lineIcon: (message) => {
       if (message.kind !== 'system') {
         return undefined;

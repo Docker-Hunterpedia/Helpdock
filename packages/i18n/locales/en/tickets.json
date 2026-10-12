@@ -672,6 +672,7 @@
       "figure": "Story · {{date}} · kept until it expires"
     },
     "sticker": "Sticker",
+    "unsent": "Unsent by the customer",
     "quote": {
       "label": "Quoted message",
       "from": "{{author}}: {{text}}"

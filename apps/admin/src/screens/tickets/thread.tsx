@@ -124,6 +124,12 @@ export function Thread({
   const { locale } = usePreferences();
   const end = useRef<HTMLDivElement | null>(null);
   const count = items.length;
+  // M10-08: the line that marks an unsent Instagram message is drawn on the
+  // message, so it is not a second event beside it.
+  const shown =
+    meta === undefined
+      ? items
+      : items.filter((item) => item.kind !== 'message' || !meta.hides(item.message));
 
   // The newest message is the one somebody opened the ticket to read. The
   // count, not the items: a re-read that changes nothing must not scroll.
@@ -152,7 +158,7 @@ export function Thread({
           gap: 4,
         }}
       >
-        {items.map((item) => (
+        {shown.map((item) => (
           <Box component="li" key={item.id} sx={{ display: 'flex', flexDirection: 'column' }}>
             {item.kind === 'merged' ? (
               <MergedBlock
@@ -426,6 +432,13 @@ function SentMessage({
   };
   const files = message.attachments.map(drawFile).filter((node) => node !== null);
   const label = meta?.labelFor(message, author);
+  const extra =
+    located === undefined && content?.after === undefined ? undefined : (
+      <>
+        {located === undefined ? null : <LocationLine location={located.location} />}
+        {content?.after}
+      </>
+    );
 
   return (
     <MessageBubble
@@ -438,7 +451,7 @@ function SentMessage({
       body={assist?.bodyFor(message)}
       facts={assist?.factsFor(message)}
       footer={footer}
-      {...(located === undefined ? {} : { extra: <LocationLine location={located.location} /> })}
+      {...(extra === undefined ? {} : { extra })}
       {...(files.length === 0 ? {} : { attachments: files })}
     />
   );

@@ -1,6 +1,7 @@
 import type {
   Attachment,
   MetaDeliveryView,
+  MetaUnsent,
   Ticket,
   TicketMessage,
   TicketStatus,
@@ -424,6 +425,22 @@ export const metaSeed = ({
 
   return { tickets, messages };
 };
+
+/**
+ * The one message of the three threads the customer unsent, and the line that
+ * marks it (`MetaTicketContextResponse.unsent`): the thread draws "Unsent by the
+ * customer" under the message and leaves the line out. `at` is when the fixture
+ * was built.
+ */
+export const metaUnsentSeed = (at: number): Record<string, MetaUnsent[]> => ({
+  [MOCK_TICKET_INSTAGRAM]: [
+    {
+      ticketMessageId: metaMessageId(0x31),
+      lineId: metaMessageId(0x32),
+      at: new Date(at - (igAnchor + 64 * MINUTE)).toISOString(),
+    },
+  ],
+});
 
 /**
  * What each reply of the three threads has become on the platform, by the

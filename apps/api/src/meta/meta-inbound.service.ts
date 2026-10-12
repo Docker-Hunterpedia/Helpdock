@@ -1,4 +1,4 @@
-import type { MetaEvent, MetaRoute } from '@helpdock/channels';
+import type { MetaEvent, MetaIgnoredReason, MetaRoute } from '@helpdock/channels';
 import type { Db, DbTransaction, MetaAccount as MetaAccountRow } from '@helpdock/db';
 import type { MetaPlatform } from '@helpdock/schemas';
 import { isUniqueViolation } from '../channels/pg-errors.js';
@@ -14,8 +14,8 @@ import { metaMessageSeen, metaSenderBlocked } from './meta-inbound-gate.js';
  * | The event is | What happens |
  * |---|---|
  * | a customer's message already filed | `duplicate`; the handler never sees it |
- * | a customer's message from a blocked sender | `ignored`, counted on the block row |
- * | any other event, or a message that passed both | the platform's {@link PlatformInboundService} decides |
+ * | anything a customer caused (a message, a reaction, an edit, an unsent or unsupported message) from a blocked sender | `ignored`, counted on the block row |
+ * | any other event, or one that passed both | the platform's {@link PlatformInboundService} decides |
  *
  * **One system transaction for the account's brand** holds every event of the
  * route, so a customer who writes three times in one batch is filed in order
@@ -30,6 +30,39 @@ import { metaMessageSeen, metaSenderBlocked } from './meta-inbound-gate.js';
  * handler.
  */
 
+/**
+ * Why an event was dropped, in one vocabulary for all three platforms, so a
+ * name in the route report means one thing whichever service wrote it.
+ */
+export type MetaDropReason =
+  /** What the classifier already refused (a field, a standby event, an empty message). */
+  | MetaIgnoredReason
+  | 'account-gone'
+  | 'blocked-sender'
+  /** The customer's id, or a number it carried, cannot be held as an identifier. */
+  | 'invalid-customer-id'
+  | 'invalid-number'
+  /** A message the account sent: Helpdock's own, or typed outside it. */
+  | 'own-echo'
+  | 'foreign-echo'
+  | 'no-conversation'
+  | 'unknown-conversation'
+  /** The ticket is closed, spam or was never opened: nowhere to write a line. */
+  | 'no-open-ticket'
+  /** The message a reaction, an edit or an unsend is about was never filed. */
+  | 'unknown-message'
+  | 'no-delivery-to-advance'
+  | 'no-delivery-to-fail'
+  /** Helpdock recorded Meta's acceptance when it sent; the status adds nothing. */
+  | 'status-sent'
+  | 'empty-receipt'
+  | 'empty-edit'
+  | 'policy-enforcement'
+  | 'postback'
+  | 'referral'
+  /** An event of another platform's vocabulary reached this platform's service. */
+  | 'wrong-platform';
+
 /** What became of one event. */
 export type MetaEventOutcome =
   /** The handler did what the event's kind calls for. */
@@ -37,9 +70,7 @@ export type MetaEventOutcome =
   /** The message was filed before: by an earlier delivery of this batch, or a concurrent one. */
   | { readonly outcome: 'duplicate' }
   /** Dropped on purpose, with the reason. */
-  | { readonly outcome: 'ignored'; readonly reason: string }
-  /** No inbound service is installed for the platform yet. */
-  | { readonly outcome: 'unhandled' };
+  | { readonly outcome: 'ignored'; readonly reason: MetaDropReason };
 
 /** What a handler is given, inside the route's transaction (already in a savepoint). */
 export interface MetaEventContext {
@@ -49,11 +80,12 @@ export interface MetaEventContext {
 }
 
 /**
- * The seam M10-03 (WhatsApp), M10-04 (Messenger) and M10-05 (Instagram) fill.
- * `handle` is called once per event of the platform's accounts, in the order
- * Meta sent them. It throws to refuse the whole route (the transaction rolls
- * back and Meta redelivers); a customer's message has been checked against the
- * dedupe key and the block list before it gets here.
+ * One platform's inbound service: WhatsApp's (M10-03), Messenger's (M10-04) or
+ * Instagram's (M10-05). `handle` is called once per event of the platform's
+ * accounts, in the order Meta sent them. It throws to refuse the whole route
+ * (the transaction rolls back and Meta redelivers); a customer's message has
+ * been checked against the dedupe key, and anything a customer caused against
+ * the block list, before it gets here.
  */
 export interface PlatformInboundService {
   handle(context: MetaEventContext, event: MetaEvent): Promise<MetaEventOutcome>;
@@ -66,27 +98,6 @@ export interface MetaInboundLog {
   warn(fields: Record<string, unknown>, message: string): void;
   error(fields: Record<string, unknown>, message: string): void;
 }
-
-/**
- * The handler of a platform whose inbound service has not been written: the
- * webhook is complete and testable without it. It logs what arrived, never its
- * text or the customer's id, and answers `unhandled`, which the webhook counts.
- */
-export const unhandledInbound = (log: MetaInboundLog): PlatformInboundService => ({
-  handle: ({ account }, event) => {
-    log.info(
-      { accountId: account.id, platform: account.platform, kind: event.kind },
-      'meta event received with no inbound service installed',
-    );
-    return Promise.resolve({ outcome: 'unhandled' });
-  },
-});
-
-export const unhandledInboundHandlers = (log: MetaInboundLog): MetaInboundHandlers => ({
-  whatsapp: unhandledInbound(log),
-  messenger: unhandledInbound(log),
-  instagram: unhandledInbound(log),
-});
 
 /** What {@link MetaInboundService.receive} did with one account's events. */
 export interface MetaRouteResult {
@@ -155,13 +166,18 @@ export class MetaInboundService {
 
   async #file(context: MetaEventContext, event: MetaEvent): Promise<MetaEventOutcome> {
     const { tx, account, now } = context;
-    if (event.kind === 'message') {
-      if (await metaMessageSeen(tx, account.brandId, account.platform, event.messageId)) {
-        return { outcome: 'duplicate' };
-      }
-      if (await metaSenderBlocked(tx, account, event.customerId, now)) {
-        return { outcome: 'ignored', reason: 'blocked-sender' };
-      }
+    if (
+      event.kind === 'message' &&
+      (await metaMessageSeen(tx, account.brandId, account.platform, event.messageId))
+    ) {
+      return { outcome: 'duplicate' };
+    }
+    // Once for every platform and every kind of event a customer causes, so a
+    // blocked customer cannot write a line into a thread or move the reply
+    // window by a reaction, an edit or a message Helpdock cannot show.
+    const sender = customerOf(event);
+    if (sender !== null && (await metaSenderBlocked(tx, account, sender, now))) {
+      return { outcome: 'ignored', reason: 'blocked-sender' };
     }
 
     try {
@@ -197,6 +213,23 @@ export class MetaInboundService {
     }
   }
 }
+
+/**
+ * The customer an event was caused by, or null for one nobody on the customer's
+ * side caused: an echo, a receipt, a status, a policy notice.
+ */
+const customerOf = (event: MetaEvent): string | null => {
+  switch (event.kind) {
+    case 'message':
+    case 'reaction':
+    case 'edit':
+    case 'deleted':
+    case 'unsupported':
+      return event.customerId;
+    default:
+      return null;
+  }
+};
 
 /**
  * A failure's class and message for the account's health line, from the

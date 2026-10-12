@@ -1,33 +1,31 @@
 import { type MetaEvent, toMessengerInboundMessage } from '@helpdock/channels';
-import type {
-  DbTransaction,
-  MetaAccount as MetaAccountRow,
-  MetaConversation as MetaConversationRow,
-} from '@helpdock/db';
-import { ContactFailure } from '../contacts/contact-failure.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import type { MetaRepository } from './meta.repository.js';
-import { enqueueMetaProfile } from './meta-events.js';
+import {
+  askForProfile,
+  dropEcho,
+  handled,
+  ignored,
+  instantOf,
+  otherEvent,
+  routeOrDrop,
+} from './meta-event-support.js';
 import type {
   MetaEventContext,
   MetaEventOutcome,
   MetaInboundLog,
   PlatformInboundService,
 } from './meta-inbound.service.js';
-import { metaMessageSeen } from './meta-inbound-gate.js';
-import type {
-  MetaAttachmentSink,
-  MetaConversationRouter,
-  MetaRouteContext,
-} from './meta-router.js';
-import { type MetaSystemLine, metaInboundLabels, metaSystemLine } from './meta-text.js';
+import type { MetaAttachmentSink, MetaConversationRouter } from './meta-router.js';
+import { metaInboundLabels } from './meta-text.js';
+import { MetaThreadNotes, noteKeys, noteOutcome, reactionNote } from './meta-thread-notes.js';
 
 /**
  * A Messenger Page's events into one brand (M10-04, ADR 0025, DOMAIN-RULES
  * §4.7 and §4.8): the `PlatformInboundService` for `object: page`, called by
  * the webhook once per event of a Page, in a transaction of its brand. The
  * dedupe on the `mid` and the block list are the webhook's, asked before
- * `handle` for a customer's message, so neither is repeated here.
+ * `handle` for what a customer caused, so neither is repeated here.
  *
  * | The event is | What happens |
  * |---|---|
@@ -37,7 +35,7 @@ import { type MetaSystemLine, metaInboundLabels, metaSystemLine } from './meta-t
  * | `reaction`, `edit` | a system line on the ticket of the message they are about |
  * | `unsupported` | a system line on the conversation's open ticket; the message still opens the reply window |
  * | `policy_enforcement` | counted and dropped, and recorded as the account's `last_error` |
- * | `postback`, `referral`, `standby` and the rest | counted and dropped |
+ * | `postback`, `referral` and the rest | counted and dropped |
  *
  * Everything runs in the route's transaction, as the system principal. What an
  * event causes outside the database — the media fetch, the customer's name —
@@ -46,53 +44,6 @@ import { type MetaSystemLine, metaInboundLabels, metaSystemLine } from './meta-t
  */
 
 type Event<Kind extends MetaEvent['kind']> = Extract<MetaEvent, { kind: Kind }>;
-
-const handled: MetaEventOutcome = { outcome: 'handled' };
-
-const ignored = (reason: string): MetaEventOutcome => ({ outcome: 'ignored', reason });
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Where a message came to, in the shape the router takes. */
-const routeContextOf = ({ tx, account, now }: MetaEventContext): MetaRouteContext => ({
-  tx,
-  brandId: account.brandId,
-  account: {
-    id: account.id,
-    departmentId: account.departmentId,
-    platform: 'messenger',
-    externalId: account.externalId,
-  },
-  now,
-});
-
-/**
- * Whether a customer's name has been looked for. `profile_checked_at` is the
- * profile job's mark (M10-05, migration 0051): it is set whether Graph answered
- * or refused, so a lookup is made once per conversation.
- */
-const profileAsked = (conversation: MetaConversationRow): boolean =>
-  conversation.profileName !== null || conversation.profileCheckedAt !== null;
-
-/** How a line in the thread came out. */
-type NoteResult = 'written' | 'duplicate' | 'no-open-ticket';
-
-const outcomeOf = (result: NoteResult): MetaEventOutcome => {
-  switch (result) {
-    case 'written':
-      return handled;
-    case 'duplicate':
-      return { outcome: 'duplicate' };
-    case 'no-open-ticket':
-      return ignored('no-open-ticket');
-  }
-};
-
-/** What a line in the thread is, and the key that keeps a redelivery to one of it. */
-interface Note {
-  readonly line: MetaSystemLine;
-  readonly key: string | null;
-}
 
 export interface MessengerInboundServiceOptions {
   readonly router: MetaConversationRouter;
@@ -105,6 +56,7 @@ export interface MessengerInboundServiceOptions {
     | 'delivery'
     | 'markError'
     | 'messageByPlatformId'
+    | 'systemLineSeen'
     | 'upsertConversation'
   >;
   readonly lifecycleReads: Pick<TicketLifecycleRepository, 'localeForContact'>;
@@ -115,9 +67,11 @@ export interface MessengerInboundServiceOptions {
 
 export class MessengerInboundService implements PlatformInboundService {
   readonly #options: MessengerInboundServiceOptions;
+  readonly #notes: MetaThreadNotes;
 
   constructor(options: MessengerInboundServiceOptions) {
     this.#options = options;
+    this.#notes = new MetaThreadNotes(options);
   }
 
   async handle(context: MetaEventContext, event: MetaEvent): Promise<MetaEventOutcome> {
@@ -125,7 +79,7 @@ export class MessengerInboundService implements PlatformInboundService {
       case 'message':
         return this.#message(context, event);
       case 'echo':
-        return this.#echo(context, event);
+        return dropEcho(context, event, this.#options);
       case 'delivery':
         return this.#receipt(context, event, 'delivered');
       case 'read':
@@ -138,135 +92,54 @@ export class MessengerInboundService implements PlatformInboundService {
         return this.#unsupported(context, event);
       case 'policy_enforcement':
         return this.#policy(context, event);
-      case 'ignored':
-        return ignored(event.reason);
-      case 'postback':
-      case 'referral':
-        return ignored(event.kind);
       // A Page's webhook carries none of WhatsApp's or Instagram's kinds.
       default:
-        this.#options.log.warn(
-          { kind: event.kind, platform: event.platform },
-          'messenger received an event of another platform; dropped',
-        );
-        return ignored(`unexpected-${event.kind}`);
+        return otherEvent(this.#options.log, context, event);
     }
   }
 
   // --------------------------------------------------------------- messages
 
   async #message(context: MetaEventContext, event: Event<'message'>): Promise<MetaEventOutcome> {
-    const { tx, account } = context;
-    const known = await this.#options.repository.conversation(tx, account.id, event.customerId);
-    const routed = await this.#route(context, event, known);
-    if (routed === undefined) {
-      return ignored('invalid-customer-id');
-    }
-
-    if (known === undefined || !profileAsked(known)) {
-      await this.#askForProfile(tx, account, routed.conversationId);
-    }
-    if (event.unsupportedAttachments.length > 0) {
-      // An attachment of a type Helpdock cannot show rides on a message that was
-      // filed for the rest of it; the agent is told something is missing.
-      await this.#note(context, routed.ticketId, {
-        line: { kind: 'unsupported' },
-        key: `unsupported:${event.messageId}`,
-      });
-    }
-    return handled;
-  }
-
-  /** The router's filing of the message, or undefined for an id that cannot be an identifier. */
-  async #route(
-    context: MetaEventContext,
-    event: Event<'message'>,
-    known: MetaConversationRow | undefined,
-  ) {
     const { tx, account, now } = context;
+    const known = await this.#options.repository.conversation(tx, account.id, event.customerId);
     const locale = await this.#options.lifecycleReads.localeForContact(
       tx,
       account.brandId,
       known?.contactId ?? null,
     );
-    try {
-      return await this.#options.router.route(
-        routeContextOf(context),
-        toMessengerInboundMessage(
-          {
-            event: { ...event, profileName: known?.profileName ?? null },
-            accountExternalId: account.externalId,
-            labels: metaInboundLabels(locale),
-          },
-          // The customer's time, which anchors the reply window, and never the future's.
-          event.timestamp !== null && event.timestamp < now ? event.timestamp : now,
-        ),
-        this.#options.sink,
-      );
-    } catch (error) {
-      if (!(error instanceof ContactFailure)) {
-        throw error;
-      }
-      // Meta would redeliver a message with such an id for ever to no purpose.
-      this.#options.log.warn(
-        { accountId: account.id, reason: error.reason },
-        'a messenger customer id was refused as an identifier; the message is dropped',
-      );
-      return undefined;
-    }
-  }
-
-  /**
-   * The customer's name is not in a Messenger webhook, and reading it is a Graph
-   * call the request must not make, so the first message of a conversation
-   * leaves a `meta.profile` outbox row for the profile job. Until the job has
-   * filled it (or been refused, as a Page without the reviewed feature is) the
-   * contact is named by its id and the thread says "Messenger user".
-   */
-  async #askForProfile(
-    tx: DbTransaction,
-    account: MetaAccountRow,
-    conversationId: string,
-  ): Promise<void> {
-    await enqueueMetaProfile(tx, account.brandId, {
-      conversationId,
-      accountId: account.id,
-      platform: 'messenger',
-    });
-  }
-
-  // ----------------------------------------------------------------- echoes
-
-  /**
-   * A message the Page sent. Helpdock's own are in the thread already as the
-   * reply an agent wrote; one typed in Meta Business Suite is not imported (an
-   * accepted gap), but is counted so an operator can see it happens.
-   */
-  async #echo({ tx, account }: MetaEventContext, event: Event<'echo'>): Promise<MetaEventOutcome> {
-    if (await this.#isOurs(tx, account, event)) {
-      return ignored('echo');
-    }
-    this.#options.log.info(
-      { accountId: account.id },
-      'messenger echo of a message Helpdock did not send; dropped',
+    const routed = await routeOrDrop(
+      this.#options,
+      context,
+      toMessengerInboundMessage(
+        {
+          event: { ...event, profileName: known?.profileName ?? null },
+          accountExternalId: account.externalId,
+          labels: metaInboundLabels(locale),
+        },
+        // The customer's time, which anchors the reply window, and never the future's.
+        instantOf(event.timestamp, now),
+      ),
     );
-    return ignored('echo-not-ours');
-  }
+    if (routed === undefined) {
+      return ignored('invalid-customer-id');
+    }
 
-  async #isOurs(
-    tx: DbTransaction,
-    account: MetaAccountRow,
-    event: Event<'echo'>,
-  ): Promise<boolean> {
-    const appId = await this.#options.appId();
-    if (appId !== '' && event.appId === appId) {
-      return true;
+    // The customer's name is not in a Messenger webhook, and reading it is a Graph
+    // call the request must not make, so the first message of a conversation
+    // leaves a `meta.profile` outbox row for the profile job. Until the job has
+    // filled it (or been refused, as a Page without the reviewed feature is) the
+    // contact is named by its id and the thread says "Messenger user".
+    await askForProfile(tx, account, 'messenger', routed.conversationId, known);
+    if (event.unsupportedAttachments.length > 0) {
+      // An attachment of a type Helpdock cannot show rides on a message that was
+      // filed for the rest of it; the agent is told something is missing.
+      await this.#notes.write(context, routed.ticketId, {
+        line: { kind: 'unsupported' },
+        key: noteKeys.unsupported(event.messageId),
+      });
     }
-    if (event.metadata !== null && UUID.test(event.metadata)) {
-      const delivery = await this.#options.repository.delivery(tx, event.metadata);
-      return delivery?.accountId === account.id;
-    }
-    return false;
+    return handled;
   }
 
   // --------------------------------------------------------------- receipts
@@ -295,7 +168,12 @@ export class MessengerInboundService implements PlatformInboundService {
       await repository.advanceByWatermark(tx, conversation.id, status, event.watermark);
     }
     for (const mid of mids) {
-      await repository.advanceStatus(tx, mid, status, event.watermark ?? event.timestamp ?? now);
+      await repository.advanceStatus(
+        tx,
+        mid,
+        status,
+        event.watermark ?? instantOf(event.timestamp, now),
+      );
     }
     return handled;
   }
@@ -313,23 +191,7 @@ export class MessengerInboundService implements PlatformInboundService {
     if (target === undefined) {
       return ignored('unknown-message');
     }
-    const line: MetaSystemLine =
-      event.action === 'unreact'
-        ? { kind: 'reaction', emoji: null }
-        : event.emoji === null
-          ? { kind: 'reactionPlain' }
-          : { kind: 'reaction', emoji: event.emoji };
-
-    return outcomeOf(
-      await this.#note(context, target.ticketId, {
-        line,
-        // A reaction has no id of its own: who, to what, which way and when.
-        key:
-          event.timestamp === null
-            ? null
-            : `reaction:${event.messageId}:${event.customerId}:${event.action}:${String(event.timestamp.getTime())}`,
-      }),
-    );
+    return noteOutcome(await this.#notes.write(context, target.ticketId, reactionNote(event)));
   }
 
   async #edit(context: MetaEventContext, event: Event<'edit'>): Promise<MetaEventOutcome> {
@@ -342,10 +204,10 @@ export class MessengerInboundService implements PlatformInboundService {
     }
     const version = event.editNumber ?? event.timestamp?.getTime() ?? null;
 
-    return outcomeOf(
-      await this.#note(context, target.ticketId, {
+    return noteOutcome(
+      await this.#notes.write(context, target.ticketId, {
         line: { kind: 'edited', text: event.text },
-        key: version === null ? null : `edit:${event.messageId}:${String(version)}`,
+        key: version === null ? null : noteKeys.edit(event.messageId, version),
       }),
     );
   }
@@ -378,16 +240,13 @@ export class MessengerInboundService implements PlatformInboundService {
         waId: null,
         profileName: null,
         username: null,
-        inbound: {
-          at: event.timestamp !== null && event.timestamp < now ? event.timestamp : now,
-          messageId: event.messageId,
-        },
+        inbound: { at: instantOf(event.timestamp, now), messageId: event.messageId },
       });
     }
-    return outcomeOf(
-      await this.#note(context, conversation.ticketId, {
+    return noteOutcome(
+      await this.#notes.write(context, conversation.ticketId, {
         line: { kind: 'unsupported' },
-        key: event.messageId === null ? null : `unsupported:${event.messageId}`,
+        key: event.messageId === null ? null : noteKeys.unsupported(event.messageId),
       }),
     );
   }
@@ -400,35 +259,6 @@ export class MessengerInboundService implements PlatformInboundService {
       'messenger',
       platformMessageId,
     );
-  }
-
-  /**
-   * A line in the open ticket `ticketId` leads to, worded for its contact, once
-   * however often the event arrives. `no-open-ticket` when there is none: no
-   * ticket, or one that is closed or spam.
-   */
-  async #note(
-    { tx, account }: MetaEventContext,
-    ticketId: string | null,
-    note: Note,
-  ): Promise<NoteResult> {
-    const { router, lifecycleReads } = this.#options;
-    const ticket = ticketId === null ? undefined : await router.openTicket(tx, ticketId);
-    if (ticket === undefined) {
-      return 'no-open-ticket';
-    }
-    if (note.key !== null && (await metaMessageSeen(tx, account.brandId, 'messenger', note.key))) {
-      return 'duplicate';
-    }
-
-    const locale = await lifecycleReads.localeForContact(tx, account.brandId, ticket.contactId);
-    await router.writeSystemLine(tx, {
-      ticket,
-      accountId: account.id,
-      text: metaSystemLine(locale, note.line),
-      ...(note.key === null ? {} : { externalMessageId: note.key }),
-    });
-    return 'written';
   }
 
   // ----------------------------------------------------------------- policy

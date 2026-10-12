@@ -12,11 +12,7 @@ import { MetaAccountsService } from './meta-accounts.service.js';
 import { MetaAppController } from './meta-app.controller.js';
 import { MetaAppService } from './meta-app.service.js';
 import { MetaDeliveriesService } from './meta-deliveries.service.js';
-import {
-  type MetaInboundHandlers,
-  MetaInboundService,
-  unhandledInboundHandlers,
-} from './meta-inbound.service.js';
+import { type MetaInboundHandlers, MetaInboundService } from './meta-inbound.service.js';
 import { MetaWebhookController } from './meta-webhook.controller.js';
 import { MetaWebhookService } from './meta-webhook.service.js';
 import { OutboundMetaService } from './outbound-meta.service.js';
@@ -79,7 +75,6 @@ export class MetaModule {
       });
 
       return {
-        ...unhandledInboundHandlers(logger),
         whatsapp: inbound.whatsapp,
         messenger: inbound.messenger,
         instagram: inbound.instagram,

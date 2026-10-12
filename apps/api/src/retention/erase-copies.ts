@@ -4,10 +4,11 @@ import {
   metaConversations,
   telegramChats,
   telegramDeliveries,
+  ticketMessages,
   tickets,
   webhookDeliveries,
 } from '@helpdock/db';
-import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, like, or, sql } from 'drizzle-orm';
 import { erasedIdentityValue } from '../contacts/anonymise.js';
 
 /**
@@ -78,6 +79,40 @@ export const eraseMetaConversations = async (
 /** Which tickets are the contact's, in one place; each caller picks the column it compares. */
 const theirTickets = (brandId: string, contactId: string) =>
   and(eq(tickets.brandId, brandId), eq(tickets.contactId, contactId));
+
+/**
+ * The key of every system line the Meta channels wrote on their tickets: a
+ * reaction, an edit, an unsupported message or one unsent keeps the platform's
+ * id for the message it is about (`wamid.…`, `mid`) in `external_message_id`
+ * so a redelivered webhook writes it once (M10-03 to M10-05). Those ids are
+ * the platform's names for the person's messages, so they go as a message's
+ * own do. A line is the system's (`meta:<account>`), not the contact's, which
+ * is why the contact's authorship does not find it. The line itself stays, as
+ * a thread keeps its words (§11).
+ */
+export const eraseMetaLineKeys = async (
+  tx: DbTransaction,
+  brandId: string,
+  contactId: string,
+): Promise<number> => {
+  const cleared = await tx
+    .update(ticketMessages)
+    .set({ externalMessageId: null })
+    .where(
+      and(
+        eq(ticketMessages.brandId, brandId),
+        eq(ticketMessages.kind, 'system'),
+        like(ticketMessages.authorId, 'meta:%'),
+        isNotNull(ticketMessages.externalMessageId),
+        inArray(
+          ticketMessages.ticketId,
+          tx.select({ id: tickets.id }).from(tickets).where(theirTickets(brandId, contactId)),
+        ),
+      ),
+    )
+    .returning({ id: ticketMessages.id });
+  return cleared.length;
+};
 
 /**
  * The redaction maps of the model calls on their tickets: each pairs a

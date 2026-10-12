@@ -10,26 +10,30 @@ import { attachVerifiedIdentity, findByIdentity, removeIdentity } from '../conta
 import { isSenderBlocked } from '../ticketing/sender-gate.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import type { MetaRepository } from './meta.repository.js';
+import {
+  duplicate,
+  handled,
+  ignored,
+  instantOf,
+  otherEvent,
+  routeOrDrop,
+} from './meta-event-support.js';
 import type {
   MetaEventContext,
   MetaEventOutcome,
   MetaInboundLog,
   PlatformInboundService,
 } from './meta-inbound.service.js';
-import { metaMessageSeen, metaSenderBlocked } from './meta-inbound-gate.js';
-import type {
-  MetaAttachmentSink,
-  MetaConversationRouter,
-  MetaRouteContext,
-} from './meta-router.js';
-import { type MetaSystemLine, metaInboundLabels, metaSystemLine } from './meta-text.js';
+import type { MetaAttachmentSink, MetaConversationRouter } from './meta-router.js';
+import { metaInboundLabels } from './meta-text.js';
+import { MetaThreadNotes, noteKeys, noteOutcome, reactionNote } from './meta-thread-notes.js';
 
 /**
  * What a WhatsApp event becomes (M10-03, DOMAIN-RULES §4.7 and §4.8): the
  * `PlatformInboundService` for `object: whatsapp_business_account`, called by
  * the webhook once per event of a number, in a transaction of its brand. The
  * dedupe on the `wamid` and the block list are the webhook's, asked before
- * `handle` for a customer's message, so neither is repeated here.
+ * `handle` for what a customer caused, so neither is repeated here.
  *
  * | The event is | What happens |
  * |---|---|
@@ -57,6 +61,7 @@ export interface WhatsAppInboundServiceOptions {
     | 'markError'
     | 'messageByPlatformId'
     | 'recordPricing'
+    | 'systemLineSeen'
     | 'upsertConversation'
   >;
   readonly lifecycleReads: Pick<TicketLifecycleRepository, 'localeForContact'>;
@@ -64,22 +69,6 @@ export interface WhatsAppInboundServiceOptions {
 }
 
 type WhatsAppMessage = Extract<MetaEvent, { kind: 'message' }>;
-
-const ignored = (reason: string): MetaEventOutcome => ({ outcome: 'ignored', reason });
-const handled: MetaEventOutcome = { outcome: 'handled' };
-
-/** Where a message came to, in the shape the router takes. */
-const routeContextOf = ({ tx, account, now }: MetaEventContext): MetaRouteContext => ({
-  tx,
-  brandId: account.brandId,
-  account: {
-    id: account.id,
-    departmentId: account.departmentId,
-    platform: 'whatsapp',
-    externalId: account.externalId,
-  },
-  now,
-});
 
 /** `131026: Message undeliverable`, in Meta's words and nobody else's. */
 const describeError = (error: MetaEventError | undefined): string => {
@@ -93,9 +82,11 @@ const describeError = (error: MetaEventError | undefined): string => {
 
 export class WhatsAppInboundService implements PlatformInboundService {
   readonly #options: WhatsAppInboundServiceOptions;
+  readonly #notes: MetaThreadNotes;
 
   constructor(options: WhatsAppInboundServiceOptions) {
     this.#options = options;
+    this.#notes = new MetaThreadNotes(options);
   }
 
   async handle(context: MetaEventContext, event: MetaEvent): Promise<MetaEventOutcome> {
@@ -112,11 +103,9 @@ export class WhatsAppInboundService implements PlatformInboundService {
         return this.#reaction(context, event);
       case 'error':
         return this.#accountError(context, event);
-      case 'ignored':
-        return ignored(event.reason);
       default:
-        // Echoes, watermarks, postbacks: Messenger's and Instagram's vocabulary.
-        return ignored('not-whatsapp');
+        // Echoes and watermarks are Messenger's and Instagram's vocabulary.
+        return otherEvent(this.#options.log, context, event);
     }
   }
 
@@ -135,7 +124,7 @@ export class WhatsAppInboundService implements PlatformInboundService {
         accountExternalId: account.externalId,
         labels: metaInboundLabels(locale),
       },
-      event.timestamp ?? now,
+      instantOf(event.timestamp, now),
     );
     if (event.errors.length > 0) {
       // Meta could not serve what the customer sent (a media file it failed to
@@ -147,26 +136,13 @@ export class WhatsAppInboundService implements PlatformInboundService {
       );
     }
 
-    try {
-      await this.#options.router.route(
-        routeContextOf(context),
-        message,
-        this.#options.sink,
-        event.files.length > 0 && event.errors.length > 0 ? { fileRefusal: 'unreadable' } : {},
-      );
-    } catch (error) {
-      if (error instanceof ContactFailure) {
-        // An id this install cannot hold as an identifier: Meta would redeliver
-        // it for days to no purpose, so it is dropped and counted.
-        this.#options.log.warn(
-          { accountId: account.id, reason: error.reason },
-          'a whatsapp customer id was refused as an identifier; the message is dropped',
-        );
-        return ignored('invalid-customer-id');
-      }
-      throw error;
-    }
-    return handled;
+    const routed = await routeOrDrop(
+      this.#options,
+      context,
+      message,
+      event.files.length > 0 && event.errors.length > 0 ? { fileRefusal: 'unreadable' } : {},
+    );
+    return routed === undefined ? ignored('invalid-customer-id') : handled;
   }
 
   /**
@@ -195,7 +171,7 @@ export class WhatsAppInboundService implements PlatformInboundService {
   ): Promise<MetaEventOutcome> {
     const { tx, now } = context;
     const repository = this.#options.repository;
-    const at = event.timestamp ?? now;
+    const at = instantOf(event.timestamp, now);
 
     if (event.pricingCategory !== null) {
       await repository.recordPricing(tx, event.messageId, event.pricingCategory);
@@ -272,12 +248,18 @@ export class WhatsAppInboundService implements PlatformInboundService {
       // Not a customer message: the window stays where the last one put it.
       inbound: null,
     });
-    await this.#note(context, conversation.ticketId, {
-      kind: 'numberChanged',
-      from: previous === null ? '' : `+${previous}`,
-      to: `+${event.newWaId}`,
+    // The number moved whether or not there is a ticket to say so; redelivered,
+    // the same change is not told twice.
+    const told = await this.#notes.write(context, conversation.ticketId, {
+      line: {
+        kind: 'numberChanged',
+        from: previous === null ? '' : `+${previous}`,
+        to: `+${event.newWaId}`,
+      },
+      key:
+        event.timestamp === null ? null : noteKeys.numberChanged(conversation.id, event.timestamp),
     });
-    return handled;
+    return told === 'duplicate' ? duplicate : handled;
   }
 
   /** The new number proved, the old one taken off. Throws `ContactFailure` for a number that is not one. */
@@ -316,13 +298,11 @@ export class WhatsAppInboundService implements PlatformInboundService {
     if (event.customerId === null || event.messageId === null) {
       return ignored('no-customer');
     }
-    if (await metaMessageSeen(tx, account.brandId, 'whatsapp', event.messageId)) {
-      return { outcome: 'duplicate' };
-    }
-    if (await metaSenderBlocked(tx, account, event.customerId, now)) {
-      return ignored('blocked-sender');
-    }
+    const key = noteKeys.unsupported(event.messageId);
     const repository = this.#options.repository;
+    if (await repository.systemLineSeen(tx, account.brandId, key)) {
+      return duplicate;
+    }
     const conversation = await repository.conversation(tx, account.id, event.customerId);
     if (conversation === undefined) {
       this.#options.log.info(
@@ -340,15 +320,14 @@ export class WhatsAppInboundService implements PlatformInboundService {
       waId: null,
       profileName: null,
       username: null,
-      inbound: { at: event.timestamp ?? now, messageId: event.messageId },
+      inbound: { at: instantOf(event.timestamp, now), messageId: event.messageId },
     });
-    const noted = await this.#note(
-      context,
-      conversation.ticketId,
-      { kind: 'unsupported' },
-      event.messageId,
+    return noteOutcome(
+      await this.#notes.write(context, conversation.ticketId, {
+        line: { kind: 'unsupported' },
+        key,
+      }),
     );
-    return noted ? handled : ignored('no-open-ticket');
   }
 
   /**
@@ -361,10 +340,7 @@ export class WhatsAppInboundService implements PlatformInboundService {
     context: MetaEventContext,
     event: Extract<MetaEvent, { kind: 'reaction' }>,
   ): Promise<MetaEventOutcome> {
-    const { tx, account, now } = context;
-    if (await metaSenderBlocked(tx, account, event.customerId, now)) {
-      return ignored('blocked-sender');
-    }
+    const { tx, account } = context;
     const target = await this.#options.repository.messageByPlatformId(
       tx,
       account.brandId,
@@ -374,37 +350,7 @@ export class WhatsAppInboundService implements PlatformInboundService {
     if (target === undefined) {
       return ignored('unknown-message');
     }
-    const noted = await this.#note(context, target.ticketId, {
-      kind: 'reaction',
-      emoji: event.emoji,
-    });
-    return noted ? handled : ignored('no-open-ticket');
-  }
-
-  /**
-   * A line in the open ticket `ticketId` leads to, worded for its contact.
-   * False when there is none: no ticket, or one that is closed or spam.
-   */
-  async #note(
-    { tx, account }: MetaEventContext,
-    ticketId: string | null,
-    line: MetaSystemLine,
-    externalMessageId?: string,
-  ): Promise<boolean> {
-    const { router, lifecycleReads } = this.#options;
-    const ticket = ticketId === null ? undefined : await router.openTicket(tx, ticketId);
-    if (ticket === undefined) {
-      return false;
-    }
-
-    const locale = await lifecycleReads.localeForContact(tx, account.brandId, ticket.contactId);
-    await router.writeSystemLine(tx, {
-      ticket,
-      accountId: account.id,
-      text: metaSystemLine(locale, line),
-      ...(externalMessageId === undefined ? {} : { externalMessageId }),
-    });
-    return true;
+    return noteOutcome(await this.#notes.write(context, target.ticketId, reactionNote(event)));
   }
 
   // ------------------------------------------------------------- the account

@@ -1102,6 +1102,63 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     });
   });
 
+  describe('lines on the thread', () => {
+    it('are not written for a blocked customer: a reaction, an edit or something unsupported is dropped and counted', async () => {
+      const { psid, mid, ticket } = await customerWhoWrote();
+      await owner.db
+        .insert(blockedSenders)
+        .values({ brandId: BRAND_A, kind: 'messenger', value: identityOf(psid) });
+      const unsupported = pageText({ psid, mid: newMid(), timestamp: META_FIXTURE.time + 30 }) as {
+        entry: { messaging: { message: Record<string, unknown> }[] }[];
+      };
+      Object.assign(unsupported.entry[0]?.messaging[0]?.message ?? {}, {
+        text: '',
+        is_unsupported: true,
+      });
+
+      await post(pageReaction({ psid, mid, emoji: '👍' }));
+      await post(pageEdit({ psid, mid, text: 'Order 77', numEdit: 1 }));
+      await post(unsupported);
+
+      expect(await systemLines(ticket.id)).toEqual([]);
+      const [row] = await owner.db
+        .select({ droppedCount: blockedSenders.droppedCount })
+        .from(blockedSenders)
+        .where(eq(blockedSenders.value, identityOf(psid)));
+      expect(row?.droppedCount).toBe(3);
+    });
+
+    it('are written once on the primary of a merge, even when the primary is an email ticket', async () => {
+      const secondary = await customerWhoWrote('My order is late');
+      const primary = await customerWhoWrote('Another question');
+      await owner.db
+        .update(tickets)
+        .set({ channel: 'email' })
+        .where(eq(tickets.id, primary.ticket.id));
+      await owner.db
+        .update(tickets)
+        .set({ mergedIntoId: primary.ticket.id })
+        .where(eq(tickets.id, secondary.ticket.id));
+      const reaction = pageReaction({ psid: secondary.psid, mid: secondary.mid, emoji: '👍' });
+      const edit = pageEdit({
+        psid: secondary.psid,
+        mid: secondary.mid,
+        text: 'Order 77',
+        numEdit: 2,
+      });
+
+      for (const body of [reaction, reaction, edit, edit]) {
+        await post(body);
+      }
+
+      expect(await systemLines(secondary.ticket.id)).toEqual([]);
+      expect(await systemLines(primary.ticket.id)).toEqual([
+        'The customer reacted 👍 to a message.',
+        'The customer edited a message. It now reads: Order 77',
+      ]);
+    });
+  });
+
   // ------------------------------------------------------- counted, dropped
 
   describe('what Helpdock does not file', () => {

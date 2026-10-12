@@ -15,9 +15,9 @@ import {
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import { and, asc, eq, inArray, isNull, like } from 'drizzle-orm';
-import { UNSENT_ID_PREFIX, unsentMessageId } from './instagram-rules.js';
 import type { MetaRepository } from './meta.repository.js';
 import { MetaFailure } from './meta-failure.js';
+import { UNSENT_ID_PREFIX, unsentMessageId } from './meta-thread-notes.js';
 import { deliveryFacts, toMetaDelivery, toMetaTicketContext } from './meta-view.js';
 import { closedWindowDetails, conversationWindow } from './meta-window.js';
 import type { OutboundMetaService } from './outbound-meta.service.js';

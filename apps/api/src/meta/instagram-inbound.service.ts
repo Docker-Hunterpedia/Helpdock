@@ -3,33 +3,33 @@ import {
   type MetaMessageEvent,
   toInstagramInboundMessage,
 } from '@helpdock/channels';
-import { type DbTransaction, ticketMessages } from '@helpdock/db';
-import { and, eq } from 'drizzle-orm';
-import { z } from 'zod';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
-import { instantOf, REACTION_EMOJI_MAX_LENGTH, unsentExternalId } from './instagram-rules.js';
 import type { MetaRepository } from './meta.repository.js';
-import { enqueueMetaProfile } from './meta-events.js';
+import {
+  askForProfile,
+  dropEcho,
+  duplicate,
+  handled,
+  ignored,
+  instantOf,
+  otherEvent,
+  routeOrDrop,
+} from './meta-event-support.js';
 import type {
   MetaEventContext,
   MetaEventOutcome,
   MetaInboundLog,
   PlatformInboundService,
 } from './meta-inbound.service.js';
-import { metaSenderBlocked } from './meta-inbound-gate.js';
-import { wantsProfile } from './meta-profile.js';
-import type {
-  MetaAttachmentSink,
-  MetaConversationRouter,
-  MetaRouteContext,
-} from './meta-router.js';
-import { type MetaSystemLine, metaInboundLabels, metaSystemLine } from './meta-text.js';
+import type { MetaAttachmentSink, MetaConversationRouter } from './meta-router.js';
+import { metaInboundLabels } from './meta-text.js';
+import { MetaThreadNotes, noteKeys, noteOutcome, reactionNote } from './meta-thread-notes.js';
 
 /**
  * Instagram's events into one brand (M10-05, DOMAIN-RULES §4.7 and §4.8): the
  * platform half of the seam `MetaInboundService` fills, beside WhatsApp's. By
  * the time `handle` is called the dedupe on the `mid` and the block list have
- * been checked for a customer's message, so neither is repeated here.
+ * been checked for what a customer caused, so neither is repeated here.
  *
  * | The event is | What happens |
  * |---|---|
@@ -51,7 +51,12 @@ export interface InstagramInboundServiceOptions {
   readonly sink: MetaAttachmentSink;
   readonly repository: Pick<
     MetaRepository,
-    'advanceStatus' | 'conversation' | 'delivery' | 'messageByPlatformId' | 'upsertConversation'
+    | 'advanceStatus'
+    | 'conversation'
+    | 'delivery'
+    | 'messageByPlatformId'
+    | 'systemLineSeen'
+    | 'upsertConversation'
   >;
   readonly lifecycleReads: Pick<TicketLifecycleRepository, 'localeForContact'>;
   /** The install's `meta.appId`, to recognise Helpdock's own echoes; empty when none is set. */
@@ -59,27 +64,13 @@ export interface InstagramInboundServiceOptions {
   readonly log: MetaInboundLog;
 }
 
-const ignored = (reason: string): MetaEventOutcome => ({ outcome: 'ignored', reason });
-const handled: MetaEventOutcome = { outcome: 'handled' };
-
-/** Where a message came to, in the shape the router takes. */
-const routeContextOf = ({ tx, account, now }: MetaEventContext): MetaRouteContext => ({
-  tx,
-  brandId: account.brandId,
-  account: {
-    id: account.id,
-    departmentId: account.departmentId,
-    platform: 'instagram',
-    externalId: account.externalId,
-  },
-  now,
-});
-
 export class InstagramInboundService implements PlatformInboundService {
   readonly #options: InstagramInboundServiceOptions;
+  readonly #notes: MetaThreadNotes;
 
   constructor(options: InstagramInboundServiceOptions) {
     this.#options = options;
+    this.#notes = new MetaThreadNotes(options);
   }
 
   async handle(context: MetaEventContext, event: MetaEvent): Promise<MetaEventOutcome> {
@@ -87,7 +78,7 @@ export class InstagramInboundService implements PlatformInboundService {
       case 'message':
         return this.#file(context, event);
       case 'echo':
-        return this.#echo(context, event);
+        return dropEcho(context, event, this.#options);
       case 'deleted':
         return this.#unsent(context, event);
       case 'unsupported':
@@ -96,12 +87,10 @@ export class InstagramInboundService implements PlatformInboundService {
         return this.#seen(context, event);
       case 'reaction':
         return this.#reaction(context, event);
-      case 'ignored':
-        return ignored(event.reason);
       default:
         // Postbacks and referrals, and what Instagram does not send (a Messenger
         // watermark, a WhatsApp status): counted by the webhook, filed by nobody.
-        return ignored(event.kind);
+        return otherEvent(this.#options.log, context, event);
     }
   }
 
@@ -109,7 +98,7 @@ export class InstagramInboundService implements PlatformInboundService {
 
   async #file(context: MetaEventContext, event: MetaMessageEvent): Promise<MetaEventOutcome> {
     const { tx, account, now } = context;
-    const { repository, lifecycleReads, router, sink } = this.#options;
+    const { repository, lifecycleReads } = this.#options;
     const before = await repository.conversation(tx, account.id, event.customerId);
     const locale = await lifecycleReads.localeForContact(
       tx,
@@ -117,63 +106,20 @@ export class InstagramInboundService implements PlatformInboundService {
       before?.contactId ?? null,
     );
 
-    const message = toInstagramInboundMessage(
-      { event, accountExternalId: account.externalId, labels: metaInboundLabels(locale) },
-      instantOf(event.timestamp, now),
+    const routed = await routeOrDrop(
+      this.#options,
+      context,
+      toInstagramInboundMessage(
+        { event, accountExternalId: account.externalId, labels: metaInboundLabels(locale) },
+        instantOf(event.timestamp, now),
+      ),
     );
-    const routed = await router.route(routeContextOf(context), message, sink);
-
-    // Meta's message carries no name. A customer nobody has named, and Graph has
-    // not been asked about, gets one lookup, raised here and run by a job.
-    if (account.status === 'connected' && wantsProfile(before)) {
-      await enqueueMetaProfile(tx, account.brandId, {
-        conversationId: routed.conversationId,
-        accountId: account.id,
-        platform: 'instagram',
-      });
+    if (routed === undefined) {
+      return ignored('invalid-customer-id');
     }
 
+    await askForProfile(tx, account, 'instagram', routed.conversationId, before);
     return handled;
-  }
-
-  // ---------------------------------------------------------------- echoes
-
-  /**
-   * A business message echoed back. Helpdock's own sends carry its app id, or
-   * the delivery id it set as `metadata`; both are dropped without a word. Any
-   * other echo is one typed in the Instagram app or Meta Business Suite, which
-   * M10 does not import (the milestone's accepted gaps): dropped and counted.
-   */
-  async #echo(
-    { tx, account }: MetaEventContext,
-    event: Extract<MetaEvent, { kind: 'echo' }>,
-  ): Promise<MetaEventOutcome> {
-    const appId = await this.#options.appId();
-    const own =
-      (appId !== '' && event.appId === appId) ||
-      (await this.#isOurDelivery(tx, account.id, event.metadata));
-    if (own) {
-      return ignored('own-echo');
-    }
-    this.#options.log.info(
-      { accountId: account.id, platform: 'instagram', kind: 'echo' },
-      'instagram echo of a message sent outside helpdock dropped',
-    );
-    return ignored('echo');
-  }
-
-  async #isOurDelivery(
-    tx: DbTransaction,
-    accountId: string,
-    metadata: string | null,
-  ): Promise<boolean> {
-    const id = z.uuid().safeParse(metadata);
-    if (!id.success) {
-      return false;
-    }
-    const delivery = await this.#options.repository.delivery(tx, id.data);
-
-    return delivery?.accountId === accountId;
   }
 
   // -------------------------------------------------- unsent, unsupported
@@ -181,7 +127,7 @@ export class InstagramInboundService implements PlatformInboundService {
   /**
    * DOMAIN-RULES §4.8: an unsent message is kept and marked, never deleted. A
    * ticket message has no column for the mark, so it is a line whose external
-   * id is {@link unsentExternalId}: that is how the thread finds the message it
+   * id is {@link noteKeys.unsent}: that is how the thread finds the message it
    * belongs to, and how a redelivered event is told from a new one.
    */
   async #unsent(
@@ -189,9 +135,9 @@ export class InstagramInboundService implements PlatformInboundService {
     event: Extract<MetaEvent, { kind: 'deleted' }>,
   ): Promise<MetaEventOutcome> {
     const { tx, account } = context;
-    const marker = unsentExternalId(event.messageId);
-    if (await this.#lineExists(tx, account.brandId, marker)) {
-      return { outcome: 'duplicate' };
+    const key = noteKeys.unsent(event.messageId);
+    if (await this.#options.repository.systemLineSeen(tx, account.brandId, key)) {
+      return duplicate;
     }
     const target = await this.#options.repository.messageByPlatformId(
       tx,
@@ -200,12 +146,12 @@ export class InstagramInboundService implements PlatformInboundService {
       event.messageId,
     );
     if (target === undefined) {
-      return ignored('message-unknown');
+      return ignored('unknown-message');
     }
 
-    return (await this.#note(context, target.ticketId, { kind: 'unsent' }, marker))
-      ? handled
-      : ignored('no-open-ticket');
+    return noteOutcome(
+      await this.#notes.write(context, target.ticketId, { line: { kind: 'unsent' }, key }),
+    );
   }
 
   /**
@@ -223,11 +169,9 @@ export class InstagramInboundService implements PlatformInboundService {
     if (event.customerId === null || event.messageId === null) {
       return ignored('no-customer');
     }
-    if (await this.#lineExists(tx, account.brandId, event.messageId)) {
-      return { outcome: 'duplicate' };
-    }
-    if (await metaSenderBlocked(tx, account, event.customerId, now)) {
-      return ignored('blocked-sender');
+    const key = noteKeys.unsupported(event.messageId);
+    if (await repository.systemLineSeen(tx, account.brandId, key)) {
+      return duplicate;
     }
     const conversation = await repository.conversation(tx, account.id, event.customerId);
     this.#options.log.info(
@@ -249,14 +193,12 @@ export class InstagramInboundService implements PlatformInboundService {
       inbound: { at: instantOf(event.timestamp, now), messageId: event.messageId },
     });
 
-    return (await this.#note(
-      context,
-      conversation.ticketId,
-      { kind: 'unsupported' },
-      event.messageId,
-    ))
-      ? handled
-      : ignored('no-open-ticket');
+    return noteOutcome(
+      await this.#notes.write(context, conversation.ticketId, {
+        line: { kind: 'unsupported' },
+        key,
+      }),
+    );
   }
 
   // --------------------------------------------------- receipts, reactions
@@ -273,7 +215,7 @@ export class InstagramInboundService implements PlatformInboundService {
       instantOf(event.timestamp, now),
     );
 
-    return delivery === undefined ? ignored('no-delivery') : handled;
+    return delivery === undefined ? ignored('no-delivery-to-advance') : handled;
   }
 
   /**
@@ -286,10 +228,7 @@ export class InstagramInboundService implements PlatformInboundService {
     context: MetaEventContext,
     event: Extract<MetaEvent, { kind: 'reaction' }>,
   ): Promise<MetaEventOutcome> {
-    const { tx, account, now } = context;
-    if (await metaSenderBlocked(tx, account, event.customerId, now)) {
-      return ignored('blocked-sender');
-    }
+    const { tx, account } = context;
     const target = await this.#options.repository.messageByPlatformId(
       tx,
       account.brandId,
@@ -300,67 +239,6 @@ export class InstagramInboundService implements PlatformInboundService {
       return ignored('unknown-message');
     }
 
-    return (await this.#note(context, target.ticketId, reactionLine(event)))
-      ? handled
-      : ignored('no-open-ticket');
-  }
-
-  // ---------------------------------------------------------------- lines
-
-  /**
-   * A line in the open ticket `ticketId` leads to, worded for its contact.
-   * False when there is none: no ticket, or one that is closed or spam.
-   */
-  async #note(
-    { tx, account }: MetaEventContext,
-    ticketId: string | null,
-    line: MetaSystemLine,
-    externalMessageId?: string,
-  ): Promise<boolean> {
-    const { router, lifecycleReads } = this.#options;
-    const ticket = ticketId === null ? undefined : await router.openTicket(tx, ticketId);
-    if (ticket === undefined) {
-      return false;
-    }
-
-    const locale = await lifecycleReads.localeForContact(tx, account.brandId, ticket.contactId);
-    await router.writeSystemLine(tx, {
-      ticket,
-      accountId: account.id,
-      text: metaSystemLine(locale, line),
-      ...(externalMessageId === undefined ? {} : { externalMessageId }),
-    });
-    return true;
-  }
-
-  /**
-   * Whether a line with this external id is already in the brand's tickets,
-   * whatever channel the ticket it landed on has: a line goes to the primary of
-   * a merge, which can be an email ticket, and the unique key is per channel.
-   */
-  async #lineExists(tx: DbTransaction, brandId: string, externalId: string): Promise<boolean> {
-    const rows = await tx
-      .select({ id: ticketMessages.id })
-      .from(ticketMessages)
-      .where(
-        and(
-          eq(ticketMessages.brandId, brandId),
-          eq(ticketMessages.kind, 'system'),
-          eq(ticketMessages.externalMessageId, externalId),
-        ),
-      )
-      .limit(1);
-
-    return rows.length > 0;
+    return noteOutcome(await this.#notes.write(context, target.ticketId, reactionNote(event)));
   }
 }
-
-/** A reaction, or one taken back, as the line the thread shows. */
-const reactionLine = (event: Extract<MetaEvent, { kind: 'reaction' }>): MetaSystemLine => {
-  if (event.action === 'unreact') {
-    return { kind: 'reaction', emoji: null };
-  }
-  const emoji = (event.emoji ?? '').slice(0, REACTION_EMOJI_MAX_LENGTH);
-
-  return emoji === '' ? { kind: 'reactionPlain' } : { kind: 'reaction', emoji };
-};

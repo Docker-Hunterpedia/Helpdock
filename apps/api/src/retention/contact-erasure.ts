@@ -5,6 +5,7 @@ import { enqueueObjectPurge } from '../media/object-purge.js';
 import {
   eraseAiRedactions,
   eraseMetaConversations,
+  eraseMetaLineKeys,
   eraseTelegramChats,
   eraseWebhookPayloads,
 } from './erase-copies.js';
@@ -26,8 +27,9 @@ import {
  * still reads "customer" where the customer spoke. What a channel stamped on
  * the message is different: `external_message_id` is an email `Message-ID`
  * (whose right-hand side is the sender's mail host), a Telegram message id in a
- * chat with that person or a WhatsApp `wamid`. Those are cleared. The body
- * stays, as §11 says.
+ * chat with that person or a WhatsApp `wamid`. Those are cleared, and so are
+ * the ones a Meta channel's system lines carry for the person's messages
+ * (`eraseMetaLineKeys`). The body stays, as §11 says.
  *
  * **Copies in other tables** (ASVS 8.3.2): the Telegram chat rows and the Meta
  * conversations, the redaction maps of model calls on their tickets, and the
@@ -86,9 +88,11 @@ export class DbContactErasureProvider implements ContactErasureProvider {
       .where(and(authoredByContact, isNotNull(ticketMessages.externalMessageId)))
       .returning({ id: ticketMessages.id });
 
+    const metaLines = await eraseMetaLineKeys(tx, brandId, contactId);
+
     return {
       attachments: sent.length,
-      messages: rewritten.length,
+      messages: rewritten.length + metaLines,
       telegramChats: await eraseTelegramChats(tx, brandId, contactId),
       metaConversations: await eraseMetaConversations(tx, brandId, contactId),
       aiCalls: await eraseAiRedactions(tx, brandId, contactId),

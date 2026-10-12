@@ -565,6 +565,29 @@ export class MetaRepository {
   }
 
   /**
+   * Whether a system line with this key is already in the brand's tickets,
+   * whatever channel the ticket it landed on has: a line goes to the primary of
+   * a merge, which can be an email ticket, and the unique key is per channel,
+   * so asking about the platform's own channel would miss it. A redelivered
+   * webhook is told from a new event by this (`meta-thread-notes.ts`).
+   */
+  async systemLineSeen(tx: DbTransaction, brandId: string, key: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: ticketMessages.id })
+      .from(ticketMessages)
+      .where(
+        and(
+          eq(ticketMessages.brandId, brandId),
+          eq(ticketMessages.kind, 'system'),
+          eq(ticketMessages.externalMessageId, key),
+        ),
+      )
+      .limit(1);
+
+    return rows.length > 0;
+  }
+
+  /**
    * WhatsApp's `failed` report on one message of ours (a number that is not on
    * WhatsApp, a recipient who blocked the number): the delivery ends here
    * whether Meta had accepted it or the report beat the send job's last write.

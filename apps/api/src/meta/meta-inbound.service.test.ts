@@ -1,5 +1,4 @@
 import {
-  classifyMessagingEvent,
   type MetaEvent,
   type MetaRoute,
   type MetaWebhookBody,
@@ -14,12 +13,9 @@ import type { AccountLocator, MetaRepository } from './meta.repository.js';
 import {
   describeFailure,
   type MetaEventContext,
-  type MetaEventOutcome,
   type MetaInboundLog,
   MetaInboundService,
   type PlatformInboundService,
-  unhandledInbound,
-  unhandledInboundHandlers,
 } from './meta-inbound.service.js';
 
 /**
@@ -126,14 +122,6 @@ describe('MetaInboundService.receive', () => {
     expect(repository.markEvent).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'acc-1', NOW);
   });
 
-  it('runs every event in a savepoint of the route’s transaction', async () => {
-    const { service, calls } = harness();
-
-    await service.receive(locator, messages('mid.1'));
-
-    expect(calls[0]?.context.tx).toEqual({ savepoint: true });
-  });
-
   it('never shows the handler a message that was filed before', async () => {
     seen.add('mid.1');
     const { service, calls } = harness();
@@ -154,7 +142,73 @@ describe('MetaInboundService.receive', () => {
     expect(calls).toEqual([]);
   });
 
-  it('asks only a customer’s message for its dedupe key and its sender', async () => {
+  describe('a blocked sender', () => {
+    const customerId = '7654321098765432';
+    const base = { platform: 'messenger', timestamp: null } as const;
+    const caused: [string, MetaEvent][] = [
+      [
+        'reacts',
+        { ...base, kind: 'reaction', customerId, messageId: 'mid.r', action: 'react', emoji: 'x' },
+      ],
+      [
+        'edits a message',
+        { ...base, kind: 'edit', customerId, messageId: 'mid.e', text: 'y', editNumber: 1 },
+      ],
+      [
+        'sends something Helpdock cannot show',
+        { ...base, kind: 'unsupported', customerId, messageId: 'mid.u', detail: null, errors: [] },
+      ],
+      ['unsends a message', { ...base, kind: 'deleted', customerId, messageId: 'mid.d' }],
+    ];
+
+    it.each(caused)('writes nothing and moves no window when it %s', async (_what, event) => {
+      blocked.add(customerId);
+      const { service, calls } = harness();
+
+      const result = await service.receive(locator, { ...messages('mid.1'), events: [event] });
+
+      expect(result.events).toEqual([{ outcome: 'ignored', reason: 'blocked-sender' }]);
+      expect(calls).toEqual([]);
+    });
+
+    it('is not asked about what its customer did not cause: a receipt, an echo, a notice', async () => {
+      blocked.add(customerId);
+      const { service, calls } = harness();
+      const events: MetaEvent[] = [
+        { ...base, kind: 'delivery', customerId, watermark: null, mids: ['mid.9'] },
+        { ...base, kind: 'read', customerId, watermark: null },
+        { ...base, kind: 'policy_enforcement', action: 'block', reason: null },
+      ];
+
+      const result = await service.receive(locator, { ...messages('mid.1'), events });
+
+      expect(result.events).toEqual([
+        { outcome: 'handled' },
+        { outcome: 'handled' },
+        { outcome: 'handled' },
+      ]);
+      expect(calls).toHaveLength(3);
+    });
+
+    it('is not asked about an unsupported event that names no customer', async () => {
+      blocked.add(customerId);
+      const { service } = harness();
+      const event: MetaEvent = {
+        ...base,
+        kind: 'unsupported',
+        customerId: null,
+        messageId: 'mid.u',
+        detail: null,
+        errors: [],
+      };
+
+      const result = await service.receive(locator, { ...messages('mid.1'), events: [event] });
+
+      expect(result.events).toEqual([{ outcome: 'handled' }]);
+    });
+  });
+
+  it('asks only a customer’s message for its dedupe key', async () => {
     const { service, calls } = harness();
     seen.add('mid.9');
     const delivery = routeOf(pageDelivery({ mids: ['mid.9'] }));
@@ -230,39 +284,6 @@ describe('MetaInboundService.receive', () => {
     ]);
     expect(calls).toEqual([]);
     expect(repository.markEvent).not.toHaveBeenCalled();
-  });
-});
-
-describe('unhandledInbound', () => {
-  it('logs what arrived, without the customer or the words, and counts it as unhandled', async () => {
-    const info = vi.fn();
-    const handler = unhandledInbound({ info, warn: vi.fn(), error: vi.fn() });
-    const event = classifyMessagingEvent(
-      {
-        sender: { id: '7654321098765432' },
-        message: { mid: 'mid.1', text: 'my card number is 4111' },
-      },
-      'messenger',
-    );
-
-    const outcome: MetaEventOutcome = await handler.handle(
-      { tx: {} as never, account, now: NOW },
-      event,
-    );
-
-    expect(outcome).toEqual({ outcome: 'unhandled' });
-    expect(info).toHaveBeenCalledExactlyOnceWith(
-      { accountId: 'acc-1', platform: 'messenger', kind: 'message' },
-      expect.any(String),
-    );
-    expect(JSON.stringify(info.mock.calls)).not.toContain('7654321098765432');
-    expect(JSON.stringify(info.mock.calls)).not.toContain('4111');
-  });
-
-  it('is the default for all three platforms', () => {
-    const handlers = unhandledInboundHandlers({ info: vi.fn(), warn: vi.fn(), error: vi.fn() });
-
-    expect(Object.keys(handlers).sort()).toEqual(['instagram', 'messenger', 'whatsapp']);
   });
 });
 

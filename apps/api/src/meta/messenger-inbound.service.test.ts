@@ -41,11 +41,6 @@ const state = vi.hoisted(() => ({
   seen: new Set<string>(),
   profileRequests: [] as { brandId: string; profile: unknown }[],
 }));
-vi.mock('./meta-inbound-gate.js', () => ({
-  metaMessageSeen: async (_tx: unknown, _brand: string, _platform: string, messageId: string) =>
-    state.seen.has(messageId),
-  metaSenderBlocked: async () => false,
-}));
 vi.mock('./meta-events.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./meta-events.js')>()),
   enqueueMetaProfile: async (_tx: unknown, brandId: string, profile: unknown) => {
@@ -56,10 +51,8 @@ vi.mock('./meta-events.js', async (importOriginal) => ({
 
 const BRAND = '01924f00-0000-7000-8000-0000000000a1';
 const ACCOUNT_ID = '01924f00-0000-7000-8000-0000000000b1';
-const OTHER_ACCOUNT_ID = '01924f00-0000-7000-8000-0000000000b2';
 const CONTACT = '01924f00-0000-7000-8000-0000000000c1';
 const CONVERSATION = '01924f00-0000-7000-8000-0000000000d1';
-const DELIVERY = '01924f00-0000-7000-8000-0000000000e1';
 const TICKET = {
   id: '01924f00-0000-7000-8000-0000000000f1',
   departmentId: 'dept-1',
@@ -71,6 +64,7 @@ const account = {
   id: ACCOUNT_ID,
   brandId: BRAND,
   platform: 'messenger',
+  status: 'connected',
   externalId: META_FIXTURE.pageId,
   departmentId: 'dept-1',
 } as MetaAccount;
@@ -94,6 +88,7 @@ const conversation = (over: Partial<MetaConversation> = {}): MetaConversation =>
     contactId: CONTACT,
     ticketId: TICKET.id,
     profileName: null,
+    username: null,
     profileCheckedAt: null,
     ...over,
   }) as MetaConversation;
@@ -132,6 +127,7 @@ const harness = () => {
     advanceStatus: vi.fn(async () => undefined),
     advanceByWatermark: vi.fn(async () => []),
     markError: vi.fn(async (..._args: unknown[]) => undefined),
+    systemLineSeen: vi.fn(async (_tx: unknown, _brand: string, key: string) => state.seen.has(key)),
     upsertConversation: vi.fn(async () => conversation()),
     messageByPlatformId: vi.fn(
       async (_tx: unknown, _brand: string, _platform: string, id: string) => messages.get(id),
@@ -340,102 +336,33 @@ describe('an echo', () => {
 
     const outcome = await handle(echoOf({ appId: META_FIXTURE.appId }));
 
-    expect(outcome).toEqual({ outcome: 'ignored', reason: 'echo' });
+    expect(outcome).toEqual({ outcome: 'ignored', reason: 'own-echo' });
     expect(route).not.toHaveBeenCalled();
     expect(log.info).not.toHaveBeenCalled();
   });
 
-  it('is dropped silently when its metadata names one of this account’s deliveries', async () => {
-    const { handle, repository, log } = harness();
-    repository.delivery.mockResolvedValue({ id: DELIVERY, accountId: ACCOUNT_ID } as MetaDelivery);
+  it('is counted when it was typed in the Page inbox', async () => {
+    const { handle, log } = harness();
 
-    const outcome = await handle(echoOf({ appId: '999', metadata: DELIVERY }));
-
-    expect(outcome).toEqual({ outcome: 'ignored', reason: 'echo' });
-    expect(log.info).not.toHaveBeenCalled();
-  });
-
-  it('is counted when it is another app’s, a delivery of another account, or a metadata that is no id', async () => {
-    const other = harness();
-    other.repository.delivery.mockResolvedValue({
-      id: DELIVERY,
-      accountId: OTHER_ACCOUNT_ID,
-    } as MetaDelivery);
-    expect(await other.handle(echoOf({ appId: '999', metadata: DELIVERY }))).toEqual({
+    expect(await handle(echoOf({ appId: '263902037430900' }))).toEqual({
       outcome: 'ignored',
-      reason: 'echo-not-ours',
+      reason: 'foreign-echo',
     });
-    expect(other.log.info).toHaveBeenCalledWith(
-      { accountId: ACCOUNT_ID },
-      'messenger echo of a message Helpdock did not send; dropped',
-    );
-
-    const inbox = harness();
-    expect(await inbox.handle(echoOf({ appId: '263902037430900' }))).toEqual({
-      outcome: 'ignored',
-      reason: 'echo-not-ours',
-    });
-
-    const noDelivery = harness();
-    expect(await noDelivery.handle(echoOf({ appId: '999', metadata: DELIVERY }))).toEqual({
-      outcome: 'ignored',
-      reason: 'echo-not-ours',
-    });
-
-    const typed = harness();
-    expect(await typed.handle(echoOf({ appId: '999', metadata: 'sent from the inbox' }))).toEqual({
-      outcome: 'ignored',
-      reason: 'echo-not-ours',
-    });
-    // Not an id at all: asking the database would be an error, not an answer.
-    expect(typed.repository.delivery).not.toHaveBeenCalled();
-  });
-
-  it('is never taken for ours by an app id when the install has none set', async () => {
-    const { handle, appId } = harness();
-    appId.mockResolvedValue('');
-
-    expect(await handle(echoOf({ appId: META_FIXTURE.appId }))).toEqual({
-      outcome: 'ignored',
-      reason: 'echo-not-ours',
-    });
+    expect(log.info).toHaveBeenCalledOnce();
   });
 });
 
 describe('a delivery or read report', () => {
+  // Which deliveries a watermark marks, and that none moves back, is proved against
+  // Postgres in `meta-messenger.integration.test.ts`; here only what the webhook is told.
   it.each([
-    ['delivery', pageDelivery, 'delivered'],
-    ['read', pageRead, 'read'],
-  ] as const)(
-    'marks the conversation’s deliveries up to a %s watermark, at its time',
-    async (_kind, report, status) => {
-      const { handle, repository } = harness();
-      repository.conversation.mockResolvedValue(conversation());
-      const watermark = META_FIXTURE.time + 120;
-
-      expect(await handle(report({ watermark }))).toEqual({ outcome: 'handled' });
-
-      expect(repository.advanceByWatermark).toHaveBeenCalledWith(
-        {},
-        CONVERSATION,
-        status,
-        new Date(watermark * 1_000),
-      );
-      expect(repository.advanceStatus).not.toHaveBeenCalled();
-    },
-  );
-
-  it('also moves the messages a delivery names, one by one', async () => {
+    ['a delivery', pageDelivery({ mids: ['mid.a'] })],
+    ['a read', pageRead()],
+  ] as const)('is handled for %s from a customer the account talks to', async (_kind, body) => {
     const { handle, repository } = harness();
     repository.conversation.mockResolvedValue(conversation());
-    const watermark = META_FIXTURE.time + 120;
 
-    await handle(pageDelivery({ watermark, mids: ['mid.a', 'mid.b'] }));
-
-    expect(repository.advanceStatus.mock.calls).toEqual([
-      [{}, 'mid.a', 'delivered', new Date(watermark * 1_000)],
-      [{}, 'mid.b', 'delivered', new Date(watermark * 1_000)],
-    ]);
+    expect(await handle(body)).toEqual({ outcome: 'handled' });
   });
 
   it('is dropped for a customer the account has no conversation with', async () => {
@@ -479,7 +406,8 @@ describe('a reaction or an edit', () => {
         ticket: TICKET,
         accountId: ACCOUNT_ID,
         text: 'The customer reacted ❤️ to a message.',
-        externalMessageId: `reaction:mid.reply:${META_FIXTURE.psid}:react:${String(META_FIXTURE.time * 1_000)}`,
+        // The key names the message, the way and the time, never the customer.
+        externalMessageId: `reaction:mid.reply:react:${String(META_FIXTURE.time * 1_000)}`,
       },
     ]);
   });
@@ -728,12 +656,9 @@ describe('what Helpdock does not file', () => {
       ],
     };
 
-    expect(await handle(seenReceipt)).toEqual({
-      outcome: 'ignored',
-      reason: 'unexpected-seen',
-    });
+    expect(await handle(seenReceipt)).toEqual({ outcome: 'ignored', reason: 'wrong-platform' });
     expect(log.warn).toHaveBeenCalledWith(
-      { kind: 'seen', platform: 'instagram' },
+      { accountId: ACCOUNT_ID, kind: 'seen', platform: 'instagram' },
       'messenger received an event of another platform; dropped',
     );
   });

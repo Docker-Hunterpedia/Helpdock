@@ -943,6 +943,22 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
     });
   });
 
+  describe('a customer id Helpdock cannot hold as an identifier', () => {
+    it('is dropped, answered 200, and costs the rest of the batch nothing', async () => {
+      const good = nextIgsid();
+
+      const batch = await driver.postBatch([
+        instagramText({ igAccountId: IG_A, igsid: 'not an id', mid: nextMid(), text: 'Odd one' }),
+        instagramText({ igAccountId: IG_A, igsid: good, mid: nextMid(), text: 'Normal one' }),
+      ]);
+
+      expect(batch.status).toBe(200);
+      const { ticket } = await ticketFor(accountOf(BRAND_A), good);
+      expect(ticket).toBeDefined();
+      expect(await conversationOf(accountOf(BRAND_A).id, 'not an id')).toBeUndefined();
+    });
+  });
+
   // ---------------------------------------------- files, stories, shared posts
 
   describe('what a customer attaches', () => {

@@ -1331,6 +1331,69 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
         );
       });
 
+      it('notes a reaction once however often Meta delivers it', async () => {
+        const customer = newCustomer();
+        const { ticket, wamid } = await openTicket(customer);
+        const body = whatsappReaction({ ...base(customer), reactsTo: wamid, emoji: '\u{1F44D}' });
+
+        await send(body);
+        await send(body);
+
+        expect(await systemLines(ticket.id)).toEqual([
+          'The customer reacted \u{1F44D} to a message.',
+        ]);
+        // The key names the message, the way and the time: no customer id outlives an erasure in it.
+        const [line] = (await messagesOf(ticket.id)).filter((row) => row.kind === 'system');
+        expect(line?.externalMessageId).toMatch(/^reaction:wamid\.[^:]+:react:\d+$/);
+        expect(line?.externalMessageId).not.toContain(customer.userId);
+      });
+
+      it('tells a change of number once however often Meta delivers it', async () => {
+        const customer = newCustomer();
+        const { ticket } = await openTicket(customer);
+        const body = whatsappUserChangedNumber({
+          ...base(customer),
+          oldWaId: customer.from,
+          newWaId: '16505559999',
+        });
+
+        await send(body);
+        await send(body);
+
+        expect(await systemLines(ticket.id)).toHaveLength(1);
+      });
+
+      it('files each line once on the primary of a merge, even when the primary is an email ticket', async () => {
+        const [secondary, primary] = [newCustomer(), newCustomer()];
+        const first = await openTicket(secondary, 'My order is late');
+        const into = await openTicket(primary, 'Another question');
+        // The line goes to the primary, whose channel decides the key's uniqueness.
+        await owner.db
+          .update(tickets)
+          .set({ channel: 'email' })
+          .where(eq(tickets.id, into.ticket.id));
+        await owner.db
+          .update(tickets)
+          .set({ mergedIntoId: into.ticket.id })
+          .where(eq(tickets.id, first.ticket.id));
+        const unsupported = whatsappUnsupported({ ...base(secondary) });
+        const reaction = whatsappReaction({
+          ...base(secondary),
+          reactsTo: first.wamid,
+          emoji: '\u{1F44D}',
+        });
+
+        for (const body of [unsupported, unsupported, reaction, reaction]) {
+          await send(body);
+        }
+
+        expect(await systemLines(first.ticket.id)).toEqual([]);
+        expect(await systemLines(into.ticket.id)).toEqual([
+          'The customer sent something that cannot be shown here.',
+          'The customer reacted \u{1F44D} to a message.',
+        ]);
+      });
+
       it('notes a reaction to the agent’s reply on its ticket', async () => {
         const customer = newCustomer();
         const { ticket } = await openTicket(customer);

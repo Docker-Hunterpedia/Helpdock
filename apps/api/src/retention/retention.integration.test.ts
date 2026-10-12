@@ -1460,6 +1460,27 @@ describe.skipIf(!hasDocker)('data retention', () => {
               BYSTANDER_USER_ID,
             ),
           ]);
+        // The lines the inbound services write keep the platform's id for the message
+        // they are about, so a redelivered webhook writes each once.
+        const line = (ticketId: string, key: string) => ({
+          brandId: brandA.id,
+          departmentId: brandA.departmentId,
+          ticketId,
+          seq: 2,
+          kind: 'system' as const,
+          authorType: 'system' as const,
+          authorId: `meta:${accountId}`,
+          bodyHtml: '<p>The customer reacted to a message.</p>',
+          bodyText: 'The customer reacted to a message.',
+          channel: 'email' as const,
+          externalMessageId: key,
+        });
+        await tx
+          .insert(ticketMessages)
+          .values([
+            line(ticket.id, 'reaction:wamid.MINE:react:1760000000000'),
+            line(bystanderTicket.id, 'reaction:wamid.THEIRS:react:1760000000000'),
+          ]);
       });
 
       const response = await call<ContactDetail>(
@@ -1478,6 +1499,14 @@ describe.skipIf(!hasDocker)('data retention', () => {
           .select()
           .from(metaDeliveries)
           .where(eq(metaDeliveries.accountId, accountId)),
+        lines: await tx
+          .select({
+            ticketId: ticketMessages.ticketId,
+            externalMessageId: ticketMessages.externalMessageId,
+            bodyText: ticketMessages.bodyText,
+          })
+          .from(ticketMessages)
+          .where(and(eq(ticketMessages.brandId, brandA.id), eq(ticketMessages.kind, 'system'))),
         audit: (
           await tx
             .select()
@@ -1491,6 +1520,16 @@ describe.skipIf(!hasDocker)('data retention', () => {
       expect(after.deliveries.map((row) => row.customerId)).toEqual([BYSTANDER_USER_ID]);
       expect(after.audit?.meta).toMatchObject({ metaConversationCount: 1 });
       expect(JSON.stringify(after)).not.toContain('16505551234');
+      // The platform's id for their message goes from the line, which keeps its words; the
+      // bystander's line keeps its key.
+      expect(after.lines.find((row) => row.ticketId === ticket.id)).toMatchObject({
+        externalMessageId: null,
+        bodyText: 'The customer reacted to a message.',
+      });
+      expect(after.lines.find((row) => row.ticketId === bystanderTicket.id)).toMatchObject({
+        externalMessageId: 'reaction:wamid.THEIRS:react:1760000000000',
+      });
+      expect(JSON.stringify(after.lines)).not.toContain('wamid.MINE');
       expect(JSON.stringify(after.audit?.meta)).not.toContain(USER_ID);
 
       // A later message from the same person meets nobody and files a new contact.

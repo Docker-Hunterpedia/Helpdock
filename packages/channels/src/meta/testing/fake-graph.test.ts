@@ -512,6 +512,230 @@ describe('refusing a customer, as Meta does', () => {
   });
 });
 
+describe('bodies as Meta’s reference writes them', () => {
+  // Literal requests, copied from the shapes Meta documents for `POST /{id}/messages` and
+  // not built from Helpdock's own schemas, so a field Helpdock got wrong is refused here too.
+  it('accepts the WhatsApp text, image, document and audio bodies of the reference', async () => {
+    const bodies = [
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: CUSTOMER,
+        type: 'text',
+        text: { preview_url: false, body: 'text-message-content' },
+      },
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: CUSTOMER,
+        type: 'image',
+        image: { id: 'your-media-id', caption: 'your-image-caption' },
+      },
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: CUSTOMER,
+        type: 'document',
+        document: { id: 'your-media-id', caption: 'your-document-caption', filename: 'file-name' },
+      },
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: CUSTOMER,
+        type: 'audio',
+        audio: { id: 'your-media-id' },
+      },
+    ];
+
+    for (const body of bodies) {
+      expect(
+        (await call('POST', fb(`/${PHONE_ID}/messages`), { token: WA_TOKEN, body })).status,
+      ).toBe(200);
+    }
+  });
+
+  it('accepts the Messenger text, attachment and tagged bodies of the reference', async () => {
+    graph.lastCustomerMessage.set(PSID, new Date(NOW.getTime() - 3 * 86_400_000));
+    const bodies = [
+      {
+        recipient: { id: PSID },
+        messaging_type: 'MESSAGE_TAG',
+        tag: 'HUMAN_AGENT',
+        message: { text: 'hello' },
+      },
+      {
+        recipient: { id: PSID },
+        messaging_type: 'MESSAGE_TAG',
+        tag: 'HUMAN_AGENT',
+        message: {
+          attachment: {
+            type: 'image',
+            payload: { url: 'https://www.example.com/image.png', is_reusable: true },
+          },
+        },
+      },
+    ];
+
+    for (const body of bodies) {
+      expect(
+        (await call('POST', fb(`/${PAGE_ID}/messages`), { token: PAGE_TOKEN, body })).status,
+      ).toBe(200);
+    }
+  });
+
+  it('refuses what Meta refuses: a caption on audio, a file name on an image, an unknown message_type', async () => {
+    const refused = [
+      {
+        messaging_product: 'whatsapp',
+        to: CUSTOMER,
+        type: 'audio',
+        audio: { id: 'your-media-id', caption: 'no captions on audio' },
+      },
+      {
+        messaging_product: 'whatsapp',
+        to: CUSTOMER,
+        type: 'image',
+        image: { id: 'your-media-id', filename: 'no file names on images' },
+      },
+    ];
+    for (const body of refused) {
+      expect(
+        (await call('POST', fb(`/${PHONE_ID}/messages`), { token: WA_TOKEN, body })).status,
+      ).toBe(400);
+    }
+    expect(
+      (
+        await call('POST', fb(`/${PAGE_ID}/messages`), {
+          token: PAGE_TOKEN,
+          body: { recipient: { id: PSID }, message_type: 'RESPONSE', message: { text: 'hello' } },
+        })
+      ).status,
+    ).toBe(400);
+  });
+});
+
+describe('the windows of a customer who wrote', () => {
+  const HOUR = 3_600_000;
+  const DAY = 24 * HOUR;
+  const wroteAgo = (ms: number): Date => new Date(NOW.getTime() - ms);
+  const tagged = (id: string, text = 'Still looking into it') => ({
+    recipient: { id },
+    messaging_type: 'MESSAGE_TAG',
+    tag: 'HUMAN_AGENT',
+    message: { text },
+  });
+  const sendMessenger = (body: unknown) =>
+    call('POST', fb(`/${PAGE_ID}/messages`), { token: PAGE_TOKEN, body });
+  const sendInstagram = (body: unknown) =>
+    call('POST', ig(`/${IG_ID}/messages`), { token: IG_TOKEN, body });
+  const sendWhatsApp = (body: unknown) =>
+    call('POST', fb(`/${PHONE_ID}/messages`), { token: WA_TOKEN, body });
+
+  it('takes a free-form reply for 24 hours and refuses it from the instant they have passed', async () => {
+    graph.lastCustomerMessage.set(PSID, wroteAgo(24 * HOUR - 1));
+    expect((await sendMessenger(messagingText(PSID))).status).toBe(200);
+
+    graph.lastCustomerMessage.set(PSID, wroteAgo(24 * HOUR));
+    const late = await sendMessenger(messagingText(PSID));
+
+    expect(late.status).toBe(400);
+    expect(errorOf(late)).toMatchObject({ code: 10, error_subcode: 2_018_278 });
+  });
+
+  it('refuses a WhatsApp text after 24 hours with 131047, however the number is written', async () => {
+    graph.lastCustomerMessage.set(CUSTOMER, wroteAgo(25 * HOUR));
+
+    for (const to of [CUSTOMER, `+${CUSTOMER}`]) {
+      const reply = await sendWhatsApp(waText(to));
+
+      expect(reply.status).toBe(400);
+      expect(errorOf(reply)).toMatchObject({ code: 131_047 });
+    }
+  });
+
+  it('does not judge a customer it was never told about, so a suite that ignores the window need not set one', async () => {
+    expect((await sendMessenger(messagingText(PSID))).status).toBe(200);
+  });
+
+  it.each([
+    ['Messenger', sendMessenger, PSID],
+    ['Instagram', sendInstagram, IGSID],
+  ] as const)(
+    'takes the Human Agent tag on %s for seven days after the customer’s last message',
+    async (_name, send, customer) => {
+      graph.lastCustomerMessage.set(customer, wroteAgo(3 * DAY));
+
+      const reply = await send(tagged(customer));
+
+      expect(reply.status).toBe(200);
+      expect(graph.sent.at(-1)?.payload).toMatchObject({
+        messaging_type: 'MESSAGE_TAG',
+        tag: 'HUMAN_AGENT',
+      });
+    },
+  );
+
+  it.each([
+    ['Messenger', sendMessenger, PSID],
+    ['Instagram', sendInstagram, IGSID],
+  ] as const)(
+    'refuses the tag on %s from the seventh day, with the closed-window error',
+    async (_name, send, customer) => {
+      graph.lastCustomerMessage.set(customer, wroteAgo(7 * DAY - 1));
+      expect((await send(tagged(customer))).status).toBe(200);
+
+      graph.lastCustomerMessage.set(customer, wroteAgo(7 * DAY));
+      const late = await send(tagged(customer));
+
+      expect(late.status).toBe(400);
+      expect(errorOf(late)).toMatchObject({ code: 10, error_subcode: 2_018_278 });
+    },
+  );
+
+  it('refuses the tag for a customer who never wrote: it extends a window, it does not open one', async () => {
+    const reply = await sendMessenger(tagged(PSID));
+
+    expect(reply.status).toBe(400);
+    expect(errorOf(reply)).toMatchObject({ code: 10, error_subcode: 2_018_278 });
+    expect(graph.sent).toEqual([]);
+  });
+
+  it('refuses the tag on WhatsApp, which has no such parameter', async () => {
+    graph.lastCustomerMessage.set(CUSTOMER, wroteAgo(3 * DAY));
+
+    const reply = await sendWhatsApp({
+      ...waText(CUSTOMER),
+      messaging_type: 'MESSAGE_TAG',
+      tag: 'HUMAN_AGENT',
+    });
+
+    expect(reply.status).toBe(400);
+    expect(errorOf(reply)).toMatchObject({ code: 100 });
+    expect(graph.sent).toEqual([]);
+  });
+
+  it('refuses an untagged reply on day 3 even though the tagged one would have gone', async () => {
+    graph.lastCustomerMessage.set(PSID, wroteAgo(3 * DAY));
+
+    expect((await sendMessenger(messagingText(PSID))).status).toBe(400);
+    expect((await sendMessenger(tagged(PSID))).status).toBe(200);
+  });
+
+  it('judges the customer by the clock it was given', async () => {
+    graph.lastCustomerMessage.set(PSID, wroteAgo(HOUR));
+    clock = new Date(NOW.getTime() + 24 * HOUR);
+
+    expect((await sendMessenger(messagingText(PSID))).status).toBe(400);
+  });
+
+  it('forgets when a customer wrote on reset', async () => {
+    graph.lastCustomerMessage.set(PSID, wroteAgo(30 * DAY));
+    graph.reset();
+
+    expect(graph.lastCustomerMessage.size).toBe(0);
+  });
+});
+
 describe('queued failures', () => {
   it('answers the next request with the failure, once, then carries on', async () => {
     graph.failures.push({

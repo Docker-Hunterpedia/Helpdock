@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { META_SUBSCRIBED_FIELDS, META_TEXT_LIMITS, type MetaPlatform } from '@helpdock/schemas';
+import { META_SUBSCRIBED_FIELDS, type MetaPlatform } from '@helpdock/schemas';
 import {
   fixtureMid,
   fixtureWamid,
@@ -203,9 +203,22 @@ const parseSend = (platform: MetaPlatform, raw: Buffer): ParsedSend | Answer => 
   };
 };
 
+/**
+ * What Meta documents a text may be, written here again on purpose and not
+ * imported from `@helpdock/schemas`, for the reason `REPLY_WINDOW_MS` gives:
+ * WhatsApp 4,096 characters, Messenger 2,000 characters, Instagram 1,000 bytes.
+ */
+const TEXT_LIMITS: Readonly<
+  Record<MetaPlatform, { readonly max: number; readonly unit: 'characters' | 'bytes' }>
+> = {
+  whatsapp: { max: 4_096, unit: 'characters' },
+  messenger: { max: 2_000, unit: 'characters' },
+  instagram: { max: 1_000, unit: 'bytes' },
+};
+
 /** Graph's refusal of a text over the platform's limit, or null when it fits. */
 const textOverLimit = (platform: MetaPlatform, text: string | null): Answer | null => {
-  const limit = META_TEXT_LIMITS[platform];
+  const limit = TEXT_LIMITS[platform];
   if (text === null) {
     return null;
   }
@@ -219,6 +232,19 @@ const textOverLimit = (platform: MetaPlatform, text: string | null): Answer | nu
         },
       });
 };
+
+/**
+ * Meta's own windows, written here again on purpose and not imported from
+ * `@helpdock/schemas`: the stand-in is the independent check on what Helpdock
+ * believes, so a wrong constant in Helpdock fails a suite instead of agreeing
+ * with itself. A free-form reply is taken for 24 hours after the customer's last
+ * message; the `HUMAN_AGENT` tag, on Messenger and Instagram only, for seven days.
+ */
+const REPLY_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+/** The ids the stand-in gives what it accepts start here, beyond the ones a suite gives a customer's messages. */
+const SENT_ID_BASE = 5_000_000;
+const HUMAN_AGENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export interface FakeGraphOptions {
   /** The app the stand-in reports as subscribed. */
@@ -242,6 +268,15 @@ export class FakeGraph {
   readonly profiles = new Map<string, Record<string, string>>();
   /** Customers a send is refused for with the closed-window error of their platform. */
   readonly windowClosed = new Set<string>();
+  /**
+   * When each customer last wrote, by the id Helpdock sends to, as Meta would
+   * know it. A customer listed here is judged by the windows of a real platform:
+   * a free-form reply after 24 hours, or a `HUMAN_AGENT` one after seven days,
+   * is refused with the closed-window error. A customer not listed is not judged
+   * (a test that does not care about the window need not say when they wrote),
+   * except that the tag is never taken for one who has not written.
+   */
+  readonly lastCustomerMessage = new Map<string, Date>();
   /** Customers a send is refused for with the pair rate limit (`131056`). */
   readonly pairLimited = new Set<string>();
   /** Customers a send is refused for with `551`, as for a person who blocked the Page. */
@@ -331,6 +366,7 @@ export class FakeGraph {
     this.sent.length = 0;
     this.uploads.clear();
     this.windowClosed.clear();
+    this.lastCustomerMessage.clear();
     this.pairLimited.clear();
     this.blocked.clear();
     this.expiredTokens.clear();
@@ -725,7 +761,7 @@ export class FakeGraph {
     if (tooLong !== null) {
       return tooLong;
     }
-    const refused = this.#refusal(platform, send.recipient);
+    const refused = this.#refusal(platform, send.recipient) ?? this.#outsideWindow(platform, send);
     if (refused !== null) {
       return refused;
     }
@@ -733,8 +769,8 @@ export class FakeGraph {
     this.#counter += 1;
     const messageId =
       platform === 'whatsapp'
-        ? fixtureWamid(1_000 + this.#counter)
-        : fixtureMid(1_000 + this.#counter);
+        ? fixtureWamid(SENT_ID_BASE + this.#counter)
+        : fixtureMid(SENT_ID_BASE + this.#counter);
     this.sent.push({
       accountId: id,
       platform,
@@ -753,6 +789,26 @@ export class FakeGraph {
           }
         : { recipient_id: send.recipient, message_id: messageId },
     );
+  }
+
+  /**
+   * Graph's refusal of a send the customer's windows do not allow: free-form
+   * text and files after 24 hours, the `HUMAN_AGENT` tag after seven days or for
+   * a customer who never wrote. WhatsApp has no tag, so a body that carries one
+   * never reaches here: it is an unknown parameter and `parseSend` refused it.
+   */
+  #outsideWindow(platform: MetaPlatform, { payload, recipient }: ParsedSend): Answer | null {
+    const wrote =
+      this.lastCustomerMessage.get(customerKey(recipient)) ??
+      this.lastCustomerMessage.get(recipient);
+    const age = wrote === undefined ? null : this.#now().getTime() - wrote.getTime();
+    const tagged = 'message' in payload && payload.tag !== undefined;
+
+    const allowed = tagged
+      ? age !== null && age < HUMAN_AGENT_WINDOW_MS
+      : age === null || age < REPLY_WINDOW_MS;
+
+    return allowed ? null : reply(400, graphWindowClosed(platform));
   }
 
   /** The refusal a test programmed for this customer, if any: blocked, then window, then pair limit. */

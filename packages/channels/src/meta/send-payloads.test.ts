@@ -28,20 +28,55 @@ describe('whatsappSendPayloadSchema', () => {
     ).toBe(true);
   });
 
+  const media = (type: string, body: Record<string, unknown>) => ({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: '16505551234',
+    type,
+    [type]: { id: '1479537139650973', ...body },
+  });
+
   it.each(['image', 'audio', 'video', 'document', 'sticker'] as const)(
-    'accepts a %s by uploaded media id, with a caption where WhatsApp allows one',
+    'accepts a %s by uploaded media id',
     (type) => {
-      expect(
-        whatsappSendPayloadSchema.safeParse({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: '16505551234',
-          type,
-          [type]: { id: '1479537139650973', caption: 'Look' },
-        }).success,
-      ).toBe(true);
+      expect(whatsappSendPayloadSchema.safeParse(media(type, {})).success).toBe(true);
     },
   );
+
+  it.each(['image', 'video', 'document'] as const)('accepts a caption on a %s', (type) => {
+    expect(whatsappSendPayloadSchema.safeParse(media(type, { caption: 'Look' })).success).toBe(
+      true,
+    );
+  });
+
+  it.each(['audio', 'sticker'] as const)(
+    'refuses a caption on a %s, which WhatsApp does not allow',
+    (type) => {
+      expect(whatsappSendPayloadSchema.safeParse(media(type, { caption: 'Look' })).success).toBe(
+        false,
+      );
+    },
+  );
+
+  it('holds a caption to 1,024 characters', () => {
+    expect(
+      whatsappSendPayloadSchema.safeParse(media('image', { caption: 'x'.repeat(1_024) })).success,
+    ).toBe(true);
+    expect(
+      whatsappSendPayloadSchema.safeParse(media('image', { caption: 'x'.repeat(1_025) })).success,
+    ).toBe(false);
+  });
+
+  it('accepts a file name on a document and on nothing else', () => {
+    expect(
+      whatsappSendPayloadSchema.safeParse(media('document', { filename: 'terms.pdf' })).success,
+    ).toBe(true);
+    for (const type of ['image', 'video', 'audio', 'sticker']) {
+      expect(
+        whatsappSendPayloadSchema.safeParse(media(type, { filename: 'terms.pdf' })).success,
+      ).toBe(false);
+    }
+  });
 
   it('accepts a document by https link with a file name, and refuses a link that is not https', () => {
     const payload = (link: string) => ({

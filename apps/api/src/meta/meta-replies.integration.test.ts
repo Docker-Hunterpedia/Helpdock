@@ -65,7 +65,6 @@ import { signInForTest } from '../testing/staff-sign-in.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { MetaRepository } from './meta.repository.js';
 import { createMetaReplyEventHandler, META_EVENTS } from './meta-events.js';
-import type { MetaEventOutcome, PlatformInboundService } from './meta-inbound.service.js';
 import { paceKey } from './meta-pacing.js';
 import { MetaReplyHook } from './meta-reply.hook.js';
 import { createMetaSendHandler, createMetaSendProcessor } from './meta-send.job.js';
@@ -84,10 +83,9 @@ import { OutboundMetaService } from './outbound-meta.service.js';
  * that the delay was asked for is asserted. One test runs a real BullMQ worker
  * and waits the six seconds out.
  *
- * The inbound services are M10-03 to M10-05's. Here each platform's is a double
- * that applies the delivery and read reports to the delivery, which is what
- * those services do, so the ids the send job records are proved to be the ones
- * Meta's reports name.
+ * The inbound services are M10-03 to M10-05's, the module's own: a delivery or
+ * read report goes through the signed webhook into the real handler, so the ids
+ * and times the send job records are proved to be the ones Meta's reports name.
  */
 
 const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
@@ -399,6 +397,13 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
               },
       });
       await repository.setConversationTicket(tx, conversation.id, ticketId);
+      // Meta knows it too, so the stand-in judges a send by the windows of a real platform.
+      if (input.lastInboundAgoMs !== null) {
+        graph.lastCustomerMessage.set(
+          input.waId ?? input.customerId,
+          new Date(Date.now() - input.lastInboundAgoMs),
+        );
+      }
 
       return {
         ticketId,
@@ -468,6 +473,14 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
     const rows = await deliveriesOf(ticketId);
     expect(rows).toHaveLength(1);
     return rows[0] as MetaDelivery;
+  };
+
+  const deliveryById = async (id: string): Promise<MetaDelivery> => {
+    const [row] = await owner.db.select().from(metaDeliveries).where(eq(metaDeliveries.id, id));
+    if (row === undefined) {
+      throw new Error('the delivery is gone');
+    }
+    return row;
   };
 
   const outboxRowsFor = (deliveryId: string) =>
@@ -637,49 +650,6 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
   const sentOn = (platform: MetaPlatform, to: string) =>
     graph.sentTo(to).filter((message) => message.platform === platform);
 
-  // ------------------------------------------------------------------- the reports
-
-  /** The reports a platform makes, as the inbound services will apply them. */
-  const reports = (): PlatformInboundService => ({
-    handle: async ({ tx, account }, event): Promise<MetaEventOutcome> => {
-      switch (event.kind) {
-        case 'status':
-          if (event.status === 'delivered' || event.status === 'read') {
-            await repository.advanceStatus(
-              tx,
-              event.messageId,
-              event.status,
-              event.timestamp ?? new Date(),
-            );
-          }
-          break;
-        case 'delivery':
-          for (const mid of event.mids) {
-            await repository.advanceStatus(tx, mid, 'delivered', event.watermark ?? new Date());
-          }
-          break;
-        case 'read': {
-          const conversation = await repository.conversation(tx, account.id, event.customerId);
-          if (conversation !== undefined) {
-            await repository.advanceByWatermark(
-              tx,
-              conversation.id,
-              'read',
-              event.watermark ?? new Date(),
-            );
-          }
-          break;
-        }
-        case 'seen':
-          await repository.advanceStatus(tx, event.messageId, 'read', new Date());
-          break;
-        default:
-          break;
-      }
-      return { outcome: 'handled' };
-    },
-  });
-
   beforeAll(async () => {
     [postgres, redisContainer] = await Promise.all([
       new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
@@ -700,14 +670,9 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
     app = await createApiApp({
       runtime,
       objectStorage: storage,
-      meta: {
-        graph: () => client,
-        inbound: {
-          whatsapp: reports(),
-          messenger: reports(),
-          instagram: reports(),
-        },
-      },
+      // The inbound services are the module's own: a delivery or read report goes through
+      // the signed webhook into the real handler, which reads what the send job wrote.
+      meta: { graph: () => client },
     });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
     redis = createQueueConnection(redisContainer.getConnectionUrl());
@@ -896,6 +861,53 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       },
     );
 
+    it.each([
+      ['whatsapp', NUMBER, '16505550131', 1],
+      ['messenger', PAGE, '5031', 0],
+      ['instagram', INSTAGRAM, '6031', 0],
+    ] as const)(
+      'sends the text and each attachment once on %s when the job runs twice (exit criterion)',
+      async (platform, externalId, customerId, uploadCount) => {
+        const account = accounts.get(externalId) as MetaAccount;
+        const customer = await converse({
+          account,
+          customerId,
+          ...(platform === 'whatsapp' ? { waId: customerId } : {}),
+          lastInboundAgoMs: HOUR,
+        });
+        const photo = await attach(customer.ticketId, {
+          name: 'label.jpg',
+          kind: 'image',
+          mime: 'image/jpeg',
+          variant: 'original',
+          bytes: Buffer.from('JPEG bytes'),
+        });
+        expect(
+          (await reply(customer.ticketId, '<p>Here is the label.</p>', { attachmentIds: [photo] }))
+            .status,
+        ).toBe(201);
+
+        const [first] = await runNew();
+        expect(first?.outcome).toBe('done');
+        const messages = graph.callsTo(`/${externalId}/messages`, 'POST').length;
+        const sentBefore = sentOn(platform, customerId).map((message) => message.id);
+        expect(sentBefore).toHaveLength(2);
+        expect(graph.uploads.size).toBe(uploadCount);
+
+        // The same job again, as after a crash between the send and the acknowledgement.
+        const second = first === undefined ? undefined : await again(first);
+
+        expect(second?.outcome).toBe('done');
+        expect(sentOn(platform, customerId).map((message) => message.id)).toEqual(sentBefore);
+        expect(graph.callsTo(`/${externalId}/messages`, 'POST')).toHaveLength(messages);
+        expect(graph.uploads.size).toBe(uploadCount);
+        expect(await onlyDelivery(customer.ticketId)).toMatchObject({
+          status: 'sent',
+          partsSent: 2,
+        });
+      },
+    );
+
     it('tells the ticket view who the conversation is with and whether a reply may be written now', async () => {
       const waId = '16505550112';
       const customer = await converse({
@@ -1060,6 +1072,34 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       expect((await call('GET', `${path(customer.ticketId)}/deliveries`, bo)).status).toBe(404);
     });
 
+    it('cuts an unbroken run of Arabic letters between two letters on Instagram, never inside one', async () => {
+      const customer = await converse({
+        account: accounts.get(INSTAGRAM) as MetaAccount,
+        customerId: '6010',
+        lastInboundAgoMs: HOUR,
+        locale: 'ar',
+      });
+      // 700 letters of two bytes each and no space to cut at: the cut must fall between letters.
+      const text = 'ط'.repeat(700);
+
+      expect((await reply(customer.ticketId, `<p>${text}</p>`)).status).toBe(201);
+      const [ran] = await runNew();
+
+      expect(ran?.outcome).toBe('done');
+      const parts = sentOn('instagram', customer.customerId).map(
+        (message) => (message.payload as { message: { text: string } }).message.text,
+      );
+      expect(parts.length).toBeGreaterThanOrEqual(2);
+      for (const part of parts) {
+        expect(Buffer.byteLength(part, 'utf8')).toBeLessThanOrEqual(1_000);
+        expect(part).not.toContain('�');
+      }
+      const letters = parts.map((part, index) =>
+        index === 0 ? part.slice(OPENING.length + 1) : part,
+      );
+      expect(letters.join('')).toBe(text);
+    });
+
     it('splits a 1000-byte Arabic reply on Instagram at a letter boundary and sends both parts', async () => {
       const customer = await converse({
         account: accounts.get(INSTAGRAM) as MetaAccount,
@@ -1082,9 +1122,8 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       expect(parts).toHaveLength(2);
       for (const part of parts) {
         expect(Buffer.byteLength(part, 'utf8')).toBeLessThanOrEqual(1_000);
-        // Whole words: no letter was cut, and the text survives the bytes.
+        // Whole words: no letter was cut.
         expect(part).not.toContain('�');
-        expect(Buffer.from(part, 'utf8').toString('utf8')).toBe(part);
       }
       // The opening line is on the first part and counts toward its bytes.
       expect(parts[0]?.startsWith(`${OPENING}\n`)).toBe(true);
@@ -1456,23 +1495,30 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       expect(await outboxRowsFor(refused.id)).toHaveLength(1);
     });
 
-    it('records the closed window with the code of Messenger and Instagram too', async () => {
-      const customer = await converse({
-        account: accounts.get(PAGE) as MetaAccount,
-        customerId: '5006',
-        lastInboundAgoMs: 23 * HOUR + 59 * MINUTE,
-      });
-      await reply(customer.ticketId, '<p>On its way.</p>');
+    it.each([
+      ['messenger', PAGE, '5006'],
+      ['instagram', INSTAGRAM, '6006'],
+    ] as const)(
+      'records the closed window with the code of %s too',
+      async (platform, externalId, customerId) => {
+        const customer = await converse({
+          account: accounts.get(externalId) as MetaAccount,
+          customerId,
+          lastInboundAgoMs: 23 * HOUR + 59 * MINUTE,
+        });
+        expect((await reply(customer.ticketId, '<p>On its way.</p>')).status).toBe(201);
+        expect(platform).toBe(accounts.get(externalId)?.platform);
 
-      clock.now = new Date(Date.now() + 2 * MINUTE);
-      await runNew();
+        clock.now = new Date(Date.now() + 2 * MINUTE);
+        await runNew();
 
-      expect(await onlyDelivery(customer.ticketId)).toMatchObject({
-        status: 'refused',
-        errorCode: '10/2018278',
-      });
-      expect(graph.sent).toEqual([]);
-    });
+        expect(await onlyDelivery(customer.ticketId)).toMatchObject({
+          status: 'refused',
+          errorCode: '10/2018278',
+        });
+        expect(graph.sent).toEqual([]);
+      },
+    );
 
     it('is refused by Meta itself when the clocks disagree, and ends refused rather than failed', async () => {
       const customer = await converse({
@@ -1496,34 +1542,166 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       expect((await accountRow(customer.accountId)).lastError).toBe(accountBefore.lastError);
     });
 
-    it('gives a person seven days on Messenger with the switch on, and the assistant never', async () => {
-      const page = await connect('messenger', '112233445567000', 'EAAGmessengertoken000000005', {
-        humanAgentEnabled: true,
-      });
-      const customer = await converse({
-        account: page,
-        customerId: '5007',
-        lastInboundAgoMs: 72 * HOUR,
-      });
+    describe('the Human Agent extension (M10-06; the tag shipped here, templates are M10-09)', () => {
+      const SEVEN = [
+        ['messenger', '112233445568000', 'EAAGmessengertoken000000005', '5007'],
+        ['instagram', '17841400000000777', 'IGAAinstagramtoken0000000006', '6007'],
+      ] as const;
 
-      // The ticket view draws the strip from the same function.
-      const read = await call<MetaTicketContextResponse>(
-        'GET',
-        `/api/brands/${seeded.brandId}/tickets/${customer.ticketId}/meta`,
-        ada,
+      it.each(SEVEN)(
+        'gives a person seven days on %s with the switch on, sends their reply tagged HUMAN_AGENT on day 3, and gives the assistant none',
+        async (platform, externalId, token, customerId) => {
+          const account = await connect(platform, externalId, token, { humanAgentEnabled: true });
+          const customer = await converse({ account, customerId, lastInboundAgoMs: 72 * HOUR });
+
+          // The ticket view draws the strip from the same function.
+          const read = await call<MetaTicketContextResponse>(
+            'GET',
+            `/api/brands/${seeded.brandId}/tickets/${customer.ticketId}/meta`,
+            ada,
+          );
+          expect(read.body.context?.window.state).toBe('human_agent');
+          // A person's reply is written and queued: the window is not closed for them.
+          expect((await reply(customer.ticketId, '<p>Following up.</p>')).status).toBe(201);
+          const queued = await onlyDelivery(customer.ticketId);
+          expect(queued).toMatchObject({ status: 'queued' });
+
+          // The assistant's message, on the same ticket, is not.
+          const aiMessageId = await assistantSays(customer.ticketId, platform);
+          const rows = await deliveriesOf(customer.ticketId);
+          const ai = rows.find((row) => row.ticketMessageId === aiMessageId);
+          expect(ai).toMatchObject({ status: 'refused', errorCode: '10/2018278' });
+          expect(await outboxRowsFor(ai?.id ?? '')).toEqual([]);
+
+          // The person's reply goes out, with the tag, and the stand-in takes it: day 3 is
+          // inside the seven days and well outside the 24 hours a RESPONSE is good for.
+          const ran = await runNew();
+          expect(ran.map((job) => job.outcome)).toEqual(['done']);
+          const sent = sentOn(platform, customerId);
+          expect(sent.map((message) => message.payload)).toEqual([
+            {
+              recipient: { id: customerId },
+              messaging_type: 'MESSAGE_TAG',
+              tag: 'HUMAN_AGENT',
+              message: { text: `${OPENING}\nFollowing up.`, metadata: queued.id },
+            },
+          ]);
+          expect(await deliveryById(queued.id)).toMatchObject({ status: 'sent', partsSent: 1 });
+        },
       );
-      expect(read.body.context?.window.state).toBe('human_agent');
-      // A person's reply is written and queued: the window is not closed for them.
-      expect((await reply(customer.ticketId, '<p>Following up.</p>')).status).toBe(201);
-      expect(await onlyDelivery(customer.ticketId)).toMatchObject({ status: 'queued' });
 
-      // The assistant's message, on the same ticket, is not.
-      const aiMessageId = await assistantSays(customer.ticketId, 'messenger');
+      it('tags every part of a person’s long reply on day 3, and the file after it', async () => {
+        const account = await connect(
+          'messenger',
+          '112233445568001',
+          'EAAGmessengertoken000000007',
+          {
+            humanAgentEnabled: true,
+          },
+        );
+        const customer = await converse({
+          account,
+          customerId: '5008',
+          lastInboundAgoMs: 72 * HOUR,
+        });
+        const terms = await attach(customer.ticketId, {
+          name: 'terms.pdf',
+          kind: 'file',
+          mime: 'application/pdf',
+          variant: 'original',
+          bytes: Buffer.from('%PDF-1.7 terms'),
+        });
+        const body = `<p>${'a'.repeat(1_500)}</p><p>${'b'.repeat(1_500)}</p>`;
 
-      const rows = await deliveriesOf(customer.ticketId);
-      const ai = rows.find((row) => row.ticketMessageId === aiMessageId);
-      expect(ai).toMatchObject({ status: 'refused', errorCode: '10/2018278' });
-      expect(await outboxRowsFor(ai?.id ?? '')).toEqual([]);
+        expect((await reply(customer.ticketId, body, { attachmentIds: [terms] })).status).toBe(201);
+        const [ran] = await runNew();
+
+        expect(ran?.outcome).toBe('done');
+        const sent = sentOn('messenger', '5008').map((message) => message.payload);
+        expect(sent).toHaveLength(3);
+        expect(sent).toEqual(
+          Array.from({ length: 3 }, () =>
+            expect.objectContaining({ messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }),
+          ),
+        );
+      });
+
+      it('sends a reply inside the 24 hours as a RESPONSE, tagged with nothing, even with the switch on', async () => {
+        const account = await connect(
+          'messenger',
+          '112233445568002',
+          'EAAGmessengertoken000000008',
+          {
+            humanAgentEnabled: true,
+          },
+        );
+        const customer = await converse({
+          account,
+          customerId: '5009',
+          lastInboundAgoMs: 2 * HOUR,
+        });
+
+        expect((await reply(customer.ticketId, '<p>On it.</p>')).status).toBe(201);
+        await runNew();
+
+        const [message] = sentOn('messenger', '5009');
+        expect(message?.payload).toMatchObject({ messaging_type: 'RESPONSE' });
+        expect(message?.payload).not.toHaveProperty('tag');
+      });
+
+      it('refuses a person on day 3 at compose time when the switch is off, and on day 8 when it is on', async () => {
+        const off = await converse({
+          account: accounts.get(PAGE) as MetaAccount,
+          customerId: '5010',
+          lastInboundAgoMs: 72 * HOUR,
+        });
+        const on = await connect('messenger', '112233445568003', 'EAAGmessengertoken000000009', {
+          humanAgentEnabled: true,
+        });
+        const expired = await converse({
+          account: on,
+          customerId: '5011',
+          lastInboundAgoMs: 8 * 24 * HOUR,
+        });
+
+        for (const customer of [off, expired]) {
+          const refused = await reply(customer.ticketId, '<p>Following up.</p>');
+
+          expect(refused.status).toBe(409);
+          expect(refusalOf(refused)).toMatchObject({ reason: 'reply-window-closed' });
+        }
+        expect(await runNew()).toEqual([]);
+        expect(graph.sent).toEqual([]);
+      });
+
+      it('is refused by Meta itself, and ends refused rather than failed, when the seven days run out while the job waits', async () => {
+        const account = await connect(
+          'messenger',
+          '112233445568004',
+          'EAAGmessengertoken000000010',
+          {
+            humanAgentEnabled: true,
+          },
+        );
+        const customer = await converse({
+          account,
+          customerId: '5012',
+          lastInboundAgoMs: 7 * 24 * HOUR - MINUTE,
+        });
+        expect((await reply(customer.ticketId, '<p>Following up.</p>')).status).toBe(201);
+
+        // Meta counts from an earlier message than Helpdock filed: by its clock the seven days
+        // ran out a minute ago, by Helpdock's they have a minute left.
+        graph.lastCustomerMessage.set('5012', new Date(Date.now() - 7 * 24 * HOUR - MINUTE));
+        const [ran] = await runNew();
+
+        expect(ran?.outcome).toBe('failed');
+        expect(await onlyDelivery(customer.ticketId)).toMatchObject({
+          status: 'refused',
+          errorCode: '10/2018278',
+        });
+        expect(graph.sent).toEqual([]);
+      });
     });
   });
 
@@ -1796,7 +1974,12 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
           expect(row.lastError).toBeNull();
         }
         const jobs = await Promise.all(ids.map((id) => queue.getJob(id)));
-        expect(jobs.map((job) => job?.attemptsStarted ?? 0).sort()).toEqual([1, 2]);
+        // The first job ran once. The second was moved to delayed at least once, and more than
+        // once when the first send outlasted the 50 ms slack the wait is rounded up by: the slot
+        // is set again for a pace from the end of that send.
+        const started = jobs.map((job) => job?.attemptsStarted ?? 0).sort();
+        expect(started[0]).toBe(1);
+        expect(started[1]).toBeGreaterThanOrEqual(2);
         expect(jobs.every((job) => (job?.attemptsMade ?? 9) <= 1)).toBe(true);
       } finally {
         await worker.close();

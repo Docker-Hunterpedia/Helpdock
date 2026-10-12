@@ -1086,7 +1086,7 @@
         "caption": "How long a person may answer after the customer’s last message.",
         "label": "Messenger and Instagram only",
         "switch": "Allow a person to reply for 7 days instead of 24 hours",
-        "body": "Turn this on only once Meta has approved the Human Agent feature for your app. Helpdock cannot check it: turning it on says that Meta did. Replies after 24 hours carry Meta’s `HUMAN_AGENT` tag.",
+        "body": "Turn this on only once Meta has approved the Human Agent feature for your app. Helpdock cannot check it: turning it on says that Meta did. A person’s reply sent after 24 hours, and within 7 days of the customer’s last message, carries Meta’s `HUMAN_AGENT` tag.",
         "personOnly": "Only a person’s reply gets the 7 days. AI replies, rule replies and surveys keep the 24-hour window.",
         "restricted": "Meta may restrict a Page that uses the tag without approval. Changes are recorded in the audit log."
       },

@@ -14,19 +14,20 @@ import { z } from 'zod';
 // WhatsApp
 // --------------------------------------------------------------------------
 
-/** What a WhatsApp media message names: an uploaded media id (preferred), or a link. */
-const whatsappMediaSchema = z.union([
-  z.strictObject({
-    id: z.string().min(1),
-    caption: z.string().max(1_024).optional(),
-    filename: z.string().min(1).max(240).optional(),
-  }),
-  z.strictObject({
-    link: z.url({ protocol: /^https$/ }),
-    caption: z.string().max(1_024).optional(),
-    filename: z.string().min(1).max(240).optional(),
-  }),
-]);
+/**
+ * What a WhatsApp media message names: an uploaded media id (preferred), or a
+ * link, and the extras its type takes. A caption goes on an image, a video or a
+ * document, and a file name on a document only; an audio message or a sticker
+ * carries neither, and WhatsApp refuses them.
+ */
+const whatsappMediaSchema = <Extras extends z.ZodRawShape>(extras: Extras) =>
+  z.union([
+    z.strictObject({ id: z.string().min(1), ...extras }),
+    z.strictObject({ link: z.url({ protocol: /^https$/ }), ...extras }),
+  ]);
+
+const caption = { caption: z.string().max(1_024).optional() };
+const documentExtras = { ...caption, filename: z.string().min(1).max(240).optional() };
 
 const whatsappBase = {
   messaging_product: z.literal('whatsapp'),
@@ -40,27 +41,27 @@ const whatsappBase = {
 const whatsappImagePayloadSchema = z.strictObject({
   ...whatsappBase,
   type: z.literal('image'),
-  image: whatsappMediaSchema,
+  image: whatsappMediaSchema(caption),
 });
 const whatsappAudioPayloadSchema = z.strictObject({
   ...whatsappBase,
   type: z.literal('audio'),
-  audio: whatsappMediaSchema,
+  audio: whatsappMediaSchema({}),
 });
 const whatsappVideoPayloadSchema = z.strictObject({
   ...whatsappBase,
   type: z.literal('video'),
-  video: whatsappMediaSchema,
+  video: whatsappMediaSchema(caption),
 });
 const whatsappDocumentPayloadSchema = z.strictObject({
   ...whatsappBase,
   type: z.literal('document'),
-  document: whatsappMediaSchema,
+  document: whatsappMediaSchema(documentExtras),
 });
 const whatsappStickerPayloadSchema = z.strictObject({
   ...whatsappBase,
   type: z.literal('sticker'),
-  sticker: whatsappMediaSchema,
+  sticker: whatsappMediaSchema({}),
 });
 
 export const whatsappTextPayloadSchema = z.strictObject({

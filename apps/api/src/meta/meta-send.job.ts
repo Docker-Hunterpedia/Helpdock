@@ -172,6 +172,12 @@ interface CourierContext {
   readonly conversation: MetaConversation;
   readonly delivery: MetaDelivery;
   readonly token: string;
+  /**
+   * The reply goes out in the extended window of Messenger and Instagram: a
+   * person's, more than 24 hours after the customer's last message and within
+   * seven days, on an account whose Human Agent switch is on.
+   */
+  readonly humanAgent: boolean;
 }
 
 const postSend = async (
@@ -255,22 +261,20 @@ const whatsappCourier = (context: CourierContext): Courier => {
 
 /**
  * Messenger on `graph.facebook.com` and Instagram on `graph.instagram.com`: the
- * same payload. `RESPONSE`, because every reply here answers the customer's
- * message inside the window; `metadata` carries the delivery id so the echo of
- * Helpdock's own send can be told from a message typed in the Page inbox
- * (M10-04, M10-05). A file is handed over as a five-minute presigned link, so
- * the bucket's host must be one Meta can reach (the guide says so).
- *
- * M10-09 adds `MESSAGE_TAG` with `HUMAN_AGENT` for a person's reply in the
- * extended window; until then such a reply goes out as `RESPONSE`, which Meta
- * refuses with the closed-window error, and the delivery ends `refused`.
+ * same payload. `RESPONSE`, because a reply answers the customer's message
+ * inside the 24 hours; `MESSAGE_TAG` with `HUMAN_AGENT` for a person's reply in
+ * the extended window (ADR 0025, 9), which every part of that reply carries.
+ * `metadata` carries the delivery id so the echo of Helpdock's own send can be
+ * told from a message typed in the Page inbox (M10-04, M10-05). A file is
+ * handed over as a five-minute presigned link, so the bucket's host must be one
+ * Meta can reach (the guide says so).
  */
 const messagingCourier = (context: CourierContext): Courier => {
-  const { deps, delivery } = context;
-  const envelope = {
-    recipient: { id: delivery.customerId },
-    messaging_type: 'RESPONSE',
-  } as const;
+  const { deps, delivery, humanAgent } = context;
+  const recipient = { id: delivery.customerId };
+  const envelope: Pick<MessagingSendPayload, 'recipient' | 'messaging_type' | 'tag'> = humanAgent
+    ? { recipient, messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }
+    : { recipient, messaging_type: 'RESPONSE' };
   const metadata = delivery.id;
 
   return {
@@ -320,21 +324,26 @@ export const createMetaSendHandler =
     await sendReply(deps, tx, { payload, log, job, token });
   };
 
-const sendReply = async (
+/** What a reply needs to go out: its delivery, the account and conversation it goes through, and its words. */
+interface LoadedReply {
+  readonly delivery: MetaDelivery;
+  readonly account: MetaAccount;
+  readonly conversation: MetaConversation;
+  readonly message: {
+    readonly bodyText: string;
+    readonly authorType: (typeof ticketMessages.$inferSelect)['authorType'];
+    readonly authorName: string | null;
+    readonly brandName: string;
+  };
+}
+
+/** The reply a job is for, or undefined when there is nothing to send: it is not queued, or its rows are gone. */
+const loadReply = async (
   deps: MetaSendDependencies,
   tx: DbTransaction,
-  {
-    payload,
-    log,
-    job,
-    token,
-  }: {
-    readonly payload: MetaSendPayload;
-    readonly log: JobLogger;
-    readonly job: Job;
-    readonly token: string | undefined;
-  },
-): Promise<void> => {
+  payload: MetaSendPayload,
+  log: JobLogger,
+): Promise<LoadedReply | undefined> => {
   const delivery = await deps.repository.delivery(tx, payload.deliveryId);
   // Only a queued reply is sent; `failed` is put back by Retry, which sets `queued` first.
   if (delivery === undefined || delivery.status !== 'queued') {
@@ -346,7 +355,7 @@ const sendReply = async (
       },
       'meta.send skipped: nothing queued to send',
     );
-    return;
+    return undefined;
   }
 
   const account = await deps.repository.account(tx, delivery.accountId);
@@ -376,22 +385,162 @@ const sendReply = async (
     .limit(1);
   /* c8 ignore next 3 -- each cascade-deletes the delivery with it. */
   if (account === undefined || conversation === undefined || message === undefined) {
+    return undefined;
+  }
+
+  return { delivery, account, conversation, message };
+};
+
+/** What a part needs that is not the part itself. */
+interface PartEnvironment {
+  readonly deps: MetaSendDependencies;
+  readonly tx: DbTransaction;
+  readonly log: JobLogger;
+  readonly courier: Courier;
+  readonly brandId: string;
+  readonly delivery: MetaDelivery;
+  readonly conversation: MetaConversation;
+  readonly platform: MetaPlatform;
+}
+
+/** What an attachment becomes: sent, replaced by a notice to the customer, or left out. */
+const filePart = (file: Attachment, env: PartEnvironment): Part => {
+  const { deps, tx, log, courier, brandId, delivery, conversation, platform } = env;
+  const plan = planOutgoingFile(file, platform);
+  if (plan.kind === 'wait') {
+    return {
+      sends: false,
+      run: () => {
+        throw new MetaFileNotReadyError();
+      },
+    };
+  }
+  if (plan.kind === 'send') {
+    return {
+      sends: true,
+      run: () =>
+        courier.file({
+          row: file,
+          method: plan.method,
+          variant: plan.variant,
+          size: plan.size,
+          mime: plan.mime,
+          fileName: outgoingFileName(file, plan.variant),
+        }),
+    };
+  }
+
+  const leaveOut = (): void =>
+    log.info(
+      { brandId, deliveryId: delivery.id, attachmentId: file.id, reason: plan.reason },
+      'meta reply: an attachment cannot be sent and is left out',
+    );
+  if (!customerIsTold(plan.reason)) {
+    return {
+      sends: false,
+      run: async () => {
+        leaveOut();
+        return null;
+      },
+    };
+  }
+  const { reason } = plan;
+  return {
+    sends: true,
+    run: async () => {
+      leaveOut();
+      const locale = await deps.locales.localeForContact(tx, brandId, conversation.contactId);
+      return courier.text(
+        fileLeftOutText({
+          locale,
+          platform,
+          name: file.originalName,
+          reason,
+          isFile: file.kind === 'file',
+        }),
+      );
+    },
+  };
+};
+
+/**
+ * The parts of a reply, in order: its text cut at the platform's limit, then each
+ * attachment, sent, replaced by a notice or left out, so a part's index never
+ * moves between attempts.
+ */
+const planParts = async (
+  env: PartEnvironment,
+  message: LoadedReply['message'],
+): Promise<Part[]> => {
+  const files = await replyAttachments(env.tx, env.delivery.ticketMessageId);
+  // "Lina · Helpdock" for a person, the brand alone for the assistant or a rule.
+  const openingLine = metaOpeningLine({
+    firstName: message.authorName === null ? null : firstWordOf(message.authorName),
+    brand: message.brandName,
+  });
+
+  return [
+    ...replyTextParts({
+      platform: env.platform,
+      openingLine,
+      bodyText: message.bodyText,
+    }).map((text): Part => ({ sends: true, run: () => env.courier.text(text) })),
+    ...files.map((file) => filePart(file, env)),
+  ];
+};
+
+/** Sends what the earlier attempts did not, recording each part Meta accepts as it lands. */
+const sendParts = async (
+  parts: readonly Part[],
+  env: PartEnvironment,
+  {
+    account,
+    job,
+    token,
+  }: { readonly account: MetaAccount; readonly job: Job; readonly token: string | undefined },
+): Promise<void> => {
+  const { deps, log, delivery, platform, brandId } = env;
+  const key = paceKey(account.id, delivery.customerId);
+  for (const part of parts.slice(delivery.partsSent)) {
+    const sentId = await runPart(part, { deps, platform, key, job, token, log });
+    await withSystem(deps.db, brandId, (partTx) =>
+      deps.repository.recordPart(partTx, delivery.id, sentId),
+    );
+  }
+};
+
+const sendReply = async (
+  deps: MetaSendDependencies,
+  tx: DbTransaction,
+  {
+    payload,
+    log,
+    job,
+    token,
+  }: {
+    readonly payload: MetaSendPayload;
+    readonly log: JobLogger;
+    readonly job: Job;
+    readonly token: string | undefined;
+  },
+): Promise<void> => {
+  const loaded = await loadReply(deps, tx, payload, log);
+  if (loaded === undefined) {
     return;
   }
+  const { delivery, account, conversation, message } = loaded;
   const { platform } = account;
 
+  const window = conversationWindow({
+    conversation,
+    account,
+    personAuthored: message.authorType === 'staff',
+    now: (deps.now ?? (() => new Date()))(),
+  });
   // Only before the first part: a window that closes between two parts is Meta's
   // to refuse, and a half-sent reply is not turned into a refused one by a clock.
-  if (delivery.partsSent === 0) {
-    const window = conversationWindow({
-      conversation,
-      account,
-      personAuthored: message.authorType === 'staff',
-      now: (deps.now ?? (() => new Date()))(),
-    });
-    if (window.state === 'closed') {
-      throw new MetaWindowClosedError(platform);
-    }
+  if (delivery.partsSent === 0 && window.state === 'closed') {
+    throw new MetaWindowClosedError(platform);
   }
 
   const context: CourierContext = {
@@ -400,99 +549,22 @@ const sendReply = async (
     conversation,
     delivery,
     token: decryptSecret(account.accessToken, deps.keyring),
+    // The window's own word, so a person's reply is tagged by the rule that let it through.
+    humanAgent: window.state === 'human_agent',
   };
-  const courier = platform === 'whatsapp' ? whatsappCourier(context) : messagingCourier(context);
-  const files = await replyAttachments(tx, delivery.ticketMessageId);
-  // "Lina · Helpdock" for a person, the brand alone for the assistant or a rule.
-  const openingLine = metaOpeningLine({
-    firstName: message.authorName === null ? null : firstWordOf(message.authorName),
-    brand: message.brandName,
-  });
-
-  /** What an attachment becomes: sent, replaced by a notice to the customer, or left out. */
-  const filePart = (file: Attachment): Part => {
-    const plan = planOutgoingFile(file, platform);
-    if (plan.kind === 'wait') {
-      return {
-        sends: false,
-        run: () => {
-          throw new MetaFileNotReadyError();
-        },
-      };
-    }
-    if (plan.kind === 'send') {
-      return {
-        sends: true,
-        run: () =>
-          courier.file({
-            row: file,
-            method: plan.method,
-            variant: plan.variant,
-            size: plan.size,
-            mime: plan.mime,
-            fileName: outgoingFileName(file, plan.variant),
-          }),
-      };
-    }
-
-    const leaveOut = (): void =>
-      log.info(
-        {
-          brandId: payload.brandId,
-          deliveryId: delivery.id,
-          attachmentId: file.id,
-          reason: plan.reason,
-        },
-        'meta reply: an attachment cannot be sent and is left out',
-      );
-    if (!customerIsTold(plan.reason)) {
-      return {
-        sends: false,
-        run: async () => {
-          leaveOut();
-          return null;
-        },
-      };
-    }
-    const { reason } = plan;
-    return {
-      sends: true,
-      run: async () => {
-        leaveOut();
-        const locale = await deps.locales.localeForContact(
-          tx,
-          payload.brandId,
-          conversation.contactId,
-        );
-        return courier.text(
-          fileLeftOutText({
-            locale,
-            platform,
-            name: file.originalName,
-            reason,
-            isFile: file.kind === 'file',
-          }),
-        );
-      },
-    };
+  const env: PartEnvironment = {
+    deps,
+    tx,
+    log,
+    courier: platform === 'whatsapp' ? whatsappCourier(context) : messagingCourier(context),
+    brandId: payload.brandId,
+    delivery,
+    conversation,
+    platform,
   };
 
-  // Every attachment is a part, sent, replaced by a notice or left out, so a
-  // part's index never moves between attempts.
-  const parts: Part[] = [
-    ...replyTextParts({ platform, openingLine, bodyText: message.bodyText }).map(
-      (text): Part => ({ sends: true, run: () => courier.text(text) }),
-    ),
-    ...files.map(filePart),
-  ];
-
-  const key = paceKey(account.id, delivery.customerId);
-  for (const part of parts.slice(delivery.partsSent)) {
-    const sentId = await runPart(part, { deps, platform, key, job, token, log });
-    await withSystem(deps.db, payload.brandId, (partTx) =>
-      deps.repository.recordPart(partTx, delivery.id, sentId),
-    );
-  }
+  const parts = await planParts(env, message);
+  await sendParts(parts, env, { account, job, token });
 
   await deps.repository.markSent(tx, delivery.id, (deps.now ?? (() => new Date()))());
   log.info(

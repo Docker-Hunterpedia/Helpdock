@@ -12,7 +12,7 @@ Admin of the brand can open (`brand:manage`).
 |---|---|---|---|---|
 | Email | Mail to a mailbox address, fetched over IMAP or posted by the provider's inbound-parse webhook | Email from the brand's sender | Channels › Mailboxes, Channels › Outbound email | [Receiving mail](email.md), [Outbound email](outbound-email.md) |
 | Telegram | A message to the brand's bot | The same chat | Channels › Telegram | [Telegram](telegram.md) |
-| WhatsApp, Messenger, Instagram | In development (M10): the webhook Meta calls and WhatsApp messages becoming tickets exist (M10-03); Messenger and Instagram messages, replies and Channels › Meta do not yet | The same conversation, inside Meta's reply window | — | [Meta channels](meta-channels.md) |
+| WhatsApp, Messenger, Instagram | A message to the brand's WhatsApp number, Facebook Page or Instagram professional account | The same platform and conversation, inside Meta's reply window | Channels › Meta | [Meta channels](meta-channels.md) |
 | Chat widget | The widget on the brand's site, or a native app speaking its protocol | The widget, live | Channels › Widget | [Widget protocol](widget-protocol.md) |
 | Web form | The hosted contact page, `/contact` on the help center domain | Email | Channels › Web form | [Web form](web-form.md) |
 | REST API | `POST /api/v1/tickets` with an API key | Your integration, which reads the thread with `GET /api/v1/tickets/{ticketId}/messages` | Developers › API keys | [API](api.md) |
@@ -35,6 +35,10 @@ Agents can also open a ticket by hand from the ticket list
   [operations](operations.md#scaling-the-worker)).
 - **Attachments** pass the brand's content policy and the media pipeline
   whichever channel brought them ([attachments](attachments.md)).
+- **Reply windows.** WhatsApp, Messenger and Instagram accept a business's
+  reply only for a time after the customer's last message. Helpdock refuses a
+  reply outside that time when the agent writes it, and checks again when it
+  sends ([reply windows](tickets.md#reply-windows)).
 - **Outbound connections** to a host a brand configured (an IMAP server, a
   webhook endpoint) go through the SSRF-safe client
   ([security](security.md#outbound-requests)).
@@ -43,5 +47,3 @@ Agents can also open a ticket by hand from the ticket list
 
 Slack and Discord are on the v1.1 backlog
 ([REQUIREMENTS §6](../planning/REQUIREMENTS.md#6-add-on-features-v11-backlog)).
-WhatsApp, Messenger and Instagram moved into scope as M10 and are being built
-([Meta channels](meta-channels.md)).

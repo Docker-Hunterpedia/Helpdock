@@ -874,7 +874,19 @@ number under it; the same path on a number's own id answers Graph's
 `graph.subscribe(wabaId)`, `graph.dropSubscription(wabaId)` and
 `graph.subscriptionOf(wabaId)` take the business account's id for WhatsApp and
 the Page's or Instagram account's own id for the others, and say which id to use
-when given a number's. Two reads help a connect flow find the business account
+when given a number's.
+
+The driver posts to the Nest app's `inject` in the example above. To post to a
+running server instead, pass `httpWebhookTarget(baseUrl)` as the target.
+
+The admin's browser suites have their own copy of the Graph stand-in,
+`apps/admin/e2e/api/fake-graph.ts`, which answers only the calls the Channels ›
+Meta screens make. The seeded api is started with `META_GRAPH_API_ROOT` and
+`META_INSTAGRAM_API_ROOT` pointed at it, on `HD_E2E_GRAPH_PORT` (3095 by
+default). Nothing runs the stand-in from a shell on its own, and Meta cannot reach
+a development machine, so a real webhook needs a public HTTPS address at
+`APP_URL`, as in production. The [Meta channels guide](meta-channels.md#developing-without-meta)
+covers the rest. Two reads help a connect flow find the business account
 from a number: `GET /debug_token?input_token=…` answers a WhatsApp token's
 `data.granular_scopes` (`whatsapp_business_management` and
 `whatsapp_business_messaging`, each with the business account ids in

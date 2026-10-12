@@ -48,7 +48,8 @@ Brand isolation is enforced by Postgres, not only by the api
 ## Secrets and the master key
 
 - Stored secrets (SMTP, IMAP and inbound-parse credentials, Telegram tokens,
-  webhook and widget signing secrets, CAPTCHA secrets, knowledge connector
+  the Meta app secrets, the Meta webhook verify token and each Meta account's
+  access token, webhook and widget signing secrets, CAPTCHA secrets, knowledge connector
   credentials, AI provider keys, staff authenticator secrets, the token signing
   key) are encrypted with AES-256-GCM under `APP_MASTER_KEY`
   (`packages/config/src/crypto.ts`). Each value names the key that wrote it,
@@ -75,6 +76,34 @@ reach an internal range, and only the ranges it names
 ([configuration](configuration.md#outbound_allow_cidrs)). One call is not made through it: chat completions go through the model vendors' own clients, so a provider's base URL, like the embeddings and transcription URLs, is checked when an admin saves it (https, no private or metadata address unless allowed; [AI guide](ai.md#providers)). A Semgrep rule fails
 CI on a `fetch` of a non-constant URL outside `packages/net`
 ([security scanning](security-scanning.md#semgrep)).
+
+Meta's Graph calls, and the download of a customer's file from Meta, go through
+the same client with a host allow-list: `graph.facebook.com` and
+`graph.instagram.com` (or the hosts `META_GRAPH_API_ROOT` and
+`META_INSTAGRAM_API_ROOT` name), `lookaside.fbsbx.com`, and `*.fbcdn.net`. Any
+other host is refused, no redirect is followed, and an access token is sent only
+to Meta's own API hosts, never to a CDN host
+([Meta channels](meta-channels.md#how-metas-posts-are-checked),
+[ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md), 2).
+
+## Meta's webhook
+
+Meta posts to one public route, `/api/meta/webhook`, which has no session. Two
+checks stand in for one:
+
+- The **handshake** (`GET`) answers only when `hub.verify_token` equals the
+  install's verify token, compared in constant time.
+- Every **delivery** (`POST`) carries `X-Hub-Signature-256`, the HMAC-SHA256 of
+  the raw bytes Meta sent under the app secret or, when it is set, the Instagram
+  app secret. Both secrets are tried, in constant time. A missing, malformed or
+  wrong signature, and an install with no app secret, get `401`, and nothing in
+  the body is filed.
+
+The route answers at most 3,000 requests a minute from one address and accepts
+a body up to 3 MiB. A signed body that is not a Meta envelope is `400`. The
+webhook itself never calls Meta. A Messenger or Instagram file names a CDN URL
+in the body, and a job fetches it later, through the client above: a URL on any
+host outside the allow-list is refused, whatever the body says.
 
 ## Uploads
 

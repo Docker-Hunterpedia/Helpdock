@@ -122,6 +122,11 @@ Restore ([operations](operations.md#the-system-page)).
      route added later is covered too;
    - inbound mail stops: IMAP mailboxes are no longer polled, and the
      inbound-parse endpoint answers 410 once the shared secret checks out;
+   - the brand's WhatsApp, Messenger and Instagram accounts stop being checked
+     by the hourly health job, and their messages are not filed. The Meta
+     webhook is the install's one URL, so it answers `200` and passes the
+     brand's events over: a `410` would make Meta redeliver every brand's events
+     or unsubscribe the app ([Meta channels](meta-channels.md#how-metas-posts-are-checked));
    - the brand's API keys answer 410 on `/api/v1`, and its webhook deliveries
      are marked `skipped` instead of sent, so nothing leaves the brand through
      an integration. A restore does not replay what was skipped;

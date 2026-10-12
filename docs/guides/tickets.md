@@ -457,9 +457,10 @@ found by name — and in the same transaction:
   on a close — a survey, an auto-responder — can mistake spam for one;
 - with `blockSender`, the ticket's sender goes on the block list
   ([ticketing settings](ticketing-settings.md#spam)). Which identifier is the
-  sender follows the channel: a Telegram ticket blocks the chat, anything else
-  the contact's address, then phone, then chat. A visitor id or an external id
-  is never blocked. The brand's own address or domain is refused
+  sender follows the channel: a Telegram ticket blocks the chat, a WhatsApp,
+  Messenger or Instagram ticket blocks the customer's id on that platform, and
+  anything else the contact's address, then phone, then chat. A visitor id or an
+  external id is never blocked. The brand's own address or domain is refused
   (`sender-is-own`) and the whole request rolls back with it.
 
 Picking Spam from the status picker is the same move without the block, and it
@@ -792,7 +793,7 @@ GET /api/brands/:brandId/tickets
   &systemState=open           repeatable: open | on_hold | escalated | closed
   &priority=urgent            repeatable: low | medium | high | urgent
   &departmentId=<uuid>        repeatable
-  &channel=email              repeatable: email | chat | telegram | form | api | manual
+  &channel=email              repeatable: email | chat | telegram | form | api | manual | whatsapp | messenger | instagram
   &assigneeId=<uuid>          repeatable; `unassigned` and `me` are values of their own
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  the subject, the contact's name, or a reference
@@ -1060,12 +1061,13 @@ POST /api/brands/:brandId/tickets/:ticketId/meta/deliveries/:id/retry     ticket
 ```
 
 The first answers `{ context, deliveries }`. `context` is null for a ticket that is
-not on a Meta channel or has no conversation. Otherwise it names the account
-(`id`, `platform`, `externalId`, `displayName`, and `username` or `displayPhone`
-when there is one), the customer (`customerId`, `phone` and `phoneVerified` for a
-WhatsApp number Meta sent, `profileName`, `username`) and the **window for a
-person writing now**: `{ state: "open", closesAt }`, `{ state: "human_agent",
-closesAt }` or `{ state: "closed", closedAt }`. Each delivery carries `status`
+not on a Meta channel or has no conversation. Otherwise `context.account` names
+the account (`id`, `platform`, `externalId`, `displayName`, and `username` or
+`displayPhone` when there is one), `context.customerId` is the customer's id, with
+`phone` and `phoneVerified` for a WhatsApp number Meta sent, `profileName` and
+`username`, and `context.window` is the **window for a person writing now**:
+`{ state: "open", closesAt }`, `{ state: "human_agent", closesAt }` or
+`{ state: "closed", closedAt }`. Each delivery carries `status`
 (`queued`, `sent`, `delivered`, `read`, `failed`, `refused`), `partsSent` of
 `partsTotal` (the text in the platform's parts, then one message per attachment),
 `attempts`, Meta's `lastError` and `errorCode`, the four times, and `leftOut`: the

@@ -237,7 +237,7 @@ anything a stranger could not learn by trying the port.
 | Redis | Version, latency, and whether an AOF rewrite is running (not a failure, but it costs latency) |
 | Product metrics | Activation, AI deflection and help center self-service ([below](#product-metrics)) |
 | Queues | The first few, with waiting, active, failed, delayed and the age of the oldest waiting job; "All queues" fetches the rest. A failed count is a dead-letter count. |
-| Channels | Every brand's mailboxes and Telegram bots, grouped by kind, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red ([email](email.md), [Telegram](telegram.md)). The header counts the connections that need attention. |
+| Channels | Every brand's mailboxes, Telegram bots and Meta accounts (WhatsApp numbers, Facebook Pages and Instagram accounts), grouped by kind, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red. A Meta account whose token expired or whose subscription Meta dropped says `token expired` or `unsubscribed` instead ([email](email.md), [Telegram](telegram.md), [Meta channels](meta-channels.md#health-subscribe-now-and-reconnect)). The header counts the connections that need attention. |
 | Version and migrations | The version and commit, the runtime (Node, Postgres, Redis), how many migrations the database has recorded and the newest three by name. Drizzle records no time of application, so they are names alone. |
 | Storage | The bucket's size against its soft limit, and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. A brand in its deletion grace is marked "pending deletion". "Not measured yet" until the worker has measured once. Beside it, the Postgres database's size on disk (`pg_database_size`), install-wide only ([below](#where-the-numbers-come-from)). |
 | Audit log | The most recent install-scope entries |
@@ -433,8 +433,8 @@ token lacks for the question itself, is recorded as `last_error` and leaves
 
 Every call names a Graph version in its path, `v25.0` unless
 `META_GRAPH_VERSION` says otherwise ([configuration](configuration.md)), and
-Meta retires each version on a published date; `v25.0` is retired on
-2028-07-29. Treat the version like a dependency: well before the date, set
+Meta retires each version on a published date. As of October 2026, Meta's
+version table gave 2028-07-29 for `v25.0`. Treat the version like a dependency: well before the date, set
 `META_GRAPH_VERSION` to a newer one, restart the `api` and `worker`, press
 **Test connection** on one account of each platform, and read the next hourly
 check. An account that the new version refuses shows the reason as its last

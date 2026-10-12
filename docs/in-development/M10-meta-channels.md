@@ -18,9 +18,10 @@ refuses at compose time and checks again when it sends. Admins connect an
 account per platform on Channels › Meta by pasting the dashboard's token,
 subscribe it to the install's webhook, and read its health; the ticket view
 shows which number, Page or account a ticket is with, how long the reply
-window stays open, and what happened to each reply. WhatsApp templates and the
-Human Agent tag, which reach a customer after the window, are a deliverable of
-their own and may ship after the rest.
+window stays open, and what happened to each reply. WhatsApp templates, which reach a
+customer after the window, are a deliverable of their own and may ship after the
+rest. The Human Agent tag, which reaches a Messenger or Instagram customer for
+seven days, shipped early with the replies (M10-06).
 
 This is a scope change: until 2026-10-11 the Meta channels were a v1 non-goal
 (REQUIREMENTS §1, PRD §1) and a v1.1 backlog item (REQUIREMENTS §6, PRD §5).
@@ -55,7 +56,7 @@ Definition of done asks for.
 | M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | built, awaiting review: [notes](#m10-06-replies-the-window-metasend-deliveries-and-pacing) |
 | M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | built, awaiting review: [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
 | M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | planned |
-| M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; `HUMAN_AGENT` on a person's reply at day 3 and never on an AI or rule reply; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10** | 4 d | | later |
+| M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10.** The `HUMAN_AGENT` tag and its integration cases (a person's day-3 reply goes out tagged on both platforms, the assistant's is refused) shipped early in M10-06 after review, so only the templates, the picker and the delivery's `template_name` remain | 4 d | | later (templates only) |
 | M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | built, awaiting review: [notes](#m10-10-health-jobs) |
 | M10-11 | Docs and the guide: `docs/guides/meta-channels.md` (the Meta dashboard walk-through per platform, App Review, pricing, limits), `channels.md`, `configuration.md` and `.env.example` for the `META_*` keys, `contacts.md` for the new identifiers, `tickets.md` for the reply window, `data-retention.md` for the deliveries, the OpenAPI changes, this document and the PRD | AGENTS.md, Definition of done 1 | `docs-guard` before the PR | 2 d | built, awaiting review: [notes](#m10-11-docs-and-the-guide) |
 
@@ -102,6 +103,7 @@ stand-in for Graph and the signed-webhook driver, on real Postgres and Redis
   rotation re-encrypts it. Nothing in the migration uses one of the new enum values,
   so it runs inside the migration's transaction.
 - `0051_meta_profile_checked` (M10-05, `packages/db/drizzle/0051_meta_profile_checked.sql`): `meta_conversations.profile_checked_at`, nullable with no default, set by `meta.profile_fetch` whatever Graph answers about a Messenger or Instagram customer's name, so a refused read is made once per conversation. An existing conversation reads as never checked and is asked about on its next message.
+- `0052_meta_deliveries_platform_ids` (M10-06 review, `packages/db/drizzle/0052_meta_deliveries_platform_ids.sql`): a GIN index on `meta_deliveries.platform_message_ids`. A status webhook names one of Meta's ids and finds its delivery with `platform_message_ids @> array[id]`; the first build matched `id = any(...)`, which no index serves, so every status report scanned the brand's deliveries two or three times. Nothing is rewritten and no policy changes.
 
 ## Open questions
 
@@ -234,19 +236,19 @@ in the bootstrap schema (defaults live in `graph-client.ts`), and the install se
 (overridable as `HD_META_*`). The [configuration guide](../guides/configuration.md) is
 regenerated from them.
 
-**The shared adapter**, `packages/channels/src/meta/` (all exported from `@helpdock/channels`):
+**The shared adapter**, `packages/channels/src/meta/` (exported from `@helpdock/channels`, except `fixtures.ts` and `testing/`, which are the `@helpdock/channels/testing` subpath that the api and the worker never import):
 
 | File | What it holds |
 |---|---|
-| `graph-client.ts` | `GraphClient` (`get`, `post`, `delete`, `postMultipart`, `download`) over `safeFetch` with `policies.graph`; `isAllowedGraphHost`; `multipartBody`; the defaults |
-| `errors.ts` | `classifyGraphError`, `classifyGraphCode`, `GraphApiFailure` (`kind`, `code`, `subcode`, `status`, `detail`, `permanent`, `reason`), `redactToken` |
-| `signature.ts` | `verifyHubSignature` (any of several secrets, constant time, an empty secret never matches), `hubChallenge`, `hubSignature` |
-| `envelope.ts` | `metaEnvelopeSchema`, `classifyWhatsAppValue`, `classifyMessagingEvent`, `routeEnvelope` (events cut by account), the `MetaEvent` union, `metaExternalId`, `metaIdentityValue` |
+| `graph-client.ts` | `GraphClient` (`get`, `post`, `delete`, `postMultipart`, `download`) over `safeFetch` with `policies.graph`; `isAllowedGraphHost`; `multipartBody`; the defaults; `onBlocked`, called for every destination the client refuses (a host that is not Meta's or an address `safeFetch` blocks) with the host and the reason, never the path or the signature, so DOMAIN-RULES §13's "log blocked destinations" holds for every caller |
+| `errors.ts` | `classifyGraphError`, `classifyGraphCode`, `GraphApiFailure` (`kind`, `code`, `subcode`, `status`, `detail`, `permanent`, `reason`), `GraphTokenFormatError` (a token no header can carry), `redactToken` |
+| `signature.ts` | `verifyHubSignature` (any of several secrets, constant time, an empty secret never matches), `matchHubSignature` (which of them made the signature), `hubChallenge`, `hubSignature` |
+| `envelope.ts` | `metaEnvelopeSchema`, `classifyWhatsAppValue`, `classifyMessagingEvent`, `routeEnvelope` (events cut by account), the `MetaEvent` union, `metaIdentityValue`. The dedupe key of a message is the id Meta gave it, unchanged |
 | `text.ts` | `splitMetaText`, `metaLocationText`, `contactsText`, `storyText` |
 | `reply-window.ts` | `replyWindow` (the one pure function every window check uses), `replyWindowView` |
-| `graph-responses.ts`, `send-payloads.ts` | Zod for what Graph answers and for what Helpdock sends |
-| `inbound-message.ts`, `whatsapp/`, `messenger/`, `instagram/` | `MetaInboundMessage`, `MetaChannelAdapter`, `toWhatsAppInboundMessage`, `toMessengerInboundMessage`, `toInstagramInboundMessage` and the three adapter classes |
-| `fixtures.ts`, `testing/` | the webhook bodies and Graph answers; `FakeGraph` and `MetaWebhookDriver` |
+| `graph-responses.ts`, `send-payloads.ts` | Zod for what Graph answers (including `graphSuccessSchema`, the `{ success }` of a subscription) and for what Helpdock sends (WhatsApp media bodies per type: a caption on an image, a video or a document, a file name on a document only) |
+| `inbound-message.ts`, `whatsapp/`, `messenger/`, `instagram/` | `MetaInboundMessage`, `toMetaInboundMessage`, `toWhatsAppInboundMessage`, `toMessengerInboundMessage`, `toInstagramInboundMessage`. The adapter classes the first build also had were used by tests only (a `health()` that always said healthy, a `send()` that always rejected) and are gone |
+| `fixtures.ts`, `testing/`, `testing.ts` | the webhook bodies and Graph answers; `FakeGraph` and `MetaWebhookDriver`; exported as `@helpdock/channels/testing` |
 
 Decisions taken inside the plan, each with its reason in a comment where it is made:
 
@@ -269,7 +271,15 @@ Decisions taken inside the plan, each with its reason in a comment where it is m
   `lookaside.fbsbx.com`, and never to `*.fbcdn.net`, whatever the caller passed.
 - **Stand-in strictness.** A token is good on the root of its own platform only; every send body
   is checked against `send-payloads.ts`; text over the platform's limit is refused. A Meta call
-  that these let through is a call Meta would have accepted.
+  that these let through is a call Meta would have accepted. The limits and the windows are
+  Meta's own numbers written again inside the stand-in, not imported from Helpdock's contract,
+  so a wrong limit there does not pass every suite: a customer who wrote is judged by the
+  windows of a real platform (24 hours for a free-form reply, the `HUMAN_AGENT` tag only within
+  seven days, on Messenger and Instagram, and never for a customer who has not written).
+- **Out of process.** A browser suite cannot call the stand-in's methods, so `/__control/` answers
+  four requests over HTTP with no token: the app's subscription read back, a token revoked and
+  restored, and a refusal queued for the next matching call. What fails inside the stand-in is
+  recorded on `graph.errors` and every suite asserts it empty after each test.
 - **Ids that JSON cannot hold exactly** (a number past 2^53) are refused rather than rounded;
   Meta writes such ids as strings.
 
@@ -281,9 +291,9 @@ platform. The block list's kind picker therefore offers the three kinds from now
 consults them until the inbound services of M10-03 to M10-05.
 
 Not in this deliverable, by design: the api module, the webhook route, the admin screens and
-their browser stand-in (`apps/admin/e2e/api/fake-graph.ts`, M10-07), and the guide pages that
-describe behaviour no one can reach yet (`contacts.md` still says a phone is never verified;
-M10-03 changes that behaviour and its guide).
+their browser suite (M10-07, which starts this `FakeGraph` and does not carry a copy), and the guide
+pages that describe behaviour no one can reach yet (`contacts.md` still says a phone is never
+verified; M10-03 changes that behaviour and its guide).
 
 ## M10-02 The webhook, routing, dedupe and the module skeleton
 
@@ -292,16 +302,16 @@ M10-03 changes that behaviour and its guide).
 
 | File | What it holds |
 |---|---|
-| `meta-webhook-body.ts` | `registerMetaWebhookBody(adapter)`: the JSON parser that keeps the signed bytes on `request.rawBody` for this route only, and the 3 MiB body limit for it |
-| `meta-webhook.controller.ts` | `@Public()` `GET` (the handshake, `text/plain`) and `POST`, 3,000 requests a minute per address |
-| `meta-webhook.service.ts` | `verify`, `receive`, and `metaWebhookVerdict` (the status a batch is answered with) |
-| `meta-inbound.service.ts` | `MetaInboundService.receive`: one account's events in one brand transaction; `PlatformInboundService`, `MetaInboundHandlers`, `unhandledInbound` |
-| `meta-inbound-gate.ts` | `metaMessageSeen` (the dedupe key) and `metaSenderBlocked` (the block list), for all three platforms |
+| `meta-webhook-body.ts` | `registerMetaWebhookBody(adapter, gate)`: the content-type parser of this route, which takes the buffer, charges the address's budget, verifies the signature over the bytes and only then parses them, and the 3 MiB body limit for it |
+| `meta-webhook.controller.ts` | `@Public()` `GET` (the handshake, `text/plain`) and `POST` |
+| `meta-webhook.service.ts` | `admit` (3,000 requests a minute per address), `authenticate` (which secret signed the bytes), `receive`, and `metaWebhookVerdict` (the status a batch is answered with) |
+| `meta-inbound.service.ts` | `MetaInboundService.receive`: one account's events in one brand transaction; the dedupe and the block list for every customer-originated event kind; `PlatformInboundService`, `MetaInboundHandlers`, `MetaDropReason` (the one list of reasons a route report names) |
+| `meta-inbound-gate.ts` | `metaMessageSeen` (the dedupe key), `metaBlockEntry` (what "Block sender" on a Meta ticket blocks, and what the gate looks up) and `metaSenderBlocked` (the block list), for all three platforms |
 | `meta-app.service.ts`, `meta-app.controller.ts` | the install's Meta app: `secrets()`, the verify token, `GET /api/meta/app`, `POST /api/meta/app/verify-token` (`install:admin`) |
 | `meta.repository.ts` | accounts (`list`, `find`, `account`, `insert`, `update`, `delete`, `departmentExists`, `markEvent`, `markError`), install scope (`locate`, `listAll`), conversations (`conversation`, `upsertConversation`, `setConversationTicket`, `conversationForTicket`), deliveries (`insertDelivery`, `delivery`, `deliveriesForTicket`, `recordPart`, `markSent`, `markRefused`, `recordFailure`, `requeue`, `advanceStatus`, `advanceByWatermark`) and `activity` |
 | `meta-failure.ts` | `MetaFailure(reason, details?)`, mapped in `http/error-response.ts` to a `meta: { reason, details? }` field of the error body (`packages/schemas/src/error.ts`) |
-| `meta-events.ts` | `META_EVENTS` (`meta.reply`, `meta.media`, `meta_account.changed`), their enqueue helpers and event handlers, `metaSendJobId`, `metaMediaFetchJobId`, `registerMetaEventHandlers` |
-| `graph-client-factory.ts`, `meta.module.ts` | `MetaModule.forRoot({ env, db, logger, overrides? })`; `MetaModuleOverrides { graph?, inbound? }`; the `META_GRAPH` token |
+| `meta-events.ts` | `META_EVENTS` (`meta.reply`, `meta.media`, `meta.profile`, `meta_account.changed`), their enqueue helpers and event handlers, `metaSendJobId`, `metaMediaFetchJobId`, `registerMetaEventHandlers` (the four consumers are required, so a forgotten one is a type error and not an outbox event with no handler) |
+| `graph-client-factory.ts`, `meta.module.ts` | `createGraphClient(env, log?)`, the one place the client is built (the worker and the module both call it, with their logger); `MetaModule.forRoot({ env, db, logger, overrides? })`; `MetaModuleOverrides { graph?: GraphClient, inbound? }` |
 
 **The seam the inbound services fill.** `PlatformInboundService.handle({ tx, account, now }, event)`
 in `meta-inbound.service.ts`, one per platform, called once per event of the platform's accounts in
@@ -309,11 +319,13 @@ the order Meta sent them, with the `MetaEvent` that `routeEnvelope` made. `tx` i
 account's brand transaction (system context, `app.principal_id = meta.webhook`). It returns a
 `MetaEventOutcome` (`handled`, `duplicate`, `ignored` with a reason) and throws to refuse the whole
 route. A handler registers by replacing its platform's entry in the `handlers` map of
-`MetaModule.forRoot` (the default is `unhandledInbound`, which logs the platform and the kind and
-answers `unhandled`); a suite passes `overrides.inbound` instead. M10-03 to M10-05 therefore do **not**
-repeat two checks: before a customer's `message` reaches `handle`, the service has already answered
-`duplicate` for a `messageId` that `ticket_messages.external_message_id` holds for the platform, and
-`ignored: blocked-sender` for a sender on the block list (counted on the block row).
+`MetaModule.forRoot` (built by `createMetaInboundHandlers` in `factory.ts`); a suite passes
+`overrides.inbound` instead. M10-03 to M10-05 therefore do **not** repeat two checks: before a
+customer's event reaches `handle`, the service has already answered `duplicate` for a `messageId`
+that `ticket_messages.external_message_id` holds for the platform, and `ignored: blocked-sender`
+for a sender on the block list (counted on the block row), for every event the customer caused: a
+message, an unsupported message, a reaction, an edit. A receipt, an echo or a notice names nobody on
+the customer's side and is not asked.
 
 Decisions taken inside the plan, each with its reason where it is made:
 
@@ -336,11 +348,23 @@ Decisions taken inside the plan, each with its reason where it is made:
 - **The dedupe check and the sender gate are the service's**, not each platform's, so the three cannot
   come to ask them three ways. The brief's M10-03 text has the WhatsApp service do them in an early
   transaction; that is no longer needed (nothing is downloaded in the request).
-- **`rawBody` through the adapter.** Nest registers its JSON parser when the app initialises and a
-  second one for the type is refused, so `registerMetaWebhookBody` asks the adapter to register its
-  parsers first (it skips them at init) and replaces the JSON one with a parser that calls Fastify's
-  own default parser, with the same prototype-poisoning actions, so `__proto__` is refused here as
-  everywhere. `createApiApp` keeps the `FastifyAdapter` it builds, because `app.getHttpAdapter()` is typed as the framework-neutral server, which has no parser registration.
+- **The signature is checked over the bytes, before they are parsed** (ADR 0025, 4). Nest registers its
+  JSON parser when the app initialises and a second one for the type is refused, so
+  `registerMetaWebhookBody` asks the adapter to register its parsers first (it skips them at init)
+  and replaces the JSON one with a parser that takes the buffer, charges the address's budget
+  (429), verifies `X-Hub-Signature-256` over the buffer (401) and only then calls Fastify's own
+  default parser, with the same prototype-poisoning actions, so `__proto__` is refused here as
+  everywhere. A body that is unsigned or unparseable costs the read and nothing more; the other
+  routes keep no second copy of their body. Fastify runs the parser before the Nest handler, which
+  is why the check is in the parser and the service only supplies it (`admit`, `authenticate`).
+  `createApiApp` keeps the `FastifyAdapter` it builds, because `app.getHttpAdapter()` is typed as the
+  framework-neutral server, which has no parser registration.
+- **The Instagram app secret vouches for `object: instagram` only.** A batch for WhatsApp or a Page
+  that was signed with it is refused as unsigned (401), so whoever holds that secret and nothing
+  else cannot forge another product's delivery; the app secret signs any of the three.
+- **A failed entry is logged by class, code and constraint** (`failureFields`), never as the whole
+  error, whose message quotes the statement and its parameters and so the customer's words. The
+  same holds for the failures the inbound service and the send job log while recording a failure.
 - **The handshake sets its content type after the token is accepted.** Nest applies `@Header` before the
   handler runs, which made the 403's JSON body unsendable (Fastify refuses an object under
   `text/plain`).
@@ -349,16 +373,13 @@ Decisions taken inside the plan, each with its reason where it is made:
   `meta.webhookVerifyToken` is audited as `settings.updated` by key.
 - **`last_error` names the innermost cause**, because the outer error of a failed query quotes the
   statement and its parameters, which are a customer's words.
-- **Job payload types are local.** `meta.send` and `meta.media_fetch` do not exist in `@helpdock/jobs`
-  until M10-06 and M10-03, so `meta-events.ts` declares the producer-side shapes (`MetaSendJobPayload`,
-  `MetaMediaFetchJobPayload`) and the queue interfaces; those deliverables replace them with the
-  schemas' inferred types. `registerMetaEventHandlers` takes each consumer as optional and is **not
-  called by `start-worker.ts` yet**: the dispatcher refuses a second handler for an event, and no
-  consumer exists, so each owner adds its own queue to the one call when its job lands. Nothing
-  enqueues a `meta.*` event until then.
-- **`MetaModule.forRoot` has no `storage`.** Nothing in M10-02 stores a file; M10-03 adds it with its
-  media sink. `overrides.graph` and the `META_GRAPH` token are in because three later deliverables read
-  the client through them; nothing in M10-02 calls Graph, and a suite asserts it.
+- **Job payload types are the jobs'.** `meta-events.ts` first declared local producer-side shapes
+  because `meta.send` and `meta.media_fetch` did not exist yet; they use `@helpdock/jobs`'s
+  inferred types now. `registerMetaEventHandlers` is called once by `start-worker.ts` with all four
+  consumers, because the dispatcher refuses a second handler for an event.
+- **`MetaModule.forRoot` has no `storage`**: the module stores no file, and the media job's bucket is
+  the worker's. `overrides.graph` replaces the Graph client the routes use, with the stand-in; nothing
+  in M10-02 calls Graph, and a suite asserts it.
 - **`InboundSender.kind`** (`ticketing/sender-gate.ts`) accepts the three platforms, which M10-03 was
   going to do.
 - **No i18n catalogs.** The brief names none for this deliverable.
@@ -395,7 +416,7 @@ a `MetaError`, which the dialogs turn into a sentence. The ticket view's half of
 | `meta-tab.tsx` | the tab: the App card, the accounts table or the empty state, "How messages arrive" and the health legend, and the two dialogs; "Connect account" sits in the page header, which owns the dialog |
 | `app-card.tsx` | MetaAppCard, install admins only: the callback URL with Copy, the verify token (made here, replaced after a confirmation, shown once in a SecretReveal), what the app id and the two secrets are |
 | `account-table.tsx`, `account-health.tsx` | MetaAccountTable and its HealthIndicator, with Expiring read from the token's date (under a week left means the weekly renewal did not run) and the failure named ("Token expired") |
-| `connect-account-dialog.tsx`, `token-test.tsx` | ConnectAccountDialog: platform RadioCards, the id named per platform, the token, the department, Test before Connect; a refusal sits under the field it concerns |
+| `connect-account-dialog.tsx`, `token-test.tsx`, `meta-note.tsx` | ConnectAccountDialog: platform RadioCards, the id named per platform, the token, the department, Test before Connect; a refusal sits under the field it concerns. `useTokenTest` holds the Test mutation both dialogs share (the shape check, the request, what it found, what to forget when a field changes); `MetaNote` draws every note and Test result on these screens (DESIGN §6.4, a Banner variant) |
 | `account-page.tsx`, `account-draft.ts` | MetaAccountPage: the form saved together, the Activity card and the Disconnect card |
 | `connection-section.tsx`, `reconnect-dialog.tsx` | Connection (masked token, kind, expiry, Test connection) and, once Meta has invalidated the token, what Meta said and Reconnect |
 | `subscription-section.tsx` | Subscription: state, fields as tags, last checked, Meta's last problem, Subscribe now |
@@ -441,7 +462,7 @@ page (Test connection, Human Agent, Save, Disconnect by id), a WhatsApp number's
 |---|---|---|
 | `GET` | the brand's accounts | `{ accounts }`, the token as its last four characters |
 | `POST` | connect: read the id and token against Graph, subscribe the app, store | `201` the account |
-| `POST test` | "Test" in the dialog: the same read with a typed token, nothing stored | `{ ok: true, … }` or `{ ok: false, kind, detail }` |
+| `POST test` | "Test" in the Connect and Reconnect dialogs: the same read with a typed token, nothing stored. **Reconnect** names the account (`accountId`), whose own id is then free for that account and for it alone | `{ ok: true, … }` or `{ ok: false, kind, detail }` |
 | `GET :accountId` | one account | the account |
 | `PUT :accountId` | save the form: department, Human Agent, and a new token when Replace was pressed | the account |
 | `DELETE :accountId` | unsubscribe the app as far as Meta allows, delete the row | `204` |
@@ -465,7 +486,7 @@ account is `GET /me` on the Instagram host, compared with the id typed, and a Wh
 |---|---|
 | the token is dead (`190` and kin) and is alive on the other host | `platform-mismatch` |
 | the token is dead | `token-invalid` |
-| the token is good but cannot read this id, or `/me` is another account | `token-other-account` |
+| the token is good but cannot read this id, or `/me` is another account (Messenger proves it as Instagram does: `GET /me?fields=id` must answer the id typed, since a user token that manages two Pages can read both) | `token-other-account` |
 | a WhatsApp token reads the number, but no business account it was granted on lists the number | `token-other-account` |
 | `5xx`, a rate limit, a timeout, a blocked destination, an answer in a shape Helpdock does not know | `graph-unreachable` |
 | the app cannot be subscribed to the account, for good | `subscribe-failed` |
@@ -479,6 +500,13 @@ moment (a 5xx, a limit) stores the account as `unsubscribed` with the reason in 
 hourly health check or Subscribe now makes it good. The row is stored with the token encrypted under
 `APP_MASTER_KEY`, the token's expiry (an Instagram token's is estimated as 60 days from now until the
 first renewal says a real one), `token_updated_by`, and the account's name, handle or number.
+
+**Reconnect.** A replacement token for an account that is connected already names its own id, which the
+"already connected" rule would refuse. `POST test` therefore takes an optional `accountId`; the id is free
+for it when the account is the brand's (row-level security decides) and has the id and platform the request
+gives. Any other `accountId` (another account's, another brand's, a different id) is tested as a new
+connection, which the taken id refuses. The mock api, which has no taken check, is the admin client's and
+is left as it was; the real-api browser suite is what proves the flow (below).
 
 **WhatsApp's business account.** Meta keeps a WhatsApp webhook subscription on the business account
 (WABA), not on the phone number: `GET|POST|DELETE /{waba_id}/subscribed_apps` is the edge, and the
@@ -521,10 +549,15 @@ deliveries go with the row, tickets and contacts stay.
 `.deleted` `{ platform, externalId }`, `.subscribed` `{ fields }` and `.refreshed` `{ expiresAt }`. Create,
 update and delete also write `meta_account.changed` on the outbox for the health job (M10-10) to follow.
 
-**The token stays where nothing logs it**: `graph-factory.ts`'s `AccountGraph` holds it in a private
-field and serialises to its platform; the only call that carries it as a parameter is
-`debug_token`, which is its method rather than a query a caller builds, and
-`redactToken` has been over every `detail` that reaches `last_error` or a response.
+**The token stays where nothing logs it**: `account-graph.ts`'s `AccountGraph` holds it in a private
+field and serialises to its platform; `graphForAccount` is the one place a stored token is decrypted, and
+the routes and every job (the send job, the media and profile jobs, the health check, the renewal) call
+Graph through it. The only call that carries the token as a parameter is `debug_token`, which is its
+method rather than a query a caller builds, and `redactToken` has been over every `detail` that reaches
+`last_error` or a response. The subscription (the node, the `POST`, the `subscribed_apps` read, the
+missing-business-account sentence) is `meta-subscription.ts`, shared with the health check; "mark the
+account `token_expired`" is `MetaRepository.markTokenDead`, shared by the send job, the renewal, the
+routes and, through `accountFailureRecorder`, the media and profile jobs.
 
 `POST :accountId/refresh` calls M10-10's `refreshInstagramToken(deps, account)` in
 `meta-token-refresh.ts` (the same function the hourly job runs; the copy first written here was dropped
@@ -571,11 +604,17 @@ candidate (`whatsapp-identity.test.ts`, `token-facts.test.ts`).
 Integration against Postgres, Redis and the stand-in (`meta-accounts.integration.test.ts`): who may,
 every refusal over HTTP, the token stored encrypted and read back as its last four characters, the audit
 trail and the outbox event of each change, saving, testing, subscribing, renewing, disconnecting,
-isolation between brands and the System card. Playwright against the real api
-(`apps/admin/e2e/api/meta.api.spec.ts`, with `fake-graph.ts` started beside the install): the app card
-and a verify token shown once, a refused token, a WhatsApp token never assigned its business account
-and each platform connected (the subscription read back from the business account for WhatsApp), an
-account that is taken, a Page tested, saved, subscribed again and disconnected by its id.
+isolation between brands and the System card; a replacement token tested for the connected account's own
+id and held to that account (the id stays taken for any other request), and a Page token whose own account is
+another Page refused. Playwright against the real api (`apps/admin/e2e/api/meta.api.spec.ts`, with `FakeGraph`
+from `@helpdock/channels/testing` started beside the install and reached over `/__control/`): the app card and
+a verify token shown once, a refused token, a WhatsApp token whose business account does not list the number
+(a refusal queued over `/__control/`) and each platform connected (the subscription read back from the
+business account for WhatsApp), an account that is taken, **a Page whose token Meta revoked: Subscribe now
+makes the account `token_expired`, Reconnect refuses the revoked token and another Page's, accepts a new
+token for the same Page and stores it, and the same id is still refused as a new account** (with the
+account id taken out of the request the spec fails at the Test), a Page tested, saved, subscribed again
+and disconnected by its id.
 
 ## M10-08 The ticket thread
 
@@ -677,9 +716,10 @@ job, the thread's wording, the factory, the erasure and the retention purge. The
 |---|---|
 | `apps/api/src/meta/meta-router.ts` | `MetaConversationRouter`: `route(context, message, sink, options?)` (the contact, `upsertConversation`, follow merges, `onCustomerReply` or a new ticket with `channel: platform` in the account's department, the same activity, outbox and auto-assign calls as Telegram's), `contactFor`, `followMerge`, `openTicket`, `writeSystemLine`; the `MetaAttachmentSink` and `MetaSinkInput` it calls |
 | `apps/api/src/meta/deferred-sink.ts` | `DeferredAttachmentSink.store`: each file `pending` with no object and a `meta.media` outbox row; `declaredFile`, `metaFileName` |
-| `apps/api/src/meta/meta-media.job.ts` | the `meta.media_fetch` consumer: `createMetaMediaFetchHandler`, `createMetaMediaFetchProcessor`, `accountFailureRecorder`, `matchesDigest`, `sizeCap`, `actionFor`, `accountFailureOf` |
+| `apps/api/src/meta/meta-media.job.ts`, `meta-account-failure.ts` | the `meta.media_fetch` consumer: `createMetaMediaFetchHandler`, `createMetaMediaFetchProcessor`, `matchesDigest`, `sizeCap`, `actionFor`, `accountFailureOf`; `accountFailureRecorder` (the account's `token_expired` or `last_error`, in a transaction of its own, shared with the profile job) |
+| `apps/api/src/meta/meta-event-support.ts`, `meta-thread-notes.ts` | what the three inbound services decide the same way, written once: `routeOrDrop` (a customer id the contact layer refuses is `ignored: invalid-customer-id`, on every platform), `instantOf` (Meta's clock, never later than ours), `dropEcho`, `askForProfile`, the one outcome constants; `MetaThreadNotes` (a system line written once per key, found whatever channel the ticket has since become) with `noteKeys` and `reactionNote` (the emoji cut at 32 characters) |
 | `apps/api/src/meta/meta-text.ts`, `packages/i18n/locales/*/meta.json` | the `meta` namespace: `metaText`, `metaInboundLabels`, `metaSystemLine` |
-| `apps/api/src/meta/factory.ts` | `createMetaInboundService({ db, storage, log, keyring, graph })` → `{ router, sink, whatsapp, mediaFetch }`; `MetaModule` takes `whatsapp` for its handler map and the worker takes `mediaFetch` for the `inbound` queue |
+| `apps/api/src/meta/factory.ts` | the two halves, which share nothing but the repositories because only one of them runs Nest: `createMetaInboundHandlers({ log, appId })` → `{ whatsapp, messenger, instagram }` for the module's handler map (the api), and `createMetaInboundJobs({ db, storage, log, keyring, graph })` → `{ mediaFetch, profileFetch }` for the `inbound` queue (the worker) |
 | `apps/api/src/meta/whatsapp-inbound.service.ts` | `WhatsAppInboundService`, the `PlatformInboundService` for `whatsapp`, registered by `MetaModule` |
 | `apps/api/src/contacts/identity.ts` | `attachVerifiedIdentity`, `planVerifiedAttach`, `removeIdentity` |
 | `apps/api/src/meta/meta.repository.ts` | `messageByPlatformId`, `failByReport`, `recordPricing` |
@@ -716,13 +756,21 @@ and `ignored: blocked-sender` for a sender on the block list; the service repeat
 
 ```
 pending attachment + meta.media outbox row                      (the webhook's transaction)
-meta.media_fetch  whatsapp_media: GET /{media-id}, then the URL it names with the token
-                  cdn_url:        the link, no token, host checked against Meta's
-                  size against the brand's cap (Graph's file_size first), sha256 against the bytes
-                  the type against the content policy, the object put at the attachment's key
-                  status = processing, outbox(attachment.uploaded)
+meta.media_fetch  1. a short transaction: is it still pending, the account, the content policy
+                  2. no transaction at all:
+                       whatsapp_media: GET /{media-id}, then the URL it names with the token
+                       cdn_url:        the link, no token, host checked against Meta's
+                       size against the brand's cap (Graph's file_size first), sha256 against the bytes
+                       the type against the content policy, the object put at the attachment's key
+                  3. a short transaction: claim the receipt, read the row again, then
+                       status = processing, outbox(attachment.uploaded)   (or rejected, with a reason)
 media.process     sniff, re-encode, scan, ffmpeg  →  ready | rejected
 ```
+
+No database transaction waits on Meta: the job shares the `inbound` queue with email and Telegram polling,
+and a transaction held across a download holds a pooled connection with it, so a burst of media messages
+could starve every brand's intake. A redelivery that races the first run may download the file again;
+only one of them claims the receipt and writes. The profile job is built the same way.
 
 | What happened | Attachment | Account |
 |---|---|---|
@@ -738,16 +786,19 @@ media.process     sniff, re-encode, scan, ffmpeg  →  ready | rejected
 ### Decisions taken inside the plan
 
 - **No early transaction.** The brief had the service check `seen` and `blocked` in a transaction of its own
-  before one that files. M10-02's seam does both before `handle`, and nothing is downloaded in the request,
-  so there is one transaction and the service asks neither.
+  before one that files. M10-02's seam does both before `handle` (for every customer-originated event kind,
+  not only messages), and nothing is downloaded in the request, so there is one transaction and the service
+  asks neither.
 - **The job moves the row to `processing` itself.** `media.process` takes a row only when it is `processing`
   (`process.job.ts`), which the confirm endpoint sets for an agent's upload. A Meta file is never confirmed, so
   the fetch sets it, with the size, the type and the name the bytes turned out to have, in the same write.
   (By reading `StorageAttachmentSink`, the files of an inbound email or Telegram message are left `pending` and
   skipped by `media.process` in the same way; that is M2's and M6's to confirm and is not changed here.)
-- **The last attempt settles instead of throwing.** The job's transaction rolls back when it throws, so a file
-  that cannot be had would stay `pending` for good. The account's `token_expired` is written outside that
-  transaction for the same reason, so the operator sees it at the first attempt.
+- **The last attempt settles instead of throwing.** A throw writes nothing, so a file that cannot be had would
+  stay `pending` for good; the last attempt records `rejected` with the reason that fits instead. The account's
+  `token_expired` is written in a transaction of its own for the same reason, so the operator sees it at the
+  first attempt. A refused destination is logged with its host and the reason, never the link (which carries
+  Meta's signature) and never the token.
 - **A story's kind is the server's to say.** A link declares no type; a story is filed as an image and takes
   the kind of the type the CDN answers with, under the larger of the image and video caps.
 - **Deleting a conversation takes its deliveries.** `meta_deliveries.conversation_id` cascades, so erasing a
@@ -790,7 +841,7 @@ the database, the media fetch and the customer's name, is an outbox row.
 | File | What it holds |
 |---|---|
 | `messenger-inbound.service.ts` | the service |
-| `factory.ts` | `createMetaInboundService` also returns `messenger`, built on the same router and sink as `whatsapp`; it takes `appId` (optional: the worker, which runs no inbound service, hands none) |
+| `factory.ts` | `createMetaInboundHandlers` builds `messenger` on the same router and sink as `whatsapp`, with the install's `appId` (required: the worker, which runs no inbound service, no longer builds one with an empty id) |
 | `meta.module.ts` | `MetaModule` builds the inbound pipeline inside the `MetaWebhookService` provider, because Messenger reads the app id through the settings the `MetaAppService` holds, and registers `messenger` in the handler map |
 | `meta-text.ts`, `packages/i18n/locales/{en,ar}/meta.json` | `metaSystemLine` gains `reactionPlain` and `edited`; the catalogs gain `thread.reactionPlain` and `thread.edited` |
 | `meta-app.service.ts` | `MetaAppService.appId()`: the install's `meta.appId`, for the echo rule |
@@ -831,8 +882,10 @@ Decisions taken inside the plan, each with its reason where it is made:
   `read`: the later report matches nothing.
 - **Lines are idempotent.** A reaction, an edit or an unsupported message has no `mid` of its own to file under, so the
   system line's `external_message_id` (the `externalMessageId` of `router.writeSystemLine`) is
-  `reaction:<mid>:<psid>:<react|unreact>:<ms>`, `edit:<mid>:<n>` or `unsupported:<mid>`; the unique index on
-  `(brand, channel, external_message_id)` then keeps a redelivery to one line. The prefix keeps the keys from ever being a
+  `reaction:<mid>:<react|unreact>:<ms>`, `edit:<mid>:<n>` or `unsupported:<mid>` (`noteKeys` in
+  `meta-thread-notes.ts`, the same for all three platforms, none carrying the customer's id, so an erasure
+  leaves no platform id behind); whether a line is already there is asked of the brand's messages whatever
+  channel the ticket has become (`MetaRepository.systemLineSeen`), so a redelivery after a merge writes none. The prefix keeps the keys from ever being a
   platform `mid`. A line is written in the contact's language, its HTML escaped by the router, its text as typed.
 - **`unblock` is not an error.** Only a notice that warns or blocks goes on `last_error`; `lastErrorAt` is set one
   millisecond after the event because the route stamps `last_event_at` with the same instant once the handlers have run,
@@ -865,7 +918,7 @@ enforcement is on the account and reads `failing` until the next event.
 ## M10-05 Instagram inbound
 
 `InstagramInboundService` (`apps/api/src/meta/instagram-inbound.service.ts`) fills the seam M10-02 left for
-`instagram`: `createMetaInboundService` (`factory.ts`, beside WhatsApp's) builds it on the same router and sink, and
+`instagram`: `createMetaInboundHandlers` (`factory.ts`, beside WhatsApp's) builds it on the same router and sink, and
 `MetaModule.forRoot` registers it as the platform's handler, so a signed `object: instagram` webhook files tickets. By the time `handle` runs the dedupe on the
 `mid` and the block list have been checked for a customer's message (M10-02), so neither is repeated here.
 
@@ -899,7 +952,9 @@ Decisions taken inside the plan, each with its reason where it is made:
   403: the Page lacks the reviewed feature, the customer blocked the account, an answer in a shape Helpdock does not
   know) is recorded and **never stored as a name**; Meta or the network failing, or a rate limit, throws so BullMQ
   asks again (three attempts from 30 seconds) and records nothing; a token that no longer works marks the account
-  `token_expired` in a transaction of its own (the job's rolls back with the throw) and throws. "Recorded" is
+  `token_expired` in a transaction of its own (`accountFailureRecorder`) and throws. Like the media job, it runs in
+  three steps (read, ask Graph with no transaction open, claim the receipt and write), so a slow Graph holds a
+  worker and never a pooled connection. "Recorded" is
   `profile_checked_at` (migration `0051_meta_profile_checked`, nullable, no default), which is what makes a refused
   read happen once per conversation: the retry rule is "raise while `profile_checked_at` is null". A lookup that
   could not be answered is therefore raised again by the customer's next message, but not for an account that is not
@@ -908,9 +963,9 @@ Decisions taken inside the plan, each with its reason where it is made:
   raised by messages that arrive before the first runs read once, and a lookup that finds the conversation already
   answered (or its row, account or platform gone or changed) does nothing.
 - **A ticket message has no column for "unsent".** The mark is the system line above, found by the external id
-  `unsent:<mid>` (`unsentExternalId` in `instagram-rules.ts`, for M10-08 to read). Whether a line is already there is
-  asked of the brand's tickets whatever their channel, because a line goes to the primary of a merge and that can be
-  an email ticket, whose unique key is its own.
+  `unsent:<mid>` (`noteKeys.unsent` in `meta-thread-notes.ts`, for M10-08 to read). Whether a line is already there is
+  asked of the brand's tickets whatever their channel (`systemLineSeen`), because a line goes to the primary of a
+  merge and that can be an email ticket, whose unique key is its own.
 - **System lines are the router's** (`openTicket`, `writeSystemLine`): the primary of a merge, in the contact's
   language, none on a closed or spam ticket, with no outbox event, like the other system lines (the AI pause, a
   merge): it appears on the next read, and a `ticket.replied` for it would be sent to every webhook subscriber.
@@ -948,10 +1003,9 @@ reply, and one taken back adds another.
 and `createMetaProfileEventHandler(queue)` in `meta-events.ts`; the job `metaProfileFetchJob` (`meta.profile_fetch`,
 `inbound`, receipt `meta.profile_fetch:<conversationId>`) and `metaProfileFetchPayloadSchema { brandId, conversationId, accountId, platform: 'messenger' | 'instagram' }`
 in `packages/jobs/src/jobs.ts`; `wantsProfile`, `readProfile` and `PROFILE_READS` in `meta-profile.ts`;
-`createMetaProfileProcessor` in `meta-profile.job.ts`, built by `createMetaInboundService` as `profileFetch` beside
+`createMetaProfileProcessor` in `meta-profile.job.ts`, built by `createMetaInboundJobs` as `profileFetch` beside
 `mediaFetch` and registered by `start-worker.ts` on the `inbound` worker, and the `profileQueue` consumer of
-`registerMetaEventHandlers`; `createMetaInboundService` also takes an optional `appId` (the install's `meta.appId`, for
-echoes) and returns `instagram`.
+`registerMetaEventHandlers`; `createMetaInboundHandlers` takes the install's `appId` (`meta.appId`, for echoes).
 
 ### M10-05 What is left
 
@@ -968,14 +1022,14 @@ and [Reply windows](../guides/tickets.md#reply-windows).
 |---|---|
 | `tickets/reply-delivery.hook.ts` | `assertCanDeliver(tx, { brandId, ticket, personAuthored })` on `ReplyDeliveryHook` (default: allow) and on `ChannelReplyDeliveryHooks` (each hook in turn); `personAuthored` on `StaffPublicReplyEvent` |
 | `tickets/tickets.service.ts` | `addMessage` asks `assertCanDeliver` for a staff public reply **before** `nextSeq`, so a refusal takes no lock and writes nothing; its `onStaffPublicReply` says `personAuthored: true` |
-| `meta/meta-window.ts` | a re-export of `replyWindow` and `replyWindowView` from `@helpdock/channels`, and `conversationWindow` (a conversation row and an account row to the function's input), `windowClosedCode`, `closedWindowDetails`. There is no second window function |
+| `meta/meta-window.ts` | a re-export of `ReplyWindow` and `replyWindowView` from `@helpdock/channels`, and `conversationWindow` (a conversation row and an account row to the function's input), `windowClosedCode`, `closedWindowDetails`. There is no second window function |
 | `meta/meta-reply.hook.ts`, `meta/outbound-meta.service.ts` | `MetaReplyHook` (wired in `tickets.module.ts` and `ai/auto-reply/auto-reply-deps.ts`); `OutboundMetaService` (`targetFor`, `queueReply`, `retry`) |
 | `meta/meta-attachments.ts` | `planOutgoingFile(row, platform)`: `wait`, `skip` with a reason, or `send { method, variant, size, mime }`; `readOutgoingBytes` |
 | `meta/meta-pacing.ts` | `withRecipientPace`, `RecipientPaceHeld`, `holdRecipientPace`, `paceKey` |
-| `meta/meta-send.job.ts` | `createMetaSendHandler`, `createMetaSendProcessor`, `recordSendFailure`, the errors the handler throws |
+| `meta/meta-send.job.ts` | `createMetaSendHandler` (`loadReply`, `planParts`, `sendParts`), `createMetaSendProcessor`, `recordSendFailure`, the errors the handler throws; `MESSAGE_TAG` with `HUMAN_AGENT` on every part of a person's reply in the extended window |
 | `meta/meta-text.ts` | `fileLeftOutText`: the line a customer gets in place of a file the platform will not take (`meta` catalog, `en` and `ar`) |
 | `meta/meta-deliveries.service.ts`, `meta/meta-view.ts`, `meta/ticket-meta.controller.ts`, `meta/dto.ts` | `list`, `ticketContext`, `retry`; the delivery and context views; the three ticket-half routes |
-| `packages/jobs` | `metaSendJob`, `metaSendPayloadSchema` (`kind: 'reply' \| 'template'`); `JobContext.token` |
+| `packages/jobs` | `metaSendJob`, `metaSendPayloadSchema` (`kind: 'reply'`, and the template kind is M10-09's); `JobContext.token`; `readJob`, the guard every Meta processor starts with |
 | `worker/start-worker.ts` | the `meta.send` processor on the `outbound` worker; the one `registerMetaEventHandlers` call, with the send queue only |
 | `csat/csat-delivery.ts` | `whatsapp`, `messenger` and `instagram` are `unreachable` |
 
@@ -1039,10 +1093,16 @@ Decisions taken inside the plan, each with its reason where it is made:
   sends the line as a message of its own, so the customer still sees who wrote. The rule is the pure
   `metaOpeningLine({ firstName, brand })` in `@helpdock/schemas` (with `firstWordOf`), so M10-08's composer counts "Sent
   as N messages" the same way. The name comes from the message's staff author row and the brand from the brand row.
-- **The Human Agent tag is M10-09's.** A person's reply in the extended days is composed and queued, goes out as
-  `RESPONSE`, and Meta refuses it with the closed-window error, so the delivery ends `refused` with Meta's code.
-  `MESSAGE_TAG` with `HUMAN_AGENT` is two lines in `messagingCourier`, with the delivery's `tag`, the day-3 case and
-  the proof it is never sent for an AI or rule reply.
+- **The Human Agent tag shipped here, early** (code review 2, test review High 3). With the account's switch on a
+  person's reply is composed and queued in the extended days, and the first build sent it as `RESPONSE`, which Meta
+  refuses, so every reply between 24 hours and 7 days failed while the strip said the window was open. The send job
+  now sends `messaging_type: MESSAGE_TAG` with `tag: HUMAN_AGENT` on every part of a reply whose window state is
+  `human_agent`, which only a person's reply on Messenger or Instagram, on an account whose switch is on, can be: the
+  assistant's, a rule's and a survey's keep 24 hours and are refused at compose time as before. The stand-in accepts
+  the tag within seven days of the customer's last message, on those two platforms only, and refuses it after, for
+  WhatsApp and for a customer who has not written. Integration: a day-3 reply by a person goes out tagged on both
+  platforms (every part of a long reply and its file), the assistant's is refused. What is left for M10-09 is
+  templates, the picker and `template_name`; `meta_deliveries.tag` is recorded from this deliverable on.
 - **Failure is recorded outside the job's transaction**, as `telegram.send` does (`createMetaSendProcessor`): a throw
   rolls the transaction back, and the failure has to survive it. `refused` is recorded the same way. `token_dead` also
   sets the account `token_expired` (no `meta_account.changed` event: the health job needs none for a flip it caused).
@@ -1067,10 +1127,13 @@ the third, a 1000-byte Arabic reply on Instagram split at a letter, a reply at 2
 row, one queued at 23 h 59 m and refused by the job at 24 h 01 m, the assistant's message past the window refused with no
 job, two replies to one customer six seconds apart through a real BullMQ worker, `551` failing at once, `190` marking
 `token_expired`, `131056` retrying, Retry refused for a `refused` delivery, a file Instagram will not take, the ticket
-routes' shapes and scope. `tickets.integration.test.ts` gains the compose-time refusal on a real Meta ticket. The reports
-in the replies suite are applied by a double standing in for M10-03 to M10-05's inbound services.
+routes' shapes and scope; a day-3 person's reply tagged on both platforms and the assistant's refused; a finished job that
+carried files run again sends and uploads nothing twice; the Delivered and Read reports are posted as signed webhooks to
+the real inbound services, which compare the Messenger watermark with a `sent_at` the send job wrote; the lookup of a
+delivery by Meta's id is served by the GIN index (migration 0052). `tickets.integration.test.ts` gains the compose-time
+refusal on a real Meta ticket.
 
-Not in this deliverable, by design: the thread's screens (M10-08), templates and the Human Agent tag (M10-09), the
+Not in this deliverable, by design: the thread's screens (M10-08), templates (M10-09), the
 inbound `statuses[]`, watermarks and `messaging_seen` handling (M10-03 to M10-05; the repository's `advanceStatus` and
 `advanceByWatermark` they call are M10-02's), and the guide's walk-through of the Meta dashboard (M10-11).
 
@@ -1084,7 +1147,7 @@ it finds goes on the `meta_accounts` row. The operator's view is
 | File | What it holds |
 |---|---|
 | `meta-token-refresh.ts` | `refreshInstagramToken({ db, repository, keyring, graph }, account)` → `{ outcome: 'refreshed' \| 'refused' \| 'not-due', expiresAt? }`, a plain function the job and M10-07's `POST :accountId/refresh` share; `instagramRefreshDue`, `INSTAGRAM_REFRESH_AFTER_MS` |
-| `meta-health.ts` | `checkMetaAccount(checks, account, token, now)`: the four steps as a decision from what Graph says to the update the row should get. Reads Graph, writes nothing |
+| `meta-health.ts`, `meta-subscription.ts` | `checkMetaAccount(checks, account, graph, now)`: the four steps as a decision from what Graph says to the update the row should get, reading Graph through the account's `AccountGraph` and writing nothing; the subscription helpers it shares with M10-07's routes |
 | `meta-health.job.ts` | `runMetaHealth` (one account in its brand's transaction with the hour's receipt), `createMetaHealthProcessor` (the `maintenance` worker's processor for both jobs), `queueMetaHealthScheduler`, `scheduleAllMetaHealth`, `createMetaAccountChangedHandler` |
 | `packages/jobs/src/jobs.ts` | `metaHealthJob` (`meta.health`), `metaHealthScheduleJob` (`meta.health.schedule`), `metaHealthPayloadSchema`, `META_HEALTH_CRON`, `META_HEALTH_SCHEDULE_CRON`, `metaHealthSchedulerId`, `metaHealthReceiptKey` |
 | `worker/start-worker.ts` | the `meta.health` processor and `scheduleAllMetaHealth` on the `maintenance` worker, `meta.health.schedule` in its cron loop, `META_*` keys in `WorkerEnv`, and the one `registerMetaEventHandlers` call (`accountChanged`) |
@@ -1196,7 +1259,7 @@ sentence that relies on it says so.
 | `docs/guides/operations.md` | The System page's Channels row names Meta accounts; the date Meta gives for `v25.0` is dated |
 | `docs/guides/api.md` | The ticket `channel` values, and what a key's message on a Meta ticket does |
 | `docs/guides/security.md` | Meta's secrets and tokens in the encrypted list; the Graph host allow-list and where the token goes; a section on Meta's webhook |
-| `docs/guides/development.md` | The admin's browser stand-in, and why a real webhook needs a public address |
+| `docs/guides/development.md` | The stand-ins and where to import them from (`@helpdock/channels/testing`), the browser suite's use of the same `FakeGraph` and its `/__control/` routes, and why a real webhook needs a public address |
 | `docs/guides/contacts.md` | Checked against `identity.ts`, `identity-rules.ts` and `contact.ts`; already right, unchanged |
 | `docs/guides/configuration.md` | Unchanged: it is generated from the registry and `.env.example`, and its snapshot test passes |
 | `docs/design/README.md` | Unchanged: the five M10 rows and their screens are present |
@@ -1205,9 +1268,10 @@ sentence that relies on it says so.
 
 Found while writing, not changed here because the fix is code or screen copy:
 
-1. **The account page's Human Agent text is false until M10-09.** `meta.detail.humanAgent.body` says
-   "Replies after 24 hours carry Meta's `HUMAN_AGENT` tag". The send path sends `RESPONSE` only
-   (`messagingCourier` in `meta-send.job.ts`), so the tag is not sent in this build.
+1. **The account page's Human Agent text was false until the tag shipped.** `meta.detail.humanAgent.body` said
+   "Replies after 24 hours carry Meta's `HUMAN_AGENT` tag" while the send path sent `RESPONSE` only. The send job
+   now sends the tag (M10-06), and the catalog string (`en` and `ar`) says that a person's replies carry it for seven
+   days and that the assistant's, rules' and surveys' keep 24 hours.
 2. **The Connect dialog says a system-user token "does not expire".** That holds only when the token is
    generated with expiry set to Never. The guide says so.
 3. **The Meta section of the ticket view is not described in the guides.** It is M10-08's, and the
@@ -1226,15 +1290,95 @@ As landed on the M10 branch (2026-10-12). What is not built yet is marked as suc
 | Kind | Name |
 |---|---|
 | Outbox events | `meta.reply` `{ deliveryId }`, `meta.media` `{ attachmentId, accountId, ref }`, `meta.profile` `{ conversationId, accountId, platform }` (M10-04, M10-05), `meta_account.changed` `{ accountId }`. Declared in `apps/api/src/meta/meta-events.ts`. `meta.template` is M10-09's and not built |
-| Seams | `PlatformInboundService` and `MetaInboundHandlers` in `apps/api/src/meta/meta-inbound.service.ts` (M10-02): the WhatsApp, Messenger and Instagram inbound services implement one and replace their platform's entry in `MetaModule.forRoot`; `MetaModuleOverrides { graph?, inbound? }` for suites |
-| Jobs | `meta.send` (`outbound`; payload `kind: 'reply' \| 'template'`, and only `reply` is produced until M10-09), `meta.media_fetch` (`inbound`), `meta.profile_fetch` (`inbound`, M10-05), `meta.health` and `meta.health.schedule` (`maintenance`). `meta.templates.sync` (`maintenance`) is M10-09's and not built |
+| Seams | `PlatformInboundService` and `MetaInboundHandlers` in `apps/api/src/meta/meta-inbound.service.ts` (M10-02): the WhatsApp, Messenger and Instagram inbound services implement one and `createMetaInboundHandlers` registers them in `MetaModule.forRoot`; `MetaModuleOverrides { graph?, inbound? }` for suites; `createMetaInboundJobs` for the worker |
+| Jobs | `meta.send` (`outbound`; payload `kind: 'reply'`, and M10-09 adds `'template'`), `meta.media_fetch` (`inbound`), `meta.profile_fetch` (`inbound`, M10-05), `meta.health` and `meta.health.schedule` (`maintenance`). `meta.templates.sync` (`maintenance`) is M10-09's and not built |
 | Config | `META_GRAPH_VERSION`, `META_GRAPH_API_ROOT`, `META_INSTAGRAM_API_ROOT` in `.env.example`; settings `meta.appId`, `meta.appSecret`, `meta.instagramAppSecret`, `meta.webhookVerifyToken` (overridable as `HD_META_*`). The [configuration guide](../guides/configuration.md) is generated from them |
 | i18n | namespace `meta` (`packages/i18n/locales/{en,ar}/meta.json`: what the api sends to customers); `channels:meta.*` (Channels › Meta). `tickets:meta.*` is M10-08's and not in the catalogs yet |
 | Permissions | none new: `brand:manage` for accounts, `install:admin` for the App card (`GET /api/meta/app`, `POST /api/meta/app/verify-token`), `ticket:read` and `ticket:write` for a ticket's Meta context and deliveries |
 | Routes | `GET\|POST /api/meta/webhook`; `GET /api/meta/app`; `POST /api/meta/app/verify-token`; `/api/brands/:brandId/meta/accounts` (`GET`, `POST`, `POST test`, `GET`, `PUT` and `DELETE :accountId`, `POST :accountId/test`, `:accountId/subscribe`, `:accountId/status`, `:accountId/refresh`); `GET /api/brands/:brandId/tickets/:ticketId/meta`, `GET …/meta/deliveries`, `POST …/meta/deliveries/:deliveryId/retry` |
-| Packages | `@helpdock/channels` exports `GraphClient`, `classifyGraphError`, `verifyHubSignature`, `hubChallenge`, `metaEnvelopeSchema`, `routeEnvelope`, `splitMetaText`, `replyWindow`, the three adapters and, for tests, `FakeGraph`, `MetaWebhookDriver` and the fixtures; `@helpdock/net` gains `policies.graph`; `@helpdock/schemas` exports `meta.ts`; `@helpdock/jobs` exports the `meta.*` job definitions |
+| Packages | `@helpdock/channels` exports `GraphClient`, `classifyGraphError`, `verifyHubSignature`, `matchHubSignature`, `hubChallenge`, `metaEnvelopeSchema`, `routeEnvelope`, `splitMetaText`, `replyWindow` and the three `to*InboundMessage` functions, and `@helpdock/channels/testing` exports `FakeGraph`, `MetaWebhookDriver` and the fixtures (the root exports none of them); `@helpdock/net` gains `policies.graph`; `@helpdock/schemas` exports `meta.ts`; `@helpdock/jobs` exports the `meta.*` job definitions |
 | Channel kinds | `ticket_channel` gains `whatsapp`, `messenger`, `instagram`; `contact_identity_kind`, `contact_duplicate_reason` and `blocked_sender_kind` gain the same three |
 
 ## Pull requests
 
 - none yet
+
+## Review
+
+Three reviews of the branch at `ac36c65` (a code review of the production code, a test review, a security review) were
+worked through on 2026-10-12. Each finding was checked against the code before it was changed; every one was right
+about what it described. Numbers are the reviews' own. The fixes are in this branch's `fix(meta)`, `refactor(meta)` and
+`test(meta)` commits, one per coherent change, and each change carries its tests and the docs above.
+
+### Code review (8 High, 26 Medium, 6 Low)
+
+**Fixed**
+
+| # | What changed |
+|---|---|
+| 1 | Reconnect completes against the real api: `POST test` takes the `accountId` being reconnected, whose own id is then free for it alone ([M10-07](#m10-07-the-api)). The review proposed an account-scoped route; one route with an optional field keeps one permission and one code path. Proved in the real-api browser suite (Meta revokes a Page's token, Subscribe now marks the account, Reconnect refuses the revoked token and another Page's, accepts a new token for the same Page; with the account id taken out of the request the spec fails) and at the api. |
+| 2 | The Human Agent tag is sent (`MESSAGE_TAG`, `HUMAN_AGENT`) on every part of a person's reply whose window state is `human_agent`, and recorded on the delivery. It shipped early, in M10-06; only templates remain for M10-09. The account page's text (`meta.detail.humanAgent.body`, `en` and `ar`) says what is true. |
+| 3, 9, 10, 11, 12, 13, 14 | The three inbound services share their rules: `routeOrDrop` (a refused customer id is dropped on every platform), `instantOf` (every anchor clamped to now), the echo test, the reaction line (cut at 32 characters), the profile ask behind one connected-account gate (`wantsProfile`), one `MetaDropReason` list, the block gate for every customer-originated event kind in `MetaInboundService`, and `MetaThreadNotes` for the system lines. |
+| 4, 5, 6 | Every system line has a dedupe key, none carries a customer's id, and `systemLineSeen` ignores the ticket's channel, so a redelivery after a merge writes no second line. Erasure also clears `external_message_id` on the system lines of the contact's Meta tickets. |
+| 7 | The Channels › Meta screens use the §3 and §4 scales (body, caption, mono, h3; steps of 4 px), and the repeated note box is one `MetaNote` (DESIGN §6.4 and its change log, 1.24). |
+| 8 | Unit tests for `whatsapp-inbound.service`, `meta-router`, `meta-deliveries.service` and the profile job. |
+| 15, 16, 17, 18, 19, 20, 21, 22 | One Graph access shape: `AccountGraph` and `graphForAccount` everywhere a job or route talks to Meta, one `meta-subscription.ts`, one `MetaRepository.markTokenDead`, one `accountFailureRecorder`, `GraphClient` injected (not a factory), `createGraphClient(env, log)`, `createMetaInboundHandlers` for the api and `createMetaInboundJobs` for the worker, the `unhandled` seam and `META_GRAPH` removed, the stale progress comments rewritten. `MetaAppService.appId()` is what the module passes; the worker, which has no Nest provider, reads the setting. |
+| 23, 24, 25 | `registerMetaEventHandlers` takes its four consumers as required; the fixtures, the stand-in and the driver are the `@helpdock/channels/testing` subpath (a test proves the root has none of them); the adapter classes that only tests used are deleted. |
+| 26, 27, 28, 29, 30 | Only `GraphApiFailure` is caught (and logged on a failed unsubscribe), a token no header can carry is its own error class, the subscribe answer is read through `graphSuccessSchema`, `#connectToken` serves Connect and Save, and `sendReply` is `loadReply`, `planParts` and `sendParts`. |
+| 31 | Migration 0052: a GIN index on `platform_message_ids`, with the four lookups on `@>` and a plan test. |
+| 32 | `conversationById`, `recordProfile`, `recordProfileCheck` and `systemLineSeen` are in `MetaRepository`. |
+| 33 | `useTokenTest` for both dialogs, `META_TOKEN_MIN_LENGTH` in the three places. |
+| 34 | A failed entry is logged by class, code and constraint (`failureFields`). |
+| 35, 36 | `meta.send`'s payload kind is `reply` until M10-09, `META_SEND_ATTEMPTS` is gone, the M10 sections of `jobs.ts` are in order; `metaExternalId` is inlined, the unused `replyWindow` re-export dropped, `isMetaChannel` and one `iso` replace the copies. |
+
+**Deferred, with the reason**
+
+| # | Why |
+|---|---|
+| 37 (colliding names) | A rename across a dozen files for no behaviour; nothing is wrong until a third `describeFailure` appears. |
+| 38 (`last_error_at` is `now + 1 ms`) | The fix is to stamp `last_event_at` before the handlers run or to let health treat equal times as an error, which changes the health rule M10-10 proved; it needs its own decision. |
+| 39 (`POST :accountId/refresh` has no client) | Wiring a "Renew now" button needs an artboard (design first), removing the route is a product decision; the health job renews on its own. |
+| 40 (three long screen files) | The shared `MetaNote` and the dialogs' `useTokenTest` took the duplicated parts out; splitting the rest into more components is a design-system decision, not a defect. |
+
+### Test review (3 High, 13 Medium, 17 Low)
+
+**Fixed.** High 1 (a finished job that carried files, run again, sends and uploads nothing twice), High 2 (the replies suite
+posts Delivered and Read as signed webhooks to the real inbound services, and the hand-written `reports()` is gone), High 3
+(a person's day-3 reply goes out tagged on Messenger and Instagram, the assistant's is refused). Medium: the pacing assertion
+no longer depends on the first send finishing in 50 ms; the WhatsApp suite resets the stand-in before each test and restores
+the shared account in a `finally`; a new customer's first message posted twice at once files one contact, conversation,
+ticket and message; the closed window is proved on Messenger and Instagram; the WhatsApp media bodies are held to what
+WhatsApp takes per type; the stand-in's limits and windows are Meta's own numbers, not imported from Helpdock's contract;
+the browser suite starts the same `FakeGraph` instead of a second copy (a workspace devDependency, `/__control/` for the
+other process); the seven suites share `meta-install.ts` and `meta-outbox.ts` (the Docker probe, the containers, the `Env`,
+the outbox relay and the media pipeline); the Instagram unit suite keeps outcomes, not call shapes; "Block sender" on a
+Meta ticket is joined to the gate, through the route and without a mock; the admin has tests for a renewal Meta refused.
+Low: the stand-in records what fails inside it and every suite asserts it empty; the master key rotation seeds a Meta
+account; the exact `lastInboundAt`; the Arabic split with no spaces; the savepoint test and a vague test name.
+
+**Deferred, with the reason.** `FakeGraph.reset()` keeps the maps a test programs (changing it would clear subscriptions
+and token expiries that the accounts and health suites build up across tests, so it needs those suites reworked first);
+the health suite's `registered >= 2` and `toBeDefined()`; the identity test's all-true table; pins of constants in
+`schemas/src/meta.test.ts`, `account-health.test.tsx` and `jobs.test.ts`; the driver's verifier cases and the stand-in's
+bookkeeping cases; typed row builders under `apps/api/src/meta/testing/` (about a dozen `as` casts remain); the
+mock-vs-http scenario table (`apps/admin/src/meta/**` is another deliverable's folder); the 0049-to-0051 upgrade case
+(optional); a refused Save and axe on the dialogs in `meta.spec.ts`; three of the four vague test names. None changes what
+a suite proves today.
+
+### Security review (6 Low, 5 Info)
+
+**Fixed.** L1: the route's own parser charges the address's budget and checks the signature over the bytes before parsing
+anything, keeping the 3 MiB cap. L2: no Drizzle query message or parameters in any log (`failureFields`; class, code and
+constraint). L3: a batch signed with the Instagram app secret is accepted for `object: instagram` only. L4: a Messenger
+token is proved to own its Page (`GET /me?fields=id`, `token-other-account` otherwise), as Instagram's already was; the
+stand-in needed nothing new, since a token connected to two Pages answers `/me` with the first. L5: every refused outbound
+destination is logged with its host and reason, whoever called (`GraphClient.onBlocked`). L6: the media and profile jobs
+download or ask Graph with no transaction open and write in a short one, so the inbound queue never waits on Meta inside a
+transaction. The five Info findings ask for nothing.
+
+### Left for another deliverable
+
+- **`apps/admin/src/meta/mock-api.ts`** (M10-08's folder) has no taken check, which is how the first Reconnect passed the
+  mock suite. It should refuse `account-taken` for an id that is connected unless the request names that account.
+- **M10-09**: templates, the picker and the delivery's `template_name`. The Human Agent tag is done.
+- **A "Renew now" action or the removal of `POST :accountId/refresh`** (code review 39).

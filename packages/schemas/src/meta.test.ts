@@ -236,6 +236,18 @@ describe('the account form', () => {
       metaTokenTestRequestSchema.safeParse({ platform: 'instagram', accessToken: TOKEN }).success,
     ).toBe(false);
   });
+
+  it('names the account being reconnected by its id, and takes nothing else for one', () => {
+    const request = { platform: 'messenger', externalId: '112233445566778', accessToken: TOKEN };
+
+    expect(metaTokenTestRequestSchema.safeParse({ ...request, accountId: ACCOUNT }).success).toBe(
+      true,
+    );
+    expect(
+      metaTokenTestRequestSchema.safeParse({ ...request, accountId: 'not-an-id' }).success,
+    ).toBe(false);
+    expect(metaTokenTestRequestSchema.parse(request)).not.toHaveProperty('accountId');
+  });
 });
 
 describe('metaAccountSchema', () => {

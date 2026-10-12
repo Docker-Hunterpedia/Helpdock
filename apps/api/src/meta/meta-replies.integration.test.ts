@@ -1529,7 +1529,12 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
               message: { text: `${OPENING}\nFollowing up.`, metadata: queued.id },
             },
           ]);
-          expect(await deliveryById(queued.id)).toMatchObject({ status: 'sent', partsSent: 1 });
+          // The delivery says how it went out, which the thread shows beside it.
+          expect(await deliveryById(queued.id)).toMatchObject({
+            status: 'sent',
+            partsSent: 1,
+            tag: 'HUMAN_AGENT',
+          });
         },
       );
 
@@ -1590,6 +1595,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
         const [message] = sentOn('messenger', '5009');
         expect(message?.payload).toMatchObject({ messaging_type: 'RESPONSE' });
         expect(message?.payload).not.toHaveProperty('tag');
+        expect((await onlyDelivery(customer.ticketId)).tag).toBeNull();
       });
 
       it('refuses a person on day 3 at compose time when the switch is off, and on day 8 when it is on', async () => {

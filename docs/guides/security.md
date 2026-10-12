@@ -95,9 +95,10 @@ checks stand in for one:
   install's verify token, compared in constant time.
 - Every **delivery** (`POST`) carries `X-Hub-Signature-256`, the HMAC-SHA256 of
   the raw bytes Meta sent under the app secret or, when it is set, the Instagram
-  app secret. Both secrets are tried, in constant time. A missing, malformed or
-  wrong signature, and an install with no app secret, get `401`, and nothing in
-  the body is filed.
+  app secret. Both secrets are tried, in constant time, over the bytes as they
+  arrive and before the body is parsed; the Instagram secret vouches for an
+  Instagram batch only. A missing, malformed or wrong signature, and an install
+  with no app secret, get `401`, and nothing in the body is filed or parsed.
 
 The route answers at most 3,000 requests a minute from one address and accepts
 a body up to 3 MiB. A signed body that is not a Meta envelope is `400`. The

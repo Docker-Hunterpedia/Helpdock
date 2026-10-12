@@ -407,7 +407,7 @@ Depends on: M6 (the channel pattern), M9's code side. Runs beside M9's remaining
 | M10-06 | Agent replies on all three through the delivery hooks: the reply window refused at compose time and checked again in `meta.send`, per-platform splitting, attachments as messages of their own, per-recipient pacing, deliveries with `delivered`, `read`, `refused` and `failed` with Retry | A §8, §13, D §2.6, §6 |
 | M10-07 | Admin: Channels › Meta with the App card, connecting an account per platform by pasted token, Test, Subscribe, health, Human Agent switch, Disconnect; the System page's Channels card | R §4.10 |
 | M10-08 | Ticket thread: channel chip, "via" and "to" lines, delivery states, the reply-window strip with Send disabled when closed, the composer's message count, the channel identity card per platform | DESIGN §6.3, D §2.6 |
-| M10-09 | WhatsApp templates (sync, picker, send after the window) and the Messenger and Instagram `HUMAN_AGENT` tag for a person's reply between 24 h and 7 d when the account's switch is on. May ship after the rest | D §2.6 |
+| M10-09 | WhatsApp templates (sync, picker, send after the window) and the Messenger and Instagram `HUMAN_AGENT` tag for a person's reply between 24 h and 7 d when the account's switch is on. May ship after the rest; the tag shipped early, with M10-06, after the review found the extended window open and its replies untagged | D §2.6 |
 | M10-10 | Health jobs: `meta.health` per account (token check, `subscribed_apps` with re-subscribe, Instagram token refresh) and Reconnect | A §13 |
 | M10-11 | Docs: `docs/guides/meta-channels.md` (dashboard walk-through, App Review, pricing, limits), the configuration, channels, contacts, tickets and retention guides, `.env.example`, OpenAPI | A §2 |
 

@@ -557,7 +557,12 @@ const sendReply = async (
   const parts = await planParts(env, message);
   await sendParts(parts, env, { account, job, token });
 
-  await deps.repository.markSent(tx, delivery.id, (deps.now ?? (() => new Date()))());
+  await deps.repository.markSent(
+    tx,
+    delivery.id,
+    (deps.now ?? (() => new Date()))(),
+    context.humanAgent ? 'HUMAN_AGENT' : undefined,
+  );
   log.info(
     { brandId: payload.brandId, deliveryId: delivery.id, platform, parts: parts.length },
     'meta reply sent',

@@ -475,12 +475,19 @@ export class MetaRepository {
    * for the first part while the job is still sending the last, so the status
    * only leaves `queued`, and never goes back from `delivered` or `read`.
    */
-  async markSent(tx: DbTransaction, id: string, at: Date): Promise<void> {
+  async markSent(
+    tx: DbTransaction,
+    id: string,
+    at: Date,
+    /** `HUMAN_AGENT` when the reply went out in the extended window; left alone otherwise. */
+    tag?: string,
+  ): Promise<void> {
     await tx
       .update(metaDeliveries)
       .set({
         status: sql`case when ${metaDeliveries.status} = 'queued' then 'sent'::meta_delivery_status else ${metaDeliveries.status} end`,
         sentAt: at,
+        ...(tag === undefined ? {} : { tag }),
         lastError: null,
         errorCode: null,
         failedAt: null,

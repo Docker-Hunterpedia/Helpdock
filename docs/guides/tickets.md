@@ -1016,9 +1016,8 @@ The anchor is the time of the customer's last message on that conversation
 an echo does not move it. It closes at its instant: a reply at 23 h 59 m goes out,
 one at 24 h 00 m does not. The 7 days belong to a person: the assistant's message,
 a rule's canned reply and the survey get the 24 hours whatever the switch says.
-(Until M10-09, a reply written in the extended days is sent without Meta's
-`HUMAN_AGENT` tag and Meta refuses it; the delivery ends `refused` with Meta's
-words.)
+(A reply written in the extended days is sent with Meta's `HUMAN_AGENT` tag
+on every part of it, and the delivery records the tag.)
 
 **At compose time.** A public reply on a Meta ticket whose window is closed is
 refused with `409` and writes nothing: no message, no delivery, no outbox row, no

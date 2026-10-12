@@ -4,7 +4,7 @@ How a brand answers customers on WhatsApp, Messenger and Instagram (M10, [ADR 00
 
 Accounts are managed on **Channels › Meta**, which only an Admin of the brand can open (`brand:manage`). The install's Meta app is set up once, by an install admin, from the environment.
 
-> **Status.** This guide describes the M10 branch: the webhook and the App card (M10-02, M10-07), inbound on the three platforms (M10-03 to M10-05), replies and the reply window (M10-06), the Connect, Test and Reconnect flows and the health check (M10-07, M10-10). WhatsApp templates and the Human Agent tag are not built yet (M10-09); each place they matter says so.
+> **Status.** This guide describes the M10 branch: the webhook and the App card (M10-02, M10-07), inbound on the three platforms (M10-03 to M10-05), replies and the reply window (M10-06), the Connect, Test and Reconnect flows and the health check (M10-07, M10-10). WhatsApp templates are not built yet (M10-09); each place they matter says so. The Human Agent tag is built (M10-06).
 
 ## What each platform needs
 
@@ -97,7 +97,7 @@ Meta's answers and what the dialog says back:
 | Meta said | The dialog says |
 |---|---|
 | The token is not one Meta knows | Meta refused this token. Generate a new one for this account in the dashboard. |
-| The token belongs to another account, or cannot reach this one | That token belongs to a different account, or does not reach this one. For WhatsApp, check that the business account is assigned to the system user. |
+| The token belongs to another account, or cannot reach this one | That token belongs to a different account, or does not reach this one. For WhatsApp, check that the business account is assigned to the system user. For a Messenger Page, the token must be the Page's own: a user token that manages several Pages can read each of them, but its own account is the user, so Helpdock asks `GET /me` and compares it with the Page id you typed. |
 | The token is for another platform | That token is for a different Meta product than the platform you chose. |
 | The account is already connected, to any brand | This account is already connected on this install. An account answers for one brand only. |
 | Meta could not be reached | Meta could not be reached. Try again in a moment. |
@@ -141,7 +141,7 @@ The account's state, as the list and its page show it:
 
 On the account's page:
 
-- **Connection** shows the masked token, its kind and expiry, and **Test connection**, which asks Meta with the saved token and sends nothing. **Reconnect** appears once Meta has invalidated the token; it keeps the account's tickets, contacts and settings.
+- **Connection** shows the masked token, its kind and expiry, and **Test connection**, which asks Meta with the saved token and sends nothing. **Reconnect** appears once Meta has invalidated the token (also after **Subscribe now** finds it dead, which marks the account); it keeps the account's tickets, contacts and settings. Its **Test** checks the new token against the account's own id, which is connected already, so it is the one place that id may be tested; the token still has to be for that account, and the same id as a new connection is refused as already connected.
 - **Subscription** shows the fields the app is subscribed to, when Meta last answered, Meta's last problem and **Subscribe now**. Subscribing again is also what the hourly check does.
 
 Two limits the check cannot remove. Messenger and Instagram do not replay what Meta could not deliver: when Meta drops a subscription after an hour of failed deliveries, the messages of that gap are not filed. WhatsApp redelivers for seven days, and Helpdock files each message once. And the check is hourly: a subscription dropped at 10:05 is restored at 11:00.
@@ -152,7 +152,7 @@ Routes: `POST /:accountId/test`, `POST /:accountId/subscribe` (Subscribe now), `
 
 Meta posts to `<APP_URL>/api/meta/webhook`. The route is public, because Meta has no session. Every `POST` is checked in this order:
 
-1. **Signature.** `X-Hub-Signature-256: sha256=<hex>` must be the HMAC-SHA256 of the raw bytes of the body under the app secret or, when set, the Instagram secret. The comparison is constant-time and tries each secret. A missing, malformed or wrong signature, and an install with no secret, get `401`, and nothing is read or filed.
+1. **Signature.** `X-Hub-Signature-256: sha256=<hex>` must be the HMAC-SHA256 of the raw bytes of the body under the app secret or, when set, the Instagram secret. The comparison is constant-time and tries each secret. It is made over the bytes as they arrive, before the body is parsed, and after the address's request budget has been charged, so a body that is unsigned costs the read and nothing more. The Instagram secret vouches for Instagram batches only: a WhatsApp or Page batch signed with it gets `401`. A missing, malformed or wrong signature, and an install with no secret, get `401`, and nothing is read or filed.
 2. **Envelope.** The body must be a Meta envelope with `object` of `whatsapp_business_account`, `page` or `instagram`. A signed body that is not one gets `400`.
 3. **Account.** WhatsApp entries are routed by the phone number id, Messenger and Instagram entries by the entry's id. An account is unique on its platform and id across the install. An unknown account is counted and passed over.
 4. **Brand.** An account whose brand is in its deletion grace is passed over and counted. It still gets `200`.
@@ -262,7 +262,7 @@ Meta lets a business write to a customer only for a time after the customer's la
 - **Compose time.** A public reply on a Meta ticket whose window is closed is refused with `409` and writes nothing. The body carries `error.meta.reason` `reply-window-closed`, the platform, and `anchorAt` and `closedAt`: the customer's last message and the instant the window closed.
 - **Send time.** The send job checks again before the first part, because the window can close while the job waits. A reply past it is recorded `refused` with the platform's code, and is not retried. The window is not read again between parts: if it closes while a reply is being sent, Meta decides what happens to the parts that are left.
 - **WhatsApp after 24 hours.** Free text cannot reach the customer. Only an approved template can, and templates are M10-09, not built yet. Until then such a reply is refused.
-- **Messenger and Instagram after 24 hours.** The server accepts a person's reply in the extended days, but the tag that Meta requires is M10-09's, not built yet. Until then the reply goes out untagged, Meta refuses it with the closed-window error, and the delivery ends `refused` with Meta's words. Read [The Human Agent feature](#the-human-agent-feature) before you turn the switch on.
+- **Messenger and Instagram after 24 hours.** A person's reply in the extended days goes out with Meta's Human Agent tag (`messaging_type: MESSAGE_TAG`, `tag: HUMAN_AGENT`) on every part of it, when the account's switch is on. The delivery records the tag. Read [The Human Agent feature](#the-human-agent-feature) before you turn the switch on.
 
 The rules are also in the [tickets guide](tickets.md#reply-windows), with the routes the ticket view reads.
 
@@ -306,7 +306,7 @@ In Helpdock, the switch is on the account's page under **Human Agent**, for Mess
 
 - Turning it on says that Meta approved the feature for your app. Helpdock cannot check that. Meta may restrict a Page that uses the tag without approval.
 - A person's reply in the extended days is allowed. An assistant's, a rule's and a survey's replies keep the 24 hours.
-- **Not built yet (M10-09).** The switch is stored and the composer allows the extended days, but the tag is not sent in this release. Until M10-09 lands, such a reply goes out untagged and Meta refuses it (see [The reply window](#the-reply-window)). Do not rely on the seven days until the tag ships.
+- With the switch on, the tag is sent on every part of such a reply, text and files, and the delivery's `tag` says `HUMAN_AGENT`. Meta refuses the tag after seven days, and for a customer who has not written; the delivery then ends `refused` with Meta's words (see [The reply window](#the-reply-window)).
 
 ## Pricing
 

@@ -265,3 +265,18 @@ stand-in for the vendor in every test (`apps/api/src/testing/fake-telegram.ts`).
   hook only after it is written (the assistant's) and finds the window closed is recorded as a `refused`
   delivery with no outbox row, so it stands in the thread without a job. Decision 7's pacing is built as written:
   `moveToDelayed` and `DelayedError`, with no in-process wait to amend.
+- **2026-10-12, review of M10.** Decision 4's "keeps the raw body (a JSON parser for this route alone that
+  stores the buffer beside the parsed body)" is built tighter: the route's content-type parser takes the
+  buffer, charges the address's budget, checks `X-Hub-Signature-256` over the bytes and only then parses
+  them, so an unsigned body costs a read and nothing more, and no copy of the body is
+  kept on the request. The Instagram app secret vouches for `object: instagram` only, so it cannot forge a
+  WhatsApp or Page delivery. A Messenger token is proved to be the Page's own (`GET /me?fields=id`), as an
+  Instagram token already was, because a user token that manages several Pages reads each of them. Decision
+  6's media job, and the profile job beside it, hold no database transaction open while they wait on Meta:
+  a short transaction reads, Graph is called with none open, and a short one claims the receipt and writes,
+  because both share the `inbound` queue with the intake of every brand. Decision 9's `HUMAN_AGENT` tag
+  shipped with the replies (M10-06) and not with the templates: the first build let a person's reply
+  through the extended window and sent it as `RESPONSE`, which Meta refuses, so the window the strip
+  called open was not one. The send job sends `MESSAGE_TAG` with `HUMAN_AGENT` on every part of a reply
+  whose window state is `human_agent` (a person's reply, on Messenger or Instagram, on an account whose
+  switch is on) and records the tag on the delivery; templates remain M10-09's.

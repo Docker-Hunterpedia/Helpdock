@@ -138,7 +138,14 @@ export function ChannelIdentityRows({
           gridTemplateColumns: '72px minmax(0, 1fr)',
           columnGap: 3,
           alignItems: 'start',
-          '& dt': { fontSize: 12, fontWeight: 500, color: 'text.secondary', paddingBlock: '6px' },
+          '& dt': {
+            fontSize: 12,
+            lineHeight: '20px',
+            fontWeight: 500,
+            color: 'text.secondary',
+            // 4 + 20 + 4: a one-line label is as tall as a row (28 px).
+            paddingBlock: '4px',
+          },
           '& dd': {
             margin: 0,
             fontSize: 13,

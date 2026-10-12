@@ -57,7 +57,7 @@ Definition of done asks for.
 | M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | planned |
 | M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; `HUMAN_AGENT` on a person's reply at day 3 and never on an AI or rule reply; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10** | 4 d | | later |
 | M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | built, awaiting review: [notes](#m10-10-health-jobs) |
-| M10-11 | Docs and the guide: `docs/guides/meta-channels.md` (the Meta dashboard walk-through per platform, App Review, pricing, limits), `channels.md`, `configuration.md` and `.env.example` for the `META_*` keys, `contacts.md` for the new identifiers, `tickets.md` for the reply window, `data-retention.md` for the deliveries, the OpenAPI changes, this document and the PRD | AGENTS.md, Definition of done 1 | `docs-guard` before the PR | 2 d | | planned |
+| M10-11 | Docs and the guide: `docs/guides/meta-channels.md` (the Meta dashboard walk-through per platform, App Review, pricing, limits), `channels.md`, `configuration.md` and `.env.example` for the `META_*` keys, `contacts.md` for the new identifiers, `tickets.md` for the reply window, `data-retention.md` for the deliveries, the OpenAPI changes, this document and the PRD | AGENTS.md, Definition of done 1 | `docs-guard` before the PR | 2 d | built, awaiting review: [notes](#m10-11-docs-and-the-guide) |
 
 ## Exit criteria
 
@@ -90,7 +90,7 @@ stand-in for Graph and the signed-webhook driver, on real Postgres and Redis
 
 ## Migrations
 
-- `0050_meta_channels` (M10-01): `meta_accounts` and `meta_conversations` (brand) and
+- `0050_meta_channels` (M10-01, `packages/db/drizzle/0050_meta_channels.sql`): `meta_accounts` and `meta_conversations` (brand) and
   `meta_deliveries` (department, moved with its ticket by a trigger of its own, as
   `telegram_deliveries` is), the enums `meta_platform`, `meta_account_status`,
   `meta_token_kind` and `meta_delivery_status`, and `whatsapp`, `messenger` and
@@ -101,7 +101,7 @@ stand-in for Graph and the signed-webhook driver, on real Postgres and Redis
   case. `meta_accounts.access_token` is in `ENVELOPE_COLUMNS`, so a master key
   rotation re-encrypts it. Nothing in the migration uses one of the new enum values,
   so it runs inside the migration's transaction.
-- `0051_meta_profile_checked` (M10-05): `meta_conversations.profile_checked_at`, nullable with no default, set by `meta.profile_fetch` whatever Graph answers about a Messenger or Instagram customer's name, so a refused read is made once per conversation. An existing conversation reads as never checked and is asked about on its next message.
+- `0051_meta_profile_checked` (M10-05, `packages/db/drizzle/0051_meta_profile_checked.sql`): `meta_conversations.profile_checked_at`, nullable with no default, set by `meta.profile_fetch` whatever Graph answers about a Messenger or Instagram customer's name, so a refused read is made once per conversation. An existing conversation reads as never checked and is asked about on its next message.
 
 ## Open questions
 
@@ -114,32 +114,48 @@ written here.
   the Meta app secret or the Instagram app secret. The webhook verifies
   against both (ADR 0025, 4); confirm with a real delivery and drop the one
   that never matches.
+  *Status (2026-10-12):* not settled by a run. Both secrets are tried, so a webhook is accepted
+  whichever signs it. Which one Meta uses needs a real delivery on a staging account.
 - **How long Meta waits for the webhook's answer** (5 s on the webhooks page,
   20 s in the App Review checklist) and **how long Messenger and Instagram
   retry** (one hour, then unsubscribed, on the Messenger page; 36 hours on
   the Instagram page). The design assumes the worse case of each.
+  *Status (2026-10-12):* answered by the design, not by a run. The webhook files a batch in the
+  request and answers at once, and the health job checks hourly; both assume the worse case.
 - **The closed-window error on Messenger and Instagram** (`10` with subcode
   `2018278`) is widely documented but was not readable on Meta's reference;
   the stand-in uses it, and a real refusal confirms the code the classifier
   keys on.
+  *Status (2026-10-12):* the classifier keys on `10` with subcode `2018278` (`WINDOW_CLOSED_SUBCODE`),
+  and the stand-in answers it. A real refusal is still to confirm.
 - **Whether Business Verification is required** for the Advanced Access
   Messenger and Instagram need; the guide says "expect it" until an install
   has been through App Review.
+  *Status (2026-10-12):* the guide says to expect it. Not settled.
 - **The test number's allow-list size** (commonly five recipients) and
   **Instagram's automated-DM cap** (200 an hour, from third parties only) are
   unconfirmed and only affect the guide's wording.
+  *Status (2026-10-12):* the guide gives no number for either. The allow-list size is not stated on
+  the pages the research read, and the Instagram cap is not repeated.
 - **WhatsApp's free service-message allowance.** Meta's page lists none;
   one third party claims 1000 a month. The guide says every delivered reply
   may be charged.
+  *Status (2026-10-12):* answered in the guide. Every delivered reply may be charged, and Meta's
+  pricing pages list no monthly allowance. The third-party figure is not repeated.
 - **Profile names on Messenger** need the Business Asset User Profile Access
   feature. Until an install has it the contact is "Messenger user"; whether
   the name arrives without it on a Page the operator administers is to be
   tried.
+  *Status (2026-10-12):* the contact keeps its id until a name arrives, and a refused read is recorded
+  once (M10-04, M10-05). Whether a Page the operator administers returns the name without the feature
+  is still to be tried on staging.
 - **The satisfaction survey on these channels.** M8-06 sends it by email for
   any channel it does not know, and these contacts have no email: `CsatDelivery`
   answers `unreachable` for them in M10. A WhatsApp survey needs a template
   and a Messenger one the `customer_feedback` template; both wait on M10-09
   or later.
+  *Status (2026-10-12):* answered by the code. `CsatDelivery` answers `unreachable` for the three
+  platforms (M10-06), and the surveys wait for M10-09.
 
 ## Artboards to draw
 
@@ -1076,20 +1092,59 @@ one; the job twice in one hour, and in two workers at once, checking once; a bra
 skipped; and the BullMQ schedulers registered for the accounts of two brands and followed through
 `meta_account.changed`.
 
+## M10-11 Docs and the guide
+
+The guide, the sweep and this document. The guide was written from the code on the branch: every route,
+key, setting, job name, status and limit in it was checked against its source. The research note of
+2026-10-11 is the only source for Meta's dashboard, App Review, pricing and token lifetimes, and each
+sentence that relies on it says so.
+
+| File | What changed |
+|---|---|
+| `docs/guides/meta-channels.md` | The whole guide, shaped like the Telegram guide: what each platform needs, the Meta dashboard steps per platform, the App card, Connect and Test with Meta's refusals, the health states and Reconnect, how Meta's posts are checked and answered, what customers can send, identities, replies and what Meta's answers do to them, the reply window, the limits, App Review, the Human Agent feature, pricing, the AI-provider terms, removing an account, developing without Meta |
+| `docs/guides/channels.md` | The Meta row, a reply-window bullet, and "Not in v1" lists Slack and Discord only |
+| `docs/guides/tickets.md` | The `channel` filter's values; the block-sender rule for a Meta ticket; the Meta context's shape (`context.account`, `context.window`) |
+| `docs/guides/data-retention.md` | Brand deletion: the Meta webhook answers `200` and passes a brand's events over, and its accounts are not checked |
+| `docs/guides/operations.md` | The System page's Channels row names Meta accounts; the date Meta gives for `v25.0` is dated |
+| `docs/guides/api.md` | The ticket `channel` values, and what a key's message on a Meta ticket does |
+| `docs/guides/security.md` | Meta's secrets and tokens in the encrypted list; the Graph host allow-list and where the token goes; a section on Meta's webhook |
+| `docs/guides/development.md` | The admin's browser stand-in, and why a real webhook needs a public address |
+| `docs/guides/contacts.md` | Checked against `identity.ts`, `identity-rules.ts` and `contact.ts`; already right, unchanged |
+| `docs/guides/configuration.md` | Unchanged: it is generated from the registry and `.env.example`, and its snapshot test passes |
+| `docs/design/README.md` | Unchanged: the five M10 rows and their screens are present |
+| `README.md` | The channel list and the M10 roadmap row |
+| `.changeset/m10-meta-channels.md` | `@helpdock/api`, minor |
+
+Found while writing, not changed here because the fix is code or screen copy:
+
+1. **The account page's Human Agent text is false until M10-09.** `meta.detail.humanAgent.body` says
+   "Replies after 24 hours carry Meta's `HUMAN_AGENT` tag". The send path sends `RESPONSE` only
+   (`messagingCourier` in `meta-send.job.ts`), so the tag is not sent in this build.
+2. **The Connect dialog says a system-user token "does not expire".** That holds only when the token is
+   generated with expiry set to Never. The guide says so.
+3. **The Meta section of the ticket view is not described in the guides.** It is M10-08's, and the
+   tickets guide only documents the context route and the window.
+
+Left out, because no source the team could point at confirms them: the path to Instagram's "allow access to
+messages" setting (not re-checked against Meta's pages); the test number's allow-list size; Instagram's
+200-an-hour cap; WhatsApp's 1,000-a-month allowance; the per-permission Business Verification gate; the
+72-hour free window of a Click-to-WhatsApp ad; the dashboard's menu paths beyond what the research note
+and the screens' own hints give.
+
 ## Interfaces for other milestones
 
-Planned; the implementation brief names the files. Corrected here as they land.
+As landed on the M10 branch (2026-10-12). What is not built yet is marked as such.
 
 | Kind | Name |
 |---|---|
-| Outbox events | `meta.reply` `{ deliveryId }`, `meta.media` `{ attachmentId, accountId, ref }`, `meta_account.changed` `{ accountId }`; M10-09 adds `meta.template`. Declared in `apps/api/src/meta/meta-events.ts` (M10-02) |
+| Outbox events | `meta.reply` `{ deliveryId }`, `meta.media` `{ attachmentId, accountId, ref }`, `meta.profile` `{ conversationId, accountId, platform }` (M10-04, M10-05), `meta_account.changed` `{ accountId }`. Declared in `apps/api/src/meta/meta-events.ts`. `meta.template` is M10-09's and not built |
 | Seams | `PlatformInboundService` and `MetaInboundHandlers` in `apps/api/src/meta/meta-inbound.service.ts` (M10-02): the WhatsApp, Messenger and Instagram inbound services implement one and replace their platform's entry in `MetaModule.forRoot`; `MetaModuleOverrides { graph?, inbound? }` for suites |
-| Jobs | `meta.send` (`outbound`, `kind: 'reply' \| 'template'`), `meta.media_fetch` (`inbound`), `meta.health` and `meta.health.schedule` (`maintenance`), `meta.templates.sync` (`maintenance`, M10-09) |
-| Config | `META_GRAPH_VERSION`, `META_GRAPH_API_ROOT`, `META_INSTAGRAM_API_ROOT`; settings `meta.appId`, `meta.appSecret`, `meta.instagramAppSecret`, `meta.webhookVerifyToken` (overridable as `HD_META_*`) |
-| i18n | namespace `meta` (what the api sends to customers: the location label, the refused-file line), `channels:meta.*`, `tickets:meta.*` |
-| Permissions | none new: `brand:manage` for accounts, `install:admin` for the App card's secrets through Settings, `ticket:read` / `ticket:write` for the ticket's context and deliveries |
-| Routes | `GET\|POST /api/meta/webhook` (built, M10-02); `GET /api/meta/app` and `POST /api/meta/app/verify-token` (built, M10-02); `/api/brands/:brandId/meta/accounts` (built, M10-07: list, create, `test`, `:id`, `:id/test`, `:id/subscribe`, `:id/status`, `:id/refresh`); `GET /api/brands/:brandId/tickets/:ticketId/meta`, `POST …/meta/deliveries/:deliveryId/retry` |
-| Packages | `@helpdock/channels` exports `GraphClient`, `classifyGraphError`, `verifyHubSignature`, `hubChallenge`, `metaEnvelopeSchema`, `routeEnvelope`, `splitMetaText`, `replyWindow`, the three adapters and, for tests, `FakeGraph`, `MetaWebhookDriver` and the fixtures; `@helpdock/net` gains `policies.graph`; `@helpdock/schemas` exports `meta.ts` |
+| Jobs | `meta.send` (`outbound`; payload `kind: 'reply' \| 'template'`, and only `reply` is produced until M10-09), `meta.media_fetch` (`inbound`), `meta.profile_fetch` (`inbound`, M10-05), `meta.health` and `meta.health.schedule` (`maintenance`). `meta.templates.sync` (`maintenance`) is M10-09's and not built |
+| Config | `META_GRAPH_VERSION`, `META_GRAPH_API_ROOT`, `META_INSTAGRAM_API_ROOT` in `.env.example`; settings `meta.appId`, `meta.appSecret`, `meta.instagramAppSecret`, `meta.webhookVerifyToken` (overridable as `HD_META_*`). The [configuration guide](../guides/configuration.md) is generated from them |
+| i18n | namespace `meta` (`packages/i18n/locales/{en,ar}/meta.json`: what the api sends to customers); `channels:meta.*` (Channels › Meta). `tickets:meta.*` is M10-08's and not in the catalogs yet |
+| Permissions | none new: `brand:manage` for accounts, `install:admin` for the App card (`GET /api/meta/app`, `POST /api/meta/app/verify-token`), `ticket:read` and `ticket:write` for a ticket's Meta context and deliveries |
+| Routes | `GET\|POST /api/meta/webhook`; `GET /api/meta/app`; `POST /api/meta/app/verify-token`; `/api/brands/:brandId/meta/accounts` (`GET`, `POST`, `POST test`, `GET`, `PUT` and `DELETE :accountId`, `POST :accountId/test`, `:accountId/subscribe`, `:accountId/status`, `:accountId/refresh`); `GET /api/brands/:brandId/tickets/:ticketId/meta`, `GET …/meta/deliveries`, `POST …/meta/deliveries/:deliveryId/retry` |
+| Packages | `@helpdock/channels` exports `GraphClient`, `classifyGraphError`, `verifyHubSignature`, `hubChallenge`, `metaEnvelopeSchema`, `routeEnvelope`, `splitMetaText`, `replyWindow`, the three adapters and, for tests, `FakeGraph`, `MetaWebhookDriver` and the fixtures; `@helpdock/net` gains `policies.graph`; `@helpdock/schemas` exports `meta.ts`; `@helpdock/jobs` exports the `meta.*` job definitions |
 | Channel kinds | `ticket_channel` gains `whatsapp`, `messenger`, `instagram`; `contact_identity_kind`, `contact_duplicate_reason` and `blocked_sender_kind` gain the same three |
 
 ## Pull requests

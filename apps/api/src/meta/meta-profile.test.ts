@@ -1,5 +1,6 @@
 import { GraphApiFailure, type GraphClient } from '@helpdock/channels';
 import { describe, expect, it, vi } from 'vitest';
+import { AccountGraph } from './account-graph.js';
 import {
   contactNameFor,
   hasPlaceholderName,
@@ -86,7 +87,7 @@ describe('what each platform is asked', () => {
 describe('parseProfile', () => {
   it('takes an Instagram name and handle', () => {
     expect(
-      parseProfile('instagram', { id: '1', name: 'Sheena Nelson', username: 'sheena.n' }, TOKEN),
+      parseProfile('instagram', { id: '1', name: 'Sheena Nelson', username: 'sheena.n' }),
     ).toEqual({
       name: 'Sheena Nelson',
       username: 'sheena.n',
@@ -94,36 +95,34 @@ describe('parseProfile', () => {
   });
 
   it('joins a Messenger first and last name, and has no handle', () => {
-    expect(
-      parseProfile('messenger', { id: '1', first_name: 'Omar', last_name: 'Khalil' }, TOKEN),
-    ).toEqual({
-      name: 'Omar Khalil',
-      username: null,
-    });
-    expect(parseProfile('messenger', { id: '1', first_name: 'Omar' }, TOKEN)).toEqual({
+    expect(parseProfile('messenger', { id: '1', first_name: 'Omar', last_name: 'Khalil' })).toEqual(
+      {
+        name: 'Omar Khalil',
+        username: null,
+      },
+    );
+    expect(parseProfile('messenger', { id: '1', first_name: 'Omar' })).toEqual({
       name: 'Omar',
       username: null,
     });
-    expect(parseProfile('messenger', { id: '1', last_name: ' Khalil ' }, TOKEN).name).toBe(
-      'Khalil',
-    );
+    expect(parseProfile('messenger', { id: '1', last_name: ' Khalil ' }).name).toBe('Khalil');
   });
 
   it('treats a blank as missing, and a handle Messenger would not send as none', () => {
-    expect(parseProfile('instagram', { id: '1', name: '  ', username: '' }, TOKEN)).toEqual({
+    expect(parseProfile('instagram', { id: '1', name: '  ', username: '' })).toEqual({
       name: null,
       username: null,
     });
-    expect(parseProfile('messenger', { id: '1', username: 'x', first_name: ' ' }, TOKEN)).toEqual({
+    expect(parseProfile('messenger', { id: '1', username: 'x', first_name: ' ' })).toEqual({
       name: null,
       username: null,
     });
   });
 
   it('refuses an answer that is not an object as a permanent failure, without the token', () => {
-    expect(() => parseProfile('instagram', 'nope', TOKEN)).toThrow(GraphApiFailure);
+    expect(() => parseProfile('instagram', 'nope')).toThrow(GraphApiFailure);
     try {
-      parseProfile('instagram', 'nope', TOKEN);
+      parseProfile('instagram', 'nope');
     } catch (error) {
       expect(error).toMatchObject({ kind: 'permanent' });
       expect(String(error)).not.toContain(TOKEN);
@@ -138,10 +137,16 @@ describe('readProfile', () => {
   const graphFailing = (error: unknown) => ({
     get: vi.fn<GraphClient['get']>(() => Promise.reject(error)),
   });
+  /** The client double behind an account's calls, which add the token and the platform's root. */
   const read = (
-    graph: Pick<GraphClient, 'get'>,
+    client: Pick<GraphClient, 'get'>,
     platform: 'instagram' | 'messenger' = 'instagram',
-  ) => readProfile({ graph, platform, customerId: '1784', token: TOKEN });
+  ) =>
+    readProfile({
+      graph: new AccountGraph(client as GraphClient, platform, TOKEN),
+      platform,
+      customerId: '1784',
+    });
 
   it('asks on the platform’s root, for the platform’s fields, with the account’s token', async () => {
     const instagram = graphReturning({ id: '1784', name: 'Sheena', username: 'sheena.n' });

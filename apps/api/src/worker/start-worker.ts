@@ -143,8 +143,8 @@ import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
-import { createMetaInboundService } from '../meta/factory.js';
-import { graphClientFactory } from '../meta/graph-client-factory.js';
+import { createMetaInboundJobs } from '../meta/factory.js';
+import { createGraphClient } from '../meta/graph-client-factory.js';
 import { MetaRepository } from '../meta/meta.repository.js';
 import { registerMetaEventHandlers } from '../meta/meta-events.js';
 import {
@@ -374,10 +374,6 @@ export type WorkerEnv = Pick<
   | 'META_INSTAGRAM_API_ROOT'
   // M7-03: whether a website crawl may render pages in a headless browser.
   | 'KNOWLEDGE_CRAWL_RENDER'
-  // M10: where Graph is and which version the Meta jobs call.
-  | 'META_GRAPH_VERSION'
-  | 'META_GRAPH_API_ROOT'
-  | 'META_INSTAGRAM_API_ROOT'
   // M9: how many outbox events run at once.
   | 'OUTBOX_CONCURRENCY'
 >;
@@ -620,11 +616,11 @@ export const workerDependencies: WorkerDependencies = {
         env.TELEGRAM_POLLING === true,
       ),
     });
-    // M10-10. A Meta account connected, re-tokened or disconnected moves its
-    // hourly health check on the `maintenance` queue. This is the one call for
-    // M10's events: the dispatcher refuses a second handler for an event, so
-    // each M10 deliverable adds its own consumer here (M10-06: the
-    // `meta.send` queue; M10-03: the media queue).
+    // M10. The one call for Meta's outbox events (the dispatcher refuses a
+    // second handler for an event): an account connected, re-tokened or
+    // disconnected moves its hourly health check on the `maintenance` queue
+    // (M10-10), a reply is queued on `outbound` (M10-06), and a file or a name
+    // to fetch on `inbound` (M10-03, M10-05).
     const maintenanceQueue = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
     registerMetaEventHandlers({
       accountChanged: createMetaAccountChangedHandler(
@@ -855,7 +851,7 @@ export const workerDependencies: WorkerDependencies = {
         db,
         repository: metaRepository,
         keyring,
-        graph: graphClientFactory(env)(),
+        graph: createGraphClient(env, log),
         storage: storageFor(env),
         redis,
         locales: new TicketLifecycleRepository(),
@@ -1028,7 +1024,7 @@ export const workerDependencies: WorkerDependencies = {
       log,
       keyring: createKeyring(env),
       repository: metaRepository,
-      graph: graphClientFactory(env)(),
+      graph: createGraphClient(env, log),
       scheduler: metaScheduler,
       appId: () => settings.get('meta.appId'),
     });
@@ -1102,15 +1098,13 @@ export const workerDependencies: WorkerDependencies = {
 
     // M10-03: the files a Meta message named, fetched after the webhook answered;
     // M10-05: a new customer's name, read after it.
-    const metaInbound = createMetaInboundService({
+    const { mediaFetch: metaMediaFetch, profileFetch: metaProfileFetch } = createMetaInboundJobs({
       db,
       storage: storageFor(env),
       log,
       keyring: createKeyring(env),
-      graph: graphClientFactory(env),
+      graph: createGraphClient(env, log),
     });
-    const metaMediaFetch = metaInbound.mediaFetch;
-    const metaProfileFetch = metaInbound.profileFetch;
 
     const worker = new Worker(
       QUEUE_NAMES.inbound,

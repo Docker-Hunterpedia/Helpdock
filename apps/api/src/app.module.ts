@@ -280,7 +280,6 @@ export class AppModule implements NestModule {
           env: options.env,
           db: options.db,
           logger: options.logger,
-          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
           ...(options.meta === undefined ? {} : { overrides: options.meta }),
         }),
         // M3-03 to M3-05: workflow rules, their log and the test run. The

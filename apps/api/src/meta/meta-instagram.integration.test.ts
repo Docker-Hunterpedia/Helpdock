@@ -63,7 +63,7 @@ import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { createMediaProcessor } from '../media/process.job.js';
 import { FakeStorage } from '../testing/media.js';
-import { createMetaInboundService } from './factory.js';
+import { createMetaInboundJobs } from './factory.js';
 import { MetaRepository } from './meta.repository.js';
 import {
   createMetaMediaEventHandler,
@@ -265,12 +265,11 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       log,
       repository,
       keyring: createKeyring(envFor()),
-      graph: () =>
-        new GraphClient({
-          root: graph.facebookRoot,
-          instagramRoot: graph.instagramRoot,
-          allowCidrs: ['127.0.0.0/8'],
-        }),
+      graph: new GraphClient({
+        root: graph.facebookRoot,
+        instagramRoot: graph.instagramRoot,
+        allowCidrs: ['127.0.0.0/8'],
+      }),
     });
     const rows = await owner.db
       .select()
@@ -318,17 +317,16 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
         (row) => row.id,
       ),
     );
-    const { mediaFetch } = createMetaInboundService({
+    const { mediaFetch } = createMetaInboundJobs({
       db: runtime.db,
       storage,
       log: silentLogger,
       keyring: createKeyring(envFor()),
-      graph: () =>
-        new GraphClient({
-          root: graph.facebookRoot,
-          instagramRoot: graph.instagramRoot,
-          allowCidrs: ['127.0.0.0/8'],
-        }),
+      graph: new GraphClient({
+        root: graph.facebookRoot,
+        instagramRoot: graph.instagramRoot,
+        allowCidrs: ['127.0.0.0/8'],
+      }),
     });
     const errors: unknown[] = [];
 
@@ -537,12 +535,11 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       runtime,
       objectStorage: storage,
       meta: {
-        graph: () =>
-          new GraphClient({
-            root: graph.facebookRoot,
-            instagramRoot: graph.instagramRoot,
-            allowCidrs: ['127.0.0.0/8'],
-          }),
+        graph: new GraphClient({
+          root: graph.facebookRoot,
+          instagramRoot: graph.instagramRoot,
+          allowCidrs: ['127.0.0.0/8'],
+        }),
       },
     });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });

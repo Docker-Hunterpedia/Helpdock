@@ -20,6 +20,7 @@ import {
   graphRefreshTokenSchema,
   graphSendResponseSchema,
   graphSubscribedAppsSchema,
+  graphSuccessSchema,
   parseGraph,
   subscribedAppsOf,
 } from './graph-responses.js';
@@ -243,5 +244,20 @@ describe('parseGraph', () => {
       'Graph answered to the upload in a shape Helpdock does not know',
     );
     expect(JSON.stringify(failure)).not.toContain(secret);
+  });
+});
+
+describe('graphSuccessSchema', () => {
+  it('reads the answer to a subscription: true, false, and no word at all', () => {
+    expect(graphSuccessSchema.parse({ success: true })).toEqual({ success: true });
+    expect(graphSuccessSchema.parse({ success: false })).toEqual({ success: false });
+    expect(graphSuccessSchema.parse({})).toEqual({});
+    expect(graphSuccessSchema.parse(undefined)).toBeUndefined();
+    expect(graphSuccessSchema.parse(null)).toBeNull();
+  });
+
+  it('refuses what is not an object with a boolean success', () => {
+    expect(graphSuccessSchema.safeParse({ success: 'yes' }).success).toBe(false);
+    expect(graphSuccessSchema.safeParse('ok').success).toBe(false);
   });
 });

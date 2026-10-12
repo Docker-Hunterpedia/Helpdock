@@ -672,7 +672,7 @@ describe.skipIf(!hasDocker)('replies (M10-06)', () => {
       objectStorage: storage,
       // The inbound services are the module's own: a delivery or read report goes through
       // the signed webhook into the real handler, which reads what the send job wrote.
-      meta: { graph: () => client },
+      meta: { graph: client },
     });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
     redis = createQueueConnection(redisContainer.getConnectionUrl());

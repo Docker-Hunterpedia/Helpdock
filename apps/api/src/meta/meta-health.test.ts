@@ -1,6 +1,7 @@
 import {
   classifyGraphError,
   GraphApiFailure,
+  type GraphClient,
   graphSubscribedApp,
   graphSubscribedApps,
   graphTokenExpired,
@@ -13,7 +14,9 @@ import {
   type MetaPlatform,
 } from '@helpdock/schemas';
 import { describe, expect, it, vi } from 'vitest';
+import { AccountGraph } from './account-graph.js';
 import { checkMetaAccount, type MetaHealthChecks } from './meta-health.js';
+import { NO_BUSINESS_ACCOUNT } from './meta-subscription.js';
 import type { TokenRefreshResult } from './meta-token-refresh.js';
 
 /**
@@ -80,7 +83,12 @@ interface Call {
   readonly query: Readonly<Record<string, unknown>> | undefined;
 }
 
-/** A Graph that answers each call from `answer`: a body, or an error to throw. */
+/**
+ * A Graph client that answers each call from `answer`: a body, or an error to
+ * throw. The checks reach it through an account's calls, which add the token
+ * and the platform's root to each one, so the calls recorded are what Meta would
+ * be sent.
+ */
 const graphDouble = (answer: (call: Call, calls: readonly Call[]) => unknown) => {
   const calls: Call[] = [];
   const run = async (
@@ -108,7 +116,7 @@ const graphDouble = (answer: (call: Call, calls: readonly Call[]) => unknown) =>
     graph: {
       get: (path: string, request: Parameters<typeof run>[2]) => run('GET', path, request),
       post: (path: string, request: Parameters<typeof run>[2]) => run('POST', path, request),
-    } as MetaHealthChecks['graph'],
+    } as unknown as GraphClient,
   };
 };
 
@@ -136,13 +144,13 @@ const subscribedTo = (platform: Platform, appId: string = APP_ID) =>
 const nobody = { data: [] };
 
 const check = (
-  graph: MetaHealthChecks['graph'],
+  client: GraphClient,
   row: MetaAccount,
   {
     appId = APP_ID,
     refresh = vi.fn<MetaHealthChecks['refresh']>(async () => ({ outcome: 'not-due' })),
   }: { appId?: string; refresh?: MetaHealthChecks['refresh'] } = {},
-) => checkMetaAccount({ graph, appId, refresh }, row, TOKEN, NOW);
+) => checkMetaAccount({ appId, refresh }, row, new AccountGraph(client, row.platform, TOKEN), NOW);
 
 describe('step 1, the token', () => {
   it('asks debug_token about the token itself for WhatsApp and Messenger', async () => {
@@ -156,7 +164,7 @@ describe('step 1, the token', () => {
       method: 'GET',
       path: '/debug_token',
       token: TOKEN,
-      api: undefined,
+      api: 'graph',
       query: { input_token: TOKEN },
     });
   });
@@ -341,7 +349,7 @@ describe('step 2, the subscription', () => {
     const update = await check(graph, whatsapp({ wabaId: null, status: 'unsubscribed' }));
 
     expect(update).toEqual({
-      lastError: 'The business account id is not known; reconnect the number',
+      lastError: NO_BUSINESS_ACCOUNT,
       lastErrorAt: NOW,
     });
     expect(calls).toHaveLength(0);

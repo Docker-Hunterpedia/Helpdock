@@ -1,33 +1,24 @@
-import { metaIdentityValue } from '@helpdock/channels';
-import { decryptSecret, type Keyring } from '@helpdock/config';
+import type { GraphClient } from '@helpdock/channels';
+import type { Keyring } from '@helpdock/config';
 import {
-  contacts,
   type Db,
   type DbTransaction,
   type MetaAccount as MetaAccountRow,
   type MetaConversation as MetaConversationRow,
-  metaConversations,
   withSystem,
 } from '@helpdock/db';
 import {
-  createJobProcessor,
-  type JobHandler,
+  claimReceipt,
   type JobLogger,
   type MetaProfileFetchPayload,
   metaProfileFetchJob,
+  readJob,
 } from '@helpdock/jobs';
 import { META_ERROR_MAX_LENGTH } from '@helpdock/schemas';
 import type { Job } from 'bullmq';
-import { eq } from 'drizzle-orm';
-import type { GraphClientFactory } from './graph-client-factory.js';
+import { graphForAccount } from './account-graph.js';
 import type { MetaRepository } from './meta.repository.js';
-import {
-  contactNameFor,
-  hasPlaceholderName,
-  type MetaProfile,
-  planProfileLookup,
-  readProfile,
-} from './meta-profile.js';
+import { planProfileLookup, readProfile, wantsProfile } from './meta-profile.js';
 
 /**
  * The `meta.profile_fetch` consumer (M10-05, shared with M10-04): reads a
@@ -35,143 +26,169 @@ import {
  * their first message has been filed, so the webhook never calls Graph
  * (ADR 0025, 6). Raised by a `meta.profile` outbox row beside the message.
  *
+ * ```
+ * 1. a short transaction: the conversation and the account, and whether the name is still wanted
+ * 2. no transaction at all: GET /{customer id}?fields=…
+ * 3. a short transaction: claim the receipt, write what Graph said
+ * ```
+ *
+ * The job shares the `inbound` queue with email and Telegram polling, so no
+ * transaction of the brand's waits on Meta: a slow Graph holds a worker, never
+ * a pooled connection.
+ *
  * | Graph answers | The job |
  * |---|---|
  * | a name or a handle | writes them on the conversation and, when the contact still has the name it was created with, on the contact; records the check |
  * | nothing in it | records the check |
  * | a refusal (the Page lacks the reviewed feature, the customer blocked the account) | records the check and stores nothing: "Messenger user" is drawn at render time, never kept as a name |
  * | Meta or the network failing, a rate limit | throws, so BullMQ asks again (three attempts from 30 seconds); nothing is recorded, so the customer's next message raises the lookup again |
- * | a token that no longer works | marks the account `token_expired` (outside the job's transaction, which a throw rolls back) and throws; the row is left for the next attempt |
+ * | a token that no longer works | marks the account `token_expired` (in a transaction of its own) and throws; the row is left for the next attempt |
  *
  * **Idempotent** (DOMAIN-RULES §6): the receipt is `meta.profile_fetch:<conversation>`,
- * claimed in the job's transaction, so two lookups raised by messages that
- * arrived before the first ran read once; a lookup that finds the conversation
- * already answered does nothing, which holds after receipts are purged.
+ * claimed in the transaction that writes, so two lookups raised by messages that
+ * arrived before the first ran read once and write once; a lookup that finds the
+ * conversation already answered does nothing, which holds after receipts are purged.
  */
 
 export interface MetaProfileDependencies {
-  readonly db: Db;
-  readonly repository: MetaRepository;
+  readonly repository: Pick<
+    MetaRepository,
+    'account' | 'conversationById' | 'recordProfile' | 'recordProfileCheck' | 'update'
+  >;
   readonly keyring: Keyring;
-  readonly graph: GraphClientFactory;
+  readonly graph: GraphClient;
+  /** A short transaction of the brand's, as the system principal: the job has two. */
+  readonly transaction: <T>(brandId: string, work: (tx: DbTransaction) => Promise<T>) => Promise<T>;
+  /** Claims the delivery's receipt, in the transaction that writes what the delivery did. */
+  readonly claim: (tx: DbTransaction, key: string) => Promise<boolean>;
   readonly now?: () => Date;
 }
 
-const conversationOf = async (
-  tx: DbTransaction,
-  id: string,
-): Promise<MetaConversationRow | undefined> => {
-  const rows = await tx
-    .select()
-    .from(metaConversations)
-    .where(eq(metaConversations.id, id))
-    .limit(1);
-  return rows[0];
-};
+/** What one delivery of the job is for. */
+export interface MetaProfileRun {
+  readonly payload: MetaProfileFetchPayload;
+  readonly log: JobLogger;
+  /** The receipt this delivery claims when it writes. */
+  readonly receipt: string;
+}
 
-const recordCheck = async (tx: DbTransaction, conversationId: string, at: Date): Promise<void> => {
-  await tx
-    .update(metaConversations)
-    .set({ profileCheckedAt: at })
-    .where(eq(metaConversations.id, conversationId));
-};
+/** What the first transaction found to ask Graph about. */
+interface Lookup {
+  readonly conversation: MetaConversationRow;
+  readonly account: MetaAccountRow;
+}
 
-/**
- * What Graph said, on the conversation and, when the contact has no better
- * name, on the contact. A part Graph did not send leaves what is stored alone.
- */
-const recordProfile = async (
-  tx: DbTransaction,
-  { conversation, account }: { conversation: MetaConversationRow; account: MetaAccountRow },
-  profile: MetaProfile,
-  at: Date,
-): Promise<void> => {
-  await tx
-    .update(metaConversations)
-    .set({
-      ...(profile.name === null ? {} : { profileName: profile.name }),
-      ...(profile.username === null ? {} : { username: profile.username }),
-      profileCheckedAt: at,
-    })
-    .where(eq(metaConversations.id, conversation.id));
-
-  const name = contactNameFor(profile);
-  if (name === null) {
-    return;
-  }
-  const [contact] = await tx
-    .select({ name: contacts.name })
-    .from(contacts)
-    .where(eq(contacts.id, conversation.contactId))
-    .limit(1);
-  const identity = metaIdentityValue(account.platform, account.externalId, conversation.customerId);
-  if (contact !== undefined && hasPlaceholderName(contact.name, identity)) {
-    await tx
-      .update(contacts)
-      .set({ name, updatedAt: at })
-      .where(eq(contacts.id, conversation.contactId));
-  }
-};
-
-export const createMetaProfileHandler = (
-  deps: MetaProfileDependencies,
-): JobHandler<MetaProfileFetchPayload> => {
+export const createMetaProfileHandler = (deps: MetaProfileDependencies) => {
   const now = deps.now ?? (() => new Date());
 
-  /** Outside the job's transaction, which the throw that follows rolls back. */
+  /**
+   * The second transaction: the receipt, then the write. The conversation is
+   * read again, because Graph took a while: a lookup that raced this one may
+   * have answered it, and the name is then not written twice.
+   */
+  const write = (
+    { payload, log, receipt }: MetaProfileRun,
+    lookup: Lookup,
+    record: (tx: DbTransaction, conversation: MetaConversationRow) => Promise<void>,
+  ): Promise<void> =>
+    deps.transaction(payload.brandId, async (tx) => {
+      if (!(await deps.claim(tx, receipt))) {
+        log.info(
+          { conversationId: lookup.conversation.id, receipt },
+          'duplicate delivery ignored; its receipt is already claimed',
+        );
+        return;
+      }
+      const current = await deps.repository.conversationById(tx, lookup.conversation.id);
+      if (current === undefined || !wantsProfile(current)) {
+        log.info(
+          { conversationId: lookup.conversation.id },
+          'the conversation was answered while Graph was asked',
+        );
+        return;
+      }
+      await record(tx, current);
+    });
+
+  /** In a transaction of its own, because the throw that follows ends the job's attempt. */
   const expireToken = async (
     account: MetaAccountRow,
     detail: string,
     log: JobLogger,
   ): Promise<void> => {
-    await withSystem(deps.db, account.brandId, (tx) =>
-      deps.repository.update(tx, account.id, {
-        status: 'token_expired',
-        lastError: detail.slice(0, META_ERROR_MAX_LENGTH),
-        lastErrorAt: now(),
-      }),
-    ).catch((error: unknown) => {
-      log.error(
-        { err: error, accountId: account.id },
-        'could not mark a meta account token_expired',
-      );
-    });
+    await deps
+      .transaction(account.brandId, (tx) =>
+        deps.repository.update(tx, account.id, {
+          status: 'token_expired',
+          lastError: detail.slice(0, META_ERROR_MAX_LENGTH),
+          lastErrorAt: now(),
+        }),
+      )
+      .catch((error: unknown) => {
+        log.error(
+          { err: error, accountId: account.id },
+          'could not mark a meta account token_expired',
+        );
+      });
   };
 
-  return async ({ payload, brandId, tx, log }) => {
-    const plan = planProfileLookup(
-      payload,
-      await conversationOf(tx, payload.conversationId),
-      await deps.repository.account(tx, payload.accountId),
+  return async (run: MetaProfileRun): Promise<void> => {
+    const { payload, log } = run;
+    const plan = await deps.transaction(payload.brandId, async (tx) =>
+      planProfileLookup(
+        payload,
+        await deps.repository.conversationById(tx, payload.conversationId),
+        await deps.repository.account(tx, payload.accountId),
+      ),
     );
     if (!plan.read) {
       log.info(
-        { brandId, conversationId: payload.conversationId, reason: plan.reason },
+        {
+          brandId: payload.brandId,
+          conversationId: payload.conversationId,
+          reason: plan.reason,
+        },
         'meta profile lookup skipped',
       );
       return;
     }
     const { conversation, account } = plan;
+    const lookup = { conversation, account };
 
     const read = await readProfile({
-      graph: deps.graph(),
+      graph: graphForAccount(account, deps.keyring, deps.graph),
       platform: payload.platform,
       customerId: conversation.customerId,
-      token: decryptSecret(account.accessToken, deps.keyring),
     });
     switch (read.kind) {
       case 'named':
-        await recordProfile(tx, { conversation, account }, read.profile, now());
+        await write(run, lookup, (tx, current) =>
+          deps.repository.recordProfile(
+            tx,
+            { conversation: current, account },
+            read.profile,
+            now(),
+          ),
+        );
         return;
       case 'empty':
-        await recordCheck(tx, conversation.id, now());
+        await write(run, lookup, (tx, current) =>
+          deps.repository.recordProfileCheck(tx, current.id, now()),
+        );
         return;
       case 'refused':
         log.warn(
-          { brandId, accountId: account.id, reason: read.failure.kind, code: read.failure.code },
+          {
+            brandId: payload.brandId,
+            accountId: account.id,
+            reason: read.failure.kind,
+            code: read.failure.code,
+          },
           'meta profile read refused; the customer keeps no name',
         );
-        await recordCheck(tx, conversation.id, now());
+        await write(run, lookup, (tx, current) =>
+          deps.repository.recordProfileCheck(tx, current.id, now()),
+        );
         return;
       case 'retry':
         throw read.failure;
@@ -182,10 +199,27 @@ export const createMetaProfileHandler = (
   };
 };
 
-export const createMetaProfileProcessor = (
-  deps: MetaProfileDependencies & { readonly log: JobLogger },
-): ((job: Job) => Promise<void>) =>
-  createJobProcessor(metaProfileFetchJob, createMetaProfileHandler(deps), {
-    db: deps.db,
-    log: deps.log,
+/**
+ * The handler behind the job's guards (the right job, an id, a payload that
+ * parses) with a short transaction of the brand's for each of its two steps and
+ * the receipt claimed in the second.
+ */
+export const createMetaProfileProcessor = ({
+  db,
+  log,
+  ...deps
+}: Omit<MetaProfileDependencies, 'transaction' | 'claim'> & {
+  readonly db: Db;
+  readonly log: JobLogger;
+}): ((job: Job) => Promise<void>) => {
+  const handler = createMetaProfileHandler({
+    ...deps,
+    transaction: (brandId, work) => withSystem(db, brandId, work),
+    claim: claimReceipt,
   });
+
+  return async (job) => {
+    const { payload, key } = readJob(metaProfileFetchJob, job);
+    await handler({ payload, log, receipt: key });
+  };
+};

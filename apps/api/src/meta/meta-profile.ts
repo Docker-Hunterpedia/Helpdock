@@ -1,10 +1,11 @@
-import { type GraphApi, GraphApiFailure, type GraphClient, parseGraph } from '@helpdock/channels';
+import { type GraphApi, GraphApiFailure, parseGraph } from '@helpdock/channels';
 import type {
   MetaAccount as MetaAccountRow,
   MetaConversation as MetaConversationRow,
 } from '@helpdock/db';
 import type { MetaProfileFetchPayload } from '@helpdock/jobs';
 import { z } from 'zod';
+import type { AccountGraph } from './account-graph.js';
 
 /**
  * What the `meta.profile_fetch` job decides (M10-05, shared with M10-04), as
@@ -97,12 +98,8 @@ const profileBodySchema = z.looseObject({
  * answer in a shape Helpdock does not know is a permanent failure, as every
  * Graph response read through `parseGraph` is.
  */
-export const parseProfile = (
-  platform: ProfilePlatform,
-  body: unknown,
-  token: string,
-): MetaProfile => {
-  const parsed = parseGraph(profileBodySchema, body, 'a customer profile', token);
+export const parseProfile = (platform: ProfilePlatform, body: unknown): MetaProfile => {
+  const parsed = parseGraph(profileBodySchema, body, 'a customer profile');
   if (platform === 'instagram') {
     return { name: textOrNull(parsed.name), username: textOrNull(parsed.username) };
   }
@@ -145,19 +142,15 @@ const readOfFailure = (failure: GraphApiFailure): ProfileRead => {
  * as an exception.
  */
 export const readProfile = async (input: {
-  readonly graph: Pick<GraphClient, 'get'>;
+  /** The account's calls: the platform's own root, which {@link PROFILE_READS} names too. */
+  readonly graph: Pick<AccountGraph, 'get'>;
   readonly platform: ProfilePlatform;
   readonly customerId: string;
-  readonly token: string;
 }): Promise<ProfileRead> => {
-  const { graph, platform, customerId, token } = input;
-  const { api, fields } = PROFILE_READS[platform];
+  const { graph, platform, customerId } = input;
+  const { fields } = PROFILE_READS[platform];
   try {
-    const profile = parseProfile(
-      platform,
-      await graph.get(`/${customerId}`, { token, api, query: { fields } }),
-      token,
-    );
+    const profile = parseProfile(platform, await graph.get(`/${customerId}`, { fields }));
 
     return profile.name === null && profile.username === null
       ? { kind: 'empty' }

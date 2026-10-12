@@ -79,7 +79,7 @@ export class MetaAccountsController {
     @Param(new ZodValidationPipe(MetaBrandParamDto)) _params: MetaBrandParamDto,
     @Body(new ZodValidationPipe(MetaTokenTestDto)) body: MetaTokenTestDto,
   ): Promise<MetaTestResult> {
-    return metaTestResultSchema.parse(await this.#accounts.testToken(body));
+    return metaTestResultSchema.parse(await this.#accounts.testToken(getTx(), body));
   }
 
   @Get(':accountId')

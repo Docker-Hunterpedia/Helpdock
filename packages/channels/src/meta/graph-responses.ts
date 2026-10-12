@@ -97,6 +97,13 @@ export const subscribedAppsOf = (
         ];
   });
 
+/**
+ * `POST /{id}/subscribed_apps`: `{ "success": true }`. Only an explicit `false`
+ * is a refusal; an answer with no `success` in it (an empty body, a bare object)
+ * is the 200 it came with.
+ */
+export const graphSuccessSchema = z.looseObject({ success: z.boolean().optional() }).nullish();
+
 /** `GET /debug_token`: whether a token works, and until when. */
 export const graphDebugTokenSchema = z.looseObject({
   data: z.looseObject({

@@ -3,11 +3,11 @@ import {
   type GraphClient,
   graphRefreshTokenSchema,
   parseGraph,
-  redactToken,
 } from '@helpdock/channels';
-import { decryptSecret, encryptSecret, type Keyring } from '@helpdock/config';
+import { encryptSecret, type Keyring } from '@helpdock/config';
 import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import { withSystemJob } from '../tenant/system-job.js';
+import { type AccountGraph, graphForAccount } from './account-graph.js';
 import type { MetaRepository } from './meta.repository.js';
 
 /**
@@ -33,7 +33,7 @@ export interface TokenRefreshDeps {
   readonly repository: Pick<MetaRepository, 'account' | 'update' | 'markError'>;
   readonly keyring: Keyring;
   /** Only `get` is called: the renewal is a `GET`, as Meta defines it. */
-  readonly graph: Pick<GraphClient, 'get'>;
+  readonly graph: GraphClient;
   readonly now?: () => Date;
 }
 
@@ -97,10 +97,10 @@ export const refreshInstagramToken = async (
     return { outcome: 'not-due' };
   }
 
-  const token = decryptSecret(account.accessToken, deps.keyring);
-  const answer = await askForRenewal(deps.graph, token);
+  const graph = graphForAccount(account, deps.keyring, deps.graph);
+  const answer = await askForRenewal(graph);
   if ('refusal' in answer) {
-    await recordRefusal(deps, account, answer.refusal, token, now);
+    await recordRefusal(deps, account, answer.refusal, graph, now);
 
     return { outcome: 'refused' };
   }
@@ -115,17 +115,12 @@ type RenewedToken = { readonly access_token: string; readonly expires_in: number
  * failure that is no answer (Graph or the network down, a rate limit) is thrown.
  */
 const askForRenewal = async (
-  graph: TokenRefreshDeps['graph'],
-  token: string,
+  graph: AccountGraph,
 ): Promise<{ readonly renewed: RenewedToken } | { readonly refusal: GraphApiFailure }> => {
   try {
-    const body = await graph.get('/refresh_access_token', {
-      token,
-      api: 'instagram',
-      query: { grant_type: 'ig_refresh_token' },
-    });
+    const body = await graph.get('/refresh_access_token', { grant_type: 'ig_refresh_token' });
 
-    return { renewed: parseGraph(graphRefreshTokenSchema, body, 'the token renewal', token) };
+    return { renewed: parseGraph(graphRefreshTokenSchema, body, 'the token renewal') };
   } catch (error) {
     if (error instanceof GraphApiFailure && error.permanent) {
       return { refusal: error };
@@ -138,7 +133,7 @@ const recordRefusal = async (
   deps: TokenRefreshDeps,
   account: TokenRefreshAccount,
   refusal: GraphApiFailure,
-  token: string,
+  graph: AccountGraph,
   now: Date,
 ): Promise<void> => {
   // Meta calling the token dead, or the row's own date having passed, is an
@@ -151,7 +146,7 @@ const recordRefusal = async (
     await deps.repository.markError(
       tx,
       account.id,
-      redactToken(`Instagram would not renew the token: ${refusal.detail}`, token),
+      graph.redact(`Instagram would not renew the token: ${refusal.detail}`),
       now,
     );
     if (expired) {

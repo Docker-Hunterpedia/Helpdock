@@ -76,6 +76,41 @@ const rethrowAsUnrecoverable = (error: unknown): never => {
 };
 
 /**
+ * What every processor of one job name asks first, before it opens anything: the
+ * job is the one it handles, it has an id (no delivery of it could be
+ * deduplicated without one), and its payload parses. Anything else is
+ * unrecoverable: a retry cannot make it right. Answers the payload and the
+ * receipt key a delivery of it claims.
+ */
+export const readJob = <TName extends string, TPayload extends BrandScopedPayload>(
+  definition: JobDefinition<TName, TPayload>,
+  job: Job,
+): { readonly payload: TPayload; readonly jobId: string; readonly key: string } => {
+  if (job.name !== definition.name) {
+    throw new UnrecoverableError(
+      `Queue ${definition.queue} received job ${job.name}, but this worker only handles ${definition.name}.`,
+    );
+  }
+
+  const jobId = job.id;
+  if (jobId === undefined) {
+    throw new UnrecoverableError(
+      `Job ${definition.name} arrived without an id, so no delivery of it can be deduplicated.`,
+    );
+  }
+
+  const payload = ((): TPayload => {
+    try {
+      return parseJobPayload(definition, job.data);
+    } catch (error) {
+      return rethrowAsUnrecoverable(error);
+    }
+  })();
+
+  return { payload, jobId, key: idempotencyKeyFor(definition, payload, jobId) };
+};
+
+/**
  * The processing function, without BullMQ around it: validate, open the brand's
  * transaction, claim the receipt, run the handler. Separated from
  * {@link createWorker} so that everything it refuses can be proved without Redis.
@@ -98,28 +133,7 @@ export const createJobProcessor =
     { db, log = silentLogger }: { readonly db: Db; readonly log?: JobLogger | undefined },
   ) =>
   async (job: Job, token?: string): Promise<void> => {
-    if (job.name !== definition.name) {
-      throw new UnrecoverableError(
-        `Queue ${definition.queue} received job ${job.name}, but this worker only handles ${definition.name}.`,
-      );
-    }
-
-    const jobId = job.id;
-    if (jobId === undefined) {
-      throw new UnrecoverableError(
-        `Job ${definition.name} arrived without an id, so no delivery of it can be deduplicated.`,
-      );
-    }
-
-    const payload = ((): TPayload => {
-      try {
-        return parseJobPayload(definition, job.data);
-      } catch (error) {
-        return rethrowAsUnrecoverable(error);
-      }
-    })();
-
-    const key = idempotencyKeyFor(definition, payload, jobId);
+    const { payload, jobId, key } = readJob(definition, job);
 
     await withSystem(db, payload.brandId, async (tx) => {
       if (!(await claimReceipt(tx, key))) {

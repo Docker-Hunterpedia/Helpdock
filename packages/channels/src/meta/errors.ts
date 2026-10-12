@@ -182,6 +182,18 @@ export class GraphApiFailure extends Error {
 }
 
 /**
+ * A token that no header can carry: not one Meta issued, so no call was made. A
+ * class of its own so a caller can tell it from a programming error, which is
+ * also a `TypeError`, and must not be taken for a token the person mistyped.
+ */
+export class GraphTokenFormatError extends TypeError {
+  constructor() {
+    super('A Graph token is printable characters with no space');
+    this.name = 'GraphTokenFormatError';
+  }
+}
+
+/**
  * The text of an error for a person: the code and Graph's sentence, cut to what
  * `last_error` keeps. The token is removed first, wherever Graph or the
  * transport chose to quote it.

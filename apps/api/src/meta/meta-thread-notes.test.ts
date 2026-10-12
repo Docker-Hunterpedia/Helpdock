@@ -119,7 +119,7 @@ describe('MetaThreadNotes.write', () => {
   const harness = (setup: { open?: Ticket | undefined; seen?: boolean } = {}) => {
     const router = {
       openTicket: vi.fn(async () => ('open' in setup ? setup.open : TICKET)),
-      writeSystemLine: vi.fn(async () => 'line-id'),
+      writeSystemLine: vi.fn(async (_tx: unknown, _line: unknown) => 'line-id'),
     };
     const lifecycleReads = { localeForContact: vi.fn(async () => 'ar' as const) };
     const repository = { systemLineSeen: vi.fn(async () => setup.seen === true) };

@@ -1,22 +1,20 @@
 import {
   GRAPH_IDENTITY_FIELDS,
   GraphApiFailure,
-  type GraphClient,
   type GraphSubscribedApp,
-  graphApiFor,
   graphDebugTokenSchema,
   graphIdentitySchema,
-  graphSubscribedAppsSchema,
   parseGraph,
-  redactToken,
-  subscribedAppsOf,
 } from '@helpdock/channels';
 import type { MetaAccount, NewMetaAccount } from '@helpdock/db';
+import { META_ERROR_MAX_LENGTH, type MetaAccountStatus } from '@helpdock/schemas';
+import type { AccountGraph } from './account-graph.js';
 import {
-  META_ERROR_MAX_LENGTH,
-  META_SUBSCRIBED_FIELDS,
-  type MetaAccountStatus,
-} from '@helpdock/schemas';
+  listSubscribedApps,
+  NO_BUSINESS_ACCOUNT,
+  subscribeApp,
+  subscriptionNodeOf,
+} from './meta-subscription.js';
 import type { TokenRefreshResult } from './meta-token-refresh.js';
 
 /**
@@ -51,7 +49,6 @@ export type MetaHealthUpdate = Pick<
 >;
 
 export interface MetaHealthChecks {
-  readonly graph: Pick<GraphClient, 'get' | 'post'>;
   /** The install's Meta app id (`meta.appId`); empty when it is not set. */
   readonly appId: string;
   /** Step 3. Called for Instagram accounts only, and decides for itself whether the token is due. */
@@ -62,20 +59,12 @@ export interface MetaHealthChecks {
 interface Run {
   readonly checks: MetaHealthChecks;
   readonly account: MetaAccount;
-  readonly token: string;
+  /** Every call and every word taken out of a token goes through it: the run never holds the token. */
+  readonly graph: AccountGraph;
   readonly now: Date;
-  /** The id `subscribed_apps` is read and written on: see {@link subscriptionNode}. */
+  /** The id `subscribed_apps` is read and written on: see `subscriptionNodeOf`. */
   readonly node: string;
 }
-
-/**
- * Where the webhook subscription lives. Meta keeps WhatsApp's on the business
- * account (`/{waba}/subscribed_apps`; the number's own id has no such edge) and
- * a Page's or an Instagram account's on the account itself. Null for a number
- * whose business account the row does not know.
- */
-const subscriptionNode = ({ platform, wabaId, externalId }: MetaAccount): string | null =>
-  platform === 'whatsapp' ? wabaId : externalId;
 
 type Step<T> =
   | { readonly ok: true; readonly value: T }
@@ -101,16 +90,16 @@ const attempt = async <T>(call: () => Promise<T>): Promise<Step<T>> => {
 };
 
 /** Graph's words, with the token taken out and cut to what `last_error` keeps. */
-const errorText = (message: string, token: string): string =>
-  redactToken(message, token).slice(0, META_ERROR_MAX_LENGTH);
+const errorText = (message: string, graph: AccountGraph): string =>
+  graph.redact(message).slice(0, META_ERROR_MAX_LENGTH);
 
 const problem = (
-  run: Pick<Run, 'token' | 'now'>,
+  run: Pick<Run, 'graph' | 'now'>,
   detail: string,
   status?: MetaAccountStatus,
 ): MetaHealthUpdate => ({
   ...(status === undefined ? {} : { status }),
-  lastError: errorText(detail, run.token),
+  lastError: errorText(detail, run.graph),
   lastErrorAt: run.now,
 });
 
@@ -130,26 +119,17 @@ const stopped = (
 // --------------------------------------------------------------------------
 
 /** A 200 with `is_valid: false` is Graph's way of saying the token is dead. */
-const verifyToken = async ({ checks, account, token }: Run): Promise<void> => {
+const verifyToken = async ({ account, graph }: Run): Promise<void> => {
   if (account.platform === 'instagram') {
+    // Instagram's host has no `debug_token`; reading the account is the check.
     parseGraph(
       graphIdentitySchema,
-      await checks.graph.get('/me', {
-        token,
-        api: 'instagram',
-        query: { fields: GRAPH_IDENTITY_FIELDS.instagram },
-      }),
+      await graph.get('/me', { fields: GRAPH_IDENTITY_FIELDS.instagram }),
       'the account',
-      token,
     );
     return;
   }
-  const { data } = parseGraph(
-    graphDebugTokenSchema,
-    await checks.graph.get('/debug_token', { token, query: { input_token: token } }),
-    'the token check',
-    token,
-  );
+  const { data } = parseGraph(graphDebugTokenSchema, await graph.debugToken(), 'the token check');
   if (data.is_valid === false) {
     const code = data.error?.code === undefined ? '' : `${String(data.error.code)}: `;
     throw new GraphApiFailure(
@@ -170,7 +150,6 @@ const tokenProblem = async (run: Run): Promise<MetaHealthUpdate | undefined> => 
 // The subscription
 // --------------------------------------------------------------------------
 
-const NO_BUSINESS_ACCOUNT = 'The business account id is not known; reconnect the number';
 const DROPPED = "Meta dropped Helpdock's webhook subscription for this account";
 const UNREADABLE = 'Could not read the webhook subscription: ';
 
@@ -180,49 +159,17 @@ interface Subscribed {
   readonly resubscribed: boolean;
 }
 
-const listSubscribedApps = async ({
-  checks,
-  account,
-  token,
-  node,
-}: Run): Promise<GraphSubscribedApp[]> =>
-  subscribedAppsOf(
-    parseGraph(
-      graphSubscribedAppsSchema,
-      await checks.graph.get(`/${node}/subscribed_apps`, {
-        token,
-        api: graphApiFor(account.platform),
-      }),
-      'the webhook subscriptions',
-      token,
-    ),
-  );
-
-/**
- * WhatsApp subscribes the whole `messages` field; Messenger and Instagram name
- * the fields (ADR 0025, 10).
- */
-const subscribe = async ({ checks, account, token, node }: Run): Promise<void> => {
-  await checks.graph.post(`/${node}/subscribed_apps`, {
-    token,
-    api: graphApiFor(account.platform),
-    ...(account.platform === 'whatsapp'
-      ? {}
-      : { query: { subscribed_fields: META_SUBSCRIBED_FIELDS[account.platform].join(',') } }),
-  });
-};
-
 /** Helpdock's own app among those subscribed; any app while the install has no app id. */
 const ourApp = (run: Run, apps: readonly GraphSubscribedApp[]): GraphSubscribedApp | undefined =>
   apps.find((app) => run.checks.appId === '' || app.id === run.checks.appId);
 
 /** Subscribes the app again and reads the subscription back. */
 const resubscribe = async (run: Run): Promise<Outcome<Subscribed>> => {
-  const posted = await attempt(() => subscribe(run));
+  const posted = await attempt(() => subscribeApp(run.graph, run.account.platform, run.node));
   if (!posted.ok) {
     return { problem: stopped(run, posted, `${DROPPED} and refused it again: `, 'unsubscribed') };
   }
-  const again = await attempt(() => listSubscribedApps(run));
+  const again = await attempt(() => listSubscribedApps(run.graph, run.node));
   if (!again.ok) {
     return { problem: stopped(run, again, UNREADABLE) };
   }
@@ -236,7 +183,7 @@ const resubscribe = async (run: Run): Promise<Outcome<Subscribed>> => {
 };
 
 const ensureSubscribed = async (run: Run): Promise<Outcome<Subscribed>> => {
-  const listed = await attempt(() => listSubscribedApps(run));
+  const listed = await attempt(() => listSubscribedApps(run.graph, run.node));
   if (!listed.ok) {
     return { problem: stopped(run, listed, UNREADABLE) };
   }
@@ -279,21 +226,22 @@ const healthy = (
 };
 
 /**
- * Runs the checks against one account with its decrypted token and returns what
- * the row should say. Never logs or returns the token.
+ * Runs the checks against one account, through the calls made with its token,
+ * and returns what the row should say. The token itself never reaches this
+ * module, so it is never logged or returned.
  */
 export const checkMetaAccount = async (
   checks: MetaHealthChecks,
   account: MetaAccount,
-  token: string,
+  graph: AccountGraph,
   now: Date,
 ): Promise<MetaHealthUpdate> => {
-  const node = subscriptionNode(account);
+  const node = subscriptionNodeOf(account.platform, account.externalId, account.wabaId);
   if (node === null) {
     // Nothing is asked of Meta: without the business account the subscription cannot be read.
-    return problem({ token, now }, NO_BUSINESS_ACCOUNT);
+    return problem({ graph, now }, NO_BUSINESS_ACCOUNT);
   }
-  const run: Run = { checks, account, token, now, node };
+  const run: Run = { checks, account, graph, now, node };
 
   const unconfirmed = await tokenProblem(run);
   if (unconfirmed !== undefined) {

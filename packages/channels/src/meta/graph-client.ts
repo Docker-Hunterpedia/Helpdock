@@ -7,7 +7,12 @@ import {
   safeFetch,
 } from '@helpdock/net';
 import type { MetaPlatform } from '@helpdock/schemas';
-import { classifyGraphError, GraphApiFailure, redactToken } from './errors.js';
+import {
+  classifyGraphError,
+  GraphApiFailure,
+  GraphTokenFormatError,
+  redactToken,
+} from './errors.js';
 
 /**
  * The Graph API calls Helpdock makes (M10-01, ADR 0025), every one through the
@@ -91,7 +96,12 @@ export interface GraphClientOptions {
   readonly allowCidrs: readonly string[];
   /** Resolver override, for tests. */
   readonly lookup?: LookupFunction;
-  /** Called for every refused destination so the caller can log it. */
+  /**
+   * Called for every refused destination so the caller can log it (DOMAIN-RULES
+   * §13): by the SSRF-safe client for an address it will not connect to, and by
+   * this client for a host that is not Meta's, which it refuses before any
+   * address is looked up. Never the query string.
+   */
   readonly onBlocked?: (event: BlockedEvent) => void;
 }
 
@@ -136,7 +146,7 @@ const HEADER_TOKEN = /^[\x21-\x7e]+$/;
 
 const assertToken = (token: string): void => {
   if (!HEADER_TOKEN.test(token)) {
-    throw new TypeError('A Graph token is printable characters with no space');
+    throw new GraphTokenFormatError();
   }
 };
 
@@ -288,6 +298,15 @@ export class GraphClient {
 
   #assertHost(url: URL): void {
     if (!isAllowedGraphHost(url.hostname, [this.#roots.graph, this.#roots.instagram])) {
+      this.#report({
+        code: 'destination-blocked',
+        // The scheme, host and path: the query of a media link carries Meta's signature.
+        url: `${url.protocol}//${url.host}${url.pathname}`,
+        host: url.hostname,
+        address: undefined,
+        hop: 0,
+        reason: 'host-not-allowed',
+      });
       throw new GraphApiFailure(
         'permanent',
         `${url.hostname} is not a Meta host, so it is not fetched`,
@@ -295,6 +314,15 @@ export class GraphClient {
           reason: 'host-not-allowed',
         },
       );
+    }
+  }
+
+  /** A logging sink must not mask the refusal that triggered it. */
+  #report(event: BlockedEvent): void {
+    try {
+      this.#onBlocked?.(event);
+    } catch {
+      // Intentionally ignored: see above.
     }
   }
 

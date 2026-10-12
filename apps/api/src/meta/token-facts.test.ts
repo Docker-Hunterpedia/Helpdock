@@ -88,6 +88,12 @@ describe('readTokenFacts', () => {
     ).rejects.toMatchObject({ kind: 'token_dead' });
   });
 
+  it('throws a failure that is not Graph’s, which must not read as Graph not answering', async () => {
+    await expect(readTokenFacts(answering(new TypeError('a bug of ours')))).rejects.toThrow(
+      'a bug of ours',
+    );
+  });
+
   it.each([
     ['a failure that is no answer', new GraphApiFailure('retry', 'Unavailable', { status: 503 })],
     ['an answer in a shape nobody knows', { nonsense: true }],

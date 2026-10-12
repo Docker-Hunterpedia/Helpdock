@@ -1,5 +1,5 @@
 import type { GraphClient } from '@helpdock/channels';
-import { decryptSecret, type Keyring } from '@helpdock/config';
+import type { Keyring } from '@helpdock/config';
 import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import {
   claimReceipt,
@@ -16,6 +16,7 @@ import {
 import type { Job } from 'bullmq';
 import { isBrandGone } from '../brands/brand-availability.js';
 import { withSystemJob } from '../tenant/system-job.js';
+import { graphForAccount } from './account-graph.js';
 import type { MetaRepository } from './meta.repository.js';
 import { metaAccountChangedEventSchema } from './meta-events.js';
 import { checkMetaAccount, type MetaHealthUpdate } from './meta-health.js';
@@ -43,7 +44,7 @@ export interface MetaHealthDependencies {
   readonly log: JobLogger;
   readonly keyring: Keyring;
   readonly repository: MetaRepository;
-  readonly graph: Pick<GraphClient, 'get' | 'post'>;
+  readonly graph: GraphClient;
   readonly scheduler: MetaHealthScheduler;
   /** The install's Meta app id (`meta.appId`), empty when unset. Read per check: a setting can change. */
   readonly appId: () => Promise<string>;
@@ -105,9 +106,9 @@ const diagnose = async (
     );
 
   return checkMetaAccount(
-    { graph: deps.graph, appId: await deps.appId(), refresh },
+    { appId: await deps.appId(), refresh },
     account,
-    decryptSecret(account.accessToken, deps.keyring),
+    graphForAccount(account, deps.keyring, deps.graph),
     now,
   );
 };

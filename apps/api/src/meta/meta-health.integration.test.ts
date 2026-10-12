@@ -35,6 +35,7 @@ import {
   runMetaHealth,
   scheduleAllMetaHealth,
 } from './meta-health.job.js';
+import { NO_BUSINESS_ACCOUNT } from './meta-subscription.js';
 import { refreshInstagramToken } from './meta-token-refresh.js';
 
 /**
@@ -336,7 +337,7 @@ describe.skipIf(!hasDocker)('the Meta health check (M10-10)', () => {
       expect(graph.calls).toHaveLength(0);
       expect(await reload(account.id)).toMatchObject({
         status: 'connected',
-        lastError: 'The business account id is not known; reconnect the number',
+        lastError: NO_BUSINESS_ACCOUNT,
         lastErrorAt: clock,
         subscriptionCheckedAt: null,
       });

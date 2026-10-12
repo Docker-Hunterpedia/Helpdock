@@ -6,7 +6,7 @@ import {
   parseGraph,
 } from '@helpdock/channels';
 import { z } from 'zod';
-import type { AccountGraph } from './graph-factory.js';
+import type { AccountGraph } from './account-graph.js';
 import { readTokenFacts } from './token-facts.js';
 
 /**

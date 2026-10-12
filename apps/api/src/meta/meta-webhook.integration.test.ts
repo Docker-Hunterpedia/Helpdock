@@ -344,12 +344,11 @@ describe.skipIf(!hasDocker)('the Meta webhook (M10-02)', () => {
     app = await createApiApp({
       runtime,
       meta: {
-        graph: () =>
-          new GraphClient({
-            root: graph.facebookRoot,
-            instagramRoot: graph.instagramRoot,
-            allowCidrs: ['127.0.0.0/8'],
-          }),
+        graph: new GraphClient({
+          root: graph.facebookRoot,
+          instagramRoot: graph.instagramRoot,
+          allowCidrs: ['127.0.0.0/8'],
+        }),
         inbound: {
           whatsapp: double('whatsapp'),
           messenger: double('messenger'),

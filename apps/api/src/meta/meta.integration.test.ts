@@ -66,7 +66,7 @@ import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
 import { createMediaTools, type MediaTools } from '../media/ffmpeg.js';
 import { createMediaProcessor } from '../media/process.job.js';
 import { FakeStorage } from '../testing/media.js';
-import { createMetaInboundService } from './factory.js';
+import { createMetaInboundJobs } from './factory.js';
 import { createMetaMediaEventHandler, META_EVENTS } from './meta-events.js';
 
 /**
@@ -367,12 +367,12 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
   // ------------------------------------------------------------ the worker
 
   const inbound = () =>
-    createMetaInboundService({
+    createMetaInboundJobs({
       db: runtime.db,
       storage,
       log: silentLogger,
       keyring,
-      graph: graphClient,
+      graph: graphClient(),
     });
   const tools = (): MediaTools => {
     const real = createMediaTools({ ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' });
@@ -554,7 +554,7 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
       }),
     });
     storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-meta-')));
-    app = await createApiApp({ runtime, objectStorage: storage, meta: { graph: graphClient } });
+    app = await createApiApp({ runtime, objectStorage: storage, meta: { graph: graphClient() } });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
     driver = new MetaWebhookDriver({ target: app, secret: APP_SECRET });
 

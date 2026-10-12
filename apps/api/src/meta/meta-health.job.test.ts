@@ -1,4 +1,4 @@
-import { graphSubscribedApps, META_FIXTURE } from '@helpdock/channels';
+import { type GraphClient, graphSubscribedApps, META_FIXTURE } from '@helpdock/channels';
 import { createKeyring, encryptSecret } from '@helpdock/config';
 import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import {
@@ -172,7 +172,7 @@ describe('runMetaHealth', () => {
     log,
     keyring,
     repository: repository as unknown as MetaRepository,
-    graph: { get, post },
+    graph: { get, post } as unknown as GraphClient,
     scheduler,
     appId: async () => META_FIXTURE.appId,
     now: () => NOW,
@@ -226,7 +226,7 @@ describe('createMetaHealthProcessor', () => {
     log,
     keyring,
     repository: { listAll } as unknown as MetaRepository,
-    graph: { get: vi.fn(), post: vi.fn() },
+    graph: { get: vi.fn(), post: vi.fn() } as unknown as GraphClient,
     scheduler,
     appId: async () => '',
   });

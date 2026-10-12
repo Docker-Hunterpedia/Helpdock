@@ -247,12 +247,11 @@ describe.skipIf(!hasDocker)('Channels › Meta routes (M10-07)', () => {
     app = await createApiApp({
       runtime,
       meta: {
-        graph: () =>
-          new GraphClient({
-            root: graph.facebookRoot,
-            instagramRoot: graph.instagramRoot,
-            allowCidrs: ['127.0.0.0/8'],
-          }),
+        graph: new GraphClient({
+          root: graph.facebookRoot,
+          instagramRoot: graph.instagramRoot,
+          allowCidrs: ['127.0.0.0/8'],
+        }),
       },
     });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });

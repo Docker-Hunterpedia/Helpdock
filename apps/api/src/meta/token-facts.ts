@@ -6,7 +6,7 @@ import {
 } from '@helpdock/channels';
 import { META_ERROR_MAX_LENGTH } from '@helpdock/schemas';
 import { z } from 'zod';
-import type { AccountGraph } from './graph-factory.js';
+import type { AccountGraph } from './account-graph.js';
 
 /**
  * What `GET /debug_token` says of a token (M10-07): whether it works, when it
@@ -42,8 +42,10 @@ const grantedSchema = z.looseObject({
 
 /**
  * Asks Graph about the token. A token Graph calls dead is thrown, because that
- * is the answer the caller wanted; any other failure only means the question
- * went unanswered, and the facts say so with `valid: null`.
+ * is the answer the caller wanted; any other failure of Graph's only means the
+ * question went unanswered, and the facts say so with `valid: null`. A failure
+ * that is not Graph's (a bug, a token no header can carry) is thrown too: it
+ * must not read as "Graph did not answer".
  */
 export const readTokenFacts = async (
   graph: Pick<AccountGraph, 'debugToken'>,
@@ -69,7 +71,7 @@ export const readTokenFacts = async (
         : new Map(),
     };
   } catch (error) {
-    if (error instanceof GraphApiFailure && error.kind === 'token_dead') {
+    if (!(error instanceof GraphApiFailure) || error.kind === 'token_dead') {
       throw error;
     }
 

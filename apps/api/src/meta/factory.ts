@@ -1,3 +1,4 @@
+import type { GraphClient } from '@helpdock/channels';
 import type { Keyring } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import type { JobLogger } from '@helpdock/jobs';
@@ -12,7 +13,6 @@ import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.reposi
 import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
 import { TicketRepository } from '../tickets/tickets.repository.js';
 import { DeferredAttachmentSink } from './deferred-sink.js';
-import type { GraphClientFactory } from './graph-client-factory.js';
 import { InstagramInboundService } from './instagram-inbound.service.js';
 import { MessengerInboundService } from './messenger-inbound.service.js';
 import { MetaRepository } from './meta.repository.js';
@@ -24,54 +24,34 @@ import { WhatsAppInboundService } from './whatsapp-inbound.service.js';
 /**
  * The Meta inbound pipeline from plain constructors, for the reason
  * `telegram/factory.ts` gives: the api runs the inbound services for the
- * webhook and the worker runs the media fetch, and only one of them runs Nest.
- * The lifecycle hooks are M3-02's, so a WhatsApp, Messenger or Instagram ticket
- * starts its SLA clocks and a customer's message resumes or reopens one exactly
- * as in a request.
- *
- * One router and one sink serve all three platforms; each platform's inbound
- * service is built on them and returned beside them (`whatsapp`, M10-03;
- * `messenger`, M10-04; `instagram`, M10-05).
+ * webhook and the worker runs the jobs that follow them, and only one of them
+ * runs Nest. The two halves share nothing but the router's repositories, so
+ * each is built on its own: the api never builds a job processor it does not
+ * run, and the worker never builds an inbound service it has no webhook for.
  */
 
-export interface MetaInboundOptions {
-  readonly db: Db;
-  /** Where the media job puts the files it fetches: the bucket `media.process` reads. */
-  readonly storage: ObjectStorage;
+export interface MetaInboundHandlersOptions {
   readonly log: JobLogger;
-  readonly keyring: Keyring;
-  readonly graph: GraphClientFactory;
   /**
    * The install's `meta.appId`, which Messenger and Instagram put on the echo of
    * every message the app sent, so their inbound services can tell Helpdock's own
-   * sends from the rest. The module hands the accessor in through the settings;
-   * the worker, which runs no inbound service, hands none.
+   * sends from the rest. The module hands the accessor in through the settings.
    */
-  readonly appId?: () => Promise<string>;
+  readonly appId: () => Promise<string>;
 }
 
-export interface MetaInbound {
-  readonly router: MetaConversationRouter;
-  readonly sink: DeferredAttachmentSink;
-  /** WhatsApp's events (M10-03), for `MetaModule`'s handler map. */
-  readonly whatsapp: WhatsAppInboundService;
-  /** Messenger's events (M10-04), for `MetaModule`'s handler map. */
-  readonly messenger: MessengerInboundService;
-  /** Instagram's events (M10-05), for `MetaModule`'s handler map. */
-  readonly instagram: InstagramInboundService;
-  /** The `meta.media_fetch` consumer, for the worker's `inbound` queue. */
-  readonly mediaFetch: (job: Job) => Promise<void>;
-  /** The `meta.profile_fetch` consumer (M10-05, shared with M10-04), for the same queue. */
-  readonly profileFetch: (job: Job) => Promise<void>;
-}
-
-export const createMetaInboundService = (options: MetaInboundOptions): MetaInbound => {
+/**
+ * The three platforms' inbound services (WhatsApp M10-03, Messenger M10-04,
+ * Instagram M10-05), built on one router and one sink. The lifecycle hooks are
+ * M3-02's, so a WhatsApp, Messenger or Instagram ticket starts its SLA clocks
+ * and a customer's message resumes or reopens one exactly as in a request.
+ */
+export const createMetaInboundHandlers = ({ log, appId }: MetaInboundHandlersOptions) => {
   const lifecycleReads = new TicketLifecycleRepository();
   const tickets = new TicketRepository();
-  const meta = new MetaRepository();
-  const media = new MediaRepository();
+  const repository = new MetaRepository();
   const router = new MetaConversationRouter({
-    meta,
+    meta: repository,
     tickets,
     lifecycle: new TicketLifecycleService(
       lifecycleReads,
@@ -80,41 +60,43 @@ export const createMetaInboundService = (options: MetaInboundOptions): MetaInbou
     ),
     lifecycleReads,
     assignment: new AssignmentRepository(),
-    log: options.log,
+    log,
   });
-
-  const sink = new DeferredAttachmentSink(media);
+  const sink = new DeferredAttachmentSink(new MediaRepository());
+  const parts = { router, sink, repository, lifecycleReads, log };
 
   return {
-    router,
-    sink,
-    whatsapp: new WhatsAppInboundService({
-      router,
-      sink,
-      repository: meta,
-      lifecycleReads,
-      log: options.log,
-    }),
-    messenger: new MessengerInboundService({
-      router,
-      sink,
-      repository: meta,
-      lifecycleReads,
-      appId: options.appId ?? (() => Promise.resolve('')),
-      log: options.log,
-    }),
-    instagram: new InstagramInboundService({
-      router,
-      sink,
-      repository: meta,
-      lifecycleReads,
-      appId: options.appId ?? (() => Promise.resolve('')),
-      log: options.log,
-    }),
+    whatsapp: new WhatsAppInboundService(parts),
+    messenger: new MessengerInboundService({ ...parts, appId }),
+    instagram: new InstagramInboundService({ ...parts, appId }),
+  };
+};
+
+export interface MetaInboundJobsOptions {
+  readonly db: Db;
+  /** Where the media job puts the files it fetches: the bucket `media.process` reads. */
+  readonly storage: ObjectStorage;
+  readonly log: JobLogger;
+  readonly keyring: Keyring;
+  readonly graph: GraphClient;
+}
+
+export interface MetaInboundJobs {
+  /** The `meta.media_fetch` consumer (M10-03), for the worker's `inbound` queue. */
+  readonly mediaFetch: (job: Job) => Promise<void>;
+  /** The `meta.profile_fetch` consumer (M10-05, shared with M10-04), for the same queue. */
+  readonly profileFetch: (job: Job) => Promise<void>;
+}
+
+/** The jobs the inbound services raise outbox rows for: the files a message named, a customer's name. */
+export const createMetaInboundJobs = (options: MetaInboundJobsOptions): MetaInboundJobs => {
+  const repository = new MetaRepository();
+
+  return {
     profileFetch: createMetaProfileProcessor({
       db: options.db,
       log: options.log,
-      repository: meta,
+      repository,
       keyring: options.keyring,
       graph: options.graph,
     }),
@@ -124,9 +106,9 @@ export const createMetaInboundService = (options: MetaInboundOptions): MetaInbou
       storage: options.storage,
       graph: options.graph,
       keyring: options.keyring,
-      repository: meta,
-      media,
-      recordAccountFailure: accountFailureRecorder(options.db, meta),
+      repository,
+      media: new MediaRepository(),
+      recordAccountFailure: accountFailureRecorder(options.db, repository),
     }),
   };
 };

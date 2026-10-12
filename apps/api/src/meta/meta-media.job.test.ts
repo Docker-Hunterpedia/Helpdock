@@ -35,6 +35,7 @@ const TOKEN = 'EAAGunit-test-token-0123456789';
 const MEDIA_URL =
   'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1479537139650973&signature=SECRET';
 const CDN_URL = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/12345_n.jpg?oh=SIGNED';
+const RECEIPT = `meta.media_fetch.${ATTACHMENT}`;
 
 const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64') });
 const bytes = Buffer.from('not really a jpeg, the pipeline sniffs it later');
@@ -66,6 +67,10 @@ interface Scenario {
   /** The attachment was deleted (with its ticket, say) while the job waited. */
   readonly attachment?: 'present' | 'gone';
   readonly storageFails?: boolean;
+  /** The receipt was claimed by a delivery that ran first. */
+  readonly claimed?: boolean;
+  /** Something settled the attachment while the file was being downloaded. */
+  readonly settledWhileFetching?: boolean;
 }
 
 const run = async (scenario: Scenario = {}) => {
@@ -87,6 +92,9 @@ const run = async (scenario: Scenario = {}) => {
   const storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-meta-media-')));
   const outbox: OutboxRow[] = [];
   const calls: { method: 'get' | 'download'; args: unknown[] }[] = [];
+  // How many of the job's transactions were open when each call to Meta was made.
+  const openDuringCalls: number[] = [];
+  let open = 0;
   const recorded: MetaAccountFailure[] = [];
   const logged: unknown[] = [];
 
@@ -100,6 +108,7 @@ const run = async (scenario: Scenario = {}) => {
   const downloaded = scenario.download ?? { bytes, contentType: 'image/jpeg' };
   const graph = {
     get: async (...args: unknown[]) => {
+      openDuringCalls.push(open);
       calls.push({ method: 'get', args });
       if (description instanceof Error) {
         throw description;
@@ -107,7 +116,11 @@ const run = async (scenario: Scenario = {}) => {
       return description;
     },
     download: async (...args: unknown[]) => {
+      openDuringCalls.push(open);
       calls.push({ method: 'download', args });
+      if (scenario.settledWhileFetching === true) {
+        state.row = { ...state.row, status: 'ready' };
+      }
       if (downloaded instanceof Error) {
         throw downloaded;
       }
@@ -118,6 +131,7 @@ const run = async (scenario: Scenario = {}) => {
   const account = {
     id: ACCOUNT,
     brandId: BRAND,
+    platform: ref.kind === 'cdn_url' ? 'messenger' : 'whatsapp',
     accessToken: encryptSecret(TOKEN, keyring),
   } as unknown as MetaAccount;
   const failingStorage = {
@@ -135,10 +149,27 @@ const run = async (scenario: Scenario = {}) => {
   };
 
   const rows = fakeRepository(state);
+  const tx = fakeTx(outbox) as DbTransaction;
+  const claimed = new Set<string>(scenario.claimed === true ? [RECEIPT] : []);
   const handler = createMetaMediaFetchHandler({
     storage: scenario.storageFails === true ? failingStorage : storage,
-    graph: () => graph,
+    graph,
     keyring,
+    transaction: async (_brandId, work) => {
+      open += 1;
+      try {
+        return await work(tx);
+      } finally {
+        open -= 1;
+      }
+    },
+    claim: async (_tx, key) => {
+      if (claimed.has(key)) {
+        return false;
+      }
+      claimed.add(key);
+      return true;
+    },
     repository: {
       account: async () => (scenario.account === 'gone' ? undefined : account),
     },
@@ -161,16 +192,15 @@ const run = async (scenario: Scenario = {}) => {
   const attemptsMade = scenario.attempt ?? 0;
   const result = await handler({
     payload,
-    brandId: BRAND,
-    tx: fakeTx(outbox) as DbTransaction,
     job: { attemptsMade, opts: { attempts: 5 } } as unknown as Job,
     log,
+    receipt: RECEIPT,
   }).then(
     () => ({ threw: undefined as unknown }),
     (error: unknown) => ({ threw: error }),
   );
 
-  return { ...result, state, storage, outbox, calls, recorded, logged };
+  return { ...result, state, storage, outbox, calls, openDuringCalls, recorded, logged };
 };
 
 const LAST = 4;
@@ -196,7 +226,7 @@ describe('a WhatsApp file', () => {
       },
     ]);
     expect(result.calls).toEqual([
-      { method: 'get', args: ['/1479537139650973', { token: TOKEN }] },
+      { method: 'get', args: ['/1479537139650973', { token: TOKEN, api: 'graph' }] },
       {
         method: 'download',
         args: [
@@ -208,6 +238,36 @@ describe('a WhatsApp file', () => {
         ],
       },
     ]);
+  });
+
+  it('is fetched with no transaction open: Meta is never waited on inside one', async () => {
+    const result = await run();
+
+    expect(result.openDuringCalls).toEqual([0, 0]);
+  });
+
+  it('is fetched with no transaction open for a link as well, and for a failure', async () => {
+    expect((await run({ ref: link('image') })).openDuringCalls).toEqual([0]);
+    expect(
+      (await run({ download: new GraphApiFailure('retry', 'HTTP 503', { status: 503 }) }))
+        .openDuringCalls,
+    ).toEqual([0, 0]);
+  });
+
+  it('writes nothing when a delivery that ran first has claimed the receipt', async () => {
+    const result = await run({ claimed: true });
+
+    expect(result.threw).toBeUndefined();
+    expect(result.state.row.status).toBe('pending');
+    expect(result.outbox).toEqual([]);
+  });
+
+  it('writes nothing for an attachment that was settled while its file was downloaded', async () => {
+    const result = await run({ settledWhileFetching: true });
+
+    expect(result.threw).toBeUndefined();
+    expect(result.state.row.status).toBe('ready');
+    expect(result.outbox).toEqual([]);
   });
 
   it('is rejected as unreadable when the bytes are not the ones Meta described', async () => {
@@ -355,6 +415,26 @@ describe('a link in a Messenger or Instagram payload', () => {
       status: 'rejected',
       rejectReason: 'processing_failed',
     });
+  });
+
+  it('leaves a trace of the host it refused and why, and never the link or the token', async () => {
+    const result = await run({
+      ref: { kind: 'cdn_url', url: 'https://evil.example/x.jpg?sig=SIGNED', type: 'image' },
+      download: new GraphApiFailure('permanent', 'evil.example is not a Meta host', {
+        reason: 'host-not-allowed',
+      }),
+    });
+
+    expect(result.logged).toContainEqual({
+      fields: expect.objectContaining({
+        attachmentId: ATTACHMENT,
+        reason: 'host-not-allowed',
+        host: 'evil.example',
+      }),
+      message: 'meta media could not be fetched',
+    });
+    expect(JSON.stringify(result.logged)).not.toContain('SIGNED');
+    expect(JSON.stringify(result.logged)).not.toContain(TOKEN);
   });
 });
 

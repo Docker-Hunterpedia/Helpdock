@@ -1,14 +1,13 @@
 import {
   GraphApiFailure,
   type GraphClient,
-  graphApiFor,
   graphMediaUploadSchema,
   graphSendResponseSchema,
   type MessagingSendPayload,
   parseGraph,
   type WhatsAppSendPayload,
 } from '@helpdock/channels';
-import { decryptSecret, type Keyring } from '@helpdock/config';
+import type { Keyring } from '@helpdock/config';
 import {
   type Attachment,
   brands,
@@ -44,6 +43,7 @@ import type { Redis } from 'ioredis';
 import { objectKeyBeside } from '../media/keys.js';
 import type { ObjectStorage } from '../media/storage.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
+import { type AccountGraph, graphForAccount } from './account-graph.js';
 import type { MetaRepository } from './meta.repository.js';
 import {
   customerIsTold,
@@ -171,7 +171,8 @@ interface CourierContext {
   readonly account: MetaAccount;
   readonly conversation: MetaConversation;
   readonly delivery: MetaDelivery;
-  readonly token: string;
+  /** The calls made with the account's token, which this module never holds. */
+  readonly graph: AccountGraph;
   /**
    * The reply goes out in the extended window of Messenger and Instagram: a
    * person's, more than 24 hours after the customer's last message and within
@@ -181,18 +182,13 @@ interface CourierContext {
 }
 
 const postSend = async (
-  { deps, account, token }: CourierContext,
+  { graph, account }: CourierContext,
   payload: WhatsAppSendPayload | MessagingSendPayload,
 ): Promise<string> =>
   parseGraph(
     graphSendResponseSchema,
-    await deps.graph.post(`/${account.externalId}/messages`, {
-      token,
-      api: graphApiFor(account.platform),
-      json: payload,
-    }),
+    await graph.post(`/${account.externalId}/messages`, { json: payload }),
     'a send',
-    token,
   );
 
 /**
@@ -202,7 +198,7 @@ const postSend = async (
  * the bucket (ADR 0025, 7).
  */
 const whatsappCourier = (context: CourierContext): Courier => {
-  const { deps, account, conversation, delivery, token } = context;
+  const { deps, graph, account, conversation, delivery } = context;
   const addressee =
     conversation.waId === null
       ? ({ recipient: delivery.customerId } as const)
@@ -225,13 +221,11 @@ const whatsappCourier = (context: CourierContext): Courier => {
       );
       const { id } = parseGraph(
         graphMediaUploadSchema,
-        await deps.graph.postMultipart(`/${account.externalId}/media`, {
-          token,
+        await graph.postMultipart(`/${account.externalId}/media`, {
           fields: { messaging_product: 'whatsapp', type: file.mime },
           file: { name: file.fileName, contentType: file.mime, bytes },
         }),
         'a media upload',
-        token,
       );
       switch (file.method) {
         case 'image':
@@ -548,7 +542,7 @@ const sendReply = async (
     account,
     conversation,
     delivery,
-    token: decryptSecret(account.accessToken, deps.keyring),
+    graph: graphForAccount(account, deps.keyring, deps.graph),
     // The window's own word, so a person's reply is tagged by the rule that let it through.
     humanAgent: window.state === 'human_agent',
   };

@@ -1,4 +1,4 @@
-import { classifyGraphError, graphRefreshToken } from '@helpdock/channels';
+import { classifyGraphError, type GraphClient, graphRefreshToken } from '@helpdock/channels';
 import { createKeyring, decryptSecret, encryptSecret } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -77,7 +77,7 @@ describe('instagramRefreshDue', () => {
 });
 
 describe('refreshInstagramToken', () => {
-  const get = vi.fn<TokenRefreshDeps['graph']['get']>();
+  const get = vi.fn<GraphClient['get']>();
   const repository = {
     account: vi.fn(),
     update: vi.fn(),
@@ -87,7 +87,7 @@ describe('refreshInstagramToken', () => {
     db: {} as Db,
     repository: repository as unknown as TokenRefreshDeps['repository'],
     keyring,
-    graph: { get },
+    graph: { get } as unknown as GraphClient,
     now: () => NOW,
   });
 

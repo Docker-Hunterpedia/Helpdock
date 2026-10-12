@@ -1,12 +1,11 @@
 import {
   GRAPH_IDENTITY_FIELDS,
   GraphApiFailure,
+  type GraphClient,
+  GraphTokenFormatError,
   graphIdentityName,
   graphIdentitySchema,
-  graphSubscribedAppsSchema,
   parseGraph,
-  redactToken,
-  subscribedAppsOf,
 } from '@helpdock/channels';
 import { decryptSecret, encryptSecret, type Keyring } from '@helpdock/config';
 import {
@@ -18,7 +17,6 @@ import {
 } from '@helpdock/db';
 import {
   META_ERROR_MAX_LENGTH,
-  META_SUBSCRIBED_FIELDS,
   META_TOKEN_KIND,
   type MetaAccount,
   type MetaAccountCreateRequest,
@@ -35,16 +33,17 @@ import {
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
-import {
-  type AccountGraph,
-  type GraphClientFactory,
-  graphForAccount,
-  graphForToken,
-} from './graph-factory.js';
+import { type AccountGraph, graphForAccount, graphForToken } from './account-graph.js';
 import type { AccountWithNames, MetaRepository } from './meta.repository.js';
 import { toMetaAccount } from './meta-account-view.js';
 import { enqueueMetaAccountChanged } from './meta-events.js';
 import { MetaFailure } from './meta-failure.js';
+import {
+  listSubscribedApps,
+  NO_BUSINESS_ACCOUNT,
+  subscribeApp,
+  subscriptionNodeOf,
+} from './meta-subscription.js';
 import { refreshInstagramToken } from './meta-token-refresh.js';
 import { readTokenFacts } from './token-facts.js';
 import { identifyWhatsApp } from './whatsapp-identity.js';
@@ -101,14 +100,6 @@ const instagramMeSchema = graphIdentitySchema.extend({
     .optional(),
 });
 
-/**
- * What an operator is told when a WhatsApp number has no business account on
- * record, which a connection made by this version cannot produce: Meta keeps the
- * subscription on the business account, so there is nowhere to ask.
- */
-const RECONNECT_DETAIL =
-  'This number has no WhatsApp business account on record. Disconnect it and connect it again so Helpdock can find it.';
-
 /** What Graph said an account is, in the shape the account row and the Test box share. */
 interface Identified {
   readonly name: string;
@@ -131,22 +122,48 @@ interface Refused {
 
 type Identity = ({ readonly ok: true } & Identified) | ({ readonly ok: false } & Refused);
 
+/**
+ * What connecting a token to an account leaves on its row: what Graph said the
+ * account is, and the columns the subscription decides, whether Meta accepted it
+ * (`connected`) or failed for a moment (`unsubscribed`, with Graph's words, which
+ * the hourly health check will try again).
+ */
+interface Connected {
+  readonly identified: Identified;
+  readonly subscription: Pick<
+    NewMetaAccount,
+    | 'status'
+    | 'subscribedFields'
+    | 'subscribedAt'
+    | 'subscriptionCheckedAt'
+    | 'lastError'
+    | 'lastErrorAt'
+  >;
+}
+
 const clip = (text: string): string => text.slice(0, META_ERROR_MAX_LENGTH);
+
+/** What the service says to the log. */
+export interface AccountsLog {
+  warn(fields: Record<string, unknown>, message: string): void;
+}
 
 export class MetaAccountsService {
   readonly #db: Db;
   readonly #repository: MetaRepository;
   readonly #keyring: Keyring;
-  readonly #graph: GraphClientFactory;
+  readonly #graph: GraphClient;
   readonly #app: { secrets(): Promise<string[]> };
+  readonly #log: AccountsLog | undefined;
   readonly #now: () => Date;
 
   constructor(options: {
     readonly db: Db;
     readonly repository: MetaRepository;
     readonly keyring: Keyring;
-    readonly graph: GraphClientFactory;
+    readonly graph: GraphClient;
     readonly app: { secrets(): Promise<string[]> };
+    readonly log?: AccountsLog;
     readonly now?: () => Date;
   }) {
     this.#db = options.db;
@@ -154,6 +171,7 @@ export class MetaAccountsService {
     this.#keyring = options.keyring;
     this.#graph = options.graph;
     this.#app = options.app;
+    this.#log = options.log;
     this.#now = options.now ?? (() => new Date());
   }
 
@@ -180,18 +198,12 @@ export class MetaAccountsService {
     await this.#requireDepartment(tx, request.departmentId);
     await this.#requireFree(platform, externalId);
 
-    const graph = graphForToken(platform, request.accessToken, this.#graph);
-    const identified = this.#unwrap(await this.#identify(graph, externalId));
-    const subscription = await this.#subscribe(
-      graph,
-      platform,
-      subscriptionNodeOf(platform, externalId, identified.wabaId),
-    );
-    if (!subscription.ok && subscription.failure.permanent) {
-      throw new MetaFailure('subscribe-failed');
-    }
-
     const now = this.#now();
+    const { identified, subscription } = await this.#connectToken(
+      graphForToken(platform, request.accessToken, this.#graph),
+      externalId,
+      now,
+    );
     const row = await this.#repository.insert(tx, {
       brandId,
       platform,
@@ -208,18 +220,7 @@ export class MetaAccountsService {
       tokenUpdatedAt: now,
       tokenUpdatedBy: actor.userId,
       humanAgentEnabled: platform !== 'whatsapp' && request.humanAgentEnabled,
-      ...(subscription.ok
-        ? {
-            subscribedFields: [...subscription.fields],
-            subscribedAt: now,
-            subscriptionCheckedAt: now,
-            status: 'connected' as const,
-          }
-        : {
-            status: 'unsubscribed' as const,
-            lastError: clip(redactToken(subscription.failure.detail, request.accessToken)),
-            lastErrorAt: now,
-          }),
+      ...subscription,
     });
     if (row === undefined) {
       throw new MetaFailure('account-taken');
@@ -252,17 +253,12 @@ export class MetaAccountsService {
     };
 
     if (request.accessToken !== undefined) {
-      const graph = graphForToken(current.platform, request.accessToken, this.#graph);
-      const identified = this.#unwrap(await this.#identify(graph, current.externalId));
-      const subscription = await this.#subscribe(
-        graph,
-        current.platform,
-        subscriptionNodeOf(current.platform, current.externalId, identified.wabaId),
-      );
-      if (!subscription.ok && subscription.failure.permanent) {
-        throw new MetaFailure('subscribe-failed');
-      }
       const now = this.#now();
+      const { identified, subscription } = await this.#connectToken(
+        graphForToken(current.platform, request.accessToken, this.#graph),
+        current.externalId,
+        now,
+      );
       Object.assign(values, {
         // A new token finds the business account again, which also repairs a row made without one.
         wabaId: identified.wabaId ?? current.wabaId,
@@ -273,20 +269,7 @@ export class MetaAccountsService {
         tokenRefreshedAt: current.platform === 'instagram' ? now : current.tokenRefreshedAt,
         tokenUpdatedAt: now,
         tokenUpdatedBy: actor.userId,
-        ...(subscription.ok
-          ? {
-              subscribedFields: [...subscription.fields],
-              subscribedAt: now,
-              subscriptionCheckedAt: now,
-              status: 'connected' as const,
-              lastError: null,
-              lastErrorAt: null,
-            }
-          : {
-              status: 'unsubscribed' as const,
-              lastError: clip(redactToken(subscription.failure.detail, request.accessToken)),
-              lastErrorAt: now,
-            }),
+        ...subscription,
       });
     }
 
@@ -312,7 +295,16 @@ export class MetaAccountsService {
     if (node !== null && !(await this.#othersUseSubscription(account))) {
       await graphForAccount(account, this.#keyring, this.#graph)
         .delete(`/${node}/subscribed_apps`)
-        .catch(() => undefined);
+        .catch((error: unknown) => {
+          // Only Graph's refusal or silence: a bug in the call must still be heard.
+          if (!(error instanceof GraphApiFailure)) {
+            throw error;
+          }
+          this.#log?.warn(
+            { accountId: id, kind: error.kind, code: error.code },
+            'could not unsubscribe the app from a Meta account being disconnected',
+          );
+        });
     }
     const removed = await this.#repository.delete(context.tx, id);
     if (removed === undefined) {
@@ -349,15 +341,22 @@ export class MetaAccountsService {
   }
 
   /**
-   * "Test" in the Connect dialog: the same read with a typed token, before
-   * anything is stored. Refuses what a rule refuses (the app is not set up, the
-   * account is taken, the token is for another account or product) and answers
-   * what Graph said of the token. Never repeats the token.
+   * "Test" in the Connect and Reconnect dialogs: the same read with a typed
+   * token, before anything is stored. Refuses what a rule refuses (the app is not
+   * set up, the account is taken, the token is for another account or product)
+   * and answers what Graph said of the token. Never repeats the token.
+   *
+   * **Reconnect** tests a replacement token for an account that is connected
+   * already, so its own id is taken by definition: the request then names that
+   * account (`accountId`), and the id is free for it, and for it alone. The
+   * account must be this brand's (row-level security decides) and have the id
+   * and platform the request gives; anything else is tested as a new connection,
+   * which the taken id refuses.
    */
-  async testToken(request: MetaTokenTestRequest): Promise<MetaTestResult> {
+  async testToken(tx: DbTransaction, request: MetaTokenTestRequest): Promise<MetaTestResult> {
     const { platform, externalId, accessToken } = request;
     await this.#requireApp();
-    await this.#requireFree(platform, externalId);
+    await this.#requireFree(platform, externalId, await this.#reconnecting(tx, request));
 
     const identity = await this.#identify(
       graphForToken(platform, accessToken, this.#graph),
@@ -386,17 +385,17 @@ export class MetaAccountsService {
     const node = subscriptionNodeOf(account.platform, account.externalId, account.wabaId);
     const now = this.#now();
     if (node === null) {
-      await this.#repository.markError(tx, id, RECONNECT_DETAIL, now);
-      return { ok: false, detail: RECONNECT_DETAIL };
+      await this.#repository.markError(tx, id, NO_BUSINESS_ACCOUNT, now);
+      return { ok: false, detail: NO_BUSINESS_ACCOUNT };
     }
     const outcome = await this.#subscribe(graph, account.platform, node);
 
     if (!outcome.ok) {
-      await this.#repository.markError(tx, id, redactToken(outcome.failure.detail), now);
+      await this.#repository.markError(tx, id, graph.redact(outcome.failure.detail), now);
       if (outcome.failure.kind === 'token_dead') {
         await this.#repository.update(tx, id, { status: 'token_expired' });
       }
-      return { ok: false, detail: clip(redactToken(outcome.failure.detail)) };
+      return { ok: false, detail: clip(graph.redact(outcome.failure.detail)) };
     }
 
     await this.#repository.update(tx, id, {
@@ -471,7 +470,7 @@ export class MetaAccountsService {
           db: this.#db,
           repository: this.#repository,
           keyring: this.#keyring,
-          graph: this.#graph(),
+          graph: this.#graph,
           now: this.#now,
         },
         account,
@@ -543,6 +542,16 @@ export class MetaAccountsService {
         };
       }
 
+      // A Page token's own account is the Page, which is what makes it the Page's: reading
+      // the Page's name proves nothing, since a token that cannot send as it may still read it.
+      const me = parseGraph(
+        graphIdentitySchema,
+        await graph.get('/me', { fields: 'id' }),
+        'to the account read',
+      );
+      if (me.id !== externalId) {
+        return refused('token-other-account', 'refused', null);
+      }
       const identity = parseGraph(
         graphIdentitySchema,
         await graph.get(`/${externalId}`, { fields: GRAPH_IDENTITY_FIELDS[platform] }),
@@ -582,7 +591,7 @@ export class MetaAccountsService {
    */
   async #refusalOf(error: unknown, graph: AccountGraph): Promise<Identity> {
     // A token with characters no header can carry is not one Meta issued.
-    if (error instanceof TypeError) {
+    if (error instanceof GraphTokenFormatError) {
       return refused('token-invalid', 'token', null);
     }
     if (!(error instanceof GraphApiFailure)) {
@@ -615,8 +624,12 @@ export class MetaAccountsService {
     try {
       await graph.onOtherHost().get('/me', { fields: 'id' });
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      // Graph refusing the token there is the answer; anything else is a bug to hear.
+      if (error instanceof GraphApiFailure || error instanceof GraphTokenFormatError) {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -647,9 +660,47 @@ export class MetaAccountsService {
   }
 
   /**
-   * `POST /{node}/subscribed_apps` for the platform's fields; Graph's refusal is
-   * returned, not thrown. WhatsApp subscribes the whole `messages` field and takes
-   * none by name.
+   * Reads what a token is for and subscribes the app to it: what "Connect" and a
+   * replaced token both do. A subscription Meta refuses for good, since a token
+   * that cannot subscribe an app will not receive anything, refuses the
+   * connection; one that failed for a moment is recorded on the row for the
+   * hourly check to try again.
+   */
+  async #connectToken(graph: AccountGraph, externalId: string, now: Date): Promise<Connected> {
+    const { platform } = graph;
+    const identified = this.#unwrap(await this.#identify(graph, externalId));
+    const outcome = await this.#subscribe(
+      graph,
+      platform,
+      subscriptionNodeOf(platform, externalId, identified.wabaId),
+    );
+    if (!outcome.ok && outcome.failure.permanent) {
+      throw new MetaFailure('subscribe-failed');
+    }
+
+    return {
+      identified,
+      subscription: outcome.ok
+        ? {
+            status: 'connected',
+            subscribedFields: [...outcome.fields],
+            subscribedAt: now,
+            subscriptionCheckedAt: now,
+            lastError: null,
+            lastErrorAt: null,
+          }
+        : {
+            status: 'unsubscribed',
+            lastError: clip(graph.redact(outcome.failure.detail)),
+            lastErrorAt: now,
+          },
+    };
+  }
+
+  /**
+   * {@link subscribeApp}, with Graph's refusal returned instead of thrown, and a
+   * number whose business account was never recorded refused in words that say
+   * what to do.
    */
   async #subscribe(
     graph: AccountGraph,
@@ -659,19 +710,11 @@ export class MetaAccountsService {
     | { readonly ok: true; readonly fields: readonly string[] }
     | { readonly ok: false; readonly failure: GraphApiFailure }
   > {
-    const fields = META_SUBSCRIBED_FIELDS[platform];
     if (node === null) {
-      return { ok: false, failure: new GraphApiFailure('permanent', RECONNECT_DETAIL) };
+      return { ok: false, failure: new GraphApiFailure('permanent', NO_BUSINESS_ACCOUNT) };
     }
     try {
-      const answer = await graph.post(
-        `/${node}/subscribed_apps`,
-        platform === 'whatsapp' ? {} : { query: { subscribed_fields: fields.join(',') } },
-      );
-      if ((answer as { readonly success?: unknown } | null)?.success === false) {
-        throw new GraphApiFailure('permanent', 'Graph did not accept the subscription');
-      }
-      return { ok: true, fields };
+      return { ok: true, fields: await subscribeApp(graph, platform, node) };
     } catch (error) {
       if (error instanceof GraphApiFailure) {
         return { ok: false, failure: error };
@@ -701,15 +744,9 @@ export class MetaAccountsService {
       }
       const node = subscriptionNodeOf(account.platform, account.externalId, account.wabaId);
       if (node === null) {
-        return { tokenValid, subscribedApps: null, liveError: RECONNECT_DETAIL };
+        return { tokenValid, subscribedApps: null, liveError: NO_BUSINESS_ACCOUNT };
       }
-      const apps = subscribedAppsOf(
-        parseGraph(
-          graphSubscribedAppsSchema,
-          await graph.get(`/${node}/subscribed_apps`),
-          'to the subscribed apps',
-        ),
-      );
+      const apps = await listSubscribedApps(graph, node);
 
       return {
         tokenValid: true,
@@ -762,10 +799,26 @@ export class MetaAccountsService {
    * read crosses brands, which `INSERT … ON CONFLICT` also does without saying
    * so; asking first lets "Test" refuse it before anything is sent to Graph.
    */
-  async #requireFree(platform: MetaPlatform, externalId: string): Promise<void> {
-    if ((await this.#repository.locate(this.#db, platform, externalId)) !== undefined) {
+  async #requireFree(platform: MetaPlatform, externalId: string, except?: string): Promise<void> {
+    const held = await this.#repository.locate(this.#db, platform, externalId);
+    if (held !== undefined && held.id !== except) {
       throw new MetaFailure('account-taken');
     }
+  }
+
+  /** The account a token test is for, when it is a reconnect of one of this brand's: its id, else undefined. */
+  async #reconnecting(
+    tx: DbTransaction,
+    { accountId, platform, externalId }: MetaTokenTestRequest,
+  ): Promise<string | undefined> {
+    if (accountId === undefined) {
+      return undefined;
+    }
+    const account = await this.#repository.account(tx, accountId);
+
+    return account?.platform === platform && account.externalId === externalId
+      ? account.id
+      : undefined;
   }
 
   async #changed(
@@ -802,15 +855,3 @@ const refused = (refusal: MetaRefusal, kind: Refused['kind'], detail: string | n
   kind,
   detail,
 });
-
-/**
- * Where Meta keeps the app's webhook subscription: on the business account for a
- * WhatsApp number, whose own node has no such edge, and on the account itself for
- * a Page or an Instagram account. Null for a number whose business account was
- * never recorded.
- */
-const subscriptionNodeOf = (
-  platform: MetaPlatform,
-  externalId: string,
-  wabaId: string | null,
-): string | null => (platform === 'whatsapp' ? wabaId : externalId);

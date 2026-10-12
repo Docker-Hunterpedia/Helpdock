@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { GraphApiFailure } from './errors.js';
+import { GraphApiFailure, GraphTokenFormatError } from './errors.js';
 import { sha256Base64 } from './fixtures.js';
 import {
   DEFAULT_META_GRAPH_API_ROOT,
@@ -246,15 +246,21 @@ describe('a path that is not a Graph path', () => {
     ['a newline', '/me\n/messages'],
     ['nothing', ''],
   ])('is refused before anything is sent: %s', async (_label, path) => {
-    await expect(clientFor().get(path, { token: WA_TOKEN })).rejects.toThrow(TypeError);
+    const refused = clientFor().get(path, { token: WA_TOKEN });
+
+    await expect(refused).rejects.toThrow(TypeError);
+    // A path is our own bug, never a token the person mistyped.
+    await expect(refused).rejects.not.toBeInstanceOf(GraphTokenFormatError);
     expect(graph.calls).toEqual([]);
   });
 
   it('is refused for a token that could carry a second header', async () => {
     await expect(clientFor().get('/me', { token: `${WA_TOKEN}\r\nx-evil: 1` })).rejects.toThrow(
-      TypeError,
+      GraphTokenFormatError,
     );
-    await expect(clientFor().get('/me', { token: 'has a space' })).rejects.toThrow(TypeError);
+    await expect(clientFor().get('/me', { token: 'has a space' })).rejects.toThrow(
+      GraphTokenFormatError,
+    );
     expect(graph.calls).toEqual([]);
   });
 });
@@ -272,6 +278,44 @@ describe('the host allow-list', () => {
 
     expect(failure).toMatchObject({ kind: 'permanent', reason: 'host-not-allowed' });
     expect(failure.detail).toContain('evil.example.com');
+  });
+
+  it('reports a host that is not Meta’s to the hook, with the host and no query string', async () => {
+    const events: { code: string; host: string | undefined; url: string | undefined }[] = [];
+    const client = new GraphClient({
+      allowCidrs: [],
+      lookup: unresolvable,
+      onBlocked: (event) => events.push(event),
+    });
+
+    await failureOf(
+      client.download('https://evil.example.com/file.jpg?signature=SECRET', { maxBytes: 1_000 }),
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        code: 'destination-blocked',
+        host: 'evil.example.com',
+        url: 'https://evil.example.com/file.jpg',
+      }),
+    ]);
+    expect(JSON.stringify(events)).not.toContain('SECRET');
+  });
+
+  it('is not stopped by a hook that throws', async () => {
+    const client = new GraphClient({
+      allowCidrs: [],
+      lookup: unresolvable,
+      onBlocked: () => {
+        throw new Error('the log is down');
+      },
+    });
+
+    const failure = await failureOf(
+      client.download('https://evil.example.com/file.jpg', { maxBytes: 1_000 }),
+    );
+
+    expect(failure.reason).toBe('host-not-allowed');
   });
 
   it('refuses a look-alike of a Meta host', async () => {

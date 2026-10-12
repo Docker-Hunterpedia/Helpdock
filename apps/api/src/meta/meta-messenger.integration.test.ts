@@ -65,7 +65,7 @@ import { createAttachmentUploadedHandler } from '../media/attachment-events.js';
 import { createMediaTools } from '../media/ffmpeg.js';
 import { createMediaProcessor } from '../media/process.job.js';
 import { FakeStorage } from '../testing/media.js';
-import { createMetaInboundService } from './factory.js';
+import { createMetaInboundJobs } from './factory.js';
 import { MetaRepository } from './meta.repository.js';
 import { createMetaMediaEventHandler, META_EVENTS } from './meta-events.js';
 
@@ -249,7 +249,7 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
       }),
     });
     storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-messenger-')));
-    app = await createApiApp({ runtime, objectStorage: storage, meta: { graph: graphClient } });
+    app = await createApiApp({ runtime, objectStorage: storage, meta: { graph: graphClient() } });
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
     driver = new MetaWebhookDriver({ target: app, secret: APP_SECRET });
 
@@ -665,12 +665,12 @@ describe.skipIf(!hasDocker)('Messenger (M10-04)', () => {
     };
 
     const runFetch = (job: FetchJob): Promise<unknown> =>
-      createMetaInboundService({
+      createMetaInboundJobs({
         db: runtime.db,
         storage,
         log: silentLogger,
         keyring: createKeyring(envFor()),
-        graph: graphClient,
+        graph: graphClient(),
       })
         .mediaFetch({
           name: 'meta.media_fetch',

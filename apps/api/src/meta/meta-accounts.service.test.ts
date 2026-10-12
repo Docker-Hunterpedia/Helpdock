@@ -35,12 +35,18 @@ const OTHER_WHATSAPP_TOKEN = 'EAAGwhatsappSystemUserToken0002';
 const PAGE_TOKEN = 'EAAGmessengerPageToken000000001';
 const INSTAGRAM_TOKEN = 'IGAAinstagramUserToken000000001';
 const OTHER_INSTAGRAM_TOKEN = 'IGAAinstagramUserToken000000002';
+const USER_TOKEN = 'EAAGuserTokenManagingTwoPages01';
+const SIBLING_PAGE = '112233445566801';
+const SECOND_PAGE = '112233445566802';
 
 describe('MetaAccountsService (Graph reads)', () => {
   const graph = new FakeGraph();
   let configured = true;
   let taken = false;
+  // The id of the account that holds the id a test asks about, when `taken`.
+  let holder = 'x';
   let stored: AccountWithNames | undefined;
+  const tx = {} as DbTransaction;
   const marked: { id: string; detail: string }[] = [];
   const updated: { id: string; values: Record<string, unknown> }[] = [];
 
@@ -52,8 +58,10 @@ describe('MetaAccountsService (Graph reads)', () => {
       updated.push({ id, values });
     },
     locate: async () =>
-      taken ? { id: 'x', brandId: BRAND, platform: 'whatsapp', externalId: NUMBER } : undefined,
+      taken ? { id: holder, brandId: BRAND, platform: 'whatsapp', externalId: NUMBER } : undefined,
     find: async () => stored,
+    account: async (_tx: unknown, id: string) =>
+      stored?.account.id === id ? stored.account : undefined,
     activity: async () => ({
       lastReplyAt: new Date('2026-10-11T10:00:00.000Z'),
       failedSends: 1,
@@ -62,19 +70,8 @@ describe('MetaAccountsService (Graph reads)', () => {
     }),
   } as unknown as MetaRepository;
 
-  const service = new MetaAccountsService({
-    db: {} as Db,
-    repository,
-    keyring,
-    graph: () =>
-      new GraphClient({
-        root: graph.facebookRoot,
-        instagramRoot: graph.instagramRoot,
-        allowCidrs: ['127.0.0.0/8'],
-      }),
-    app: { secrets: async () => (configured ? ['app-secret'] : []) },
-    now: () => new Date('2026-10-11T12:00:00.000Z'),
-  });
+  // Built once the stand-in is listening: its roots are its own addresses.
+  let service: MetaAccountsService;
 
   const row = (
     platform: MetaPlatform,
@@ -121,6 +118,18 @@ describe('MetaAccountsService (Graph reads)', () => {
 
   beforeAll(async () => {
     await graph.start();
+    service = new MetaAccountsService({
+      db: {} as Db,
+      repository,
+      keyring,
+      graph: new GraphClient({
+        root: graph.facebookRoot,
+        instagramRoot: graph.instagramRoot,
+        allowCidrs: ['127.0.0.0/8'],
+      }),
+      app: { secrets: async () => (configured ? ['app-secret'] : []) },
+      now: () => new Date('2026-10-11T12:00:00.000Z'),
+    });
     graph.connect({
       platform: 'whatsapp',
       id: NUMBER,
@@ -162,6 +171,7 @@ describe('MetaAccountsService (Graph reads)', () => {
     graph.reset();
     configured = true;
     taken = false;
+    holder = 'x';
     stored = undefined;
     marked.length = 0;
     updated.length = 0;
@@ -169,7 +179,7 @@ describe('MetaAccountsService (Graph reads)', () => {
 
   describe('testToken', () => {
     it('names a WhatsApp number by what Meta verified, and a token that never expires', async () => {
-      const result = await service.testToken({
+      const result = await service.testToken(tx, {
         platform: 'whatsapp',
         externalId: NUMBER,
         accessToken: WHATSAPP_TOKEN,
@@ -189,7 +199,7 @@ describe('MetaAccountsService (Graph reads)', () => {
     });
 
     it('finds the number’s business account through the token, which is what it subscribes on', async () => {
-      await service.testToken({
+      await service.testToken(tx, {
         platform: 'whatsapp',
         externalId: NUMBER,
         accessToken: WHATSAPP_TOKEN,
@@ -208,7 +218,7 @@ describe('MetaAccountsService (Graph reads)', () => {
       });
 
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'whatsapp',
           externalId: NUMBER,
           accessToken: WHATSAPP_TOKEN,
@@ -222,7 +232,7 @@ describe('MetaAccountsService (Graph reads)', () => {
       graph.setTokenExpiry(PAGE_TOKEN, endsAt);
 
       try {
-        const result = await service.testToken({
+        const result = await service.testToken(tx, {
           platform: 'messenger',
           externalId: PAGE,
           accessToken: PAGE_TOKEN,
@@ -239,7 +249,7 @@ describe('MetaAccountsService (Graph reads)', () => {
     });
 
     it('asks Instagram for its own account, and dates its 60-day token from now', async () => {
-      const result = await service.testToken({
+      const result = await service.testToken(tx, {
         platform: 'instagram',
         externalId: INSTAGRAM,
         accessToken: INSTAGRAM_TOKEN,
@@ -257,7 +267,7 @@ describe('MetaAccountsService (Graph reads)', () => {
     });
 
     it('says Meta refused a token it does not know, in Meta’s words', async () => {
-      const result = await service.testToken({
+      const result = await service.testToken(tx, {
         platform: 'messenger',
         externalId: PAGE,
         accessToken: 'EAAGsomethingMetaHasNeverIssued',
@@ -270,7 +280,7 @@ describe('MetaAccountsService (Graph reads)', () => {
     it('says a token Meta calls expired is refused, not that it belongs to another account', async () => {
       graph.expiredTokens.add(WHATSAPP_TOKEN);
 
-      const result = await service.testToken({
+      const result = await service.testToken(tx, {
         platform: 'whatsapp',
         externalId: NUMBER,
         accessToken: WHATSAPP_TOKEN,
@@ -281,21 +291,21 @@ describe('MetaAccountsService (Graph reads)', () => {
 
     it('refuses an Instagram token pasted for Messenger, and a Page token pasted for Instagram', async () => {
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'messenger',
           externalId: PAGE,
           accessToken: INSTAGRAM_TOKEN,
         }),
       ).rejects.toMatchObject({ reason: 'platform-mismatch' });
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'instagram',
           externalId: INSTAGRAM,
           accessToken: PAGE_TOKEN,
         }),
       ).rejects.toMatchObject({ reason: 'platform-mismatch' });
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'whatsapp',
           externalId: NUMBER,
           accessToken: INSTAGRAM_TOKEN,
@@ -305,14 +315,14 @@ describe('MetaAccountsService (Graph reads)', () => {
 
     it('refuses a good token for a number or an account it does not open', async () => {
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'whatsapp',
           externalId: OTHER_NUMBER,
           accessToken: WHATSAPP_TOKEN,
         }),
       ).rejects.toMatchObject({ reason: 'token-other-account' });
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'instagram',
           externalId: OTHER_INSTAGRAM,
           accessToken: INSTAGRAM_TOKEN,
@@ -325,13 +335,13 @@ describe('MetaAccountsService (Graph reads)', () => {
         status: 503,
         body: { error: { code: 2, message: 'Service unavailable' } },
       });
-      const down = await service.testToken({
+      const down = await service.testToken(tx, {
         platform: 'whatsapp',
         externalId: NUMBER,
         accessToken: WHATSAPP_TOKEN,
       });
       graph.failures.push({ status: 200, body: { unexpected: true }, match: /GET \/1065/ });
-      const nonsense = await service.testToken({
+      const nonsense = await service.testToken(tx, {
         platform: 'whatsapp',
         externalId: NUMBER,
         accessToken: WHATSAPP_TOKEN,
@@ -342,7 +352,7 @@ describe('MetaAccountsService (Graph reads)', () => {
     });
 
     it('treats a token no header can carry as one Meta did not issue', async () => {
-      const result = await service.testToken({
+      const result = await service.testToken(tx, {
         platform: 'whatsapp',
         externalId: NUMBER,
         accessToken: 'EAAG not-a-token-0000',
@@ -356,7 +366,7 @@ describe('MetaAccountsService (Graph reads)', () => {
       configured = false;
 
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'whatsapp',
           externalId: NUMBER,
           accessToken: WHATSAPP_TOKEN,
@@ -369,7 +379,7 @@ describe('MetaAccountsService (Graph reads)', () => {
       taken = true;
 
       await expect(
-        service.testToken({
+        service.testToken(tx, {
           platform: 'whatsapp',
           externalId: NUMBER,
           accessToken: WHATSAPP_TOKEN,
@@ -380,12 +390,12 @@ describe('MetaAccountsService (Graph reads)', () => {
 
     it('never repeats the token it was given', async () => {
       const answers = await Promise.all([
-        service.testToken({
+        service.testToken(tx, {
           platform: 'whatsapp',
           externalId: NUMBER,
           accessToken: WHATSAPP_TOKEN,
         }),
-        service.testToken({
+        service.testToken(tx, {
           platform: 'messenger',
           externalId: PAGE,
           accessToken: 'EAAGsomethingMetaHasNeverIssued',
@@ -394,6 +404,90 @@ describe('MetaAccountsService (Graph reads)', () => {
 
       expect(JSON.stringify(answers)).not.toContain(WHATSAPP_TOKEN);
       expect(JSON.stringify(answers)).not.toContain('EAAGsomethingMetaHasNeverIssued');
+    });
+
+    it('refuses a Page token whose own account is another Page, though it can read this one', async () => {
+      // A user token that manages two Pages reads both, but `/me` is the first.
+      graph.connect({ platform: 'messenger', id: SIBLING_PAGE, name: 'First', token: USER_TOKEN });
+      graph.connect({ platform: 'messenger', id: SECOND_PAGE, name: 'Second', token: USER_TOKEN });
+
+      await expect(
+        service.testToken(tx, {
+          platform: 'messenger',
+          externalId: SECOND_PAGE,
+          accessToken: USER_TOKEN,
+        }),
+      ).rejects.toMatchObject({ reason: 'token-other-account' });
+      await expect(
+        service.testToken(tx, {
+          platform: 'messenger',
+          externalId: SIBLING_PAGE,
+          accessToken: USER_TOKEN,
+        }),
+      ).resolves.toMatchObject({ ok: true, name: 'First' });
+    });
+
+    describe('Reconnect', () => {
+      const reconnect = (accountId: string | undefined, externalId = NUMBER) =>
+        service.testToken(tx, {
+          platform: 'whatsapp',
+          externalId,
+          accessToken: WHATSAPP_TOKEN,
+          ...(accountId === undefined ? {} : { accountId }),
+        });
+
+      it('tests a replacement token for the connected account’s own id, which is taken by definition', async () => {
+        stored = row('whatsapp', NUMBER, OTHER_WHATSAPP_TOKEN);
+        taken = true;
+        holder = stored.account.id;
+
+        await expect(reconnect(stored.account.id)).resolves.toMatchObject({
+          ok: true,
+          externalId: NUMBER,
+        });
+      });
+
+      it('still refuses the id without the account, as a new connection would be', async () => {
+        stored = row('whatsapp', NUMBER, OTHER_WHATSAPP_TOKEN);
+        taken = true;
+        holder = stored.account.id;
+
+        await expect(reconnect(undefined)).rejects.toMatchObject({ reason: 'account-taken' });
+        expect(graph.calls).toHaveLength(0);
+      });
+
+      it('refuses an id another account holds, whichever account the request names', async () => {
+        stored = row('whatsapp', OTHER_NUMBER, OTHER_WHATSAPP_TOKEN);
+        taken = true;
+        holder = '01924f00-0000-7000-8000-0000000000cc';
+
+        // Named account has another id: the request is a new connection of a taken id.
+        await expect(reconnect(stored.account.id)).rejects.toMatchObject({
+          reason: 'account-taken',
+        });
+        // Named account has this id and platform, but another account holds it.
+        stored = row('whatsapp', NUMBER, OTHER_WHATSAPP_TOKEN);
+        await expect(reconnect(stored.account.id)).rejects.toMatchObject({
+          reason: 'account-taken',
+        });
+        expect(graph.calls).toHaveLength(0);
+      });
+
+      it('refuses an account of another platform or another brand', async () => {
+        stored = row('messenger', NUMBER, PAGE_TOKEN);
+        taken = true;
+        holder = stored.account.id;
+        await expect(reconnect(stored.account.id)).rejects.toMatchObject({
+          reason: 'account-taken',
+        });
+
+        // Row-level security hides another brand's account: the repository finds nothing.
+        stored = undefined;
+        await expect(reconnect('01924f00-0000-7000-8000-0000000000dd')).rejects.toMatchObject({
+          reason: 'account-taken',
+        });
+        expect(graph.calls).toHaveLength(0);
+      });
     });
   });
 

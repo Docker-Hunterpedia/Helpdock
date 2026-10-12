@@ -369,13 +369,16 @@ export const metaAccountUpdateRequestSchema = z.object({
 export type MetaAccountUpdateRequest = z.infer<typeof metaAccountUpdateRequestSchema>;
 
 /**
- * "Test" in the Connect dialog: a read with a token that is not stored yet, so
- * Connect stays off until Graph has recognised it.
+ * "Test" in the Connect and Reconnect dialogs: a read with a token that is not
+ * stored yet, so Connect and Reconnect stay off until Graph has recognised it.
+ * `accountId` names the account being reconnected, whose own id is taken by
+ * definition: the id is free for that account and for no other.
  */
 export const metaTokenTestRequestSchema = z.object({
   platform: metaPlatformSchema,
   externalId: EXTERNAL_ID,
   accessToken: TOKEN,
+  accountId: z.uuid().optional(),
 });
 export type MetaTokenTestRequest = z.infer<typeof metaTokenTestRequestSchema>;
 

@@ -1,5 +1,6 @@
-import { metaExternalId } from '@helpdock/channels';
+import { metaExternalId, metaIdentityValue } from '@helpdock/channels';
 import {
+  contacts,
   type Db,
   type DbTransaction,
   departments,
@@ -23,6 +24,7 @@ import {
 } from '@helpdock/schemas';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from 'drizzle-orm';
 import { withAllBrands } from '../tenant/all-brands.js';
+import { contactNameFor, hasPlaceholderName, type MetaProfile } from './meta-profile.js';
 
 /**
  * `meta_accounts`, `meta_conversations` and `meta_deliveries` (M10, ADR 0025).
@@ -241,6 +243,67 @@ export class MetaRepository {
       )
       .limit(1);
     return rows[0];
+  }
+
+  async conversationById(tx: DbTransaction, id: string): Promise<MetaConversationRow | undefined> {
+    const rows = await tx
+      .select()
+      .from(metaConversations)
+      .where(eq(metaConversations.id, id))
+      .limit(1);
+    return rows[0];
+  }
+
+  /**
+   * That Graph was asked for the customer's name, whatever it answered: a read
+   * Meta refuses is made once per conversation (`meta_conversations.profile_checked_at`).
+   */
+  async recordProfileCheck(tx: DbTransaction, conversationId: string, at: Date): Promise<void> {
+    await tx
+      .update(metaConversations)
+      .set({ profileCheckedAt: at })
+      .where(eq(metaConversations.id, conversationId));
+  }
+
+  /**
+   * What Graph said, on the conversation and, when the contact has no better
+   * name, on the contact. A part Graph did not send leaves what is stored alone.
+   */
+  async recordProfile(
+    tx: DbTransaction,
+    { conversation, account }: { conversation: MetaConversationRow; account: MetaAccountRow },
+    profile: MetaProfile,
+    at: Date,
+  ): Promise<void> {
+    await tx
+      .update(metaConversations)
+      .set({
+        ...(profile.name === null ? {} : { profileName: profile.name }),
+        ...(profile.username === null ? {} : { username: profile.username }),
+        profileCheckedAt: at,
+      })
+      .where(eq(metaConversations.id, conversation.id));
+
+    const name = contactNameFor(profile);
+    if (name === null) {
+      return;
+    }
+    const [contact] = await tx
+      .select({ name: contacts.name })
+      .from(contacts)
+      .where(eq(contacts.id, conversation.contactId))
+      .limit(1);
+    const identity = metaIdentityValue(
+      account.platform,
+      account.externalId,
+      conversation.customerId,
+    );
+    if (contact !== undefined && hasPlaceholderName(contact.name, identity)) {
+      await tx
+        .update(contacts)
+        .set({ name, updatedAt: at })
+        .where(eq(contacts.id, conversation.contactId));
+    }
   }
 
   /**

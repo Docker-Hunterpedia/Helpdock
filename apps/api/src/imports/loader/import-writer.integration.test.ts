@@ -13,6 +13,8 @@ import {
   importRecords,
   importRuns,
   outbox,
+  reportAgentDaily,
+  reportDaily,
   runMigrations,
   tags,
   ticketMessages,
@@ -34,6 +36,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
 import { CsatRepository } from '../../csat/csat.repository.js';
+import { RollupRepository } from '../../reports/rollup.repository.js';
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -325,6 +328,97 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       .from(importExternalIds)
       .where(eq(importExternalIds.externalId, 'invalid-label'));
     expect(ledger).toEqual([]);
+  });
+
+  it('rolls imported name-only replies, resolution and ratings onto their original days without inventing agent identities', async () => {
+    const departmentId = uuidv7();
+    const closedStatus = uuidv7();
+    await owner.db
+      .insert(departments)
+      .values({ id: departmentId, brandId: BRAND, name: 'Historical reports' });
+    await owner.db.insert(ticketStatuses).values({
+      id: closedStatus,
+      brandId: BRAND,
+      name: 'Historically closed',
+      systemState: 'closed',
+      color: 'success',
+    });
+    const input = request('reported-history');
+    input.record.createdAt = '2018-01-01T00:00:00Z';
+    input.record.updatedAt = '2018-01-03T00:00:00Z';
+    input.record.closedAt = '2018-01-03T00:00:00Z';
+    input.resolved.departmentId = departmentId;
+    input.resolved.statusId = closedStatus;
+    input.resolved.assigneeId = null;
+    input.messages = [
+      {
+        externalId: 'historical-system',
+        ticketExternalId: 'reported-history',
+        authorKind: 'system',
+        public: true,
+        bodyText: 'System receipt',
+        createdAt: '2018-01-01T12:00:00Z',
+        attachments: [],
+      },
+      {
+        externalId: 'historical-answer',
+        ticketExternalId: 'reported-history',
+        authorExternalId: 'oldagent',
+        authorKind: 'agent',
+        public: true,
+        bodyText: 'Agent answer',
+        createdAt: '2018-01-02T00:00:00Z',
+        attachments: [],
+      },
+    ];
+    input.csat = [
+      {
+        externalId: 'historical-rating',
+        ticketExternalId: 'reported-history',
+        rating: 5,
+        ratedAt: '2018-01-04T00:00:00Z',
+      },
+    ];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    await withSystem(app.db, BRAND, (tx) =>
+      new RollupRepository().rebuild(tx, {
+        brandId: BRAND,
+        timezone: 'UTC',
+        range: { from: '2018-01-01', to: '2018-01-04' },
+        countReopens: false,
+      }),
+    );
+    const days = await owner.db
+      .select()
+      .from(reportDaily)
+      .where(eq(reportDaily.departmentId, departmentId));
+    expect(days.find((row) => row.day === '2018-01-01')).toMatchObject({
+      created: 1,
+      firstResponseMs: [],
+    });
+    expect(days.find((row) => row.day === '2018-01-02')).toMatchObject({
+      firstResponseMs: [86400000],
+    });
+    expect(days.find((row) => row.day === '2018-01-03')).toMatchObject({
+      resolved: 1,
+      resolutionMs: [172800000],
+    });
+    expect(days.find((row) => row.day === '2018-01-04')).toMatchObject({ csat5: 1 });
+    expect(
+      await owner.db
+        .select()
+        .from(reportAgentDaily)
+        .where(eq(reportAgentDaily.departmentId, departmentId)),
+    ).toEqual([]);
+    expect(
+      days.every(
+        (row) =>
+          row.slaResponseMet === 0 &&
+          row.slaResponseBreached === 0 &&
+          row.slaResolutionMet === 0 &&
+          row.slaResolutionBreached === 0,
+      ),
+    ).toBe(true);
   });
 
   it('loads companies with all domains/notes, links through a secondary domain and writes nothing on repeat', async () => {
@@ -746,6 +840,23 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       outcome: 'unchanged',
       messages: 0,
     });
+  });
+
+  it('refuses a system message mapped to an old agent name rather than fabricating a reportable reply', async () => {
+    const input = request('system-name-mismatch');
+    const note = input.messages.find((message) => message.authorExternalId === 'oldagent');
+    if (!note) throw new Error('Missing old-agent fixture');
+    note.authorKind = 'system';
+    note.public = true;
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
+      { code: 'mapping-invalid' },
+    );
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(eq(importExternalIds.externalId, input.record.externalId)),
+    ).toEqual([]);
   });
 
   it('rolls back a ticket and its prior messages when a later author is unmapped', async () => {

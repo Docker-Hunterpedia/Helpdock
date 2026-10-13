@@ -22,7 +22,8 @@ async function messageAuthor(tx: DbTransaction, input: TicketLoad, message: Impo
   }
   if (
     (message.authorKind === 'customer' && author.kind !== 'contact') ||
-    (message.authorKind === 'agent' && author.kind === 'contact')
+    (message.authorKind === 'agent' && author.kind === 'contact') ||
+    (author.kind === 'name' && message.authorKind !== 'agent')
   )
     throw new ImportLoadError('mapping-invalid');
   if (author.kind === 'name')

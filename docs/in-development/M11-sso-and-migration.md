@@ -987,6 +987,19 @@ remaining loader paths, privacy handling across complete source bundles, report
 rebuild jobs, vendor stand-ins and browser acceptance are still required.
 
 
+### Historical report checkpoint (M11-09, in progress)
+
+The rollup previously omitted imported public agent replies represented by a
+name-only system author. A failing real-Postgres regression reproduced the empty
+first-response sample. `REPORT_ROLLUP_VERSION` is now 3: its fallback timing
+query counts those replies only on imported tickets with an author display.
+Anonymous system messages remain excluded, and the loader refuses to map a
+system message to a name-only agent. Agent workload still requires a real staff
+ID; it does not synthesize accounts from historical names. The regression also
+checks original creation, resolution and rating days and zero SLA outcomes.
+The finish job still needs to request the full historical rebuild range.
+
+
 ## M11-10 Import jobs
 
 `packages/jobs/src/jobs.ts`: `import.extract`, `import.load`, `import.attachments`,

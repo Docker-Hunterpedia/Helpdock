@@ -84,6 +84,12 @@ minus started, **less the time paused** waiting on the customer
 (`paused_total_ms`). A ticket no policy matched has no clocks, and is timed from
 its creation to the first public staff reply, and to `closed_at`.
 
+M11 migration support is in development. Its rollup includes an imported agent's
+first public reply when the author is retained as a name only. Anonymous system
+messages do not count as agent replies, and a name-only author does not get an
+invented staff account or per-agent workload row. Historical ratings count on
+their original rating day; they are separate from live surveys.
+
 Only a ticket's **initial** clocks count, unless the brand turns on "count
 reopens" (`slaCountReopens`, Ticketing › SLAs): then a reopened ticket's
 next-response clock counts as a response and its later resolution clocks as

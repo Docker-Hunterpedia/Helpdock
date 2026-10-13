@@ -1091,6 +1091,8 @@ PRD status board.
 
 - [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210) — M11-02 OIDC protocol and verified identity handoff (merged).
 
+- [#211](https://github.com/Docker-Hunterpedia/Helpdock/pull/211) — M11-03 SAML protocol, browser handoff and metadata rotation (in review).
+
 ## Supporting CI work
 
 [#208](https://github.com/Docker-Hunterpedia/Helpdock/issues/208), implemented in

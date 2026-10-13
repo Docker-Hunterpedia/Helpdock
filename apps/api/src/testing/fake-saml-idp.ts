@@ -57,6 +57,7 @@ export async function fakeSamlIdp() {
     metadataCertificates: [key.certificate],
     metadataEntityId: issuer,
     metadataStatus: 200,
+    groups: ['Support'],
     subject: 'staff-1',
     email: 'ada@example.com',
     spCertificate: '',
@@ -78,6 +79,7 @@ export async function fakeSamlIdp() {
       metadataCertificates: [key.certificate],
       metadataEntityId: issuer,
       metadataStatus: 200,
+      groups: ['Support'],
       subject: 'staff-1',
       email: 'ada@example.com',
     });
@@ -89,7 +91,7 @@ export async function fakeSamlIdp() {
     const correlation = input.requestId ? ` InResponseTo="${xmlEscape(input.requestId)}"` : '';
     const attribute = (name: string, values: string[]) =>
       `<saml:Attribute Name="${name}">${values.map((value) => `<saml:AttributeValue>${xmlEscape(value)}</saml:AttributeValue>`).join('')}</saml:Attribute>`;
-    let assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${id}" Version="2.0" IssueInstant="${new Date(now).toISOString()}"><saml:Issuer>${xmlEscape(controls.wrongIssuer ? 'wrong-idp' : issuer)}</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">${xmlEscape(controls.subject)}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${xmlEscape(controls.wrongRecipient ? 'https://attacker.example/acs' : input.recipient)}" NotOnOrAfter="${after}"${correlation}/></saml:SubjectConfirmation></saml:Subject><saml:Conditions${controls.missingTimes ? '' : ` NotBefore="${before}" NotOnOrAfter="${after}"`}><saml:AudienceRestriction><saml:Audience>${xmlEscape(controls.wrongAudience ? 'wrong-audience' : input.audience)}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${new Date(now).toISOString()}" SessionIndex="${id}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attribute('email', [controls.email])}${attribute('name', ['Ada'])}${controls.missingGroups ? '' : attribute('groups', ['Support'])}${controls.duplicateAttribute ? attribute('email', ['attacker@example.com']) : ''}</saml:AttributeStatement></saml:Assertion>`;
+    let assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${id}" Version="2.0" IssueInstant="${new Date(now).toISOString()}"><saml:Issuer>${xmlEscape(controls.wrongIssuer ? 'wrong-idp' : issuer)}</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">${xmlEscape(controls.subject)}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${xmlEscape(controls.wrongRecipient ? 'https://attacker.example/acs' : input.recipient)}" NotOnOrAfter="${after}"${correlation}/></saml:SubjectConfirmation></saml:Subject><saml:Conditions${controls.missingTimes ? '' : ` NotBefore="${before}" NotOnOrAfter="${after}"`}><saml:AudienceRestriction><saml:Audience>${xmlEscape(controls.wrongAudience ? 'wrong-audience' : input.audience)}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${new Date(now).toISOString()}" SessionIndex="${id}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attribute('email', [controls.email])}${attribute('name', ['Ada'])}${controls.missingGroups ? '' : attribute('groups', controls.groups)}${controls.duplicateAttribute ? attribute('email', ['attacker@example.com']) : ''}</saml:AttributeStatement></saml:Assertion>`;
     if (!controls.unsigned) {
       const signing = controls.unknownCert ? stranger : controls.rotated ? rotated : key;
       const signature = new SignedXml({

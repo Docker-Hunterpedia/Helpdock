@@ -173,6 +173,15 @@ describe.skipIf(!hasDocker)('M11-03 SAML through Postgres, Redis and a signed lo
     const attempt = await flow();
     await expect(accept(bodyOf(attempt.body))).rejects.toThrow();
   });
+  it('accepts explicitly empty authoritative groups instead of treating them as missing', async () => {
+    idp.controls.groups = [];
+    const attempt = await flow();
+    const accepted = await accept(bodyOf(attempt.body));
+    if (accepted.kind !== 'pending') throw new Error('Expected pending response');
+    expect((await complete(accepted.token, attempt.started.browserNonce)).assertion.groups).toEqual(
+      [],
+    );
+  });
   it('refuses altered signed attributes and DTDs', async () => {
     const attempt = await flow();
     const xml = Buffer.from(attempt.body.SAMLResponse, 'base64')

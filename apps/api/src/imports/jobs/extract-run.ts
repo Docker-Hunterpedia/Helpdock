@@ -148,6 +148,28 @@ class ExtractionSession<Credentials> {
     }
     if (!done) throw new ConnectorError('invalid-response');
   }
+  async delayFailure(
+    claim: ImportClaim,
+    error: RateLimited | ConnectorError,
+  ): Promise<ExtractionOutcome> {
+    const delay = error instanceof RateLimited ? error.retryAfterMs : 5000;
+    const deadline = new Date(Date.now() + delay);
+    if (
+      !Number.isFinite(deadline.getTime()) ||
+      !z.iso.datetime().safeParse(deadline.toISOString()).success
+    ) {
+      await this.inRun((tx) => failExtraction(tx, { claim, code: 'invalid-response' }));
+      return { state: 'failed' };
+    }
+    const failed = await this.inRun((tx) =>
+      deferExtraction(tx, {
+        claim,
+        delayMs: delay,
+        code: error instanceof RateLimited ? 'import.rate-limited' : 'import.vendor-unavailable',
+      }),
+    );
+    return failed ? { state: 'failed' } : { state: 'deferred', retryAfterMs: delay };
+  }
   async failure(claim: ImportClaim, error: unknown): Promise<ExtractionOutcome> {
     if (error instanceof ImportClaimLost) return { state: 'stopped' };
     if (this.deps.context.signal.aborted) {
@@ -158,23 +180,7 @@ class ExtractionSession<Credentials> {
       error instanceof RateLimited ||
       (error instanceof ConnectorError && error.code === 'vendor-unavailable')
     ) {
-      const delay = error instanceof RateLimited ? error.retryAfterMs : 5000;
-      const deadline = new Date(Date.now() + delay);
-      if (
-        !Number.isFinite(deadline.getTime()) ||
-        !z.iso.datetime().safeParse(deadline.toISOString()).success
-      ) {
-        await this.inRun((tx) => failExtraction(tx, { claim, code: 'invalid-response' }));
-        return { state: 'failed' };
-      }
-      const failed = await this.inRun((tx) =>
-        deferExtraction(tx, {
-          claim,
-          delayMs: delay,
-          code: error instanceof RateLimited ? 'import.rate-limited' : 'import.vendor-unavailable',
-        }),
-      );
-      return failed ? { state: 'failed' } : { state: 'deferred', retryAfterMs: delay };
+      return this.delayFailure(claim, error);
     }
     if (error instanceof ConnectorError || error instanceof z.ZodError) {
       await this.inRun((tx) =>

@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
 import { MockAttachmentUploader } from '../../media/mock-uploader.js';
+import { MockStaffApi } from '../../staff/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { MOCK_TICKET_REFUND, MockTicketsApi } from '../../tickets/mock-api.js';
@@ -206,6 +207,22 @@ describe('one ticket', () => {
     await openRefund();
 
     expect(await screen.findByText('Omar Nasser is viewing')).toBeVisible();
+  });
+
+  it('names who else has the ticket open for an Agent, who cannot read the staff list', async () => {
+    // #174: an Agent saw "01a13522 is replying". `GET /staff` declares
+    // `staff:manage`; the department's assignable list is what an Agent can
+    // read, and it names everybody who works the ticket.
+    const listStaff = vi
+      .spyOn(MockStaffApi.prototype, 'listStaff')
+      .mockRejectedValue(new Error('Missing permission staff:manage'));
+    try {
+      await openRefund();
+
+      expect(await screen.findByText('Omar Nasser is viewing')).toBeVisible();
+    } finally {
+      listStaff.mockRestore();
+    }
   });
 
   it('shows a reply as sending, then as part of the thread once it has a seq', async () => {

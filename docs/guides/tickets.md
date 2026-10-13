@@ -1207,6 +1207,11 @@ and the same authorisation covers both words. It stays stateless on purpose: "is
 replying" is not a lock, so a browser that crashes mid-reply cannot leave a
 ticket claimed.
 
+The relayed event carries a user id, not a name. The ticket view names it the
+way the assignee picker names an assignee: from the department's `assignable`
+list (M1-07), which an Agent can read, then from the staff list, which needs
+`staff:manage`, and otherwise as a shortened id.
+
 ### Merge and split in the workspace
 
 The ⋯ menu in the header (`ticket-actions-menu.tsx`) draws the entries it is

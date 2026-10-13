@@ -414,7 +414,7 @@ the one-hour target.
 
 ## Gaps carried from earlier milestones
 
-Closed, each with unit and integration tests and its guide updated (the last row after #147):
+Closed, each with unit and integration tests and its guide updated (the last row after #147; the two #174 rows are admin-only and have unit and component tests):
 
 | Gap | From | Now |
 |---|---|---|
@@ -427,6 +427,8 @@ Closed, each with unit and integration tests and its guide updated (the last row
 | The Telegram language prompt was the catalog's, not the bot's | M6 | Each bot has its own `language_prompt` (migration `0048`), edited on the bot's page under Channels › Telegram; `/start` asks with it first ([M6-04](../completed/M6-telegram.md#m6-04-start-and-the-language-pick)) |
 | The ticket list drew no AI state, and "AI paused" was not drawn | M7 | A row's caption line ends with "AI paused" while the conversation is handed off, or "AI answered" once the assistant has taken part and is not paused (`Admin/Ticket-AI`, `apps/admin/src/screens/tickets/ai/ticket-ai-mark.tsx`). Telling a handed-back conversation apart is open, see Open questions |
 | Agent assist sent the brand's main system prompt for an Arabic ticket | M7 | Every assist call passes the ticket's language to `complete()`, which sends `systemPromptAr` for an Arabic ticket, as auto-reply does ([M7 gaps](../completed/M7-ai.md#gaps-and-follow-ups)) |
+| Agent assist never appeared in a production build | M7 | `HttpAssistApi` built `/api/brands/…` paths on top of the transport's own `/api`, so every call went to `/api/api/…` and 404ed and the composer read assist as off. The paths now start at `/brands/`, and `apps/admin/src/assist/http-api.test.ts` drives every method through the real `HttpTransport` (#174) |
+| The collision indicator named a colleague by id for an Agent | M1 | Viewers were named from `GET /staff` alone, which an Agent cannot read. `staffName` (`apps/admin/src/screens/tickets/directory.ts`) names them as the assignee picker does: the department's `assignable` read, then the staff read, then a shortened id (#174) |
 
 ## Pull requests
 

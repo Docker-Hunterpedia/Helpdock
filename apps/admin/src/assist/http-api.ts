@@ -175,7 +175,7 @@ export class HttpAssistApi implements AssistApi {
   }
 
   #ticket(brandId: string, ticketId: string, path: string): string {
-    return `/api/brands/${brandId}/tickets/${ticketId}/${path}`;
+    return `/brands/${brandId}/tickets/${ticketId}/${path}`;
   }
 
   #assist(brandId: string, ticketId: string, path: string): string {
@@ -183,6 +183,6 @@ export class HttpAssistApi implements AssistApi {
   }
 
   #proposals(brandId: string): string {
-    return `/api/brands/${brandId}/help-center/proposals`;
+    return `/brands/${brandId}/help-center/proposals`;
   }
 }

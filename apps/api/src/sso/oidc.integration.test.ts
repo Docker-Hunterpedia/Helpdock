@@ -246,6 +246,8 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
     });
     expect(start.statusCode).toBe(302);
     const cookie = start.cookies[0];
+    expect(cookie?.name).toMatch(/^__Host-hd_sso_/);
+    expect(cookie?.path).toBe('/');
     expect(cookie?.httpOnly).toBe(true);
     expect(cookie?.secure).toBe(true);
     expect(cookie?.sameSite).toBe('Lax');

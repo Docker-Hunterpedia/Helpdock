@@ -1,5 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { cookieAttributes } from '../auth/session/cookies.js';
+import { SSO_REQUEST_TTL_SECONDS } from './request-store.js';
 
 export const ssoAssertionSchema = z.object({
   connectionId: z.uuid(),
@@ -92,4 +94,14 @@ export function oidcAssertion(input: {
     name: claims[input.nameClaim] ?? supplemental[input.nameClaim],
     groups: typeof groups === 'string' ? [groups] : groups,
   });
+}
+
+export function oidcNonceCookie(appUrl: string, connectionId: string) {
+  const attributes = cookieAttributes({ appUrl, maxAgeSeconds: SSO_REQUEST_TTL_SECONDS });
+  // HTTPS uses the browser's host-prefix enforcement to prevent sibling-domain
+  // cookie planting. That prefix requires Path=/; HTTP is a local-dev exception.
+  return {
+    name: `${attributes.secure ? '__Host-' : ''}hd_sso_${connectionId}`,
+    attributes: { ...attributes, path: attributes.secure ? '/' : `/api/auth/sso/${connectionId}` },
+  };
 }

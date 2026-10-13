@@ -5,10 +5,11 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { AuthService } from '../auth/auth.service.js';
 import { isAuthFailure } from '../auth/auth-failure.js';
 import { Public } from '../auth/route-declaration.js';
-import { cookieAttributes, encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
+import { encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { ENV } from '../runtime/tokens.js';
 import { OidcCallbackQueryDto, OidcStartQueryDto, SsoParamDto } from './dto.js';
 import { OidcService } from './oidc.service.js';
+import { oidcNonceCookie } from './oidc-contracts.js';
 
 @Controller('api/auth/sso')
 export class SsoOidcController {
@@ -32,7 +33,7 @@ export class SsoOidcController {
         returnTo: query.returnTo,
         ip: request.ip,
       });
-      const cookie = this.nonceCookie(id);
+      const cookie = oidcNonceCookie(this.env.APP_URL, id);
       reply.setCookie(cookie.name, result.browserNonce, cookie.attributes);
       reply.header('cache-control', 'no-store');
       await reply.redirect(result.url, 302);
@@ -49,7 +50,7 @@ export class SsoOidcController {
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
-    const cookie = this.nonceCookie(id);
+    const cookie = oidcNonceCookie(this.env.APP_URL, id);
     reply.clearCookie(cookie.name, cookie.attributes);
     try {
       const result = await this.oidc.complete({
@@ -82,14 +83,6 @@ export class SsoOidcController {
     } catch (error) {
       await this.redirect(reply, { error: isAuthFailure(error) ? error.auth.code : 'unavailable' });
     }
-  }
-
-  private nonceCookie(id: string) {
-    const attributes = {
-      ...cookieAttributes({ appUrl: this.env.APP_URL, maxAgeSeconds: 600 }),
-      path: `/api/auth/sso/${id}`,
-    };
-    return { name: `${attributes.secure ? '__Secure-' : ''}hd_sso_${id}`, attributes };
   }
 
   private async redirect(reply: FastifyReply, params: Record<string, string>) {

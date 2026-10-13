@@ -145,9 +145,16 @@ bound that lifetime when integrating enforcement.
   check alone would leave a DNS-rebinding window.
 - Configured group overage or a missing/malformed authoritative group list fails
   sign-in. It is never represented as an empty list that could revoke grants.
-- Browser cookies are scoped and named per connection; the request binds the
+- Browser cookies are named per connection; the request binds the
   current configuration revision so disabling or changing a provider during
   a flow cannot complete against stale cached settings.
 - M11-02 completes existing subject bindings through local MFA and the existing
   exchange flow. M11-04 owns JIT, email linking, group sync, and IdP MFA policy;
   protocol acceptance alone never creates or grants an account.
+
+HTTPS OIDC nonce cookies use the `__Host-` prefix with Path=/ and no Domain.
+This deliberately prefers host binding over a narrow path, because a sibling
+domain must not plant a matching login nonce. Local HTTP retains an unprefixed,
+connection-scoped cookie. See the [browser prefix requirements](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#cookie_prefixes).
+Provider requests advertise `Accept-Encoding: identity` because safeFetch
+returns bounded raw bytes rather than automatically decompressing responses.

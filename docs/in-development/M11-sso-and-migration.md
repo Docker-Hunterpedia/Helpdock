@@ -414,9 +414,9 @@ on 2026-10-13. A provider client must allow authorization code, PKCE S256 and
 - `GET /api/auth/sso/:id/start?returnTo=...` is public with a 20/minute/IP budget.
   It stores random state, nonce, PKCE verifier, connection/configuration binding,
   browser-nonce hash and validated local return path in Redis for ten minutes.
-  The per-connection `hd_sso_<id>` cookie is HttpOnly, host-only, SameSite=Lax,
-  Secure over HTTPS, and limited to that connection's auth path. Its HTTPS name
-  has the `__Secure-` prefix. `test=1` is rejected until M11-06 adds the protected
+  The per-connection cookie is HttpOnly, host-only and SameSite=Lax. HTTPS uses
+  `__Host-hd_sso_<id>`, Secure and Path=/ to prevent sibling-domain cookie
+  planting. Local HTTP uses `hd_sso_<id>` scoped to the connection's auth path. `test=1` is rejected until M11-06 adds the protected
   connection-test flow; it must never accidentally create a session.
 - `GET /api/auth/sso/:id/oidc/callback` has a 40/minute/IP budget, atomically
   consumes state, checks the browser and configuration, validates PKCE, state,
@@ -1038,6 +1038,8 @@ PRD status board.
 - [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) — M11-01 SSO configuration foundation (merged).
 
 - [#209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209) — dependency-aware CI selection (merged).
+
+- [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210) — M11-02 OIDC protocol and verified identity handoff (in review).
 
 ## Supporting CI work
 

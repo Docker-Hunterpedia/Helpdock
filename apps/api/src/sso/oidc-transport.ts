@@ -37,7 +37,10 @@ export function oidcTransport(allowCidrs: readonly string[]): CustomFetch {
       url,
       {
         method: init?.method,
-        headers: Object.fromEntries(new Headers(init?.headers)),
+        headers: {
+          ...Object.fromEntries(new Headers(init?.headers)),
+          'accept-encoding': 'identity',
+        },
         ...(body == null ? {} : { body: body instanceof Uint8Array ? body : String(body) }),
         ...(init?.signal == null ? {} : { signal: init.signal }),
       },

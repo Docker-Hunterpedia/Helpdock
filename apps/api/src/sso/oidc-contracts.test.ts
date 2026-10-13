@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   matchesBrowserNonce,
   oidcAssertion,
+  oidcNonceCookie,
   ssoHash,
   ssoReturnToSchema,
 } from './oidc-contracts.js';
@@ -76,5 +77,18 @@ describe('SSO return paths', () => {
     expect(ssoReturnToSchema.parse('/tickets?search=two%20words')).toBe(
       '/tickets?search=two%20words',
     );
+  });
+});
+
+it('uses a host-prefixed HTTPS nonce cookie and a scoped local HTTP fallback', () => {
+  const secure = oidcNonceCookie('https://support.example.com', 'connection');
+  expect(secure).toMatchObject({
+    name: '__Host-hd_sso_connection',
+    attributes: { secure: true, httpOnly: true, path: '/', sameSite: 'lax' },
+  });
+  expect(secure.attributes).not.toHaveProperty('domain');
+  expect(oidcNonceCookie('http://localhost:3100', 'connection')).toMatchObject({
+    name: 'hd_sso_connection',
+    attributes: { secure: false, path: '/api/auth/sso/connection' },
   });
 });

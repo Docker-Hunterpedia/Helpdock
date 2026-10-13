@@ -48,7 +48,7 @@ import { TranscriptsProvider } from './assist/voice-transcript.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
 import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
-import { assigneeName } from './directory.js';
+import { assigneeName, staffName } from './directory.js';
 import { paragraph, statusName, ticketReference } from './format.js';
 import { LogTimeDialog } from './log-time-dialog.tsx';
 import { MacroPicker } from './macro-picker.tsx';
@@ -567,11 +567,6 @@ export function TicketView({
     setTags: (tagIds) => tags.mutateAsync([...tagIds]),
   });
 
-  const headerViewers = viewers.map(({ userId, activity }) => ({
-    name: directory.staff.find((member) => member.userId === userId)?.name ?? userId.slice(0, 8),
-    activity,
-  }));
-
   if (detail.isError) {
     return (
       <Box sx={{ padding: 8 }}>
@@ -634,6 +629,10 @@ export function TicketView({
     return embedded?.name ?? (id === contact.data?.id ? contact.data.name : null);
   };
   const agents = assignable.data?.agents ?? [];
+  const headerViewers = viewers.map(({ userId, activity }) => ({
+    name: staffName(userId, { agents, staff: directory.staff, viewer }),
+    activity,
+  }));
   const departmentName = directory.departments.find(
     (department) => department.id === ticket.departmentId,
   )?.name;

@@ -22,31 +22,35 @@ export const shortId = (id: string): string => {
   return compact.length <= 8 ? compact : `${compact.slice(0, 4)}…${compact.slice(-2)}`;
 };
 
+interface NameSources {
+  readonly agents: readonly { readonly userId: string; readonly name: string }[];
+  readonly staff: readonly StaffMember[];
+  readonly viewer: { readonly id: string; readonly name: string };
+}
+
 /**
- * The name the assignee picker's button shows. The picker's own read (M1-07's
- * `assignable`) names everybody who can work the department; somebody outside
- * it — assigned before a move, or before their scope narrowed — is named from
- * the staff read if it has them, and otherwise drawn as a shortened id, so the
- * button shows what the ticket actually says instead of reading as unassigned.
+ * The name of a staff member a ticket screen knows only by id: the assignee,
+ * or a colleague who has the ticket open. M1-07's `assignable` read names
+ * everybody who can work the department and is the one an Agent can make;
+ * somebody outside it — assigned before a move, or before their scope
+ * narrowed — is named from the staff read if it has them, and otherwise drawn
+ * as a shortened id, never as somebody else.
  */
-export const assigneeName = (
-  assigneeId: string | null,
-  sources: {
-    readonly agents: readonly { readonly userId: string; readonly name: string }[];
-    readonly staff: readonly StaffMember[];
-    readonly viewer: { readonly id: string; readonly name: string };
-  },
-): string | null => {
-  if (assigneeId === null) {
-    return null;
-  }
-  if (assigneeId === sources.viewer.id) {
+export const staffName = (id: string, sources: NameSources): string => {
+  if (id === sources.viewer.id) {
     return sources.viewer.name;
   }
 
   return (
-    sources.agents.find((agent) => agent.userId === assigneeId)?.name ??
-    sources.staff.find((member) => member.userId === assigneeId)?.name ??
-    shortId(assigneeId)
+    sources.agents.find((agent) => agent.userId === id)?.name ??
+    sources.staff.find((member) => member.userId === id)?.name ??
+    shortId(id)
   );
 };
+
+/**
+ * The name the assignee picker's button shows, so the button shows what the
+ * ticket actually says instead of reading as unassigned.
+ */
+export const assigneeName = (assigneeId: string | null, sources: NameSources): string | null =>
+  assigneeId === null ? null : staffName(assigneeId, sources);

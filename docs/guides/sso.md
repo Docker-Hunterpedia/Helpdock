@@ -1,9 +1,8 @@
 # Staff single sign-on configuration
 
-M11-01 adds the install-wide configuration foundation. Protocol sign-in is
-M11-02/M11-03 and authentication integration is M11-04: the configuration alone
-does not enable SSO sign-in or enforce SSO against existing password, magic-link,
-or Google/GitHub sign-in. Those authentication paths are unchanged in M11-01.
+M11-01 adds install-wide configuration; M11-02 adds OIDC for already-linked
+accounts. SAML is M11-03. Provisioning, role sync and enforcement are M11-04;
+the existing password, magic-link and Google/GitHub paths remain available.
 
 ## Access and connections
 
@@ -102,3 +101,34 @@ REST API's OpenAPI document does not describe these install-admin endpoints.
 Master-key rotation re-encrypts saved connection secrets and the encrypted SP
 private-key setting. The signing key itself remains the same, so rotating the
 installation master key does not require replacing IdP metadata.
+
+## OIDC protocol (M11-02)
+
+Register an authorization-code client with PKCE S256, `client_secret_post`,
+scopes `openid email profile`, and the exact Redirect URI returned by the
+connection details API. Discovery must expose a JWKS URI. The ID token must
+contain `sub`, a valid configured email claim, and boolean `email_verified:true`.
+If a group attribute is configured, its authoritative value must be a string
+or an array of strings; unresolved distributed/overage claims refuse sign-in.
+
+All provider requests use the outbound-safe client and refuse redirects. Use
+HTTPS; a deliberately internal HTTP IdP must be included in
+`OUTBOUND_ALLOW_CIDRS`. The normal outbound port allowlist still applies
+(80, 443, 8080, 8443). Changing configuration during a round trip invalidates
+that attempt. Discovery is cached for one hour per configuration revision.
+
+`GET /api/auth/sso/:id/start` starts the browser round trip. The callback URI
+remains `/api/auth/sso/:id/oidc/callback`. The browser must retain its HttpOnly
+nonce cookie. Failed callbacks return to the existing sign-in completion page
+with its translated generic error; valid callbacks preserve local TOTP and use
+a one-time session exchange code. No ID/access token appears in a redirect URL.
+
+At this milestone step only an existing `(connection, subject)` binding can
+sign in. There is no account auto-linking/provisioning or group-role sync yet;
+M11-04 adds these, and M11-05 adds the login/configuration screens. Do not
+manually edit production identity bindings to bypass that rollout. `test=1`
+is rejected until the protected M11-06 test flow exists.
+
+The fake-IdP suites need no provider credentials. For a real local Keycloak
+Docker/Chromium smoke test, follow the commands in
+[M11-02](../in-development/M11-sso-and-migration.md#m11-02-oidc-sign-in).

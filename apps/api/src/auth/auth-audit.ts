@@ -44,7 +44,7 @@ export type AuthAuditAction =
   | 'auth.recovery_codes.regenerated'
   | 'auth.recovery_code.used';
 
-export type SignInMethod = 'password' | 'magic-link' | 'oauth' | 'invite' | 'second-factor';
+export type SignInMethod = 'password' | 'magic-link' | 'oauth' | 'sso' | 'invite' | 'second-factor';
 
 export interface AuthAuditEntry {
   readonly action: AuthAuditAction;

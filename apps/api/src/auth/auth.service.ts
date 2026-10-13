@@ -11,6 +11,7 @@ import type {
 } from '@helpdock/schemas';
 import { OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS } from '@helpdock/schemas';
 import type { Logger } from '../logging/logger.js';
+import { type SsoAssertion, ssoAssertionSchema } from '../sso/oidc-contracts.js';
 import type { AuthAuditAction, AuthAuditTrail, SignInMethod } from './auth-audit.js';
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import { AuthFailure } from './auth-failure.js';
@@ -690,6 +691,27 @@ export class AuthService {
 
     return this.#afterFirstFactor(user, {
       method: 'oauth',
+      userAgent,
+      trustedDeviceCookie: undefined,
+    });
+  }
+
+  /** Only an existing subject binding can sign in before M11-04 adds JIT and group sync. */
+  async completeSso(
+    assertion: SsoAssertion,
+    userAgent: string | undefined,
+  ): Promise<SignInOutcome> {
+    const verified = ssoAssertionSchema.parse(assertion);
+    const user = await this.#parts.staff.findBySsoIdentity(verified.connectionId, verified.subject);
+    if (!user || !this.#isUsable(user)) {
+      await this.#audit('auth.sign_in.failed', user?.id ?? null, 'system', {
+        method: 'sso',
+        reason: 'no-linked-account',
+      });
+      throw new AuthFailure('no-account');
+    }
+    return this.#afterFirstFactor(user, {
+      method: 'sso',
       userAgent,
       trustedDeviceCookie: undefined,
     });

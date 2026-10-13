@@ -64,6 +64,7 @@ const brand = (id = BRAND_ID): Brand => ({
 /** Just enough of the repository to answer the service, all in memory. */
 class FakeStaffRepository {
   readonly users = new Map<string, StaffUser>();
+  readonly ssoIdentities = new Map<string, string>();
   readonly memberships = new Map<string, StaffMembership[]>();
   readonly brands: Brand[] = [brand()];
 
@@ -83,6 +84,12 @@ class FakeStaffRepository {
     ]);
 
     return user;
+  }
+
+  findBySsoIdentity(connectionId: string, subject: string): Promise<StaffUser | undefined> {
+    return Promise.resolve(
+      this.users.get(this.ssoIdentities.get(`${connectionId}:${subject}`) ?? ''),
+    );
   }
 
   findByEmail(email: string): Promise<StaffUser | undefined> {
@@ -895,6 +902,46 @@ describe('OAuth', () => {
         userAgent: 'Firefox',
       }),
     ).rejects.toMatchObject({ auth: { code: 'unavailable' } });
+  });
+});
+
+describe('SSO completion', () => {
+  const assertion = {
+    connectionId: uuidv7(),
+    subject: 'staff-1',
+    email: 'verified@example.com',
+    emailVerified: true as const,
+    groups: ['Support'],
+  };
+  it('signs in a linked subject without changing manual memberships', async () => {
+    const user = staff.add(await newUser());
+    staff.ssoIdentities.set(`${assertion.connectionId}:${assertion.subject}`, user.id);
+    const memberships = structuredClone(staff.memberships.get(user.id));
+    await expect(service.completeSso(assertion, undefined)).resolves.toMatchObject({
+      kind: 'session',
+    });
+    expect(staff.memberships.get(user.id)).toEqual(memberships);
+  });
+  it('never links an unknown subject by a matching verified email', async () => {
+    staff.add(await newUser({ email: assertion.email }));
+    await expect(service.completeSso(assertion, undefined)).rejects.toMatchObject({
+      auth: { code: 'no-account' },
+    });
+  });
+  it('preserves the local second factor for a linked account', async () => {
+    const { user } = await withTotp();
+    staff.add(user);
+    staff.ssoIdentities.set(`${assertion.connectionId}:${assertion.subject}`, user.id);
+    await expect(service.completeSso(assertion, undefined)).resolves.toMatchObject({
+      kind: 'totp-required',
+    });
+  });
+  it('rejects a linked inactive account', async () => {
+    const user = staff.add(await newUser({ status: 'deactivated' }));
+    staff.ssoIdentities.set(`${assertion.connectionId}:${assertion.subject}`, user.id);
+    await expect(service.completeSso(assertion, undefined)).rejects.toMatchObject({
+      auth: { code: 'no-account' },
+    });
   });
 });
 

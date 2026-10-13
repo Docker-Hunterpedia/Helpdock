@@ -571,11 +571,11 @@ sees one origin and the `SameSite=Lax` refresh cookie is actually sent.
 The last one needs Docker and a build; without Docker it skips itself and says
 so.
 
-## M11 SSO configuration foundation
+## M11 staff SSO
 
-Install admins can manage OIDC/SAML connections and group mappings through
-`/api/install/sso`. [Staff SSO configuration](sso.md) describes the contracts,
-encrypted secrets and environment overrides. M11-01 supplies configuration and
-request-state primitives only; protocol sign-in and authentication enforcement
-are implemented by M11-02 to M11-04. Existing sign-in behavior is unchanged by
-this foundation, including when enforcement configuration is saved.
+Install admins manage connections and mappings through `/api/install/sso`.
+[Staff SSO](sso.md) documents the configuration, encrypted secrets and OIDC
+protocol. M11-02 verifies OIDC and completes already-linked subjects through
+the existing local TOTP/session flow. JIT provisioning, role sync and sign-in
+enforcement belong to M11-04; SAML is M11-03. Saving enforcement configuration
+alone does not disable the existing password, magic-link or OAuth methods.

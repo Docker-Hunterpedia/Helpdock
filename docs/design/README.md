@@ -593,3 +593,43 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 #### `Meta/Chat-AR`
 
 ![Meta/Chat-AR](screens/m10/Meta-Chat-AR.png)
+
+### M11 SSO and migration
+
+Drawn 2026-10-13 for [M11](../in-development/M11-sso-and-migration.md#artboards-to-draw), before implementation.
+
+#### `Admin/Settings-SSO`
+
+![Admin/Settings-SSO](screens/m11/Admin-Settings-SSO.png)
+
+#### `Admin/Settings-SSO-Connection`
+
+![Admin/Settings-SSO-Connection](screens/m11/Admin-Settings-SSO-Connection.png)
+
+#### `Admin/Login-SSO`
+
+![Admin/Login-SSO](screens/m11/Admin-Login-SSO.png)
+
+#### `Admin/Login-SSO-AR`
+
+![Admin/Login-SSO-AR](screens/m11/Admin-Login-SSO-AR.png)
+
+#### `Admin/Import`
+
+![Admin/Import](screens/m11/Admin-Import.png)
+
+#### `Admin/Import-Wizard`
+
+![Admin/Import-Wizard](screens/m11/Admin-Import-Wizard.png)
+
+#### `Admin/Import-Run`
+
+![Admin/Import-Run](screens/m11/Admin-Import-Run.png)
+
+#### `Admin/Import-FileMapper`
+
+![Admin/Import-FileMapper](screens/m11/Admin-Import-FileMapper.png)
+
+#### `Admin/Ticket-Imported`
+
+![Admin/Ticket-Imported](screens/m11/Admin-Ticket-Imported.png)

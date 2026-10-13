@@ -229,7 +229,7 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 ## 5. Non-functional requirements
 
 ### 5.1 Security (non-negotiable)
-- Passwords: argon2id. Sessions: short-lived JWT (jose) + rotating refresh token in httpOnly/SameSite cookie, refresh state in Redis (revocable). TOTP 2FA (otplib) for all staff, enforceable per install. OAuth: Google, GitHub. Magic link.
+- Passwords: argon2id. Sessions: short-lived JWT (jose) + rotating refresh token in httpOnly/SameSite cookie, refresh state in Redis (revocable). TOTP 2FA (otplib) for all staff, enforceable per install. OAuth: Google, GitHub. Magic link. SSO for staff over SAML 2.0 and OpenID Connect with just-in-time provisioning and group-to-role sync, enforceable per install with break-glass admins (M11).
 - **Postgres Row-Level Security** on every tenant table, set per request (`SET LOCAL app.brand_ids`). No query runs outside a tenant context except admin/system paths.
 - Secrets (SMTP, bot tokens, LLM keys, OAuth tokens) encrypted at rest with AES-256-GCM under a master key from `.env`; never returned to the UI after save.
 - Widget: allowed-origin check, signed visitor identity (optional), per-visitor and per-IP rate limits, CAPTCHA option, no inline scripts, strict CSP on the served bundle.
@@ -272,11 +272,11 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 - Slack, Discord, Viber, LINE
 - Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, Business Suite echo import, webhook backfill, auto-reply and surveys on these channels
 - Customer portal (magic-link login, ticket history, restricted KB)
-- Custom roles / permission sets; SAML/OIDC SSO
+- Custom roles / permission sets; SCIM provisioning and single logout (SAML/OIDC SSO moved into 1.0 as M11)
 - React Native + Flutter widget SDKs
 - More UI locales; per-department language routing
 - AI actions via MCP tools (order lookup, refunds) with approval flow
-- Importers: Zoho Desk, Zendesk, Freshdesk (CSV/API)
+- Importers beyond M11's connectors, and importing macros, automations and SLA policies (Zendesk, Freshdesk and Zoho Desk connectors and a CSV mapper moved into 1.0 as M11)
 - Scheduled reports, custom dashboards
 - Article versioning + review workflow
 - Knowledge: Confluence, GitHub docs, generic MCP servers

@@ -64,7 +64,7 @@ export const importRuns = pgTable(
       columns: [table.brandId, table.parentRunId],
       foreignColumns: [table.brandId, table.id],
       name: 'import_runs_parent_brand_fk',
-    }).onDelete('restrict'),
+    }).onDelete('cascade'),
     check(
       'import_runs_parent_shape',
       sql`(${table.mode} = 'full' AND ${table.parentRunId} IS NULL) OR (${table.mode} = 'delta' AND ${table.parentRunId} IS NOT NULL AND ${table.parentRunId} <> ${table.id})`,

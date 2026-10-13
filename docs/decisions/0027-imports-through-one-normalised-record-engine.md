@@ -105,3 +105,8 @@ Validation is streaming; failed extraction never advances to domain loading.
 Dependency versions were checked against npm on 2026-10-13: `csv-parse` 7.0.3,
 `yauzl` 3.4.0 and its matching `@types/yauzl` 3.4.0. ZIP reading uses the documented
 3.4 promise/async-iterator API, avoiding a custom archive parser.
+
+Delta parent deletion cascades to its dependent runs. Import runs remain permanent
+under normal retention and have no user deletion route; this cascade makes the
+existing batched brand purge work regardless of parent/delta deletion order. A
+real-Postgres regression reproduced the restrictive-key failure before the fix.

@@ -173,6 +173,13 @@ describe.skipIf(!hasDocker)('migrations', () => {
       const [completed] =
         await owner`SELECT status, credentials_encrypted FROM import_runs WHERE id = ${run?.id}`;
       expect(completed).toEqual({ status: 'completed', credentials_encrypted: null });
+      await owner`INSERT INTO import_runs (id, brand_id, source, mode, parent_run_id, started_by)
+        VALUES (gen_random_uuid(), ${tenants[0]?.id}, 'file', 'delta', ${run?.id}, ${person?.id})`;
+      // Brand purge deletes in batches; a parent's dependent deltas must not block its batch.
+      await owner`DELETE FROM import_runs WHERE id = ${run?.id}`;
+      expect(
+        await owner`SELECT id FROM import_runs WHERE brand_id = ${tenants[0]?.id}`,
+      ).toHaveLength(0);
       const origins =
         await owner`SELECT enumlabel FROM pg_enum JOIN pg_type ON enumtypid = pg_type.oid WHERE typname = 'csat_answer_channel'`;
       expect(origins.map((entry) => entry.enumlabel)).toContain('import');

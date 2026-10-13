@@ -108,7 +108,7 @@ ALTER TABLE "import_records" ADD CONSTRAINT "import_records_brand_id_brands_id_f
 ALTER TABLE "import_records" ADD CONSTRAINT "import_records_brand_id_run_id_import_runs_brand_id_id_fk" FOREIGN KEY ("brand_id","run_id") REFERENCES "public"."import_runs"("brand_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "import_runs" ADD CONSTRAINT "import_runs_brand_id_brands_id_fk" FOREIGN KEY ("brand_id") REFERENCES "public"."brands"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "import_runs" ADD CONSTRAINT "import_runs_started_by_users_id_fk" FOREIGN KEY ("started_by") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "import_runs" ADD CONSTRAINT "import_runs_parent_brand_fk" FOREIGN KEY ("brand_id","parent_run_id") REFERENCES "public"."import_runs"("brand_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "import_runs" ADD CONSTRAINT "import_runs_parent_brand_fk" FOREIGN KEY ("brand_id","parent_run_id") REFERENCES "public"."import_runs"("brand_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "import_external_ids_helpdock_idx" ON "import_external_ids" USING btree ("brand_id","entity","helpdock_id");--> statement-breakpoint
 CREATE INDEX "import_external_ids_number_idx" ON "import_external_ids" USING btree ("brand_id","source_number");--> statement-breakpoint
 CREATE UNIQUE INDEX "import_file_presets_name_key" ON "import_file_presets" USING btree ("brand_id",lower("name"));--> statement-breakpoint

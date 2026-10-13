@@ -765,6 +765,8 @@ Existing system uploads are backfilled to `channel`. The six tables are in the
 RLS registry and negative-suite fixtures. See ADR 0027 amendments. Migration and
 isolation checks passed: 61 focused cases on real PostgreSQL plus fresh migration
 and terminal-credential/composite-key constraints. Registry/policy unit tests pass.
+A parent/delta purge regression also passes: the parent key cascades so the
+existing batched brand purge cannot be blocked by its dependent delta rows.
 The full negative suite, queue integration and PR CI remain pending.
 
 ### M11-08 implementation notes (in progress)

@@ -12,6 +12,7 @@ import {
   startFakeGraph,
 } from './fake-graph.js';
 import { fakeOidcIdp } from './fake-oidc.js';
+import { fakeSamlIdp } from './fake-saml.js';
 import { E2E_TELEGRAM_ROOT, startFakeTelegram } from './fake-telegram.js';
 
 /**
@@ -70,6 +71,7 @@ export const ACCOUNT_PASSWORD_ENV = 'HD_E2E_PASSWORD';
 export const INVITE_TOKEN_ENV = 'HD_E2E_INVITE_TOKEN';
 export const INVITEE_EMAIL = 'invitee@helpdock.test';
 /** Set when Docker is missing, so the specs skip with a reason instead of failing. */
+export const SAML_CONNECTION_ENV = 'HD_E2E_SAML_CONNECTION';
 export const SSO_CONNECTION_ENV = 'HD_E2E_SSO_CONNECTION_ID';
 export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
 /**
@@ -152,18 +154,20 @@ export const startInstall = async (): Promise<RunningInstall> => {
     );
   }
 
-  const [postgres, redis, telegram, graph, oidc] = (await Promise.all([
+  const [postgres, redis, telegram, graph, oidc, saml] = (await Promise.all([
     new PostgreSqlContainer(POSTGRES_IMAGE).start(),
     new RedisContainer(REDIS_IMAGE).start(),
     startFakeTelegram(),
     startFakeGraph(),
     fakeOidcIdp(),
+    fakeSamlIdp(),
   ])) as [
     StartedPostgreSqlContainer,
     StartedRedisContainer,
     Awaited<ReturnType<typeof startFakeTelegram>>,
     Awaited<ReturnType<typeof startFakeGraph>>,
     Awaited<ReturnType<typeof fakeOidcIdp>>,
+    Awaited<ReturnType<typeof fakeSamlIdp>>,
   ];
 
   const host = postgres.getHost();
@@ -256,6 +260,10 @@ export const startInstall = async (): Promise<RunningInstall> => {
     await run(path.join(apiRoot, 'dist/seed/seed-oidc.js'), env, [seeded.userId]),
   ) as { connectionId: string };
   process.env[SSO_CONNECTION_ENV] = oidcSeed.connectionId;
+  const samlSeed = JSON.parse(
+    await run(path.join(apiRoot, 'dist/seed/seed-saml.js'), env, [seeded.userId, saml.certificate]),
+  ) as { connectionId: string };
+  process.env[SAML_CONNECTION_ENV] = samlSeed.connectionId;
 
   // A worker beside the seeded api, as in production: the outbox relay and
   // the event handlers are what carry an agent's reply to the widget's socket
@@ -291,11 +299,22 @@ export const startInstall = async (): Promise<RunningInstall> => {
           }),
       ),
     );
-    await Promise.all([postgres.stop(), redis.stop(), telegram.stop(), graph.stop(), oidc.close()]);
+    await Promise.all([
+      postgres.stop(),
+      redis.stop(),
+      telegram.stop(),
+      graph.stop(),
+      oidc.close(),
+      saml.close(),
+    ]);
   };
 
   try {
     await Promise.all([waitForHealth(E2E_API_ORIGIN), waitForHealth(E2E_SETUP_ORIGIN)]);
+    const metadata = await (await fetch(`${E2E_API_ORIGIN}/api/auth/sso/saml/metadata`)).text();
+    const certificate = /<ds:X509Certificate>([^<]+)<\/ds:X509Certificate>/.exec(metadata)?.[1];
+    if (!certificate) throw new Error('SP metadata is missing its certificate');
+    saml.controls.spCertificate = `-----BEGIN CERTIFICATE-----\n${certificate.match(/.{1,64}/g)?.join('\n')}\n-----END CERTIFICATE-----\n`;
   } catch (error) {
     await stopEverything('SIGKILL');
     throw error;

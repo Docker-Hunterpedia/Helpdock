@@ -78,16 +78,20 @@ export async function validateOidcEndpoints(
     metadata.userinfo_endpoint,
   ]) {
     if (!raw) continue;
-    const endpoint = new URL(raw);
-    if (
-      !['https:', 'http:'].includes(endpoint.protocol) ||
-      endpoint.username ||
-      endpoint.password ||
-      endpoint.hash
-    )
-      throw new OidcFailure('sso-endpoint-invalid');
-    const host = await resolvePublicHost(endpoint.hostname, { allowCidrs });
-    if (endpoint.protocol === 'http:' && !addressInCidrs(host.address, allowCidrs))
-      throw new OidcFailure('sso-https-required');
+    await validateSsoEndpoint(raw, allowCidrs);
   }
+}
+
+export async function validateSsoEndpoint(raw: string, allowCidrs: readonly string[]) {
+  const endpoint = new URL(raw);
+  if (
+    !['https:', 'http:'].includes(endpoint.protocol) ||
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.hash
+  )
+    throw new OidcFailure('sso-endpoint-invalid');
+  const host = await resolvePublicHost(endpoint.hostname, { allowCidrs });
+  if (endpoint.protocol === 'http:' && !addressInCidrs(host.address, allowCidrs))
+    throw new OidcFailure('sso-https-required');
 }

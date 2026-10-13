@@ -185,6 +185,11 @@ Start from \`.env.example\`: \`cp .env.example docker/.env\`. An empty value
 counts as unset. The [install guide](install.md#install) says which keys a
 first install must fill in.`;
 
+const SSO_PROTOCOLS = `SAML connections may set \`idpMetadataUrl\`. M11-03 validates it on save and
+refreshes enabled providers daily at 04:45 UTC through the maintenance worker;
+no additional environment key is required. Complete certificate replacements
+require explicit admin confirmation. See [SAML rotation](sso.md#saml-protocol-m11-03).`;
+
 const TRACING = `## Tracing
 
 Tracing uses the standard OpenTelemetry variables rather than Helpdock ones
@@ -227,6 +232,7 @@ export const renderConfigurationReference = (envExample: string, composeFile: st
     '## Settings you can pin with `HD_*`',
     "Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `brand` means a brand can override the install's value in admin. A **secret** is encrypted under `APP_MASTER_KEY` when stored, never logged and never sent to a browser; pinned in `.env`, it is not stored at all. JSON-valued settings (`HD_AI_PROVIDERS`) take JSON.",
     renderSettings(),
+    SSO_PROTOCOLS,
     TRACING,
     DEVELOPMENT,
   ].join('\n\n')}\n`;

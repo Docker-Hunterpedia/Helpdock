@@ -2,20 +2,22 @@ import type { Env } from '@helpdock/config';
 import { Controller, Get, Inject, Param, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from 'nestjs-zod';
-import { AuthService } from '../auth/auth.service.js';
-import { isAuthFailure } from '../auth/auth-failure.js';
 import { Public } from '../auth/route-declaration.js';
-import { encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { ENV } from '../runtime/tokens.js';
 import { OidcCallbackQueryDto, OidcStartQueryDto, SsoParamDto } from './dto.js';
 import { OidcService } from './oidc.service.js';
 import { oidcNonceCookie } from './oidc-contracts.js';
+import { SamlService } from './saml.service.js';
+import { SsoService } from './sso.service.js';
+import { SsoSessionCompletion } from './sso-session-completion.js';
 
 @Controller('api/auth/sso')
 export class SsoOidcController {
   constructor(
     @Inject(OidcService) private readonly oidc: OidcService,
-    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(SamlService) private readonly saml: SamlService,
+    @Inject(SsoService) private readonly sso: SsoService,
+    @Inject(SsoSessionCompletion) private readonly completion: SsoSessionCompletion,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -28,7 +30,11 @@ export class SsoOidcController {
     @Res() reply: FastifyReply,
   ): Promise<void> {
     try {
-      const result = await this.oidc.start({
+      const starts = {
+        oidc: this.oidc.start.bind(this.oidc),
+        saml: this.saml.start.bind(this.saml),
+      };
+      const result = await starts[await this.sso.signInProtocol(id)]({
         connectionId: id,
         returnTo: query.returnTo,
         ip: request.ip,
@@ -38,7 +44,7 @@ export class SsoOidcController {
       reply.header('cache-control', 'no-store');
       await reply.redirect(result.url, 302);
     } catch {
-      await this.redirect(reply, { error: 'unavailable' });
+      await this.completion.refuse(reply, null);
     }
   }
 
@@ -59,37 +65,9 @@ export class SsoOidcController {
         browserNonce: request.cookies[cookie.name],
         ip: request.ip,
       });
-      const outcome = await this.auth.completeSso(result.assertion, request.headers['user-agent']);
-      if (outcome.kind === 'totp-required') {
-        await this.redirect(reply, {
-          challenge: outcome.challengeId,
-          email: outcome.email,
-          returnTo: result.returnTo,
-        });
-      } else if (outcome.kind === 'totp-enrolment-required') {
-        await this.redirect(reply, { enrol: outcome.challengeId, returnTo: result.returnTo });
-      } else {
-        const refresh = refreshCookieOf(this.env);
-        reply.setCookie(
-          refresh.name,
-          encodeRefreshCookie(outcome.issued.refreshCookieValue),
-          refresh.attributes,
-        );
-        await this.redirect(reply, {
-          code: await this.auth.issueExchangeCode(outcome.issued),
-          returnTo: result.returnTo,
-        });
-      }
+      await this.completion.signIn(reply, result, request.headers['user-agent']);
     } catch (error) {
-      await this.redirect(reply, { error: isAuthFailure(error) ? error.auth.code : 'unavailable' });
+      await this.completion.refuse(reply, error);
     }
-  }
-
-  private async redirect(reply: FastifyReply, params: Record<string, string>) {
-    const url = new URL('/sign-in/complete', this.env.APP_URL);
-    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-    reply.header('cache-control', 'no-store');
-    reply.header('referrer-policy', 'no-referrer');
-    await reply.redirect(url.toString(), 302);
   }
 }

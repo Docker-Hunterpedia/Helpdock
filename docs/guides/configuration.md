@@ -476,6 +476,11 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_META_INSTAGRAM_APP_SECRET` | `meta.instagramAppSecret` | install | yes | — | Instagram app secret, from the Instagram product of the Meta app. Empty when Instagram webhooks are signed with the app secret; a webhook is accepted when either matches. |
 | `HD_META_WEBHOOK_VERIFY_TOKEN` | `meta.webhookVerifyToken` | install | yes | — | The token Meta sends with its callback-URL handshake. Generated on first read when empty; paste the same value into the Meta dashboard. |
 
+SAML connections may set `idpMetadataUrl`. M11-03 validates it on save and
+refreshes enabled providers daily at 04:45 UTC through the maintenance worker;
+no additional environment key is required. Complete certificate replacements
+require explicit admin confirmation. See [SAML rotation](sso.md#saml-protocol-m11-03).
+
 ## Tracing
 
 Tracing uses the standard OpenTelemetry variables rather than Helpdock ones

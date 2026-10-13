@@ -574,8 +574,8 @@ so.
 ## M11 staff SSO
 
 Install admins manage connections and mappings through `/api/install/sso`.
-[Staff SSO](sso.md) documents the configuration, encrypted secrets and OIDC
-protocol. M11-02 verifies OIDC and completes already-linked subjects through
+[Staff SSO](sso.md) documents the configuration, encrypted secrets and OIDC/SAML
+protocols. M11-02/M11-03 verify OIDC/SAML and complete already-linked subjects through
 the existing local TOTP/session flow. JIT provisioning, role sync and sign-in
-enforcement belong to M11-04; SAML is M11-03. Saving enforcement configuration
+enforcement belong to M11-04. Saving enforcement configuration
 alone does not disable the existing password, magic-link or OAuth methods.

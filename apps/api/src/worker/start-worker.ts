@@ -52,7 +52,9 @@ import {
   rulesEvaluateJobId,
   rulesTimeBasedJob,
   rulesTimeBasedScheduleJob,
+  SAML_METADATA_REFRESH_CRON,
   STATS_ROLLUP_CRON,
+  samlMetadataRefreshJob,
   slaRebuildJob,
   startOutboxRelay,
   statsRollupJob,
@@ -176,6 +178,7 @@ import {
   registerSlaEventHandlers,
   type SlaWorkerDeps,
 } from '../sla/sla-worker.js';
+import { createSamlMetadataProcessor } from '../sso/saml-metadata.job.js';
 import { telegramApiFactory } from '../telegram/bot-api-factory.js';
 import { createTelegramInboundService } from '../telegram/factory.js';
 import { TelegramRepository } from '../telegram/telegram.repository.js';
@@ -951,6 +954,7 @@ export const workerDependencies: WorkerDependencies = {
       { job: statsRollupScheduleJob, cron: STATS_ROLLUP_CRON },
       { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
       { job: metaHealthScheduleJob, cron: META_HEALTH_SCHEDULE_CRON },
+      { job: samlMetadataRefreshJob, cron: SAML_METADATA_REFRESH_CRON },
     ]) {
       maintenance
         .upsertJobScheduler(
@@ -1029,11 +1033,16 @@ export const workerDependencies: WorkerDependencies = {
       appId: () => settings.get('meta.appId'),
     });
 
+    const samlMetadata = createSamlMetadataProcessor({
+      db,
+      allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+      log,
+    });
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
       async (job) => {
         // Retention fails a job it does not know, so it stays last.
-        await (stats(job) ?? purge(job) ?? metaHealth(job) ?? retention(job));
+        await (stats(job) ?? purge(job) ?? metaHealth(job) ?? samlMetadata(job) ?? retention(job));
       },
       // One brand at a time: retention is background housekeeping, and two
       // brands purging at once would only compete for the same disk.

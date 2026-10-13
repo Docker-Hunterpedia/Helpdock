@@ -1478,8 +1478,18 @@ export const metaHealthScheduleJob = defineJob({
   schedule: { cron: META_HEALTH_SCHEDULE_CRON },
 });
 
+export const SAML_METADATA_REFRESH_CRON = '45 4 * * *';
+export const samlMetadataRefreshJob = defineJob({
+  name: 'sso.metadata_refresh',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}).strict(),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60000 }, removeOnFail: 100 },
+  schedule: { cron: SAML_METADATA_REFRESH_CRON },
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
+  [samlMetadataRefreshJob.name]: samlMetadataRefreshJob,
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,
   [maintenanceRetentionJob.name]: maintenanceRetentionJob,

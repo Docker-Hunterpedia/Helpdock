@@ -8,7 +8,7 @@ export const SSO_REQUEST_TTL_SECONDS = 600;
 export class SsoRequestStore<T> {
   constructor(
     private readonly redis: Redis,
-    private readonly namespace: 'oidc' | 'saml' | 'test',
+    private readonly namespace: 'oidc' | 'saml' | 'saml-pending' | 'test',
     private readonly schema: z.ZodType<T>,
   ) {}
 

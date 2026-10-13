@@ -110,7 +110,7 @@ Effort assumes one full-time maintainer working with AI coding agents, including
 | M6 | A Telegram bot token for the staging bot | @Docker-Hunterpedia | needed |
 | M7 | LLM and embeddings API keys for the nightly evaluation run (stored as CI secrets: `AI_EVAL_API_KEY` and the keys named in `.github/workflows/ai-eval.yml`) | @Docker-Hunterpedia | needed |
 | M7-03 | Notion integration and Google Cloud OAuth app for the connectors | @Docker-Hunterpedia | needed |
-| M9-01 | External pentest vendor, budget and a 2-week slot booked at least 6 weeks ahead | @Docker-Hunterpedia | not started |
+| M9-01 | External pentest vendor, budget and a 2-week slot booked at least 6 weeks ahead ([statement of work](pentest-scope.md)) | @Docker-Hunterpedia | not started |
 | M9-07 | Three outside testers for the usability pass, and a clean VM for the onboarding run and the restore drill for the record (`docs/completed/onboarding-test.md`, `docs/completed/restore-drill.md`) | @Docker-Hunterpedia | not started |
 | M9-08 | GHCR publish permissions on the org (done: `v0.4.0` is published). No signing key is needed: Cosign signs keylessly through GitHub OIDC, and `v0.4.0` was signed that way on 2026-10-09 (#158, closed) | @Docker-Hunterpedia | done |
 | M10 | A Meta developer account and a Business-type app with the WhatsApp, Messenger and Instagram products in Live mode, with its app secret and Instagram app secret | @Docker-Hunterpedia | needed |

@@ -16,6 +16,7 @@ import {
   recoveryCodesSchema,
   sessionSchema,
   signInResponseSchema,
+  ssoDiscoveryResponseSchema,
   totpEnrolmentSchema,
 } from '@helpdock/schemas';
 import { type AuthApi, AuthError } from './api.js';
@@ -37,6 +38,16 @@ export class HttpAuthApi implements AuthApi {
 
   async authMethods(): Promise<AuthMethods> {
     return authMethodsSchema.parse(await this.#transport.request('GET', '/auth/methods'));
+  }
+
+  async discoverSso(email: string) {
+    return ssoDiscoveryResponseSchema.parse(
+      await this.#transport.request('POST', '/auth/sso/discover', { email: email.trim() }),
+    );
+  }
+
+  ssoStartUrl(connectionId: string, returnTo: string): string {
+    return `${this.#transport.baseUrl}/auth/sso/${encodeURIComponent(connectionId)}/start?${new URLSearchParams({ returnTo })}`;
   }
 
   async signInWithPassword(email: string, password: string): Promise<SignInResult> {

@@ -144,6 +144,7 @@ describe.skipIf(!hasDocker)('M11-03 SAML through Postgres, Redis and a signed lo
     expect(await complete(accepted.token, attempt.started.browserNonce)).toEqual({
       assertion: {
         connectionId: CONNECTION,
+        connectionRevision: expect.any(String),
         subject: 'staff-1',
         email: 'ada@example.com',
         emailVerified: true,

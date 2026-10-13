@@ -192,6 +192,8 @@ export const OAUTH_PROVIDERS: readonly OauthProvider[] = oauthProviders;
  * the answer is the same for everybody and is needed before anyone signs in.
  */
 export const authMethodsSchema = z.object({
+  sso: z.array(z.object({ id: z.uuid(), name: z.string().min(1).max(80) })).default([]),
+  ssoEnforced: z.boolean().default(false),
   password: z.boolean(),
   magicLink: z.boolean(),
   oauth: z.record(oauthProviderSchema, z.boolean()),
@@ -262,6 +264,11 @@ export type EnrolmentCompleteResponse = z.infer<typeof enrolmentCompleteResponse
  * (packages/i18n README).
  */
 const authErrorCodes = [
+  'sso-email-unverified',
+  'sso-no-access',
+  'sso-connection-disabled',
+  'sso-required',
+  'sso-invalid-response',
   'invalid-credentials',
   'totp-mismatch',
   'totp-locked',

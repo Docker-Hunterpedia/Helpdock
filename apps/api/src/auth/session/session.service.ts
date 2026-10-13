@@ -4,6 +4,7 @@ import type { AuthSessionResponse, Session } from '@helpdock/schemas';
 import type { Redis } from 'ioredis';
 import type { Logger } from '../../logging/logger.js';
 import type { AuthAuditTrail } from '../auth-audit.js';
+import { AuthFailure } from '../auth-failure.js';
 import {
   brandPreferenceKey,
   PRINCIPAL_REVOKED_CHANNEL,
@@ -11,7 +12,7 @@ import {
 } from '../redis-keys.js';
 import { buildSession, toClaimBrands } from '../session-view.js';
 import type { Queryable, StaffMembership, StaffRepository } from '../staff.repository.js';
-import { ACCESS_TOKEN_TTL_SECONDS, issueAccessToken } from './access-token.js';
+import { issueAccessToken } from './access-token.js';
 import type { RefreshFamily, RefreshStore } from './refresh-store.js';
 import type { SigningKeys } from './signing-keys.js';
 
@@ -81,25 +82,33 @@ export class SessionService {
   async open({
     userId,
     userAgent,
+    maxAgeSeconds,
   }: {
     readonly userId: string;
     readonly userAgent: string | undefined;
+    readonly maxAgeSeconds?: number;
   }): Promise<IssuedSession | null> {
-    const view = await this.#view(userId);
-    if (view === null) {
-      return null;
-    }
+    return this.#staff.withSessionAuthority(userId, async (tx) => {
+      const view = await this.#view(userId, tx);
+      if (view === null) {
+        return null;
+      }
 
-    const { familyId, token } = await this.#refresh.createFamily({ userId, userAgent });
-    const accessToken = await this.#mint({ userId, familyId, view });
+      const { familyId, token } = await this.#refresh.createFamily({
+        userId,
+        userAgent,
+        ...(maxAgeSeconds === undefined ? {} : { maxAgeSeconds }),
+      });
+      const accessToken = await this.#mint({ userId, familyId, view });
 
-    this.#logger.info({ userId, familyId }, 'Opened a staff session');
+      this.#logger.info({ userId, familyId }, 'Opened a staff session');
 
-    return {
-      ...accessToken,
-      session: view.session,
-      refreshCookieValue: { fam: familyId, token },
-    };
+      return {
+        ...accessToken,
+        session: view.session,
+        refreshCookieValue: { fam: familyId, token },
+      };
+    });
   }
 
   /** Mints a fresh access token on an existing family. Used by the code exchange. */
@@ -110,13 +119,15 @@ export class SessionService {
     readonly userId: string;
     readonly familyId: string;
   }): Promise<AuthSessionResponse | null> {
-    const view = await this.#view(userId);
-    if (view === null) {
-      return null;
-    }
+    return this.#staff.withSessionAuthority(userId, async (tx) => {
+      const view = await this.#view(userId, tx);
+      if (view === null) {
+        return null;
+      }
 
-    const accessToken = await this.#mint({ userId, familyId, view });
-    return { ...accessToken, session: view.session };
+      const accessToken = await this.#mint({ userId, familyId, view });
+      return { ...accessToken, session: view.session };
+    });
   }
 
   /**
@@ -163,23 +174,25 @@ export class SessionService {
       return { status: 'reused' };
     }
 
-    const view = await this.#view(outcome.userId);
-    if (view === null) {
-      // The account lost its last brand role while it held a session.
-      await this.revokeFamily(familyId, 'no-brand-role');
-      return { status: 'rejected' };
-    }
+    return this.#staff.withSessionAuthority(outcome.userId, async (tx) => {
+      const view = await this.#view(outcome.userId, tx);
+      if (view === null) {
+        // The account lost its last brand role while it held a session.
+        await this.revokeFamily(familyId, 'no-brand-role');
+        return { status: 'rejected' };
+      }
 
-    const accessToken = await this.#mint({ userId: outcome.userId, familyId, view });
+      const accessToken = await this.#mint({ userId: outcome.userId, familyId, view });
 
-    return {
-      status: 'rotated',
-      issued: {
-        ...accessToken,
-        session: view.session,
-        refreshCookieValue: { fam: familyId, token: outcome.token },
-      },
-    };
+      return {
+        status: 'rotated',
+        issued: {
+          ...accessToken,
+          session: view.session,
+          refreshCookieValue: { fam: familyId, token: outcome.token },
+        },
+      };
+    });
   }
 
   /** The newest activity per account, for the staff table's "Last active" (M0-06). */
@@ -269,6 +282,8 @@ export class SessionService {
     familyId: string;
     view: SessionView;
   }): Promise<{ accessToken: string; expiresInSeconds: number }> {
+    const expiresInSeconds = await this.#refresh.accessTokenLifetime(familyId);
+    if (expiresInSeconds <= 0) throw new AuthFailure('challenge-expired');
     const sessionId = uuidv7();
     const accessToken = await issueAccessToken(
       {
@@ -277,15 +292,17 @@ export class SessionService {
         familyId,
         brands: view.claimBrands,
         installAdmin: view.installAdmin,
+        expiresInSeconds,
       },
       this.#keys,
     );
 
     // Recorded before the token is handed out, so a revocation that lands a
     // millisecond later still reaches it.
-    await this.#refresh.registerSession(familyId, sessionId);
+    if (!(await this.#refresh.registerSession(familyId, sessionId)))
+      throw new AuthFailure('challenge-expired');
 
-    return { accessToken, expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS };
+    return { accessToken, expiresInSeconds };
   }
 
   async #view(userId: string, tx?: Queryable): Promise<SessionView | null> {

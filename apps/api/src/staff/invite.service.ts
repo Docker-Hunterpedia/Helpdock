@@ -92,6 +92,8 @@ export class InviteService {
   ): Promise<SignInOutcome> {
     await this.#assertAllowed(ip);
 
+    const preview = this.#asInvite(await this.#parts.tokens.read(token, 'invite'));
+    await this.#parts.auth.assertLocalSignInAllowed(preview.email, 'invite');
     // Hashed before the token is spent, so an argon2 failure costs nothing and
     // the person can try again with the link they still hold.
     const passwordHash = await this.#parts.auth.hashPassword(request.password);

@@ -22,6 +22,8 @@ import type {
 export interface AuthApi {
   /** Which ways in this install offers, so a disabled provider's button is not drawn. */
   authMethods(): Promise<AuthMethods>;
+  discoverSso(email: string): Promise<{ connections: { id: string; name: string }[] }>;
+  ssoStartUrl(connectionId: string, returnTo: string): string;
   signInWithPassword(email: string, password: string): Promise<SignInResult>;
   requestMagicLink(email: string): Promise<void>;
   verifyTotp(

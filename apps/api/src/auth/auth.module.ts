@@ -5,6 +5,8 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import type { Logger } from '../logging/logger.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
+import { SsoIdentityService } from '../sso/identity.service.js';
+import { SsoSignInPolicy } from '../sso/sign-in-policy.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { DbAuthAuditTrail } from './auth-audit.js';
@@ -47,6 +49,8 @@ export interface AuthModuleOptions {
 export interface AuthRuntime {
   readonly sessions: SessionService;
   readonly auth: AuthService;
+  readonly sso: SsoIdentityService;
+  readonly ssoPolicy: SsoSignInPolicy;
   /**
    * Exported because the first-run wizard hashes the install admin's password
    * (M0-08). One instance per process holds the pepper, so a second hasher
@@ -99,7 +103,11 @@ export const createAuthRuntime = ({
     audit,
   });
 
+  const sso = new SsoIdentityService({ db, sessions, redis, settings });
+  const ssoPolicy = new SsoSignInPolicy({ db, settings, keyring });
   const auth = new AuthService({
+    sso,
+    ssoPolicy,
     staff,
     sessions,
     hasher,
@@ -118,7 +126,7 @@ export const createAuthRuntime = ({
     appUrl: env.APP_URL,
   });
 
-  return { sessions, auth, hasher };
+  return { sessions, auth, hasher, sso, ssoPolicy };
 };
 
 /** The whole graph, built once per process and shared by both providers below. */
@@ -141,6 +149,16 @@ export class AuthModule {
       global: true,
       controllers: [AuthController],
       providers: [
+        {
+          provide: SsoIdentityService,
+          inject: [AUTH_RUNTIME],
+          useFactory: (runtime: AuthRuntime) => runtime.sso,
+        },
+        {
+          provide: SsoSignInPolicy,
+          inject: [AUTH_RUNTIME],
+          useFactory: (runtime: AuthRuntime) => runtime.ssoPolicy,
+        },
         {
           provide: AUTH_RUNTIME,
           inject: [ENV, DB, REDIS, SETTINGS],
@@ -170,7 +188,7 @@ export class AuthModule {
           useFactory: (runtime: AuthRuntime): PasswordHasher => runtime.hasher,
         },
       ],
-      exports: [AuthService, SessionService, PasswordHasher],
+      exports: [AuthService, SessionService, PasswordHasher, SsoIdentityService, SsoSignInPolicy],
     };
   }
 }

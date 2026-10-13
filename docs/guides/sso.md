@@ -1,84 +1,212 @@
-# Staff single sign-on configuration
+# Staff single sign-on
 
-M11-01 adds install-wide configuration; M11-02 adds OIDC for already-linked
-accounts; M11-03 adds SAML for the same existing bindings. Provisioning, role sync and enforcement are M11-04;
-the existing password, magic-link and Google/GitHub paths remain available.
+Install admins configure identity providers under **Settings → Single sign-on**.
+SSO is for staff; widget and help-center customer authentication stays separate.
+OIDC uses authorization code, PKCE S256, a confidential client secret, and signed
+ID tokens. SAML requires signed assertions and stable NameIDs. Both protocols
+use browser-bound requests; open Helpdock's sign-in button to begin.
 
-## Access and connections
+## Configure a connection
 
-The endpoints below require an authenticated install administrator. Brand
-administrators, including a person administering every brand, cannot manage
-the installation's identity providers without install-admin status.
+Set `APP_URL` to the canonical HTTPS origin before copying callback URLs. Add a
+connection, choose its protocol and button label, and save the provider fields.
+The protocol cannot change afterwards. Once identities are linked, issuer/client
+ID (OIDC) or entity ID/NameID format (SAML) cannot change; create a different
+connection when changing identity authority.
 
-| Method | Endpoint | Purpose |
+| Value | Where to copy it |
+|---|---|
+| OIDC redirect URI | The saved connection's service provider details |
+| SAML reply URL / ACS | The saved connection's service provider details |
+| SAML entity ID and metadata URL | Service provider details; shared across the install |
+| SAML signing/encryption certificates | The public SP metadata XML |
+
+The first save gives a new connection its callback URL. Enable it after the IdP
+has registered that exact URL. A SAML metadata URL is optional: supply entity ID,
+SSO URL and trusted PEM certificates explicitly. Metadata refresh must overlap a
+trusted certificate; it cannot silently replace the identity authority.
+
+Add exact email domains, without wildcards. New links require an email in an
+allowed domain. OIDC additionally requires signed `email_verified: true`; SAML
+trusts the configured IdP's signed email attribute. Only use domains the IdP
+administrator controls, with verified or centrally managed email attributes.
+A provider that lets people choose an unverified coworker's email is unsafe for
+email-based linking, even if its tokens are signed.
+
+Existing `(connection, subject)` links remain authoritative when an email changes.
+Otherwise a matching email links the existing active or invited account. With
+**Create accounts on first sign-in**, an unknown email gets a passwordless active
+account only if mappings/default access grant an active brand. SSO never grants
+install-admin access. Completing the required factors accepts invitations,
+records acceptance and invalidates their pending links.
+
+## Roles, MFA and enforcement
+
+Group values match exactly. The first matching mapping **for each brand** wins;
+reorder rows to set precedence. A default applies to its brand only when no row
+matches that brand. Agents need an explicit department list. A mapping naming a
+removed department refuses sign-in rather than widening access. Disabled Viewer
+access never provisions a new account whose only role would be Viewer.
+
+Each successful assertion adds/updates/removes only roles owned by that SSO
+connection. Manual grants survive. A matching role owned by another connection
+refuses sign-in. Role removal or replacement revokes existing sessions before the
+change commits. Staff shows an SSO badge for linked identities and names the
+provider managing a membership. An explicit administrative role edit through the
+staff API converts the grant to manual ownership.
+
+**The provider enforces multi-factor sign-in** is an administrator's policy
+assertion: enable it only if every assigned staff sign-in requires IdP MFA.
+Helpdock then skips local TOTP. Otherwise enrolled TOTP and mandatory enrolment
+apply as for local authentication. Pending SSO challenges stop working if their
+connection is disabled. SSO refresh families expire within 12 hours even if
+`AUTH_SESSION_MAX_HOURS` is longer; access tokens cannot outlive that ceiling.
+
+Enforcement requires an enabled connection and one to three active install
+admins with passwords and enabled TOTP for emergency access. Existing sessions remain open. At the
+next sign-in, password, magic links, Google/GitHub OAuth and password invitation
+acceptance are blocked. The explicit break-glass form permits only configured
+admins using **password and fresh TOTP**; recovery codes and trusted browsers
+cannot bypass this requirement. Discovery matches domains, never account existence.
+Settings pinned by `HD_SSO_ENFORCED` or `HD_SSO_BREAK_GLASS_USER_IDS` are read-only.
+See the generated [configuration reference](configuration.md).
+
+## Test before enforcing
+
+Save and enable the connection, then choose **Test connection**. Allow the popup.
+An install-admin route creates a short-lived test owned by that administrator.
+The IdP callback previews claims, matched/new account and roles without creating
+accounts, linking identities, changing roles or opening a staff session. The
+result is single-use and expires after ten minutes. An unsaved draft cannot be
+tested; save it first. Direct public `test=1` requests are refused.
+
+Then perform a normal sign-in with a test person. Confirm mappings and local/IdP
+MFA before enabling enforcement. Keep the emergency admin's password and
+accessible authenticator available, and verify its fresh-TOTP sign-in separately.
+
+## Okta (OIDC)
+
+Official documentation checked **2026-10-13**:
+[OIDC app creation](https://help.okta.com/en-us/Content/topics/apps/apps_app_integration_wizard_oidc.htm),
+[group claims](https://developer.okta.com/docs/guides/customize-tokens-groups-claim/),
+[email claim semantics](https://help.okta.com/en-us/content/topics/apps/oiw/sso-settings.htm).
+
+Create an OIDC **Web Application**, enable authorization code and PKCE, and
+register the exact Helpdock redirect URI. Use client-secret authentication
+compatible with `client_secret_post`. Copy its client ID, secret and issuer into
+Helpdock; retain `openid email profile`. Assign only intended staff/groups.
+Configure an ID-token groups claim and use its name in Helpdock's Groups field.
+Use the issuer belonging to that authorization server, not an unrelated console URL.
+
+Okta documents `email_verified` as scope-dependent, rather than proof of mailbox
+ownership. Restrict assignment to centrally managed enterprise identities whose
+email attributes are controlled by your administrators; test the actual signed
+claim and email policy before permitting email links. Do not hardcode verification
+to true to make an unmanaged/self-service identity pass.
+
+## Microsoft Entra ID (SAML)
+
+Official documentation checked **2026-10-13**:
+[SAML setup](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/add-application-portal-setup-sso),
+[group claims and limits](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-fed-group-claims).
+
+Configure an enterprise application's SAML sign-on. Set Identifier to Helpdock's
+entity ID and Reply URL to its ACS. Copy the Entra Identifier, Login URL and
+signing certificate into Helpdock. Configure a stable NameID, a controlled email
+attribute, and optional name/groups attributes; enter their **full emitted claim
+names** in Helpdock. Require assertion signing. Assign the application to the
+intended staff. Map emitted group object IDs rather than display names when using
+the default group-ID representation.
+
+Entra limits group claims to 150 groups for SAML and 200 for JWT. Prefer groups
+assigned to the application to avoid overage. Helpdock refuses overage/distributed
+group claims; it does not treat missing group data as an authoritative empty list
+or fetch distributed claim URLs.
+
+## Google Workspace (SAML)
+
+Official documentation checked **2026-10-13**:
+[custom SAML application setup](https://knowledge.workspace.google.com/admin/apps/set-up-your-own-custom-saml-app).
+
+In Admin console, add a custom SAML app. Copy Google's entity ID, SSO URL and
+certificate into Helpdock. Set the app ACS URL and entity ID to Helpdock's values.
+Choose emailAddress NameID only with a centrally controlled primary email, or a
+stable persistent identifier where available. Map controlled email/name
+attributes and any required group memberships; match their names in Helpdock.
+Turn the app on only for intended organizational units/groups.
+
+Google's default signs the assertion; the Signed response option adds response
+signing. Helpdock requires the assertion signature in either case. Group
+membership mapping has provider selection limits; explicitly select the relevant
+groups and use the test preview to confirm the emitted values.
+
+## Keycloak (OIDC)
+
+Official documentation checked **2026-10-13**:
+[server administration guide](https://www.keycloak.org/docs/latest/server_admin/index.html).
+
+Create an OpenID Connect client in the staff realm. Enable client authentication
+and Standard flow; require PKCE S256 and register the exact Helpdock redirect URI.
+Copy the Credentials secret and set issuer to `https://<host>/realms/<realm>`.
+Keep `openid email profile`; add a Group Membership mapper to the ID token using
+the claim name configured in Helpdock. Decide whether full group paths are emitted
+and map those exact strings. Assign the client only to intended staff.
+
+Configure realm SMTP and require **Verify Email**, then complete email verification
+for the test person. Do not mark an arbitrary user-supplied address verified just
+to pass a test. If enabling Helpdock's IdP-MFA flag, bind a Keycloak flow that
+requires MFA for every assigned staff member and verify that policy independently.
+
+## Rotation and troubleshooting
+
+Add the next SAML signing certificate while retaining the current certificate,
+switch signing at the provider, test, then remove the old certificate after old
+assertions have expired. Keep the metadata endpoint and configured authority
+consistent. Failed metadata refreshes keep the current trust and record a
+sanitized warning. Disabling a connection blocks new sign-ins; linked connections
+cannot be deleted. There is no SCIM or single logout in v1: IdP offboarding does
+not immediately revoke Helpdock sessions. Deactivate the person in Helpdock when
+immediate revocation is required.
+
+| Error | Check |
+|---|---|
+| `sso-email-unverified` | Controlled email claim and OIDC `email_verified: true` |
+| `sso-no-access` | Active brands, group values/order, default access, departments and conflicting provider ownership |
+| `sso-connection-disabled` | Connection enabled; restart any pending MFA flow |
+| `sso-required` | Use SSO, or the configured emergency password + fresh TOTP path |
+| `sso-invalid-response` | Restart from Helpdock; compare issuer, audience, callback, certificates, time and group overage |
+| `unavailable` | Provider/network availability and sanitized server logs |
+
+All provider discovery, tokens, JWKS, metadata and user-info requests use the
+SSRF-safe client. Private IdPs require a narrowly scoped operator
+`OUTBOUND_ALLOW_CIDRS` exception; never broadly allow all private networks.
+Callback failures do not expose assertions, secrets or untrusted provider errors.
+Real Okta/Entra/Workspace acceptance needs your own test accounts; automated tests
+use local stand-ins. A local Keycloak smoke test does not establish those other
+providers' compatibility.
+
+## Administrative API
+
+Every `/api/install/sso` route requires `install:admin`; brand admin is insufficient.
+Responses are Zod-serialized and contain no stored secrets.
+
+| Method | Path under `/api/install/sso` | Purpose |
 |---|---|---|
-| GET | `/api/install/sso/connections` | List connections |
-| POST | `/api/install/sso/connections` | Create a connection |
-| GET | `/api/install/sso/connections/:id` | Read configuration and public SP URLs |
-| PUT | `/api/install/sso/connections/:id` | Replace configuration; omit the secret to retain it |
-| DELETE | `/api/install/sso/connections/:id` | Remove an unused connection |
-| GET | `/api/install/sso/connections/:id/mappings` | Read ordered group mappings |
-| PUT | `/api/install/sso/connections/:id/mappings` | Replace the complete mapping list |
-| GET | `/api/install/sso/settings` | Read enforcement configuration and environment-lock flags |
-| PUT | `/api/install/sso/settings` | Update both control settings atomically |
+| GET / POST | `/connections` | List / create a connection |
+| GET / PUT / DELETE | `/connections/:id` | Read / replace / delete unused connection |
+| GET / PUT | `/connections/:id/mappings` | Read / replace mappings |
+| POST | `/certificates/inspect` | Validate PEM and read public subject, SHA-256 fingerprint and expiry |
+| POST | `/configurations` | Atomically create `{ connection, mappings }` |
+| PUT | `/connections/:id/configuration` | Atomically replace `{ connection, mappings }` |
+| GET / PUT | `/settings` | Read / atomically save enforcement and break-glass selection |
+| GET | `/targets` | Active brands/departments, eligible emergency admins and public SP URLs |
+| POST | `/connections/:id/test` | Start an administrator-owned preview |
+| GET | `/connections/:id/test?key=…` | Consume that administrator's preview result |
 
-An OIDC connection body contains `name`, optional `enabled`, `emailDomains`,
-`jitEnabled`, `idpEnforcesMfa`, `defaultAccess`, `groupAttribute`, and `config`:
-
-```json
-{
-  "name": "Work identity provider",
-  "emailDomains": ["example.com"],
-  "config": {
-    "protocol": "oidc",
-    "issuer": "https://identity.example.com",
-    "clientId": "helpdock",
-    "scopes": ["openid", "email", "profile"],
-    "requireEmailVerified": true
-  }
-}
-```
-
-Connections default to disabled. `clientSecret` is write-only for OIDC and
-encrypted under `APP_MASTER_KEY`. Responses return `secretConfigured`; they
-never contain the secret or its encryption envelope. Protocol is immutable.
-Once an identity is linked, changing the OIDC issuer/client id or SAML entity
-id/NameID format returns 409 `sso-identity-configuration-in-use`. Claim settings
-and certificate rotation do not change that identity namespace.
-
-SAML configuration contains `protocol: "saml"`, `idpEntityId`, `idpSsoUrl`,
-and one to three PEM `idpCertificates`. Optional fields include
-`idpMetadataUrl`, `emailAttribute` and `nameAttribute`. AuthnRequests must be
-signed; IdP-initiated sign-in defaults to disabled; clock skew is bounded to
-60 seconds. Certificates must contain RSA keys of at least 2048 bits before configuration is stored.
-
-Every endpoint host passes the shared outbound destination policy. HTTPS is
-required unless the resolved address is inside `OUTBOUND_ALLOW_CIDRS`, for
-example an explicitly allowed local identity provider. Userinfo and URL
-fragments are refused. Protocol fetches apply the same policy
-again when connecting; saving a URL is not protection against DNS rebinding.
-
-## Mappings and enforcement configuration
-
-A mapping contains `idpGroup`, `brandId`, `role`, `departmentIds` and `position`.
-Roles use `admin`, `team_leader`, `agent` or `viewer`. Agents require an explicit
-department list; every named department must belong to the active target brand.
-`position` orders mappings; M11-04 applies the first matching mapping per brand.
-Duplicate group/brand mappings and duplicate positions within a brand are refused. Failed replacements preserve the
-previous mappings.
-
-Control settings use `{ "enforced": false, "breakGlassUserIds": [] }`.
-Enforcement configuration requires at least one enabled connection and one
-active install admin with a password, enabled TOTP and a stored TOTP secret.
-Disabling or deleting the last enabled connection while enforced returns 409
-`sso-enforced-last`, including under concurrent requests. Removing a connection
-with linked identities returns 409 `sso-connection-in-use`.
-
-`HD_SSO_ENFORCED` and `HD_SSO_BREAK_GLASS_USER_IDS` override and lock these
-settings. A locked setting can be submitted unchanged; changing it returns
-409 `sso-settings-locked`. Control reads bypass process caches and writes commit
-with their audit record in one transaction, so replicas read the same committed
-state.
+The public `POST /api/auth/sso/discover { email }` returns matching enabled
+connection IDs and labels, under sign-in rate limits. `GET /api/auth/methods`
+includes enabled connections and `ssoEnforced`. The existing brand-scoped public
+REST OpenAPI document excludes these authentication and install-admin routes.
 
 ## Signing material and request state
 
@@ -120,14 +248,8 @@ that attempt. Discovery is cached for one hour per configuration revision.
 `GET /api/auth/sso/:id/start` starts the browser round trip. The callback URI
 remains `/api/auth/sso/:id/oidc/callback`. The browser must retain its HttpOnly
 nonce cookie. Failed callbacks return to the existing sign-in completion page
-with its translated generic error; valid callbacks preserve local TOTP and use
+with a safe translated error; valid callbacks apply the configured MFA policy and use
 a one-time session exchange code. No ID/access token appears in a redirect URL.
-
-At this milestone step only an existing `(connection, subject)` binding can
-sign in. There is no account auto-linking/provisioning or group-role sync yet;
-M11-04 adds these, and M11-05 adds the login/configuration screens. Do not
-manually edit production identity bindings to bypass that rollout. `test=1`
-is rejected until the protected M11-06 test flow exists.
 
 The fake-IdP suites need no provider credentials. For a real local Keycloak
 Docker/Chromium smoke test, follow the commands in
@@ -155,8 +277,7 @@ limited to 256 KiB. Its 303 redirect completes through a local GET so the Lax
 HttpOnly nonce cookie works across sites. Cookies and unconsumed request state
 must survive the round trip; assertions older than ten minutes, replayed
 responses, changed/disabled connections and wrong browsers are refused.
-Failures use the existing translated sign-in completion error. Local TOTP
-still applies to existing subject bindings.
+Failures use the existing translated sign-in completion error. Local TOTP applies unless the administrator has vouched for IdP MFA.
 
 `allowIdpInitiated` defaults to false. When enabled, an unsolicited assertion
 starts a fresh SP round trip and must return the same subject. IdP dashboards

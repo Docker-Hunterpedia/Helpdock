@@ -26,7 +26,7 @@ Companion to `REQUIREMENTS.md` and `DOMAIN-RULES.md` (same folder). Behavioural 
 | Images | sharp | 0.35 | WebP conversion, thumbnails, EXIF strip |
 | Audio/video | ffmpeg (static binary in image) | — | Voice-note normalization, video posters |
 | Auth | argon2 + jose + otplib | 0.45 / 6.2 / 13.5 | Hand-wired, auditable (passport was listed here but never installed) |
-| SSO (M11, planned) | openid-client + @node-saml/node-saml + @peculiar/x509 | 6.8 / 5.1 / 2.1 | OIDC and SAML 2.0 for staff, all IdP HTTP through `safeFetch` ([ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md), accepted) |
+| Staff SSO (M11) | openid-client + @node-saml/node-saml + @peculiar/x509 | 6.8 / 5.1 / 2.1 | OIDC and SAML 2.0 for staff, all IdP HTTP through `safeFetch` ([ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md), accepted) |
 | Imports (M11, planned) | csv-parse + yauzl, vendor APIs over `packages/net` | 7.0 / 3.4 | Streaming CSV and zip for the manual mapper; connectors behind one interface in `@helpdock/importers` ([ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), proposed) |
 | Storage | @aws-sdk/client-s3 | 3.x | S3 / MinIO / R2 — S3-only in v1 |
 | Docs parsing | unpdf, mammoth, cheerio, playwright (optional) | 1.8 / 1.12 / 1.2 / 1.63 | PDF, DOCX, HTML crawl |
@@ -187,6 +187,15 @@ Search: `tickets.search` and the help center index `hc_search_documents.search` 
 - **Internal endpoints** (`/internal/*`, e.g. domain-check, inbound-parse) require a shared secret header and are not exposed by Caddy publicly except where needed.
 
 ---
+
+Staff SSO uses install-wide OIDC/SAML connections and verified protocol assertions
+for email linking or JIT. Group sync touches only connection-owned memberships;
+manual grants survive. Role reductions serialize with session minting and revoke
+old families. SSO families expire within twelve hours. Enforcement uses current
+install settings; emergency access requires password plus fresh TOTP. Protected
+connection tests preview access without issuing sessions or writing identities.
+See [ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md) and
+[operator setup](../guides/sso.md).
 
 ## 8. Channel adapters
 
@@ -359,4 +368,4 @@ MinIO is pulled from Quay, MinIO's own registry, rather than from Docker Hub, an
 - Bull Board vs custom queue page: Bull Board embedded, custom summary on System page.
 - Embedding model scope: one per install, no per-brand override in v1 (DOMAIN-RULES §8).
 - Meta channels (M10, 2026-10-11): one shared Graph adapter with three thin platform adapters, Instagram through Instagram Login, one webhook per install, inbound filed in the request with media by job, the reply window enforced at compose time and at send time — settled by [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md).
-- SSO and migration (M11, 2026-10-13): staff SSO over SAML and OIDC with install-wide connections, JIT provisioning and sync of SSO-sourced memberships only; imports as normalised records staged then loaded by one writer that bypasses every live side effect — proposed in [ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md) and [ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), to be accepted in M11-01 and M11-07.
+- SSO and migration (M11, 2026-10-13): staff SSO over SAML and OIDC with install-wide connections, JIT provisioning and sync of SSO-sourced memberships only; imports as normalised records staged then loaded by one writer that bypasses every live side effect — accepted for SSO in [ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md) and proposed for imports in [ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), to be accepted in M11-07.

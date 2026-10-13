@@ -126,6 +126,56 @@ describe.skipIf(!hasDocker)('M11-01 install SSO configuration', () => {
       ...(payload === undefined ? {} : { payload }),
     });
 
+  it('inspects public certificate details and refuses malformed PEM without exposing parser errors', async () => {
+    const pem = (await app.get(SsoService).spKeys()).certificate;
+    const inspected = await request('POST', 'certificates/inspect', { certificates: [pem] });
+    expect(inspected.statusCode).toBe(200);
+    expect(inspected.json().certificates).toMatchObject([
+      {
+        subject: expect.any(String),
+        fingerprint: expect.stringMatching(/^(?:[A-F0-9]{2}:){31}[A-F0-9]{2}$/),
+        expiresAt: expect.any(String),
+      },
+    ]);
+    expect(inspected.body).not.toContain('BEGIN CERTIFICATE');
+    const invalid = await request('POST', 'certificates/inspect', {
+      certificates: ['invalid-pem'],
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.body).not.toContain('OpenSSL');
+    expect(
+      (
+        await request(
+          'POST',
+          'certificates/inspect',
+          { certificates: [pem] },
+          { ...principal, installAdmin: false },
+        )
+      ).statusCode,
+    ).toBe(403);
+  });
+
+  it('rolls back the entire settings save when any mapping is invalid', async () => {
+    const mappings = [
+      { idpGroup: 'Support', brandId: uuidv7(), role: 'viewer', departmentIds: null, position: 0 },
+    ];
+    const created = await request('POST', 'configurations', { connection: connection(), mappings });
+    expect(created.statusCode).toBe(400);
+    expect(await owner.db.select().from(ssoConnections)).toEqual([]);
+    const valid = await request('POST', 'configurations', {
+      connection: connection(),
+      mappings: [],
+    });
+    expect(valid.statusCode).toBe(201);
+    const id = valid.json().id as string;
+    const updated = await request('PUT', `connections/${id}/configuration`, {
+      connection: connection('Changed'),
+      mappings,
+    });
+    expect(updated.statusCode).toBe(400);
+    expect((await request('GET', `connections/${id}`)).json().name).toBe('Work');
+  });
+
   it('creates, reads, updates and deletes connections without exposing their secrets', async () => {
     const created = await request('POST', 'connections', connection());
     expect(created.statusCode).toBe(201);

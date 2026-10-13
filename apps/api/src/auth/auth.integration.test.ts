@@ -219,6 +219,8 @@ describe.skipIf(!hasDocker)('the auth service', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
+        sso: [],
+        ssoEnforced: false,
         password: true,
         magicLink: true,
         // Neither provider has a client id in settings, so neither button is drawn.

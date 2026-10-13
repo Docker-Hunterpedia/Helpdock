@@ -47,6 +47,9 @@ import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-ap
 import type { SettingsApi } from '../settings/api.js';
 import { HttpSettingsApi } from '../settings/http-api.js';
 import { MockSettingsApi } from '../settings/mock-api.js';
+import type { SsoApi } from '../sso/api.js';
+import { HttpSsoApi } from '../sso/http-api.js';
+import { MockSsoApi } from '../sso/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { HttpStaffApi } from '../staff/http-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
@@ -70,6 +73,7 @@ export type AuthApiAdapter = (typeof AUTH_API_ADAPTERS)[number];
 
 /** The adapters the app is built from, always from the same source. */
 export interface AdminApis {
+  readonly sso: SsoApi;
   readonly auth: AuthApi;
   readonly staff: StaffApi;
   readonly contacts: ContactsApi;
@@ -142,6 +146,7 @@ export function createApis(
     const transport = new HttpTransport();
 
     return {
+      sso: new HttpSsoApi(transport),
       auth: new HttpAuthApi(transport),
       staff: new HttpStaffApi(transport),
       contacts: new HttpContactsApi(transport),
@@ -184,9 +189,11 @@ export function createApis(
     ticketing,
   );
   const helpCenter = new MockHelpCenterApi();
+  const auth = new MockAuthApi(staff);
 
   return {
-    auth: new MockAuthApi(staff),
+    sso: new MockSsoApi(auth),
+    auth,
     staff,
     contacts,
     // One block list for both, so a sender blocked from a ticket is on the

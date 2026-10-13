@@ -127,6 +127,7 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
     expect(await complete(attempt)).toEqual({
       assertion: {
         connectionId: CONNECTION,
+        connectionRevision: expect.any(String),
         subject: 'staff-1',
         email: 'ada@example.com',
         emailVerified: true,
@@ -282,7 +283,9 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
       url: `${callback.pathname}${callback.search}`,
     });
     expect(refused.statusCode).toBe(302);
-    expect(new URL(String(refused.headers.location)).searchParams.get('error')).toBe('unavailable');
+    expect(new URL(String(refused.headers.location)).searchParams.get('error')).toBe(
+      'sso-invalid-response',
+    );
     expect(refused.cookies.some((cookie) => cookie.name.includes('hd_refresh'))).toBe(false);
     await owner.db
       .update(ssoConnections)
@@ -290,7 +293,7 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
       .where(eq(ssoConnections.id, CONNECTION));
     const disabled = await app.inject({ method: 'GET', url: `/api/auth/sso/${CONNECTION}/start` });
     expect(new URL(String(disabled.headers.location)).searchParams.get('error')).toBe(
-      'unavailable',
+      'sso-connection-disabled',
     );
     expect(
       (
@@ -332,12 +335,16 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
     expect(response.cookies.some((value) => value.name.includes('hd_refresh'))).toBe(false);
   });
 
-  it('never links an unknown subject by email before M11-04 provisions it', async () => {
+  it('links a new subject to the existing verified-email account without changing manual access', async () => {
     await owner.db.delete(userSsoIdentities);
     const assertion = (await complete(await flow())).assertion;
     const { AuthService } = await import('../auth/auth.service.js');
-    await expect(app.get(AuthService).completeSso(assertion, undefined)).rejects.toMatchObject({
-      auth: { code: 'no-account' },
+    await expect(app.get(AuthService).completeSso(assertion, undefined)).resolves.toMatchObject({
+      kind: 'session',
+      issued: { session: { user: { id: USER } } },
     });
+    expect(await owner.db.select().from(userSsoIdentities)).toMatchObject([
+      { userId: USER, subject: assertion.subject },
+    ]);
   });
 });

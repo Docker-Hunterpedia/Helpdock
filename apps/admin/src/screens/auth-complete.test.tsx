@@ -1,0 +1,46 @@
+import { screen } from '@testing-library/react';
+import { Route, Routes } from 'react-router';
+import { afterEach, expect, it, vi } from 'vitest';
+import { HttpAuthApi } from '../auth/http-api.js';
+import { MockAuthApi } from '../auth/mock-api.js';
+import { renderApp } from '../test/render.tsx';
+import { AuthComplete } from './auth-complete.tsx';
+
+afterEach(() => vi.unstubAllGlobals());
+
+it('exchanges an SSO completion code once when React replays effects', async () => {
+  const session = await new MockAuthApi().exchange('fixture');
+  let spent = false;
+  vi.stubGlobal('fetch', async () => {
+    if (spent)
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 'unauthenticated',
+            message: 'Already consumed',
+            requestId: 'test',
+            auth: { code: 'challenge-expired' },
+          },
+        }),
+        { status: 401 },
+      );
+    spent = true;
+    return new Response(
+      JSON.stringify({ session, accessToken: 'fixture-token', expiresInSeconds: 600 }),
+      { status: 201 },
+    );
+  });
+  renderApp(
+    <Routes>
+      <Route path="/sign-in/complete" element={<AuthComplete />} />
+      <Route path="/tickets" element={<h1>Desk opened</h1>} />
+    </Routes>,
+    {
+      strictMode: true,
+      authApi: new HttpAuthApi(),
+      initialEntries: ['/sign-in/complete?code=one-use'],
+    },
+  );
+  expect(await screen.findByRole('heading', { name: 'Desk opened' })).toBeVisible();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});

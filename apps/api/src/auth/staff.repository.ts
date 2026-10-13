@@ -3,15 +3,15 @@ import {
   brands,
   type Db,
   type DbTransaction,
-  ssoConnections,
+  INSTALL_SCOPE_BRAND_ID,
   type User,
   type UserBrandRole,
   userBrandRoles,
-  userSsoIdentities,
   users,
   withTenant,
 } from '@helpdock/db';
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import { lockSessionReadAuthority } from './session/authority-lock.js';
 
 /**
  * Everything sign-in reads and writes about a staff account.
@@ -24,7 +24,8 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
  * opens a transaction naming every active brand, as `principal_type = system`
  * with `principal_id = auth`.
  *
- * That is the widest scope in the application, so it is confined to this file,
+ * This broad scope is confined to named authentication paths (this repository
+ * and the SSO identity service),
  * it never returns anything but the memberships of the one user who has just
  * proved who they are, and it never writes. AGENTS.md asks for exactly this: an
  * explicit, named system path rather than a query that quietly runs without a
@@ -58,22 +59,24 @@ export class StaffRepository {
     this.#db = db;
   }
 
-  /** Explicit pre-tenant identity lookup; provisioning and email linking are M11-04. */
-  async findBySsoIdentity(connectionId: string, subject: string): Promise<StaffUser | undefined> {
-    const [found] = await this.#db
-      .select({ user: users })
-      .from(userSsoIdentities)
-      .innerJoin(users, eq(users.id, userSsoIdentities.userId))
-      .innerJoin(ssoConnections, eq(ssoConnections.id, userSsoIdentities.connectionId))
-      .where(
-        and(
-          eq(userSsoIdentities.connectionId, connectionId),
-          eq(userSsoIdentities.subject, subject),
-          eq(ssoConnections.enabled, true),
-        ),
-      )
-      .limit(1);
-    return found?.user;
+  async withSessionAuthority<T>(
+    userId: string,
+    read: (tx: DbTransaction) => Promise<T>,
+  ): Promise<T> {
+    const brandIds = await this.activeBrandIds();
+    return withTenant(
+      this.#db,
+      {
+        brandIds: [INSTALL_SCOPE_BRAND_ID, ...brandIds],
+        departmentIds: 'all',
+        principalType: 'system',
+        principalId: AUTH_SYSTEM_PRINCIPAL,
+      },
+      async (tx) => {
+        await lockSessionReadAuthority(tx, userId);
+        return read(tx);
+      },
+    );
   }
 
   /**

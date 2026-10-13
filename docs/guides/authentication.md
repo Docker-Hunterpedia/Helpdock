@@ -5,23 +5,24 @@ has to configure. Specified by [REQUIREMENTS
 §5.1](../planning/REQUIREMENTS.md#51-security-non-negotiable), [ARCHITECTURE
 §7](../planning/ARCHITECTURE.md#7-auth-design) and [DOMAIN-RULES
 §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets), §4.6 and §12.
-Implemented by M0-05.
+Implemented by M0-05 and M11-01–06.
 
 Visitors (the widget, M4) and API keys (M8) are different principals with
 different credentials and are not covered here. What an account may *do* once it
 has signed in is [staff and roles](staff-and-roles.md), which also covers
 invitations and a person's own security page.
 
-## The four ways in
+## Sign-in methods
 
 | | |
 |---|---|
-| **Password** | Argon2id with a pepper. Always available. |
+| **Password** | Argon2id with a pepper; blocked by SSO enforcement except emergency admins. |
 | **Sign-in link** | A single-use link by email, valid for `auth.magicLinkTtlMinutes` (10 by default). |
 | **Google / GitHub** | OAuth. Shown only when the install has configured that provider. |
+| **Staff SSO** | OIDC or SAML company sign-in; see [SSO setup](sso.md). |
 | **Password reset** | A single-use link by email, valid for 10 minutes. |
 
-Whichever of them is used, if the account has an authenticator enrolled the
+Except when an administrator vouches for IdP MFA on an SSO connection, if the account has an authenticator enrolled the
 second factor is asked for afterwards. There is no path that skips it, apart
 from a browser the person has explicitly chosen to trust. An account that must
 have one and has none — an Admin, an install admin, or anybody on an install
@@ -66,6 +67,9 @@ Two limits, both from `.env` (ASVS 3.3.2):
 |---|---|---|
 | `AUTH_SESSION_IDLE_MINUTES` | `240` | A browser that has not refreshed for this long signs in again |
 | `AUTH_SESSION_MAX_HOURS` | `12` | Every browser signs in again this long after it signed in, however busy it was |
+
+SSO families additionally cap the absolute lifetime at 12 hours, even if
+`AUTH_SESSION_MAX_HOURS` is longer. Access JWTs expire no later than their family.
 
 The family's Redis record lives for the idle limit and each refresh renews it,
 but never past what is left of the absolute one; the cookie's `Max-Age` is the
@@ -579,3 +583,14 @@ protocols. M11-02/M11-03 verify OIDC/SAML and complete already-linked subjects t
 the existing local TOTP/session flow. JIT provisioning, role sync and sign-in
 enforcement belong to M11-04. Saving enforcement configuration
 alone does not disable the existing password, magic-link or OAuth methods.
+
+## Required single sign-on
+
+When `sso.enforced` is on, local password, magic links, Google/GitHub OAuth and
+password invitation acceptance refuse sign-in. Discovery matches enabled
+provider domains without looking up accounts. Existing sessions stay open.
+Configured break-glass install admins may use their password followed by fresh
+TOTP; trusted browsers and recovery codes do not qualify. Enforcement and
+connection status are rechecked for pending challenges. Completing SSO accepts
+an invitation only after its required factors and keeps manual membership grants.
+See [SSO policy and setup](sso.md#roles-mfa-and-enforcement).

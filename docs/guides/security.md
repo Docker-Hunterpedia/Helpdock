@@ -218,4 +218,12 @@ IdP-initiated login requires a fresh SP round trip for the same subject.
 
 Metadata URLs use the shared SSRF-safe, socket-pinned client with redirects
 refused. A daily refresh never replaces every currently trusted certificate
-without admin confirmation. See [SSO setup and rotation](sso.md#saml-protocol-m11-03).
+without admin confirmation. See [SSO setup and rotation](sso.md#rotation-and-troubleshooting).
+
+SSO group sync serializes session minting against role changes. Role removal or
+replacement revokes Redis families and registered access-session IDs before
+committing. Registering a token against an already revoked family fails closed.
+Only connection-owned SSO memberships change; manual and other-provider grants
+retain ownership. Enforcement reads current settings, including environment
+pins, and emergency access always requires password plus fresh stored TOTP.
+SSO session families and their JWTs have an absolute twelve-hour ceiling.

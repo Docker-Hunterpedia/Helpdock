@@ -19,7 +19,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LockKeyhole, Settings2 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
-import { Link as RouterLink } from 'react-router';
+import { Link as RouterLink, useSearchParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { ROUTES } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
@@ -31,12 +31,15 @@ import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { SecretField } from '../../../ui/secret-field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../channels/section-card.tsx';
+import { SsoTab } from './sso-tab.tsx';
 
 const MASKED_SECRET = '••••••••••••';
 
 export function SettingsPage(): ReactNode {
   const t = useT();
   const api = useSettingsApi();
+  const [search, setSearch] = useSearchParams();
+  const tab = search.get('tab') === 'sso' ? 'sso' : 'authentication';
   const query = useQuery({
     queryKey: SETTINGS_AUTHENTICATION_QUERY_KEY,
     queryFn: () => api.authentication(),
@@ -45,11 +48,18 @@ export function SettingsPage(): ReactNode {
   return (
     <>
       <PageHeader title={t('settings:title')} caption={t('settings:scope')} />
-      <Tabs value="authentication" sx={{ marginBlockStart: -5, marginBlockEnd: 6 }}>
+      <Tabs
+        value={tab}
+        onChange={(_event, selected: string) => setSearch({ tab: selected })}
+        sx={{ marginBlockStart: -5, marginBlockEnd: 6 }}
+      >
         <Tab value="authentication" label={t('settings:tabs.authentication')} />
+        <Tab value="sso" label={t('sso:title')} />
       </Tabs>
 
-      {query.isPending ? (
+      {tab === 'sso' ? (
+        <SsoTab />
+      ) : query.isPending ? (
         <Box role="status" sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
           <CircularProgress size={20} aria-hidden="true" />
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>

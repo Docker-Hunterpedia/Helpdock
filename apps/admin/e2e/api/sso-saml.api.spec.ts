@@ -51,7 +51,7 @@ for (const locale of ['en', 'ar'] as const) {
     expect(start.status()).toBe(302);
     await page.context().clearCookies();
     await page.goto(start.headers().location ?? '');
-    await expect(page.getByRole('alert')).toHaveText(t('auth:completing.failed'));
+    await expect(page.getByRole('alert')).toHaveText(t('auth:sso.errors.sso-invalid-response'));
     expect(
       (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze())
         .violations,

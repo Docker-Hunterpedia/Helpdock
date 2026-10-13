@@ -1,8 +1,14 @@
 import { z } from 'zod';
 
 const endpoint = z.url().refine((raw) => {
-  const url = new URL(raw);
-  return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password && !url.hash;
+  try {
+    const url = new URL(raw);
+    return (
+      ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password && !url.hash
+    );
+  } catch {
+    return false;
+  }
 }, 'An identity endpoint must be HTTP(S) without credentials or a fragment');
 const role = z.enum(['admin', 'team_leader', 'agent', 'viewer']);
 export const ssoAccessSchema = z
@@ -75,6 +81,7 @@ export const ssoConnectionSchema = connectionFields.omit({ clientSecret: true })
   id: z.uuid(),
   protocol: z.enum(['oidc', 'saml']),
   secretConfigured: z.boolean(),
+  peopleCount: z.int().nonnegative().default(0),
   lastSignInAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -121,3 +128,80 @@ export type SsoConnectionInput = z.infer<typeof ssoConnectionCreateSchema>;
 export type SsoConnection = z.infer<typeof ssoConnectionSchema>;
 export type SsoMapping = z.infer<typeof ssoMappingSchema>;
 export type SsoSettingsUpdate = z.infer<typeof ssoSettingsUpdateSchema>;
+
+export const ssoDiscoveryRequestSchema = z.object({ email: z.email().max(320) });
+export const ssoDiscoveryResponseSchema = z.object({
+  connections: z.array(z.object({ id: z.uuid(), name: z.string().min(1).max(80) })),
+});
+
+export const ssoTestStartSchema = z.object({ startUrl: z.url() });
+export const ssoTestResultSchema = z.object({
+  claims: z.object({
+    subject: z.string().min(1).max(300),
+    email: z.email(),
+    name: z.string().max(300).optional(),
+    groups: z.array(z.string().max(300)).max(1000),
+  }),
+  user: z.object({ id: z.uuid(), name: z.string(), email: z.email() }).nullable(),
+  wouldCreate: z.boolean(),
+  access: z.array(ssoAccessSchema),
+  conflict: z.boolean(),
+});
+export const ssoTestKeySchema = z.object({ key: z.string().regex(/^[A-Za-z0-9_-]{43}$/) });
+
+export const ssoTargetsSchema = z.object({
+  sp: z.object({ entityId: z.url(), metadataUrl: z.url() }),
+  brands: z.array(
+    z.object({
+      id: z.uuid(),
+      name: z.string(),
+      departments: z.array(z.object({ id: z.uuid(), name: z.string() })),
+    }),
+  ),
+  admins: z.array(
+    z.object({ id: z.uuid(), name: z.string(), email: z.email(), eligible: z.boolean() }),
+  ),
+});
+export type SsoTargets = z.infer<typeof ssoTargetsSchema>;
+export type SsoConnectionDetail = z.infer<typeof ssoConnectionDetailSchema>;
+export type SsoSettings = z.infer<typeof ssoSettingsSchema>;
+export type SsoTestResult = z.infer<typeof ssoTestResultSchema>;
+
+export const ssoReturnToSchema = z
+  .string()
+  .max(2000)
+  .default('/')
+  .refine((path) => {
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject control characters in redirect targets.
+    if (!path.startsWith('/') || path.startsWith('//') || /[\\\u0000-\u001f]/.test(path))
+      return false;
+    try {
+      const decoded = decodeURIComponent(path);
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject encoded control characters too.
+      return !decoded.startsWith('//') && !/[\\\u0000-\u001f]/.test(decoded);
+    } catch {
+      return false;
+    }
+  }, 'Return path must stay on this installation');
+
+/** The settings form saves connection and mapping changes in one transaction. */
+export const ssoConfigurationSchema = z
+  .object({ connection: ssoConnectionCreateSchema })
+  .and(ssoMappingsSchema);
+export type SsoConfiguration = z.infer<typeof ssoConfigurationSchema>;
+
+export const ssoCertificatesSchema = z.object({
+  certificates: z.array(z.string().min(1).max(16000)).min(1).max(3),
+});
+export const ssoCertificateDetailsSchema = z.object({
+  certificates: z
+    .array(
+      z.object({
+        subject: z.string().max(2000),
+        fingerprint: z.string().regex(/^(?:[A-F0-9]{2}:){31}[A-F0-9]{2}$/),
+        expiresAt: z.iso.datetime(),
+      }),
+    )
+    .max(3),
+});
+export type SsoCertificateDetails = z.infer<typeof ssoCertificateDetailsSchema>;

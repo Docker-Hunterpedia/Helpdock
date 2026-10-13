@@ -962,6 +962,9 @@ describe.skipIf(!hasDocker)('/ready when Redis is gone', () => {
   });
 
   it('reports not ready, with the failing dependency named', async () => {
+    // A stopped container's port can be reused by another parallel fixture.
+    // This outage probe must not reconnect to that unrelated Redis.
+    runtime.redis.options.retryStrategy = () => null;
     await redis.stop();
 
     const response = await app.inject({ method: 'GET', url: '/ready' });

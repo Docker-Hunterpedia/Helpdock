@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
 import { CONSUME_SCRIPT } from '../auth/rate-limit.js';
-import { ROTATE_SCRIPT } from '../auth/session/refresh-store.js';
+import { REGISTER_SESSION_SCRIPT, ROTATE_SCRIPT } from '../auth/session/refresh-store.js';
 import { CLAIM_STEP_SCRIPT } from '../auth/totp/used-steps.js';
 import { RedisStub } from './redis-stub.js';
 
@@ -15,6 +15,17 @@ import { RedisStub } from './redis-stub.js';
  */
 export const authRedisStub = (): RedisStub =>
   new RedisStub()
+    .defineScript(REGISTER_SESSION_SCRIPT, async (stub, keys, args) => {
+      const [family = '', sessions = '', revoked = ''] = keys;
+      const [ttl = '0', session = ''] = args;
+      if (!(await stub.exists(family))) {
+        await stub.set(revoked, '1', 'EX', Number(ttl));
+        return 0;
+      }
+      await stub.sadd(sessions, session);
+      await stub.expire(sessions, Number(ttl));
+      return 1;
+    })
     .defineScript(ROTATE_SCRIPT, async (stub, keys, args) => {
       const [familyKey = ''] = keys;
       const [presented, next, now = '0', userAgent = '', idle = '0', max = '0'] = args;
@@ -30,7 +41,11 @@ export const authRedisStub = (): RedisStub =>
       }
 
       const issuedAt = Number((await stub.hget(familyKey, 'issuedAt')) ?? '0');
-      const remaining = issuedAt + Number(max) - Number(now);
+      const maximum = Math.min(
+        Number((await stub.hget(familyKey, 'maxSeconds')) ?? max),
+        Number(max),
+      );
+      const remaining = issuedAt + maximum - Number(now);
       if (remaining <= 0) {
         await stub.del(familyKey);
         return ['expired', userId];

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { inflateRawSync } from 'node:zlib';
 import { X509CertificateGenerator } from '@peculiar/x509';
 import { SignedXml } from 'xml-crypto';
+import { idpControl } from './idp-control.js';
 
 const xmlEscape = (text: string) =>
   text
@@ -11,7 +12,7 @@ const xmlEscape = (text: string) =>
     .replaceAll('<', '&lt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
-async function signingKey() {
+export async function fakeSamlSigningKey() {
   const algorithm = {
     name: 'RSASSA-PKCS1-v1_5',
     hash: 'SHA-256',
@@ -38,7 +39,11 @@ async function signingKey() {
 
 /** Signed local IdP responses; the redirect signature is verified against the actual SP certificate. */
 export async function fakeSamlIdp() {
-  const [key, rotated, stranger] = await Promise.all([signingKey(), signingKey(), signingKey()]);
+  const [key, rotated, stranger] = await Promise.all([
+    fakeSamlSigningKey(),
+    fakeSamlSigningKey(),
+    fakeSamlSigningKey(),
+  ]);
   const issuer = 'http://127.0.0.1:8443';
   const controls = {
     unsigned: false,
@@ -56,6 +61,7 @@ export async function fakeSamlIdp() {
     subject: 'staff-1',
     email: 'ada@example.com',
     spCertificate: '',
+    groups: ['Support'],
   };
   const reset = () =>
     Object.assign(controls, {
@@ -73,6 +79,7 @@ export async function fakeSamlIdp() {
       wrapping: false,
       subject: 'staff-1',
       email: 'ada@example.com',
+      groups: ['Support'],
     });
   const response = (input: { requestId?: string; recipient: string; audience: string }) => {
     const id = `_${randomBytes(24).toString('hex')}`;
@@ -82,7 +89,7 @@ export async function fakeSamlIdp() {
     const correlation = input.requestId ? ` InResponseTo="${xmlEscape(input.requestId)}"` : '';
     const attribute = (name: string, values: string[]) =>
       `<saml:Attribute Name="${name}">${values.map((value) => `<saml:AttributeValue>${xmlEscape(value)}</saml:AttributeValue>`).join('')}</saml:Attribute>`;
-    let assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${id}" Version="2.0" IssueInstant="${new Date(now).toISOString()}"><saml:Issuer>${xmlEscape(controls.wrongIssuer ? 'wrong-idp' : issuer)}</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">${xmlEscape(controls.subject)}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${xmlEscape(controls.wrongRecipient ? 'https://attacker.example/acs' : input.recipient)}" NotOnOrAfter="${after}"${correlation}/></saml:SubjectConfirmation></saml:Subject><saml:Conditions${controls.missingTimes ? '' : ` NotBefore="${before}" NotOnOrAfter="${after}"`}><saml:AudienceRestriction><saml:Audience>${xmlEscape(controls.wrongAudience ? 'wrong-audience' : input.audience)}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${new Date(now).toISOString()}" SessionIndex="${id}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attribute('email', [controls.email])}${attribute('name', ['Ada'])}${controls.missingGroups ? '' : attribute('groups', ['Support'])}${controls.duplicateAttribute ? attribute('email', ['attacker@example.com']) : ''}</saml:AttributeStatement></saml:Assertion>`;
+    let assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${id}" Version="2.0" IssueInstant="${new Date(now).toISOString()}"><saml:Issuer>${xmlEscape(controls.wrongIssuer ? 'wrong-idp' : issuer)}</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">${xmlEscape(controls.subject)}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${xmlEscape(controls.wrongRecipient ? 'https://attacker.example/acs' : input.recipient)}" NotOnOrAfter="${after}"${correlation}/></saml:SubjectConfirmation></saml:Subject><saml:Conditions${controls.missingTimes ? '' : ` NotBefore="${before}" NotOnOrAfter="${after}"`}><saml:AudienceRestriction><saml:Audience>${xmlEscape(controls.wrongAudience ? 'wrong-audience' : input.audience)}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${new Date(now).toISOString()}" SessionIndex="${id}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attribute('email', [controls.email])}${attribute('name', ['Ada'])}${controls.missingGroups ? '' : attribute('groups', controls.groups)}${controls.duplicateAttribute ? attribute('email', ['attacker@example.com']) : ''}</saml:AttributeStatement></saml:Assertion>`;
     if (!controls.unsigned) {
       const signing = controls.unknownCert ? stranger : controls.rotated ? rotated : key;
       const signature = new SignedXml({
@@ -135,7 +142,9 @@ export async function fakeSamlIdp() {
       requestId,
     };
   };
-  const server = createServer((request, reply) => {
+  const fixture = idpControl((identity) => Object.assign(controls, identity));
+  const server = createServer(async (request, reply) => {
+    if (await fixture.serve(request, reply)) return;
     try {
       const issued = authorize(new URL(request.url ?? '/', issuer).toString());
       reply.writeHead(200, { 'content-type': 'text/html' });
@@ -153,6 +162,7 @@ export async function fakeSamlIdp() {
   });
   return {
     issuer,
+    controlKey: fixture.key,
     certificate: key.certificate,
     rotatedCertificate: rotated.certificate,
     controls,

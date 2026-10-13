@@ -16,6 +16,7 @@ import arMeta from '../locales/ar/meta.json' with { type: 'json' };
 import arReports from '../locales/ar/reports.json' with { type: 'json' };
 import arRules from '../locales/ar/rules.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
+import arSso from '../locales/ar/sso.json' with { type: 'json' };
 import arStaff from '../locales/ar/staff.json' with { type: 'json' };
 import arSystem from '../locales/ar/system.json' with { type: 'json' };
 import arTelegram from '../locales/ar/telegram.json' with { type: 'json' };
@@ -43,6 +44,7 @@ import enMeta from '../locales/en/meta.json' with { type: 'json' };
 import enReports from '../locales/en/reports.json' with { type: 'json' };
 import enRules from '../locales/en/rules.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
+import enSso from '../locales/en/sso.json' with { type: 'json' };
 import enStaff from '../locales/en/staff.json' with { type: 'json' };
 import enSystem from '../locales/en/system.json' with { type: 'json' };
 import enTelegram from '../locales/en/telegram.json' with { type: 'json' };
@@ -66,6 +68,7 @@ export const NAMESPACES = [
   'admin',
   'wizard',
   'settings',
+  'sso',
   'staff',
   'contacts',
   'tickets',
@@ -119,6 +122,7 @@ export const resources = {
     admin: enAdmin,
     wizard: enWizard,
     settings: enSettings,
+    sso: enSso,
     staff: enStaff,
     contacts: enContacts,
     tickets: enTickets,
@@ -148,6 +152,7 @@ export const resources = {
     admin: arAdmin,
     wizard: arWizard,
     settings: arSettings,
+    sso: arSso,
     staff: arStaff,
     contacts: arContacts,
     tickets: arTickets,

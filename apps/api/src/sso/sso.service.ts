@@ -22,6 +22,7 @@ import {
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
+import { AuthFailure } from '../auth/auth-failure.js';
 import { principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 import { ssoIdentityAuthority } from './identity-authority.js';
@@ -49,26 +50,57 @@ const view = (row: typeof ssoConnections.$inferSelect) =>
 export class SsoService {
   constructor(private readonly options: SsoServiceOptions) {}
 
+  inspectCertificates(certificates: string[]) {
+    try {
+      return {
+        certificates: certificates.map((pem) => {
+          const certificate = samlCertificate(pem);
+          return {
+            subject: certificate.subject,
+            fingerprint: certificate.fingerprint256,
+            expiresAt: new Date(certificate.validTo).toISOString(),
+          };
+        }),
+      };
+    } catch {
+      // Parsing untrusted PEM is a validation boundary; never expose OpenSSL errors.
+      throw new BadRequestException('sso-invalid-certificate');
+    }
+  }
+
   async signInProtocol(id: string): Promise<'oidc' | 'saml'> {
     // Explicit pre-tenant read of install-global configuration for protocol dispatch.
     const [connection] = await this.options.db
       .select({ protocol: ssoConnections.protocol, enabled: ssoConnections.enabled })
       .from(ssoConnections)
       .where(eq(ssoConnections.id, id));
-    if (!connection?.enabled) throw new NotFoundException('sso-connection-disabled');
+    if (!connection?.enabled) throw new AuthFailure('sso-connection-disabled');
     return connection.protocol;
   }
 
   async list() {
+    const rows = await getTx()
+      .select({
+        connection: ssoConnections,
+        peopleCount: sql<number>`(select count(*)::int from ${userSsoIdentities} where ${userSsoIdentities.connectionId} = ${ssoConnections.id})`,
+      })
+      .from(ssoConnections)
+      .orderBy(ssoConnections.name);
     return {
-      connections: (await getTx().select().from(ssoConnections).orderBy(ssoConnections.name)).map(
-        view,
-      ),
+      connections: rows.map(({ connection, peopleCount }) => ({
+        ...view(connection),
+        peopleCount,
+      })),
     };
   }
 
   async get(id: string) {
     const connection = view(await this.row(id));
+    const [linked] = await getTx()
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userSsoIdentities)
+      .where(eq(userSsoIdentities.connectionId, id));
+    connection.peopleCount = linked?.count ?? 0;
     const base = this.options.env.APP_URL;
     const url = (path: string) => new URL(path, base).toString();
     return {
@@ -178,6 +210,41 @@ export class SsoService {
         .values(mappings.map((mapping) => ({ ...mapping, connectionId: id })));
     await this.audit('sso.connection.updated', id, ['mappings']);
     return this.mappings(id);
+  }
+
+  async targets() {
+    const brandRows = await this.options.db
+      .select({ id: brands.id, name: brands.name })
+      .from(brands)
+      .where(eq(brands.status, 'active'));
+    const targets = [];
+    for (const brand of brandRows) {
+      const ownedDepartments = await withSystem(this.options.db, brand.id, (tx) =>
+        tx
+          .select({ id: departments.id, name: departments.name })
+          .from(departments)
+          .where(eq(departments.brandId, brand.id)),
+      );
+      targets.push({ ...brand, departments: ownedDepartments });
+    }
+    const adminRows = await this.options.db
+      .select()
+      .from(users)
+      .where(and(eq(users.installAdmin, true), eq(users.status, 'active')));
+    return {
+      sp: {
+        entityId: new URL('/api/auth/sso/saml/metadata', this.options.env.APP_URL).toString(),
+        metadataUrl: new URL('/api/auth/sso/saml/metadata', this.options.env.APP_URL).toString(),
+      },
+      brands: targets,
+      admins: adminRows.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        eligible:
+          user.totpEnabled && user.totpSecretEncrypted !== null && user.passwordHash !== null,
+      })),
+    };
   }
 
   async settings() {

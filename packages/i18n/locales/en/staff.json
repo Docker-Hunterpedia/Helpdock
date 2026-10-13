@@ -124,5 +124,9 @@
     "lastInstallAdmin": "This is the last install admin, so it cannot be deactivated.",
     "outOfScope": "You can only manage agents and viewers in your own departments.",
     "viewerDisabled": "The Viewer role is turned off for this install."
+  },
+  "sso": {
+    "badge": "SSO",
+    "managedBy": "Managed by {{provider}}"
   }
 }

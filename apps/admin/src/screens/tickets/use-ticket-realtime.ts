@@ -1,4 +1,4 @@
-import type { TicketDetail, TicketViewingActivity } from '@helpdock/schemas';
+import type { TicketDetail, TicketMessagePage, TicketViewingActivity } from '@helpdock/schemas';
 import { departmentRoom, TICKET_VIEWING_INTERVAL_MS, ticketRoom } from '@helpdock/schemas';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -66,17 +66,10 @@ export function useTicketRoom(
         api.activity(brandId, ticketId),
       ]);
 
-      queryClient.setQueryData<TicketDetail>(key, {
-        ticket: ticket.ticket,
-        messages: {
-          messages: applyCatchUp(held.messages.messages, page.messages),
-          nextAfter: page.nextAfter,
-        },
-        activity: activity.activity,
-        // M1-09: the merge read comes with the ticket, and a catch-up that
-        // dropped it would take the merged block off the screen until a reload.
-        ...mergeViewOf(ticket),
-      });
+      queryClient.setQueryData<TicketDetail>(
+        key,
+        detailAfterCatchUp(held, ticket, page, activity.activity),
+      );
     };
 
     const unsubscribe = client.subscribe({
@@ -136,11 +129,24 @@ export function useTicketRoom(
   return { viewers: viewersOf(sightings, selfId, Date.now()) };
 }
 
-/** The merge half of a ticket read, carried over by a catch-up. */
-const mergeViewOf = (read: TicketDetail): Partial<TicketDetail> => ({
-  ...(read.merged === undefined ? {} : { merged: read.merged }),
-  ...(read.mergedInto === undefined ? {} : { mergedInto: read.mergedInto }),
-  ...(read.related === undefined ? {} : { related: read.related }),
+/**
+ * The detail a catch-up leaves in the cache: everything the fresh read says
+ * (the ticket, its SLA, survey, merge and related tickets) with the held
+ * thread and what it missed. Copying fields one by one is how the SLA card
+ * came to say "No SLA policy applies" after a note (#179).
+ */
+export const detailAfterCatchUp = (
+  held: TicketDetail,
+  read: TicketDetail,
+  page: TicketMessagePage,
+  activity: TicketDetail['activity'],
+): TicketDetail => ({
+  ...read,
+  messages: {
+    messages: applyCatchUp(held.messages.messages, page.messages),
+    nextAfter: page.nextAfter,
+  },
+  activity,
 });
 
 /**

@@ -7,7 +7,11 @@ being implemented; this foundation alone does not import a brand.
 `Connector` yields `{ records, cursor }` pages. Every record is a shared
 `{ entity, payload }` discriminated union; `payload.externalId` retains the vendor's
 identifier. The API must stage a page and its next cursor atomically. A final null
-cursor ends extraction. Vendor credentials belong only in the encrypted API run,
+cursor ends that entity's extraction. A page contains only the entity requested;
+external IDs within that page are unique, and a non-final cursor must advance.
+Pages may overlap records across requests; staging upserts those records without
+counting them twice. The API page store bounds a page to 1,000 records and 50 MiB
+serialized and commits records/counts/cursor together. Vendor credentials belong only in the encrypted API run,
 never in normalized records or emitted cursor data.
 
 `ImportHttp` validates JSON output and uses `safeFetch` with exact vendor host

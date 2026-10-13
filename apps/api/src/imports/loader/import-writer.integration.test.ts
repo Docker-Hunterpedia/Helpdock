@@ -32,15 +32,19 @@ import {
 import { hashImportValue } from '@helpdock/importers';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
-import { eq, sql } from 'drizzle-orm';
+import { eq, isNotNull, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
 import { CsatRepository } from '../../csat/csat.repository.js';
 import { RollupRepository } from '../../reports/rollup.repository.js';
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
+import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
+import { storeImportPage } from '../jobs/extract-page.js';
+import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
+import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
 import { contactLoadSchema, organizationLoadSchema } from './profile-contracts.js';
 import { staffLoadSchema } from './staff-contracts.js';
@@ -172,6 +176,13 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       .insert(importRuns)
       .values({ id: RUN, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
   }, 300000);
+  afterEach(async () => {
+    // A failed lease assertion must not hold the brand hostage for later scenarios.
+    await owner?.db
+      .update(importRuns)
+      .set({ claimToken: null, claimedAt: null })
+      .where(isNotNull(importRuns.claimToken));
+  });
   afterAll(async () => {
     await app?.close();
     await owner?.close();
@@ -715,6 +726,472 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     const loaded = await withSystem(app.db, OTHER_BRAND, (tx) => writer.organization(tx, input));
     const [company] = await owner.db.select().from(accounts).where(eq(accounts.id, loaded.id));
     expect(company?.custom).toEqual({ contract_code: 'Original contract' });
+  });
+
+  it('creates confirmed field definitions, preserves local edits across repeats/deltas and loads their values', async () => {
+    const input = fieldLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      record: {
+        externalId: 'vendor-field',
+        target: 'ticket',
+        key: 'vendor-key',
+        label: 'Vendor label',
+        type: 'textarea',
+      },
+      mapping: {
+        kind: 'create',
+        definition: {
+          target: 'ticket',
+          key: 'imported_summary',
+          label: 'Historical summary',
+          type: 'text',
+        },
+      },
+    });
+    const created = await withSystem(app.db, BRAND, (tx) => writer.field(tx, input));
+    expect(created.outcome).toBe('created');
+    if (!created.id) throw new Error('Expected a created field');
+    const [definition] = await owner.db
+      .select()
+      .from(customFieldDefs)
+      .where(eq(customFieldDefs.id, created.id));
+    expect(definition).toMatchObject({
+      brandId: BRAND,
+      target: 'ticket',
+      key: 'imported_summary',
+      type: 'text',
+      label: 'Historical summary',
+    });
+    await owner.db
+      .update(customFieldDefs)
+      .set({ label: 'Local label', agentVisible: false })
+      .where(eq(customFieldDefs.id, created.id));
+    const before = await owner.db
+      .select()
+      .from(customFieldDefs)
+      .where(eq(customFieldDefs.id, created.id));
+    const nextRun = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: nextRun,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'loading',
+      startedBy: USER,
+    });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => writer.field(tx, { ...input, runId: nextRun })),
+    ).toMatchObject({ id: created.id, outcome: 'unchanged' });
+    input.record.label = 'Changed vendor label';
+    expect(await withSystem(app.db, BRAND, (tx) => writer.field(tx, input))).toMatchObject({
+      id: created.id,
+      outcome: 'linked',
+    });
+    expect(
+      await owner.db.select().from(customFieldDefs).where(eq(customFieldDefs.id, created.id)),
+    ).toEqual(before);
+    expect(
+      await owner.db.select().from(auditLog).where(eq(auditLog.targetId, created.id)),
+    ).toHaveLength(1);
+    const ticket = request('new-field-values');
+    ticket.resolved.custom = { imported_summary: '  Original summary  ' };
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, ticket));
+    const [stored] = await owner.db.select().from(tickets).where(eq(tickets.id, loaded.ticketId));
+    expect(stored?.custom).toEqual({ imported_summary: 'Original summary' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(await redis.dbsize()).toBe(0);
+  });
+
+  it('requires explicit field reuse or skip and refuses duplicate keys, foreign fields and wrong targets', async () => {
+    const [existing] = await owner.db
+      .select()
+      .from(customFieldDefs)
+      .where(eq(customFieldDefs.key, 'tier'));
+    if (!existing) throw new Error('Missing contact field fixture');
+    const input = fieldLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      record: {
+        externalId: 'existing-field',
+        target: 'contact',
+        key: 'vendor_tier',
+        label: 'Tier',
+        type: 'select',
+        options: [{ value: 'gold', label: 'Gold' }],
+      },
+      mapping: { kind: 'existing', fieldId: existing.id },
+    });
+    expect(await withSystem(app.db, BRAND, (tx) => writer.field(tx, input))).toMatchObject({
+      id: existing.id,
+      outcome: 'linked',
+    });
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        writer.field(tx, {
+          ...input,
+          record: { ...input.record, externalId: 'skipped-field' },
+          mapping: { kind: 'skip' },
+        }),
+      ),
+    ).toEqual({ id: null, outcome: 'skipped' });
+    const [foreign] = await owner.db
+      .select()
+      .from(customFieldDefs)
+      .where(eq(customFieldDefs.key, 'foreign_field'));
+    if (!foreign) throw new Error('Missing foreign field fixture');
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.field(tx, {
+          ...input,
+          record: { ...input.record, externalId: 'foreign-field', target: 'ticket' },
+          mapping: { kind: 'existing', fieldId: foreign.id },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.field(tx, {
+          ...input,
+          record: { ...input.record, externalId: 'wrong-target-field', target: 'ticket' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.field(tx, {
+          ...input,
+          record: { ...input.record, externalId: 'duplicate-field' },
+          mapping: {
+            kind: 'create',
+            definition: {
+              target: 'contact',
+              key: 'tier',
+              label: 'Other label',
+              type: 'text',
+              options: [],
+              required: false,
+              agentVisible: true,
+            },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(eq(importExternalIds.externalId, 'duplicate-field')),
+    ).toEqual([]);
+  });
+
+  it('fences competing workers per brand and refuses the previous worker after a stale takeover', async () => {
+    const firstRun = uuidv7();
+    const secondRun = uuidv7();
+    const otherRun = uuidv7();
+    await owner.db.insert(importRuns).values([
+      { id: firstRun, brandId: BRAND, source: 'zendesk', status: 'extracting', startedBy: USER },
+      { id: secondRun, brandId: BRAND, source: 'zendesk', status: 'extracting', startedBy: USER },
+      {
+        id: otherRun,
+        brandId: OTHER_BRAND,
+        source: 'zendesk',
+        status: 'extracting',
+        startedBy: USER,
+      },
+    ]);
+    const claims = await Promise.all(
+      [firstRun, secondRun].map((runId) =>
+        withSystem(app.db, BRAND, (tx) =>
+          claimImportRun(tx, { brandId: BRAND, runId, phase: 'extracting' }),
+        ),
+      ),
+    );
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    const original = claims.find((claim) => claim !== null);
+    if (!original) throw new Error('Expected a claim');
+    const replacementRun = original.runId === firstRun ? secondRun : firstRun;
+    const independent = await withSystem(app.db, OTHER_BRAND, (tx) =>
+      claimImportRun(tx, { brandId: OTHER_BRAND, runId: otherRun, phase: 'extracting' }),
+    );
+    expect(independent).not.toBeNull();
+    await owner.db
+      .update(importRuns)
+      .set({ claimedAt: new Date(Date.now() - IMPORT_CLAIM_TIMEOUT_MS - 1000) })
+      .where(eq(importRuns.id, original.runId));
+    const replacement = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId: replacementRun, phase: 'extracting' }),
+    );
+    if (!replacement) throw new Error('Expected stale takeover');
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await renewImportClaim(tx, original);
+        await tx.insert(importRecords).values({
+          brandId: BRAND,
+          runId: original.runId,
+          entity: 'group',
+          externalId: 'stale-write',
+          payload: { externalId: 'stale-write', name: 'Uncommitted' },
+          payloadHash: hashImportValue({ name: 'Uncommitted' }),
+        });
+      }),
+    ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+    expect(
+      await owner.db
+        .select()
+        .from(importRecords)
+        .where(eq(importRecords.externalId, 'stale-write')),
+    ).toEqual([]);
+    await withSystem(app.db, BRAND, (tx) => renewImportClaim(tx, replacement));
+    await withSystem(app.db, BRAND, (tx) =>
+      cancelImportRun(tx, { brandId: BRAND, runId: replacementRun }),
+    );
+    await withSystem(app.db, OTHER_BRAND, (tx) =>
+      cancelImportRun(tx, { brandId: OTHER_BRAND, runId: otherRun }),
+    );
+  });
+
+  it.each(['extracting', 'dry_run', 'loading', 'finishing'] as const)(
+    'pauses %s, revokes its worker, resumes with a fresh token and purges credentials on cancel',
+    async (phase) => {
+      const runId = uuidv7();
+      const scope = { brandId: BRAND, runId };
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status: phase,
+        startedBy: USER,
+        credentialsEncrypted: 'encrypted-fixture',
+      });
+      const original = await withSystem(app.db, BRAND, (tx) =>
+        claimImportRun(tx, { ...scope, phase }),
+      );
+      if (!original) throw new Error('Expected loading claim');
+      expect(await withSystem(app.db, BRAND, (tx) => pauseImportRun(tx, scope))).toBe(true);
+      const [paused] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(paused).toMatchObject({
+        status: 'paused',
+        pausedFrom: phase,
+        claimToken: null,
+        claimedAt: null,
+        credentialsEncrypted: 'encrypted-fixture',
+      });
+      await expect(
+        withSystem(app.db, BRAND, (tx) => renewImportClaim(tx, original)),
+      ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+      expect(await withSystem(app.db, BRAND, (tx) => resumeImportRun(tx, scope))).toBe(phase);
+      const resumed = await withSystem(app.db, BRAND, (tx) =>
+        claimImportRun(tx, { ...scope, phase }),
+      );
+      expect(resumed?.token).not.toBe(original.token);
+      expect(
+        await withSystem(app.db, OTHER_BRAND, (tx) =>
+          cancelImportRun(tx, { brandId: OTHER_BRAND, runId }),
+        ),
+      ).toBe(false);
+      expect(await withSystem(app.db, BRAND, (tx) => cancelImportRun(tx, scope))).toBe(true);
+      const [cancelled] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(cancelled).toMatchObject({
+        status: 'cancelled',
+        pausedFrom: null,
+        claimToken: null,
+        claimedAt: null,
+        credentialsEncrypted: null,
+      });
+      expect(cancelled?.finishedAt).toBeInstanceOf(Date);
+      if (!resumed) throw new Error('Expected resumed claim');
+      await expect(
+        withSystem(app.db, BRAND, (tx) => renewImportClaim(tx, resumed)),
+      ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+      expect(await withSystem(app.db, BRAND, (tx) => resumeImportRun(tx, scope))).toBeNull();
+      expect(await withSystem(app.db, BRAND, (tx) => cancelImportRun(tx, scope))).toBe(false);
+    },
+  );
+
+  it('commits extracted records, distinct counts and cursors atomically and resumes without duplicates', async () => {
+    const runId = uuidv7();
+    const scope = { brandId: BRAND, runId };
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+    });
+    const original = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'extracting' }),
+    );
+    if (!original) throw new Error('Expected extraction claim');
+    const page = {
+      records: [{ entity: 'group', payload: { externalId: 'group-1', name: 'First' } }],
+      cursor: { after: 'first-page' },
+    };
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await storeImportPage(tx, original, 'group', page);
+        throw new Error('Worker stopped before commit');
+      }),
+    ).rejects.toThrow('Worker stopped before commit');
+    expect(
+      await owner.db.select().from(importRecords).where(eq(importRecords.runId, runId)),
+    ).toEqual([]);
+    const [uncommitted] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(uncommitted?.cursors).toEqual({});
+    await withSystem(app.db, BRAND, (tx) => storeImportPage(tx, original, 'group', page));
+    await withSystem(app.db, BRAND, (tx) => pauseImportRun(tx, scope));
+    await withSystem(app.db, BRAND, (tx) => resumeImportRun(tx, scope));
+    const resumed = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'extracting' }),
+    );
+    if (!resumed) throw new Error('Expected resumed extraction');
+    await withSystem(app.db, BRAND, (tx) =>
+      storeImportPage(tx, resumed, 'group', {
+        records: [
+          { entity: 'group', payload: { externalId: 'group-1', name: 'Updated first' } },
+          { entity: 'group', payload: { externalId: 'group-2', name: 'Second' } },
+        ],
+        cursor: null,
+      }),
+    );
+    const records = await owner.db
+      .select()
+      .from(importRecords)
+      .where(eq(importRecords.runId, runId));
+    expect(records).toHaveLength(2);
+    expect(records.find((row) => row.externalId === 'group-1')?.payload).toEqual({
+      externalId: 'group-1',
+      name: 'Updated first',
+    });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run?.counts).toEqual({ extracted: { group: 2 } });
+    expect(run?.cursors).toEqual({ group: { cursor: null, done: true } });
+    await expect(
+      withSystem(app.db, BRAND, (tx) => storeImportPage(tx, original, 'group', page)),
+    ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+    await withSystem(app.db, BRAND, (tx) => cancelImportRun(tx, scope));
+  });
+
+  it('refuses malformed extraction pages and a cursor that makes no progress without losing the checkpoint', async () => {
+    const runId = uuidv7();
+    const scope = { brandId: BRAND, runId };
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'extracting' }),
+    );
+    if (!claim) throw new Error('Expected claim');
+    const group = { entity: 'group', payload: { externalId: 'group', name: 'Group' } };
+    await withSystem(app.db, BRAND, (tx) =>
+      storeImportPage(tx, claim, 'group', { records: [group], cursor: { page: 2 } }),
+    );
+    const [before] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    for (const page of [
+      { records: [group], cursor: { page: 2 } },
+      { records: [group, group], cursor: { page: 3 } },
+      { records: [{ entity: 'group', payload: { externalId: 'bad' } }], cursor: { page: 3 } },
+      {
+        records: [{ entity: 'tag', payload: { externalId: 'tag', name: 'Tag' } }],
+        cursor: { page: 3 },
+      },
+    ])
+      await expect(
+        withSystem(app.db, BRAND, (tx) => storeImportPage(tx, claim, 'group', page)),
+      ).rejects.toThrow();
+    const [after] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(after?.cursors).toEqual(before?.cursors);
+    expect(after?.counts).toEqual(before?.counts);
+    expect(
+      await owner.db.select().from(importRecords).where(eq(importRecords.runId, runId)),
+    ).toHaveLength(1);
+    await withSystem(app.db, BRAND, (tx) => cancelImportRun(tx, scope));
+  });
+
+  it('stages original ticket and knowledge parent references for later ordered loading', async () => {
+    const runId = uuidv7();
+    const scope = { brandId: BRAND, runId };
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'extracting' }),
+    );
+    if (!claim) throw new Error('Expected claim');
+    await withSystem(app.db, BRAND, (tx) =>
+      storeImportPage(tx, claim, 'message', {
+        records: [
+          {
+            entity: 'message',
+            payload: {
+              externalId: 'staged-message',
+              ticketExternalId: 'staged-ticket',
+              authorKind: 'system',
+              public: false,
+              bodyText: 'Original note',
+              createdAt: '2020-01-01T00:00:00Z',
+              attachments: [],
+            },
+          },
+        ],
+        cursor: null,
+      }),
+    );
+    await withSystem(app.db, BRAND, (tx) =>
+      storeImportPage(tx, claim, 'section', {
+        records: [
+          {
+            entity: 'section',
+            payload: {
+              externalId: 'staged-section',
+              parentExternalId: 'staged-category',
+              names: { en: 'Original section' },
+            },
+          },
+        ],
+        cursor: null,
+      }),
+    );
+    await withSystem(app.db, BRAND, (tx) =>
+      storeImportPage(tx, claim, 'article', {
+        records: [
+          {
+            entity: 'article',
+            payload: {
+              externalId: 'staged-article',
+              sectionExternalId: 'staged-section',
+              locale: 'en',
+              title: 'Original title',
+              bodyHtml: '<p>Original body</p>',
+              draft: false,
+              internal: false,
+              createdAt: '2020-01-01T00:00:00Z',
+              updatedAt: '2020-01-02T00:00:00Z',
+            },
+          },
+        ],
+        cursor: null,
+      }),
+    );
+    const staged = await owner.db
+      .select()
+      .from(importRecords)
+      .where(eq(importRecords.runId, runId));
+    expect(staged.map((row) => [row.externalId, row.parentExternalId]).sort()).toEqual([
+      ['staged-article', 'staged-section'],
+      ['staged-message', 'staged-ticket'],
+      ['staged-section', 'staged-category'],
+    ]);
+    await withSystem(app.db, BRAND, (tx) => cancelImportRun(tx, scope));
   });
 
   it('loads companies with all domains/notes, links through a secondary domain and writes nothing on repeat', async () => {

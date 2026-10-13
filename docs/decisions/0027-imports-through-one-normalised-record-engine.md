@@ -180,3 +180,15 @@ grant membership: the operator must explicitly map an eligible staff member
 already in this brand. This avoids cross-brand account linking and activation
 through vendor data. Name-only authors have no account or role. New staff creation
 is audited under the importing brand and system run actor.
+
+### 2026-10-14 — fenced import worker claims
+
+A heartbeat alone does not stop a worker that wakes after stale-claim takeover
+from committing a second batch. Import runs therefore add a UUID `claim_token`,
+checked under the run's row lock on every batch transaction, and `paused_from`
+for durable resume of the exact interrupted phase. A partial unique index enforces one claim per brand,
+with a 30-minute stale timeout and heartbeat renewal at page/batch boundaries.
+Pause/cancel clear the token; takeover replaces it. The previous worker loses
+write authority immediately at its next batch boundary. SQL requires complete
+claim metadata on active phases and a resumable phase on paused runs. Terminal
+runs clear claims and credentials.

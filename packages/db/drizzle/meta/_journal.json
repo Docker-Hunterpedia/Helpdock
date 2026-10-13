@@ -386,6 +386,13 @@
       "when": 1791928384624,
       "tag": "0056_imported_csat",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1791929908817,
+      "tag": "0057_import_worker_claims",
+      "breakpoints": true
     }
   ]
 }

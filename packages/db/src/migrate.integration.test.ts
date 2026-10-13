@@ -69,6 +69,7 @@ const MIGRATION_TAGS = [
   '0054_imports',
   '0055_import_source_details',
   '0056_imported_csat',
+  '0057_import_worker_claims',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -150,6 +151,37 @@ describe.skipIf(!hasDocker)('migrations', () => {
     expect(first.total).toBe(MIGRATION_TAGS.length);
     expect(second.total).toBe(MIGRATION_TAGS.length);
     expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
+  });
+
+  it('enforces one claimed import per brand and requires valid claim and pause metadata', async () => {
+    const url = await migrated('import_claims');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const [person] =
+        await owner`INSERT INTO users (id, email, name) VALUES (gen_random_uuid(), 'claim-test@example.com', 'Importer') RETURNING id`;
+      const [brand] =
+        await owner`INSERT INTO brands (id, name, prefix) VALUES (gen_random_uuid(), 'Claims', 'CL') RETURNING id`;
+      const [claimed] =
+        await owner`INSERT INTO import_runs (id, brand_id, source, started_by, status, claim_token, claimed_at)
+        VALUES (gen_random_uuid(), ${brand?.id}, 'file', ${person?.id}, 'loading', gen_random_uuid(), now()) RETURNING id`;
+      await expect(owner`INSERT INTO import_runs (id, brand_id, source, started_by, status, claim_token, claimed_at)
+        VALUES (gen_random_uuid(), ${brand?.id}, 'file', ${person?.id}, 'extracting', gen_random_uuid(), now())`).rejects.toMatchObject(
+        { code: '23505' },
+      );
+      await expect(
+        owner`UPDATE import_runs SET claimed_at = NULL WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        owner`UPDATE import_runs SET status = 'paused', claim_token = NULL, claimed_at = NULL WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'paused', paused_from = 'loading', claim_token = NULL, claimed_at = NULL WHERE id = ${claimed?.id}`;
+      await expect(
+        owner`UPDATE import_runs SET paused_from = 'ready' WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'loading', paused_from = NULL, claim_token = gen_random_uuid(), claimed_at = now() WHERE id = ${claimed?.id}`;
+    } finally {
+      await owner.end();
+    }
   });
 
   it('binds import children to their own brand and refuses credentials in terminal runs', async () => {

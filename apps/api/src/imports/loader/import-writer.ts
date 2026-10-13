@@ -4,8 +4,10 @@ import { sql } from 'drizzle-orm';
 import { mappedTicketLoadSchema, type TicketLoad } from './contracts.js';
 import { validatedImportedCustom } from './custom-values.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
+import type { FieldLoad } from './field-contracts.js';
 import { loadImportedContact } from './load-contacts.js';
 import { loadImportedCsat } from './load-csat.js';
+import { loadImportedField } from './load-fields.js';
 import { importMessageHash, loadImportedMessages } from './load-messages.js';
 import { loadImportedOrganization } from './load-organizations.js';
 import { loadImportedParticipants } from './load-participants.js';
@@ -23,6 +25,9 @@ import type { StaffLoad } from './staff-contracts.js';
 
 /** The caller owns one system-job transaction per ticket; this module emits no live-ticket events. */
 export class ImportWriter {
+  field(tx: DbTransaction, input: FieldLoad) {
+    return loadImportedField(tx, input);
+  }
   staff(tx: DbTransaction, input: StaffLoad) {
     return loadImportedStaff(tx, input);
   }

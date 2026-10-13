@@ -349,6 +349,13 @@ audience and filters disabled, the menu has no Delete, and the api answers 409
 
 ## Custom fields
 
+M11 field imports are in development. Confirmed mappings can reuse a definition,
+create one within the same field limits, or skip it. Organization fields map to
+account fields. Imports preserve existing field labels, choices and visibility;
+source changes do not rewrite a definition under its stored values. New values
+still pass the brand's field validation, including required fields.
+
+
 A custom field keeps something a brand needs that Helpdock does not ship. Three
 targets — **Ticket**, **Contact**, **Account** — each with its own list and its
 own order, which is why the tab draws three tables.

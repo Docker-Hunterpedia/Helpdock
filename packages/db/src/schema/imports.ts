@@ -57,6 +57,8 @@ export const importRuns = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
     claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    claimToken: uuid('claim_token'),
+    pausedFrom: importStatusEnum('paused_from'),
   },
   (table) => [
     unique('import_runs_brand_id_key').on(table.brandId, table.id),
@@ -73,6 +75,17 @@ export const importRuns = pgTable(
       'import_runs_terminal_credentials',
       sql`${table.status} NOT IN ('completed', 'failed', 'cancelled') OR ${table.credentialsEncrypted} IS NULL`,
     ),
+    check(
+      'import_runs_claim_shape',
+      sql`(${table.claimToken} IS NULL AND ${table.claimedAt} IS NULL) OR (${table.claimToken} IS NOT NULL AND ${table.claimedAt} IS NOT NULL AND ${table.status} IN ('extracting', 'dry_run', 'loading', 'finishing'))`,
+    ),
+    check(
+      'import_runs_pause_shape',
+      sql`(${table.status} = 'paused' AND ${table.pausedFrom} IS NOT NULL AND ${table.pausedFrom} IN ('extracting', 'dry_run', 'loading', 'finishing')) OR (${table.status} <> 'paused' AND ${table.pausedFrom} IS NULL)`,
+    ),
+    uniqueIndex('import_runs_brand_claim_key')
+      .on(table.brandId)
+      .where(sql`${table.claimToken} IS NOT NULL`),
     index('import_runs_brand_created_idx').on(table.brandId, table.createdAt, table.id),
     index('import_runs_claim_idx').on(table.status, table.claimedAt),
   ],

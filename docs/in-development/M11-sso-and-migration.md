@@ -103,7 +103,7 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
 | M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
-| M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | planned |
+| M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
 | M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
 | M11-12 | Zendesk connector: API token or OAuth; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | planned |
 | M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | planned |
@@ -697,11 +697,13 @@ import_runs
   options jsonb not null               -- scope: { since, until, entities[], helpCenter, keepNumbers, startSla, statuses[] … }
   credentials_encrypted text null      -- vendor credentials, v1 envelope; nulled on completed/failed/cancelled
   cursors jsonb not null default '{}'  -- per entity: vendor cursor or page
-  counts jsonb not null default '{}'   -- per entity: { found, staged, loaded, skipped, failed }
+  counts jsonb not null default '{}'   -- extracted: { entity: unique staged count }; load progress is separate
   dry_run_report jsonb null
   error text null
   started_by uuid fk users
   created_at, started_at, finished_at, updated_at, claimed_at
+  claim_token uuid null, paused_from import_status null
+  unique (brand_id) where claim_token is not null
 
 import_records                          -- the staging area, one row per normalised record
   id uuid pk, brand_id, run_id fk import_runs on delete cascade
@@ -927,7 +929,7 @@ cover canonical hashes and the existing email-view compatibility. The writer
 build check rejects live hooks, outbound helpers and unreviewed dependencies;
 it is wired into `pnpm check:routes` and has eight refusal/allowance tests.
 
-This is an implementation checkpoint, not a complete loader. Field-definition mappings, help-center loading,
+This is an implementation checkpoint, not a complete loader. Help-center loading,
 report rebuilds, scheduled-rule guards and imported-media completion remain to be
 implemented and verified. Shared imported attachment copies must receive their
 original's final processed state. The 500-ticket reference import and external
@@ -1031,6 +1033,24 @@ Field-definition creation, help-center loading,
 worker/runtime guards and complete vendor/browser acceptance remain pending.
 
 
+### Field-definition checkpoint (M11-09, in progress)
+
+Field mappings explicitly reuse a definition, create one from the operator's
+confirmed configuration, or skip it. Organization fields target account
+custom values. The source field vocabulary remains intact; confirmed definitions
+use the ordinary custom-field request schema, including key/label/option limits.
+Creation is bounded by `MAX_CUSTOM_FIELDS_PER_TARGET`, locks the target's field
+ordering and writes an `import.field.created` audit entry. A colliding key requires
+explicit reuse; foreign-brand and wrong-target definitions are refused.
+
+Existing definitions, including local labels, visibility and choices, are never
+rewritten by source updates. Repeats across runs preserve the source identity and
+write nothing. Changed source definitions refresh the identity hash while retaining
+the brand's definition; mapped values still pass the target's value validation.
+Twenty-four focused writer integration cases pass on real PostgreSQL/Redis.
+The full loader, workers, vendor connectors and UI acceptance remain incomplete.
+
+
 ## M11-10 Import jobs
 
 `packages/jobs/src/jobs.ts`: `import.extract`, `import.load`, `import.attachments`,
@@ -1080,6 +1100,32 @@ claim older than 30 min is taken over, as `knowledge.sync` does).
 | POST | `/:runId/start-sla` | start clocks for its open tickets (open question 1) |
 
 Audit (brand scope): `import.created|started|paused|cancelled|completed|failed`.
+
+### M11-10 claims and extraction checkpoint (in progress)
+
+Migration `0057_import_worker_claims` adds `claim_token` and `paused_from` with
+SQL shape checks and a partial unique claim-per-brand index. Claims are exclusive within a brand and independent across
+brands. A stale claim older than 30 minutes is invalidated under the brand lock;
+a replacement receives a fresh token. Each batch renews/checks its token in the
+same transaction as its writes. Pause and cancel invalidate the current token;
+resume restores the exact interrupted phase. Cancellation purges credentials
+and sets a finish time. Terminal runs cannot resume or cancel again.
+
+The extraction page store validates JSON-only, same-entity pages (at most 1,000
+records and 50 MiB serialized), refuses duplicate IDs within a page, completed
+entity writes and non-advancing cursors, and stages parent references for ticket
+threads/ratings/attachments and knowledge records. Records, unique extracted
+counts, heartbeat and per-entity cursor checkpoints commit together. Overlapping
+records across pages update their payload without inflating the count. The last
+null cursor marks that entity done. A transaction stopped before commit preserves
+the previous cursor and writes no records. Raw vendor bodies are not log text.
+
+This checkpoint proves the database mechanics on real PostgreSQL and Redis.
+It does not yet provide registered BullMQ handlers, extraction orchestration,
+429 delay scheduling, mapping proposals/dry runs, load/attachment/finish jobs,
+run-control API endpoints, or the worker-kill reference acceptance test.
+Those remain required before M11-10 or the milestone is marked complete.
+
 
 ### Shared HTTP security implementation notes (in progress)
 

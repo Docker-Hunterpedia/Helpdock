@@ -355,6 +355,11 @@ happens once across two concurrent callers; audit rows.
 
 ### M11-01 implementation notes
 
+Master-key rotation includes the encrypted OIDC client secret and the SP private
+key setting. The real-Postgres rotation suite verifies both remain decryptable
+with the replacement key alone; migration-runner expectations include `0053_sso`.
+
+
 Issue #183; implementation branch `feat/m11-01-sso-schema`.
 
 Migration `0053_sso` adds the three install-scope tables and membership

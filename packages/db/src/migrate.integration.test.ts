@@ -65,6 +65,7 @@ const MIGRATION_TAGS = [
   '0050_meta_channels',
   '0051_meta_profile_checked',
   '0052_meta_deliveries_platform_ids',
+  '0053_sso',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

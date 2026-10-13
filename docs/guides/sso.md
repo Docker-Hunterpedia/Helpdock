@@ -98,3 +98,7 @@ secret appears in a configuration response or audit record.
 The administrative contracts are defined in `packages/schemas/src/sso.ts` and
 wrapped in Nest Zod DTOs in `apps/api/src/sso/dto.ts`. The brand-scoped public
 REST API's OpenAPI document does not describe these install-admin endpoints.
+
+Master-key rotation re-encrypts saved connection secrets and the encrypted SP
+private-key setting. The signing key itself remains the same, so rotating the
+installation master key does not require replacing IdP metadata.

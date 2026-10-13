@@ -29,6 +29,21 @@ it('refuses an oversized unterminated line before parsing it', async () => {
   expect(stream.destroyed).toBe(true);
 });
 
+it.each([
+  ['invalid continuation', Buffer.from([0xc3, 0x28])],
+  ['truncated final character', Buffer.from([0xe2, 0x82])],
+])('refuses %s instead of silently altering source history', async (_scenario, malformed) => {
+  const stream = Readable.from([
+    Buffer.from('{"externalId":"t","name":"'),
+    malformed,
+    ...(_scenario === 'invalid continuation' ? [Buffer.from('"}\n')] : []),
+  ]);
+  await expect(
+    collectAsync(readImportNdjson({ stream, entity: 'tag', file: 'tag.ndjson' })),
+  ).rejects.toMatchObject({ code: 'invalid-encoding', file: 'tag.ndjson' });
+  expect(stream.destroyed).toBe(true);
+});
+
 it('refuses deeply nested custom JSON with a safe line error before schema traversal', async () => {
   const nested = `${'['.repeat(200)}0${']'.repeat(200)}`;
   const json = `{"externalId":"1","subject":"History","status":"open","ccEmails":[],"tags":[],"custom":{"nested":${nested}},"createdAt":"2020-01-01T00:00:00Z","updatedAt":"2020-01-01T00:00:00Z"}`;

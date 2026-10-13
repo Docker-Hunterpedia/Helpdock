@@ -1,11 +1,16 @@
 import type { Readable } from 'node:stream';
-import { StringDecoder } from 'node:string_decoder';
 import { type ImportEntity, type ImportRecord, importRecordSchema } from '@helpdock/schemas';
 import { withinJsonDepth } from './json-depth.js';
+import { isInvalidUtf8 } from './utf8.js';
 
 export class ImportFileError extends Error {
   constructor(
-    readonly code: 'line-too-large' | 'invalid-json' | 'invalid-record' | 'invalid-bundle',
+    readonly code:
+      | 'line-too-large'
+      | 'invalid-json'
+      | 'invalid-record'
+      | 'invalid-bundle'
+      | 'invalid-encoding',
     readonly file: string,
     readonly line?: number,
   ) {
@@ -39,13 +44,15 @@ export async function* readImportNdjson(options: {
   file: string;
   signal?: AbortSignal;
 }): AsyncGenerator<ImportRecord> {
-  const decoder = new StringDecoder('utf8');
+  const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
   let pending = '';
   let line = 0;
   try {
     for await (const chunk of options.stream) {
       options.signal?.throwIfAborted();
-      pending += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      pending += decoder.decode(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk), {
+        stream: true,
+      });
       let newline = pending.indexOf('\n');
       while (newline !== -1) {
         line += 1;
@@ -58,7 +65,7 @@ export async function* readImportNdjson(options: {
       if (Buffer.byteLength(pending, 'utf8') > MAX_LINE_BYTES)
         throw new ImportFileError('line-too-large', options.file, line + 1);
     }
-    pending += decoder.end();
+    pending += decoder.decode();
     if (pending.trim())
       yield recordLine(
         line === 0 ? pending.replace(/^\uFEFF/, '') : pending,
@@ -66,6 +73,9 @@ export async function* readImportNdjson(options: {
         line + 1,
         options.entity,
       );
+  } catch (error) {
+    if (isInvalidUtf8(error)) throw new ImportFileError('invalid-encoding', options.file);
+    throw error;
   } finally {
     options.stream.destroy();
   }

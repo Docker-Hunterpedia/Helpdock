@@ -22,3 +22,9 @@ it.each(['missing-manifest', 'count-mismatch', 'duplicate', 'traversal', 'symlin
     await expect(collectAsync(readImportBundle({ path: fixture(name) }))).rejects.toThrow();
   },
 );
+
+it('refuses invalid UTF-8 in a manifest before accepting the bundle', async () => {
+  await expect(
+    collectAsync(readImportBundle({ path: fixture('invalid-encoding') })),
+  ).rejects.toMatchObject({ code: 'invalid-encoding', file: 'manifest.json' });
+});

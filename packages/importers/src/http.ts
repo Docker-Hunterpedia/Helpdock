@@ -7,6 +7,7 @@ import {
 import type { z } from 'zod';
 import { ConnectorError, RateLimited } from './errors.js';
 import { type ImportRateLimiter, retryAfterMs } from './rate-limiter.js';
+import { isInvalidUtf8 } from './utf8.js';
 
 export class ImportHttp {
   constructor(
@@ -48,9 +49,10 @@ export class ImportHttp {
     const response = await this.request(url, init);
     let decoded: unknown;
     try {
-      decoded = JSON.parse(response.body.toString('utf8'));
+      decoded = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(response.body));
     } catch (error) {
-      if (error instanceof SyntaxError) throw new ConnectorError('invalid-response');
+      if (error instanceof SyntaxError || isInvalidUtf8(error))
+        throw new ConnectorError('invalid-response');
       throw error;
     }
     const parsed = schema.safeParse(decoded);

@@ -9,6 +9,7 @@ import {
 } from '@helpdock/schemas';
 import { type Entry, openPromise, type ZipFile } from 'yauzl';
 import { ImportFileError, readImportNdjson } from './ndjson.js';
+import { isInvalidUtf8 } from './utf8.js';
 
 const MAX_BUNDLE_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_MEMBERS = 100000;
@@ -54,8 +55,9 @@ async function manifestFrom(stream: Readable): Promise<ImportManifest> {
   }
   let decoded: unknown;
   try {
-    decoded = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    decoded = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
   } catch (error) {
+    if (isInvalidUtf8(error)) throw new ImportFileError('invalid-encoding', 'manifest.json');
     if (error instanceof SyntaxError) throw new ImportFileError('invalid-json', 'manifest.json');
     throw error;
   }

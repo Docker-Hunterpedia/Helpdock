@@ -11,6 +11,13 @@ let port: number;
 
 beforeAll(async () => {
   server = createServer((request, response) => {
+    if (request.url === '/malformed-utf8') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        Buffer.concat([Buffer.from('{"account":"'), Buffer.from([0xc3, 0x28]), Buffer.from('"}')]),
+      );
+      return;
+    }
     const status = Number(request.url?.slice(1)) || 200;
     response.writeHead(status, { 'content-type': 'application/json', 'retry-after': '12' });
     response.end(status === 200 ? JSON.stringify({ account: 'Sandbox' }) : 'provider secret error');
@@ -40,6 +47,12 @@ it('validates successful vendor JSON before returning it to a connector', async 
   await expect(
     client().json(`${origin}/200`, z.object({ tickets: z.array(z.object({ id: z.string() })) })),
   ).rejects.toMatchObject({ code: 'invalid-response' });
+});
+
+it('rejects corrupted vendor text rather than saving replacement characters', async () => {
+  await expect(
+    client().json(`${origin}/malformed-utf8`, z.object({ account: z.string() })),
+  ).rejects.toMatchObject({ code: 'invalid-response', message: 'invalid-response' });
 });
 
 it('honours vendor Retry-After and keeps the transport blocked until its retry time', async () => {

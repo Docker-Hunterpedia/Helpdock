@@ -434,3 +434,4 @@ Closed, each with unit and integration tests and its guide updated (the last row
 
 - #147 feat: M6 Telegram, M7 AI, M8 API/webhooks/reports and M9 hardening towards 1.0 (M9-02, M9-04, M9-05, M9-06; the M9-03 suites and the M9-07 and M9-10 tooling; the carried gaps above)
 - #167 feat: M9 hardening towards 1.0: the pre-pentest fixes (M9-01 F1 to F5), the ASVS re-walk's gaps (M9-02), the automated zoom, forced-colours, semantics and bidi specs (M9-04), the signing of `v0.4.0` (M9-08) and the M6 and M7 gaps carried above. Open when this record was written.
+- #175 fix: agent assist reaches the api in production builds, and the collision indicator names colleagues for Agents (the two #174 rows in the gaps table above)

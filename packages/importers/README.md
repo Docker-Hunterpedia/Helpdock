@@ -18,6 +18,11 @@ the underlying client. A 429 throws `RateLimited` with a delay from `Retry-After
 the worker must persist that delay rather than spending an attempt. Provider error
 bodies never become `ConnectorError` messages.
 
+`hashImportValue` validates JSON and hashes a canonical representation. Nested
+object key order does not change identity; array order does. Non-JSON values are
+refused instead of being silently dropped. The loader excludes expiring download
+URLs from message hashes and keeps body/attachment identity changes meaningful.
+
 ## Import bundle version 1
 
 A ZIP contains `manifest.json`, singular entity files such as `ticket.ndjson` and

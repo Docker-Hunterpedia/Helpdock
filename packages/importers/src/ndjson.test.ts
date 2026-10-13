@@ -1,16 +1,17 @@
 import { Readable } from 'node:stream';
 import { expect, it } from 'vitest';
 import { readImportNdjson } from './ndjson.js';
+import { collectAsync } from './testing/collect.js';
 
 it('keeps UTF-8 split across chunks, accepts BOM/CRLF and reports physical line numbers', async () => {
   const encoded = Buffer.from(`\uFEFF${JSON.stringify({ externalId: 't', name: 'الدعم' })}\r\n\n`);
   const chunks = Array.from(encoded, (byte) => Buffer.from([byte]));
-  const records = await Array.fromAsync(
+  const records = await collectAsync(
     readImportNdjson({ stream: Readable.from(chunks), entity: 'tag', file: 'tag.ndjson' }),
   );
   expect(records).toEqual([{ entity: 'tag', payload: { externalId: 't', name: 'الدعم' } }]);
   await expect(
-    Array.fromAsync(
+    collectAsync(
       readImportNdjson({
         stream: Readable.from(['\n{broken}']),
         entity: 'tag',
@@ -23,7 +24,7 @@ it('keeps UTF-8 split across chunks, accepts BOM/CRLF and reports physical line 
 it('refuses an oversized unterminated line before parsing it', async () => {
   const stream = Readable.from(Array.from({ length: 65 }, () => Buffer.alloc(65536, 0x61)));
   await expect(
-    Array.fromAsync(readImportNdjson({ stream, entity: 'tag', file: 'tag.ndjson' })),
+    collectAsync(readImportNdjson({ stream, entity: 'tag', file: 'tag.ndjson' })),
   ).rejects.toMatchObject({ code: 'line-too-large', line: 1 });
   expect(stream.destroyed).toBe(true);
 });
@@ -32,7 +33,7 @@ it('refuses deeply nested custom JSON with a safe line error before schema trave
   const nested = `${'['.repeat(200)}0${']'.repeat(200)}`;
   const json = `{"externalId":"1","subject":"History","status":"open","ccEmails":[],"tags":[],"custom":{"nested":${nested}},"createdAt":"2020-01-01T00:00:00Z","updatedAt":"2020-01-01T00:00:00Z"}`;
   await expect(
-    Array.fromAsync(
+    collectAsync(
       readImportNdjson({ stream: Readable.from([json]), entity: 'ticket', file: 'ticket.ndjson' }),
     ),
   ).rejects.toMatchObject({ code: 'invalid-json', line: 1 });

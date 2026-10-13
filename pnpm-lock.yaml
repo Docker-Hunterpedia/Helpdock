@@ -362,6 +362,9 @@ importers:
       '@helpdock/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@helpdock/importers':
+        specifier: workspace:*
+        version: link:../../packages/importers
       '@helpdock/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs

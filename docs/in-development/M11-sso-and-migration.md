@@ -102,7 +102,7 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | done |
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
-| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | planned |
+| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
 | M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | planned |
 | M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
 | M11-12 | Zendesk connector: API token or OAuth; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | planned |
@@ -903,6 +903,35 @@ dates, notes vs public, tags, CSAT, idempotent re-run, delta append, outbox
 contains only allowed events, no rows in `workflow_runs`, `ticket_sla_clocks`,
 `notifications`, `ai_calls`, `webhook_deliveries` for imported tickets; scheduled
 rule does not fire; transcription skipped; reports show original days.
+
+### M11-09 implementation notes (in progress)
+
+The first writer path loads a ticket and its thread in one caller-owned system
+transaction, validates brand/department/status/team/assignee/contact mappings,
+keeps source dates and author identities, sanitizes message HTML and stores the
+existing canonical email-card metadata. Original agent names can be retained as
+system authors. A failed later message rolls back the ticket and earlier messages.
+
+Stable canonical hashes make a repeated load write nothing. A delta updates the
+mapped ticket fields and appends unseen messages; existing messages are never
+rewritten. Ephemeral attachment download URLs do not change message hashes. A
+shared source asset has one original identity/key with copied message references,
+and filenames pass `safeFileName`. Shared asset locks are acquired in sorted
+order to avoid deadlocks between ticket transactions.
+
+Five focused real-Postgres/Redis integration cases pass for historical dates,
+authors/notes, sanitization, no side-effect rows, repeated/delta loads, rollback,
+cross-brand mapping refusal and shared attachment identity. Focused unit tests
+cover canonical hashes and the existing email-view compatibility. The writer
+build check rejects live hooks, outbound helpers and unreviewed dependencies;
+it is wired into `pnpm check:routes` and has eight refusal/allowance tests.
+
+This is an implementation checkpoint, not a complete loader. Contacts/accounts,
+agent invitation mappings, fields/tags/participants, CSAT, help-center loading,
+report rebuilds, scheduled-rule guards and imported-media completion remain to be
+implemented and verified. Shared imported attachment copies must receive their
+original's final processed state. The 500-ticket reference import and external
+stand-in zero-send assertions are still required before exit criteria are ticked.
 
 ## M11-10 Import jobs
 

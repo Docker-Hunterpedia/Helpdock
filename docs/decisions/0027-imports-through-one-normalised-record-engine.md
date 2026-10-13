@@ -110,3 +110,18 @@ Delta parent deletion cascades to its dependent runs. Import runs remain permane
 under normal retention and have no user deletion route; this cascade makes the
 existing batched brand purge work regardless of parent/delta deletion order. A
 real-Postgres regression reproduced the restrictive-key failure before the fix.
+
+### 2026-10-13 — shared attachment references and compiler guard
+
+A source file appearing in several messages keeps one asset identity/storage key.
+Other message references use the existing `copied_from_attachment_id` mechanism.
+Sorted per-asset advisory locks prevent concurrent ticket transactions from
+claiming different originals. Expiring URL query strings are excluded from the
+message hash; message/file IDs, content metadata and body remain authoritative.
+Imported-media completion must propagate the processed result to these copies.
+
+The writer check uses the repository's TypeScript 7 token scanner; its native
+compiler has no JavaScript `createSourceFile` API. The check rejects forbidden
+hooks and imports outside the reviewed loader boundary, including dynamic module
+loading and impure channel exports. Run it through `pnpm check:routes` or the
+dedicated `pnpm check:imports`.

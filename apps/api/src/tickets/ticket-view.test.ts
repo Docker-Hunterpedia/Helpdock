@@ -36,6 +36,8 @@ const row = (contactId: string | null): TicketRow => ({
   statusId: status.id,
   priority: 'medium',
   channel: 'email',
+  importSource: null,
+  importedAt: null,
   teamId: null,
   assigneeId: null,
   contactId,

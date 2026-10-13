@@ -148,7 +148,7 @@ known gaps.
   clean-VM onboarding run with outside testers, and the restore drill for the
   record ([M9](docs/in-development/M9-hardening-and-1-0.md)).
 - The rest is listed in
-  [M10](docs/in-development/M10-meta-channels.md#gaps-accepted-up-front).
+  [M10](docs/completed/M10-meta-channels.md#gaps-accepted-up-front).
 
 ## 0.4.0 — 2026-10-08
 

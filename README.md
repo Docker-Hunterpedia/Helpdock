@@ -48,7 +48,7 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 | M7 | AI | [shipped](docs/completed/M7-ai.md) |
 | M8 | API, webhooks, reports | [shipped](docs/completed/M8-api-webhooks-reports.md) |
 | M9 | Hardening and 1.0 release | [in development](docs/in-development/M9-hardening-and-1-0.md) |
-| M10 | Meta channels: WhatsApp, Messenger and Instagram | [in development](docs/in-development/M10-meta-channels.md) |
+| M10 | Meta channels: WhatsApp, Messenger and Instagram | [shipped](docs/completed/M10-meta-channels.md) |
 
 Milestones are grouped into five phases with deliverables and exit criteria in the [PRD](docs/planning/PRD.md). All project documents live under [docs/](docs/), organised by lifecycle stage.
 

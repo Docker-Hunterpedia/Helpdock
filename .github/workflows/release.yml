@@ -17,12 +17,14 @@ on:
       - 'v*'
   # The release job did not sign images before v0.4.0. This mode signs an
   # already-published tag's immutable digest without rebuilding it or moving
-  # either registry tag. It is also the recovery path if Sigstore alone is
-  # unavailable during a release.
+  # either registry tag, and when the tag has no GitHub Release yet (a release
+  # that failed after its image was pushed) it also generates the SBOM and
+  # creates the Release from that image. It is the recovery path when Sigstore
+  # or a later step fails during a release.
   workflow_dispatch:
     inputs:
       tag:
-        description: The existing v<version> image tag to sign.
+        description: The existing v<version> image tag to sign, and to release if it has no Release yet.
         type: string
         required: true
   workflow_call:
@@ -134,7 +136,6 @@ jobs:
         env:
           BUILT_DIGEST: ${{ steps.build.outputs.digest }}
           EVENT_NAME: ${{ github.event_name }}
-          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
@@ -154,12 +155,14 @@ jobs:
           fi
 
           echo "ref=$image@$digest" >> "$GITHUB_OUTPUT"
-          if [ "$EVENT_NAME" = 'push' ]; then
-            signer_ref="refs/tags/$TAG"
-          else
-            signer_ref='refs/heads/main'
-          fi
-          echo "signer_identity=https://github.com/Docker-Hunterpedia/Helpdock/.github/workflows/release.yml@$signer_ref" >> "$GITHUB_OUTPUT"
+          # The certificate names this workflow file at the ref the run took it
+          # from, which is `GITHUB_REF` in every mode: the tag for a tag pushed
+          # by hand, and `refs/heads/main` both when `changesets.yml` calls this
+          # workflow from a push to main and for the manual mode run from main.
+          # The event name cannot tell the first two apart (both are `push`):
+          # expecting the tag's identity on the Changesets path is what failed
+          # the v0.5.0 release's own verification.
+          echo "signer_identity=https://github.com/Docker-Hunterpedia/Helpdock/.github/workflows/release.yml@$GITHUB_REF" >> "$GITHUB_OUTPUT"
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -176,12 +179,30 @@ jobs:
             --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
             "$IMAGE_REF"
 
-      # From the image that was just pushed, not from the working tree: the SBOM
+      # A tag that already has a Release is only re-signed above: the manual
+      # mode must not rewrite a Release somebody has read. A tag without one,
+      # which is the normal release and also a release that failed after its
+      # image was pushed, gets its SBOM and its Release below.
+      - name: Check for an existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already has a Release; signing only."
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      # From the image that was pushed, not from the working tree: the SBOM
       # has to describe what an operator will run, which includes the base
       # image's Debian packages and ffmpeg, not only this repository's
       # `node_modules`.
       - name: Generate the SBOM
-        if: github.event_name != 'workflow_dispatch'
+        if: steps.existing.outputs.exists != 'true'
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ghcr.io/docker-hunterpedia/helpdock:${{ steps.version.outputs.version }}
@@ -191,7 +212,7 @@ jobs:
           upload-release-assets: false
 
       - name: Collect the release notes
-        if: github.event_name != 'workflow_dispatch'
+        if: steps.existing.outputs.exists != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -221,7 +242,7 @@ jobs:
           fi
 
       - name: Create the release
-        if: github.event_name != 'workflow_dispatch'
+        if: steps.existing.outputs.exists != 'true'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: Helpdock ${{ steps.version.outputs.version }}

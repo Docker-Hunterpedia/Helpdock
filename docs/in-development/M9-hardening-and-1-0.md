@@ -327,6 +327,17 @@ existing tag without rebuilding or moving it. It signed `v0.4.0` on 2026-10-09
 against the workflow identity run in the same job; checking the signature from
 outside is the procedure in the [release guide](../guides/release.md#verify-the-image-signature).
 
+`v0.5.0` (2026-10-13) was the first release to go through the Changesets path
+with signing on, and it failed its own verification after the image was pushed
+(run 38387367580): the workflow expected the certificate to name the tag
+because the event was `push`, but a reusable workflow called from a push to
+`main` runs under `refs/heads/main`, which is what the certificate carried. The
+identity is now `GITHUB_REF` in every mode, and the manual **Run workflow**
+mode finishes a release whose tag has no GitHub Release yet (SBOM and Release
+from the published image), which is how `v0.5.0` was completed. The procedure
+is in the release guide's
+[If something goes wrong](../guides/release.md#if-something-goes-wrong).
+
 ## M9-06 User docs
 
 The PRD's list, each page checked against the code it names (every command,

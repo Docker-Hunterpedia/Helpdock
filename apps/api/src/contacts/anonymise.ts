@@ -25,12 +25,18 @@ import type { ContactIdentityKind } from '@helpdock/schemas';
 /** The phrase an erased contact is shown under, as a value rather than a key. */
 export const ERASED_CONTACT_NAME = 'Erased contact';
 
+/** Per-row salts keep multiple emails/phones distinct; channel traces retain the per-contact placeholder. */
+
 /** Half a SHA-256 is 128 bits: far more than a per-brand unique index needs. */
 const DIGEST_LENGTH = 32;
 
-export const erasedIdentityValue = (contactId: string, kind: ContactIdentityKind): string =>
+export const erasedIdentityValue = (
+  contactId: string,
+  kind: ContactIdentityKind,
+  identityId?: string,
+): string =>
   `erased:${kind}:${createHash('sha256')
-    .update(`${contactId}:${kind}`, 'utf8')
+    .update(`${contactId}:${kind}${identityId === undefined ? '' : `:${identityId}`}`, 'utf8')
     .digest('hex')
     .slice(0, DIGEST_LENGTH)}`;
 

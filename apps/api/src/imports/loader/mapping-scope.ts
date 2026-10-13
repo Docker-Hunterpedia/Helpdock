@@ -7,7 +7,7 @@ import {
   userBrandRoles,
   users,
 } from '@helpdock/db';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 
 /** Foreign keys alone do not prove that a mapping target belongs to this brand. */
@@ -61,7 +61,7 @@ export async function validateTicketMappings(
         and(
           eq(userBrandRoles.brandId, brandId),
           eq(userBrandRoles.userId, resolved.assigneeId),
-          eq(users.status, 'active'),
+          inArray(users.status, ['active', 'invited']),
         ),
       );
     if (

@@ -1,33 +1,28 @@
-import { type DbTransaction, importRuns, uuidv7 } from '@helpdock/db';
+import { type DbTransaction, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { and, eq, sql } from 'drizzle-orm';
-import { ImportLoadError, type TicketLoad, ticketLoadSchema } from './contracts.js';
+import { sql } from 'drizzle-orm';
+import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
+import { loadImportedContact } from './load-contacts.js';
 import { importMessageHash, loadImportedMessages } from './load-messages.js';
+import { loadImportedOrganization } from './load-organizations.js';
 import {
   createImportedTicket,
   importedTicketChanges,
   updateImportedTicket,
 } from './load-ticket.js';
 import { validateTicketMappings } from './mapping-scope.js';
-
-async function visibleRun(tx: DbTransaction, input: TicketLoad): Promise<void> {
-  const [run] = await tx
-    .select({ id: importRuns.id })
-    .from(importRuns)
-    .where(
-      and(
-        eq(importRuns.id, input.runId),
-        eq(importRuns.brandId, input.brandId),
-        eq(importRuns.source, input.source),
-        eq(importRuns.status, 'loading'),
-      ),
-    );
-  if (!run) throw new ImportLoadError('mapping-invalid');
-}
+import type { ContactLoad, OrganizationLoad } from './profile-contracts.js';
+import { requireLoadingRun } from './run-scope.js';
 
 /** The caller owns one system-job transaction per ticket; this module emits no live-ticket events. */
 export class ImportWriter {
+  contact(tx: DbTransaction, input: ContactLoad) {
+    return loadImportedContact(tx, input);
+  }
+  organization(tx: DbTransaction, input: OrganizationLoad) {
+    return loadImportedOrganization(tx, input);
+  }
   async ticket(
     tx: DbTransaction,
     request: TicketLoad,
@@ -36,7 +31,7 @@ export class ImportWriter {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.brandId}:${input.source}:${input.record.externalId}`}, 17))`,
     );
-    await visibleRun(tx, input);
+    await requireLoadingRun(tx, input);
     const payloadHash = hashImportValue({
       ticket: input.record,
       messages: input.messages.map(importMessageHash),

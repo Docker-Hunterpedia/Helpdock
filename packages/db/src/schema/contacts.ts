@@ -45,6 +45,11 @@ export const contacts = pgTable(
       .references(() => brands.id, { onDelete: 'cascade' }),
     /** Null until somebody files them under a company. */
     accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+    importedDetails: jsonb('imported_details').$type<{
+      phones: string[];
+      locale: string | null;
+      timezone: string | null;
+    }>(),
     name: text('name').notNull(),
     locale: localeEnum('locale'),
     /** IANA zone, for example `Europe/Berlin`. */

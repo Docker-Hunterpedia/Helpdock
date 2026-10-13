@@ -264,6 +264,25 @@ wakes up, and only an Admin is offered the button at all.
 
 There is no undo.
 
+## Imported profiles (M11, in development)
+
+Migration loading reuses contacts by normalized email/phone within the brand and
+logs the match. New imported identifiers are unverified; an existing identifier
+keeps its verification. Conflicting owners are blocked instead of merged. Existing
+local names and custom fields stay intact. Company matching considers the primary
+and retained source domains; extra company domains/notes and unsupported profile
+values are retained as private imported details, outside normal response fields.
+
+Source pointers follow manual contact merges when resolving their current target,
+without changing the original pointer needed by undo. Erasure clears retained
+import details and linked staged customer records, including merged ancestors.
+Repeated imports cannot recreate an erased source profile. Each erased profile
+identifier receives a distinct placeholder even when several addresses share one
+kind; channel-trace placeholders keep their previous per-contact contract.
+
+This describes the loader foundation. The complete import wizard and connector
+work is still in development.
+
 ## Export
 
 The other half of a privacy request (ASVS 8.3.2):

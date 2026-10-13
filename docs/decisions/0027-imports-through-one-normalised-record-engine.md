@@ -125,3 +125,35 @@ compiler has no JavaScript `createSourceFile` API. The check rejects forbidden
 hooks and imports outside the reviewed loader boundary, including dynamic module
 loading and impure channel exports. Run it through `pnpm check:routes` or the
 dedicated `pnpm check:imports`.
+
+### 2026-10-14 — source metadata without silently dropping organization details
+
+Accounts have a single primary `domain` and no notes column. Contacts support EN/AR
+locale and normalized identities, but source platforms can return additional
+domains, company notes, local phone strings and other locales. Nullable
+`imported_details` JSON columns on accounts/contacts retain these bounded source
+values. They are not authentication identities or arbitrary raw vendor payloads;
+credentials and URLs are excluded. Existing output mappers whitelist fields so
+these columns do not leak into ordinary API responses. Contact erasure must clear
+its imported details along with name, locale, timezone, external ID and custom data.
+Organization matching considers all retained source domains and refuses ambiguous
+multiple-account matches. No contact or organization is merged automatically.
+
+Profile imports preserve the existing local name/custom values when matching a
+contact or company. New normalized identifiers are unverified; existing verified
+identities keep their verification. Conflicting contact owners or company-domain
+matches refuse loading rather than merging automatically. Supported regional
+EN/AR locale codes reduce to their language, while raw locale/phone/timezone
+values remain in imported details.
+
+Source contact identity pointers remain stable across manual merge/undo; the
+current profile resolver follows the existing merge chain. Erasure clears source
+metadata and staged customer records for the survivor and its merged ancestors.
+Historical invited staff may remain assignees when their brand/department role
+is eligible; import does not activate them or send an invitation.
+
+Supporting issue [#213](https://github.com/Docker-Hunterpedia/Helpdock/issues/213)
+fixes an existing erasure uniqueness collision for multiple identifiers of one
+kind. Profile erasure salts each placeholder with the identity row ID; existing
+channel-trace callers keep their per-contact placeholder contract. This necessary
+M11 gap fix is included in the owner-requested combined remaining-milestone PR.

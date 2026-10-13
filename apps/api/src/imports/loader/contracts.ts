@@ -41,6 +41,7 @@ export type TicketLoad = z.infer<typeof ticketLoadSchema>;
 export class ImportLoadError extends Error {
   constructor(
     readonly code:
+      | 'identity-ambiguous'
       | 'mapping-invalid'
       | 'author-unmapped'
       | 'target-unavailable'

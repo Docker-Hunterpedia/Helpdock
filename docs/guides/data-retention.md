@@ -189,3 +189,11 @@ for an account that no longer exists), and null for an active brand.
 - A CSAT rating link mailed before the deletion still opens during the grace.
   It names no brand in its address, so the 410 guard cannot see one; the purge
   removes the survey it points at.
+
+### Imported contact profiles (M11, in development)
+
+Contact erasure also clears retained imported profile details and linked staged
+customer records. Profiles merged into the erased survivor are included. Source
+identity pointers remain so another import cannot silently recreate an erased
+contact. Company source details remain with the company row and disappear with
+brand/account deletion. Import loading is still in development.

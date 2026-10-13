@@ -926,12 +926,40 @@ cover canonical hashes and the existing email-view compatibility. The writer
 build check rejects live hooks, outbound helpers and unreviewed dependencies;
 it is wired into `pnpm check:routes` and has eight refusal/allowance tests.
 
-This is an implementation checkpoint, not a complete loader. Contacts/accounts,
-agent invitation mappings, fields/tags/participants, CSAT, help-center loading,
+This is an implementation checkpoint, not a complete loader. Agent invitation mappings, fields/tags/participants, CSAT, help-center loading,
 report rebuilds, scheduled-rule guards and imported-media completion remain to be
 implemented and verified. Shared imported attachment copies must receive their
 original's final processed state. The 500-ticket reference import and external
 stand-in zero-send assertions are still required before exit criteria are ticked.
+
+### Profile loading checkpoint (M11-09, in progress)
+
+Companies match within their brand by primary or retained source domains;
+conflicting multiple matches block loading. Contacts reuse normalized email/phone
+owners, add unverified identifiers without downgrading existing verification,
+and refuse ambiguous matches. Existing local names/custom data remain unchanged.
+A repeat produces no profile/identifier/log writes. Existing merge chains are
+followed without rewriting the stable source pointer, preserving undo semantics.
+
+Migration `0055_import_source_details` adds bounded private imported details to
+accounts/contacts for company notes/additional domains and raw unsupported phone,
+locale/timezone values. Normal account/contact response mappers still whitelist
+fields. Contact erasure clears this metadata and matching staged customer data,
+including merged ancestors. Raw profile values are excluded from import warnings.
+
+Historical assignments to invited staff retain their eligible brand/department
+role without activating the person or sending mail. A reproduced existing bug
+made erasure return HTTP 500 for multiple emails of one kind; supporting
+[#213](https://github.com/Docker-Hunterpedia/Helpdock/issues/213) now has a passing
+real-API regression. Existing channel-trace erasure placeholders retain their
+original contract. See ADR 0027 amendments. This checkpoint does not complete
+the loader, connectors, jobs or milestone exit criteria.
+
+Verification for this checkpoint: 12 focused real Postgres/Redis writer cases,
+five real-API erasure cases, and 44 focused profile/merge/view/erasure unit tests
+pass. The API and root fixture typechecks and writer boundary checks pass. Full
+reference/vendor/browser/coverage acceptance remains pending.
+
 
 ## M11-10 Import jobs
 

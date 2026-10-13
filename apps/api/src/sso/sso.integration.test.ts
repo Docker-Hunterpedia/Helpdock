@@ -195,8 +195,11 @@ describe.skipIf(!hasDocker)('M11-01 install SSO configuration', () => {
     ).toBe(400);
     expect((await request('GET', `connections/${id}/mappings`)).json().mappings).toEqual([mapping]);
     expect(
-      (await request('PUT', `connections/${id}/mappings`, { mappings: [mapping, mapping] }))
-        .statusCode,
+      (
+        await request('PUT', `connections/${id}/mappings`, {
+          mappings: [mapping, { ...mapping, position: 1 }],
+        })
+      ).statusCode,
     ).toBe(400);
     await request('DELETE', `connections/${id}`);
   });

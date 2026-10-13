@@ -994,4 +994,4 @@ PRD status board.
 
 ## Pull requests
 
-- none yet
+- [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) — M11-01 SSO configuration foundation (in review; aggregate CI must pass).

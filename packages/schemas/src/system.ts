@@ -134,7 +134,16 @@ export type SystemRelay = z.infer<typeof systemRelaySchema>;
 export const channelStatusSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1),
-  kind: z.enum(['email', 'telegram', 'widget', 'form', 'api']),
+  kind: z.enum([
+    'email',
+    'telegram',
+    'widget',
+    'form',
+    'api',
+    'whatsapp',
+    'messenger',
+    'instagram',
+  ]),
   status: componentStatusSchema,
   /** One short line, already resolved to a catalog key by the page. Never a credential. */
   detail: z.string(),

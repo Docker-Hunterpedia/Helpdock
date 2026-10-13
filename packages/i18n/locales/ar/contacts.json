@@ -55,7 +55,10 @@
     "phone": "الهاتف",
     "telegram": "تيليجرام",
     "visitor": "الدردشة",
-    "external": "رقم العميل"
+    "external": "رقم العميل",
+    "whatsapp": "واتساب",
+    "messenger": "ماسنجر",
+    "instagram": "إنستغرام"
   },
   "identity": {
     "verified": "مُوثَّق",
@@ -137,7 +140,10 @@
       "telegram": "محادثة تيليجرام نفسها",
       "visitor": "مُعرِّف الزائر نفسه",
       "external": "رقم العميل نفسه",
-      "similar_name": "اسم مشابه"
+      "similar_name": "اسم مشابه",
+      "whatsapp": "مستخدم واتساب نفسه",
+      "messenger": "مستخدم ماسنجر نفسه",
+      "instagram": "مستخدم إنستغرام نفسه"
     },
     "sameAccount": "الشركة نفسها",
     "unverified": "غير موثّق",
@@ -256,6 +262,7 @@
     "invalid-phone": "هذا ليس رقم هاتف.",
     "invalid-telegram": "مُعرِّف محادثة تيليجرام رقم.",
     "invalid-visitor": "مُعرِّف الزائر هو ما أصدرته أداة الدردشة.",
+    "invalid-meta": "هذا ليس معرِّفًا من واتساب أو ماسنجر أو إنستغرام.",
     "too-long": "هذا أطول من اللازم."
   },
   "accounts": {

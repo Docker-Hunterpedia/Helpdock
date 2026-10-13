@@ -404,7 +404,17 @@ export const widgetConversationSchema = z.object({
    * visitor of a brand that shows them every channel (§4.2), and then the
    * conversation is read-only in the widget.
    */
-  channel: z.enum(['chat', 'email', 'telegram', 'form', 'api', 'manual']),
+  channel: z.enum([
+    'chat',
+    'email',
+    'telegram',
+    'form',
+    'api',
+    'manual',
+    'whatsapp',
+    'messenger',
+    'instagram',
+  ]),
   /** The highest `seq` of the conversation; the catch-up cursor to start from. */
   lastSeq: z.int().nonnegative(),
   /** The conversation a reply after closing continued on (§2.3), if any. */

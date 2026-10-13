@@ -2,7 +2,13 @@ import { attachments, type DbTransaction, ticketMessages } from '@helpdock/db';
 import { and, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import type { ContactErasureProvider, ContactErasureResult } from '../contacts/providers.js';
 import { enqueueObjectPurge } from '../media/object-purge.js';
-import { eraseAiRedactions, eraseTelegramChats, eraseWebhookPayloads } from './erase-copies.js';
+import {
+  eraseAiRedactions,
+  eraseMetaConversations,
+  eraseMetaLineKeys,
+  eraseTelegramChats,
+  eraseWebhookPayloads,
+} from './erase-copies.js';
 
 /**
  * The half of a contact's erasure that lives on tickets (DOMAIN-RULES §11,
@@ -20,12 +26,14 @@ import { eraseAiRedactions, eraseTelegramChats, eraseWebhookPayloads } from './e
  * and it points at a row that now holds only hashes, so it stays — the thread
  * still reads "customer" where the customer spoke. What a channel stamped on
  * the message is different: `external_message_id` is an email `Message-ID`
- * (whose right-hand side is the sender's mail host) or a Telegram message id
- * in a chat with that person. Those are cleared. The body stays, as §11 says.
+ * (whose right-hand side is the sender's mail host), a Telegram message id in a
+ * chat with that person or a WhatsApp `wamid`. Those are cleared, and so are
+ * the ones a Meta channel's system lines carry for the person's messages
+ * (`eraseMetaLineKeys`). The body stays, as §11 says.
  *
- * **Copies in other tables** (ASVS 8.3.2): the Telegram chat rows, the redaction
- * maps of model calls on their tickets, and the webhook deliveries that carry
- * them (`erase-copies.ts`).
+ * **Copies in other tables** (ASVS 8.3.2): the Telegram chat rows and the Meta
+ * conversations, the redaction maps of model calls on their tickets, and the
+ * webhook deliveries that carry them (`erase-copies.ts`).
  *
  * Every read runs under the caller's row-level security; erasure is Admin only
  * and an Admin's scope is every department, so nothing of the contact's is out
@@ -80,10 +88,13 @@ export class DbContactErasureProvider implements ContactErasureProvider {
       .where(and(authoredByContact, isNotNull(ticketMessages.externalMessageId)))
       .returning({ id: ticketMessages.id });
 
+    const metaLines = await eraseMetaLineKeys(tx, brandId, contactId);
+
     return {
       attachments: sent.length,
-      messages: rewritten.length,
+      messages: rewritten.length + metaLines,
       telegramChats: await eraseTelegramChats(tx, brandId, contactId),
+      metaConversations: await eraseMetaConversations(tx, brandId, contactId),
       aiCalls: await eraseAiRedactions(tx, brandId, contactId),
       webhookDeliveries: await eraseWebhookPayloads(tx, brandId, contactId),
     };

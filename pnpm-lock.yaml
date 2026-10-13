@@ -275,6 +275,9 @@ importers:
       '@axe-core/playwright':
         specifier: 4.13.0
         version: 4.13.0(playwright-core@1.63.0)
+      '@helpdock/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
@@ -552,6 +555,9 @@ importers:
 
   packages/channels:
     dependencies:
+      '@helpdock/net':
+        specifier: workspace:*
+        version: link:../net
       '@helpdock/schemas':
         specifier: workspace:*
         version: link:../schemas
@@ -633,6 +639,9 @@ importers:
       '@helpdock/db':
         specifier: workspace:*
         version: link:../db
+      '@helpdock/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       bullmq:
         specifier: 6.3.6
         version: 6.3.6(ioredis@6.0.0(supports-color@7.2.0))

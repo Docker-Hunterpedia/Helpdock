@@ -9,6 +9,7 @@ import { channelsRefusalSchema } from './email-inbound.js';
 import { hcRefusalSchema } from './help-center.js';
 import { setupRefusalSchema } from './install.js';
 import { knowledgeRefusalSchema } from './knowledge.js';
+import { metaRefusalDetailsSchema, metaRefusalSchema } from './meta.js';
 import { staffRefusalSchema } from './staff.js';
 import { telegramRefusalSchema } from './telegram.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
@@ -103,6 +104,13 @@ export const errorResponseSchema = z.object({
     knowledge: z.object({ reason: knowledgeRefusalSchema }).optional(),
     /** Only on a refused Telegram bot action (M6-05). */
     telegram: z.object({ reason: telegramRefusalSchema }).optional(),
+    /**
+     * Only on a refused Meta channel action (M10). `details` is there for a
+     * reply the reply window refused: which platform, and when it closed.
+     */
+    meta: z
+      .object({ reason: metaRefusalSchema, details: metaRefusalDetailsSchema.optional() })
+      .optional(),
     /**
      * Only on a refused webhook endpoint (M8-03): `address` is what the name
      * resolved to, so the form can say which private address it was.

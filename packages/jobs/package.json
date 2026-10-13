@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@helpdock/db": "workspace:*",
+    "@helpdock/schemas": "workspace:*",
     "bullmq": "6.3.6",
     "drizzle-orm": "0.45.2",
     "ioredis": "6.0.0",

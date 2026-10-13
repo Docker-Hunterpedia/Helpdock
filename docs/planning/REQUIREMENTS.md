@@ -17,7 +17,7 @@ Helpdock is built from day one around four ideas:
 4. **Security and speed are requirements, not features.** Row-level tenant isolation in Postgres, encrypted secrets, signed widget identities, rate limits everywhere, and a widget under 40 KB.
 
 ### Non-goals (v1)
-Blueprint-style visual process builder · community forums · phone/VoIP · billing or SaaS metering · SLA credits · Meta channels (WhatsApp, Messenger, Instagram) · Slack/Discord · customer login portal · backups tooling · one-click cloud deploy (Docker Compose only).
+Blueprint-style visual process builder · community forums · phone/VoIP · billing or SaaS metering · SLA credits · Slack/Discord · customer login portal · backups tooling · one-click cloud deploy (Docker Compose only).
 
 ---
 
@@ -46,7 +46,7 @@ Install
     ├── Domains: support.helpdock.com (help center), widget allowed origins
     ├── Departments (Billing, Technical, Sales)
     │   └── Teams → Agents
-    ├── Channels: email mailboxes, Telegram bots, web widget(s), API keys
+    ├── Channels: email mailboxes, Telegram bots, WhatsApp numbers, Facebook Pages, Instagram accounts, web widget(s), API keys
     ├── Help Center (categories → sections → articles, per locale)
     ├── Theme (tokens) for widget + help center
     ├── AI config: provider, model, knowledge sources, modes, guardrails
@@ -69,8 +69,8 @@ Install
 - **Statuses:** Open, On Hold, Escalated, Closed (system) + custom statuses per brand mapped to one of the four system states with `pauses_sla` and `awaiting_customer` flags (so SLA/reporting stay consistent). Transition table in DOMAIN-RULES §2.
 - **Reopen policy** per brand, set by Team Leaders: customer reply to a closed ticket reopens it within N days (default 7), always, or never (new linked ticket). DOMAIN-RULES §2.3.
 - **Priorities:** Low, Medium, High, Urgent (labels editable).
-- **Channels:** Email, Web chat, Telegram, Web form, API, Manual.
-- **Contacts & Accounts:** contact = person (email/phone/telegram id/visitor id merged into one identity, automatically only when both identifiers are verified, DOMAIN-RULES §4.4); account = customer company; contacts belong to accounts; contact timeline shows all tickets across channels that the viewer is allowed to see.
+- **Channels:** Email, Web chat, Telegram, WhatsApp, Messenger, Instagram, Web form, API, Manual.
+- **Contacts & Accounts:** contact = person (email/phone/telegram id/WhatsApp, Messenger and Instagram ids/visitor id merged into one identity, automatically only when both identifiers are verified, DOMAIN-RULES §4.4); account = customer company; contacts belong to accounts; contact timeline shows all tickets across channels that the viewer is allowed to see.
 - **Views:** saved filters (personal + shared), Zoho-like defaults: My open, Unassigned, Overdue, All open per department, Escalated.
 - **Assignment:** manual, round-robin per department, skill-based (tags on agents ↔ ticket tags/department), load-cap per agent, auto-unassign when agent goes offline (toggle).
 - **Agent collision:** live indicator when another agent is viewing/replying.
@@ -119,13 +119,22 @@ All channels implement one `ChannelAdapter` interface (normalize inbound → mes
 - Supports text, photos, documents, voice notes (OGG/Opus → normalized), locations (stored as text).
 - Optional `/start` welcome text and language pick.
 
+**WhatsApp, Messenger and Instagram (Meta)** — M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)
+- One connected account per WhatsApp business number (Cloud API), Facebook Page (Messenger) or Instagram professional account (Instagram API with Instagram Login); several per brand; an account belongs to one brand. Connected by pasting the token and id from the operator's Meta developer app; one Meta app per install, with one webhook callback (`/api/meta/webhook`) signed with the app secret.
+- Each customer on an account = one contact, keyed on the platform's scoped id (WhatsApp business-scoped user id, with the phone recorded as a verified identifier when Meta sends it; Messenger page-scoped id; Instagram-scoped id with the `@username`); a new message with no open ticket → new ticket in the account's department; agent replies go back on the same platform.
+- Inbound: text, images, video, documents, audio and voice notes, stickers (through the media pipeline, fetched by a job), locations and shared contacts as text, quoted context, story replies and mentions; delivery and read reports update the reply's state. Unsent messages are marked, not removed.
+- Outbound: text split at the platform's limit, each attachment as a message of its own, within Meta's limits per platform.
+- **Reply window** (DOMAIN-RULES §2.6): a reply is accepted only within 24 hours of the customer's last message; on Messenger and Instagram within 7 days for a person's reply when the account's Human Agent feature is on. The composer says how long is left and the api refuses a late reply. WhatsApp templates reach a customer after the window (M10-09).
+- Health: token check, webhook subscription check with re-subscribe, Instagram token refresh, Reconnect in admin.
+- Not in M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, importing replies typed in Meta Business Suite, backfill of missed webhooks, AI auto-reply and the satisfaction survey on these channels, Messenger profile names before App Review. Operators carry Meta's App Review for Messenger and Instagram and WhatsApp's per-message pricing.
+
 **Web widget** — see 4.6.
 
 **Web form** — hosted form per brand (embed or link) with custom fields, CAPTCHA (Turnstile/hCaptcha) toggle.
 
 **API** — tenant API keys (scoped) can create/update tickets, add messages, upsert contacts, search articles.
 
-**Not in v1 (adapter interface ready):** WhatsApp Cloud API, Messenger, Instagram DM, Slack, Discord.
+**Not in v1 (adapter interface ready):** Slack, Discord.
 
 ### 4.5 Help center
 - Structure: Category → Section → Article. Draft / published / archived. Scheduled publish.
@@ -193,7 +202,7 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 
 ### 4.10 Admin panel (everything dynamic)
 - Brands, domains (with verification status), departments, teams, users, roles (enable/disable Viewer), invitations.
-- Channels: mailboxes (IMAP/SMTP test button), inbound-parse endpoints, Telegram bots (token, set webhook button, health), widget origins, API keys (scopes, rate limit, last used, revoke).
+- Channels: mailboxes (IMAP/SMTP test button), inbound-parse endpoints, Telegram bots (token, set webhook button, health), Meta accounts (WhatsApp numbers, Facebook Pages, Instagram accounts: token, subscribe, health, Human Agent switch), widget origins, API keys (scopes, rate limit, last used, revoke).
 - Ticketing config: statuses, priorities, tags, custom fields, templates, canned responses, macros, views, SLAs, business hours, holidays, workflow rules (with logs).
 - Help center: content tree, theme, custom CSS, domain, locales.
 - Widget: theme tokens, mode, pre-chat form, content policy, allowed origins, install snippet, live preview.
@@ -260,7 +269,8 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 
 ## 6. Add-on features (v1.1+ backlog)
 
-- Meta channels (WhatsApp Cloud, Messenger, Instagram), Slack, Discord, Viber, LINE
+- Slack, Discord, Viber, LINE
+- Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, Business Suite echo import, webhook backfill, auto-reply and surveys on these channels
 - Customer portal (magic-link login, ticket history, restricted KB)
 - Custom roles / permission sets; SAML/OIDC SSO
 - React Native + Flutter widget SDKs

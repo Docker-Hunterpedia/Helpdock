@@ -17,6 +17,9 @@ const CHANNEL_KINDS: readonly ChannelStatus['kind'][] = [
   'widget',
   'form',
   'api',
+  'whatsapp',
+  'messenger',
+  'instagram',
 ];
 
 /**

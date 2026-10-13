@@ -14,6 +14,7 @@ import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
+import { MetaFailure } from '../meta/meta-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { WebhooksFailure } from '../webhooks/webhooks-failure.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
@@ -137,6 +138,27 @@ describe('errorBody', () => {
       requestId: 'req-11',
       domains: { reason: 'domain-taken' },
     });
+  });
+
+  it('carries the Meta refusal and, for a closed reply window, when the window closed', () => {
+    const details = {
+      platform: 'messenger',
+      anchorAt: '2026-10-10T08:00:00.000Z',
+      closedAt: '2026-10-11T08:00:00.000Z',
+    } as const;
+    const closed = errorBody(mapError(new MetaFailure('reply-window-closed', details)), 'req-20');
+    const invalid = errorBody(mapError(new MetaFailure('token-invalid')), 'req-21');
+
+    expect(closed.error).toMatchObject({
+      code: 'conflict',
+      requestId: 'req-20',
+      meta: { reason: 'reply-window-closed', details },
+    });
+    expect(invalid.error).toMatchObject({
+      code: 'validation_failed',
+      meta: { reason: 'token-invalid' },
+    });
+    expect(invalid.error.meta).not.toHaveProperty('details');
   });
 
   it('carries the webhook refusal and the address the name resolved to', () => {

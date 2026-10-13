@@ -388,3 +388,4 @@ it. The contract is in
 | M4 | The widget's uploads and `MediaRecorder` voice notes, against the same endpoints under a visitor principal. |
 | M6 | Telegram media: `getFile` fetches the bytes and hands them to this pipeline as a `system` uploader. |
 | M7 | Optional transcription of a voice note (`ai.transcribe`), stored on the message. |
+| M10 | WhatsApp, Messenger and Instagram files arrive as references: the message is filed with the attachment `pending` and no object, and the `meta.media_fetch` job fetches the bytes, checks them against the content policy (and, for WhatsApp, Meta's SHA-256), puts the object and moves the row to `processing`, from where this pipeline takes over ([Meta channels](meta-channels.md)). |

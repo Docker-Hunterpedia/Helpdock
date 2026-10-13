@@ -34,8 +34,9 @@ different fact from "English, UTC": a null falls back to the brand's defaults.
 ## Identities
 
 An identity is one way of recognising a person: an `email`, a `phone`, a
-Telegram `chat_id`, a widget `visitor` id, or the brand's own `external` user
-id.
+Telegram `chat_id`, a widget `visitor` id, the brand's own `external` user id, or
+the id a Meta platform gives them: a `whatsapp` business-scoped user id, a
+`messenger` page-scoped id or an `instagram` account-scoped id.
 
 **The value is always normalised before it is stored.** That is the whole
 mechanism: `contact_identities` is unique on `(brand_id, kind, value)`, so two
@@ -50,6 +51,7 @@ normalised means, because the admin, the api and the widget all have to agree.
 | `telegram` | the chat id as digits (negative for a group) |
 | `visitor` | the issued UUID, lower-cased |
 | `external` | trimmed, never case-folded — the brand chose the spelling |
+| `whatsapp`, `messenger`, `instagram` | trimmed, letters, digits and `. _ : -` only. WhatsApp: the user id as Meta sends it (`US.13491208655302741918`); Messenger and Instagram: `<account id>:<customer id>`, because both ids are scoped to the Page or account |
 
 Arabic-Indic (`٠١٢…`) and Eastern Arabic-Indic (`۰۱۲…`) digits become Latin
 first, so a number typed on an Arabic keyboard is the same number.
@@ -66,9 +68,10 @@ each other's customers.
 |---|---|---|
 | Email | An inbound email arrived from it, or a magic link sent to it was clicked | Yes |
 | Telegram chat id | Always (it comes from the Bot API) | Yes |
+| WhatsApp business-scoped user id, Messenger page-scoped id, Instagram-scoped id | Always (they come in a webhook Meta signed) | Yes |
 | Signed `external_id` | Always (HMAC) | Yes |
 | Visitor id | Always (the server issued it) | Yes |
-| Phone | **Never in v1** — Helpdock sends no SMS | No |
+| Phone | **Only as the `wa_id` of a WhatsApp message** (source `whatsapp.cloud`, M10-03); never when an agent or a form typed it. Helpdock sends no SMS | No: a number two contacts both proved is suggested as a duplicate, not merged — see below |
 | Email typed into a form | Never | No; suggests a duplicate |
 
 A caller never says whether an identifier is verified; it says **where it came
@@ -79,21 +82,26 @@ from**, and `isVerifiedIdentity(kind, source)` answers from the table above
 |---|---|---|
 | `email.inbound`, `email.magic_link` | email | yes |
 | `telegram.bot` | telegram | yes |
+| `whatsapp.cloud` | whatsapp, **phone** | yes |
+| `messenger.page` | messenger | yes |
+| `instagram.account` | instagram | yes |
 | `widget.signed` | external | yes |
 | `widget.visitor` | visitor | yes |
 | `widget.form` | email, phone | no |
 | `email.cc` | email | no |
 | `agent`, `import` | any | no |
 
-Nothing an agent types is verified, and no source verifies a phone number. A
-kind the source cannot produce — a phone number "from the Bot API" — throws a
-`TypeError`, as a programming error rather than a request the api declines.
+Nothing an agent types is verified, and one source alone verifies a phone number:
+`whatsapp.cloud`, because WhatsApp checked the SIM and Meta signed the webhook
+that carries the `wa_id`. A kind the source cannot produce — a phone number
+"from the Bot API" — throws a `TypeError`, as a programming error rather than a
+request the api declines.
 
 ### The seam every channel uses
 
 `findOrCreateContactByIdentity(tx, brandId, { kind, value, source }, options)`
 in `apps/api/src/contacts/identity.ts` is the one function that turns "a message
-arrived from X" into a contact row. M2 (email), M4 (widget) and M6 (Telegram)
+arrived from X" into a contact row. M2 (email), M4 (widget), M6 (Telegram) and M10 (Meta)
 all call it, inside their own transaction, so the contact and the domain change
 commit together.
 
@@ -114,6 +122,28 @@ contact. So a hint on either side becomes a suggestion, and an agent decides.
 When the claim is proof and the holder's is a hint, the identifier moves to the
 contact that can prove it, because the unique index allows one holder.
 
+**A second proven identifier on a contact already found** goes through
+`attachVerifiedIdentity(tx, brandId, contactId, claim)`, next to the seam. A
+WhatsApp message arrives with the business-scoped user id (the contact is found
+or made on that) and usually the customer's number, `wa_id`, which is recorded
+on the same contact as a verified `phone`. The contact is already settled, so
+where the seam would return the other holder, this cannot, and merging two
+contacts is an agent's decision, never something a webhook does:
+
+| Who holds the number | What happens |
+|---|---|
+| nobody | it is recorded on this contact, verified |
+| this contact, typed | it is marked verified |
+| this contact, proven | nothing |
+| another contact, typed (an agent typed it before the customer wrote) | it **moves** here, verified, and the pair is suggested as duplicates (`phone`) |
+| another contact, proven | nothing moves; the pair is suggested as duplicates and the event is logged |
+
+A customer who has adopted a WhatsApp username may withhold their number: the
+message has a user id and no `wa_id`, and the contact has no phone. When
+WhatsApp reports that a customer's number changed (`user_changed_number`), the
+new number becomes the contact's verified phone, the old one is taken off, and
+a line in the open ticket says so.
+
 ## Duplicates
 
 A suggestion names two contacts and **why** they were suggested:
@@ -121,8 +151,8 @@ A suggestion names two contacts and **why** they were suggested:
 | Reason | Raised when | The pill says |
 |---|---|---|
 | `email` | an unverified email matched another contact's | email typed in a form |
-| `phone` | a phone number matched (never verified in v1) | same phone |
-| `telegram`, `visitor`, `external` | that identifier matched with one side unverified | same … |
+| `phone` | a phone number matched: typed on one side (an agent or a form), or proven by WhatsApp on both | same phone |
+| `telegram`, `visitor`, `external`, `whatsapp`, `messenger`, `instagram` | that identifier matched with one side unverified | same … |
 | `similar_name` | a contact landed under an account where another contact's name reads alike (pg_trgm `similarity` ≥ 0.4) | similar name |
 
 It is raised **once per pair, in either direction**: a third form submission
@@ -210,6 +240,11 @@ A Viewer sees the button disabled, and an erased contact offers neither entry.
     later message from that chat files a new contact, and the chat id on a
     Telegram reply already queued for them is replaced by the same digest as
     their identifier, so that reply fails instead of reaching the person;
+  - their **WhatsApp, Messenger and Instagram conversations** are deleted (the
+    platform's id for them, their number, profile name and `@username`), and the
+    replies delivered through them with them, so a reply still queued finds no
+    delivery and sends nothing; a later message from the same id files a new
+    contact;
   - the **redaction map** of every AI call on their tickets is cleared (it pairs
     each placeholder with the email, phone, card or IBAN it replaced);
   - the **webhook deliveries** that carry their data (their `contact.created`,
@@ -217,7 +252,8 @@ A Viewer sees the button disabled, and an erased contact offers neither entry.
     delivery log, pending ones included. A receiver that already got them still
     has them.
 - The audit row also carries `attachmentCount`, `messageCount`,
-  `telegramChatCount`, `aiCallCount` and `webhookDeliveryCount`.
+  `telegramChatCount`, `metaConversationCount`, `aiCallCount` and
+  `webhookDeliveryCount`.
 - An erased contact is immutable afterwards: every write answers
   `anonymised` (409). `contacts.anonymised_at` is the marker: anything that
   matches contacts — duplicate suggestions, the merge of M1-13 — skips a row

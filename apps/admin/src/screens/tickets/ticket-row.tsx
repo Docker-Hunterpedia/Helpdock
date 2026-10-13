@@ -6,8 +6,12 @@ import { useT } from '../../app/i18n.js';
 import { ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { TicketAiMark } from './ai/ticket-ai-mark.tsx';
-import { PriorityDot, SlaTimer, StatusBadge } from './badges.tsx';
+import { ChannelMark, PriorityDot, SlaTimer, StatusBadge } from './badges.tsx';
 import { elapsed, ticketReference } from './format.js';
+
+/** WhatsApp, Messenger and Instagram rows say which platform they are with an icon (M10-08). */
+const isMetaChannel = (channel: Ticket['channel']): boolean =>
+  channel === 'whatsapp' || channel === 'messenger' || channel === 'instagram';
 
 /**
  * DESIGN §6.3 TicketRow, in its 64 px side-list form: the priority dot, the
@@ -86,6 +90,7 @@ export function TicketRow({
             <Typography component="bdi" variant="mono" sx={{ fontSize: 12 }}>
               {reference}
             </Typography>
+            {isMetaChannel(ticket.channel) ? <ChannelMark channel={ticket.channel} /> : null}
             {contactName === null ? null : (
               <>
                 <span aria-hidden="true">·</span>

@@ -15,6 +15,8 @@ import { APP_ROLE_NAME } from './roles.js';
 import {
   auditLog,
   brands,
+  departments,
+  metaAccounts,
   outbox,
   settings,
   users,
@@ -75,7 +77,8 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
         const [widget] = await tx.select().from(widgetSettings);
         const [webhook] = await tx.select().from(webhooks);
         const [pending] = await tx.select().from(outbox).where(sql`${outbox.publishedAt} is null`);
-        return { widget, webhook, pending };
+        const [metaAccount] = await tx.select().from(metaAccounts);
+        return { widget, webhook, pending, metaAccount };
       });
     const a = await brandSecret(acme);
     const b = await brandSecret(globex);
@@ -86,6 +89,7 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
       acmeWidget: a.widget?.signingSecret ?? '',
       acmeWebhook: a.webhook?.secret ?? '',
       acmeOutbox: String(a.pending?.payload.urlEncrypted ?? ''),
+      acmeMetaToken: a.metaAccount?.accessToken ?? '',
       globexWebhook: b.webhook?.secret ?? '',
     };
   };
@@ -151,6 +155,21 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
         url: 'https://hooks.example.test/a',
         secret: encryptSecret('acme-webhook', oldOnly),
       });
+      // A connected Meta account holds its token as an envelope too (M10-07).
+      const [support] = await tx
+        .insert(departments)
+        .values({ brandId: acme, name: 'Support' })
+        .returning({ id: departments.id });
+      await tx.insert(metaAccounts).values({
+        brandId: acme,
+        platform: 'messenger',
+        departmentId: support?.id ?? '',
+        externalId: '112233445566778',
+        displayName: 'Acme Page',
+        accessToken: encryptSecret('page-access-token', oldOnly),
+        tokenKind: 'page',
+        tokenUpdatedAt: new Date(),
+      });
       await tx.insert(outbox).values([
         {
           brandId: acme,
@@ -179,7 +198,7 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
 
     const report = await rotateMasterKey(handle.db, rotating);
 
-    expect(report.rotated).toBe(6);
+    expect(report.rotated).toBe(7);
     expect(report.currentKeyId).toBe(newOnly.current.id);
     expect(report.previousKeyId).toBe(oldOnly.current.id);
     await expect(plaintexts(newOnly)).resolves.toEqual(before);
@@ -235,7 +254,7 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
     expect(rows[0]?.meta).toEqual({
       currentKeyId: newOnly.current.id,
       previousKeyId: oldOnly.current.id,
-      rotated: 6,
+      rotated: 7,
     });
     expect(JSON.stringify(rows[0])).not.toContain(NEW_KEY);
   });

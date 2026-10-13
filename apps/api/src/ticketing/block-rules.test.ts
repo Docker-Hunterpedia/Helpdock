@@ -24,6 +24,9 @@ describe('isOwnSender', () => {
     ['a sibling of a brand hostname', 'domain', 'shop.acme.test'],
     ['a phone number', 'phone', '+15550100123'],
     ['a Telegram chat', 'telegram', '123456789'],
+    ['a WhatsApp user', 'whatsapp', 'US.13491208655302741918'],
+    ['a Messenger user', 'messenger', '106540352242922:7654321098765432'],
+    ['an Instagram user', 'instagram', '17841400000000000:17841499999999999'],
   ] as const)('allows %s', (_label, kind, value) => {
     expect(isOwnSender({ kind, value }, OWN)).toBe(false);
   });

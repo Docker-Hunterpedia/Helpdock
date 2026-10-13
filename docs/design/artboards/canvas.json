@@ -617,6 +617,41 @@
       "w": 1280,
       "h": 760,
       "title": "Admin/PasswordField"
+    },
+    "AdminChannelsMeta.dc.html": {
+      "h": 2840,
+      "title": "Admin/Channels-Meta",
+      "w": 1440,
+      "x": 0,
+      "y": 49928
+    },
+    "AdminChannelsMetaAccount.dc.html": {
+      "h": 3200,
+      "title": "Admin/Channels-Meta-Account",
+      "w": 1440,
+      "x": 1520,
+      "y": 49928
+    },
+    "AdminTicketMeta.dc.html": {
+      "h": 3080,
+      "title": "Admin/Ticket-Meta",
+      "w": 1440,
+      "x": 3040,
+      "y": 49928
+    },
+    "MetaChatEN.dc.html": {
+      "h": 1800,
+      "title": "Meta/Chat-EN",
+      "w": 1280,
+      "x": 4560,
+      "y": 49928
+    },
+    "MetaChatAR.dc.html": {
+      "h": 1800,
+      "title": "Meta/Chat-AR",
+      "w": 1280,
+      "x": 5920,
+      "y": 49928
     }
   },
   "createdOnFiles": {
@@ -864,7 +899,12 @@
     "EmailCsat.dc.html",
     "WidgetCsatEN.dc.html",
     "WidgetCsatAR.dc.html",
-    "AdminPasswordField.dc.html"
+    "AdminPasswordField.dc.html",
+    "AdminChannelsMeta.dc.html",
+    "AdminChannelsMetaAccount.dc.html",
+    "AdminTicketMeta.dc.html",
+    "MetaChatEN.dc.html",
+    "MetaChatAR.dc.html"
   ],
   "pages": [],
   "title": "Helpdock Design System"

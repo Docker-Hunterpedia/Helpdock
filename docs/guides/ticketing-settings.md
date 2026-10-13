@@ -488,6 +488,7 @@ The search box matches any part of the value.
 | Email domain | lower-cased punycode, no leading `@` or trailing dot | every address at that domain **or below it**: blocking `promo-deals.biz` also drops `news.promo-deals.biz` |
 | Phone | E.164 by [ADR 0008](../decisions/0008-phone-normalisation.md): `+` and digits; a national number takes the install's `contacts.defaultCallingCode` | that number |
 | Telegram | the chat id the Bot API gives, digits only | that chat |
+| WhatsApp, Messenger, Instagram | the id Meta gave the customer, as a contact identifier stores it: the WhatsApp user id, or `<account id>:<customer id>` for Messenger and Instagram; trimmed, case kept, letters, digits and `._:-` only | that customer on that platform. The kinds exist from M10-01; the Meta inbound services (M10-03 to M10-05) are what consult them |
 
 Every value goes through the same `@helpdock/schemas` normaliser a contact
 identifier does, so a spelling the list stores is the spelling a channel

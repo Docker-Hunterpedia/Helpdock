@@ -24,6 +24,8 @@ import {
 } from './email-compose.tsx';
 import { statusName } from './format.js';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
+import { MetaCount, MetaRecipient } from './meta/composer-meta.tsx';
+import type { ComposerMeta } from './meta/use-ticket-meta.tsx';
 
 /**
  * DESIGN §6.3 Composer: the Reply / Internal note segmented control and the
@@ -89,6 +91,13 @@ export interface ComposerProps {
    * chat it goes to and that the bot sends it as plain text, unsigned.
    */
   readonly telegram?: { readonly bot: string; readonly username: string | null } | undefined;
+  /**
+   * M10-08: a ticket that answers on WhatsApp, Messenger or Instagram. A reply
+   * then names its recipient and account, counts the messages it becomes, and
+   * while the reply window is closed holds Send (`aria-disabled`, described by
+   * the strip). A note is unchanged and never held.
+   */
+  readonly meta?: ComposerMeta | undefined;
   /** M3-06: opens the macro picker. Absent for a reader who cannot reply. */
   onOpenMacros?: (() => void) | undefined;
   /** Whether the picker is open, for the button's `aria-expanded`. */
@@ -119,6 +128,7 @@ export function Composer({
   onBodyFocus,
   email,
   telegram,
+  meta,
   onOpenMacros,
   macrosOpen = false,
   assist,
@@ -134,6 +144,10 @@ export function Composer({
   const note = mode === 'note';
   const emailReply = email !== undefined && !note;
   const telegramReply = telegram !== undefined && !note;
+  const metaReply = meta !== undefined && !note;
+  // Held, not disabled: the button keeps its place and its focus, so the reason
+  // is read where the agent is. Nothing is sent while it is.
+  const sendHeld = metaReply && meta.closed;
 
   // A layout effect: refs are attached and the caret moves before the browser
   // paints, so `r` never shows a frame of the composer without a caret in it.
@@ -150,7 +164,9 @@ export function Composer({
       aria-label={t('tickets:composer.label')}
       onSubmit={(event) => {
         event.preventDefault();
-        onSend();
+        if (!sendHeld) {
+          onSend();
+        }
       }}
       sx={{
         width: '100%',
@@ -182,6 +198,8 @@ export function Composer({
 
         {emailReply ? (
           <FromSelect email={email} />
+        ) : metaReply ? (
+          <MetaRecipient meta={meta} />
         ) : telegramReply ? (
           <Typography
             variant="caption"
@@ -256,6 +274,8 @@ export function Composer({
         </Box>
       )}
 
+      {metaReply ? <MetaCount meta={meta} body={body} attachments={attachments} /> : null}
+
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <input
           ref={fileRef}
@@ -323,7 +343,24 @@ export function Composer({
         <Button
           type="submit"
           variant="contained"
-          disabled={busy || uploading || body.trim() === ''}
+          disabled={!sendHeld && (busy || uploading || body.trim() === '')}
+          aria-disabled={sendHeld ? true : undefined}
+          aria-describedby={sendHeld ? meta.stripId : undefined}
+          onClick={(event) => {
+            if (sendHeld) {
+              event.preventDefault();
+            }
+          }}
+          sx={
+            sendHeld
+              ? {
+                  backgroundColor: tokens['bg.muted'],
+                  color: tokens['text.disabled'],
+                  cursor: 'not-allowed',
+                  '&:hover, &:active': { backgroundColor: tokens['bg.muted'] },
+                }
+              : undefined
+          }
         >
           {t(
             note

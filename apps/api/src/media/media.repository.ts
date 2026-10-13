@@ -183,7 +183,15 @@ export class MediaRepository {
     values: Partial<
       Pick<
         NewAttachment,
-        'status' | 'rejectReason' | 'scanStatus' | 'mime' | 'size' | 'variants' | 'processedAt'
+        | 'status'
+        | 'rejectReason'
+        | 'scanStatus'
+        | 'mime'
+        | 'size'
+        | 'kind'
+        | 'originalName'
+        | 'variants'
+        | 'processedAt'
       >
     >,
   ): Promise<AttachmentRow | undefined> {

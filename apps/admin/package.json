@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
+    "@helpdock/channels": "workspace:*",
     "@playwright/test": "1.63.0",
     "@testcontainers/postgresql": "12.1.0",
     "@testcontainers/redis": "12.1.0",

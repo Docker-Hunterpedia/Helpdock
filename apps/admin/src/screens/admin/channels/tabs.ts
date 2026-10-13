@@ -1,16 +1,17 @@
 import type { StaffRole } from '@helpdock/schemas';
-import { FileText, Inbox, type LucideIcon, MessageCircle, Send } from 'lucide-react';
+import { FileText, Inbox, type LucideIcon, MessageCircle, Network, Send } from 'lucide-react';
 
 /**
  * The tab row of `Admin/Channels`: Mailboxes (M2-02, M2-03, M2-08's inbound
  * half), Outgoing email (M2-05, M2-06, M2-08's outbound half), Widget (M4)
- * Web form (M4-09) and Telegram (M6-05). Mailboxes, Outgoing email, Web form
- * and Telegram are the Admin's; a Team Leader owns the widget's look, conversation and content
+ * Web form (M4-09), Telegram (M6-05) and Meta (M10-07: WhatsApp, Messenger and
+ * Instagram). Mailboxes, Outgoing email, Web form, Telegram and Meta are the
+ * Admin's; a Team Leader owns the widget's look, conversation and content
  * policy (DOMAIN-RULES §1.2), so `/admin/channels` lands on the first tab the
  * viewer may open.
  */
 export interface ChannelsTab {
-  readonly key: 'mailboxes' | 'outgoing' | 'widget' | 'webForm' | 'telegram';
+  readonly key: 'mailboxes' | 'outgoing' | 'widget' | 'webForm' | 'telegram' | 'meta';
   readonly segment: string;
   readonly icon: LucideIcon;
   readonly roles: readonly StaffRole[];
@@ -22,6 +23,7 @@ export const CHANNELS_TABS: readonly ChannelsTab[] = [
   { key: 'widget', segment: 'widget', icon: MessageCircle, roles: ['admin', 'teamLeader'] },
   { key: 'webForm', segment: 'web-form', icon: FileText, roles: ['admin'] },
   { key: 'telegram', segment: 'telegram', icon: Send, roles: ['admin'] },
+  { key: 'meta', segment: 'meta', icon: Network, roles: ['admin'] },
 ];
 
 export type ChannelsTabKey = ChannelsTab['key'];

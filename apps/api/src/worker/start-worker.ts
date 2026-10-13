@@ -30,9 +30,14 @@ import {
   knowledgeReembedJob,
   knowledgeSyncJob,
   knowledgeSyncSchedulerId,
+  META_HEALTH_SCHEDULE_CRON,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
+  metaHealthScheduleJob,
+  metaMediaFetchJob,
+  metaProfileFetchJob,
+  metaSendJob,
   notifyEmailJob,
   notifyPushJob,
   type OutboxRelay,
@@ -138,6 +143,17 @@ import { registerObjectPurgeHandler } from '../media/object-purge.js';
 import { createMediaProcessor, TIMEOUTS_MS } from '../media/process.job.js';
 import { createClamavScanner, type FileScanner } from '../media/scanner.js';
 import { createS3Client, S3ObjectStorage } from '../media/storage.js';
+import { createMetaInboundJobs } from '../meta/factory.js';
+import { createGraphClient } from '../meta/graph-client-factory.js';
+import { MetaRepository } from '../meta/meta.repository.js';
+import { registerMetaEventHandlers } from '../meta/meta-events.js';
+import {
+  createMetaAccountChangedHandler,
+  createMetaHealthProcessor,
+  queueMetaHealthScheduler,
+  scheduleAllMetaHealth,
+} from '../meta/meta-health.job.js';
+import { createMetaSendHandler, createMetaSendProcessor } from '../meta/meta-send.job.js';
 import { createNotifyProcessor } from '../notifications/delivery.js';
 import { InstallChannels } from '../notifications/install-channels.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
@@ -227,7 +243,7 @@ export interface WorkerDependencies {
     installSmtp: InstallSmtp;
   }): Closable;
   createEventWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
-  /** The `outbound` queue: M2-05's `email.send` and M6-02's `telegram.send`. */
+  /** The `outbound` queue: M2-05's `email.send`, M6-02's `telegram.send` and M10-06's `meta.send`. */
   createOutboundWorker(options: {
     redis: Redis;
     db: Db;
@@ -243,12 +259,16 @@ export interface WorkerDependencies {
    * M1-14's `maintenance` consumer and the nightly retention schedule. The
    * schedule is upserted on every boot, so a Redis that lost it gets it back
    * (DOMAIN-RULES §10: "repeatable pollers are re-registered on worker boot").
+   * M10-10 adds the hourly health check of each Meta account, whose scheduler
+   * per account is registered on boot the same way and which reads the
+   * install's Meta app id from settings.
    */
   createMaintenanceWorker(options: {
     redis: Redis;
     db: Db;
     log: JobLogger;
     env: WorkerEnv;
+    settings: WorkerSettings;
   }): Closable;
   /**
    * M2-02's `inbound` consumer: one `email.poll` tick per IMAP mailbox, and in
@@ -348,6 +368,10 @@ export type WorkerEnv = Pick<
   // M6: whether bots are polled, and where the Bot API is.
   | 'TELEGRAM_POLLING'
   | 'TELEGRAM_API_ROOT'
+  // M10: where Graph is, and which version the sends name.
+  | 'META_GRAPH_VERSION'
+  | 'META_GRAPH_API_ROOT'
+  | 'META_INSTAGRAM_API_ROOT'
   // M7-03: whether a website crawl may render pages in a headless browser.
   | 'KNOWLEDGE_CRAWL_RENDER'
   // M9: how many outbox events run at once.
@@ -592,6 +616,40 @@ export const workerDependencies: WorkerDependencies = {
         env.TELEGRAM_POLLING === true,
       ),
     });
+    // M10. The one call for Meta's outbox events (the dispatcher refuses a
+    // second handler for an event): an account connected, re-tokened or
+    // disconnected moves its hourly health check on the `maintenance` queue
+    // (M10-10), a reply is queued on `outbound` (M10-06), and a file or a name
+    // to fetch on `inbound` (M10-03, M10-05).
+    const maintenanceQueue = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
+    registerMetaEventHandlers({
+      accountChanged: createMetaAccountChangedHandler(
+        new MetaRepository(),
+        queueMetaHealthScheduler(maintenanceQueue),
+      ),
+      sendQueue: {
+        add: async ({ jobId, payload }) => {
+          await outbound.add(metaSendJob.name, payload, { ...metaSendJob.options, jobId });
+        },
+      },
+      mediaQueue: {
+        add: async ({ jobId, payload }) => {
+          await inbound.add(metaMediaFetchJob.name, payload, {
+            ...metaMediaFetchJob.options,
+            jobId,
+          });
+        },
+      },
+      // M10-05: a Messenger or Instagram customer's name, read after the webhook answered.
+      profileQueue: {
+        add: async ({ jobId, payload }) => {
+          await inbound.add(metaProfileFetchJob.name, payload, {
+            ...metaProfileFetchJob.options,
+            jobId,
+          });
+        },
+      },
+    });
     // M3-03. Every ticket, SLA and CSAT event ends in a `rules.evaluate` job,
     // with a job id derived from the outbox row, so a redelivery adds nothing.
     const rules = new Queue(QUEUE_NAMES.rules, { connection: redis });
@@ -734,6 +792,7 @@ export const workerDependencies: WorkerDependencies = {
         await domains.close();
         await webhooks.close();
         await ai.close();
+        await maintenanceQueue.close();
       },
     };
   },
@@ -783,9 +842,35 @@ export const workerDependencies: WorkerDependencies = {
         }),
       }),
     });
+    const metaRepository = new MetaRepository();
+    const meta = createMetaSendProcessor({
+      db,
+      log,
+      repository: metaRepository,
+      handler: createMetaSendHandler({
+        db,
+        repository: metaRepository,
+        keyring,
+        graph: createGraphClient(env, log),
+        storage: storageFor(env),
+        redis,
+        locales: new TicketLifecycleRepository(),
+      }),
+    });
+    // `meta.send` takes BullMQ's lock token: a part held back by WhatsApp's pair
+    // limit moves its own job to delayed with it (`meta-pacing.ts`).
     const worker = new Worker(
       QUEUE_NAMES.outbound,
-      (job) => (job.name === telegramSendJob.name ? telegram(job) : email(job)),
+      (job, token) => {
+        switch (job.name) {
+          case telegramSendJob.name:
+            return telegram(job);
+          case metaSendJob.name:
+            return meta(job, token);
+          default:
+            return email(job);
+        }
+      },
       { connection: redis },
     );
     worker.on('failed', (job, error) =>
@@ -856,14 +941,16 @@ export const workerDependencies: WorkerDependencies = {
       },
     };
   },
-  createMaintenanceWorker: ({ redis, db, log, env }) => {
+  createMaintenanceWorker: ({ redis, db, log, env, settings }) => {
     const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
-    // M1-14's nightly retention, M8-04's hourly rollup and M8-07's nightly
-    // purge tick, each upserted on every boot for the reason above.
+    // M1-14's nightly retention, M8-04's hourly rollup, M8-07's nightly purge
+    // tick and M10-10's daily re-registration of the Meta health checks, each
+    // upserted on every boot for the reason above.
     for (const { job, cron } of [
       { job: maintenanceRetentionScheduleJob, cron: RETENTION_CRON },
       { job: statsRollupScheduleJob, cron: STATS_ROLLUP_CRON },
       { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
+      { job: metaHealthScheduleJob, cron: META_HEALTH_SCHEDULE_CRON },
     ]) {
       maintenance
         .upsertJobScheduler(
@@ -925,10 +1012,28 @@ export const workerDependencies: WorkerDependencies = {
       },
     });
 
+    // M10-10. Every connected Meta account is checked hourly by a scheduler of
+    // its own, registered again here on every boot.
+    const metaRepository = new MetaRepository();
+    const metaScheduler = queueMetaHealthScheduler(maintenance);
+    scheduleAllMetaHealth(db, metaRepository, metaScheduler).catch((error: unknown) =>
+      log.error({ err: error }, 'could not register the Meta health checks'),
+    );
+    const metaHealth = createMetaHealthProcessor({
+      db,
+      log,
+      keyring: createKeyring(env),
+      repository: metaRepository,
+      graph: createGraphClient(env, log),
+      scheduler: metaScheduler,
+      appId: () => settings.get('meta.appId'),
+    });
+
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
       async (job) => {
-        await (stats(job) ?? purge(job) ?? retention(job));
+        // Retention fails a job it does not know, so it stays last.
+        await (stats(job) ?? purge(job) ?? metaHealth(job) ?? retention(job));
       },
       // One brand at a time: retention is background housekeeping, and two
       // brands purging at once would only compete for the same disk.
@@ -991,11 +1096,29 @@ export const workerDependencies: WorkerDependencies = {
       }),
     });
 
+    // M10-03: the files a Meta message named, fetched after the webhook answered;
+    // M10-05: a new customer's name, read after it.
+    const { mediaFetch: metaMediaFetch, profileFetch: metaProfileFetch } = createMetaInboundJobs({
+      db,
+      storage: storageFor(env),
+      log,
+      keyring: createKeyring(env),
+      graph: createGraphClient(env, log),
+    });
+
     const worker = new Worker(
       QUEUE_NAMES.inbound,
       async (job) => {
         if (job.name === telegramPollJob.name) {
           await telegramPoll(job);
+          return;
+        }
+        if (job.name === metaMediaFetchJob.name) {
+          await metaMediaFetch(job);
+          return;
+        }
+        if (job.name === metaProfileFetchJob.name) {
+          await metaProfileFetch(job);
           return;
         }
         // `form.submit` shares this queue from M4.
@@ -1390,7 +1513,13 @@ export const startWorker = ({
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
-  const maintenance = deps.createMaintenanceWorker({ redis: connection, db, log, env });
+  const maintenance = deps.createMaintenanceWorker({
+    redis: connection,
+    db,
+    log,
+    env,
+    settings,
+  });
   const inbound = deps.createInboundWorker({ redis: connection, db, log, env });
   const sla = deps.createSlaWorker({ redis: connection, db, log });
   const rules = deps.createRulesWorker({ redis: connection, db, log });

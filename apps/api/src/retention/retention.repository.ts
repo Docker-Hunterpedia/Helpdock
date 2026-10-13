@@ -5,6 +5,7 @@ import {
   auditLog,
   type DbTransaction,
   hcSearchLog,
+  metaDeliveries,
   notifications,
   type RetentionSettingsRow,
   retentionSettings,
@@ -257,6 +258,35 @@ export class RetentionRepository {
       .delete(telegramDeliveries)
       .where(inArray(telegramDeliveries.id, batch))
       .returning({ id: telegramDeliveries.id });
+    return deleted.length;
+  }
+
+  /**
+   * Replies WhatsApp, Messenger or Instagram took an outcome on before the
+   * cutoff: accepted and reported on (`sent`, `delivered`, `read`), or ended
+   * (`failed`, `refused`). A `queued` one is still to be sent (M10-03).
+   */
+  async purgeMetaDeliveriesBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = tx
+      .select({ id: metaDeliveries.id })
+      .from(metaDeliveries)
+      .where(
+        and(
+          eq(metaDeliveries.brandId, brandId),
+          inArray(metaDeliveries.status, ['sent', 'delivered', 'read', 'failed', 'refused']),
+          lt(metaDeliveries.createdAt, cutoff),
+        ),
+      )
+      .limit(limit);
+    const deleted = await tx
+      .delete(metaDeliveries)
+      .where(inArray(metaDeliveries.id, batch))
+      .returning({ id: metaDeliveries.id });
     return deleted.length;
   }
 

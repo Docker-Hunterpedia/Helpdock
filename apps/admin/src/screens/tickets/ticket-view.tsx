@@ -55,6 +55,7 @@ import { MacroPicker } from './macro-picker.tsx';
 import { MergeDialog } from './merge-dialog.tsx';
 import { MergedIntoBanner } from './merged-block.tsx';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
+import { useTicketMeta } from './meta/use-ticket-meta.tsx';
 import { SplitDialog } from './split-dialog.tsx';
 import { StagedMacroChips } from './staged-macro.tsx';
 import { ChannelIdentityCard } from './telegram/channel-identity-card.tsx';
@@ -142,6 +143,9 @@ export function TicketView({
   const [picking, setPicking] = useState(false);
   const [staged, setStaged] = useState<StagedMacro | null>(null);
   const macroBySend = useRef(new Map<string, StagedMacro>());
+  // M10-08: the files of each send, so a reply the platform's window refuses
+  // goes back into the composer with its text instead of being lost.
+  const filesBySend = useRef(new Map<string, readonly Attachment[]>());
 
   const detail = useQuery({
     queryKey: ticketKeys.detail(brandId, ticketId),
@@ -307,6 +311,7 @@ export function TicketView({
     onSuccess: async (saved, message) => {
       const macro = macroBySend.current.get(message.clientId);
       macroBySend.current.delete(message.clientId);
+      filesBySend.current.delete(message.clientId);
       dispatch({ type: 'acknowledged', clientId: message.clientId });
       queryClient.setQueryData<TicketDetail>(ticketKeys.detail(brandId, ticketId), (held) =>
         held === undefined
@@ -337,11 +342,31 @@ export function TicketView({
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
       await ticketEmail.refresh();
       await ticketTelegram.refresh();
+      await ticketMeta.refresh();
       if (message.timeSpentSeconds !== undefined) {
         await time.refresh();
       }
     },
     onError: (error, message) => {
+      // M10-06: the reply window closed while the agent was writing. The api
+      // wrote nothing, and the strip now says so; the text, the files and the
+      // macro go back where they were, so there is nothing to retry.
+      if (ticketMeta.refused(error)) {
+        dispatch({ type: 'discarded', clientId: message.clientId });
+        const files = filesBySend.current.get(message.clientId);
+        filesBySend.current.delete(message.clientId);
+        const macro = macroBySend.current.get(message.clientId);
+        macroBySend.current.delete(message.clientId);
+        setMode('reply');
+        setBody((held) => (held === '' ? message.bodyText : held));
+        if (files !== undefined) {
+          setAttachments((held) => (held.length === 0 ? files : held));
+        }
+        if (macro !== undefined) {
+          setStaged(macro);
+        }
+        return;
+      }
       dispatch({ type: 'failed', clientId: message.clientId });
       toast({
         tone: 'danger',
@@ -512,6 +537,18 @@ export function TicketView({
     }),
     [directory, viewer, contact.data, detail.data],
   );
+
+  // M10-08: the Meta half of a WhatsApp, Messenger or Instagram ticket.
+  const ticketMeta = useTicketMeta({
+    brandId,
+    ticketId,
+    channel: detail.data?.ticket.channel ?? '',
+    customerName: contact.data?.name ?? detail.data?.ticket.contact?.name ?? null,
+    viewerName: viewer.name,
+    brandName: brand.data?.name ?? null,
+    messages,
+    authorOf: (message) => names.nameFor(message.authorType, message.authorId),
+  });
 
   // M7-05, M7-08, M7-09: agent assist, "Show redacted" and voice transcripts.
   const assist = useTicketAssist({
@@ -718,7 +755,11 @@ export function TicketView({
       canConfigure={role === 'admin' || role === 'teamLeader'}
       cards={cards}
       channelIdentity={
-        telegramChat === undefined ? undefined : <ChannelIdentityCard context={telegramChat} />
+        telegramChat === undefined ? (
+          ticketMeta.identity
+        ) : (
+          <ChannelIdentityCard context={telegramChat} />
+        )
       }
       brandTags={directory.tags}
       customFields={ticketFieldsFor(
@@ -762,6 +803,9 @@ export function TicketView({
     if (staged !== null && message.kind === 'public') {
       macroBySend.current.set(message.clientId, staged);
       setStaged(null);
+    }
+    if (attachments.length > 0) {
+      filesBySend.current.set(message.clientId, attachments);
     }
     dispatch({ type: 'queued', message });
     setBody('');
@@ -810,6 +854,7 @@ export function TicketView({
           ticket={ticket}
           departmentName={departmentName}
           channelHandle={telegramChat?.username ?? undefined}
+          channelAccount={ticketMeta.account}
           viewers={headerViewers}
           now={now}
           showDetailsButton={detailsInDrawer}
@@ -877,9 +922,12 @@ export function TicketView({
                 },
               }}
               deliveryFooter={(message) =>
-                ticketEmail.deliveryFooter(message) ?? ticketTelegram.deliveryFooter(message)
+                ticketEmail.deliveryFooter(message) ??
+                ticketTelegram.deliveryFooter(message) ??
+                ticketMeta.deliveryFooter(message)
               }
               telegram={ticketTelegram.thread}
+              meta={ticketMeta.thread}
               assist={assist.thread}
               ai={ticketAi.thread}
               onRetry={(message) => {
@@ -896,6 +944,7 @@ export function TicketView({
         {ticketAi.strip === null || mergedInto !== null ? null : (
           <Box sx={{ paddingInline: 5, paddingBlockEnd: 3 }}>{ticketAi.strip}</Box>
         )}
+        {mergedInto === null ? ticketMeta.strip : null}
         {mergedInto === null ? (
           <Box
             sx={{
@@ -974,6 +1023,7 @@ export function TicketView({
               }}
               onSend={queueSend}
               email={ticketEmail.composer}
+              meta={ticketMeta.composer}
               telegram={
                 telegramChat === undefined
                   ? undefined

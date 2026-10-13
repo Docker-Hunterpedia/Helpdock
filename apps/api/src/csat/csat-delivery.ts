@@ -16,6 +16,7 @@ import type { ClosedTicketFacts, CsatRepository } from './csat.repository.js';
  * |---|---|---|
  * | `chat` (widget) | a `csat` frame to the conversation; the card is also read over REST | now: the card is offered |
  * | `telegram` | a `telegram.notice` of kind `csat_survey`: the question, five score buttons, Add a comment | when Telegram accepts the message |
+ * | `whatsapp`, `messenger`, `instagram` | nothing: `unreachable`, the survey stays `pending` (M10) | never |
  * | anything else | an `email_deliveries` row of kind `csat` and its `email.send` | when the relay accepts the email |
  *
  * Email and Telegram go through the outbox like every message to a customer
@@ -83,6 +84,15 @@ export class CsatDelivery {
         });
         return 'telegram';
       }
+      // M10. These contacts have no address, and the survey after a close is
+      // usually outside the reply window: it needs a WhatsApp template or
+      // Messenger's `customer_feedback` template (M10-09 or later). Until then it
+      // stays `pending` and the agent still has the link to share (the milestone
+      // doc's "Gaps accepted up front").
+      case 'whatsapp':
+      case 'messenger':
+      case 'instagram':
+        return 'unreachable';
       default: {
         const queued = await this.#deps.email.queueCsatSurvey(tx, {
           brandId,

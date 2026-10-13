@@ -30,6 +30,7 @@ export const ENVELOPE_COLUMNS: readonly EnvelopeColumn[] = [
   { table: 'widget_settings', column: 'signing_secret' },
   { table: 'telegram_bots', column: 'token' },
   { table: 'telegram_bots', column: 'webhook_secret' },
+  { table: 'meta_accounts', column: 'access_token' },
   { table: 'webhooks', column: 'secret' },
   { table: 'knowledge_sources', column: 'config_encrypted' },
 ];
@@ -55,6 +56,12 @@ export const NOT_ENVELOPE_COLUMNS: readonly (EnvelopeColumn & { readonly reason:
     table: 'ticket_search_tokens',
     column: 'token',
     reason: 'a word of a ticket, indexed for search',
+  },
+  {
+    table: 'meta_accounts',
+    column: 'token_kind',
+    reason:
+      'which kind of token access_token is (system user, Page, Instagram user), not the token',
   },
   {
     table: 'settings',

@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
     }
   },
   "scripts": {
@@ -18,6 +22,7 @@
     "test": "vitest run --config ../../vitest.config.ts --project @helpdock/channels"
   },
   "dependencies": {
+    "@helpdock/net": "workspace:*",
     "@helpdock/schemas": "workspace:*",
     "grammy": "1.46.0",
     "imapflow": "2.0.7",

@@ -676,6 +676,13 @@ export class TicketsService {
     const { ticket, status } = await this.#require(tx, ticketId);
     const context: LifecycleContext = { tx, brandId, actor, now };
 
+    // M10-06. A channel that cannot carry this reply refuses it here, before
+    // the lock below and before anything is written, so a refusal costs the
+    // ticket nothing (Meta's reply window, DOMAIN-RULES §2.6). Notes stay.
+    if (input.kind === 'public' && authorType === 'staff') {
+      await this.#replyDelivery.assertCanDeliver(tx, { brandId, ticket, personAuthored: true });
+    }
+
     // The lock comes first, on the ticket the reply was addressed to, so
     // concurrent replies queue however the lifecycle then moves them (§7).
     let seq = await this.#tickets.nextSeq(tx, ticketId);
@@ -794,6 +801,7 @@ export class TicketsService {
         ticket: target,
         messageId: message.id,
         emailFrom: input.emailFrom,
+        personAuthored: true,
       });
     }
 

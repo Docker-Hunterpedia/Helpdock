@@ -47,7 +47,7 @@ test.describe('the ticket list', () => {
     await openTickets(page, locale);
     await page.getByRole('link', { name: t('tickets:views.all'), exact: true }).click();
 
-    await expect(page.getByRole('link', { name: /HD-/ })).toHaveCount(6);
+    await expect(page.getByRole('link', { name: /HD-/ })).toHaveCount(9);
   });
 
   test('names each row’s contact from the ticket itself (M1-15)', async ({

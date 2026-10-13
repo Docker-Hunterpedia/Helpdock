@@ -8,7 +8,8 @@ export interface FieldProps {
   readonly label: string;
   /** Sits at the label's inline-end, such as the "Forgot password?" link. */
   readonly action?: ReactNode | undefined;
-  readonly hint?: string | undefined;
+  /** A sentence, or one with `CodeText` in it when it names a variable or a permission. */
+  readonly hint?: ReactNode | undefined;
   readonly error?: string | undefined;
   readonly children: ReactNode;
 }
@@ -23,7 +24,7 @@ const fieldErrorId = (id: string): string => `${id}-error`;
  */
 export function fieldDescribedBy(
   id: string,
-  { hint, error }: { readonly hint?: string | undefined; readonly error?: string | undefined },
+  { hint, error }: { readonly hint?: ReactNode | undefined; readonly error?: string | undefined },
 ): string | undefined {
   if (error) {
     return fieldErrorId(id);

@@ -79,6 +79,32 @@ describe('isSenderBlocked', () => {
     expect(result.blocked).toBe(true);
   });
 
+  it.each([
+    ['whatsapp', 'US.13491208655302741918'],
+    ['messenger', '112233445566778:7654321098765432'],
+    ['instagram', '17841400000000000:17841499999999999'],
+  ] as const)('drops a blocked %s customer by the id Meta gave', async (kind, value) => {
+    const { repository, recordDrop } = repositoryHolding([row('m1', kind, value)]);
+
+    const result = await isSenderBlocked(tx, BRAND, { kind, value }, { repository, now: NOW });
+
+    expect(result).toEqual({ blocked: true, blockedSenderId: 'm1' });
+    expect(recordDrop).toHaveBeenCalledExactlyOnceWith(tx, 'm1', NOW);
+  });
+
+  it('does not fold the case of a Meta id: another case is another customer', async () => {
+    const { repository } = repositoryHolding([row('m1', 'whatsapp', 'US.13491208655302741918')]);
+
+    const result = await isSenderBlocked(
+      tx,
+      BRAND,
+      { kind: 'whatsapp', value: 'us.13491208655302741918' },
+      { repository },
+    );
+
+    expect(result).toEqual({ blocked: false });
+  });
+
   it('lets a sender through when nothing matches, and writes nothing', async () => {
     const { repository, recordDrop } = repositoryHolding([row('t1', 'telegram', '42')]);
 

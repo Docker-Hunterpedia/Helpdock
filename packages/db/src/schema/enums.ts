@@ -41,6 +41,9 @@ export const contactIdentityKindEnum = pgEnum('contact_identity_kind', [
   'telegram',
   'visitor',
   'external',
+  'whatsapp',
+  'messenger',
+  'instagram',
 ]);
 
 /**
@@ -56,6 +59,9 @@ export const contactDuplicateReasonEnum = pgEnum('contact_duplicate_reason', [
   'visitor',
   'external',
   'similar_name',
+  'whatsapp',
+  'messenger',
+  'instagram',
 ]);
 
 /**
@@ -99,6 +105,9 @@ export const ticketChannelEnum = pgEnum('ticket_channel', [
   'form',
   'api',
   'manual',
+  'whatsapp',
+  'messenger',
+  'instagram',
 ]);
 
 /**
@@ -255,6 +264,9 @@ export const blockedSenderKindEnum = pgEnum('blocked_sender_kind', [
   'domain',
   'phone',
   'telegram',
+  'whatsapp',
+  'messenger',
+  'instagram',
 ]);
 
 /**
@@ -475,3 +487,43 @@ export const articleProposalStatusEnum = pgEnum('article_proposal_status', [
 
 /** M7-09: a voice note's transcription job. */
 export const transcriptStatusEnum = pgEnum('transcript_status', ['pending', 'done', 'failed']);
+
+/** M10-01: the three products of the Graph API a brand connects (ADR 0025). */
+export const metaPlatformEnum = pgEnum('meta_platform', ['whatsapp', 'messenger', 'instagram']);
+
+/**
+ * M10-01: where a connected account stands. `token_expired` is a token Graph
+ * refuses (`meta.health` or a send found it dead) and `unsubscribed` an app
+ * Graph no longer posts webhooks for; an Admin fixes either from Channels.
+ */
+export const metaAccountStatusEnum = pgEnum('meta_account_status', [
+  'connected',
+  'token_expired',
+  'unsubscribed',
+]);
+
+/**
+ * M10-01: what the pasted token is, which decides whether it expires and how
+ * it is checked: a system-user token (WhatsApp) and a Page token (Messenger)
+ * do not expire, an Instagram user token lives 60 days and is refreshed.
+ */
+export const metaTokenKindEnum = pgEnum('meta_token_kind', [
+  'system_user',
+  'page',
+  'instagram_user',
+]);
+
+/**
+ * M10-01: where an agent's reply to a Meta customer is. Past `sent` the
+ * platform's own reports move it forward, never back; `refused` is a reply the
+ * reply window forbade, which no retry fixes, and `failed` one the last
+ * attempt could not deliver.
+ */
+export const metaDeliveryStatusEnum = pgEnum('meta_delivery_status', [
+  'queued',
+  'sent',
+  'delivered',
+  'read',
+  'failed',
+  'refused',
+]);

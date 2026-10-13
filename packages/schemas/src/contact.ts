@@ -24,15 +24,19 @@ export const contactIdentityKindSchema = z.enum([
   'telegram',
   'visitor',
   'external',
+  'whatsapp',
+  'messenger',
+  'instagram',
 ]);
 export type ContactIdentityKind = z.infer<typeof contactIdentityKindSchema>;
 
 /**
  * Which identifiers can ever be verified, and by what
  * ([DOMAIN-RULES §4.4](../../../docs/planning/DOMAIN-RULES.md#44-contact-merge)).
- * A phone number is on this list as "never in v1": Helpdock sends no SMS, so
- * nothing can prove one, and an agent ticking a box would be a claim rather
- * than proof.
+ * A phone number is verified only as the `wa_id` of a WhatsApp message Meta
+ * signed (M10); Helpdock sends no SMS, and an agent ticking a box would be a
+ * claim rather than proof, which is why `isVerifiedIdentity` lets one source
+ * alone produce a verified phone.
  */
 export const VERIFIABLE_IDENTITY_KINDS: Readonly<Record<ContactIdentityKind, boolean>> =
   Object.freeze({
@@ -40,7 +44,12 @@ export const VERIFIABLE_IDENTITY_KINDS: Readonly<Record<ContactIdentityKind, boo
     telegram: true,
     external: true,
     visitor: true,
-    phone: false,
+    // True since M10, and only through the `whatsapp.cloud` source
+    // (DOMAIN-RULES §4.4, §4.7): a phone an agent typed stays unverified.
+    phone: true,
+    whatsapp: true,
+    messenger: true,
+    instagram: true,
   });
 
 /** Why a normaliser refused a value. The screen turns the code into a sentence. */
@@ -52,6 +61,8 @@ export const identityProblemSchema = z.enum([
   'invalid-phone',
   'invalid-telegram',
   'invalid-visitor',
+  /** Not an id Meta could have issued: characters outside letters, digits and `._:-`. */
+  'invalid-meta',
   'too-long',
 ]);
 export type IdentityProblem = z.infer<typeof identityProblemSchema>;
@@ -183,6 +194,26 @@ export const normaliseVisitor = (raw: string): NormaliseResult => {
   return z.uuid().safeParse(lowered).success ? ok(lowered) : refuse('invalid-visitor');
 };
 
+/** The longest Meta customer id kept: a WhatsApp user id is up to 128 characters after a prefix. */
+const MAX_META_ID_LENGTH = 200;
+
+/**
+ * A WhatsApp business-scoped user id (`US.13491208655302741918`), or
+ * `<account id>:<customer id>` for Messenger and Instagram (DOMAIN-RULES §4.7).
+ * Trimmed and never case-folded: Meta's ids are opaque and case-sensitive.
+ */
+export const normaliseMeta = (raw: string): NormaliseResult => {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return refuse('empty');
+  }
+  if (trimmed.length > MAX_META_ID_LENGTH) {
+    return refuse('too-long');
+  }
+
+  return /^[A-Za-z0-9._:-]+$/.test(trimmed) ? ok(trimmed) : refuse('invalid-meta');
+};
+
 /** The brand's own user id. Opaque: only trimmed, never case-folded. */
 export const normaliseExternal = (raw: string): NormaliseResult => {
   const trimmed = raw.trim();
@@ -215,6 +246,10 @@ export const normaliseIdentity = (
       return normaliseVisitor(value);
     case 'external':
       return normaliseExternal(value);
+    case 'whatsapp':
+    case 'messenger':
+    case 'instagram':
+      return normaliseMeta(value);
   }
 };
 

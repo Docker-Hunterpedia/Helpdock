@@ -12,6 +12,7 @@ import arHcSite from '../locales/ar/hcSite.json' with { type: 'json' };
 import arHelpCenter from '../locales/ar/helpCenter.json' with { type: 'json' };
 import arMacros from '../locales/ar/macros.json' with { type: 'json' };
 import arMe from '../locales/ar/me.json' with { type: 'json' };
+import arMeta from '../locales/ar/meta.json' with { type: 'json' };
 import arReports from '../locales/ar/reports.json' with { type: 'json' };
 import arRules from '../locales/ar/rules.json' with { type: 'json' };
 import arSettings from '../locales/ar/settings.json' with { type: 'json' };
@@ -38,6 +39,7 @@ import enHcSite from '../locales/en/hcSite.json' with { type: 'json' };
 import enHelpCenter from '../locales/en/helpCenter.json' with { type: 'json' };
 import enMacros from '../locales/en/macros.json' with { type: 'json' };
 import enMe from '../locales/en/me.json' with { type: 'json' };
+import enMeta from '../locales/en/meta.json' with { type: 'json' };
 import enReports from '../locales/en/reports.json' with { type: 'json' };
 import enRules from '../locales/en/rules.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
@@ -101,6 +103,10 @@ export const NAMESPACES = [
   'reports',
   // `Admin/Developers` (M8-01, M8-03): API keys and outbound webhooks.
   'developers',
+  // M10: the `meta` catalog. What the api writes into a Meta (WhatsApp, Messenger,
+  // Instagram) ticket's thread in the customer's language (a location, a story, a
+  // reaction; M10-03) and what it sends to the customer (a file left out; M10-06).
+  'meta',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -134,6 +140,7 @@ export const resources = {
     aiSettings: enAiSettings,
     reports: enReports,
     developers: enDevelopers,
+    meta: enMeta,
   },
   ar: {
     common: arCommon,
@@ -162,6 +169,7 @@ export const resources = {
     aiSettings: arAiSettings,
     reports: arReports,
     developers: arDevelopers,
+    meta: arMeta,
   },
 };
 

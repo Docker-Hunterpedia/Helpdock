@@ -29,9 +29,22 @@ import {
   knowledgeReembedJob,
   knowledgeSyncJob,
   knowledgeSyncSchedulerId,
+  META_HEALTH_CRON,
+  META_HEALTH_SCHEDULE_CRON,
+  META_MEDIA_FETCH_ATTEMPTS,
+  META_SEND_JOB_ATTEMPTS,
+  type MetaSendPayload,
   maintenanceRetentionJob,
   maintenanceRetentionScheduleJob,
   mediaProcessJob,
+  metaHealthJob,
+  metaHealthReceiptKey,
+  metaHealthScheduleJob,
+  metaHealthSchedulerId,
+  metaMediaFetchJob,
+  metaProfileFetchJob,
+  metaSendJob,
+  metaSendPayloadSchema,
   notifyEmailJob,
   notifyPushJob,
   OUTBOX_RELAY_INTERVAL_MS,
@@ -641,5 +654,178 @@ describe('the report rollup and the brand purge (M8-04, M8-07)', () => {
 
   it('looks for brands past their grace nightly, an hour after retention', () => {
     expect(brandPurgeScheduleJob.schedule).toEqual({ cron: '0 4 * * *' });
+  });
+});
+
+describe('the Meta account health check (M10-10)', () => {
+  const accountId = '01924f00-0000-7000-8000-0000000000ac';
+
+  it('checks each account every hour on the maintenance queue', () => {
+    const payload = parseJobPayload(metaHealthJob, { brandId, accountId });
+
+    // The M10 milestone doc and the operations guide name the cadence.
+    expect(META_HEALTH_CRON).toBe('0 * * * *');
+    expect(metaHealthJob.queue).toBe('maintenance');
+    expect(metaHealthJob.options.attempts).toBe(3);
+    expect(payload).toEqual({ brandId, accountId });
+    expect(metaHealthJob.schedule).toBeUndefined();
+  });
+
+  it('refuses a payload without a brand, as every job payload carries one', () => {
+    expect(() => parseJobPayload(metaHealthJob, { accountId })).toThrow(PayloadValidationError);
+    expect(() => parseJobPayload(metaHealthJob, { brandId, accountId: 'nope' })).toThrow(
+      PayloadValidationError,
+    );
+  });
+
+  it('names one scheduler per account', () => {
+    expect(metaHealthSchedulerId(accountId)).toBe(`meta.health.${accountId}`);
+  });
+
+  it('keys the receipt on the account and the UTC hour, so a second run in the hour is a repeat', () => {
+    const early = metaHealthReceiptKey(accountId, new Date('2026-10-11T09:00:00.000Z'));
+    const late = metaHealthReceiptKey(accountId, new Date('2026-10-11T09:59:59.999Z'));
+
+    expect(early).toBe(`meta.health:${accountId}:2026-10-11T09`);
+    expect(late).toBe(early);
+    expect(metaHealthReceiptKey(accountId, new Date('2026-10-11T10:00:00.000Z'))).not.toBe(early);
+  });
+
+  it('registers the schedulers again daily, never on the hour the checks run', () => {
+    expect(metaHealthScheduleJob.schedule).toEqual({ cron: META_HEALTH_SCHEDULE_CRON });
+    expect(META_HEALTH_SCHEDULE_CRON).not.toBe(META_HEALTH_CRON);
+    expect(parseJobPayload(metaHealthScheduleJob, {})).toEqual({});
+  });
+});
+
+describe('the Meta send job (M10-06)', () => {
+  const deliveryId = '01924f00-0000-7000-8000-0000000000ee';
+
+  it('keys a send by its delivery, whatever the job id', () => {
+    const payload: MetaSendPayload = { kind: 'reply', brandId, deliveryId };
+
+    expect(idempotencyKeyFor(metaSendJob, payload, 'any')).toBe(`meta.send:${deliveryId}`);
+  });
+
+  it('sends on the outbound queue, five attempts from ten seconds', () => {
+    expect(metaSendJob.queue).toBe('outbound');
+    expect(metaSendJob.options.attempts).toBe(META_SEND_JOB_ATTEMPTS);
+    expect(META_SEND_JOB_ATTEMPTS).toBe(5);
+    expect(metaSendJob.options.backoff).toEqual({ type: 'exponential', delay: 10_000 });
+  });
+
+  it('knows a reply, and nothing else until M10-09 adds the template', () => {
+    expect(metaSendPayloadSchema.safeParse({ kind: 'reply', brandId, deliveryId }).success).toBe(
+      true,
+    );
+    expect(metaSendPayloadSchema.safeParse({ kind: 'template', brandId, deliveryId }).success).toBe(
+      false,
+    );
+    expect(() => parseJobPayload(metaSendJob, { kind: 'notice', brandId, deliveryId })).toThrow(
+      PayloadValidationError,
+    );
+    expect(() => parseJobPayload(metaSendJob, { kind: 'reply', brandId })).toThrow(
+      PayloadValidationError,
+    );
+  });
+});
+
+describe('the Meta media fetch (M10-03)', () => {
+  const attachmentId = '01924f00-0000-7000-8000-0000000000f1';
+  const accountId = '01924f00-0000-7000-8000-0000000000f2';
+  const whatsapp = {
+    kind: 'whatsapp_media',
+    type: 'image',
+    mediaId: '1479537139650973',
+    mimeType: 'image/jpeg',
+    sha256: 'n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDwCgg=',
+  } as const;
+
+  it('keys a fetch by its attachment, so a redelivered event fetches once', () => {
+    expect(
+      idempotencyKeyFor(
+        metaMediaFetchJob,
+        { brandId, attachmentId, accountId, ref: whatsapp },
+        'meta.media_fetch.any',
+      ),
+    ).toBe(`meta.media_fetch:${attachmentId}`);
+  });
+
+  it('runs on the inbound queue, five attempts backing off from 30 seconds', () => {
+    expect(metaMediaFetchJob.queue).toBe('inbound');
+    expect(META_MEDIA_FETCH_ATTEMPTS).toBe(5);
+    expect(metaMediaFetchJob.options).toMatchObject({
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 30_000 },
+    });
+  });
+
+  it('takes a WhatsApp media id or a CDN link, and nothing else as the file', () => {
+    expect(
+      parseJobPayload(metaMediaFetchJob, { brandId, attachmentId, accountId, ref: whatsapp }),
+    ).toMatchObject({ ref: { kind: 'whatsapp_media' } });
+    expect(
+      parseJobPayload(metaMediaFetchJob, {
+        brandId,
+        attachmentId,
+        accountId,
+        ref: { kind: 'cdn_url', url: 'https://scontent.xx.fbcdn.net/v/t1/a.jpg', type: 'image' },
+      }),
+    ).toMatchObject({ ref: { kind: 'cdn_url' } });
+    expect(() =>
+      parseJobPayload(metaMediaFetchJob, {
+        brandId,
+        attachmentId,
+        accountId,
+        ref: { kind: 'path', path: '/etc/passwd' },
+      }),
+    ).toThrow(PayloadValidationError);
+    expect(() =>
+      parseJobPayload(metaMediaFetchJob, {
+        brandId,
+        attachmentId,
+        accountId,
+        ref: { kind: 'cdn_url', url: 'file:///etc/passwd', type: 'image' },
+      }),
+    ).toThrow(PayloadValidationError);
+  });
+});
+
+describe('the Meta profile lookup (M10-05)', () => {
+  const conversationId = '01924f00-0000-7000-8000-0000000000e1';
+  const accountId = '01924f00-0000-7000-8000-0000000000e2';
+
+  it('runs on the inbound queue with three attempts from thirty seconds', () => {
+    expect(metaProfileFetchJob.queue).toBe('inbound');
+    expect(metaProfileFetchJob.options).toMatchObject({
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 30_000 },
+    });
+  });
+
+  it('is keyed by the conversation, whichever outbox row asked', () => {
+    const payload = parseJobPayload(metaProfileFetchJob, {
+      brandId,
+      conversationId,
+      accountId,
+      platform: 'instagram',
+    });
+
+    expect(idempotencyKeyFor(metaProfileFetchJob, payload, 'meta.profile_fetch.a')).toBe(
+      `meta.profile_fetch:${conversationId}`,
+    );
+    expect(idempotencyKeyFor(metaProfileFetchJob, payload, 'meta.profile_fetch.b')).toBe(
+      `meta.profile_fetch:${conversationId}`,
+    );
+  });
+
+  it('is asked for Messenger and Instagram only: WhatsApp sends the name itself', () => {
+    const ask = (platform: string) =>
+      metaProfileFetchJob.schema.safeParse({ brandId, conversationId, accountId, platform })
+        .success;
+
+    expect(ask('messenger')).toBe(true);
+    expect(ask('instagram')).toBe(true);
+    expect(ask('whatsapp')).toBe(false);
   });
 });

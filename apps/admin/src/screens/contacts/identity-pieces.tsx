@@ -1,6 +1,6 @@
 import type { ContactIdentity, ContactIdentityKind } from '@helpdock/schemas';
 import { Box, Typography } from '@mui/material';
-import { Code, Mail, MessageCircle, Phone, Send } from 'lucide-react';
+import { Camera, Code, Mail, MessageCircle, MessagesSquare, Phone, Send } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -22,6 +22,9 @@ export const CHANNEL_ICONS = {
   telegram: Send,
   visitor: MessageCircle,
   external: Code,
+  whatsapp: Phone,
+  messenger: MessagesSquare,
+  instagram: Camera,
 } as const;
 
 export function ChannelIcons({

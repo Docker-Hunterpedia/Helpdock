@@ -32,7 +32,7 @@ Teams need ticketing discipline (departments, SLAs, rules, macros), a help cente
 
 ### Non-goals for v1
 
-Visual process builder · community forums · phone/VoIP · billing/SaaS metering · SLA credits · Meta channels (WhatsApp, Messenger, Instagram) · Slack/Discord · customer login portal · backup tooling · one-click cloud deploy · custom permission sets · native mobile SDKs.
+Visual process builder · community forums · phone/VoIP · billing/SaaS metering · SLA credits · Slack/Discord · customer login portal · backup tooling · one-click cloud deploy · custom permission sets · native mobile SDKs.
 
 ---
 
@@ -95,7 +95,8 @@ Update this table in the same PR that changes a milestone's status.
 | 3 Intelligence | M7 AI | M3, M4, M5, M6 | 7–9 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress | 2026-10-05 | |
-| | **Total** | | **46–59** | | | |
+| 4 Release | M10 Meta channels | M6, M9 (code side) | 5–6 | in progress | 2026-10-11 | |
+| | **Total** | | **51–65** | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.
 
@@ -112,6 +113,10 @@ Effort assumes one full-time maintainer working with AI coding agents, including
 | M9-01 | External pentest vendor, budget and a 2-week slot booked at least 6 weeks ahead ([statement of work](pentest-scope.md)) | @Docker-Hunterpedia | not started |
 | M9-07 | Three outside testers for the usability pass, and a clean VM for the onboarding run and the restore drill for the record (`docs/completed/onboarding-test.md`, `docs/completed/restore-drill.md`) | @Docker-Hunterpedia | not started |
 | M9-08 | GHCR publish permissions on the org (done: `v0.4.0` is published). No signing key is needed: Cosign signs keylessly through GitHub OIDC, and `v0.4.0` was signed that way on 2026-10-09 (#158, closed) | @Docker-Hunterpedia | done |
+| M10 | A Meta developer account and a Business-type app with the WhatsApp, Messenger and Instagram products in Live mode, with its app secret and Instagram app secret | @Docker-Hunterpedia | needed |
+| M10-03 | A WhatsApp Business account with its test number, and a payment method for a real number | @Docker-Hunterpedia | needed |
+| M10-04, M10-05 | A Facebook Page and an Instagram professional account for staging, with the maintainer in an app role | @Docker-Hunterpedia | needed |
+| M10-04, M10-05, M10-09 | App Review of `pages_messaging`, `instagram_business_manage_messages` and the Human Agent feature on the staging app, so messages from people outside the app's roles arrive | @Docker-Hunterpedia | not started |
 
 ---
 
@@ -388,13 +393,41 @@ Exit criteria:
 - [ ] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill.
 - [ ] `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install instructions work against it.
 
+#### M10 Meta channels
+
+Depends on: M6 (the channel pattern), M9's code side. Runs beside M9's remaining items, which need people rather than code. Design: [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md). Milestone doc: [docs/in-development/M10-meta-channels.md](../in-development/M10-meta-channels.md).
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M10-01 | Schema, config and the shared Graph adapter: `meta_accounts`, `meta_conversations`, `meta_deliveries` with RLS; the `whatsapp`, `messenger`, `instagram` channel and identity kinds; `META_*` keys and the `meta.*` settings; `packages/channels/src/meta/` (Graph client over the M0-15 SSRF-safe client with a host allow-list, `X-Hub-Signature-256`, envelope schemas, error classifier, splitter); the Graph stand-in and signed-webhook driver for tests | A §5, §8, §13, D §13 |
+| M10-02 | Webhook: `GET\|POST /api/meta/webhook`, handshake, raw-body signature check against the app secrets, routing by `object` and `entry[].id` to the account across brands, one transaction per entry, dedupe on the platform message id, 200 after a valid signature | D §6 |
+| M10-03 | WhatsApp inbound → tickets: identity on the business-scoped user id with `wa_id` as a verified phone; text, media through `meta.media_fetch` and the M1-10 pipeline with the digest check; locations and contacts as text; `user_changed_number`; delivery statuses | R §4.4, D §4.4, §4.7, §4.8 |
+| M10-04 | Messenger inbound → tickets: page-scoped id, CDN attachments, echoes of Helpdock's sends dropped, delivery and read watermarks, reactions and edits as system lines | R §4.4, D §4.7, §4.8 |
+| M10-05 | Instagram inbound → tickets through the Instagram API with Instagram Login: Instagram-scoped id and `@username`, story replies and mentions, unsent messages marked, `messaging_seen` | R §4.4, D §4.7, §4.8 |
+| M10-06 | Agent replies on all three through the delivery hooks: the reply window refused at compose time and checked again in `meta.send`, per-platform splitting, attachments as messages of their own, per-recipient pacing, deliveries with `delivered`, `read`, `refused` and `failed` with Retry | A §8, §13, D §2.6, §6 |
+| M10-07 | Admin: Channels › Meta with the App card, connecting an account per platform by pasted token, Test, Subscribe, health, Human Agent switch, Disconnect; the System page's Channels card | R §4.10 |
+| M10-08 | Ticket thread: channel chip, "via" and "to" lines, delivery states, the reply-window strip with Send disabled when closed, the composer's message count, the channel identity card per platform | DESIGN §6.3, D §2.6 |
+| M10-09 | WhatsApp templates (sync, picker, send after the window) and the Messenger and Instagram `HUMAN_AGENT` tag for a person's reply between 24 h and 7 d when the account's switch is on. May ship after the rest; the tag shipped early, with M10-06, after the review found the extended window open and its replies untagged | D §2.6 |
+| M10-10 | Health jobs: `meta.health` per account (token check, `subscribed_apps` with re-subscribe, Instagram token refresh) and Reconnect | A §13 |
+| M10-11 | Docs: `docs/guides/meta-channels.md` (dashboard walk-through, App Review, pricing, limits), the configuration, channels, contacts, tickets and retention guides, `.env.example`, OpenAPI | A §2 |
+
+Exit criteria:
+
+- [ ] A message on each platform opens a ticket with the right contact: WhatsApp on the business-scoped user id with the phone recorded as verified, Messenger on the page-scoped id, Instagram on the Instagram-scoped id with the `@username`; two accounts of two brands in one batch file two tickets, each in its brand.
+- [ ] A reply from the ticket arrives on the same platform, once when the job runs twice, and shows Sent, Delivered and Read from the status webhook.
+- [ ] A reply after the window is refused at compose time with `reply-window-closed`, and one whose window closed while queued is recorded `refused` with the platform's code and never retried.
+- [ ] Brand A cannot read brand B's rows in the three new tables (DOMAIN-RULES §1.6).
+- [ ] The stand-in suites pass in CI: webhook, inbound per platform, replies, health.
+- [ ] Channels › Meta and the Meta ticket pass Playwright in `en` and `ar` with axe.
+
 ---
 
 ## 5. Post-1.0 backlog (v1.1+)
 
 Not scheduled. Each item needs its own PRD section before work starts.
 
-- Meta channels (WhatsApp Cloud, Messenger, Instagram), Slack, Discord, Viber, LINE
+- Slack, Discord, Viber, LINE
+- Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, importing replies typed in Meta Business Suite, backfill of missed webhooks, auto-reply and the satisfaction survey on these channels
 - Customer portal with magic-link login, ticket history, restricted KB
 - Custom roles and permission sets; SAML/OIDC SSO
 - React Native and Flutter widget SDKs
@@ -426,6 +459,11 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | Internal knowledge leaks through AI answers or caches | Critical | Visibility filtered in SQL before ranking, citation validation, audience-keyed cache, tests in M5 and M7 |
 | Queued side effects drift from committed data | High | Transactional outbox from M0 with crash and rollback tests |
 | Pentest vendor unavailable when M9 starts | Medium | Book 6 weeks ahead; listed in external dependencies |
+| Messenger and Instagram need Meta's App Review per install before real customers' messages arrive (M10) | High | Everything works in Standard Access with the operator's own accounts; the guide walks through the review; recorded as a gap accepted up front |
+| WhatsApp charges per delivered message, and a split reply or an attachment is several (M10) | Medium | The composer counts the messages a reply becomes; the guide links Meta's pricing; no part is sent twice |
+| Messenger and Instagram unsubscribe the app after an hour of failed webhook deliveries, with no replay (M10) | Medium | The webhook answers 200 for everything after a valid signature; `meta.health` re-subscribes hourly; backfill is backlog |
+| Meta's pages disagree on deadlines, retry windows and which secret signs Instagram webhooks (M10) | Medium | The design assumes the worse case of each; the open questions are settled against the staging accounts and recorded in the milestone doc |
+| The pinned Graph version expires (M10) | Low | `META_GRAPH_VERSION` is one key; the stand-in's fixtures carry the version; the operations guide notes the date |
 
 ---
 
@@ -445,3 +483,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-09-27 | M4 and M5 shipped. All twenty-one deliverables merged (M4: #129, #132, #133; M5: #131, #134, #135, #136) and all nine exit criteria met, each proved by a named test in [docs/completed/M4-widget-and-realtime.md](../completed/M4-widget-and-realtime.md#exit-criteria) and [docs/completed/M5-help-center.md](../completed/M5-help-center.md#exit-criteria). Two brands on two origins and an api restart mid-send are proved in a browser against the real api. M5's first criterion is met short of a certificate for a real domain: the M5-07 external dependency on a registered domain stays `needed`. The widget's initial bundle keeps to 40 KB by loading the real transport as a lazy chunk, a departure from D §14's "everything for first paint" that ADR 0012's amendment leaves to a reviewer. Close-out found that a brand added after setup had no ticket statuses, so no ticket could be filed in it, and fixed it. Actual effort one day for both, run in parallel, against estimates of 5–6 weeks each. The gaps carried forward are in each doc, including the widget and api-page Playwright suites that CI does not run yet. M6 Telegram (M2) and M8 API, webhooks, reports (M1, M3) may start; M7 AI waits for M6. |
 | 2026-10-07 | M6, M7 and M8 shipped, with the code-side half of M9. All twenty-three deliverables merged in one pull request (#147) and eight of nine exit criteria met, each proved by a named test in [docs/completed/M6-telegram.md](../completed/M6-telegram.md#exit-criteria), [docs/completed/M7-ai.md](../completed/M7-ai.md#exit-criteria) and [docs/completed/M8-api-webhooks-reports.md](../completed/M8-api-webhooks-reports.md#exit-criteria). M7's evaluation criterion stays open: the harness passes in mock mode and the nightly workflow is in, but the run against a real provider waits on the `AI_EVAL_API_KEY` external dependency, which stays `needed`, as do the staging Telegram bot token and the Notion and Google OAuth apps. Actual effort two days for the three, run in parallel, against estimates of 2, 7–9 and 4–5 weeks. The gaps carried forward are in each doc. M9 continues: ASVS gaps closed, Semgrep, ZAP and the dependency audit in CI, the load-test suites, the accessibility audit, the user guides, master key rotation and the restore and onboarding tooling shipped in #147; the external pentest, the §14 host run, the clean-VM onboarding and restore drills, the usability pass and the 1.0.0 tag remain. |
 | 2026-10-11 | M9 pre-pentest fixes, the ASVS re-walk and the M6–M8 gaps, in #167 (open when this was written). Landed: the internal pre-pentest review ([record](../completed/internal-security-review.md)) with its fixes F1 to F5, F6 and N1 still open; the re-walk's gaps closed, so [asvs-l2](../completed/asvs-l2.md) reads 198 Met, 35 Partial, 0 Gap, 24 N/A and 1 Operator; the automated zoom, forced-colours, semantics and bidi audit ([accessibility-audit](../completed/accessibility-audit.md)); `v0.4.0` signed keylessly on 2026-10-09 and #158 closed; the per-bot Telegram language prompt, the ticket list's AI state and agent assist's Arabic prompt. Still needs people or a decision: the external pentest (M9-01), the screen-reader pass (M9-04), the §14 host run (M9-03), the clean-VM onboarding and restore drills and the three outside testers (M9-07, M9-10), and a decision or an artboard for F6, N1, the Telegram empty welcome, the ticket list's `answeredAt` and the AIPausedStrip caption in DESIGN.md. |
+| 2026-10-11 | **Scope change: the Meta channels are in scope as M10.** The owner brought WhatsApp Cloud API, Facebook Messenger and Instagram direct messages into scope as a new milestone, M10 Meta channels, stacked after M9: every message to a connected number, Page or account opens or continues a ticket, and the agent's reply reaches the customer on the same platform. Removed from §1's non-goals and §5's backlog, where REQUIREMENTS §1, §4.4 and §6 listed them as v1.1; eleven deliverables M10-01 to M10-11 in §4, a status board row (5–6 weeks, started 2026-10-11), four external dependencies (a Meta app with the three products, a WhatsApp Business account and test number, a Page and an Instagram professional account for staging, App Review for Messenger and Instagram), five risks. The design is [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md); the milestone doc is [M10-meta-channels.md](../in-development/M10-meta-channels.md). §1's release goal for 1.0.0 is unchanged. |

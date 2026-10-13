@@ -23,7 +23,7 @@ import {
  */
 
 const BRAND = '0192c3f0-1a2b-7c3d-8e4f-000000000001';
-const [SUPPORT, BILLING] = MOCK_DEPARTMENTS;
+const [SUPPORT, BILLING, ONBOARDING] = MOCK_DEPARTMENTS;
 
 describe('MockTicketsApi', () => {
   let api: MockTicketsApi;
@@ -71,16 +71,19 @@ describe('MockTicketsApi', () => {
   it('lists the brand’s tickets, newest movement first', async () => {
     const { tickets } = await api.list(BRAND);
 
-    expect(tickets).toHaveLength(6);
+    expect(tickets).toHaveLength(9);
     expect(tickets[0]?.number).toBe(1042);
   });
 
-  it('spreads the tickets across two departments', async () => {
+  it('spreads the tickets across the departments', async () => {
     const support = await api.list(BRAND, { departmentId: [SUPPORT?.id ?? ''] });
     const billing = await api.list(BRAND, { departmentId: [BILLING?.id ?? ''] });
+    const onboarding = await api.list(BRAND, { departmentId: [ONBOARDING?.id ?? ''] });
 
-    expect(support.tickets).toHaveLength(4);
+    // Support holds the WhatsApp and Messenger tickets, Onboarding the Instagram one (M10-08).
+    expect(support.tickets).toHaveLength(6);
     expect(billing.tickets).toHaveLength(2);
+    expect(onboarding.tickets).toHaveLength(1);
   });
 
   it('filters by system state, priority and assignee together', async () => {
@@ -107,22 +110,24 @@ describe('MockTicketsApi', () => {
   });
 
   it('pages by cursor, and says so by handing one back', async () => {
-    const first = await api.list(BRAND, { limit: 4 });
-    expect(first.tickets).toHaveLength(4);
+    const first = await api.list(BRAND, { limit: 5 });
+    expect(first.tickets).toHaveLength(5);
     expect(first.nextCursor).not.toBeNull();
 
-    const second = await api.list(BRAND, { limit: 4, cursor: first.nextCursor ?? '' });
-    expect(second.tickets).toHaveLength(2);
+    const second = await api.list(BRAND, { limit: 5, cursor: first.nextCursor ?? '' });
+    expect(second.tickets).toHaveLength(4);
     expect(second.nextCursor).toBeNull();
 
     const ids = new Set([...first.tickets, ...second.tickets].map((ticket) => ticket.id));
-    expect(ids.size).toBe(6);
+    expect(ids.size).toBe(9);
   });
 
   it('sorts by number when asked', async () => {
     const { tickets } = await api.list(BRAND, { sort: 'number', direction: 'asc' });
 
-    expect(tickets.map((ticket) => ticket.number)).toEqual([1028, 1030, 1035, 1039, 1041, 1042]);
+    expect(tickets.map((ticket) => ticket.number)).toEqual([
+      1028, 1030, 1035, 1036, 1038, 1039, 1040, 1041, 1042,
+    ]);
   });
 
   it('answers a ticket with the start of its thread and its activity', async () => {
@@ -163,7 +168,7 @@ describe('MockTicketsApi', () => {
     expect(created.ticket.status.name).toBe('Open');
     expect(created.messages.messages).toHaveLength(1);
     expect(created.activity[0]?.action).toBe('ticket.created');
-    expect((await api.list(BRAND)).tickets).toHaveLength(7);
+    expect((await api.list(BRAND)).tickets).toHaveLength(10);
   });
 
   it('moves a status, and records the move', async () => {

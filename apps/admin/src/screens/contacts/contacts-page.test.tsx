@@ -64,7 +64,7 @@ describe('the contact list', () => {
   it('counts the people and the accounts in the caption', async () => {
     await renderContacts();
 
-    expect(await screen.findByText(/5 people/)).toBeInTheDocument();
+    expect(await screen.findByText(/8 people/)).toBeInTheDocument();
   });
 
   it('offers to review the possible duplicates it found', async () => {
@@ -120,7 +120,7 @@ describe('the contact list', () => {
   it('prints the page it is showing', async () => {
     await renderContacts();
 
-    expect(await screen.findByText('1–5 of 5')).toBeInTheDocument();
+    expect(await screen.findByText('1–8 of 8')).toBeInTheDocument();
   });
 
   it('disables both page buttons when everything fits on one page', async () => {

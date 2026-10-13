@@ -129,6 +129,19 @@ describe('channelStatusSchema', () => {
       }).success,
     ).toBe(true);
   });
+
+  it.each(['whatsapp', 'messenger', 'instagram'])('reports a %s account too (M10)', (kind) => {
+    expect(
+      channelStatusSchema.safeParse({
+        id: '0192c3f0-1a2b-7c3d-8e4f-000000000001',
+        name: 'Acme WhatsApp',
+        kind,
+        status: 'error',
+        detail: 'token expired',
+        checkedAt: '2026-10-11T10:00:00.000Z',
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe('systemQueuesQuerySchema', () => {

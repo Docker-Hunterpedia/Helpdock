@@ -34,6 +34,8 @@ import { registerClientFacts } from './context/client-facts.js';
 import { registerJsonDisposition } from './http/json-disposition.js';
 import { registerPermissionsPolicy, securityHeaderOptions } from './http/security-headers.js';
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
+import { MetaWebhookService } from './meta/meta-webhook.service.js';
+import { registerMetaWebhookBody } from './meta/meta-webhook-body.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { registerHttpMetrics } from './observability/http-metrics.js';
 import type { Metrics } from './observability/metrics.js';
@@ -194,6 +196,8 @@ export interface CreateApiAppOptions {
   readonly channels?: AppModuleOptions['channels'];
   /** M6's Bot API, for suites. */
   readonly telegram?: AppModuleOptions['telegram'];
+  /** M10's Graph client and inbound services, for suites. */
+  readonly meta?: AppModuleOptions['meta'];
   /** M4's siteverify call and SSE timings, for suites. */
   readonly widget?: AppModuleOptions['widget'];
   /** M4-09's siteverify call, for suites. */
@@ -213,6 +217,7 @@ export const createApiApp = async ({
   objectStorage,
   channels,
   telegram,
+  meta,
   widget,
   webForm,
   ai,
@@ -234,6 +239,16 @@ export const createApiApp = async ({
   // The 410 guard on the public routes and the API key resolver read one cache,
   // so a brand put into deletion is seen by both within the same few seconds.
   const brandAvailability = new BrandAvailability(runtime.db);
+
+  // Kept to hand to `registerMetaWebhookBody`: `app.getHttpAdapter()` is typed as the
+  // framework-neutral server, which has no parser registration.
+  const adapter = new FastifyAdapter({
+    // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
+    // same promise `TRUST_PROXY` makes about `x-request-id`, so it is the same
+    // switch (REQUIREMENTS §5.1). The address list is copied because Fastify
+    // types it as mutable.
+    trustProxy: typeof env.TRUST_PROXY === 'object' ? [...env.TRUST_PROXY] : env.TRUST_PROXY,
+  });
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot({
@@ -260,6 +275,7 @@ export const createApiApp = async ({
       ...(objectStorage === undefined ? {} : { objectStorage }),
       ...(channels === undefined ? {} : { channels }),
       ...(telegram === undefined ? {} : { telegram }),
+      ...(meta === undefined ? {} : { meta }),
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
       ...(ai === undefined ? {} : { ai }),
@@ -267,13 +283,7 @@ export const createApiApp = async ({
       ...(knowledge === undefined ? {} : { knowledge }),
       ...(extraControllers === undefined ? {} : { extraControllers }),
     }),
-    // `trustProxy` decides what `request.ip` and `x-forwarded-*` mean. It is the
-    // same promise `TRUST_PROXY` makes about `x-request-id`, so it is the same
-    // switch (REQUIREMENTS §5.1). The address list is copied because Fastify
-    // types it as mutable.
-    new FastifyAdapter({
-      trustProxy: typeof env.TRUST_PROXY === 'object' ? [...env.TRUST_PROXY] : env.TRUST_PROXY,
-    }),
+    adapter,
     // `abortOnError: false` so a boot failure is thrown rather than turned into
     // `process.abort()`. Aborting leaves a container with SIGABRT and a core
     // dump where `main.ts` would have written the message that says what to fix.
@@ -322,6 +332,12 @@ export const createApiApp = async ({
   // M2-03 and M4-09. Before `init()`, which is when Nest adds its routes: the
   // `onRoute` hook that raises their body limit only sees routes added after it.
   registerFormBodies(app.getHttpAdapter().getInstance(), [INBOUND_PARSE_ROUTE, WEB_FORM_ROUTE]);
+
+  // M10-02. The webhook's signature covers the bytes Meta wrote, so its route's
+  // parser checks it over them, and the address's budget, before it parses;
+  // before `init()` for the reason above, and because Nest would otherwise
+  // register the JSON parser that replaces it.
+  registerMetaWebhookBody(adapter, app.get(MetaWebhookService, { strict: false }));
 
   // M8-05: Bull Board brings its own router, so it is a Fastify plugin behind
   // its own install-admin session check (`queue-board.ts`, ADR 0017).

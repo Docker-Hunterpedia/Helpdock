@@ -8,8 +8,9 @@ import type { ContactIdentityKind } from './contact.js';
  * |---|---|
  * | Email | an inbound email arrived from it, or a magic link sent to it was clicked |
  * | Telegram `chat_id` | always (it comes from the Bot API) |
+ * | WhatsApp user id, Messenger page-scoped id, Instagram-scoped id | always (a webhook Meta signed) |
  * | Signed `external_id` | always (HMAC) |
- * | Phone | never in v1 |
+ * | Phone | only as the `wa_id` of a WhatsApp message (M10); never when typed |
  * | Email typed in a form | never |
  *
  * A caller does not say whether an identifier is verified; it says **where the
@@ -30,6 +31,12 @@ export const identitySourceSchema = z.enum([
   'email.cc',
   /** The chat id of a Telegram update (M6). */
   'telegram.bot',
+  /** The user id and `wa_id` of a WhatsApp message Meta signed (M10). */
+  'whatsapp.cloud',
+  /** The page-scoped id of a Messenger message Meta signed (M10). */
+  'messenger.page',
+  /** The Instagram-scoped id of a message Meta signed (M10). */
+  'instagram.account',
   /** The `user_id` of a valid signed identity (§4.2). */
   'widget.signed',
   /** The visitor id the widget was issued on first load (§4.1). */
@@ -57,6 +64,9 @@ const ALL_KINDS: readonly ContactIdentityKind[] = [
   'telegram',
   'visitor',
   'external',
+  'whatsapp',
+  'messenger',
+  'instagram',
 ];
 
 export const IDENTITY_SOURCE_RULES: Readonly<Record<IdentitySource, SourceRule>> = Object.freeze({
@@ -66,6 +76,11 @@ export const IDENTITY_SOURCE_RULES: Readonly<Record<IdentitySource, SourceRule>>
   // took part.
   'email.cc': { kinds: ['email'], verified: false },
   'telegram.bot': { kinds: ['telegram'], verified: true },
+  // The one source that proves a phone: WhatsApp verified the SIM and Meta
+  // signed the webhook that carries it (DOMAIN-RULES §4.4, §4.7).
+  'whatsapp.cloud': { kinds: ['whatsapp', 'phone'], verified: true },
+  'messenger.page': { kinds: ['messenger'], verified: true },
+  'instagram.account': { kinds: ['instagram'], verified: true },
   'widget.signed': { kinds: ['external'], verified: true },
   'widget.visitor': { kinds: ['visitor'], verified: true },
   'widget.form': { kinds: ['email', 'phone'], verified: false },

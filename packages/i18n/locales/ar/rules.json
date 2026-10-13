@@ -116,7 +116,10 @@
     "telegram": "تيليغرام",
     "form": "نموذج الموقع",
     "api": "واجهة البرمجة",
-    "manual": "يدوي"
+    "manual": "يدوي",
+    "whatsapp": "واتساب",
+    "messenger": "ماسنجر",
+    "instagram": "إنستغرام"
   },
   "priorities": {
     "low": "منخفضة",

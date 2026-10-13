@@ -71,7 +71,7 @@ describe('the list', () => {
     expect(row).toHaveTextContent('built-in');
     expect(row).toHaveTextContent('Status is live · Assignee is me');
     expect(row).toHaveTextContent('Everyone');
-    expect(await within(row).findByText('2')).toBeVisible();
+    expect(await within(row).findByText('5')).toBeVisible();
     expect(rowFor('VIP refunds')).toHaveTextContent('Billing');
   });
 });

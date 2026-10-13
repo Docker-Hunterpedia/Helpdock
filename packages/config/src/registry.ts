@@ -369,6 +369,47 @@ export const SETTING_DEFINITIONS = [
     description:
       'API key for the transcription endpoint. Empty for a local server that asks for none.',
   }),
+  // M10-01 (ADR 0025). An install has one Meta developer app, and a Meta app has
+  // one callback URL and one signing secret, so these are install settings;
+  // each connected number, Page or account holds its own token in
+  // `meta_accounts`.
+  defineSetting({
+    key: 'meta.appId',
+    // Digits only, as Meta issues them; empty until the operator saves one.
+    schema: z.string().regex(/^\d{0,25}$/),
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'Id of the install’s Meta developer app, from the app dashboard. Messenger echoes of Helpdock’s own replies are recognised by it (M10-04).',
+  }),
+  defineSetting({
+    key: 'meta.appSecret',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description:
+      'App secret of the Meta developer app. Every webhook from Meta is signed with it (X-Hub-Signature-256) and refused without a match.',
+  }),
+  defineSetting({
+    key: 'meta.instagramAppSecret',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description:
+      'Instagram app secret, from the Instagram product of the Meta app. Empty when Instagram webhooks are signed with the app secret; a webhook is accepted when either matches.',
+  }),
+  defineSetting({
+    key: 'meta.webhookVerifyToken',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description:
+      'The token Meta sends with its callback-URL handshake. Generated on first read when empty; paste the same value into the Meta dashboard.',
+  }),
 ] as const;
 
 type Definition = (typeof SETTING_DEFINITIONS)[number];

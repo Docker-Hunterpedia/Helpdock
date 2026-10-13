@@ -7,6 +7,7 @@ import {
   normaliseEmail,
   normaliseExternal,
   normaliseIdentity,
+  normaliseMeta,
   normalisePhone,
   normaliseTelegram,
   normaliseVisitor,
@@ -174,6 +175,34 @@ describe('normaliseExternal', () => {
   });
 });
 
+describe('normaliseMeta', () => {
+  it.each([
+    ['US.13491208655302741918', 'US.13491208655302741918'],
+    ['  106540352242922:7654321098765432  ', '106540352242922:7654321098765432'],
+    ['17841400000000000:17841499999999999', '17841400000000000:17841499999999999'],
+    // Meta's ids are opaque and case-sensitive: nothing is folded.
+    ['us.AbC', 'us.AbC'],
+  ])('keeps %s as the id Meta issued', (raw, expected) => {
+    expect(value(normaliseMeta(raw))).toBe(expected);
+  });
+
+  it.each(['US 134912', 'US.1349/12', 'اسم', 'a@b.c', 'id;drop', '<b>'])(
+    'refuses %s, which Meta could not have issued',
+    (raw) => {
+      expect(problem(normaliseMeta(raw))).toBe('invalid-meta');
+    },
+  );
+
+  it('refuses an empty id', () => {
+    expect(problem(normaliseMeta('   '))).toBe('empty');
+  });
+
+  it('accepts an id of 200 characters and refuses one of 201', () => {
+    expect(value(normaliseMeta('a'.repeat(200)))).toBe('a'.repeat(200));
+    expect(problem(normaliseMeta('a'.repeat(201)))).toBe('too-long');
+  });
+});
+
 describe('normaliseIdentity', () => {
   it.each([
     ['email', 'Mona@Example.com', 'mona@example.com'],
@@ -181,6 +210,9 @@ describe('normaliseIdentity', () => {
     ['telegram', ' 42 ', '42'],
     ['visitor', '0192C3F0-1A2B-7C3D-8E4F-000000000001', '0192c3f0-1a2b-7c3d-8e4f-000000000001'],
     ['external', ' Cust-1 ', 'Cust-1'],
+    ['whatsapp', ' US.13491208655302741918 ', 'US.13491208655302741918'],
+    ['messenger', '106540352242922:7654321098765432', '106540352242922:7654321098765432'],
+    ['instagram', '17841400000000000:17841499999999999', '17841400000000000:17841499999999999'],
   ] as const)('dispatches %s to its own normaliser', (kind, raw, expected) => {
     expect(value(normaliseIdentity(kind, raw))).toBe(expected);
   });
@@ -193,13 +225,17 @@ describe('normaliseIdentity', () => {
 });
 
 describe('VERIFIABLE_IDENTITY_KINDS', () => {
-  it('matches the DOMAIN-RULES §4.4 table, phone included', () => {
+  it('matches the DOMAIN-RULES §4.4 table, phone included since M10', () => {
     expect(VERIFIABLE_IDENTITY_KINDS).toEqual({
       email: true,
       telegram: true,
       external: true,
       visitor: true,
-      phone: false,
+      // Verifiable, but only through the `whatsapp.cloud` source: see identity-rules.test.ts.
+      phone: true,
+      whatsapp: true,
+      messenger: true,
+      instagram: true,
     });
   });
 });

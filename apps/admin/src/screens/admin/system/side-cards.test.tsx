@@ -52,6 +52,45 @@ describe('ChannelsCard', () => {
     expect(within(card).getByRole('list', { name: 'Mailboxes' })).toBeVisible();
     expect(within(card).getByRole('list', { name: 'Telegram bots' })).toBeVisible();
   });
+
+  it('lists the Meta accounts under WhatsApp, Messenger and Instagram (M10-07)', () => {
+    renderApp(
+      <ChannelsCard
+        channels={[
+          channel({
+            id: '0192c3f0-1a2b-7c3d-8e4f-0000000000d1',
+            name: '+1 555 0142',
+            kind: 'whatsapp',
+            detail: 'last message 2 min ago',
+          }),
+          channel({
+            id: '0192c3f0-1a2b-7c3d-8e4f-0000000000d2',
+            name: 'Helpdock',
+            kind: 'messenger',
+          }),
+          channel({
+            id: '0192c3f0-1a2b-7c3d-8e4f-0000000000d3',
+            name: '@helpdock',
+            kind: 'instagram',
+            status: 'error',
+            detail: 'Token expired',
+          }),
+        ]}
+      />,
+    );
+
+    const card = screen.getByRole('region', { name: 'Channels' });
+    expect(
+      within(within(card).getByRole('list', { name: 'WhatsApp' })).getByText('+1 555 0142'),
+    ).toBeVisible();
+    expect(
+      within(within(card).getByRole('list', { name: 'Messenger' })).getByText('Helpdock'),
+    ).toBeVisible();
+    expect(
+      within(within(card).getByRole('list', { name: 'Instagram' })).getByText('Token expired'),
+    ).toBeVisible();
+    expect(within(card).getByText('1 needs attention')).toBeVisible();
+  });
 });
 
 describe('AuditCard', () => {

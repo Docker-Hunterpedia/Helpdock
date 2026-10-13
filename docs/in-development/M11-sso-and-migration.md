@@ -963,7 +963,8 @@ PRD status board.
 
 ## Supporting CI work
 
-[#208](https://github.com/Docker-Hunterpedia/Helpdock/issues/208) tracks the
+[#208](https://github.com/Docker-Hunterpedia/Helpdock/issues/208), implemented in
+[PR #209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209), tracks the
 owner-requested dependency-aware CI selection supporting M11 and M0-11. PRs
 run affected workspace suites and their transitive dependents; global or
 incomplete diffs run everything. Main pushes retain the full regression run.

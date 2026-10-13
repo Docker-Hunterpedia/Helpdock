@@ -87,7 +87,10 @@ export class CsatRepository {
     const [row] = await tx
       .insert(csatResponses)
       .values(values)
-      .onConflictDoNothing({ target: [csatResponses.ticketId, csatResponses.closedAt] })
+      .onConflictDoNothing({
+        target: [csatResponses.ticketId, csatResponses.closedAt],
+        where: sql`${csatResponses.importedExternalId} IS NULL`,
+      })
       .returning();
 
     return row;
@@ -98,7 +101,7 @@ export class CsatRepository {
     const [row] = await tx
       .select()
       .from(csatResponses)
-      .where(eq(csatResponses.ticketId, ticketId))
+      .where(and(eq(csatResponses.ticketId, ticketId), isNull(csatResponses.importedExternalId)))
       .orderBy(desc(csatResponses.closedAt))
       .limit(1);
 

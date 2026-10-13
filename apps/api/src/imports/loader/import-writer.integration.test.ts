@@ -5,6 +5,7 @@ import {
   contactIdentities,
   contacts,
   createDb,
+  csatResponses,
   type DbHandle,
   departments,
   importExternalIds,
@@ -13,9 +14,12 @@ import {
   importRuns,
   outbox,
   runMigrations,
+  tags,
   ticketMessages,
+  ticketParticipants,
   ticketStatuses,
   tickets,
+  ticketTags,
   userBrandRoles,
   users,
   uuidv7,
@@ -29,6 +33,7 @@ import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
+import { CsatRepository } from '../../csat/csat.repository.js';
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -156,6 +161,170 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await redis?.quit();
     await redisContainer?.stop();
     await postgres?.stop();
+  });
+
+  it('preserves mapped tags and CC identities, repeats without writes and replaces source tags on delta', async () => {
+    const tagId = uuidv7();
+    await owner.db.insert(tags).values({ id: tagId, brandId: BRAND, name: 'Historical' });
+    await owner.db.insert(contactIdentities).values({
+      brandId: BRAND,
+      contactId: CONTACT,
+      kind: 'email',
+      value: 'requester@example.com',
+      verified: true,
+      source: 'manual',
+    });
+    const input = request('labels-and-cc');
+    input.record.tags = ['legacy', 'discard'];
+    input.resolved.tags = [
+      { externalValue: 'legacy', tagId },
+      { externalValue: 'discard', tagId: null },
+    ];
+    input.record.ccEmails = ['CC@example.com', 'cc@example.com', 'requester@example.com'];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const beforeTags = await owner.db
+      .select()
+      .from(ticketTags)
+      .where(eq(ticketTags.ticketId, loaded.ticketId));
+    const beforeCc = await owner.db
+      .select()
+      .from(ticketParticipants)
+      .where(eq(ticketParticipants.ticketId, loaded.ticketId));
+    expect(beforeTags).toHaveLength(1);
+    expect(beforeTags[0]?.tagId).toBe(tagId);
+    expect(beforeCc).toHaveLength(1);
+    expect(beforeCc[0]?.address).toBe('cc@example.com');
+    const [ccIdentity] = await owner.db
+      .select()
+      .from(contactIdentities)
+      .where(eq(contactIdentities.contactId, beforeCc[0]?.contactId ?? 'missing-contact'));
+    expect(ccIdentity).toMatchObject({
+      value: 'cc@example.com',
+      verified: false,
+      source: 'import',
+    });
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      ticketId: loaded.ticketId,
+      outcome: 'unchanged',
+    });
+    expect(
+      await owner.db.select().from(ticketTags).where(eq(ticketTags.ticketId, loaded.ticketId)),
+    ).toEqual(beforeTags);
+    expect(
+      await owner.db
+        .select()
+        .from(ticketParticipants)
+        .where(eq(ticketParticipants.ticketId, loaded.ticketId)),
+    ).toEqual(beforeCc);
+    input.record.tags = [];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      await owner.db.select().from(ticketTags).where(eq(ticketTags.ticketId, loaded.ticketId)),
+    ).toEqual([]);
+    expect(
+      await owner.db
+        .select()
+        .from(ticketParticipants)
+        .where(eq(ticketParticipants.ticketId, loaded.ticketId)),
+    ).toEqual(beforeCc);
+  });
+
+  it('keeps distinct historical ratings without inventing closes or exposing them as live surveys', async () => {
+    const input = request('ratings');
+    input.csat = [
+      {
+        externalId: 'rating-a',
+        ticketExternalId: 'ratings',
+        rating: 5,
+        ratedAt: '2019-01-04T10:00:00Z',
+        closedAt: '2019-01-03T00:00:00Z',
+        comment: 'Original answer',
+      },
+      {
+        externalId: 'rating-b',
+        ticketExternalId: 'ratings',
+        rating: 2,
+        ratedAt: '2019-01-04T10:00:00Z',
+      },
+    ];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const before = await owner.db
+      .select()
+      .from(csatResponses)
+      .where(eq(csatResponses.ticketId, loaded.ticketId));
+    expect(before).toHaveLength(2);
+    expect(before.find((row) => row.importedExternalId === 'rating-b')?.closedAt).toBeNull();
+    for (const row of before) {
+      expect(row.ratedAt?.toISOString()).toBe('2019-01-04T10:00:00.000Z');
+      expect(row.createdAt.toISOString()).toBe('2019-01-04T10:00:00.000Z');
+      expect(row.expiresAt.getTime()).toBe(0);
+      expect(row.ratedVia).toBe('import');
+    }
+    const repository = new CsatRepository();
+    expect(
+      await withSystem(app.db, BRAND, (tx) => repository.latestForTicket(tx, loaded.ticketId)),
+    ).toBeUndefined();
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      await owner.db
+        .select()
+        .from(csatResponses)
+        .where(eq(csatResponses.ticketId, loaded.ticketId)),
+    ).toEqual(before);
+    const survey = {
+      id: uuidv7(),
+      brandId: BRAND,
+      ticketId: loaded.ticketId,
+      departmentId: DEPARTMENT,
+      closedAt: new Date('2019-01-03T00:00:00Z'),
+      tokenHash: 'a'.repeat(64),
+      expiresAt: new Date('2030-01-01T00:00:00Z'),
+    };
+    expect(
+      await withSystem(app.db, BRAND, (tx) => repository.insertSurvey(tx, survey)),
+    ).toMatchObject({ id: survey.id });
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        repository.insertSurvey(tx, { ...survey, id: uuidv7() }),
+      ),
+    ).toBeUndefined();
+    expect(
+      await withSystem(app.db, BRAND, (tx) => repository.latestForTicket(tx, loaded.ticketId)),
+    ).toMatchObject({ id: survey.id });
+    const firstRating = input.csat[0];
+    if (!firstRating) throw new Error('Missing rating fixture');
+    firstRating.rating = 4;
+    firstRating.comment = 'Corrected answer';
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const changed = await owner.db
+      .select()
+      .from(csatResponses)
+      .where(eq(csatResponses.ticketId, loaded.ticketId));
+    expect(changed).toHaveLength(3);
+    expect(changed.find((row) => row.importedExternalId === 'rating-a')).toMatchObject({
+      id: before.find((row) => row.importedExternalId === 'rating-a')?.id,
+      rating: 4,
+      comment: 'Corrected answer',
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(await redis.dbsize()).toBe(0);
+  });
+
+  it('refuses missing or cross-brand tag mappings without leaving a ticket behind', async () => {
+    const foreignTag = uuidv7();
+    await owner.db.insert(tags).values({ id: foreignTag, brandId: OTHER_BRAND, name: 'Foreign' });
+    const input = request('invalid-label');
+    input.record.tags = ['legacy'];
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toThrow();
+    input.resolved.tags = [{ externalValue: 'legacy', tagId: foreignTag }];
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
+      { code: 'mapping-invalid' },
+    );
+    const ledger = await owner.db
+      .select()
+      .from(importExternalIds)
+      .where(eq(importExternalIds.externalId, 'invalid-label'));
+    expect(ledger).toEqual([]);
   });
 
   it('loads companies with all domains/notes, links through a secondary domain and writes nothing on repeat', async () => {

@@ -157,3 +157,14 @@ fixes an existing erasure uniqueness collision for multiple identifiers of one
 kind. Profile erasure salts each placeholder with the identity row ID; existing
 channel-trace callers keep their per-contact placeholder contract. This necessary
 M11 gap fix is included in the owner-requested combined remaining-milestone PR.
+
+### 2026-10-14 — historical CSAT provenance
+
+The live `(ticket_id, closed_at)` uniqueness constraint cannot represent multiple
+source ratings associated with a close. Imported responses gain source/external-ID
+provenance and their own unique key. The live unique index remains, restricted to
+responses without import provenance. A close timestamp may be unknown on an
+imported rating; keep it null rather than invent a timestamp. A database shape
+check still requires every live survey's close time, and every imported rating's
+source, external ID, rating, rated time and `rated_via = import`. Live survey
+lookup/insertion excludes imported responses. Reports count ratings on `rated_at`.

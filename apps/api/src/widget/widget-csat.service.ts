@@ -145,6 +145,6 @@ export class WidgetCsatService {
     }
     const survey = await this.#repository.latestForTicket(scope.tx, ticket.id);
 
-    return survey?.closedAt.getTime() === ticket.closedAt.getTime() ? survey : undefined;
+    return survey?.closedAt?.getTime() === ticket.closedAt.getTime() ? survey : undefined;
   }
 }

@@ -1,11 +1,14 @@
 import { type DbTransaction, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
 import { sql } from 'drizzle-orm';
-import { type TicketLoad, ticketLoadSchema } from './contracts.js';
+import { mappedTicketLoadSchema, type TicketLoad } from './contracts.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
 import { loadImportedContact } from './load-contacts.js';
+import { loadImportedCsat } from './load-csat.js';
 import { importMessageHash, loadImportedMessages } from './load-messages.js';
 import { loadImportedOrganization } from './load-organizations.js';
+import { loadImportedParticipants } from './load-participants.js';
+import { loadImportedTags } from './load-tags.js';
 import {
   createImportedTicket,
   importedTicketChanges,
@@ -27,7 +30,7 @@ export class ImportWriter {
     tx: DbTransaction,
     request: TicketLoad,
   ): Promise<{ ticketId: string; outcome: 'created' | 'updated' | 'unchanged'; messages: number }> {
-    const input = ticketLoadSchema.parse(request);
+    const input = mappedTicketLoadSchema.parse(request);
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.brandId}:${input.source}:${input.record.externalId}`}, 17))`,
     );
@@ -35,6 +38,7 @@ export class ImportWriter {
     const payloadHash = hashImportValue({
       ticket: input.record,
       messages: input.messages.map(importMessageHash),
+      csat: input.csat,
       resolved: input.resolved,
       authors: input.authors,
     });
@@ -47,6 +51,9 @@ export class ImportWriter {
     if (existing) await updateImportedTicket(tx, { input, ticketId, changes });
     else await createImportedTicket(tx, { input, ticketId, changes });
     const appended = await loadImportedMessages(tx, input, ticketId);
+    await loadImportedTags(tx, input, ticketId);
+    await loadImportedParticipants(tx, input, ticketId);
+    await loadImportedCsat(tx, input, ticketId);
     await rememberImported(tx, {
       brandId: input.brandId,
       source: input.source,

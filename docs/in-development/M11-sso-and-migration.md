@@ -854,7 +854,8 @@ crash loses at most one ticket and a resume repeats it safely:
 4. `INSERT ticket_activity` one row `action 'ticket.imported'`, `actor_type 'system'`,
    `via 'system'`, `to: { source, externalId, number, url }`.
 5. Tags (create missing as mapped), participants (CC emails as contacts),
-   CSAT (`csat_responses` with a random `token_hash`, `closed_at` = ticket's,
+   CSAT (`csat_responses` with a random expired `token_hash`, source/external-ID
+   provenance, original `closed_at` when supplied or null when unknown,
    `rated_via 'import'`, `sent_at = rated_at`).
 6. Attachment refs become `attachments` rows `status 'pending'`, `origin 'import'`,
    `uploader_type 'system'`, with the fetch deferred to `import.attachments`
@@ -926,7 +927,7 @@ cover canonical hashes and the existing email-view compatibility. The writer
 build check rejects live hooks, outbound helpers and unreviewed dependencies;
 it is wired into `pnpm check:routes` and has eight refusal/allowance tests.
 
-This is an implementation checkpoint, not a complete loader. Agent invitation mappings, fields/tags/participants, CSAT, help-center loading,
+This is an implementation checkpoint, not a complete loader. Agent invitation mappings, fields, help-center loading,
 report rebuilds, scheduled-rule guards and imported-media completion remain to be
 implemented and verified. Shared imported attachment copies must receive their
 original's final processed state. The 500-ticket reference import and external
@@ -959,6 +960,31 @@ Verification for this checkpoint: 12 focused real Postgres/Redis writer cases,
 five real-API erasure cases, and 44 focused profile/merge/view/erasure unit tests
 pass. The API and root fixture typechecks and writer boundary checks pass. Full
 reference/vendor/browser/coverage acceptance remains pending.
+
+
+### Tags, CCs and historical satisfaction checkpoint (M11-09, in progress)
+
+Tickets require an explicit mapping or skip for every source tag, with unique
+mapping keys. Brand ownership is checked before tagging; source tag changes
+replace the selection without recreating tags that remain. CC addresses are
+normalized and deduplicated, reuse their brand's identities without changing
+verification, exclude the requester, and create unverified import contacts when
+needed. Deltas add new CCs and retain existing participants.
+
+Migration `0056_imported_csat` separates historical ratings from live surveys
+using source/external-ID provenance. It preserves original rating times, permits
+an unknown historical close to remain null, and enforces complete import
+provenance in SQL. Distinct historical ratings do not consume the one-live-survey
+per-close key. Imported rows have random token hashes and expired links, and
+live survey lookups exclude them. A delta updates a known source rating rather
+than adding another answer. Duplicate source rating IDs and cross-ticket ratings
+are refused before loading. See the ADR 0027 historical CSAT amendment.
+
+Fifteen focused writer cases pass against real PostgreSQL and Redis, including
+repeat/delta behavior, cross-brand tag refusal, historical ratings and live
+survey coexistence. Thirty focused contract/CSAT/widget unit tests pass. The
+remaining loader paths, privacy handling across complete source bundles, report
+rebuild jobs, vendor stand-ins and browser acceptance are still required.
 
 
 ## M11-10 Import jobs

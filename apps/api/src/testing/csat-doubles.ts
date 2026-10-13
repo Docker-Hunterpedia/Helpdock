@@ -34,6 +34,8 @@ export const csatSurveyRow = (overrides: Partial<CsatResponse> = {}): CsatRespon
   ticketId: CSAT_TICKET,
   departmentId: '0199f4b2-3333-7000-8000-0000000000dd',
   closedAt: CSAT_NOW,
+  importedSource: null,
+  importedExternalId: null,
   tokenHash: 'not-a-real-hash',
   expiresAt: new Date(CSAT_NOW.getTime() + 30 * 86_400_000),
   sentAt: null,

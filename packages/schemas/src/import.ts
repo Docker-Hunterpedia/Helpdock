@@ -185,6 +185,7 @@ export const importCsatSchema = z.strictObject({
   rating: z.number().int().min(1).max(5),
   comment: body.optional(),
   ratedAt: instant,
+  closedAt: instant.optional(),
 });
 export const importCategorySchema = z
   .strictObject({
@@ -237,6 +238,7 @@ export const importRecordSchema = z.discriminatedUnion('entity', [
 ]);
 export type ImportRecord = z.infer<typeof importRecordSchema>;
 export type ImportTicket = z.infer<typeof importTicketSchema>;
+export type ImportCsat = z.infer<typeof importCsatSchema>;
 export type ImportMessage = z.infer<typeof importMessageSchema>;
 export type ImportAttachmentRef = z.infer<typeof importAttachmentRefSchema>;
 

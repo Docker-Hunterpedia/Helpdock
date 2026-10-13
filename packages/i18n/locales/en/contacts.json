@@ -43,7 +43,10 @@
     "phone": "Phone",
     "telegram": "Telegram",
     "visitor": "Web chat",
-    "external": "Customer id"
+    "external": "Customer id",
+    "whatsapp": "WhatsApp",
+    "messenger": "Messenger",
+    "instagram": "Instagram"
   },
   "identity": {
     "verified": "verified",
@@ -113,7 +116,10 @@
       "telegram": "same Telegram chat",
       "visitor": "same visitor id",
       "external": "same customer id",
-      "similar_name": "similar name"
+      "similar_name": "similar name",
+      "whatsapp": "same WhatsApp user",
+      "messenger": "same Messenger user",
+      "instagram": "same Instagram user"
     },
     "sameAccount": "same account",
     "unverified": "unverified",
@@ -228,6 +234,7 @@
     "invalid-phone": "That is not a phone number.",
     "invalid-telegram": "A Telegram chat id is a number.",
     "invalid-visitor": "A visitor id is the id the widget issued.",
+    "invalid-meta": "That is not an id from WhatsApp, Messenger or Instagram.",
     "too-long": "That is too long."
   },
   "accounts": {

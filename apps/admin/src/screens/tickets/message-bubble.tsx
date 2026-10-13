@@ -25,6 +25,9 @@ export function MessageBubble({
   kind,
   author,
   meta,
+  label,
+  before,
+  bodyDir,
   bodyHtml,
   body,
   facts,
@@ -36,6 +39,16 @@ export function MessageBubble({
   readonly author: string;
   /** The caption after the name: address, channel and time. */
   readonly meta: ReactNode;
+  /** The article's accessible name, when the visible lines do not say enough: "Reply from Lina Haddad, read" (M10-08). */
+  readonly label?: string;
+  /** Drawn above the body: a Meta message's quote, and the caption and figure of a story reply (M10-08). */
+  readonly before?: ReactNode;
+  /**
+   * M10-08: `auto` lets the text decide its own direction, so a customer's
+   * English sentence in an Arabic admin keeps its punctuation where it ends
+   * (DESIGN §7). Every other channel keeps the page's direction.
+   */
+  readonly bodyDir?: 'auto';
   readonly bodyHtml: string;
   /** M7-05, M7-08: drawn instead of `bodyHtml` — a translation, or what the model received. */
   readonly body?: ReactNode;
@@ -80,6 +93,7 @@ export function MessageBubble({
   return (
     <Box
       component="article"
+      aria-label={label}
       sx={{
         alignSelf: align,
         // A note is the width of the thread; it is not addressed to anybody.
@@ -133,8 +147,11 @@ export function MessageBubble({
           {meta}
         </Typography>
 
+        {before}
+
         {body === undefined ? (
           <Box
+            {...(bodyDir === undefined ? {} : { dir: bodyDir })}
             sx={{
               fontSize: 14,
               lineHeight: '22px',

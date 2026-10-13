@@ -3,6 +3,8 @@
 Status: accepted
 Date: 2026-09-19
 
+Amended 2026-10-11 (M10, [ADR 0025](0025-meta-channels-through-one-graph-adapter.md)): the `wa_id` of a signed WhatsApp message is the first verified phone Helpdock records, through the `whatsapp.cloud` identity source alone. A phone an agent types, a form submits or an import carries stays unverified, so everything this record says about normalising and matching typed numbers stands.
+
 ## Context
 
 A contact is one person because `contact_identities` is unique on `(brand_id, kind, value)` ([DOMAIN-RULES §4.4](../planning/DOMAIN-RULES.md#44-contact-merge)). The index compares the *spelled* value, so every spelling of one identifier has to be reduced to the same string before it is stored. For an email address that is trimming and lower-casing. For a phone number it is a much bigger question: `+49 30 1234 567`, `0049-30-1234567`, `030 1234 567` and `+٤٩٣٠١٢٣٤٥٦٧` may all be the same number, and only the first two say so without knowing where the caller is.

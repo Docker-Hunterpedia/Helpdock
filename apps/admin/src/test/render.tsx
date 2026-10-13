@@ -27,6 +27,8 @@ import type { KnowledgeApi } from '../knowledge/api.js';
 import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import type { AttachmentUploader } from '../media/upload.js';
+import type { MetaApi } from '../meta/api.js';
+import { MockMetaApi } from '../meta/mock-api.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
@@ -70,6 +72,7 @@ export interface RenderAppOptions {
   /** Defaults to the System fixture: a brand that is not being deleted. */
   readonly systemApi?: SystemApi;
   readonly telegramApi?: TelegramApi;
+  readonly metaApi?: MetaApi;
   readonly assistApi?: AssistApi;
   readonly developersApi?: DevelopersApi;
   readonly initialEntries?: readonly string[];
@@ -94,6 +97,7 @@ export interface RenderedApp extends RenderResult {
   readonly knowledgeApi: KnowledgeApi;
   readonly settingsApi: SettingsApi;
   readonly telegramApi: TelegramApi;
+  readonly metaApi: MetaApi;
   readonly assistApi: AssistApi;
   readonly developersApi: DevelopersApi;
 }
@@ -122,6 +126,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const knowledgeApi = options.knowledgeApi ?? new MockKnowledgeApi();
   const settingsApi = options.settingsApi ?? new MockSettingsApi();
   const telegramApi = options.telegramApi ?? new MockTelegramApi();
+  const metaApi = options.metaApi ?? new MockMetaApi();
   const assistApi =
     options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
   const developersApi = options.developersApi ?? new MockDevelopersApi();
@@ -149,6 +154,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       reportsApi={options.reportsApi ?? fakeReportsApi()}
       systemApi={options.systemApi ?? fakeSystemApi()}
       telegramApi={telegramApi}
+      metaApi={metaApi}
       assistApi={assistApi}
       developersApi={developersApi}
       queryClient={queryClient}
@@ -180,6 +186,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     knowledgeApi,
     settingsApi,
     telegramApi,
+    metaApi,
     assistApi,
     developersApi,
   };

@@ -137,7 +137,23 @@ A new ticket created by this rule gets `parent_id` = the closed ticket, a system
 
 ### 2.5 Participants
 
-A ticket's participants are: the contact, CC addresses added by agents or present on inbound email, and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors and Telegram chats are participants through their identity mapping, never by email address.
+A ticket's participants are: the contact, CC addresses added by agents or present on inbound email, and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
+
+### 2.6 Reply windows on the Meta channels
+
+WhatsApp, Messenger and Instagram let a business write to a customer only for a time after the customer's last message; outside it the platform refuses the send. Helpdock enforces the window itself, before the reply is written and again when it is sent, because a reply that cannot leave the desk must not be written as if it had (M10-06, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)).
+
+| Platform | Window | Extension |
+|---|---|---|
+| WhatsApp | 24 hours from the customer's last message | None in free text. An approved template may be sent at any time (M10-09); Meta charges for it |
+| Messenger | 24 hours | 7 days for a reply written by a person, when the connected Page's Human Agent feature is on (the operator asserts Meta approved it) |
+| Instagram | 24 hours | 7 days, as Messenger; nothing after |
+
+- The anchor is `meta_conversations.last_inbound_at`: the time of the customer's last message on that platform, set by the webhook. A delivery or read report, a reaction or an echo does not move it.
+- **At compose time**, a staff public reply on a `whatsapp`, `messenger` or `instagram` ticket whose window is closed is refused with `reply-window-closed` (409) before anything is written. Internal notes are never refused. The ticket view reads the window and disables Send first; the refusal is for the race.
+- **At send time**, `meta.send` checks the window again before its first part. A window that closed while the job waited records the delivery `refused` with the platform's code and is never retried, and Retry is not offered for it. The customer's next message opens a new window and the agent writes a new reply.
+- The 7-day extension belongs to a person. An AI reply, a rule's canned reply, an auto-responder and the satisfaction survey use the 24-hour window only, whatever the account's switch says.
+- Tests: a reply at 23 h 59 m is queued and sent; at 24 h 01 m it is refused at compose time; one queued at 23 h 59 m whose job runs at 24 h 01 m is `refused` by the job and the stand-in receives nothing; on Messenger at day 3 with the switch on, a person's reply goes out tagged `HUMAN_AGENT` and an AI reply does not go out.
 
 ---
 
@@ -225,8 +241,11 @@ Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`,
 |---|---|---|
 | Email | An inbound email arrived from it, or a magic link sent to it was clicked | Yes |
 | Telegram `chat_id` | Always (comes from the Bot API) | Yes |
+| WhatsApp business-scoped user id | Always (comes in a webhook Meta signed) | Yes |
+| Messenger page-scoped id | Always (signed webhook) | Yes |
+| Instagram-scoped id | Always (signed webhook) | Yes |
 | Signed `external_id` | Always (HMAC) | Yes |
-| Phone | Never in v1 | No |
+| Phone | Only as the `wa_id` of a WhatsApp message (M10); never when typed | Yes, between two verified phones |
 | Email typed in a form | Never | No; suggests a merge to agents |
 
 Auto-merge happens only when both sides of the match are verified. Unverified matches produce a "possible duplicate" suggestion on the contact page. Agents can merge manually; a merge is recorded in the audit log and can be undone for 24 hours. Merging contacts never merges tickets.
@@ -238,6 +257,33 @@ Presigned GET URLs are issued only by an endpoint that first authorises the call
 ### 4.6 Tokens sent to customers
 
 CSAT links, transcript links, and magic links are single-use, signed, bound to one ticket or one address, and expire (CSAT 30 days, transcript 24 hours, magic link 10 minutes). None of them grant access to anything beyond their purpose.
+
+### 4.7 Meta identities
+
+- Each platform scopes its customer id (M10). A WhatsApp business-scoped user id is the same for every number in one business portfolio and different in another; a Messenger id is per Page; an Instagram id is per professional account. The stored value is the WhatsApp user id alone, and for Messenger and Instagram `<account external id>:<customer id>`, so the same person writing to two Pages of one brand is two identifiers until an agent merges them.
+- The kinds are `whatsapp`, `messenger` and `instagram` in `contact_identities`, from the sources `whatsapp.cloud`, `messenger.page` and `instagram.account`, all verified. `whatsapp.cloud` is also the one source that verifies a `phone`, with the `wa_id` Meta sends when the customer has not withheld their number; a phone an agent typed earlier becomes a duplicate suggestion and the verified claim takes the identifier (§4.4). A customer who has adopted a WhatsApp username may arrive with no `wa_id` at all, and is keyed on the user id alone.
+- A `user_changed_number` system message re-links the conversation: the new `wa_id` becomes the contact's verified phone and the old one is removed.
+- Names: WhatsApp sends a profile name with every message; Instagram's `@username` and name arrive once the customer has written; Messenger's name needs a reviewed feature, and without it the contact is "Messenger user". A name can change and never identifies.
+- Nothing a Messenger or Instagram user sends proves a phone or an email. An address they type in the chat is text in a message, not an identifier.
+- `meta_conversations` maps `(account, customer id)` to the contact and to the ticket the next message continues, as `telegram_chats` does: one open ticket per conversation, following a merge to its primary.
+
+### 4.8 Meta message kinds
+
+What the webhook files for each thing a platform sends (M10-03 to M10-05).
+
+| The platform sends | Helpdock files |
+|---|---|
+| Text, with `context` or `reply_to` quoting an earlier message | A public message; the quoted message's text as a leading quote line when it is on the ticket |
+| Image, video, document, audio, voice note, sticker | A public message with the caption as its body (empty allowed) and the file as an attachment, `pending` until `meta.media_fetch` has the bytes; a sticker is an image |
+| Location, shared contacts | A public message in text form: the location line with a map link, as Telegram's; each contact's name and numbers |
+| Story reply, story mention (Instagram) | A public message with the story's media as an attachment and a line naming it |
+| Unsupported, `is_unsupported`, a `fallback` without a URL | A system line saying the customer sent something Helpdock cannot show; counted |
+| `is_deleted` (Instagram unsend) | The message is kept and marked unsent by the customer; never deleted |
+| `is_echo`, the business's own messages | Dropped. Helpdock's own are recognised by `app_id` or by the delivery id in `metadata`; others are dropped too in M10 |
+| Reactions, edits, postbacks, referrals | A system line for a reaction or an edit; otherwise counted and dropped. Never a ticket message, never a window anchor |
+| `statuses[]` (WhatsApp), `delivery` and `read` watermarks (Messenger), `messaging_seen` (Instagram) | The reply's delivery moves forward, `sent` → `delivered` → `read`, never back; a watermark marks every delivery of the conversation sent at or before it; `failed` carries the code |
+| `user_changed_number` | The re-link of §4.7 and a system line |
+| Inbound `errors[]` (media Meta could not serve) | The attachment `rejected` with the reason; the message is filed |
 
 ---
 
@@ -258,8 +304,8 @@ Domain changes and their side effects must not drift apart. Rule: **a side effec
 
 - Table `outbox(id uuid, brand_id, event text, payload jsonb, created_at, published_at null)`. Services write the domain rows and the outbox row in one transaction. `@nestjs/event-emitter` is used only for in-process, non-critical effects such as cache invalidation; it never enqueues jobs.
 - A relay in the worker (`outbox.relay`, wakes on `LISTEN outbox` and every 500 ms) reads unpublished rows in id order, adds a BullMQ job with `jobId = outbox.id` (so re-publishing after a crash is a no-op), and sets `published_at`. Rows are purged 7 days after publishing.
-- Consumers are idempotent by natural key: email send keyed by `ticket_message_id` (and the SMTP `Message-ID` is deterministic from it), Telegram send keyed by `ticket_message_id`, webhook delivery keyed by `(webhook_id, event_id)`, indexing keyed by `(source_id, content_hash)`. A `job_receipts(key, completed_at)` table backs consumers that have no natural key.
-- Inbound dedupe: `ticket_messages.external_message_id` is unique per channel, so re-delivered IMAP messages, Telegram updates, or inbound-parse webhooks do not create duplicates.
+- Consumers are idempotent by natural key: email send keyed by `ticket_message_id` (and the SMTP `Message-ID` is deterministic from it), Telegram and Meta sends keyed by `ticket_message_id`, the Meta media fetch by the attachment id, webhook delivery keyed by `(webhook_id, event_id)`, indexing keyed by `(source_id, content_hash)`. A `job_receipts(key, completed_at)` table backs consumers that have no natural key.
+- Inbound dedupe: `ticket_messages.external_message_id` is unique per channel, so re-delivered IMAP messages, Telegram updates, Meta webhook batches (`wamid`, `mid`), or inbound-parse webhooks do not create duplicates.
 - Tests: crash the process between commit and publish (kill the relay) and assert the job is published on restart; roll back a transaction and assert no job appears; deliver the same job twice and assert one email.
 
 ---
@@ -332,14 +378,14 @@ Per brand, set by Admin (defaults in bold):
 | Help center search log | **180 days** | Hard delete |
 | Audit log | **2 years**, minimum 90 days | Hard delete |
 | Visitor sessions with no conversation | **30 days** inactive | Hard delete |
-| Webhook and Telegram delivery logs | 30 days (fixed) | Hard delete of finished deliveries; pending ones are kept |
+| Webhook, Telegram and Meta delivery logs | 30 days (fixed) | Hard delete of finished deliveries (sent, delivered, read, failed, refused); pending ones are kept |
 | API idempotency keys | 24 hours (fixed) | Hard delete |
 | Outbox, job receipts | 7 days after publish/complete | Hard delete |
 | Knowledge chunks of a removed source | immediate | Hard delete |
 
 - `maintenance.retention` runs nightly per brand and logs counts to the audit log.
-- **Brand deletion**: Admin soft-deletes → 30-day grace with the brand disabled (widget, help center, channels answer 410) → hard purge of every row, S3 prefix, Redis key, and Caddy domain. Ticket numbers of a deleted brand are never reused because the prefix is reserved.
-- **Contact erasure** (privacy request): agent action "Anonymise contact" replaces name, emails, phone, Telegram id and visitor ids with hashes, deletes attachments they sent, rewrites message author fields, deletes their Telegram chat rows, clears the AI redaction maps of calls on their tickets and deletes the webhook deliveries that carry their data, and keeps ticket bodies unless the brand's ticket retention says otherwise. Recorded in the audit log without the erased values.
+- **Brand deletion**: Admin soft-deletes → 30-day grace with the brand disabled (widget, help center and the brand's own channel endpoints answer 410; an endpoint the install shares across brands, the Meta webhook, answers 200 and drops the brand's entries, because a non-200 there is Meta's cue to redeliver or unsubscribe for every brand, ADR 0025 (4)) → hard purge of every row, S3 prefix, Redis key, and Caddy domain. Ticket numbers of a deleted brand are never reused because the prefix is reserved.
+- **Contact erasure** (privacy request): agent action "Anonymise contact" replaces name, emails, phone, Telegram id and visitor ids with hashes, deletes attachments they sent, rewrites message author fields, deletes their Telegram chat rows and Meta conversation rows and replaces the customer ids on their Meta deliveries, clears the AI redaction maps of calls on their tickets and deletes the webhook deliveries that carry their data, and keeps ticket bodies unless the brand's ticket retention says otherwise. Recorded in the audit log without the erased values.
 - **Staff deletion**: see §12; authored content is kept with the author shown as "Former staff".
 
 ---
@@ -368,6 +414,7 @@ Applies to the crawler, webhook deliveries, remote-image proxy, Notion and Googl
 - Timeouts: 10 s connect, 30 s total. Response cap: 10 MB for crawl pages, 1 MB for webhook responses, 20 MB for proxied images. Crawler respects `robots.txt` and a per-source rate limit.
 - Install-level allow-list `OUTBOUND_ALLOW_CIDRS` lets an operator permit internal destinations explicitly (for a private Notion proxy, for example). Every blocked attempt is logged with the destination.
 - Webhook responses are never followed, rendered, or stored beyond status code and the first 1 KB of body for the delivery log.
+- **The Graph client** (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)) goes through this client with an allow-list of hosts: `graph.facebook.com`, `graph.instagram.com` and the media hosts `lookaside.fbsbx.com` and `*.fbcdn.net`, or the roots `META_GRAPH_API_ROOT` and `META_INSTAGRAM_API_ROOT` point at. A media URL inside a webhook payload is user-supplied input and is fetched only when its host is on that list; a WhatsApp media URL is fetched with the account's token in the `Authorization` header, which the client sends only to hosts on the list.
 - **Model endpoints.** Chat completions go through the model vendors' own clients, outside this client ([ADR 0018](../decisions/0018-pi-ai-provider-layer.md)), so the AI provider base URL, the embeddings URL and the transcription endpoint are checked when an admin saves them: `https` only and no blocked range, unless the address is inside `OUTBOUND_ALLOW_CIDRS`, which is also what lets a local Ollama use `http`. Embeddings and transcription are checked again by this client on every call.
 
 ---
@@ -405,3 +452,4 @@ Technical gates alone do not show whether the product works for people. Tracked 
 |---|---|
 | 2026-09-16 | Initial version, written to close the review findings on PRD 1.0. |
 | 2026-09-27 | §3.4: the timer key is spelled with dots, as BullMQ requires (M3-02). |
+| 2026-10-11 | The Meta channels (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)): §2.5 and the new §2.6 reply-window rule; §4.4's three scoped ids and the first verified phone, a WhatsApp `wa_id`; the new §4.7 identities and §4.8 message kinds; §6's keys; §11's delivery logs and erasure; §13's Graph client. |

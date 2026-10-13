@@ -586,7 +586,12 @@ over two databases:
   `HD_E2E_REPLICA_API_PORT`, 3097 by default), and a non-allowed origin
   refused (`widget`). These four share one signed-in admin page, the `admin`
   worker fixture of `e2e/api/admin-session.ts`. The stand-in for
-  api.telegram.org listens on `HD_E2E_TELEGRAM_PORT`, 3096 by default.
+  api.telegram.org listens on `HD_E2E_TELEGRAM_PORT`, 3096 by default, and the
+  one for the Graph API (`META_GRAPH_API_ROOT`, `META_INSTAGRAM_API_ROOT`), the
+  `FakeGraph` of `@helpdock/channels/testing`, on `HD_E2E_GRAPH_PORT`, 3095 by
+  default; `meta.api.spec.ts` drives Channels › Meta against them (M10-07):
+  connecting each platform, a Page whose token Meta revoked reconnected with a
+  token for the same Page and held to it, saving, subscribing and disconnecting.
 - Every spec that runs as the seeded account uses the `test` of
   `e2e/api/admin-session.ts`, whose `page` is a fresh page in one browser
   context signed in once per worker, through the real form and the real second

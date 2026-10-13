@@ -89,6 +89,7 @@ The request and answer of each are in the OpenAPI document. What is worth knowin
 - **Messages from a key** are recorded with `authorType: system`, and the activity log names the key, via `api`. A public message from a key is part of the thread; it is not emailed to the customer, because only an agent's public reply is.
 - **Contact upsert.** `POST /api/v1/contacts` updates the contact with the same `externalId`, or else the first one holding one of the given identifiers, and adds the identifiers it lacks; otherwise it creates one. The answer is always `200` with `created: true` or `false`. An identifier that belongs to another contact is refused (`409`), never merged.
 - **Articles** are read as a visitor reads them: published and public only. A key's searches are not recorded in the help center's search insights.
+- **A ticket's `channel`** is one of `email`, `chat`, `telegram`, `form`, `api`, `manual`, `whatsapp`, `messenger` or `instagram`, as the schema's enum lists it. A ticket a key files is always `api`, and `GET /api/v1/tickets?channel=` takes the same values, repeatable. The three Meta values are tickets that came in through a connected WhatsApp number, Facebook Page or Instagram account ([Meta channels](meta-channels.md)). A key cannot file one. A message a key adds to such a ticket is part of the thread and is not sent to the customer, as with email.
 
 ## Pagination
 

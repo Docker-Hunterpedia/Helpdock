@@ -16,6 +16,11 @@ import type { ContactIdentityKind, SpamSenderIdentity, TicketChannel } from '@he
 const PREFERENCE: Readonly<Record<TicketChannel, readonly ContactIdentityKind[]>> = {
   email: ['email', 'phone', 'telegram'],
   telegram: ['telegram', 'email', 'phone'],
+  // M10: a Meta ticket blocks the customer's id on that platform, the identifier
+  // the inbound gate looks up first, then whatever else the contact has.
+  whatsapp: ['whatsapp', 'phone', 'email', 'telegram'],
+  messenger: ['messenger', 'email', 'phone', 'telegram'],
+  instagram: ['instagram', 'email', 'phone', 'telegram'],
   chat: ['email', 'phone', 'telegram'],
   form: ['email', 'phone', 'telegram'],
   api: ['email', 'phone', 'telegram'],
@@ -39,7 +44,7 @@ export const senderOf = (
 
   for (const kind of PREFERENCE[channel]) {
     const found = ordered.find((identity) => identity.kind === kind);
-    if (found !== undefined && (kind === 'email' || kind === 'phone' || kind === 'telegram')) {
+    if (found !== undefined && kind !== 'visitor' && kind !== 'external') {
       return { kind, value: found.value };
     }
   }

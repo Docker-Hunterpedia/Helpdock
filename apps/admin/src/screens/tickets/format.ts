@@ -186,7 +186,7 @@ export const messageTime = (iso: string, locale: Locale, now: number): string =>
 };
 
 /** DESIGN §7: Latin digits in both locales; Arabic-Indic is a v1.1 setting. */
-const numbering = (locale: Locale): string => (locale === 'ar' ? 'ar-u-nu-latn' : locale);
+export const numbering = (locale: Locale): string => (locale === 'ar' ? 'ar-u-nu-latn' : locale);
 
 /** The brand's own name for a status, in the locale it is being read in. */
 export const statusName = (

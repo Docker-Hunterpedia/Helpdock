@@ -72,6 +72,7 @@ describe('policies presets', () => {
     ['crawl', 10 * 1024 * 1024, DEFAULT_TOTAL_TIMEOUT_MS],
     ['webhook', 1024 * 1024, 15_000],
     ['imageProxy', 20 * 1024 * 1024, DEFAULT_TOTAL_TIMEOUT_MS],
+    ['graph', 1024 * 1024, 30_000],
   ] as const)('applies the %s caps from DOMAIN-RULES §13', (name, maxBodyBytes, totalTimeoutMs) => {
     const resolved = resolvePolicy(policies[name]);
 

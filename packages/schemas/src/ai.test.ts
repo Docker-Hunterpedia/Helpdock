@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AI_AUTO_REPLY_CHANNELS,
   AI_CALLS_PAGE_SIZE,
   AI_DEFAULT_THRESHOLD,
   aiProviderUpsertSchema,
@@ -142,5 +143,14 @@ describe('transcriptionSettingsUpdateSchema', () => {
     expect(
       transcriptionSettingsUpdateSchema.safeParse({ ...base, endpoint: 'ftp://x.test/a' }).success,
     ).toBe(false);
+  });
+});
+
+describe('AI_AUTO_REPLY_CHANNELS', () => {
+  it('leaves out the Meta channels, which need a disclosure line and a window rule first (M10)', () => {
+    expect([...AI_AUTO_REPLY_CHANNELS]).toEqual(['widget', 'email', 'telegram']);
+    for (const channel of ['whatsapp', 'messenger', 'instagram']) {
+      expect(AI_AUTO_REPLY_CHANNELS as readonly string[]).not.toContain(channel);
+    }
   });
 });

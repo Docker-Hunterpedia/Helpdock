@@ -3,8 +3,11 @@ import { isContactError } from './api.js';
 import {
   MOCK_BRAND,
   MOCK_CONTACT_ARABIC,
+  MOCK_CONTACT_DANIEL,
   MOCK_CONTACT_GMAIL,
+  MOCK_CONTACT_MESSENGER_USER,
   MOCK_CONTACT_MONA,
+  MOCK_CONTACT_SARA,
   MOCK_CONTACT_VISITOR,
   MOCK_DUPLICATE,
   MOCK_TAKEN_EMAIL,
@@ -26,8 +29,8 @@ describe('MockContactsApi', () => {
   it('lists the rows the artboard draws', async () => {
     const list = await new MockContactsApi().listContacts(MOCK_BRAND);
 
-    expect(list.contacts).toHaveLength(5);
-    expect(list.total).toBe(5);
+    expect(list.contacts).toHaveLength(8);
+    expect(list.total).toBe(8);
     expect(list.duplicateCount).toBe(1);
   });
 
@@ -64,7 +67,13 @@ describe('MockContactsApi', () => {
     const list = await new MockContactsApi().listContacts(MOCK_BRAND, { hasOpenTickets: true });
 
     expect(list.contacts.map((contact) => contact.id).sort()).toEqual(
-      [MOCK_CONTACT_MONA, MOCK_CONTACT_ARABIC].sort(),
+      [
+        MOCK_CONTACT_MONA,
+        MOCK_CONTACT_ARABIC,
+        MOCK_CONTACT_DANIEL,
+        MOCK_CONTACT_MESSENGER_USER,
+        MOCK_CONTACT_SARA,
+      ].sort(),
     );
   });
 
@@ -242,7 +251,7 @@ describe('MockContactsApi', () => {
     );
     expect(survivor.duplicates).toEqual([]);
     expect(survivor.merges).toHaveLength(1);
-    await expect(api.listContacts(MOCK_BRAND)).resolves.toMatchObject({ total: 4 });
+    await expect(api.listContacts(MOCK_BRAND)).resolves.toMatchObject({ total: 7 });
     expect((await api.contact(MOCK_BRAND, MOCK_CONTACT_GMAIL)).mergedIntoId).toBe(
       MOCK_CONTACT_MONA,
     );

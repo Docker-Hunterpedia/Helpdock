@@ -4,6 +4,7 @@ import {
   type NormaliseOptions,
   type NormaliseResult,
   normaliseEmail,
+  normaliseMeta,
   normalisePhone,
   normaliseTelegram,
 } from './contact.js';
@@ -50,7 +51,15 @@ export const countsInReports = (status: { readonly excludedFromReports: boolean 
 // The block list
 // --------------------------------------------------------------------------
 
-export const blockedSenderKindSchema = z.enum(['email', 'domain', 'phone', 'telegram']);
+export const blockedSenderKindSchema = z.enum([
+  'email',
+  'domain',
+  'phone',
+  'telegram',
+  'whatsapp',
+  'messenger',
+  'instagram',
+]);
 export type BlockedSenderKind = z.infer<typeof blockedSenderKindSchema>;
 
 /** 253 characters is the maximum length of a DNS name in presentation form. */
@@ -108,6 +117,10 @@ export const normaliseBlockedSender = (
       return normalisePhone(value, options);
     case 'telegram':
       return normaliseTelegram(value);
+    case 'whatsapp':
+    case 'messenger':
+    case 'instagram':
+      return normaliseMeta(value);
   }
 };
 

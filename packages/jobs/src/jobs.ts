@@ -1,3 +1,4 @@
+import { metaFileRefSchema } from '@helpdock/schemas';
 import { type Job, type JobsOptions, UnrecoverableError } from 'bullmq';
 import { z } from 'zod';
 import { QUEUE_NAMES, type QueueName } from './queues.js';
@@ -1274,6 +1275,209 @@ export const aiAutoReplyJob = defineJob({
 /** BullMQ refuses a custom job id with a colon. One job per customer message. */
 export const aiAutoReplyJobId = (messageId: string): string => `ai.auto_reply.${messageId}`;
 
+// --------------------------------------------------------------------------
+// M10-03: the files a message named
+// --------------------------------------------------------------------------
+
+export const metaMediaFetchPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `pending` attachment the webhook filed, whose bytes this job fetches. */
+  attachmentId: z.uuid(),
+  /** The `meta_accounts` row whose token the fetch needs. */
+  accountId: z.uuid(),
+  /** A WhatsApp media id and digest, or a Messenger or Instagram CDN link. */
+  ref: metaFileRefSchema,
+});
+export type MetaMediaFetchPayload = z.infer<typeof metaMediaFetchPayloadSchema>;
+
+/** Attempts before a file Meta will not serve is `rejected` (M10-03). */
+export const META_MEDIA_FETCH_ATTEMPTS = 5;
+
+/**
+ * M10-03's `meta.media_fetch` (ADR 0025, 6; `inbound` queue): the bytes of a
+ * file a WhatsApp, Messenger or Instagram webhook named but did not carry.
+ * Meta wants the webhook answered within seconds, so the request files the
+ * message with a `pending` attachment and a `meta.media` outbox row, and this
+ * job, added with that row's id, fetches the file, checks it and hands it to
+ * `media.process` as for any upload.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "the Meta media fetch by the attachment
+ * id"). Five attempts backing off from 30 s: a WhatsApp media URL lives five
+ * minutes and every attempt asks Graph for a fresh one, and a CDN link that
+ * answers 404 may only be late. The last attempt settles the attachment as
+ * `rejected` instead of failing the job, so a file is never left `pending`.
+ */
+export const metaMediaFetchJob = defineJob({
+  name: 'meta.media_fetch',
+  queue: QUEUE_NAMES.inbound,
+  schema: metaMediaFetchPayloadSchema,
+  options: {
+    attempts: META_MEDIA_FETCH_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: ({ attachmentId }) => `meta.media_fetch:${attachmentId}`,
+});
+
+// --------------------------------------------------------------------------
+// M10-05: a Messenger or Instagram customer's name
+// --------------------------------------------------------------------------
+
+export const metaProfileFetchPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `meta_conversations` row whose customer's name is wanted. */
+  conversationId: z.uuid(),
+  accountId: z.uuid(),
+  /** WhatsApp sends the name with every message and is never looked up. */
+  platform: z.enum(['messenger', 'instagram']),
+});
+export type MetaProfileFetchPayload = z.infer<typeof metaProfileFetchPayloadSchema>;
+
+/**
+ * M10-05 (shared with M10-04): reads a Messenger or Instagram customer's name
+ * from Graph, after the first message from them has been filed, so the webhook
+ * never calls Meta (ADR 0025, 6). Asked for through the outbox (`meta.profile`,
+ * written beside the message) and added by that event's handler with the outbox
+ * row's id (`meta.profile_fetch.<outbox id>`), on the `inbound` queue.
+ *
+ * **Idempotent** (DOMAIN-RULES §6): keyed by the conversation, so a second
+ * lookup for the same customer, raised by a message that arrived before the
+ * first ran, does nothing. Three attempts from 30 seconds: a name is not worth
+ * more, and a refusal from Meta is an answer, recorded, not a failure.
+ */
+export const metaProfileFetchJob = defineJob({
+  name: 'meta.profile_fetch',
+  queue: QUEUE_NAMES.inbound,
+  schema: metaProfileFetchPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: 1_000,
+  },
+  idempotencyKey: ({ conversationId }) => `meta.profile_fetch:${conversationId}`,
+});
+
+// --------------------------------------------------------------------------
+// M10-06: a reply to a Meta customer
+// --------------------------------------------------------------------------
+
+/**
+ * What `meta.send` is asked to do (M10-06): an agent's reply to a WhatsApp,
+ * Messenger or Instagram customer, about one `meta_deliveries` row. M10-09 adds
+ * a `template` kind, which reaches a WhatsApp customer after the window.
+ */
+export const metaSendPayloadSchema = z.object({
+  kind: z.enum(['reply']),
+  brandId: z.uuid(),
+  /** The `meta_deliveries` row: the whole job is about it, and it is the natural key. */
+  deliveryId: z.uuid(),
+});
+export type MetaSendPayload = z.infer<typeof metaSendPayloadSchema>;
+
+/** Attempts before a reply to a Meta customer is `failed` (M10-06). */
+export const META_SEND_JOB_ATTEMPTS = 5;
+
+/**
+ * M10-06's outbound Meta (ADR 0025, 7; `outbound` queue): an agent's reply to a
+ * WhatsApp number, a Messenger user or an Instagram user. Asked for through the
+ * outbox (`meta.reply` beside the `meta_deliveries` row) and added by that
+ * event's handler with the outbox row's id.
+ *
+ * **Idempotent** (DOMAIN-RULES §6: "Telegram and Meta sends keyed by
+ * `ticket_message_id`"): keyed by the delivery, which is one per ticket
+ * message. A part already accepted is recorded as it lands, so a retry resumes
+ * after it.
+ *
+ * The job may also move itself to delayed and end with BullMQ's `DelayedError`
+ * (WhatsApp refuses a second message to one user inside six seconds): that
+ * spends no attempt, which is why the attempts below count failures only.
+ */
+export const metaSendJob = defineJob({
+  name: 'meta.send',
+  queue: QUEUE_NAMES.outbound,
+  schema: metaSendPayloadSchema,
+  options: {
+    attempts: META_SEND_JOB_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 10_000 },
+    removeOnFail: false,
+  },
+  idempotencyKey: (payload) => `meta.send:${payload.deliveryId}`,
+});
+
+// --------------------------------------------------------------------------
+// M10-10: Meta account health
+// --------------------------------------------------------------------------
+
+export const metaHealthPayloadSchema = z.object({
+  /** DOMAIN-RULES §1.4: the worker opens the brand's transaction before any query. */
+  brandId: z.uuid(),
+  accountId: z.uuid(),
+});
+export type MetaHealthPayload = z.infer<typeof metaHealthPayloadSchema>;
+
+/** Every hour on the hour, UTC: the cadence of {@link metaHealthJob}. */
+export const META_HEALTH_CRON = '0 * * * *';
+
+/**
+ * M10-10 (ADR 0025, 10): the hourly check of one connected WhatsApp number,
+ * Page or Instagram account. Is the token still good, is the app still
+ * subscribed to the account's webhooks (Messenger and Instagram drop it after
+ * an hour of failed deliveries), and for Instagram, is the 60-day token due its
+ * weekly renewal. What it finds goes on the `meta_accounts` row.
+ *
+ * One BullMQ job scheduler per account, id {@link metaHealthSchedulerId} on
+ * {@link META_HEALTH_CRON}, upserted on boot and when `meta_account.changed`
+ * says an account came or went, as `telegram.poll` is for bots.
+ *
+ * **Idempotent per hour** (DOMAIN-RULES §6): the receipt
+ * {@link metaHealthReceiptKey} is claimed in the check's transaction, so two
+ * workers, a retry that lands after the first attempt committed, or a
+ * re-registration inside the same hour check an account once. The hour is the
+ * run's, not the payload's, because the scheduler's template carries no tick.
+ *
+ * Three attempts: Graph being down at :00 is worth a retry, not a wait for the
+ * next hour. A permanent answer from Graph is a finding, recorded on the row,
+ * and ends the job.
+ */
+export const metaHealthJob = defineJob({
+  name: 'meta.health',
+  queue: QUEUE_NAMES.maintenance,
+  schema: metaHealthPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: 1_000,
+  },
+});
+
+/** The scheduler id of one account's hourly check. Dots, for the reason {@link retentionJobId} gives. */
+export const metaHealthSchedulerId = (accountId: string): string => `meta.health.${accountId}`;
+
+/** The `job_receipts` key of one account's check in one hour: `meta.health:<account>:2026-10-11T09`. */
+export const metaHealthReceiptKey = (accountId: string, at: Date): string =>
+  `meta.health:${accountId}:${at.toISOString().slice(0, 13)}`;
+
+/** 05:30 UTC every day, off the hour so it never meets the checks it re-registers. */
+export const META_HEALTH_SCHEDULE_CRON = '30 5 * * *';
+
+/**
+ * The daily tick that registers every account's {@link metaHealthJob} scheduler
+ * again, so a scheduler lost while the worker kept running (a Redis flush, a
+ * `meta_account.changed` that failed for good) is back within a day and not at
+ * the next restart. No payload: the accounts table is the input.
+ */
+export const metaHealthScheduleJob = defineJob({
+  name: 'meta.health.schedule',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 }, removeOnFail: 100 },
+  schedule: { cron: META_HEALTH_SCHEDULE_CRON },
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 export const JOB_DEFINITIONS = Object.freeze({
   [outboxRelayJob.name]: outboxRelayJob,
@@ -1312,6 +1516,13 @@ export const JOB_DEFINITIONS = Object.freeze({
   [aiTranscribeJob.name]: aiTranscribeJob,
 
   [aiAutoReplyJob.name]: aiAutoReplyJob,
+
+  // M10: each Meta job is added by the deliverable that builds it.
+  [metaHealthJob.name]: metaHealthJob,
+  [metaHealthScheduleJob.name]: metaHealthScheduleJob,
+  [metaSendJob.name]: metaSendJob,
+  [metaMediaFetchJob.name]: metaMediaFetchJob,
+  [metaProfileFetchJob.name]: metaProfileFetchJob,
 } as const);
 
 export type JobName = keyof typeof JOB_DEFINITIONS;

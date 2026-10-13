@@ -7,6 +7,9 @@ import { EmailReplyHook } from '../email/email-reply.hook.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { SettingsInstallSmtp } from '../email/transport.js';
 import { MediaRepository } from '../media/media.repository.js';
+import { MetaRepository } from '../meta/meta.repository.js';
+import { MetaReplyHook } from '../meta/meta-reply.hook.js';
+import { OutboundMetaService } from '../meta/outbound-meta.service.js';
 import { ParticipantsMergeHook } from '../participants/merge-participants.hook.js';
 import { ParticipantsRepository } from '../participants/participants.repository.js';
 import { TicketParticipantsService } from '../participants/ticket-participants.service.js';
@@ -140,6 +143,9 @@ export class TicketsModule {
               ),
               // M6-02. A reply on a Telegram ticket goes to its chat.
               new TelegramReplyHook(new OutboundTelegramService(new TelegramRepository())),
+              // M10-06. A reply on a WhatsApp, Messenger or Instagram ticket goes
+              // to its customer, and is refused first when the window is closed.
+              new MetaReplyHook(new OutboundMetaService(new MetaRepository())),
             ]),
         },
         // M1-08. `TicketLifecycleHooks` is a provider rather than a registry so

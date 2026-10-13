@@ -73,7 +73,7 @@ describe('the ticket list', () => {
     await renderTickets('/tickets?view=all');
 
     await screen.findByRole('heading', { name: 'All tickets', level: 1 });
-    expect(await screen.findAllByRole('link', { name: /^HD-/ })).toHaveLength(6);
+    expect(await screen.findAllByRole('link', { name: /^HD-/ })).toHaveLength(9);
   });
 
   it('puts the reference, the contact and the time on a row', async () => {
@@ -503,6 +503,6 @@ describe('the new-ticket dialog', () => {
     await user.click(screen.getByRole('button', { name: 'Create ticket' }));
 
     expect(await screen.findByText('HD-1043 created')).toBeVisible();
-    expect((await tickets.list('brand')).tickets).toHaveLength(7);
+    expect((await tickets.list('brand')).tickets).toHaveLength(10);
   });
 });

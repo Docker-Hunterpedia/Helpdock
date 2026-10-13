@@ -78,7 +78,7 @@ test.describe('the contact list', () => {
     await openContacts(page, locale);
 
     await expect(
-      page.getByText(t('contacts:pagination.range', { from: 1, to: 5, total: 5 })),
+      page.getByText(t('contacts:pagination.range', { from: 1, to: 8, total: 8 })),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: t('contacts:pagination.next') })).toBeDisabled();
   });

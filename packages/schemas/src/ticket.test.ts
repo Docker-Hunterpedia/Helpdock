@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   messageCreateRequestSchema,
   messagePageQuerySchema,
+  ticketChannelSchema,
   ticketContactSchema,
   ticketCreateRequestSchema,
   ticketListQuerySchema,
@@ -183,5 +184,17 @@ describe('ticketContactSchema (M1-15)', () => {
     expect(
       ticketContactSchema.parse({ id: UUID, name: 'Nadia Karim', address: 'nadia@example.com' }),
     ).not.toHaveProperty('address');
+  });
+});
+
+describe('ticketChannelSchema', () => {
+  it('knows the three Meta channels, which a ticket and its messages are filed under (M10)', () => {
+    for (const channel of ['whatsapp', 'messenger', 'instagram']) {
+      expect(ticketChannelSchema.safeParse(channel).success, channel).toBe(true);
+    }
+  });
+
+  it('still refuses a channel Helpdock does not have', () => {
+    expect(ticketChannelSchema.safeParse('slack').success).toBe(false);
   });
 });

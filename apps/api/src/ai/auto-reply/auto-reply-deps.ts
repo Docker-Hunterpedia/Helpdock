@@ -6,6 +6,9 @@ import { EmailReplyHook } from '../../email/email-reply.hook.js';
 import { OutboundEmailService } from '../../email/outbound-email.service.js';
 import type { InstallSmtp } from '../../email/transport.js';
 import { createQueryEmbedder, createRetriever } from '../../knowledge/retrieval/retrieve.js';
+import { MetaRepository } from '../../meta/meta.repository.js';
+import { MetaReplyHook } from '../../meta/meta-reply.hook.js';
+import { OutboundMetaService } from '../../meta/outbound-meta.service.js';
 import { SlaRepository } from '../../sla/sla.repository.js';
 import { SlaService } from '../../sla/sla.service.js';
 import { SlaLifecycleHooks } from '../../sla/sla-hooks.js';
@@ -50,6 +53,9 @@ export const createAutoReplyDeps = ({
     delivery: new ChannelReplyDeliveryHooks([
       new EmailReplyHook(new OutboundEmailService(new EmailRepository(), installSmtp)),
       new TelegramReplyHook(new OutboundTelegramService(new TelegramRepository())),
+      // M10-06. Never asked about a window first; a message past it is written
+      // `refused` and stays in the thread.
+      new MetaReplyHook(new OutboundMetaService(new MetaRepository())),
     ]),
     responded: (tx, event) => hooks.onResponded(tx, event),
     log,

@@ -4,11 +4,14 @@ import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
   brands,
+  contacts,
   createDb,
   type Db,
   type DbHandle,
   type DbTransaction,
   departments,
+  metaAccounts,
+  metaConversations,
   outbox,
   seedBrandStatuses,
   ticketActivity,
@@ -22,7 +25,7 @@ import {
   withTenant,
 } from '@helpdock/db';
 import { outboxEvents, silentLogger } from '@helpdock/jobs';
-import type { ContactStats } from '@helpdock/schemas';
+import type { ContactStats, ErrorResponse } from '@helpdock/schemas';
 import {
   departmentRoom,
   REALTIME_EVENTS,
@@ -811,6 +814,81 @@ describe.skipIf(!hasDocker)('tickets', () => {
         sam,
       );
       expect(body.activity.map((entry) => entry.action)).toContain('ticket.note_added');
+    });
+
+    it('refuses a reply the ticket’s channel cannot carry before it is written, and a note stays welcome (M10-06)', async () => {
+      const { ticket } = await createTicket(sam);
+      const messages = `${brandPath(seeded.brandId)}/tickets/${ticket.id}/messages`;
+      // A WhatsApp ticket whose customer last wrote 25 hours ago: the window is closed.
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        const [contact] = await tx
+          .insert(contacts)
+          .values({ brandId: seeded.brandId, name: 'Daniel Reyes' })
+          .returning({ id: contacts.id });
+        const [account] = await tx
+          .insert(metaAccounts)
+          .values({
+            brandId: seeded.brandId,
+            platform: 'whatsapp',
+            departmentId: support,
+            externalId: '106540352242922',
+            displayName: 'Acme WhatsApp',
+            accessToken: 'sealed',
+            tokenKind: 'system_user',
+            tokenUpdatedAt: new Date(),
+          })
+          .returning({ id: metaAccounts.id });
+        await tx.update(tickets).set({ channel: 'whatsapp' }).where(eq(tickets.id, ticket.id));
+        await tx.insert(metaConversations).values({
+          brandId: seeded.brandId,
+          accountId: account?.id ?? '',
+          customerId: '16505550101',
+          contactId: contact?.id ?? '',
+          ticketId: ticket.id,
+          lastInboundAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        });
+      });
+      const outboxBefore = (await unpublished()).length;
+
+      const refused = await call<ErrorResponse>('POST', messages, sam, {
+        kind: 'public',
+        bodyHtml: '<p>Sorry for the wait.</p>',
+      });
+
+      expect(refused.status).toBe(409);
+      expect(refused.body.error.meta).toMatchObject({
+        reason: 'reply-window-closed',
+        details: { platform: 'whatsapp' },
+      });
+      // Nothing was written: no message, no delivery, no outbox row, and the next
+      // message takes the number the refused one would have had.
+      expect((await unpublished()).length).toBe(outboxBefore);
+      const note = await call<TicketMessage>('POST', messages, sam, {
+        kind: 'note',
+        bodyHtml: '<p>Call them.</p>',
+      });
+      expect(note.status).toBe(201);
+      expect(note.body.seq).toBe(2);
+
+      // The customer writes again: the same reply is written and queued for delivery.
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .update(metaConversations)
+          .set({ lastInboundAt: new Date() })
+          .where(eq(metaConversations.ticketId, ticket.id)),
+      );
+      const sent = await call<TicketMessage>('POST', messages, sam, {
+        kind: 'public',
+        bodyHtml: '<p>Sorry for the wait.</p>',
+      });
+      expect(sent.status).toBe(201);
+      expect(sent.body.seq).toBe(3);
+      expect((await unpublished()).filter((row) => row.event === 'meta.reply')).toHaveLength(1);
+
+      // This suite does not play the Meta worker; its row is not for `drainOutbox` to trip on.
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.update(outbox).set({ publishedAt: new Date() }).where(eq(outbox.event, 'meta.reply')),
+      );
     });
 
     it('moves the ticket to the front of the queue it just became urgent in', async () => {

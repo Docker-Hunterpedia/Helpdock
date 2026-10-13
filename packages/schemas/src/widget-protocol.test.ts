@@ -152,3 +152,26 @@ describe('widgetCsatRequestSchema', () => {
     expect(widgetCsatRequestSchema.safeParse({ rating: 6 }).success).toBe(false);
   });
 });
+
+describe('a conversation on a Meta channel (M10)', () => {
+  const stamp = '2026-10-11T08:00:00.000Z';
+
+  it.each(['whatsapp', 'messenger', 'instagram'] as const)(
+    'lists a verified visitor’s %s conversation, which the widget shows read-only',
+    (channel) => {
+      expect(
+        widgetConversationSchema.parse({
+          id: '0192c3f0-1a2b-7c3d-8e4f-0000000000aa',
+          reference: 'HD-1042',
+          subject: 'Refund',
+          state: 'open',
+          channel,
+          lastSeq: 1,
+          continuedById: null,
+          createdAt: stamp,
+          updatedAt: stamp,
+        }).channel,
+      ).toBe(channel);
+    },
+  );
+});

@@ -27,6 +27,10 @@ export default defineConfig({
             // Workspace packages resolve to `dist/` through their `exports` map,
             // which would make a test run against the last build instead of the
             // source. Each workspace project sets the same alias for itself.
+            // The subpath first: an alias is a prefix match and the first entry that matches wins.
+            '@helpdock/channels/testing': fileURLToPath(
+              new URL('packages/channels/src/testing.ts', import.meta.url),
+            ),
             '@helpdock/channels': fileURLToPath(
               new URL('packages/channels/src/index.ts', import.meta.url),
             ),

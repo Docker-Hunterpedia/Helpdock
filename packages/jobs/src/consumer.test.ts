@@ -2,7 +2,7 @@ import type { Db } from '@helpdock/db';
 import type { Job } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
 import { describe, expect, it, vi } from 'vitest';
-import { createJobProcessor } from './consumer.js';
+import { createJobProcessor, readJob } from './consumer.js';
 import { outboxEventJob } from './jobs.js';
 
 /**
@@ -69,5 +69,24 @@ describe('createJobProcessor', () => {
       'connection terminated',
     );
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('readJob', () => {
+  it('answers the payload, the id and the receipt key of a job this worker handles', () => {
+    const { payload, jobId, key } = readJob(outboxEventJob, jobOf({}));
+
+    expect(payload).toMatchObject({ event: 'settings.changed' });
+    expect(jobId).toBe('01924f00-0000-7000-8000-000000000001');
+    expect(key).toContain('01924f00-0000-7000-8000-000000000001');
+  });
+
+  it.each([
+    ['another name', jobOf({ name: 'outbox.relay' }), /only handles outbox\.event/],
+    ['no id', jobOf({ id: undefined }), /without an id/],
+    ['an invalid payload', jobOf({ data: { outboxId: 'nope' } }), /outboxId/],
+  ])('refuses a job with %s as unrecoverable', (_what, job, message) => {
+    expect(() => readJob(outboxEventJob, job)).toThrow(UnrecoverableError);
+    expect(() => readJob(outboxEventJob, job)).toThrow(message);
   });
 });

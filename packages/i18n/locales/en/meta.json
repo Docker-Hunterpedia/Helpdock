@@ -1,0 +1,27 @@
+{
+  "thread": {
+    "location": "Location",
+    "contact": "Contact",
+    "story": {
+      "reply": "Replied to your story",
+      "mention": "Mentioned you in their story"
+    },
+    "unsupported": "The customer sent something that cannot be shown here.",
+    "unsent": "The customer unsent this message.",
+    "reaction": "The customer reacted {{emoji}} to a message.",
+    "reactionPlain": "The customer reacted to a message.",
+    "reactionRemoved": "The customer removed their reaction to a message.",
+    "edited": "The customer edited a message. It now reads: {{text}}",
+    "numberChanged": "The customer's WhatsApp number changed from {{from}} to {{to}}."
+  },
+  "reply": {
+    "platform": {
+      "whatsapp": "WhatsApp",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
+    },
+    "fileLeftOut": "One file could not be sent here: {{name}}. {{platform}} only takes PDF files, so we will send it another way.",
+    "fileUnsupported": "One file could not be sent here: {{name}}. {{platform}} does not take this kind of file, so we will send it another way.",
+    "fileTooLarge": "One file could not be sent here: {{name}}. It is larger than {{platform}} allows, so we will send it another way."
+  }
+}

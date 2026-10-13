@@ -30,6 +30,7 @@ export function TicketHeader({
   ticket,
   departmentName,
   channelHandle,
+  channelAccount,
   viewers,
   actions,
   now,
@@ -42,6 +43,8 @@ export function TicketHeader({
   readonly departmentName: string | undefined;
   /** The contact on the channel, as the chip names them: Telegram's username (M6-02). */
   readonly channelHandle?: string | undefined;
+  /** M10-08: the brand's number, Page or `@handle` a Meta ticket is with: "WhatsApp · +1 555 0142 · Support". */
+  readonly channelAccount?: string | undefined;
   /** The other people in `ticket:<id>` right now, whoever is replying first. */
   readonly viewers: readonly HeaderViewer[];
   /** The ⋯ menu's entries, in the artboard's order. */
@@ -111,6 +114,7 @@ export function TicketHeader({
           channel={ticket.channel}
           departmentName={departmentName}
           handle={channelHandle}
+          account={channelAccount}
         />
       </Box>
 

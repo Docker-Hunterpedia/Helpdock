@@ -1000,3 +1000,15 @@ PRD status board.
 ## Pull requests
 
 - [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) — M11-01 SSO configuration foundation (in review; aggregate CI must pass).
+
+- [#209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209) — dependency-aware CI selection (merged).
+
+## Supporting CI work
+
+[#208](https://github.com/Docker-Hunterpedia/Helpdock/issues/208), implemented in
+[PR #209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209), tracks the
+owner-requested dependency-aware CI selection supporting M11 and M0-11. PRs
+run affected workspace suites and their transitive dependents; global or
+incomplete diffs run everything. Main pushes retain the full regression run.
+Coverage gates and the required `ci` aggregate remain in place. See the
+[development guide](../guides/development.md#the-ci-workflow).

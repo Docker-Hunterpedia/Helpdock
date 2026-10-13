@@ -933,9 +933,27 @@ command you can run locally:
 | `admin-unit` | `pnpm --filter @helpdock/admin test:coverage`: the admin's 85 % gate |
 | `api` | `pnpm --filter @helpdock/api test:coverage`: the api's unit and integration suites and its 90 % gate (Testcontainers) |
 | `integration` | `vitest run --project=integration packages/`: the packages' integration suites (Testcontainers) |
-| `e2e (1/2)`, `e2e (2/2)` | `pnpm --filter @helpdock/admin e2e --shard=<n>/2`: browser tests, `en` and `ar`, against the fixture |
+| `e2e (1/4)` … `e2e (4/4)` | `pnpm --filter @helpdock/admin e2e --shard=<n>/4`: browser tests, `en` and `ar`, against the fixture |
 | `browser-api` | `pnpm build`, then `e2e:screenshots` when the baselines are committed, then `e2e:api` against a real api, Postgres and Redis |
 | `image` | the image for `linux/amd64`, loaded not pushed, then [`scripts/compose-smoke.sh`](#the-whole-stack-from-your-working-copy) against it |
+
+Pull requests select suites with [`scripts/ci-scope.ts`](../../scripts/ci-scope.ts).
+An admin-only edit runs admin coverage, fixture browsers and real-api browser
+flows, but skips API coverage, package integration and widget browsers. An
+API-only edit runs API coverage and real-api browsers, but skips admin fixture
+suites. Shared packages include their transitive consumers from workspace
+manifests, including test and peer dependencies. Package changes retain the
+complete package coverage and integration suites. Every affected app is typechecked;
+API route guards run only when the API is affected. Lint, import boundaries and
+the dependency audit remain repository-wide checks. Semgrep and the production
+image smoke test run for any affected workspace.
+
+Global configuration, workspace manifests, tooling, unknown paths, empty diffs
+and incomplete GitHub file lists select every suite. Renames check both paths.
+Documentation changes skip heavy jobs. Pushes to `main` retain the complete
+regression suite. The workflow itself is never path-filtered: the final `ci`
+check still runs, and fails if selection or any selected job fails or is cancelled.
+The scope job records its decision in the run summary.
 
 Each suite runs once. The test jobs build the workspace packages first
 (`turbo run build --filter='./packages/*'`, a few seconds), because the suites

@@ -43,18 +43,32 @@ permissions:
 #   jobs that run those suites install it.
 
 jobs:
-  # A documentation-only pull request still gets the cheap repository checks,
-  # but it does not need databases, browsers, coverage instrumentation or an
-  # image build. Pushes to main and any PR that changes a non-document path
-  # fail closed to the complete suite. Keeping this decision inside the
-  # workflow means the required `ci` context is always created.
+  # Keep the required context present; select jobs rather than filtering the workflow.
+  # Main is the complete regression run. PRs include affected workspace consumers.
   scope:
     name: scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       run_full: ${{ steps.classify.outputs.run_full }}
+      run_api: ${{ steps.classify.outputs.run_api }}
+      run_admin: ${{ steps.classify.outputs.run_admin }}
+      run_widget: ${{ steps.classify.outputs.run_widget }}
+      run_unit: ${{ steps.classify.outputs.run_unit }}
+      run_integration: ${{ steps.classify.outputs.run_integration }}
+      run_browser_api: ${{ steps.classify.outputs.run_browser_api }}
+      run_image: ${{ steps.classify.outputs.run_image }}
+      run_semgrep: ${{ steps.classify.outputs.run_semgrep }}
+      typecheck_filters: ${{ steps.classify.outputs.typecheck_filters }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
       - name: Classify the changed paths
         id: classify
         env:
@@ -66,6 +80,15 @@ jobs:
         run: |
           if [ "$EVENT_NAME" != 'pull_request' ]; then
             echo 'run_full=true' >> "$GITHUB_OUTPUT"
+            echo 'run_api=true' >> "$GITHUB_OUTPUT"
+            echo 'run_admin=true' >> "$GITHUB_OUTPUT"
+            echo 'run_widget=true' >> "$GITHUB_OUTPUT"
+            echo 'run_unit=true' >> "$GITHUB_OUTPUT"
+            echo 'run_integration=true' >> "$GITHUB_OUTPUT"
+            echo 'run_browser_api=true' >> "$GITHUB_OUTPUT"
+            echo 'run_image=true' >> "$GITHUB_OUTPUT"
+            echo 'run_semgrep=true' >> "$GITHUB_OUTPUT"
+            echo 'typecheck_filters=[]' >> "$GITHUB_OUTPUT"
             echo 'A push to main always runs the complete suite.'
             exit 0
           fi
@@ -76,34 +99,13 @@ jobs:
             "repos/$REPOSITORY/pulls/$PR_NUMBER/files" \
             > "$changed_files_json"
 
-          listed_file_count=$(jq '[.[][]] | length' "$changed_files_json")
-          run_full=$(jq -r '
-            [
-              .[][]
-              | .filename, (.previous_filename // empty)
-            ]
-            | if length == 0 then
-                true
-              else
-                any(.[]; (startswith("docs/") or endswith(".md")) | not)
-              end
-          ' "$changed_files_json")
-
-          # The REST endpoint is capped at 3,000 files. A missing or truncated
-          # response must never turn a code change into a documentation run.
-          if [ "$listed_file_count" -eq 0 ] || \
-            [ "$listed_file_count" -ne "$CHANGED_FILE_COUNT" ]; then
-            run_full=true
-          fi
-
-          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
-          echo "Changed files classified: $listed_file_count/$CHANGED_FILE_COUNT"
-          echo "Complete suite required: $run_full"
+          node scripts/ci-scope.ts "$changed_files_json" "$CHANGED_FILE_COUNT"
 
   # Cheap, local and first to fail: lint, the three source checks and the
   # typecheck.
   checks:
     name: checks
+    needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -130,16 +132,30 @@ jobs:
       # DOMAIN-RULES §1.3: "Missing decorator fails the request in development
       # and in CI." The permission guard is the runtime half; this is CI's.
       - name: Check route permission declarations
+        if: needs.scope.outputs.run_api == 'true'
         run: pnpm check:routes
 
       # The same idea for input: every @Param, @Query and @Body names its
       # schema, so validation cannot be switched off by an `import type`
       # (issue #36).
       - name: Check route input validation
+        if: needs.scope.outputs.run_api == 'true'
         run: pnpm check:validation
 
-      - name: Typecheck
+      - name: Typecheck all workspaces and repository tooling
+        if: needs.scope.outputs.run_full == 'true'
         run: pnpm typecheck
+
+      - name: Typecheck affected workspaces
+        if: needs.scope.outputs.run_full != 'true'
+        env:
+          TYPECHECK_FILTERS: ${{ needs.scope.outputs.typecheck_filters }}
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          const filters = JSON.parse(process.env.TYPECHECK_FILTERS);
+          if (filters.length) execFileSync('pnpm', ['exec', 'turbo', 'run', 'typecheck', ...filters.map(name => `--filter=${name}`)], { stdio: 'inherit' });
+          JS
 
       # ARCHITECTURE §15: "CI runs `pnpm audit`". High and critical advisories
       # fail the run; Renovate's vulnerability alerts open the fix for anything
@@ -154,7 +170,7 @@ jobs:
   semgrep:
     name: semgrep
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_semgrep == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -176,7 +192,7 @@ jobs:
   unit:
     name: unit
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_unit == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -214,7 +230,7 @@ jobs:
   admin-unit:
     name: admin-unit shard (${{ matrix.shard }}/2)
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_admin == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -266,7 +282,7 @@ jobs:
   admin-coverage:
     name: admin-unit
     needs: [scope, admin-unit]
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_admin == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -304,7 +320,7 @@ jobs:
   api:
     name: api shard (${{ matrix.shard }}/2)
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_api == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -368,7 +384,7 @@ jobs:
   api-coverage:
     name: api
     needs: [scope, api]
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_api == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -402,7 +418,7 @@ jobs:
   integration:
     name: integration
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_integration == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -447,7 +463,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.shard }}/4)
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_admin == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -502,7 +518,7 @@ jobs:
   widget-e2e:
     name: widget-e2e
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_widget == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -550,7 +566,7 @@ jobs:
   browser-api:
     name: browser-api
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_browser_api == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -616,6 +632,7 @@ jobs:
       # center, in `en` and `ar`. They previously extended the slowest mocked
       # admin shard; this job already has the build and browser they need.
       - name: Api page browser tests
+        if: needs.scope.outputs.run_api == 'true'
         run: pnpm --filter @helpdock/api e2e
 
       - name: Upload the Playwright report
@@ -631,7 +648,7 @@ jobs:
   image:
     name: image
     needs: scope
-    if: needs.scope.outputs.run_full == 'true'
+    if: needs.scope.outputs.run_image == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:

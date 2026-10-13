@@ -1,7 +1,8 @@
 # M10 Meta channels
 
-Status: in progress
+Status: shipped
 Started: 2026-10-11
+Shipped: 2026-10-13
 Owner: @Docker-Hunterpedia
 
 ## Scope
@@ -55,7 +56,7 @@ Definition of done asks for.
 | M10-05 | Instagram inbound → tickets: identity on the Instagram-scoped id with `@username`; text, attachments, story replies and mentions as text with the media; `is_echo` dropped; `is_deleted` marks the message unsent rather than deleting it; `messaging_seen` onto deliveries | R §4.4; D §4.7, §4.8; ADR 0025 (3, 6) | Integration: the fixtures' events; a deleted message keeps its row and gains the mark | 2 d | | built and reviewed (PR #168): [notes](#m10-05-instagram-inbound) |
 | M10-06 | Agent replies on all three: `MetaReplyHook` behind `ChannelReplyDeliveryHooks`, `assertCanDeliver` at compose time with `reply-window-closed` (409), `meta.send` with the window checked again, the splitter per platform (4096 chars, 2000 chars, 1000 bytes), attachments as messages of their own (WhatsApp by upload, Messenger and Instagram by URL, Instagram files PDF only), per-recipient pacing, deliveries with `delivered` and `read`, `refused` for a closed window, `failed` with Retry, the ticket's `GET …/meta` and `POST …/meta/deliveries/:id/retry` | A §8, §13; D §2.6, §6; ADR 0025 (7, 8) | Integration: a reply reaches the stand-in once when the job runs twice; a 1000-byte Arabic reply is split at a letter boundary; a reply after 24 h is refused at compose time with `reply-window-closed`, and one queued before the window closed is `refused` by the job; two replies to one WhatsApp user six seconds apart; a permanent refusal fails at once | 4 d | | built and reviewed (PR #168): [notes](#m10-06-replies-the-window-metasend-deliveries-and-pacing) |
 | M10-07 | Admin: Channels › Meta — the App card (callback URL, verify token shown once, the settings the secrets live in), the account table per platform with health, Connect account (platform, id, token, department; Test before Connect), an account's page (connection, subscription with Subscribe now, routing, Human Agent switch, activity, Disconnect), `brand:manage` routes under `/api/brands/:brandId/meta/accounts`, the System page's Channels card | R §4.10; ADR 0025 (5, 10) | Integration: connect refuses a token Graph does not know, stores the token encrypted and shows only its hint, audits every change; Playwright in `en` and `ar` with axe (mock api) and against the real api with the stand-in (`apps/admin/e2e/api/`) | 4 d | | built and reviewed (PR #168): [notes](#m10-07-admin-api-and-the-channels--meta-screens) |
-| M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | planned |
+| M10-08 | Ticket thread: the channel chip ("WhatsApp · +1 555 …", "Messenger · Page", "Instagram · @handle"), "via" and "to" lines, delivery states including Delivered and Read, the ReplyWindowStrip between the thread and the composer with Send disabled when closed, the composer's recipient caption and "sent as N messages" count, the ChannelIdentityCard rows per platform | DESIGN §6.3; D §2.6 | Playwright in `en` and `ar`: an open window, a human-agent window, a closed window with the refusal, a refused delivery with its reason, Retry on a failed one | 2 d | | built and reviewed (PR #168): [notes](#m10-08-the-ticket-thread) |
 | M10-09 | Templates and the Human Agent tag: `meta.templates.sync` per WhatsApp account, the template picker with parameter mapping when a WhatsApp window is closed, `template` sends through `meta.send`, `HUMAN_AGENT` on Messenger and Instagram replies between 24 h and 7 d when the account's switch is on and the author is a person, the delivery's `tag` and `template_name` | ADR 0025 (9); D §2.6 | Integration: a template send after the window; Playwright for the picker in `en` and `ar`. **May ship after M10-01 to M10-08 and M10-10.** The `HUMAN_AGENT` tag and its integration cases (a person's day-3 reply goes out tagged on both platforms, the assistant's is refused) shipped early in M10-06 after review, so only the templates, the picker and the delivery's `template_name` remain | 4 d | | later (templates only) |
 | M10-10 | Health jobs: `meta.health` hourly per account and its scheduler, token check, `subscribed_apps` check with re-subscribe, Instagram refresh after seven days, `token_expired` and `unsubscribed` on the row, Reconnect on the admin page | ADR 0025 (10) | Integration against the stand-in: a dropped subscription is restored; an Instagram token is refreshed once it is old enough and the expiry moves; a refused refresh marks the account and the page says so | 2 d | | built and reviewed (PR #168): [notes](#m10-10-health-jobs) |
 | M10-11 | Docs and the guide: `docs/guides/meta-channels.md` (the Meta dashboard walk-through per platform, App Review, pricing, limits), `channels.md`, `configuration.md` and `.env.example` for the `META_*` keys, `contacts.md` for the new identifiers, `tickets.md` for the reply window, `data-retention.md` for the deliveries, the OpenAPI changes, this document and the PRD | AGENTS.md, Definition of done 1 | `docs-guard` before the PR | 2 d | built and reviewed (PR #168): [notes](#m10-11-docs-and-the-guide) |
@@ -195,6 +196,15 @@ Written down before the work starts, so nobody discovers them in review.
 | **Reactions, edits, postbacks and referrals** are system lines or counted and dropped, never messages. | They carry no text to answer. |
 | **Story-mention media expires with the story**; a fetch after 24 h leaves the attachment `rejected`. | Meta's lifetime. |
 | **No test against the real platform in CI.** Every suite runs against the stand-in; the staging accounts under external dependencies are for the maintainer's own run. | As M6: no vendor credential in CI. |
+
+## Gaps and follow-ups
+
+Carried forward from shipping. The gaps accepted up front (above) all still hold.
+
+| Gap | Why it was accepted | Where it is written down |
+|---|---|---|
+| **WhatsApp templates are not built** (M10-09: `meta.templates.sync`, the picker when a window is closed, `template` sends, the delivery's `template_name`) | The deliverable was planned to ship after the rest. The Human Agent tag, its other half, shipped with M10-06. | [Deliverables](#deliverables), [PRD §4](../planning/PRD.md#m10-meta-channels) |
+| **No run against Meta itself** | Every exit criterion is proved against the Graph stand-in and the signed-webhook driver, as M6's was against the Bot API stand-in. The Meta app, the staging accounts and App Review stay `needed` in the PRD's external dependencies. | [External dependencies](#external-dependencies) |
 
 ## External dependencies
 
@@ -1301,7 +1311,7 @@ As landed on the M10 branch (2026-10-12). What is not built yet is marked as suc
 
 ## Pull requests
 
-- none yet
+- #168 feat: M10 Meta channels — WhatsApp, Messenger and Instagram as ticket channels (M10-01 to M10-08, M10-10 and M10-11, and the Human Agent tag of M10-09), merged 2026-10-13 and released in 0.5.0
 
 ## Review
 

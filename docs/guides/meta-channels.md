@@ -34,7 +34,7 @@ These are install settings. Each can be set from the environment, which also loc
 | `meta.instagramAppSecret` | `HD_META_INSTAGRAM_APP_SECRET` | The Instagram product's own secret. Optional. A webhook is accepted when either secret matches. |
 | `meta.webhookVerifyToken` | `HD_META_WEBHOOK_VERIFY_TOKEN` | The token Meta sends with its handshake. Helpdock makes one when it is empty. |
 
-Which secret signs Instagram webhooks under Instagram Login is not settled by Meta's documentation. Helpdock checks both, so set the Instagram secret only if you need it. The open question is in the [milestone document](../in-development/M10-meta-channels.md#open-questions).
+Which secret signs Instagram webhooks under Instagram Login is not settled by Meta's documentation. Helpdock checks both, so set the Instagram secret only if you need it. The open question is in the [milestone document](../completed/M10-meta-channels.md#open-questions).
 
 ### The App card
 

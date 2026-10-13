@@ -1,5 +1,11 @@
 # @helpdock/api
 
+## 0.5.1
+
+### Patch Changes
+
+- [#175](https://github.com/Docker-Hunterpedia/Helpdock/pull/175) [`4c2a539`](https://github.com/Docker-Hunterpedia/Helpdock/commit/4c2a539c83a94e64fdc3a3a4fa9e93ee7d582910) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Admin: agent assist (the composer's Assist menu, redaction notices, transcripts and Help center › Proposals) works again in production builds, and the "is viewing" indicator names colleagues for Agents instead of showing part of their id.
+
 ## 0.5.0
 
 ### Minor Changes

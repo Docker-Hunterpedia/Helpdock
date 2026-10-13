@@ -70,7 +70,16 @@ class FakeStaffRepository {
   add(user: StaffUser, role: StaffMembership['role'] = 'agent', brandId = BRAND_ID): StaffUser {
     this.users.set(user.id, user);
     this.memberships.set(user.id, [
-      { id: uuidv7(), userId: user.id, brandId, role, departmentIds: null, createdAt: new Date() },
+      {
+        id: uuidv7(),
+        userId: user.id,
+        brandId,
+        role,
+        source: 'manual',
+        ssoConnectionId: null,
+        departmentIds: null,
+        createdAt: new Date(),
+      },
     ]);
 
     return user;

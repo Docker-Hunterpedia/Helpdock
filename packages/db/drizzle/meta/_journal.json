@@ -358,6 +358,13 @@
       "when": 1791842806404,
       "tag": "0052_meta_deliveries_platform_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791905886655,
+      "tag": "0053_sso",
+      "breakpoints": true
     }
   ]
 }

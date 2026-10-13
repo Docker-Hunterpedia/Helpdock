@@ -46,6 +46,8 @@ const membership = (overrides: Partial<UserBrandRole> = {}): UserBrandRole => ({
   brandId: '0199f4b2-6a91-7c27-9a1f-00000000000f',
   role: 'agent',
   departmentIds: [SUPPORT.id],
+  source: 'manual',
+  ssoConnectionId: null,
   createdAt: new Date('2026-09-01T00:00:00.000Z'),
   ...overrides,
 });

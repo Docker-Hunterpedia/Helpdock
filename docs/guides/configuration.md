@@ -441,6 +441,10 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_OAUTH_GOOGLE_CLIENT_SECRET` | `oauth.google.clientSecret` | install | yes | — | Google OAuth client secret. |
 | `HD_OAUTH_GITHUB_CLIENT_ID` | `oauth.github.clientId` | install | no | — | GitHub OAuth client id for staff sign-in. Empty disables the button. |
 | `HD_OAUTH_GITHUB_CLIENT_SECRET` | `oauth.github.clientSecret` | install | yes | — | GitHub OAuth client secret. |
+| `HD_SSO_ENFORCED` | `sso.enforced` | install | no | `false` | Require staff SSO except designated break-glass install admins. |
+| `HD_SSO_BREAK_GLASS_USER_IDS` | `sso.breakGlassUserIds` | install | no | `[]` | Install admins who retain password and TOTP sign-in during SSO enforcement. |
+| `HD_SSO_SP_PRIVATE_KEY` | `sso.spPrivateKey` | install | yes | — | Install SAML signing private key, generated atomically on first use. |
+| `HD_SSO_SP_CERTIFICATE` | `sso.spCertificate` | install | no | — | Public certificate matching the install SAML signing key. |
 | `HD_AUTH_REQUIRE2FA` | `auth.require2fa` | install | no | `false` | Require TOTP for every staff account on this install. |
 | `HD_AUTH_JWT_SIGNING_KEY` | `auth.jwtSigningKey` | install | yes | — | ES256 key pair the api signs access tokens with, as JSON. Generated at first boot and shared by every replica; never set by hand. Rotating it signs every session out (ARCHITECTURE §7). |
 | `HD_AUTH_MAGIC_LINK_TTL_MINUTES` | `auth.magicLinkTtlMinutes` | install | no | `10` | Lifetime of a single-use magic link, in minutes (DOMAIN-RULES §4.6). |

@@ -33,7 +33,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0023](0023-outbox-events-ordered-per-ticket.md) | Run outbox events concurrently, ordered per ticket | accepted |
 | [0024](0024-step-transactions-for-model-calls.md) | Agent assist calls the model between short transactions, not inside the request's | accepted |
 | [0025](0025-meta-channels-through-one-graph-adapter.md) | Meta channels through one Graph adapter: one module, Instagram Login, one webhook per install, the reply window enforced at compose time and at send time | accepted |
-| [0026](0026-staff-sso-over-saml-and-oidc.md) | Staff single sign-on over SAML 2.0 and OpenID Connect, with JIT provisioning and group-to-role sync | proposed |
+| [0026](0026-staff-sso-over-saml-and-oidc.md) | Staff single sign-on over SAML 2.0 and OpenID Connect, with JIT provisioning and group-to-role sync | accepted |
 | [0027](0027-imports-through-one-normalised-record-engine.md) | Imports through one engine of normalised records, written without side effects | proposed |
 
 ## Template

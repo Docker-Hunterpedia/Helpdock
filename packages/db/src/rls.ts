@@ -269,6 +269,18 @@ export const missingOwnerPolicies = (committedSql: string): readonly string[] =>
  * on one of these two lists or it is a mistake.
  */
 export const GLOBAL_TABLES: readonly { readonly name: string; readonly reason: string }[] = [
+  {
+    name: 'sso_connections',
+    reason: 'install-admin configuration and pre-tenant sign-in (ADR 0026)',
+  },
+  {
+    name: 'sso_role_mappings',
+    reason: 'install-admin cross-brand authorization mappings (ADR 0026)',
+  },
+  {
+    name: 'user_sso_identities',
+    reason: 'identity links read before any brand is known (ADR 0026)',
+  },
   { name: 'users', reason: 'sign-in happens before any brand is known' },
   { name: 'brands', reason: 'the tenant itself, managed by audited install-admin paths' },
   { name: 'job_receipts', reason: 'claimed by a worker before it opens a brand transaction' },

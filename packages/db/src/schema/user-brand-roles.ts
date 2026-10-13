@@ -1,7 +1,9 @@
-import { pgTable, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { check, pgTable, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { brandRoleEnum } from './enums.js';
+import { brandRoleSourceEnum, ssoConnections } from './sso.js';
 import { users } from './users.js';
 
 /**
@@ -25,10 +27,20 @@ export const userBrandRoles = pgTable(
       .notNull()
       .references(() => brands.id, { onDelete: 'cascade' }),
     role: brandRoleEnum('role').notNull(),
+    source: brandRoleSourceEnum('source').notNull().default('manual'),
+    ssoConnectionId: uuid('sso_connection_id').references(() => ssoConnections.id, {
+      onDelete: 'restrict',
+    }),
     departmentIds: uuid('department_ids').array(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [unique('user_brand_roles_user_brand_key').on(table.userId, table.brandId)],
+  (table) => [
+    unique('user_brand_roles_user_brand_key').on(table.userId, table.brandId),
+    check(
+      'user_brand_roles_source_connection_check',
+      sql`(${table.source} = 'sso') = (${table.ssoConnectionId} IS NOT NULL)`,
+    ),
+  ],
 );
 
 export type UserBrandRole = typeof userBrandRoles.$inferSelect;

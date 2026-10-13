@@ -96,7 +96,7 @@ Update this table in the same PR that changes a milestone's status.
 | 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress | 2026-10-05 | |
 | 4 Release | M10 Meta channels | M6, M9 (code side) | 5–6 | shipped | 2026-10-11 | 2026-10-13 |
-| 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | planned | | |
+| 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | in progress | 2026-10-13 | |
 | | **Total** | | **60–78** | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.

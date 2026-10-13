@@ -1,6 +1,6 @@
 # 0026 Staff single sign-on over SAML 2.0 and OpenID Connect, with JIT provisioning and group-to-role sync
 
-Status: proposed
+Status: accepted
 Date: 2026-10-13
 
 ## Context
@@ -40,7 +40,8 @@ accounts (`users`) are install-wide.
 6. **SAML through `@node-saml/node-saml` 5.x** (5.1.0): signed assertions
    required, signed AuthnRequests (SHA-256), audience and recipient checked,
    `validateInResponseTo: 'always'` unless the connection allows IdP-initiated
-   sign-in, a Redis `CacheProvider` with `consumeAsync`, several IdP certificates
+   sign-in, the published Redis `CacheProvider` interface plus an application-level
+   atomic replay claim, several IdP certificates
    for rotation. `@peculiar/x509` 2.x issues the SP's self-signed certificate,
    which `node:crypto` cannot.
 7. **Linking**: by `(connection, subject)`; the first time, by email only when the
@@ -66,7 +67,8 @@ accounts (`users`) are install-wide.
 - ARCHITECTURE §1's Auth row changes to `argon2 + jose + otplib + openid-client +
   @node-saml/node-saml`, and drops "passport", which was never installed.
 - Deactivation in the IdP takes effect at the next sign-in, not at once (no SCIM);
-  the 12-hour session ceiling bounds the exposure. Single logout is not offered.
+  the configured absolute session lifetime bounds the exposure (12 hours by
+  default, configurable up to 30 days before M11 enforcement integration). Single logout is not offered.
 - `user_brand_roles` gains a `source` column, and the Staff screen shows SSO-managed
   memberships as read-only.
 
@@ -84,3 +86,46 @@ accounts (`users`) are install-wide.
   several brands; per-brand IdPs can still be modelled as several connections with
   mappings to one brand each.
 - **SCIM now**: a second protocol and test matrix; it stays in the backlog.
+
+## Amendments
+
+### 2026-10-13 — M11-01 foundation
+
+- SSO memberships also carry `sso_connection_id`. A check constraint makes it
+  non-null exactly when `source = 'sso'`. M11-04 must synchronize only grants
+  owned by its connection, preserve manual grants, and refuse a conflicting
+  connection taking over the same user/brand membership. Separate connections
+  can own different brands; there is still one effective role per user/brand.
+- A linked connection cannot change its identity authority: OIDC issuer/client
+  id, or SAML entity id/NameID format. Claim names, certificates and endpoints
+  can change without reassigning subjects. Deleting a linked connection is
+  refused; explicit unlinking and session revocation belong to M11-04.
+- Control settings and SP keys are read directly from the scoped database
+  transaction, with environment overrides still honored. This avoids stale
+  enforcement decisions across replicas and does not require a cache
+  invalidation outbox event. The existing outbox belongs to real brands and
+  cannot accept the install sentinel. No customer side effect is introduced.
+- Both control settings are written together with their audit row, serialized
+  against connection deletion/disabling by a PostgreSQL transaction advisory
+  lock. Enforcement requires at least one enabled connection and one active
+  install admin with a password and enabled TOTP backed by a stored secret.
+- SP key and certificate generation uses asynchronous WebCrypto RSA-2048 and
+  `@peculiar/x509` 2.1.0 (verified against npm on 2026-10-13). The Redis lease
+  has ownership-safe release; a PostgreSQL transaction lock remains the
+  authority if that lease expires. The key/certificate pair and audit record
+  commit atomically. Existing keys must match and be RSA with at least 2048 bits.
+- The public configuration contains a protocol discriminator and requires
+  verified OIDC email. Only OIDC accepts a client secret. HTTP identity endpoints
+  are allowed only when DNS resolves into explicitly configured outbound CIDRs;
+  HTTPS endpoints still pass the shared outbound destination checks.
+- The protocol start/callback and connection-test routes are implemented in
+  M11-02/M11-03, not as inert routes in the configuration foundation. The
+  enforcement configuration does not alter sign-in until M11-04 integrates it.
+
+The SAML `consumeAsync` statement in decision 6 describes the intended atomic
+replay guarantee, not a published 5.1.0 library method. M11-03 must implement
+an atomic post-validation replay claim using the supported library interface,
+validate signed assertion issuer/recipient, and bind a cross-site POST without
+relying on a Lax cookie. The configured session lifetime, rather than an
+unconditional 12-hour ceiling, is the pre-M11 exposure; M11-04 must document or
+bound that lifetime when integrating enforcement.

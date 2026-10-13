@@ -61,6 +61,7 @@ import { DbModule } from './runtime/db.module.js';
 import { SettingsModule } from './runtime/settings.module.js';
 import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js';
 import { SlaModule } from './sla/sla.module.js';
+import { SsoModule } from './sso/sso.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { StaticModule } from './static/static.module.js';
 import { TelegramModule, type TelegramModuleOverrides } from './telegram/telegram.module.js';
@@ -220,6 +221,7 @@ export class AppModule implements NestModule {
         ConfigModule.forRoot(options.env),
         DbModule.forRoot(options.db),
         SettingsModule.forRoot(options.settings, options.redis),
+        SsoModule.forRoot(options.env, options.db),
         auth,
         BrandsModule.forRoot({ logger: options.logger }),
         InstallModule.forRoot({ auth, logger: options.logger }),

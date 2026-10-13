@@ -57,6 +57,7 @@ describe('the settings registry', () => {
       'smtp.password',
       'oauth.google.clientSecret',
       'oauth.github.clientSecret',
+      'sso.spPrivateKey',
       'auth.jwtSigningKey',
       'captcha.secret',
       'push.vapidPrivateKey',

@@ -158,9 +158,11 @@ at that tag instead; verify it with the exact
 
 To sign an existing release without rebuilding it, run **Release** from the
 Actions tab on `main` and enter its `v<version>` tag. This resolves the registry
-digest, signs and verifies it, and deliberately skips the image build, SBOM and
-GitHub Release steps. Use the same path to recover when a release published
-successfully but Sigstore was temporarily unavailable.
+digest, signs and verifies it, and deliberately skips the image build. When the
+tag already has a GitHub Release, that is all it does. When it has none, which
+is a release that failed after its image was pushed, it goes on to generate the
+SBOM from the published image and create the Release, so the manual run
+finishes the release without rebuilding or moving the image.
 
 The `v*` tag also starts [`zap.yml`](../../.github/workflows/zap.yml), the ZAP
 baseline scan against the tagged commit's stack, as does any push to a
@@ -180,10 +182,19 @@ the next patch ([security scanning](security-scanning.md)).
 ## If something goes wrong
 
 The tag is the input, so a failed run is re-runnable from the Actions tab
-without touching the repository. If only the signing step failed after the
-image was pushed, use **Release → Run workflow** with the existing tag so the
-workflow signs that exact digest and does not rebuild it. For an earlier
-failure, re-run the failed `release` job of the `Changesets` run.
+without touching the repository. If the run failed after the image was pushed
+(signing, the SBOM or the Release itself), use **Release → Run workflow** with
+the existing tag: it signs that exact digest without rebuilding it and, because
+the tag has no Release yet, generates the SBOM and creates the Release. For a
+failure before the push, re-run the failed `release` job of the `Changesets`
+run. A re-run uses the workflow file of the original run; a fix to the workflow
+has to be merged and then exercised through **Run workflow**.
+
+This is how `v0.5.0` was finished: the first release through the Changesets
+path verified the signature against the tag's identity while the certificate
+carried `refs/heads/main`, the ref the called workflow runs under. The image
+was already pushed, so the identity rule was fixed and **Run workflow** signed,
+verified and released it.
 
 A tag pointing at the wrong commit is the one case that needs care: delete it
 locally and on the remote, then tag again. The `protect-release-tags` ruleset

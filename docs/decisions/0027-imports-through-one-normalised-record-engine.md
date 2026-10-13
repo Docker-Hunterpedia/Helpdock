@@ -168,3 +168,15 @@ imported rating; keep it null rather than invent a timestamp. A database shape
 check still requires every live survey's close time, and every imported rating's
 source, external ID, rating, rated time and `rated_via = import`. Live survey
 lookup/insertion excludes imported responses. Reports count ratings on `rated_at`.
+
+### 2026-10-14 — explicit historical staff grants
+
+Import creates only new invited Agent accounts, scoped to the departments the
+administrator confirms. The membership uses the existing `manual` source because
+it is an explicit administrator grant, not an IdP group grant. It must survive
+SSO sync. No invitation token or email is created; the existing Staff resend path
+can issue the first invitation later. An existing global email is not enough to
+grant membership: the operator must explicitly map an eligible staff member
+already in this brand. This avoids cross-brand account linking and activation
+through vendor data. Name-only authors have no account or role. New staff creation
+is audited under the importing brand and system run actor.

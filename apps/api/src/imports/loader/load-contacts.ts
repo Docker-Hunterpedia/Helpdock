@@ -9,6 +9,7 @@ import {
   updateImportedContactDetails,
 } from './contact-persistence.js';
 import { importedContactTarget } from './contact-target.js';
+import { validatedImportedCustom } from './custom-values.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
 import { type ContactLoad, contactLoadSchema, type ProfileOutcome } from './profile-contracts.js';
 import { importedContactIdentifiers } from './profile-identities.js';
@@ -48,6 +49,12 @@ export async function loadImportedContact(
     identifiers: normalized.identifiers,
     ...(knownTarget ? { knownTarget } : {}),
     ...(known ? { originalContactId: known.helpdockId } : {}),
+  });
+  input.custom = await validatedImportedCustom(tx, {
+    brandId: input.brandId,
+    target: 'contact',
+    custom: input.custom,
+    operation: matched.existing ? 'patch' : 'create',
   });
   const id = matched.existing?.id ?? uuidv7();
   const outcome = known ? 'updated' : matched.existing ? 'linked' : 'created';

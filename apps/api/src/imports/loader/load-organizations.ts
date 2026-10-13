@@ -2,6 +2,7 @@ import { accounts, type DbTransaction, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { ImportLoadError } from './contracts.js';
+import { validatedImportedCustom } from './custom-values.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
 import {
   type OrganizationLoad,
@@ -66,6 +67,12 @@ export async function loadImportedOrganization(
   if (known && !linked) throw new ImportLoadError('target-unavailable');
   if (linked && matches.some((account) => account.id !== linked.id))
     throw new ImportLoadError('identity-ambiguous');
+  input.custom = await validatedImportedCustom(tx, {
+    brandId: input.brandId,
+    target: 'account',
+    custom: input.custom,
+    operation: linked ? 'patch' : 'create',
+  });
   const id = linked?.id ?? uuidv7();
   const importedDetails = {
     domains: [...new Set([...(linked?.importedDetails?.domains ?? []), ...domains])],

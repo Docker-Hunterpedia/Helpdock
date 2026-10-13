@@ -1,11 +1,13 @@
 import {
   accounts,
   attachments,
+  auditLog,
   brands,
   contactIdentities,
   contacts,
   createDb,
   csatResponses,
+  customFieldDefs,
   type DbHandle,
   departments,
   importExternalIds,
@@ -41,6 +43,7 @@ import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { ImportWriter } from './import-writer.js';
 import { contactLoadSchema, organizationLoadSchema } from './profile-contracts.js';
+import { staffLoadSchema } from './staff-contracts.js';
 
 const BRAND = uuidv7();
 const OTHER_BRAND = uuidv7();
@@ -154,6 +157,17 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await owner.db
       .insert(userBrandRoles)
       .values({ userId: USER, brandId: BRAND, role: 'agent', departmentIds: [DEPARTMENT] });
+    await owner.db.insert(customFieldDefs).values([
+      { brandId: BRAND, target: 'account', key: 'region', label: 'Region', type: 'text' },
+      {
+        brandId: BRAND,
+        target: 'contact',
+        key: 'tier',
+        label: 'Tier',
+        type: 'select',
+        options: ['gold', 'silver'],
+      },
+    ]);
     await owner.db
       .insert(importRuns)
       .values({ id: RUN, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
@@ -419,6 +433,288 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           row.slaResolutionBreached === 0,
       ),
     ).toBe(true);
+  });
+
+  it('creates invited agents without mail or tokens, uses them as historical authors and preserves manual roles on repeat', async () => {
+    const input = staffLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      record: {
+        externalId: 'old-invited-agent',
+        kind: 'agent',
+        name: 'Old agent',
+        email: 'OLD-AGENT@example.com',
+        active: true,
+      },
+      mapping: { kind: 'invited', departmentIds: [DEPARTMENT] },
+    });
+    const first = await withSystem(app.db, BRAND, (tx) => writer.staff(tx, input));
+    expect(first.outcome).toBe('created');
+    if (first.author.kind !== 'staff') throw new Error('Expected a staff mapping');
+    const userId = first.author.id;
+    const [user] = await owner.db.select().from(users).where(eq(users.id, userId));
+    const [membership] = await owner.db
+      .select()
+      .from(userBrandRoles)
+      .where(eq(userBrandRoles.userId, userId));
+    expect(user).toMatchObject({
+      email: 'old-agent@example.com',
+      status: 'invited',
+      passwordHash: null,
+      installAdmin: false,
+    });
+    expect(membership).toMatchObject({
+      role: 'agent',
+      source: 'manual',
+      departmentIds: [DEPARTMENT],
+    });
+    expect(
+      await owner.db.select().from(auditLog).where(eq(auditLog.targetId, userId)),
+    ).toHaveLength(1);
+    const nextRun = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: nextRun,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'loading',
+      startedBy: USER,
+    });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => writer.staff(tx, { ...input, runId: nextRun })),
+    ).toMatchObject({ author: first.author, outcome: 'unchanged' });
+    expect(
+      await owner.db.select().from(userBrandRoles).where(eq(userBrandRoles.userId, userId)),
+    ).toEqual([membership]);
+    const ticket = request('invited-agent-history');
+    ticket.resolved.assigneeId = userId;
+    ticket.authors.oldagent = first.author;
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, ticket));
+    const messages = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, loaded.ticketId));
+    expect(messages.find((row) => row.kind === 'note')).toMatchObject({
+      authorType: 'staff',
+      authorId: userId,
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(await redis.dbsize()).toBe(0);
+    expect(
+      await owner.db.select().from(auditLog).where(eq(auditLog.targetId, userId)),
+    ).toHaveLength(1);
+  });
+
+  it('maps existing staff or a name explicitly and refuses email collisions, foreign departments and deactivated targets', async () => {
+    const base = staffLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      record: {
+        externalId: 'linked-agent',
+        kind: 'agent',
+        name: 'Vendor name',
+        email: 'importer@example.com',
+        active: true,
+      },
+      mapping: { kind: 'existing', userId: USER },
+    });
+    const before = await owner.db.select().from(users).where(eq(users.id, USER));
+    expect(await withSystem(app.db, BRAND, (tx) => writer.staff(tx, base))).toMatchObject({
+      author: { kind: 'staff', id: USER },
+      outcome: 'linked',
+    });
+    expect(await owner.db.select().from(users).where(eq(users.id, USER))).toEqual(before);
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        writer.staff(tx, {
+          ...base,
+          record: { ...base.record, externalId: 'name-only-agent' },
+          mapping: { kind: 'name' },
+        }),
+      ),
+    ).toEqual({ author: { kind: 'name', name: 'Vendor name' }, outcome: 'name' });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.staff(tx, {
+          ...base,
+          record: { ...base.record, externalId: 'colliding-agent' },
+          mapping: { kind: 'invited', departmentIds: [DEPARTMENT] },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'identity-ambiguous' });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.staff(tx, {
+          ...base,
+          record: {
+            ...base.record,
+            externalId: 'foreign-agent',
+            email: 'foreign-agent@example.com',
+          },
+          mapping: { kind: 'invited', departmentIds: [OTHER_DEPARTMENT] },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    const deactivatedId = uuidv7();
+    await owner.db.insert(users).values({
+      id: deactivatedId,
+      email: 'inactive-agent@example.com',
+      name: 'Inactive',
+      status: 'deactivated',
+    });
+    await owner.db.insert(userBrandRoles).values({
+      userId: deactivatedId,
+      brandId: BRAND,
+      role: 'agent',
+      departmentIds: [DEPARTMENT],
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.staff(tx, {
+          ...base,
+          record: { ...base.record, externalId: 'inactive-agent' },
+          mapping: { kind: 'existing', userId: deactivatedId },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(eq(importExternalIds.externalId, 'colliding-agent')),
+    ).toEqual([]);
+    expect(
+      await owner.db.select().from(users).where(eq(users.email, 'foreign-agent@example.com')),
+    ).toEqual([]);
+  });
+
+  it('validates ticket fields against brand definitions, coerces values and rolls invalid mappings back', async () => {
+    await owner.db.insert(customFieldDefs).values([
+      {
+        brandId: BRAND,
+        target: 'ticket',
+        key: 'historical_count',
+        label: 'Historical count',
+        type: 'number',
+      },
+      {
+        brandId: BRAND,
+        target: 'ticket',
+        key: 'historical_date',
+        label: 'Historical date',
+        type: 'date',
+      },
+      {
+        brandId: OTHER_BRAND,
+        target: 'ticket',
+        key: 'foreign_field',
+        label: 'Other brand',
+        type: 'text',
+      },
+    ]);
+    const input = request('custom-values');
+    input.resolved.custom = { historical_count: '12', historical_date: '2020-05-06T12:00:00Z' };
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [ticket] = await owner.db.select().from(tickets).where(eq(tickets.id, loaded.ticketId));
+    expect(ticket?.custom).toEqual({ historical_count: 12, historical_date: '2020-05-06' });
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+    });
+    for (const custom of [{ historical_count: 'not-a-number' }, { foreign_field: 'private' }]) {
+      const invalid = request(`invalid-custom-${Object.keys(custom)[0]}`);
+      invalid.resolved.custom = custom;
+      await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, invalid))).rejects.toThrow();
+      expect(
+        await owner.db
+          .select()
+          .from(importExternalIds)
+          .where(eq(importExternalIds.externalId, invalid.record.externalId)),
+      ).toEqual([]);
+    }
+  });
+
+  it('refuses invalid contact/company field choices without creating profiles', async () => {
+    const contact = contactLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      accountId: null,
+      custom: { tier: 'unknown' },
+      record: {
+        externalId: 'invalid-profile-custom',
+        name: 'Invalid fields',
+        emails: ['invalid-fields@example.com'],
+        phones: [],
+        custom: {},
+      },
+    });
+    await expect(withSystem(app.db, BRAND, (tx) => writer.contact(tx, contact))).rejects.toThrow();
+    expect(
+      await owner.db
+        .select()
+        .from(contactIdentities)
+        .where(eq(contactIdentities.value, 'invalid-fields@example.com')),
+    ).toEqual([]);
+    const organization = organizationLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      custom: { undeclared: 'ignored?' },
+      record: {
+        externalId: 'invalid-company-custom',
+        name: 'Invalid company',
+        domains: ['invalid-fields.example'],
+        custom: {},
+      },
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) => writer.organization(tx, organization)),
+    ).rejects.toThrow();
+    expect(
+      await owner.db.select().from(accounts).where(eq(accounts.domain, 'invalid-fields.example')),
+    ).toEqual([]);
+  });
+
+  it('enforces required fields on new profiles without discarding missing source data silently', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: OTHER_BRAND,
+      source: 'zendesk',
+      status: 'loading',
+      startedBy: USER,
+    });
+    await owner.db.insert(customFieldDefs).values({
+      brandId: OTHER_BRAND,
+      target: 'account',
+      key: 'contract_code',
+      label: 'Contract',
+      type: 'text',
+      required: true,
+    });
+    const input = organizationLoadSchema.parse({
+      brandId: OTHER_BRAND,
+      runId,
+      source: 'zendesk',
+      custom: {},
+      record: {
+        externalId: 'required-company',
+        name: 'Required company',
+        domains: ['required-company.example'],
+        custom: {},
+      },
+    });
+    await expect(
+      withSystem(app.db, OTHER_BRAND, (tx) => writer.organization(tx, input)),
+    ).rejects.toThrow();
+    expect(
+      await owner.db.select().from(accounts).where(eq(accounts.domain, 'required-company.example')),
+    ).toEqual([]);
+    input.custom = { contract_code: '  Original contract  ' };
+    const loaded = await withSystem(app.db, OTHER_BRAND, (tx) => writer.organization(tx, input));
+    const [company] = await owner.db.select().from(accounts).where(eq(accounts.id, loaded.id));
+    expect(company?.custom).toEqual({ contract_code: 'Original contract' });
   });
 
   it('loads companies with all domains/notes, links through a secondary domain and writes nothing on repeat', async () => {

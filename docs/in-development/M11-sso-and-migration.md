@@ -927,7 +927,7 @@ cover canonical hashes and the existing email-view compatibility. The writer
 build check rejects live hooks, outbound helpers and unreviewed dependencies;
 it is wired into `pnpm check:routes` and has eight refusal/allowance tests.
 
-This is an implementation checkpoint, not a complete loader. Agent invitation mappings, fields, help-center loading,
+This is an implementation checkpoint, not a complete loader. Field-definition mappings, help-center loading,
 report rebuilds, scheduled-rule guards and imported-media completion remain to be
 implemented and verified. Shared imported attachment copies must receive their
 original's final processed state. The 500-ticket reference import and external
@@ -998,6 +998,37 @@ system message to a name-only agent. Agent workload still requires a real staff
 ID; it does not synthesize accounts from historical names. The regression also
 checks original creation, resolution and rating days and zero SLA outcomes.
 The finish job still needs to request the full historical rebuild range.
+
+
+### Staff and custom-value checkpoint (M11-09, in progress)
+
+Agent mappings explicitly choose an existing brand member, a new invited Agent
+with confirmed departments, or the original name only. Existing accounts,
+manual/SSO roles and department grants are never changed. A new invited account
+has no password, install-admin authority, invitation token or queued mail. Its
+manual role reflects the administrator's explicit mapping and is protected from
+SSO group sync. A colliding global email requires an explicit existing-person
+mapping rather than automatically granting that person a brand membership.
+Creation writes `import.staff.created` to the brand's audit log. A repeat in a
+new run preserves the source identity and writes nothing. Deactivated targets,
+Viewers and foreign departments are refused. The existing Staff resend flow can
+issue an invitation later without requiring a pre-existing Redis token.
+
+Mapped custom values use the existing `customValuesSchema` built from that
+brand's target definitions. Number/date/text coercions match ordinary writes;
+undefined optional fields and cleared values are removed before persistence.
+Unknown keys, other-brand definitions and invalid select choices are rejected.
+New rows must satisfy required fields; linked contact/company profiles retain
+their existing custom data. Repeat hashes retain the unmodified source/mapping
+input so coercion does not cause repeated updates.
+
+This checkpoint adds real-Postgres/Redis cases for silent invitation creation,
+manual-role preservation, historical staff authors, repeated runs, explicit
+existing/name mappings, email collisions, invalid department/activation targets,
+custom-value coercion and rollback, and required company fields. Twenty-two focused writer integration cases and five staff contract unit cases
+pass, along with API/root typechecks and the writer dependency check.
+Field-definition creation, help-center loading,
+worker/runtime guards and complete vendor/browser acceptance remain pending.
 
 
 ## M11-10 Import jobs
